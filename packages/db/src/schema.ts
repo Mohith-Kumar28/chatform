@@ -39,6 +39,7 @@ export const accounts = sqliteTable(
     userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     providerId: text("provider_id").notNull(),
     accountId: text("account_id").notNull(),
+    issuer: text("issuer"),
     accessToken: text("access_token"),
     refreshToken: text("refresh_token"),
     idToken: text("id_token"),

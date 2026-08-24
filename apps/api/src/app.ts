@@ -4,6 +4,15 @@ import { Scalar } from "@scalar/hono-api-reference";
 import type { Bindings } from "./env.js";
 import { healthRouter } from "./routes/health.js";
 import publicRouter from "./routes/public.js";
+import uploadsRouter, { filesAdminRouter } from "./routes/uploads.js";
+import { dashboardRouter } from "./routes/dashboard.js";
+import { formsRouter } from "./routes/forms.js";
+import { aiRouter } from "./routes/ai.js";
+import { resultsRouter } from "./routes/results.js";
+import { v1Router } from "./routes/v1.js";
+import { keysRouter } from "./routes/keys.js";
+import { webhooksRouter } from "./routes/webhook-admin.js";
+import { billingRouter } from "./routes/billing.js";
 import { mountOpenApiSpec } from "./lib/openapi.js";
 
 export function createApp() {
@@ -19,6 +28,18 @@ export function createApp() {
     }),
   );
 
+  app.use(
+    "/api/*",
+    cors({
+      origin: (origin) => origin ?? "*",
+      allowHeaders: ["content-type", "authorization"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      exposeHeaders: ["retry-after"],
+      credentials: true,
+      maxAge: 86400,
+    }),
+  );
+
   app.notFound((c) => c.json({ error: { code: "not_found", message: "Route not found" } }, 404));
   app.onError((err, c) => {
     console.error("unhandled_error", err);
@@ -26,7 +47,17 @@ export function createApp() {
   });
 
   app.route("/health", healthRouter);
+  publicRouter.route("/", uploadsRouter);
   app.route("/p", publicRouter);
+  app.route("/api", dashboardRouter);
+  app.route("/api", formsRouter);
+  app.route("/api", aiRouter);
+  app.route("/api", resultsRouter);
+  app.route("/v1", v1Router);
+  app.route("/api", keysRouter);
+  app.route("/api", webhooksRouter);
+  app.route("/api", billingRouter);
+  app.route("/api", filesAdminRouter);
 
   // OpenAPI spec + Scalar docs
   mountOpenApiSpec(app);

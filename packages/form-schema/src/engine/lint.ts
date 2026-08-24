@@ -1,7 +1,7 @@
-import type { FormDoc } from "../form-doc.js";
-import type { Block } from "../blocks.js";
-import { opsRequiringValue, type Condition, type ConditionGroup } from "../conditions.js";
-import type { LogicRule } from "../logic.js";
+import type { FormDoc } from "../form-doc";
+import type { Block } from "../blocks";
+import { opsRequiringValue, type Condition, type ConditionGroup } from "../conditions";
+import type { LogicRule } from "../logic";
 
 export interface LintIssue {
   level: "error" | "warning";

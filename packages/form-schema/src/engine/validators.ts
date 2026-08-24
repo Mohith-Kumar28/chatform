@@ -1,5 +1,5 @@
-import type { Block } from "../blocks.js";
-import type { AnswerValue } from "../answers.js";
+import type { Block } from "../blocks";
+import type { AnswerValue } from "../answers";
 
 export interface ValidationResult {
   ok: boolean;

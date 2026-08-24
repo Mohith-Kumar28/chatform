@@ -1,4 +1,4 @@
-import type { FormDocInput } from "./form-doc.js";
+import type { FormDocInput } from "./form-doc";
 
 export const leadFormFixture: FormDocInput = {
   title: "Product Waitlist",

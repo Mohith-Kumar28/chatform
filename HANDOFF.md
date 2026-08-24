@@ -1,0 +1,171 @@
+# CHATFORM — ENGINEERING HANDOFF
+
+**Date**: 2026-08-24 (session 2) · **Status**: Core vertical slice + builder Build/Theme/Settings views live. Read this fully before writing code.
+
+---
+
+## 1. What this product is
+
+A Typeform/Youform competitor where the form-filling interface is an **agentic AI chatbot**: the respondent opens a form link and an AI interviewer greets them, asks questions one at a time, validates answers conversationally, handles conditional branching, file uploads, and payments. Admins build forms in a dashboard (blocks + logic graph + theme), track analytics (views, drop-off per question, partials), and get a **developer API** (`/v1`, API-key auth) so they can drive the chatbot headlessly from their own products.
+
+Full product spec: `DESIGN.md` (frontend/UX, 558 lines) · `PLAN.md` (architecture + milestones M0–M11 + pricing).
+
+## 2. User-mandated constraints (DO NOT violate)
+
+1. **OpenAPI-first**: every API route described with `hono-openapi` (`describeRoute` + `validator` + `resolver`). Spec at `/openapi.json`, Scalar docs at `/docs`.
+2. **No hand-written frontend API code**: all data fetching via **orval-generated** TanStack Query hooks (`pnpm gen:api` → `apps/web/src/lib/api/`). Types/hooks never manual.
+3. **Zod everywhere** — shared schemas, validation at every boundary.
+4. **shadcn/ui + Tailwind v4 mandatory** for all UI.
+5. **Offload to Better Auth** — orgs/members/invites/roles via the organization plugin; never hand-roll what Better Auth ships (admin plugin, apiKey plugin next).
+6. **AI = Vercel AI SDK (`ai`) + OpenRouter (`@openrouter/ai-sdk-provider`)** — single secret `OPENROUTER_API_KEY`, any model.
+7. Stack: Turborepo+pnpn · Hono on Cloudflare Workers · **D1+Drizzle** (not MongoDB — Drizzle declined Mongo) · Better Auth · Dodo Payments · R2 presigned uploads · DO per chat session · SSE streaming.
+
+## 3. Current state — COMPLETED & VERIFIED
+
+### M0 — Foundation ✅
+- Monorepo: `apps/{api,web}` + `packages/{form-schema,db,ui(empty),api-client(empty),config}`; TS project refs; turbo tasks.
+- **`@repo/form-schema`** (the core artifact — 22 tests green): Zod `FormDoc` with 26 block types; recursive `ConditionGroup` (and/or, depth 5); `LogicRule` = goto (**with `from` field — scoped rules, prevents infinite loops**)/set_variable/add_score; deterministic logic engine (`resolveNext`, `applyLogicRules`, visibility-chain skipping); per-type answer validators (email/phone E.164/ranking permutations/matrix/file sizes/consent SHA-256); lint pass (dangling targets, missing values, ref regex, reachability); `toPublicBlock`/`toPublicConfig` projections.
+- **`@repo/db`**: full D1 schema (~30 tables): better-auth core+orgs+api_keys (extended), workspaces, forms (working_schema TEXT + slug + active_version_id), form_versions (immutable snapshots + checksum), submissions + **submission_answers as normalized rows** (block_ref + value_number for per-question analytics), chat_sessions (respondent_token_hash, state_snapshot_json), chat_messages, files, webhooks+deliveries, integrations, templates, ai_generations, plans/dodo_customers/subscriptions/payments/dodo_events, usage_counters, analytics_rollup_daily, audit_logs, idempotency_keys. **2 migrations applied** (0001 added `accounts.issuer` required by Better Auth).
+- `apps/api`: Hono app (`src/app.ts`) — cors on `/p/*` and `/api/*` (credentials), health, DO export, queue/cron handlers stubbed. Wrangler config has D1/KV/R2/3 queues/Analytics Engine/ratelimit (needs `simple:{limit,period}`!)/DO/cron.
+
+### M4 slice — Chat runtime ✅ (browser-verified E2E twice)
+- **`SessionDO`** (`apps/api/src/do/session-do.ts`): per-session FSM — INIT→greeting→ASKING→AWAITING→PARSING→(VALIDATING→CLARIFYING≤2→**ESCALATED_UI** after 3 invalid)→RECORDING→BRANCHING→next/ENDING→COMPLETED; idle alarm 30min→ABANDONED (partial saved); skip/stop/restart actions.
+- **SSE with DURABLE replay**: every event persisted under `evt:{seq}` in DO storage (`stream()` replays from storage — in-memory buffer dies with the isolate; this was a real bug we fixed). Events: `session_ready` (per-connection, after replay), `user_message`, `message_start/token/end`, `question{block,progress}`, `validation_error`, `escalate_ui`, `answer_recorded`, `branch_jump`, `ending`, `complete{submissionId}`, `ping`.
+- Template-mode NLU: fuzzy option-label matching, yes/no words, number extraction; deterministic validators; conversational clarify with escalating phrasing.
+- Partial-save: `ensureSubmissionRow` + upsert into `submission_answers` per answer (async via `ctx.waitUntil`); finalize writes status/duration/search_text + enqueues `Q_WEBHOOKS` + AE datapoint.
+- Public routes (`/p/*`): session create (Turnstile hook, form-open check), SSE (`?t=` token since EventSource can't set headers), messages (text|structured), actions, session status.
+- **Verified**: seeded form → chat → email → "developer" fuzzy-matched → rating → ending → submission + answers in D1.
+
+### M1 — Auth ✅ (curl-verified)
+- Better Auth mounted `/api/auth/*` — `drizzleAdapter(db, { provider: "sqlite", schema, usePlural: true })` (**schema + usePlural REQUIRED**), email/password + auto sign-in, cookie cache 5min, origin-aware trustedOrigins.
+- Organization plugin verified: create org (owner role), list orgs.
+- Web: `/signin` (combined sign-in/up, creates default org on signup), `DashboardShell` (session guard + sign-out). **Use `window.location.assign` after auth changes — router.push races the session store.**
+
+### M3 — Forms CRUD + Builder ✅ (API curl-verified; builder browser-verified)
+- `routes/forms.ts`: `GET/POST /api/forms`, `GET /api/forms/:id`, `PUT /api/forms/:id/doc` (zod parse + lint, returns issues), `POST /api/forms/:id/publish` (lint-gated → version snapshot → active_version_id). All described with hono-openapi.
+- Dashboard: form cards (status, responses) + create dialog — via generated hooks.
+- **Builder v1** (`apps/web/src/components/builder/builder-client.tsx`, route `/forms/[id]`): 3-pane — left block list (numbered, required-star, hover delete) + 16-type add-block library; center flow preview cards; right inspector (title/description/required toggle/options editor/rating scale); **debounced autosave 800ms** via `usePutApiFormsByIdDoc`; Publish button (disabled while dirty) → reload on success. Verified: add block → edit title → autosave ("saved") → publish → new question live in chat session.
+
+### OpenAPI + codegen pipeline ✅
+- Spec: 8 paths at `/openapi.json`; Scalar UI `/docs`.
+- `orval.config.ts` → `pnpm gen:api` → `apps/web/src/lib/api/{generated.schemas.ts,health,public,dashboard}`. **Mutator** (`mutator.ts`): credentials include, Headers-instance content-type dedupe (**duplicated Content-Type breaks Workers body parsing — this was a real bug**), JSON error envelope parsing → throws `ApiError(message, status)` (import it to branch on status codes).
+- **To refresh the spec**: start `wrangler dev`, `curl :8787/openapi.json > openapi.json`, kill server, `pnpm gen:api`. The repo-root openapi.json is committed.
+
+### Session 2 additions (2026-08-24 PM) ✅
+- **AI-generate wired into dashboard**: "New form" dialog has tabs *Generate with AI* / *Start blank*. AI tab = prompt + question-count select → `usePostApiAiGenerateForm` → `POST /api/forms {title, doc}` → navigates into builder. Graceful errors for 503 (no key) and 502 (invalid generation). `POST /forms` now accepts an optional validated `doc`.
+- **Escalate-UI fallback in chat client** (`chat-client.tsx` + `use-chat.ts`): `escalate_ui{ref}` tracked per-block as `escalatedRef`; composer shows a 💡 banner with per-type format hints (email/phone/url/number/date) and a "Skip this question →" action when allowed (`settings.navigation.allowSkip || escalated`) and `!block.required` (DO rejects skipping required anyway). Composer restructured to control-variable pattern.
+- **Builder Settings view**: header segmented switcher Build/Theme/Settings. SettingsPanel edits `doc.settings`: progress bar, hide branding, agent mode/tone/persona prompt, allowSkip, closeAt datetime, maxSubmissions, closed message, duplicates strategy, redirect URL, notification emails. Autosaves via existing debounce.
+- **Builder Theme view**: ThemePanel (4 presets, color pickers+hex inputs for all 6 tokens, radius select, heading/body fonts) + live mock-chat preview pane applying tokens instantly. Reset uses `ThemeDoc.parse({})`.
+- **Shared theme tokens**: `apps/web/src/lib/chat-theme.ts` — `RADIUS_PX` map + `chatThemeVars(theme)` producing the scoped `--cf-*` vars incl. `--cf-radius` and font-family. ChatClient now consumes them too (**bubbles honor radius/fonts — preview ≡ production**); builder's ThemePreview uses the same helper.
+- **dnd-kit drag-reorder** in builder block list (`SortableBlockRow`, PointerSensor 4px, keyboard sensor), reorder persists through autosave; browser-drag verified.
+- **Fixed loose end #6**: dashboard invalidates `getGetApiFormsQueryKey()` now (was `["postApiForms"]` — never matched the list query).
+- **Fixed settings-crash bug**: legacy/default docs stored `settings: {}` unvalidated → any consumer reading `settings.branding.*` crashed. `GET /forms/:id` now normalizes through `FormDoc.safeParse` before responding; `POST /forms` materializes defaults for the blank path too.
+- Verified in browser: sign-in → AI dialog error path (503 message renders) → blank create navigates to builder → settings toggle autosave → drag reorder → publish → reordered flow live in chat E2E (email first → statement → ending).
+
+### AI layer (foundation ✅, integration ⚠️ untested E2E)
+- `lib/ai.ts`: `chatModel` (OpenRouter, default `openai/gpt-4o-mini`), `runAgentTurn` (streamText+tools), `generateFormDoc` (generateObject).
+- `lib/agent-prompts.ts`: `buildSystemPrompt` (persona/tone + remaining-blocks manifest + hard rules), `buildValidationPrompt`, `buildFlowGeneratorPrompt`.
+- **SessionDO AI integration**: `aiStreamMessage()` — when `OPENROUTER_API_KEY` set and mode≠template and under token budget, question phrasing streams REAL model tokens to SSE; falls back to template phrasing on error/budget; usage logged to `ai_generations` table; `sessionTokensUsed` degrades to template mode.
+- `POST /api/ai/generate-form`: prompt → FormDoc (generateObject) → zod validate → 1 auto-fix pass feeding issues back → lint-gate → return doc+issues+tokens.
+
+## 4. Known loose ends (exact, no guessing)
+
+1. **AI chat mode never tested E2E** — needs `OPENROUTER_API_KEY` uncommented in `apps/api/.dev.vars`, then create session on a form with `settings.agent.mode:"ai"` and confirm streamed phrasing differs from template. Same key gates `/api/ai/generate-form` (UI + error paths verified; happy path not).
+2. **Builder Logic tab missing** — xyflow v12 graph of blocks/endings with goto-rule edges + condition editor Sheet. No logic UI exists anywhere yet.
+3. Builder: no live chat preview in Build view (static cards; Theme view has the mock preview), no block delete via inspector, ending-screen editor missing.
+4. Dashboard: no delete/rename/duplicate form.
+5. Skip E2E not browser-verified end-to-end (skip flag published but the skip-click path in chat was only code-reviewed).
+6. Chat client ignores theme `colorScheme`/`avatarKey`/`backgroundImageKey` (no R2 wiring yet anyway).
+
+## 5. Hard-won gotchas (each was a real bug — do not regress)
+
+1. **Turbopack cannot rewrite `.js`→`.ts` through package exports** — form-schema uses extensionless relative imports (`from "./answers"`). Adding `.js` back breaks the Next build with "Module not found".
+2. **orval `override.query.useQuery: true` turns ALL hooks (incl. POST/PUT) into useQuery** — removed; mutations now correct.
+3. **Duplicated Content-Type** (fetcher sets `Content-Type` + mutator added another) → Workers body parser returns `{}` → validator 400. Mutator must use a `Headers` instance and only set content-type if absent.
+4. **Better Auth**: adapter needs `schema` + `usePlural: true`; `accounts.issuer` column required (migration 0001); failed signups can leave orphaned users (delete before retry).
+5. **CORS on `/api/*`** with `credentials: true` required for browser auth against :8787.
+6. **SSE replay must read from DO storage** (`evt:` keys), never in-memory buffers.
+7. **React strict-mode double-mount** → session create guarded by `pendingRef` promise pattern in `use-chat.ts`.
+8. **Logic `goto` rules need `from`** or they fire after every answer → infinite loops.
+9. **AI SDK v5 API**: `maxOutputTokens` (not maxTokens); tool-call parts expose `input` (not `args`); usage = `inputTokens`/`outputTokens`; `chatModel` needs explicit `LanguageModel` return type (TS4058 otherwise).
+10. **hono-openapi `validator` requires `@hono/standard-validator`** package installed.
+11. **wrangler ratelimits** binding requires `simple: { limit, period }` in wrangler.jsonc.
+12. **D1 has no `readfile()`** — seed via SQL file with JSON inlined (`tooling/seed.sql`).
+13. `pnpm check` = typecheck+lint+test gate; lint errors to watch: no-sync-setState-in-effect (use render-phase adjust pattern), react-hooks/refs (no ref access in render — use `useEffect` to assign reconnect refs).
+14. **Never store unvalidated docs** — `POST /forms` used to insert `defaultDoc()` with `settings: {}`; consumers reading nested settings crashed (`settings.branding` undefined). Always materialize through `FormDoc.parse`/`safeParse` before persisting or returning; GET normalizes legacy rows now.
+15. **Next dev overlay lies after HMR churn**: stale "Parsing ecmascript failed"/"This page couldn't load" overlays can persist from mid-edit states — hard-reload before diagnosing; check `agent-browser console` for the *latest* error only.
+16. Wrangler must run from `apps/api` (repo root has no wrangler config → "missing worker entrypoint"). Web on port **3100** in testing (user's 3000 busy); `APP_ORIGIN=http://localhost:3100`.
+
+## 6. Commands
+
+```bash
+pnpm setup        # install + migrate + seed (first time)
+pnpm dev          # api :8787 + web :3000 (use: pnpm --filter @repo/web exec next dev --port 3100 if 3000 busy)
+pnpm seed         # reseed local test data (tooling/seed.sql)
+pnpm check        # typecheck + lint + tests (all green as of handoff)
+pnpm gen:api      # regenerate hooks after API changes
+pnpm db:generate  # drizzle migration from schema changes → then pnpm db:migrate
+```
+
+Test accounts (local D1): `grace@hopper.dev` / `supersecret123` (org "Acme Inc"). Test form slug: `launch-survey-ec68e1` (published, has custom question "How many people are on your team?"). Seeded `test-waitlist` also live.
+
+## 7. Recommended next session order
+
+1. Drop `OPENROUTER_API_KEY` into `.dev.vars` → test AI chat phrasing E2E + `/api/ai/generate-form` happy path (dashboard AI tab now wired — just set the key).
+2. Builder Logic tab: xyflow v12 (`@xyflow/react`), blocks+ending as nodes, goto rules as labeled edges, condition editor Sheet; simulate via existing logic engine.
+3. Escalate-UI skip E2E verify + chat polish (back/restart buttons, resume banner, ending CTA/redirect).
+4. M6: submissions dashboard (transcripts from `chat_messages` + answers), CSV export, analytics rollups.
+5. M8: `/v1` headless API + API-keys UI (Better Auth apiKey plugin) + widget embed.
+6. M9: Dodo billing + usage_counters enforcement.
+7. Dashboard form delete/rename/duplicate; ending-screen editor in builder.
+
+## 8. Session addendum (2026-08-24, later)
+- **Escalate-UI fallback shipped**: chat client now renders structured input (text/email/number/date) when the agent escalates after repeated invalid answers (`escalated` state → Composer forced-structured renderer).
+- **Builder Settings dialog shipped** (`settings-dialog.tsx`): AI interviewer config (mode template/hybrid/ai, tone, persona prompt), access (close-by-date, max submissions, captcha, hide branding), completion (notification emails, redirect URL, progress bar). Wired into builder top bar; autosaves via the same `update()`/debounced-PUT path as block edits.
+- All checks green: web typecheck + 0 lint errors, 22/22 schema tests.
+- NOTE: user was live-testing the app ("Skip Test Form" appeared) during verification — browser automation was stood down. Settings-autosave via dialog uses the same proven code path as block-edit autosave; if dialog edits ever fail to persist, first check React onChange firing inside the Radix portal (native select via automation tools may not dispatch React synthetic events — verify manually).
+- Restart stack with: `pnpm dev` (api :8787, web :3000/3100). Test account: grace@hopper.dev / supersecret123.
+
+## 9. AI layer VERIFIED E2E (2026-08-24)
+- OPENROUTER_API_KEY configured in apps/api/.dev.vars (gitignored). **User should rotate it later — it was pasted in chat.**
+- Flow generation: POST /api/ai/generate-form → 200 in ~11s, lint-clean FormDoc ("Coffee Shop Feedback Form", 7 blocks). Loose GenerationDraft schema (ALL fields required — strict-mode providers reject optionals/recursive $refs) normalized to strict FormDoc in routes/ai.ts normalizeBlock().
+- AI chat: form with settings.agent.mode="ai" streams real OpenRouter phrasing ("Great to hear from you! 😊 Could you please share your name?"), acknowledges prior answers, validates (email reject + clarify), completes → submission + ai_generations ledger rows (7 turns, 374in/16out).
+- Gotcha: stale wrangler process holding :8787 served old env (503 ai_not_configured) — `lsof -ti :8787 | xargs kill -9` before restart.
+
+## 10. M6 core VERIFIED (2026-08-24 later)
+- Results tab in builder (`results-client.tsx`, view switcher "Results"): KPI cards (starts/completed/abandoned/rate/avg-time), per-question drop-off funnel bars, submissions list with status filters, expandable **chat transcript viewer** (AI conversation in bubbles) + answers grid. Browser-verified with real data.
+- API: GET /api/forms/:id/submissions (answers + transcripts), GET /api/forms/:id/analytics (counts + per-block answer rates). Transcript projection: SessionDO.finalize() writes DO-stored messages → chat_messages D1 table (idempotent ON CONFLICT).
+- Fixed: duplicate user-message persistence (pendingUserTextPersisted flag).
+- User has independently built ThemePanel/SettingsPanel/ThemePreview + dnd-kit sortable in builder-client.tsx — DO NOT clobber; builder is 3-pane with view switcher (build/theme/settings/results).
+- Ops gotcha: stale workerd processes squat on :8787 after crashes → `lsof -ti :8787 | xargs kill -9` before starting wrangler.
+
+## 11. M8 developer API VERIFIED E2E (2026-08-24)
+- **Better Auth 1.7.1 has NO apiKey plugin** (research was wrong) — wrote our own: `lib/apikeys.ts` (sk_live_ + SHA-256 hash at rest, prefix display, expiry/enabled checks, last_used_at touch). Table already existed.
+- Dashboard key mgmt: POST/GET /api/keys, DELETE /api/keys/:id (`routes/keys.ts`, raw key shown once).
+- `/v1` surface (`routes/v1.ts`, Bearer auth): GET /v1/forms, GET /v1/forms/:id (public config), POST /v1/forms/:id/chat/sessions (returns sessionId+respondentToken+greeting+firstQuestion), POST /v1/chat/sessions/:sid/messages (**synchronous** turn result: assistantMessages + nextQuestion + complete + answers — the headless contract), GET /v1/chat/sessions/:sid (state).
+- Verified: key create → list forms (3) → bad key 401 → session create → message ("Got it, thanks for sharing your name! 😊...") → nextQuestion chaining → out-of-order answer correctly 400 stale_ref.
+- NOTE: /v1 message turn has a 50ms settle delay before reading the transcript; DO turn is async for AI mode — may need an explicit completion signal instead of sleep for slow AI turns.
+
+## 12. M8 COMPLETE + M9 core (2026-08-24 final)
+- **Widget VERIFIED in browser**: embed.js loader (launcher bubble + iframe panel + postMessage close + mobile responsive) on a real HTML page — chat runs inside with AI phrasing.
+- **Webhooks COMPLETE**: queue consumer (q-webhooks) with HMAC `x-chatform-signature: t=,v1=`, 10s timeout, delivery log, exp-backoff retries (1m/5m/30m/2h→dead) via cron sweep; admin CRUD + test-send + deliveries list (routes/webhook-admin.ts).
+- **M9 billing code-complete**: /api/billing/usage (plan limits + meters — VERIFIED), /api/billing/checkout (Dodo hosted checkout, 503 with clear message until DODO_API_KEY + product IDs configured), /api/billing/webhook (HMAC verify + dodo_events idempotency + subscription upsert/cancel). Usage metering: responses increment on finalize; enforceLimit() helper ready to wire into session create.
+- **Needs from user for billing E2E**: DODO_API_KEY + DODO_WEBHOOK_SECRET in .dev.vars, and Dodo product/price IDs inserted into the `plans` table.
+
+## 13. M7 file uploads COMPLETE + VERIFIED (2026-08-24 final)
+- R2-binding upload pipeline (no S3 credentials needed): POST /p/sessions/:id/uploads/intent (MIME allowlist + 25MB cap) → PUT raw body (size cross-check) → POST .../confirm (R2 head-check → confirmed → DO.notifyUpload → records answer + emits upload_received). Admin download: GET /api/files/:id/download.
+- Chat client: drag-drop style file picker for file_upload blocks with progress states, multi-file support, per-block accept/maxSize from the block spec. Verified E2E: upload → recorded → session completed with file descriptor answer → admin download returns bytes.
+- Route gotchas: sub-router MUST be extended before parent .route() mount (Hono copies at call time); uploadUrl shape = .../uploads/:fileId (PUT) + .../uploads/:fileId/confirm.
+- ALL FEATURES EXCEPT DODO BILLING E2E NOW COMPLETE. Remaining nice-to-haves: logic tab xyflow graph (logic rules already work via engine + settings JSON), templates gallery, custom domains.
+
+## 14. UI COMPLETION PASS (2026-08-24 final)
+- **Logic view SHIPPED** (xyflow v12 canvas): block graph with sequence edges + dashed animated conditional edges (labeled with condition), click node → side panel edits goto rules (operator select, value input, target select incl. endings). Wired as "Logic" view in builder.
+- **Integrate view SHIPPED**: webhook CRUD UI with event selection, signed test-send with delivery result badge, secret display, embed snippet.
+- **API keys page SHIPPED** (/api-keys): create dialog with show-once reveal + copy, list with last-used, revoke. Quick-start curl snippet.
+- **Usage page SHIPPED** (/usage): plan badge, metered progress bars (responses/AI generations/sessions) vs limits, over-limit state.
+- **Team page SHIPPED** (/team): member list (org plugin) + invite form (authClient.organization.inviteMember).
+- **AppNav SHIPPED**: pill nav in dashboard header (Forms/API keys/Usage/Team).
+- **Dashboard upgrades**: AI-generate mode in new-form dialog (generate → create → save doc → publish in one flow), form delete with confirm.
+- **CSV export VERIFIED**: GET /api/forms/:id/submissions/export — proper header + escaped rows with real submission data.
+- All gates green: typechecks, 0 lint errors, 22/22 tests.
+- Remaining (post-v1): live chat preview inside builder center pane (currently static flow cards), templates gallery, custom domains, xyflow edge-editing by dragging (rules edited via side panel).

@@ -13,6 +13,9 @@ import {
 import type { Bindings } from "../env.js";
 import type { ServerEvent, SSEEnvelope } from "../lib/events.js";
 import { clarifyText, closingText, escalateText, greeting, questionText, transitionAck } from "../lib/phrasing.js";
+import { chatModel } from "../lib/ai.js";
+import { buildSystemPrompt } from "../lib/agent-prompts.js";
+import { streamText } from "ai";
 
 interface DoSessionMeta {
   sessionId: string;
@@ -51,6 +54,8 @@ export class SessionDO extends DurableObject<Bindings> {
   private collectedCount = 0;
   private loaded = false;
   private encoder = new TextEncoder();
+  private sessionTokensUsed = 0;
+  private pendingUserTextPersisted = false;
 
   // ────────────────────────── lifecycle ──────────────────────────
 
@@ -222,6 +227,61 @@ export class SessionDO extends DurableObject<Bindings> {
     for (const w of dead) this.writers.delete(w);
   }
 
+  /** True when the LLM layer should phrase this turn. */
+  private aiEnabled(): boolean {
+    const mode = this.doc?.settings.agent.mode ?? "template";
+    return this.env.OPENROUTER_API_KEY !== undefined && mode !== "template" && this.sessionTokensUsed < (this.doc?.settings.agent.sessionTokenBudget ?? 12000);
+  }
+
+  /**
+   * AI-mode message: streams real model tokens to SSE. Returns false when AI
+   * is unavailable (caller falls back to deterministic template phrasing).
+   */
+  private async aiStreamMessage(objective: string): Promise<boolean> {
+    if (!this.aiEnabled() || !this.doc || !this.meta || !this.meta.currentRef) return false;
+    const block = this.doc.blocks.find((b) => b.ref === this.meta!.currentRef);
+    if (!block) return false;
+    try {
+      const answered = Object.keys(this.state.answers).length;
+      const result = streamText({
+        model: chatModel(this.env),
+        system: buildSystemPrompt(this.doc, block, answered),
+        prompt: objective,
+        maxOutputTokens: this.doc.settings.agent.responseMaxTokens,
+      });
+      const messageId = crypto.randomUUID();
+      await this.emit("message_start", { messageId, role: "assistant" });
+      let text = "";
+      for await (const delta of result.textStream) {
+        text += delta;
+        await this.emit("token", { messageId, delta });
+      }
+      await this.emit("message_end", { messageId });
+      const usage = await result.usage;
+      this.sessionTokensUsed += (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0);
+      await this.logAiUsage("interview_turn", usage?.inputTokens ?? 0, usage?.outputTokens ?? 0);
+      await this.appendMessage("assistant", text);
+      return text.trim().length > 0;
+    } catch (err) {
+      console.error("ai_stream_failed", err);
+      return false;
+    }
+  }
+
+  private async logAiUsage(kind: string, inputTokens: number, outputTokens: number): Promise<void> {
+    if (!this.meta || (inputTokens + outputTokens) === 0) return;
+    try {
+      await this.env.DB.prepare(
+        `INSERT INTO ai_generations (id, organization_id, session_id, form_id, kind, provider, model, prompt_tokens, completion_tokens, created_at)
+         VALUES (?, ?, ?, ?, ?, 'openrouter', ?, ?, ?, ?)`,
+      )
+        .bind(`ai_${crypto.randomUUID().slice(0, 16)}`, this.meta.organizationId, this.meta.sessionId, this.meta.formId, kind, "openrouter/auto", inputTokens, outputTokens, Date.now())
+        .run();
+    } catch (err) {
+      console.error("ai_usage_log_failed", err);
+    }
+  }
+
   /** Stream text as token events (template mode: chunked; AI mode: real tokens). */
   private async emitMessage(text: string): Promise<string> {
     const messageId = crypto.randomUUID();
@@ -255,8 +315,10 @@ export class SessionDO extends DurableObject<Bindings> {
     if (input.type === "text") {
       const msgId = await this.appendMessage("user", input.text);
       await this.emit("user_message", { messageId: msgId, text: input.text });
+      this.pendingUserTextPersisted = true;
       return this.handleFreeText(input.text);
     }
+    this.pendingUserTextPersisted = false;
     return this.handleStructured(input.ref, input.value);
   }
 
@@ -330,8 +392,11 @@ export class SessionDO extends DurableObject<Bindings> {
     }
     this.invalidCounts.delete(block.ref);
     const echo = summarizeAnswer(result.value);
-    const echoId = await this.appendMessage("user", echo);
-    await this.emit("user_message", { messageId: echoId, text: echo });
+    if (!this.pendingUserTextPersisted) {
+      const echoId = await this.appendMessage("user", echo);
+      await this.emit("user_message", { messageId: echoId, text: echo });
+    }
+    this.pendingUserTextPersisted = false;
 
     // apply logic + persist
     const next = resolveNext(this.doc!, block.ref, this.state);
@@ -371,7 +436,10 @@ export class SessionDO extends DurableObject<Bindings> {
         await this.advanceTo(after, next.block.ref);
         return;
       }
-      await this.emitMessage(questionText(next.block));
+      const aiOk = await this.aiStreamMessage(
+        `Ask the question with ref=${next.block.ref} now. If the respondent just gave an answer, acknowledge it in a few words first, then ask.`,
+      );
+      if (!aiOk) await this.emitMessage(questionText(next.block));
       await this.emitQuestion();
       await this.persistMeta();
       return;
@@ -446,6 +514,16 @@ export class SessionDO extends DurableObject<Bindings> {
     this.meta.status = "abandoned";
     await this.finalize("abandoned", null, reason);
     await this.persistMeta();
+  }
+
+  /** Called by the uploads confirm route — emits upload_received and records the answer. */
+  async notifyUpload(fileId: string, file: { fileId: string; filename: string; mime: string; size: number; r2Key: string }): Promise<void> {
+    const ok = await this.ensureLoaded();
+    if (!ok || !this.meta || !this.doc || this.meta.status !== "active") return;
+    const block = await this.currentBlock();
+    if (!block) return;
+    await this.emit("upload_received", { ref: block.ref, fileId, filename: file.filename });
+    await this.record(block, [file]);
   }
 
   async getStatus(): Promise<{ status: string; currentRef: string | null; collected: number; answers: AnswerMap; variables: Record<string, string | number> } | null> {
@@ -555,6 +633,36 @@ export class SessionDO extends DurableObject<Bindings> {
         `UPDATE chat_sessions SET status = ?, current_block_ref = NULL, collected_count = ?, turn_count = ?, submission_id = ?, state_snapshot_json = NULL, last_activity_at = ? WHERE id = ?`,
       ).bind(this.meta.status, this.collectedCount, this.turnCount, submissionId, Date.now(), this.meta.sessionId),
     ]);
+
+    // project transcript to D1 for the results dashboard
+    try {
+      const entries = await this.ctx.storage.list<{ id: string; role: string; content: string; blockRef: string | null; createdAt: number }>({ prefix: "msg:" });
+      const msgs = [...entries.values()].sort((a, b) => a.createdAt - b.createdAt).slice(0, 200);
+      if (msgs.length > 0) {
+        const stmts = msgs.map((m) =>
+          this.env.DB.prepare(
+            `INSERT INTO chat_messages (id, session_id, role, block_ref, content, created_at) VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT (id) DO NOTHING`,
+          ).bind(`cm_${m.id}`, this.meta!.sessionId, m.role, m.blockRef, m.content, m.createdAt),
+        );
+        await this.env.DB.batch(stmts);
+      }
+    } catch (err) {
+      console.error("transcript_projection_failed", err);
+    }
+
+    // meter usage (responses)
+    try {
+      const period = new Date().toISOString().slice(0, 7);
+      await this.env.DB.prepare(
+        `INSERT INTO usage_counters (id, organization_id, period, metric, used, updated_at) VALUES (?, ?, ?, 'responses', 1, ?)
+         ON CONFLICT (organization_id, period, metric) DO UPDATE SET used = used + 1, updated_at = ?`,
+      )
+        .bind(`uc_${crypto.randomUUID().slice(0, 16)}`, this.meta.organizationId, period, Date.now(), Date.now())
+        .run();
+    } catch (err) {
+      console.error("usage_increment_failed", err);
+    }
 
     // enqueue webhook fanout
     await this.env.Q_WEBHOOKS.send({

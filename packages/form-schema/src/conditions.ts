@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { HiddenFieldName, RefString, VariableName } from "./ids.js";
+import { HiddenFieldName, RefString, VariableName } from "./ids";
 
 export const ConditionOp = z.enum([
   "eq",

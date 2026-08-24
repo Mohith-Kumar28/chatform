@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import { sha256Hex } from "@repo/form-schema";
+import { respondentToken, hashToken } from "./helpers.js";
 import type { Bindings } from "../env.js";
 import { SessionDO } from "../do/session-do.js";
 import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
@@ -26,10 +27,6 @@ const actionSchema = z.object({
 
 function stub(env: Bindings, sessionId: string): DurableObjectStub<SessionDO> {
   return env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
-}
-
-function hashToken(token: string): string {
-  return sha256Hex(token);
 }
 
 sessionsRouter.post(
@@ -136,11 +133,6 @@ sessionsRouter.post(
     respondentToken,
   });
 });
-
-// respondent token auth (SSE clients pass ?t= since EventSource cannot set headers)
-function respondentToken(c: { req: { url: string; header: (k: string) => string | undefined } }): string | null {
-  return c.req.header("x-respondent-token") ?? new URL(c.req.url).searchParams.get("t");
-}
 
 async function requireRespondent(c: { req: { param: (k: string) => string; url: string; header: (k: string) => string | undefined }; env: Bindings }): Promise<string | null> {
   const sessionId = c.req.param("id");

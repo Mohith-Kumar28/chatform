@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { ConditionGroup } from "./conditions.js";
-import { NanoId, RefString, VariableName } from "./ids.js";
+import { ConditionGroup } from "./conditions";
+import { NanoId, RefString, VariableName } from "./ids";
 
 const RuleBase = { id: NanoId };
 

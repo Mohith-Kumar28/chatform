@@ -1,9 +1,9 @@
-import type { AnswerMap } from "../answers.js";
-import type { Block } from "../blocks.js";
-import type { Condition, ConditionGroup, ConditionOp } from "../conditions.js";
-import type { Ending, LogicRule } from "../logic.js";
-import type { ValueExprT } from "../logic.js";
-import type { FormDoc } from "../form-doc.js";
+import type { AnswerMap } from "../answers";
+import type { Block } from "../blocks";
+import type { Condition, ConditionGroup, ConditionOp } from "../conditions";
+import type { Ending, LogicRule } from "../logic";
+import type { ValueExprT } from "../logic";
+import type { FormDoc } from "../form-doc";
 
 export interface EvalState {
   answers: AnswerMap;

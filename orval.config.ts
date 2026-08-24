@@ -15,7 +15,6 @@ export default defineConfig({
       baseUrl: "http://localhost:8787",
       override: {
         query: {
-          useQuery: true,
           useSuspense: false,
         },
         mutator: {

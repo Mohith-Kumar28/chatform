@@ -16,7 +16,7 @@ export interface Bindings {
   APP_ORIGIN: string;
 
   BETTER_AUTH_SECRET: string;
-  OPENAI_API_KEY?: string;
+  OPENROUTER_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   AI_GATEWAY_ACCOUNT_ID?: string;
   RESEND_API_KEY?: string;

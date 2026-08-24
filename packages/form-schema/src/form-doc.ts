@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { AnswerMap } from "./answers.js";
-import { Block } from "./blocks.js";
-import { Ending, HiddenField, LogicRule, Variable } from "./logic.js";
-import { SettingsDoc, ThemeDoc } from "./settings.js";
+import { AnswerMap } from "./answers";
+import { Block } from "./blocks";
+import { Ending, HiddenField, LogicRule, Variable } from "./logic";
+import { SettingsDoc, ThemeDoc } from "./settings";
 
 export const SCHEMA_VERSION = 1;
 
