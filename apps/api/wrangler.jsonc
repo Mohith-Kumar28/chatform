@@ -1,0 +1,95 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "chatform-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "chatform",
+      "database_id": "local-dev-db",
+      "migrations_dir": "../../packages/db/drizzle"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "KV_CONFIG",
+      "id": "local-dev-kv"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "chatform-uploads"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SESSION_DO",
+        "class_name": "SessionDO"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SessionDO"]
+    }
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "Q_SUBMISSIONS", "queue": "q-submissions" },
+      { "binding": "Q_WEBHOOKS", "queue": "q-webhooks" },
+      { "binding": "Q_EXPORTS", "queue": "q-exports" }
+    ],
+    "consumers": [
+      {
+        "queue": "q-submissions",
+        "max_batch_size": 25,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "q-submissions-dlq"
+      },
+      {
+        "queue": "q-webhooks",
+        "max_batch_size": 10,
+        "max_batch_timeout": 1,
+        "max_retries": 10,
+        "dead_letter_queue": "q-webhooks-dlq"
+      },
+      {
+        "queue": "q-exports",
+        "max_batch_size": 1,
+        "max_retries": 3
+      }
+    ]
+  },
+  "analytics_engine_datasets": [
+    {
+      "binding": "ANALYTICS",
+      "dataset": "chatform_events"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "RATE_LIMIT",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 100,
+        "period": 10
+      }
+    }
+  ],
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  "vars": {
+    "ENVIRONMENT": "development",
+    "APP_ORIGIN": "http://localhost:3000"
+  }
+}

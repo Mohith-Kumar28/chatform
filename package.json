@@ -1,0 +1,34 @@
+{
+  "name": "chatform",
+  "private": true,
+  "packageManager": "pnpm@10.15.1",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "setup": "pnpm install && pnpm db:migrate && pnpm seed",
+    "dev": "turbo run dev",
+    "dev:api": "pnpm --filter @repo/api dev",
+    "dev:web": "pnpm --filter @repo/web dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "db:migrate": "pnpm --filter @repo/api d1:migrate:local",
+    "db:migrate:remote": "pnpm --filter @repo/api d1:migrate:remote",
+    "db:generate": "pnpm --filter @repo/db generate",
+    "seed": "pnpm --filter @repo/api exec wrangler d1 execute chatform --local --file ../../tooling/seed.sql",
+    "seed:remote": "pnpm --filter @repo/api exec wrangler d1 execute chatform --remote --file ../../tooling/seed.sql",
+    "gen:api": "orval --config orval.config.ts",
+    "deploy:api": "pnpm --filter @repo/api deploy",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.10.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "orval": "^8.26.0"
+  }
+}

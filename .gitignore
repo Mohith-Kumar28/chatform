@@ -1,0 +1,15 @@
+node_modules/
+.next/
+.turbo/
+dist/
+.wrangler/
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
+coverage/
+*.tsbuildinfo
+.DS_Store
+next-env.d.ts
+.vercel
+drizzle/meta/_journal.json.bak

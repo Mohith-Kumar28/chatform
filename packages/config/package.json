@@ -1,0 +1,12 @@
+{
+  "name": "@repo/config",
+  "version": "0.1.0",
+  "private": true,
+  "files": ["tsconfig.base.json", "tsconfig.worker.json", "tsconfig.next.json", "tsconfig.react-lib.json", "eslint.base.js"],
+  "exports": {
+    "./tsconfig/base": "./tsconfig.base.json",
+    "./tsconfig/worker": "./tsconfig.worker.json",
+    "./tsconfig/next": "./tsconfig.next.json",
+    "./tsconfig/react-lib": "./tsconfig.react-lib.json"
+  }
+}
