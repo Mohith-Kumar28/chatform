@@ -47,6 +47,8 @@ export class SessionDO extends DurableObject<Bindings> {
   private doc: FormDoc | null = null;
   private state: EvalState = { answers: {}, variables: {}, hidden: {} };
   private invalidCounts = new Map<string, number>();
+  /** Human-readable summary of the most recent recorded answer (for AI acks). */
+  private lastAnswerDisplay: string | null = null;
   private writers = new Set<WritableStreamDefaultWriter<Uint8Array>>();
   private eventBuffer: SSEEnvelope[] = [];
   private seq = 0;
@@ -243,9 +245,10 @@ export class SessionDO extends DurableObject<Bindings> {
     if (!block) return false;
     try {
       const answered = Object.keys(this.state.answers).length;
+      const context = await this.conversationContext();
       const result = streamText({
         model: chatModel(this.env),
-        system: buildSystemPrompt(this.doc, block, answered),
+        system: buildSystemPrompt(this.doc, block, answered, context),
         prompt: objective,
         maxOutputTokens: this.doc.settings.agent.responseMaxTokens,
       });
@@ -268,8 +271,21 @@ export class SessionDO extends DurableObject<Bindings> {
     }
   }
 
-  private async logAiUsage(kind: string, inputTokens: number, outputTokens: number): Promise<void> {
-    if (!this.meta || (inputTokens + outputTokens) === 0) return;
+  /** Recent conversation + collected answers, for the agent's system prompt. */
+  private async conversationContext(): Promise<{ transcript: string; answers: string }> {
+    const entries = await this.ctx.storage.list<{ id: string; role: string; content: string; createdAt: number }>({ prefix: "msg:" });
+    const msgs = [...entries.values()].sort((a, b) => a.createdAt - b.createdAt).slice(-16);
+    const transcript = msgs.map((m) => `${m.role === "user" ? "Respondent" : "You"}: ${m.content}`).join("\n");
+    const answers = Object.entries(this.state.answers)
+      .map(([ref, v]) => {
+        const block = this.doc?.blocks.find((b) => b.ref === ref);
+        return `- ${block?.title ?? ref}: ${typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}`;
+      })
+      .join("\n");
+    return { transcript, answers };
+  }
+
+  private async logAiUsage(kind: string, inputTokens: number, outputTokens: number): Promise<void> {    if (!this.meta || (inputTokens + outputTokens) === 0) return;
     try {
       await this.env.DB.prepare(
         `INSERT INTO ai_generations (id, organization_id, session_id, form_id, kind, provider, model, prompt_tokens, completion_tokens, created_at)
@@ -374,6 +390,19 @@ export class SessionDO extends DurableObject<Bindings> {
     if (count >= agent.escalateAfterInvalid) {
       await this.emitMessage(escalateText(block));
       await this.emit("escalate_ui", { ref: block.ref, spec: toPublicBlock(block), reason: "repeated_invalid" });
+    } else if (this.aiEnabled()) {
+      // agentic reply: address what the respondent actually said, then re-ask
+      const ok = await this.aiStreamMessage(
+        `The respondent's latest message was not a valid answer to the current question "${block.title}" (expected: ${code}). ` +
+          `Respond naturally in 1-3 sentences: if they asked a question or made conversation, address it helpfully using the conversation context; ` +
+          `then gently steer back and re-ask "${block.title}" in your own words. Do not invent new questions or options.`,
+      );
+      if (ok) {
+        await this.emitQuestion();
+        return { accepted: true };
+      }
+      await this.emitMessage(clarifyText(block, hint, count));
+      await this.emitQuestion();
     } else {
       await this.emitMessage(clarifyText(block, hint, count));
       await this.emitQuestion();
@@ -392,6 +421,7 @@ export class SessionDO extends DurableObject<Bindings> {
     }
     this.invalidCounts.delete(block.ref);
     const echo = summarizeAnswer(block, result.value);
+    this.lastAnswerDisplay = echo;
     if (!this.pendingUserTextPersisted) {
       const echoId = await this.appendMessage("user", echo);
       await this.emit("user_message", { messageId: echoId, text: echo });
@@ -436,8 +466,10 @@ export class SessionDO extends DurableObject<Bindings> {
         await this.advanceTo(after, next.block.ref);
         return;
       }
+      const answeredBlock = this.doc.blocks.find((b) => b.ref === fromRef);
       const aiOk = await this.aiStreamMessage(
-        `Ask the question with ref=${next.block.ref} now. If the respondent just gave an answer, acknowledge it in a few words first, then ask.`,
+        `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
+          `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref} in your own words.`,
       );
       if (!aiOk) await this.emitMessage(questionText(next.block));
       await this.emitQuestion();

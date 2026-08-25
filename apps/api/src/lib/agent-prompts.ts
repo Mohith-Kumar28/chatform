@@ -8,7 +8,14 @@ const TONE_GUIDE: Record<string, string> = {
   playful: "Fun and energetic. Emoji welcome. Keep it snappy.",
 };
 
-export function buildSystemPrompt(doc: FormDoc, currentBlock: Block, answeredCount: number): string {
+export interface AgentContext {
+  /** Recent conversation, "Respondent:" / "You:" lines. */
+  transcript?: string;
+  /** Answers collected so far, "- Question: value" lines. */
+  answers?: string;
+}
+
+export function buildSystemPrompt(doc: FormDoc, currentBlock: Block, answeredCount: number, context?: AgentContext): string {
   const agent = doc.settings.agent;
   const remaining = doc.blocks
     .filter((b) => !["welcome", "statement"].includes(b.type))
@@ -21,27 +28,25 @@ export function buildSystemPrompt(doc: FormDoc, currentBlock: Block, answeredCou
     })
     .join("\n");
 
-  const collected = Object.entries(currentBlock ? {} : {})
-    .length; // answers digest is injected separately by the DO
-
-  return `You are the interviewer for "${doc.title}". You ask ONE question at a time using the ask_question tool, and record answers with record_answer.
+  return `You are the live interviewer for "${doc.title}"${doc.description ? ` — ${doc.description}` : ""}. You are having a real conversation with one respondent.
 
 PERSONALITY: ${TONE_GUIDE[agent.tone] ?? TONE_GUIDE.friendly}${agent.personaPrompt ? `\nExtra persona: ${agent.personaPrompt}` : ""}
 
-CURRENT OBJECTIVE: Ask the question with ref=${currentBlock.ref}. Do not ask anything else.
+CURRENT OBJECTIVE: Respond to the respondent's latest message, then steer the conversation to the question with ref=${currentBlock.ref}. One question per turn.
 
 REMAINING QUESTIONS:
 ${remaining}
 
 PROGRESS: ${answeredCount} answered so far.
-
+${context?.transcript ? `\nCONVERSATION SO FAR:\n${context.transcript}\n` : ""}
+${context?.answers ? `\nANSWERS COLLECTED:\n${context.answers}\n` : ""}
 HARD RULES:
-- Exactly one question per turn. Never ask about a ref other than the current objective.
-- Never invent questions or options not listed above.
-- Rephrase the question naturally in your own words — do not read it robotically. Keep it under 40 words.
-- If the user's last message contains the answer, call record_answer first, then your next output will handle the transition.
-- If the user's message is unclear or invalid for this question, use clarify with a helpful hint (max ${agent.maxClarificationsPerBlock} times).
-- Mirror the respondent's language. Be brief.`;
+- Exactly one question per turn — the current objective question, in your own words (under 40 words).
+- You have the full conversation above. Use it: acknowledge what the respondent just said, reference their earlier answers when relevant, and never repeat a question they already answered.
+- If the respondent asks a question (about the form, the topic, why you're asking, anything else): answer it briefly and honestly in one sentence — you know the form's title and description — then smoothly re-ask the current question. Never ignore them, never just repeat the question robotically.
+- If their message IS a valid answer to the current question, confirm it in a few words, then move toward the next objective.
+- Never invent questions or options not listed above. Never ask about a ref other than the current objective.
+- Mirror the respondent's language. Be brief and human.`;
 }
 
 export function buildValidationPrompt(block: Block, answer: string): string {
