@@ -169,3 +169,30 @@ Test accounts (local D1): `grace@hopper.dev` / `supersecret123` (org "Acme Inc")
 - **CSV export VERIFIED**: GET /api/forms/:id/submissions/export — proper header + escaped rows with real submission data.
 - All gates green: typechecks, 0 lint errors, 22/22 tests.
 - Remaining (post-v1): live chat preview inside builder center pane (currently static flow cards), templates gallery, custom domains, xyflow edge-editing by dragging (rules edited via side panel).
+
+## 15. FRONTEND COMPLETION PASS (2026-08-24 final)
+- **Live chat preview SHIPPED**: builder center pane now runs the REAL interview runtime against the working draft — POST /api/forms/:id/preview/sessions (auth'd, uses working_schema) + use-chat existingSession mode + Restart button. Preview ≡ production, single source of truth.
+- **Logic view**: xyflow v12 canvas (sequence + dashed conditional edges w/ condition labels), per-block goto-rule editor (operator/value/target incl. endings). Rules persist via doc autosave.
+- **Templates page** (/templates): 4 seeded templates (Lead Capture, NPS, Event RSVP, Job Application) with use-template → creates draft + opens builder.
+- **Share view**: copyable public link, inline-iframe + floating-widget snippets.
+- **Integrate view**: webhook CRUD + signed test-send.
+- **API keys / Usage / Team pages** shipped earlier this pass.
+- **Landing page rebuilt**: nav, hero, 6 feature cards, 3-step how-it-works, CTA, footer — matches warm cream/orange design system.
+- **Dashboard**: AI-generate in new-form dialog (generate→create→save→publish), form delete, AppNav pill nav.
+- Build output: 9 routes, all compile. Gates: typecheck clean, 0 lint errors, 22/22 tests, CSV export verified.
+
+## 16. YOUFORM PARITY PASS (2026-08-24)
+- **Views tracking**: POST /p/forms/:slug/view (public, sessionStorage-deduped ping from chat page) → analytics_rollup_daily.views; analytics endpoint returns real views + Views KPI card.
+- **Summary tab** (Results): per-question distributions — option bars w/ percentages for choice types, avg/min/max for numeric types. Toggle "Summary view" in Results.
+- **Password protection**: settings.password {enabled,value} in schema; enforced in /p session create (401 password_required); UI in settings dialog.
+- **Hidden fields & variables UI**: chip editors in settings dialog (add/remove; variables typed number/text) — schema already supported them.
+- **Link settings UI**: OG title/description + noIndex in settings dialog (schema meta existed).
+- **Dashboard**: search + sort (newest/oldest/most responses).
+- **Share**: QR code + Facebook/X/LinkedIn/Email one-click share buttons.
+- All gates green.
+
+## 17. COMPETITOR PARITY AUDIT FIXES (2026-08-24)
+- **Logic canvas now interactive**: drag connections between nodes to create goto rules (yes/no blocks auto-wire a Yes condition; others wire is_not_empty), delete edges with Backspace/Delete, yes/no edges labeled "Yes"/"No", option-block edges labeled with the option label.
+- **Option-aware rule conditions FIXED**: rule value editor now renders a dropdown of real option IDs for select blocks (free-text values never matched option-ID answers — this was a real bug), Yes/No picker for yes_no, number input for scales, text otherwise.
+- **AI add-blocks endpoint** (/api/ai/add-blocks): prompt + existing doc → AI generates new blocks avoiding duplicates → normalized → appended → persisted. VERIFIED E2E (506 tokens, block appended). Builder AI bar ("Build with AI") uses it and refreshes the preview.
+- **Empty/loading states**: Usage, Team, Templates pages got loading skeletons + no-data/error empty states; dashboard already had them.

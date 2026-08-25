@@ -16,6 +16,8 @@ export const FormDoc = z.object({
   endingRules: z.array(LogicRule).default([]),
   /** Rules evaluated after each recorded answer, in array order. */
   logic: z.array(LogicRule).default([]),
+  /** Visual workflow editor positions, keyed by block/ending ref or rule id. */
+  layout: z.record(z.string(), z.object({ x: z.number(), y: z.number() })).default({}),
   variables: z.array(Variable).default([]),
   hiddenFields: z.array(HiddenField).default([]),
   settings: SettingsDoc.prefault({}),

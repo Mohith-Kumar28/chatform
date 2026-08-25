@@ -29,6 +29,10 @@ export const LogicRule = z.discriminatedUnion("action_kind", [
     from: RefString.optional(),
     target: RefString,
     targetKind: z.enum(["block", "ending"]).default("block"),
+    /** Id of the sibling rule forming the other branch of an if/else pair (workflow editor). */
+    pair: NanoId.optional(),
+    /** Which branch of an if/else pair this rule is. */
+    branch: z.enum(["true", "false"]).optional(),
   }),
   z.object({
     ...RuleBase,

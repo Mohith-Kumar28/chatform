@@ -391,7 +391,7 @@ export class SessionDO extends DurableObject<Bindings> {
       this.collectedCount += 1;
     }
     this.invalidCounts.delete(block.ref);
-    const echo = summarizeAnswer(result.value);
+    const echo = summarizeAnswer(block, result.value);
     if (!this.pendingUserTextPersisted) {
       const echoId = await this.appendMessage("user", echo);
       await this.emit("user_message", { messageId: echoId, text: echo });
@@ -590,6 +590,7 @@ export class SessionDO extends DurableObject<Bindings> {
   private async projectAnswer(block: Block, value: unknown): Promise<void> {
     try {
       if (!this.meta) return;
+      if (this.meta.formVersionId === "preview") return; // preview sessions never project to D1
       const submissionId = await this.ensureSubmissionRow();
       const numeric = typeof value === "number" ? value : null;
       await this.env.DB.prepare(
@@ -615,6 +616,10 @@ export class SessionDO extends DurableObject<Bindings> {
 
   private async finalize(status: "completed" | "abandoned", endingRef: string | null, reason?: string): Promise<string> {
     if (!this.meta) throw new Error("no meta");
+    if (this.meta.formVersionId === "preview") {
+      // preview sessions never touch D1: no submissions, usage, webhooks, or analytics
+      return `sbm_preview`;
+    }
     const submissionId = await this.ensureSubmissionRow();
     const durationMs = Date.now() - this.meta.startedAt;
 
@@ -690,13 +695,25 @@ function nextInSequence(doc: FormDoc, ref: string): string | null {
   return doc.blocks[idx + 1]!.ref;
 }
 
-function summarizeAnswer(value: unknown): string {
+function summarizeAnswer(block: Block, value: unknown): string {
   if (value === undefined || value === null) return "(skipped)";
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  const options = "options" in block ? block.options : undefined;
+  const labelFor = (v: unknown): string => {
+    if (options) {
+      const opt = options.find((o) => o.id === v);
+      if (opt) return opt.label;
+    }
+    return String(v);
+  };
+  if (typeof value === "string") return labelFor(value);
+  if (typeof value === "boolean") {
+    if (block.type === "yes_no") return value ? (block.yesLabel ?? "Yes") : (block.noLabel ?? "No");
+    return String(value);
+  }
+  if (typeof value === "number") return String(value);
   if (Array.isArray(value)) {
     return value
-      .map((v) => (typeof v === "object" && v !== null && "filename" in v ? (v as { filename: string }).filename : String(v)))
+      .map((v) => (typeof v === "object" && v !== null && "filename" in v ? (v as { filename: string }).filename : labelFor(v)))
       .join(", ");
   }
   return JSON.stringify(value);

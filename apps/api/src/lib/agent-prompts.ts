@@ -66,5 +66,5 @@ Requirements:
 - Every option needs a stable id like opt_<slug> (options array MUST be present on every block — use [] when the type has no options)
 - Every block MUST include: description (use "" if none) and scale (use 5 for rating, 10 otherwise)
 - One ending titled warmly (endingBody "" if none)
-- Do not include logic rules unless the request explicitly needs branching`;
+- Branching: if the flow benefits from conditions (e.g. "only ask follow-up X if Y equals Z", or "skip to the end if NPS is low"), add a "branches" array: [{ "when": { "ref": "<question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains|is_empty|is_not_empty>", "value": <option id / number / boolean, or null for is_empty and is_not_empty> }, "then": "<target question ref or end_thanks>" }]. For choice questions use the option id as value. Only add branches that genuinely make sense — linear forms should omit "branches".`;
 }

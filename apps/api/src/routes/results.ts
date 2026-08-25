@@ -53,6 +53,23 @@ const Summary = z.object({
   ),
 });
 
+// ─── views tracking (public, fire-and-forget) ───
+export const viewsRouter = new Hono<{ Bindings: Bindings }>();
+
+viewsRouter.post("/forms/:slug/view", async (c) => {
+  const slug = c.req.param("slug");
+  const form = await c.env.DB.prepare(`SELECT id FROM forms WHERE slug = ? AND deleted_at IS NULL`).bind(slug).first<{ id: string }>();
+  if (!form) return c.json({ ok: false }, 404);
+  const date = new Date().toISOString().slice(0, 10);
+  await c.env.DB.prepare(
+    `INSERT INTO analytics_rollup_daily (id, date, form_id, views) VALUES (?, ?, ?, 1)
+     ON CONFLICT (date, form_id) DO UPDATE SET views = views + 1`,
+  )
+    .bind(`av_${date}_${form.id}`, date, form.id)
+    .run();
+  return c.json({ ok: true });
+});
+
 /** List submissions for a form with answers + chat transcripts. */
 resultsRouter.get(
   "/forms/:id/submissions",
@@ -212,16 +229,60 @@ resultsRouter.get(
       });
     }
 
+    // per-question answer distributions (Summary tab)
+    const distributions = [];
+    for (const b of answerable) {
+      const rows = await c.env.DB.prepare(
+        `SELECT value_json, COUNT(*) AS n FROM submission_answers WHERE form_id = ? AND block_ref = ? GROUP BY value_json ORDER BY n DESC LIMIT 12`,
+      )
+        .bind(id, b.ref)
+        .all<{ value_json: string; n: number }>();
+      let numericSummary: { avg: number; min: number; max: number } | null = null;
+      const options: { label: string; count: number }[] = [];
+      const numericTypes = ["rating", "nps", "opinion_scale", "number"];
+      if (numericTypes.includes(b.type)) {
+        const agg = await c.env.DB.prepare(
+          `SELECT AVG(value_number) AS avg, MIN(value_number) AS min, MAX(value_number) AS max FROM submission_answers WHERE form_id = ? AND block_ref = ? AND value_number IS NOT NULL`,
+        )
+          .bind(id, b.ref)
+          .first<{ avg: number | null; min: number | null; max: number | null }>();
+        if (agg?.avg !== null && agg?.avg !== undefined) {
+          numericSummary = { avg: Math.round(agg.avg * 10) / 10, min: agg.min ?? 0, max: agg.max ?? 0 };
+        }
+      } else {
+        for (const row of rows.results ?? []) {
+          try {
+            const v = JSON.parse(row.value_json);
+            options.push({ label: typeof v === "string" ? v : JSON.stringify(v), count: row.n });
+          } catch {
+            options.push({ label: row.value_json, count: row.n });
+          }
+        }
+      }
+      distributions.push({
+        blockRef: b.ref,
+        title: b.title,
+        type: b.type,
+        answered: perBlock.find((p) => p.blockRef === b.ref)?.answered ?? 0,
+        numericSummary,
+        options,
+      });
+    }
+
+    // views from rollups
+    const viewsRow = await c.env.DB.prepare(`SELECT SUM(views) AS v FROM analytics_rollup_daily WHERE form_id = ?`).bind(id).first<{ v: number | null }>();
+
     const starts = counts?.starts ?? 0;
     const completed = counts?.completed ?? 0;
     return c.json({
-      views: starts, // AE-based views land with M6 rollups; starts is the floor
+      views: viewsRow?.v ?? starts,
       starts,
       completed,
       abandoned: counts?.abandoned ?? 0,
       completionRate: starts > 0 ? Math.round((completed / starts) * 100) : 0,
       avgDurationMs: counts?.avg_duration ? Math.round(counts.avg_duration) : null,
       perBlock,
+      distributions,
     });
   },
 );

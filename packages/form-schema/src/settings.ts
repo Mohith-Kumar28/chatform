@@ -21,6 +21,12 @@ export const SettingsDoc = z.object({
     .default({ closedMessageMd: "This form is no longer accepting responses." }),
 
   requireAuth: z.boolean().default(false),
+  password: z
+    .object({
+      enabled: z.boolean().default(false),
+      value: z.string().max(200).default(""),
+    })
+    .default({ enabled: false, value: "" }),
   captcha: z
     .object({
       enabled: z.boolean().default(true),

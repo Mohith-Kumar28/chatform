@@ -82,6 +82,20 @@ export const GenerationDraft = z.object({
     .max(30),
   endingTitle: z.string(),
   endingBody: z.string(),
+  /** Conditional flow: when <condition on question ref> → jump to <target ref | end_thanks>. */
+  branches: z
+    .array(
+      z.object({
+        when: z.object({
+          ref: z.string(),
+          op: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains", "not_contains", "is_empty", "is_not_empty"]),
+          /** null when the op needs no value (is_empty / is_not_empty) — required field for strict structured output. */
+          value: z.union([z.string(), z.number(), z.boolean()]).nullable(),
+        }),
+        then: z.string(),
+      }),
+    )
+    .max(12),
 });
 export type GenerationDraft = z.output<typeof GenerationDraft>;
 

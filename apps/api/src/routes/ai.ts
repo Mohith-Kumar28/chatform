@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { Block as BlockSchema, FormDoc, lintFormDoc, hasErrors, type Block, type FormDocInput } from "@repo/form-schema";
+import { Block as BlockSchema, FormDoc, lintFormDoc, hasErrors, type Block, type FormDocInput, type LogicRuleInput } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { createAuth } from "../lib/auth.js";
 import { generateFormDraft, type GenerationDraft } from "../lib/ai.js";
@@ -74,6 +74,38 @@ function normalizeBlock(draft: GenerationDraft["blocks"][number], index: number)
   }
 }
 
+/** Map AI draft branches onto strict goto logic rules; drops anything invalid. */
+function normalizeBranches(draft: GenerationDraft, blocks: Block[]): LogicRuleInput[] {
+  const refs = new Set(blocks.map((b) => b.ref));
+  const rules: LogicRuleInput[] = [];
+  for (const br of draft.branches) {
+    if (!refs.has(br.when.ref)) continue;
+    const isEnding = br.then === "end_thanks";
+    if (!isEnding && !refs.has(br.then)) continue;
+    if (br.when.ref === br.then) continue;
+    rules.push({
+      id: `rl_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`,
+      action_kind: "goto",
+      from: br.when.ref,
+      when: {
+        op: "and",
+        conditions: [
+          {
+            left: { kind: "ref", ref: br.when.ref },
+            op: br.when.op,
+            ...(br.when.value !== null && br.when.value !== undefined ? { value: br.when.value } : {}),
+          },
+        ],
+        groups: [],
+      },
+      target: br.then,
+      targetKind: isEnding ? "ending" : "block",
+      branch: "true",
+    });
+  }
+  return rules;
+}
+
 aiRouter.post(
   "/ai/generate-form",
   validator("json", GenerateBody),
@@ -140,7 +172,7 @@ aiRouter.post(
             showSummary: false,
           },
         ],
-        logic: [],
+        logic: normalizeBranches(draft, blocks),
         endingRules: [],
         variables: [],
         hiddenFields: [],
@@ -155,5 +187,64 @@ aiRouter.post(
       lastError = issues.filter((i) => i.level === "error").map((i) => `${i.path ?? ""}: ${i.message}`).join("\n");
     }
     return c.json({ error: { code: "generation_failed", message: "AI could not produce a valid form. Try rephrasing." } }, 502);
+  },
+);
+
+aiRouter.post(
+  "/ai/add-blocks",
+  validator(
+    "json",
+    z.object({
+      formId: z.string(),
+      prompt: z.string().min(3).max(1000),
+      count: z.number().int().min(1).max(10).default(3),
+    }),
+  ),
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "AI-generate additional blocks appended to an existing form",
+    responses: {
+      200: { description: "New blocks + updated doc", content: { "application/json": { schema: resolver(z.object({ doc: z.unknown(), added: z.number(), tokens: z.number() })) } } },
+      503: { description: "AI not configured" },
+    },
+  }),
+  async (c) => {
+    if (!c.env.OPENROUTER_API_KEY) {
+      return c.json({ error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } }, 503);
+    }
+    const { formId, prompt, count } = c.req.valid("json");
+    const row = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ? AND deleted_at IS NULL`)
+      .bind(formId)
+      .first<{ working_schema: string }>();
+    if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    const doc = FormDoc.parse(JSON.parse(row.working_schema));
+
+    const existing = doc.blocks.map((b) => `${b.ref} (${b.type}): ${b.title}`).join("; ");
+    const { draft, tokens } = await generateFormDraft({
+      env: c.env,
+      prompt: `You are extending an EXISTING form. Current questions: [${existing}].
+Create ${count} NEW question blocks only (no welcome block, no endings) that: ${prompt}
+Avoid duplicating existing questions. Return them in "blocks" (title/description may be "" if none).`,
+    });
+
+    const added: Block[] = [];
+    for (const b of draft.blocks) {
+      if (b.type === "welcome" || b.type === "statement") continue;
+      let ref = b.ref;
+      while (doc.blocks.some((x) => x.ref === ref)) ref = `${ref}_x`;
+      const normalized = normalizeBlock({ ...b, ref }, 1); // index 1 = never treated as welcome
+      if (normalized) {
+        added.push(normalized);
+        doc.blocks.push(normalized);
+      }
+    }
+    if (added.length === 0) {
+      return c.json({ error: { code: "generation_failed", message: "AI could not produce new blocks. Try a different prompt." } }, 502);
+    }
+    const issues = lintFormDoc(doc);
+    await c.env.DB.prepare(`UPDATE forms SET working_schema = ?, updated_at = ? WHERE id = ?`)
+      .bind(JSON.stringify(doc), Date.now(), formId)
+      .run();
+    return c.json({ doc, added: added.length, tokens, issues });
   },
 );

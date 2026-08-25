@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { sha256Hex } from "@repo/form-schema";
+import { sha256Hex, toPublicConfig, type FormDoc } from "@repo/form-schema";
 import { respondentToken, hashToken } from "./helpers.js";
 import type { Bindings } from "../env.js";
 import { SessionDO } from "../do/session-do.js";
@@ -12,6 +12,7 @@ const sessionsRouter = new Hono<{ Bindings: Bindings }>();
 
 const createSessionSchema = z.object({
   turnstileToken: z.string().optional(),
+  password: z.string().max(200).optional(),
   hiddenFields: z.record(z.string(), z.string()).optional(),
   embed: z.object({ origin: z.string().optional() }).optional(),
 });
@@ -28,6 +29,42 @@ const actionSchema = z.object({
 function stub(env: Bindings, sessionId: string): DurableObjectStub<SessionDO> {
   return env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
 }
+
+sessionsRouter.get(
+  "/forms/:slug/config",
+  describeRoute({
+    tags: ["public"],
+    summary: "Public rendering config for a published form",
+    responses: {
+      200: { description: "Public form config" },
+      404: { description: "Form not found", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
+    },
+  }),
+  async (c) => {
+  const { slug } = c.req.param();
+  const formRow = await c.env.DB.prepare(
+    `SELECT f.slug, f.status, f.close_at, fv.schema_json, fv.settings_json
+     FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
+     WHERE f.slug = ? AND f.deleted_at IS NULL LIMIT 1`,
+  )
+    .bind(slug)
+    .first<{ slug: string; status: string; close_at: number | null; schema_json: string; settings_json: string | null }>();
+
+  if (!formRow || formRow.status !== "published") {
+    return c.json({ error: { code: "form_not_found", message: "Form not found or not published" } }, 404);
+  }
+
+  const settings = formRow.settings_json ? (JSON.parse(formRow.settings_json) as { branding?: { hidePoweredBy?: boolean }; closedMessage?: string }) : {};
+  const closed = !!(formRow.close_at && formRow.close_at < Date.now());
+  const doc = JSON.parse(formRow.schema_json) as FormDoc;
+  const config = toPublicConfig(doc, {
+    slug: formRow.slug,
+    brandingHidden: settings?.branding?.hidePoweredBy === true,
+    closed,
+    closedMessage: typeof settings?.closedMessage === "string" ? settings.closedMessage : undefined,
+  });
+  return c.json(config);
+});
 
 sessionsRouter.post(
   "/forms/:slug/sessions",
@@ -63,6 +100,13 @@ sessionsRouter.post(
 
   // Turnstile verification (adaptive: skip when token absent and mode allows)
   const settings = formRow.settings_json ? JSON.parse(formRow.settings_json) : {};
+  const settingsParsed = settings as { password?: { enabled?: boolean; value?: string } };
+  if (settingsParsed?.password?.enabled) {
+    const supplied = (body as { password?: string }).password;
+    if (supplied !== settingsParsed.password.value) {
+      return c.json({ error: { code: "password_required", message: "This form requires a password" } }, 401);
+    }
+  }
   if (settings?.captcha?.enabled && body.turnstileToken && c.env.TURNSTILE_SECRET_KEY) {
     const verify = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
       method: "POST",
