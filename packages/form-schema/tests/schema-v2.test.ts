@@ -142,15 +142,15 @@ describe("extraction schemas", () => {
 
   it("date accepts ISO and rejects anything else", () => {
     const s = extractionSchema(block({ type: "date", title: "When?" }))!;
-    expect(s.safeParse({ value: "2026-03-04", confident: true }).success).toBe(true);
-    expect(s.safeParse({ value: "next friday", confident: true }).success).toBe(false);
+    expect(s.safeParse({ value: "2026-03-04", confident: true, note: null }).success).toBe(true);
+    expect(s.safeParse({ value: "next friday", confident: true, note: null }).success).toBe(false);
   });
 
   it("number honors the block's own bounds", () => {
     const s = extractionSchema(block({ type: "number", title: "Age?", min: 18, max: 99, integerOnly: true }))!;
-    expect(s.safeParse({ value: 30, confident: true }).success).toBe(true);
-    expect(s.safeParse({ value: 12, confident: true }).success).toBe(false);
-    expect(s.safeParse({ value: 30.5, confident: true }).success).toBe(false);
+    expect(s.safeParse({ value: 30, confident: true, note: null }).success).toBe(true);
+    expect(s.safeParse({ value: 12, confident: true, note: null }).success).toBe(false);
+    expect(s.safeParse({ value: 30.5, confident: true, note: null }).success).toBe(false);
   });
 
   it("ranking demands every item exactly once", () => {
@@ -160,14 +160,14 @@ describe("extraction schemas", () => {
       items: [{ id: "it_aaa1", label: "A" }, { id: "it_bbb1", label: "B" }],
     });
     const s = extractionSchema(b)!;
-    expect(s.safeParse({ value: ["it_bbb1", "it_aaa1"], confident: true }).success).toBe(true);
-    expect(s.safeParse({ value: ["it_aaa1"], confident: true }).success).toBe(false);
+    expect(s.safeParse({ value: ["it_bbb1", "it_aaa1"], confident: true, note: null }).success).toBe(true);
+    expect(s.safeParse({ value: ["it_aaa1"], confident: true, note: null }).success).toBe(false);
     expect(s.safeParse({ value: ["it_aaa1", "it_zzz1"], confident: true }).success).toBe(false);
   });
 
   it("address only allows the fields the block declares", () => {
     const s = extractionSchema(block({ type: "address", title: "Where?", fields: ["city", "country"] }))!;
-    const res = s.safeParse({ value: { city: "Berlin", country: "DE" }, confident: true });
+    const res = s.safeParse({ value: { city: "Berlin", country: "DE" }, confident: true, note: null });
     expect(res.success).toBe(true);
   });
 

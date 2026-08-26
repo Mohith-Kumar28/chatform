@@ -659,3 +659,29 @@ Monorepo tests: **58 passing** (was 22 at session start).
 - **F6.3 composers** ✅ Every block type now has a real control. Rating uses fill-to-the-left lucide icons instead of emoji; NPS/opinion scales show anchor labels; **date gets a real calendar** with min/max/`disablePast` and quick options (it was a plain text input); **signature gets a real pointer-events pad** (it reused the file uploader, and the recorded shape was one `validateAnswer` rejects outright, so signatures could never succeed); ranking, matrix, contact_info and address get purpose-built composers (all four previously fell through to a text input that could not produce the required shape); payment shows an honest state rather than presenting "coming soon" as the control. Number-key shortcuts for choice lists, 44px touch targets.
 - **Schema** ✅ `toPublicBlock` now projects the fields the runtime needs (`minDate`/`maxDate`/`disablePast`, `url`, `drawnNameRequired`, number bounds, selection bounds, `allowOther`). `toPublicConfig` projects `settings.meta` — the hosted form previously had **no OG tags at all**, so every share preview was blank — plus the agent's display name.
 - **Verified E2E over HTTP**: session create → SSE greeting → conversational question → answer accepted → `answer_recorded` at 50% → contextual next question referencing the actual answer. `/f/<slug>` returns a real title and OG tags; an unknown slug 404s.
+
+---
+
+## Phase 6 — the agent (the differentiator)
+
+- **B2** ✅ **Real tool-calling loop.** `do/agent-tools.ts` gives the model six guarded verbs — `record_answer`, `answer_from_knowledge`, `clarify`, `skip_current`, `request_upload`, `end_interview`. Every call is checked against the FSM before it takes effect, and a rejection is returned to the model as a tool result so it corrects itself inside the same turn. Tools never mutate state: outcomes are collected and applied by `applyPendingEffects()` after the turn, keeping the FSM the single writer. `allowedNextRefs` and `maxClarificationsPerBlock` — both previously dead — are now enforced.
+  - **Reliability floor** (PLAN.md §4.3): three guard rejections drop the session to deterministic template mode permanently. The `degraded` flag is persisted, so it survives DO eviction.
+  - **Critical fix found by testing:** a tool call ends a step in AI SDK v7, so without `stopWhen: stepCountIs(4)` the model looked something up and the turn ended having said nothing — the respondent saw the scripted fallback. This is why the first end-to-end run answered with `clarifyText` instead of the knowledge base.
+- **B3** ✅ **Knowledge base and goal in the prompt.** `agent-prompts.ts` split into `buildStablePrefix` (identity, persona, goal, knowledge, boundaries, question manifest) and `buildTurnSuffix` (per-block hints, transcript, progress, objective) so the large invariant half sits in a cache-friendly prefix. Guardrails, forbidden topics and the refusal line are enforced in the prompt; `buildRetryObjective` folds in each block's authored `retryHint`.
+- **B4** ✅ **Free-text extraction.** Choice/scale types stay deterministic (free, instant, no hallucinated options). Everything else runs `validateAnswer` first, then `extractAnswer` on the cheap model tier against a schema derived from the block, then `validateAnswer` again — the extractor narrows, the validator decides. Low confidence routes to clarify rather than recording a guess.
+  - Fixed: an **optional `note`** in the extraction envelope was rejected by strict structured output ("'required' … missing 'note'"), so every extraction call 400'd. Now nullable-and-required.
+  - Tuned: "about a dozen" is unambiguous and must extract to 12; only true ranges and comparisons are low-confidence.
+- **B5 (partial)** ✅ `ai_generations` now records the **real model id and latency** — model was hardcoded `"openrouter/auto"` and `latency_ms` was never populated, so per-model cost analysis was impossible.
+- **D4** ✅ **Model tiering live.** `MODELS.interview` → `anthropic/claude-sonnet-5`, `MODELS.extraction` → `openai/gpt-4o-mini`, per-form override via `settings.agent.model`.
+
+### Verified end to end against the running stack
+
+| Check | Result |
+|---|---|
+| Agent adopts persona + goal | "Great, glad to have you here! 🎉 To kick things off, what's your email address?" |
+| **Answers an off-topic question from the KB, then returns to the form** | "Pro is $29/month, or $240/year if billed annually — that includes 1,000 responses/month, the AI agent, and no chatform branding. 😊 … Oops, that email didn't quite look right — could you double-check…" |
+| Free-text extraction | "we are about a dozen people right now" → stored as `12` with `value_number = 12` |
+| Model tiering | `ai_generations` shows `interview_turn` on `anthropic/claude-sonnet-5`, `extraction` on `openai/gpt-4o-mini`, with real latencies |
+| Full completion | `answer_recorded` 50% → 100% → `complete` with a submission id |
+
+The middle row is the acceptance test for the entire product thesis, and it is the thing Youform structurally cannot do.

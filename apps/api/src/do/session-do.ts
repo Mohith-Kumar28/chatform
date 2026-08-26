@@ -10,13 +10,22 @@ import {
   type Ending,
   type EvalState,
   migrateFormDoc,
+  allowedNextRefs,
+  needsExtraction,
+  extractionSchema,
+  extractionGuidance,
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { ServerEvent, SSEEnvelope } from "../lib/events.js";
 import { clarifyText, closingText, escalateText, greeting, questionText, transitionAck } from "../lib/phrasing.js";
-import { chatModel } from "../lib/ai.js";
-import { buildSystemPrompt } from "../lib/agent-prompts.js";
-import { streamText } from "ai";
+import { chatModel, interviewModel, extractAnswer, MODELS } from "../lib/ai.js";
+import {
+  buildStablePrefix,
+  buildTurnSuffix,
+  buildRetryObjective,
+} from "../lib/agent-prompts.js";
+import { buildAgentTools, type ToolOutcome } from "./agent-tools.js";
+import { streamText, stepCountIs } from "ai";
 
 interface DoSessionMeta {
   sessionId: string;
@@ -46,6 +55,7 @@ interface StoredSession {
   collectedCount: number;
   invalidCounts?: Record<string, number>;
   sessionTokensUsed?: number;
+  degraded?: boolean;
 }
 
 const IDLE_ALARM_MS = 30 * 60 * 1000;
@@ -71,6 +81,12 @@ export class SessionDO extends DurableObject<Bindings> {
   private loaded = false;
   private encoder = new TextEncoder();
   private sessionTokensUsed = 0;
+  /** Consecutive guard rejections; 3 drops the session to template mode. */
+  private toolErrorStreak = 0;
+  /** Sticky: once true this session never calls the model again. */
+  private degraded = false;
+  /** Tool effects awaiting application after the model's turn completes. */
+  private pendingEffects: NonNullable<ToolOutcome["effect"]>[] = [];
   private pendingUserTextPersisted = false;
 
   // ────────────────────────── lifecycle ──────────────────────────
@@ -148,6 +164,7 @@ export class SessionDO extends DurableObject<Bindings> {
     // actually a cap). They are part of session state and must survive.
     this.invalidCounts = new Map(Object.entries(stored.invalidCounts ?? {}));
     this.sessionTokensUsed = stored.sessionTokensUsed ?? 0;
+    this.degraded = stored.degraded ?? false;
     this.loaded = true;
     return true;
   }
@@ -164,6 +181,7 @@ export class SessionDO extends DurableObject<Bindings> {
       collectedCount: this.collectedCount,
       invalidCounts: Object.fromEntries(this.invalidCounts),
       sessionTokensUsed: this.sessionTokensUsed,
+      degraded: this.degraded,
     } satisfies StoredSession);
   }
 
@@ -254,27 +272,63 @@ export class SessionDO extends DurableObject<Bindings> {
 
   /** True when the LLM layer should phrase this turn. */
   private aiEnabled(): boolean {
+    if (this.degraded) return false;
     const mode = this.doc?.settings.agent.mode ?? "template";
-    return this.env.OPENROUTER_API_KEY !== undefined && mode !== "template" && this.sessionTokensUsed < (this.doc?.settings.agent.sessionTokenBudget ?? 12000);
+    return (
+      this.env.OPENROUTER_API_KEY !== undefined &&
+      mode !== "template" &&
+      this.sessionTokensUsed < (this.doc?.settings.agent.sessionTokenBudget ?? 12000)
+    );
   }
 
   /**
-   * AI-mode message: streams real model tokens to SSE. Returns false when AI
-   * is unavailable (caller falls back to deterministic template phrasing).
+   * One agentic turn.
+   *
+   * Streams the model's words to SSE while collecting its tool calls. Tools
+   * never mutate state: each is guarded against the FSM and its outcome is
+   * returned to the model in the same turn, so a rejected call is corrected
+   * rather than silently producing a wrong answer.
+   *
+   * Returns false when AI is unavailable or fails, and the caller falls back
+   * to deterministic template phrasing.
    */
   private async aiStreamMessage(objective: string): Promise<boolean> {
     if (!this.aiEnabled() || !this.doc || !this.meta || !this.meta.currentRef) return false;
     const block = this.doc.blocks.find((b) => b.ref === this.meta!.currentRef);
     if (!block) return false;
+
+    const started = Date.now();
+    const { model, id: modelId } = interviewModel(this.env, this.doc.settings.agent.model);
+
     try {
       const answered = Object.keys(this.state.answers).length;
       const context = await this.conversationContext();
+      const outcomes: ToolOutcome[] = [];
+      const tools = buildAgentTools(
+        {
+          doc: this.doc,
+          currentBlock: block,
+          allowedNext: allowedNextRefs(this.doc, block.ref, this.state),
+          clarifications: this.invalidCounts.get(block.ref) ?? 0,
+        },
+        (o: ToolOutcome) => outcomes.push(o),
+      );
+
       const result = streamText({
-        model: chatModel(this.env),
-        system: buildSystemPrompt(this.doc, block, answered, context),
+        model,
+        // Stable prefix first so the provider's prompt cache can serve the
+        // persona, goal, knowledge base and question manifest across turns.
+        system: `${buildStablePrefix(this.doc)}\n\n${buildTurnSuffix(this.doc, block, answered, { ...context, turnCount: this.turnCount })}`,
         prompt: objective,
+        tools,
+        // A tool call ends a step. Without this the model looks something up
+        // (or records an answer) and the turn ends having said nothing, so the
+        // respondent sees the deterministic fallback instead of a reply.
+        // Four steps is enough for look-up → answer → record → ask.
+        stopWhen: stepCountIs(4),
         maxOutputTokens: this.doc.settings.agent.responseMaxTokens,
       });
+
       const messageId = crypto.randomUUID();
       await this.emit("message_start", { messageId, role: "assistant" });
       let text = "";
@@ -283,14 +337,120 @@ export class SessionDO extends DurableObject<Bindings> {
         await this.emit("token", { messageId, delta });
       }
       await this.emit("message_end", { messageId });
+
       const usage = await result.usage;
-      this.sessionTokensUsed += (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0);
-      await this.logAiUsage("interview_turn", usage?.inputTokens ?? 0, usage?.outputTokens ?? 0);
-      await this.appendMessage("assistant", text);
-      return text.trim().length > 0;
+      const inTok = usage?.inputTokens ?? 0;
+      const outTok = usage?.outputTokens ?? 0;
+      this.sessionTokensUsed += inTok + outTok;
+      await this.logAiUsage("interview_turn", inTok, outTok, modelId, Date.now() - started);
+      if (text.trim()) await this.appendMessage("assistant", text);
+
+      // Reliability floor (PLAN.md 4.3): three consecutive tool errors and the
+      // session drops to deterministic template mode for good. The product
+      // degrades; it never hangs on a model that cannot follow its own tools.
+      const rejected = outcomes.filter((o) => !o.ok).length;
+      this.toolErrorStreak = rejected > 0 ? this.toolErrorStreak + rejected : 0;
+      if (this.toolErrorStreak >= 3) {
+        console.warn("agent_degraded_to_template", { sessionId: this.meta.sessionId });
+        this.degraded = true;
+        await this.persistMeta();
+      }
+
+      this.pendingEffects = outcomes.flatMap((o) => (o.ok && o.effect ? [o.effect] : []));
+      return text.trim().length > 0 || this.pendingEffects.length > 0;
     } catch (err) {
       console.error("ai_stream_failed", err);
       return false;
+    }
+  }
+
+  /**
+   * Free text → a typed value, for the block types the deterministic NLU
+   * cannot handle. Choice and scale types never reach this — they are matched
+   * exactly, for free, with no chance of a hallucinated option.
+   *
+   * The extractor only narrows: whatever it returns still goes through
+   * `validateAnswer`. Low confidence returns null so the caller clarifies
+   * instead of recording a guess.
+   */
+  private async extractTypedAnswer(block: Block, text: string): Promise<unknown | null> {
+    if (!this.aiEnabled() || !needsExtraction(block)) return null;
+    const schema = extractionSchema(block);
+    if (!schema) return null;
+
+    const started = Date.now();
+    try {
+      const { transcript } = await this.conversationContext();
+      const out = await extractAnswer({
+        env: this.env,
+        schema: schema as never,
+        question: block.title,
+        guidance: extractionGuidance(block, new Date().toISOString().slice(0, 10)),
+        answer: text,
+        transcript,
+      });
+      if (!out) return null;
+      this.sessionTokensUsed += out.tokens;
+      await this.logAiUsage("extraction", out.tokens, 0, MODELS.extraction, Date.now() - started);
+      if (!out.confident || out.value === null || out.value === undefined) return null;
+      return out.value;
+    } catch (err) {
+      console.error("extract_failed", err);
+      return null;
+    }
+  }
+
+  /**
+   * Apply the effects the model asked for, after its turn has finished
+   * streaming. Effects are applied here rather than inside the tool handlers
+   * so the FSM stays the single writer of session state and the ordering is
+   * deterministic.
+   */
+  private async applyPendingEffects(): Promise<void> {
+    const effects = this.pendingEffects;
+    this.pendingEffects = [];
+    if (!this.doc || !this.meta) return;
+
+    for (const effect of effects) {
+      switch (effect.kind) {
+        case "record": {
+          const block = this.doc.blocks.find((b) => b.ref === effect.ref);
+          // Guarded again here: the tool checked the ref, this checks the value.
+          if (block) await this.record(block, effect.value);
+          break;
+        }
+        case "skip": {
+          const block = await this.currentBlock();
+          if (block) {
+            const next = resolveNext(this.doc, block.ref, this.state);
+            await this.advanceTo(next, block.ref);
+          }
+          break;
+        }
+        case "upload": {
+          const block = this.doc.blocks.find((b) => b.ref === effect.ref);
+          if (block && block.type === "file_upload") {
+            await this.emit("upload_request", {
+              ref: block.ref,
+              accept: block.accept,
+              maxFiles: block.maxFiles,
+              maxSizeMB: block.maxSizeMB,
+            });
+          }
+          break;
+        }
+        case "end": {
+          const ending =
+            (effect.endingRef && this.doc.endings.find((e) => e.ref === effect.endingRef)) ||
+            this.doc.endings[0];
+          if (ending) await this.advanceTo({ kind: "ending", ending }, this.meta.currentRef ?? "");
+          break;
+        }
+        // `clarify` and `ask` need no state change — the model already said
+        // the words, and the FSM is still on the same block.
+        default:
+          break;
+      }
     }
   }
 
@@ -308,13 +468,22 @@ export class SessionDO extends DurableObject<Bindings> {
     return { transcript, answers };
   }
 
-  private async logAiUsage(kind: string, inputTokens: number, outputTokens: number): Promise<void> {    if (!this.meta || (inputTokens + outputTokens) === 0) return;
+  private async logAiUsage(
+    kind: string,
+    inputTokens: number,
+    outputTokens: number,
+    model: string,
+    latencyMs: number,
+  ): Promise<void> {
+    if (!this.meta || inputTokens + outputTokens === 0) return;
     try {
       await this.env.DB.prepare(
-        `INSERT INTO ai_generations (id, organization_id, session_id, form_id, kind, provider, model, prompt_tokens, completion_tokens, created_at)
-         VALUES (?, ?, ?, ?, ?, 'openrouter', ?, ?, ?, ?)`,
+        // model was hardcoded "openrouter/auto" and latency was never recorded,
+        // so per-model cost analysis was impossible.
+        `INSERT INTO ai_generations (id, organization_id, session_id, form_id, kind, provider, model, prompt_tokens, completion_tokens, latency_ms, created_at)
+         VALUES (?, ?, ?, ?, ?, 'openrouter', ?, ?, ?, ?, ?)`,
       )
-        .bind(`ai_${crypto.randomUUID().slice(0, 16)}`, this.meta.organizationId, this.meta.sessionId, this.meta.formId, kind, "openrouter/auto", inputTokens, outputTokens, Date.now())
+        .bind(`ai_${crypto.randomUUID().slice(0, 16)}`, this.meta.organizationId, this.meta.sessionId, this.meta.formId, kind, model, inputTokens, outputTokens, latencyMs, Date.now())
         .run();
     } catch (err) {
       console.error("ai_usage_log_failed", err);
@@ -388,13 +557,28 @@ export class SessionDO extends DurableObject<Bindings> {
       if (["no", "n", "nope", "nah"].includes(t)) return this.record(block, false);
       return this.recordInvalid(block, "invalid_yes_no", "Please answer yes or no.");
     }
-    if (block.type === "rating" || block.type === "nps" || block.type === "opinion_scale" || block.type === "number") {
+    if (block.type === "rating" || block.type === "nps" || block.type === "opinion_scale") {
       const n = Number(text.trim().replace(/[^\d.-]/g, ""));
       if (Number.isNaN(n)) return this.recordInvalid(block, "not_a_number", `Please reply with a number.`);
       return this.record(block, n);
     }
-    // free text types
-    return this.record(block, text);
+
+    // Everything above is matched exactly and for free — no model involved, so
+    // no chance of a hallucinated option. Everything below may need a real
+    // reading of the sentence: "next Friday", "12 Rue de Rivoli, Paris",
+    // "about fifty people". Without extraction these block types were only
+    // answerable through a widget, which is backwards in a chat product.
+    const direct = validateAnswer(block, text);
+    if (direct.ok) return this.record(block, text);
+
+    const extracted = await this.extractTypedAnswer(block, text);
+    if (extracted !== null) return this.record(block, extracted);
+
+    return this.recordInvalid(
+      block,
+      direct.code ?? "unclear",
+      direct.hint ?? "I didn't quite catch that one.",
+    );
   }
 
   private async handleStructured(ref: string, value: unknown): Promise<{ accepted: boolean; error?: string }> {
@@ -414,13 +598,12 @@ export class SessionDO extends DurableObject<Bindings> {
       await this.emitMessage(escalateText(block));
       await this.emit("escalate_ui", { ref: block.ref, spec: toPublicBlock(block), reason: "repeated_invalid" });
     } else if (this.aiEnabled()) {
-      // agentic reply: address what the respondent actually said, then re-ask
-      const ok = await this.aiStreamMessage(
-        `The respondent's latest message was not a valid answer to the current question "${block.title}" (expected: ${code}). ` +
-          `Respond naturally in 1-3 sentences: if they asked a question or made conversation, address it helpfully using the conversation context; ` +
-          `then gently steer back and re-ask "${block.title}" in your own words. Do not invent new questions or options.`,
-      );
+      // Agentic retry: address what they actually said — which is often a
+      // question of their own — then steer back. The form author's per-block
+      // retryHint is folded in by buildRetryObjective.
+      const ok = await this.aiStreamMessage(buildRetryObjective(block, count, hint));
       if (ok) {
+        await this.applyPendingEffects();
         await this.emitQuestion();
         return { accepted: true };
       }
@@ -494,7 +677,8 @@ export class SessionDO extends DurableObject<Bindings> {
         `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
           `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref} — which is: "${next.block.title}" (${next.block.type}) — in your own words. Ask ONLY that question.`,
       );
-      if (!aiOk) await this.emitMessage(questionText(next.block));
+      if (aiOk) await this.applyPendingEffects();
+      else await this.emitMessage(questionText(next.block));
       await this.emitQuestion();
       await this.persistMeta();
       return;

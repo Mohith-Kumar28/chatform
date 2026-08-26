@@ -53,14 +53,17 @@ export interface ExtractionEnvelope<T> {
   value: T | null;
   confident: boolean;
   /** What the agent should say if it has to ask again. */
-  note?: string;
+  note: string | null;
 }
 
 function envelope<T extends z.ZodTypeAny>(value: T) {
+  // Every key must be present and required: providers running strict
+  // structured output reject a schema whose `required` array omits any
+  // property, so `note` is nullable rather than optional.
   return z.object({
     value: value.nullable(),
     confident: z.boolean(),
-    note: z.string().max(300).optional(),
+    note: z.string().max(300).nullable(),
   });
 }
 
@@ -136,7 +139,10 @@ export function extractionGuidance(block: Block, todayIso: string): string {
     case "date":
       return `Return an ISO date (YYYY-MM-DD). Today is ${todayIso}; resolve relative expressions like "next Friday" or "in two weeks" against it. If the respondent gave an ambiguous date (e.g. "3/4" without a year or locale), set confident=false.`;
     case "number":
-      return `Return a number only. Strip currency symbols, thousands separators and units. If they gave a range or an approximation ("about 50-60"), set confident=false.`;
+      // "about a dozen" is unambiguous and should extract to 12. Only a genuine
+      // range ("50 to 60") is unresolvable — a hedge word in front of one
+      // definite quantity is not.
+      return `Return a number only. Strip currency symbols, thousands separators and units. Resolve written numbers and common quantities ("a dozen" is 12, "a couple" is 2, "fifty" is 50). Hedge words like "about", "roughly" or "~" do not make a value ambiguous — extract the number they hedge. Set confident=false only for a true range ("50 to 60"), a comparison ("more than 100"), or no number at all.`;
     case "ranking":
       return `Return every item id exactly once, best first. If the respondent ranked only some items, set confident=false.`;
     case "matrix":
