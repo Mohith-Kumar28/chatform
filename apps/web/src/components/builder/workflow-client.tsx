@@ -26,7 +26,7 @@ import "./flow.css";
 import { cn } from "@/lib/utils";
 import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspector";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
-import { layoutGraph, branchNodeHeight } from "./flow-layout";
+import { layoutGraph } from "./flow-layout";
 import { toast } from "sonner";
 import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
@@ -170,9 +170,9 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
         e.id === selectedEdgeId
           ? {
               ...e,
-              style: { ...e.style, stroke: "var(--destructive)", strokeWidth: 3 },
-              labelStyle: { ...e.labelStyle, fill: "var(--destructive)" },
-              markerEnd: { type: MarkerType.ArrowClosed, color: "var(--destructive)" },
+              style: { ...e.style, stroke: "var(--primary)", strokeWidth: 2.5 },
+              labelStyle: { ...e.labelStyle, fill: "var(--primary)" },
+              markerEnd: { type: MarkerType.ArrowClosed, color: "var(--primary)" },
               zIndex: 10,
             }
           : e,
@@ -411,14 +411,36 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
       for (const e of deleted) {
         if (e.id.startsWith("case_")) {
           logic = logic.filter((r) => r.id !== e.id.slice("case_".length));
-        } else if (e.id.startsWith("else_")) {
-          // The fall-through wire only exists as a rule when it was aimed
-          // somewhere; cutting it returns the question to plain fall-through.
+          continue;
+        }
+        if (e.id.startsWith("else_")) {
           const from = e.id.slice("else_".length);
           logic = logic.filter((r) => !(isGoto(r) && r.from === from && !condOf(r)));
-        } else {
-          logic = logic.filter((r) => r.id !== e.id);
+          continue;
         }
+        if (e.id.startsWith("seq-") || e.id.startsWith("into_")) {
+          // A wire drawn from the block order had no rule behind it, so
+          // deleting it did nothing and it came straight back — the canvas
+          // said "you can't delete this" about a line that looked like every
+          // other line. Cutting it means the question stops leading to the
+          // one below it, which is a jump past it.
+          const from = e.id.startsWith("seq-") ? e.id.slice(4) : e.id.slice("into_".length);
+          const i = doc.blocks.findIndex((b) => b.ref === from);
+          const skipped = doc.blocks[i + 1];
+          const after = doc.blocks[i + 2]?.ref ?? doc.endings[0]?.ref;
+          if (i < 0 || !skipped || !after) continue;
+          logic = logic.filter((r) => !(isGoto(r) && r.from === from && !condOf(r)));
+          logic.push({
+            id: uid("rl"),
+            action_kind: "goto",
+            from,
+            when: null,
+            target: after,
+            targetKind: doc.endings.some((x) => x.ref === after) ? "ending" : "block",
+          } as LogicRule);
+          continue;
+        }
+        logic = logic.filter((r) => r.id !== e.id);
       }
       setRules(logic);
       setSelectedEdgeId(null);
@@ -667,17 +689,18 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
             </button>
             <div className="flex-1">
               {selEdge && !selEdgeRule ? (
-                <div className="px-4 py-4"><SequenceEdgeInfo edgeId={selEdge.id} doc={doc} /></div>
+                <div className="px-4 py-4">
+                  <EdgeInfo edgeId={selEdge.id} doc={doc} onDelete={() => onEdgesDelete([selEdge])} />
+                </div>
               ) : selEdgeRule ? (
-                <div className="px-4 py-4"><EdgeRuleEditor
-                  rule={selEdgeRule}
-                  doc={doc}
-                  isTrueBranch={false}
-                  isFalseBranch={false}
-                  elseTarget={null}
-                  onPatch={patchRule}
-                  onDelete={() => onEdgesDelete([{ id: selEdge!.id } as Edge])}
-                /></div>
+                <div className="px-4 py-4">
+                  <EdgeRuleEditor
+                    rule={selEdgeRule}
+                    doc={doc}
+                    onPatch={patchRule}
+                    onDelete={() => onEdgesDelete([{ id: selEdge!.id } as Edge])}
+                  />
+                </div>
               ) : selBlock ? (
                 // The shared inspector — same component, same fields, whether
                 // you got here from Questions or from Flow.
@@ -727,6 +750,30 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
 }
 
 // ────────────────────────── graph derivation ──────────────────────────
+
+/**
+ * Every wire on the canvas, drawn the same way.
+ *
+ * There used to be four styles — grey for block order, orange for a rule,
+ * dashed into a branch, and labels reading "default", "always" and
+ * "otherwise" — which invented a taxonomy the flow does not have. There are
+ * nodes and there are connections between them.
+ */
+function wire(id: string, source: string, target: string, label?: string, sourceHandle?: string): Edge {
+  return {
+    id,
+    source,
+    target,
+    sourceHandle,
+    label,
+    deletable: true,
+    style: { stroke: "var(--border)", strokeWidth: 1.5 },
+    labelStyle: { fontSize: 10, fill: "var(--muted-foreground)" },
+    labelBgStyle: { fill: "var(--card)" },
+    labelBgPadding: [4, 2],
+    markerEnd: { type: MarkerType.ArrowClosed },
+  };
+}
 
 /** A single case on a branch: one condition, one destination. */
 export interface BranchCase {
@@ -808,16 +855,9 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
         data: { sourceRef: b.ref, sourceTitle: b.title, cases, exhaustive },
         deletable: true,
       });
-      edges.push({
-        id: `into_${b.ref}`,
-        source: b.ref,
-        target: branchId,
-        deletable: false,
-        style: { stroke: "var(--border)", strokeWidth: 1.5 },
-        markerEnd: { type: MarkerType.ArrowClosed },
-      });
+      edges.push(wire(`into_${b.ref}`, b.ref, branchId));
       for (const c of cases) {
-        edges.push(caseEdge(c, branchId));
+        edges.push(wire(`case_${c.ruleId}`, branchId, c.target, c.label, c.ruleId));
       }
       // Whatever no case matched still has to go somewhere, and that
       // somewhere is the next question — or, past the last one, the ending.
@@ -825,19 +865,7 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
       // never mention.
       const fallback = exhaustive ? undefined : (always?.target ?? next?.ref ?? doc.endings[0]?.ref);
       if (fallback) {
-        edges.push({
-          id: `else_${b.ref}`,
-          source: branchId,
-          sourceHandle: OTHERWISE,
-          target: fallback,
-          label: "anything else",
-          deletable: false,
-          style: { stroke: "var(--border)", strokeWidth: 1.5 },
-          labelStyle: { fontSize: 9, fill: "var(--muted-foreground)" },
-          labelBgStyle: { fill: "var(--card)" },
-          labelBgPadding: [4, 2],
-          markerEnd: { type: MarkerType.ArrowClosed },
-        });
+        edges.push(wire(`else_${b.ref}`, branchId, fallback, undefined, OTHERWISE));
       }
       return;
     }
@@ -849,18 +877,7 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
       // route but with nothing on it to say what it did — so the only visible
       // difference between "always go here" and "go here if iPhone" was that
       // one of them had words.
-      edges.push({
-        id: always.id,
-        source: b.ref,
-        target: always.target,
-        deletable: true,
-        label: "always",
-        style: { stroke: "var(--primary)", strokeWidth: 2 },
-        labelStyle: { fontSize: 10, fontWeight: 600, fill: "var(--primary)" },
-        labelBgStyle: { fill: "var(--card)" },
-        labelBgPadding: [4, 2],
-        markerEnd: { type: MarkerType.ArrowClosed },
-      });
+      edges.push(wire(always.id, b.ref, always.target));
       return;
     }
     // Past the last question the flow reaches the ending, and that wire was
@@ -871,14 +888,7 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
       // Unlabelled: "default" on every single wire in the form was a word
       // repeated until it stopped meaning anything. A plain line already says
       // "and then this".
-      edges.push({
-        id: `seq-${b.ref}`,
-        source: b.ref,
-        target: onward,
-        deletable: false,
-        style: { stroke: "var(--border)", strokeWidth: 1.5 },
-        markerEnd: { type: MarkerType.ArrowClosed },
-      });
+      edges.push(wire(`seq-${b.ref}`, b.ref, onward));
     }
   });
 
@@ -904,21 +914,6 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
   return { nodes, edges };
 }
 
-function caseEdge(c: BranchCase, branchId: string): Edge {
-  return {
-    id: `case_${c.ruleId}`,
-    source: branchId,
-    sourceHandle: c.ruleId,
-    target: c.target,
-    label: c.label,
-    deletable: true,
-    style: { stroke: "var(--primary)", strokeWidth: 2 },
-    labelStyle: { fontSize: 10, fontWeight: 600, fill: "var(--primary)" },
-    labelBgStyle: { fill: "var(--card)" },
-    labelBgPadding: [4, 2],
-    markerEnd: { type: MarkerType.ArrowClosed },
-  };
-}
 
 // ────────────────────────── node components ──────────────────────────
 
@@ -1201,17 +1196,12 @@ function BranchInspector({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="flex items-center gap-1.5 text-sm font-semibold">
-            <GitBranch className="text-primary size-4 shrink-0" />
-            Branch
-          </p>
-          <p className="text-muted-foreground mt-0.5 truncate text-xs">{sourceBlock?.title ?? sourceRef}</p>
-        </div>
-        <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={onDelete} aria-label="Delete branch">
-          <Trash2 className="size-3.5" />
-        </Button>
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-sm font-semibold">
+          <GitBranch className="text-primary size-4 shrink-0" />
+          Branch
+        </p>
+        <p className="text-muted-foreground mt-0.5 truncate text-xs">{sourceBlock?.title ?? sourceRef}</p>
       </div>
 
       <div className="space-y-3">
@@ -1246,6 +1236,14 @@ function BranchInspector({
       {answerableBlocks.length === 0 && (
         <p className="text-muted-foreground text-xs">Add a question before wiring conditions.</p>
       )}
+
+      {/* The same button, in the same place, as every other panel. This was a
+          bare trash icon in the header while the panels beside it used a
+          labelled button at the bottom. */}
+      <Button variant="outline" size="sm" className="w-full" onClick={onDelete}>
+        <Trash2 className="size-3.5" />
+        Delete branch
+      </Button>
     </div>
   );
 }
@@ -1351,49 +1349,48 @@ function BranchCaseRow({
   );
 }
 
+/**
+ * A connection that carries a condition.
+ *
+ * It used to call itself "YES branch", "NO branch" or "Custom flow" depending
+ * on flags that no caller sets any more, tint its heading green or red to
+ * match, and delete through a bare trash icon — while the plain-connection
+ * panel beside it said "Connection" and deleted through a labelled button.
+ * Same thing, same words, same button.
+ */
 function EdgeRuleEditor({
   rule,
   doc,
-  isTrueBranch,
-  isFalseBranch,
-  elseTarget,
   onPatch,
   onDelete,
 }: {
   rule: GotoRule;
   doc: FormDoc;
-  isTrueBranch: boolean;
-  isFalseBranch: boolean;
-  elseTarget: string | null;
   onPatch: (ruleId: string, patch: RulePatch) => void;
   onDelete: () => void;
 }) {
   const cond = condOf(rule);
   const sourceBlock = doc.blocks.find((b) => b.ref === rule.from) ?? null;
   const isYesNo = sourceBlock?.type === "yes_no";
-  const accent = isTrueBranch ? "text-green-600" : isFalseBranch ? "text-red-600" : "text-primary";
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className={`text-sm font-semibold ${accent}`}>
-          {isTrueBranch ? "YES branch" : isFalseBranch ? "NO branch" : "Custom flow"}
-        </p>
-        <Button variant="ghost" size="icon" className="size-7" onClick={onDelete}>
-          <Trash2 className="size-3.5" />
-        </Button>
-      </div>
-      {!isTrueBranch && !isFalseBranch && (
-        <div className="space-y-1.5">
-          <Label>Source question</Label>
-          <Picker value={rule.from ?? ""} onValueChange={(v) => onPatch(rule.id, { from: v })}>
-            {doc.blocks.filter((b) => b.type !== "welcome").map((b) => (
-              <SelectItem key={b.ref} value={b.ref}>{b.title.slice(0, 40)}</SelectItem>
+      <p className="text-sm font-semibold">Connection</p>
+
+      <div className="space-y-1.5">
+        <Label>Source question</Label>
+        <Picker value={rule.from ?? ""} onValueChange={(v) => onPatch(rule.id, { from: v })}>
+          {doc.blocks
+            .filter((b) => b.type !== "welcome")
+            .map((b) => (
+              <SelectItem key={b.ref} value={b.ref}>
+                {b.title.slice(0, 40)}
+              </SelectItem>
             ))}
-          </Picker>
-        </div>
-      )}
-      {isYesNo && !isFalseBranch ? (
+        </Picker>
+      </div>
+
+      {isYesNo ? (
         <div className="space-y-1.5">
           <Label>Answer</Label>
           <div className="flex gap-2">
@@ -1420,7 +1417,9 @@ function EdgeRuleEditor({
           <Label>Condition</Label>
           <Picker value={cond?.op ?? "is_not_empty"} onValueChange={(v) => onPatch(rule.id, { op: v as Op })}>
             {OPS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
             ))}
           </Picker>
           {opsValueNeeded(cond?.op ?? "is_not_empty") && (
@@ -1428,33 +1427,50 @@ function EdgeRuleEditor({
           )}
         </div>
       )}
+
       <div className="space-y-1.5">
         <Label>Jumps to</Label>
         <TargetSelect doc={doc} value={rule.target} onChange={(t, kind) => onPatch(rule.id, { target: t, targetKind: kind })} />
       </div>
-      {isFalseBranch && elseTarget === null && (
-        <p className="text-muted-foreground text-xs">This branch falls through when unwired.</p>
-      )}
-      {!cond && !isTrueBranch && !isFalseBranch && (
+
+      {!cond && (
         <Button variant="outline" size="sm" className="w-full" onClick={() => onPatch(rule.id, { makeConditional: true })}>
-          Add a condition to this wire
+          Add a condition
         </Button>
       )}
+
+      <Button variant="outline" size="sm" className="w-full" onClick={onDelete}>
+        <Trash2 className="size-3.5" />
+        Delete connection
+      </Button>
     </div>
   );
 }
 
-function SequenceEdgeInfo({ edgeId, doc }: { edgeId: string; doc: FormDoc }) {
-  const fromRef = edgeId.slice(4);
+/** A wire with no condition on it: what it connects, and a way to cut it. */
+function EdgeInfo({ edgeId, doc, onDelete }: { edgeId: string; doc: FormDoc; onDelete: () => void }) {
+  const fromRef = edgeId.startsWith("seq-")
+    ? edgeId.slice(4)
+    : edgeId.startsWith("into_")
+      ? edgeId.slice("into_".length)
+      : edgeId.startsWith("else_")
+        ? edgeId.slice("else_".length)
+        : "";
   const from = doc.blocks.find((b) => b.ref === fromRef);
+  const i = doc.blocks.findIndex((b) => b.ref === fromRef);
+  const to = doc.blocks[i + 1];
+
   return (
-    <div className="space-y-3">
-      <p className="text-sm font-semibold">Default flow</p>
+    <div className="space-y-4">
+      <p className="text-sm font-semibold">Connection</p>
       <p className="text-muted-foreground text-xs leading-relaxed">
-        Runs after <span className="font-medium text-foreground">{from?.title ?? "this block"}</span> when no matching rule
-        redirects the flow. This wire follows the block order and can&apos;t be deleted — add a Branch or a custom
-        wire to override it.
+        {from ? <span className="text-foreground font-medium">{from.title}</span> : "This question"} leads to{" "}
+        {to ? <span className="text-foreground font-medium">{to.title}</span> : "the ending"}.
       </p>
+      <Button variant="outline" size="sm" className="w-full" onClick={onDelete}>
+        <Trash2 className="size-3.5" />
+        Delete connection
+      </Button>
     </div>
   );
 }
