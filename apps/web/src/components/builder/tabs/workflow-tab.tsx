@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { WorkflowClient } from "../workflow-client";
-import { BuildViewSwitcher } from "./build-tab";
+import { BuildToolbar } from "../build-toolbar";
 import { useBuilderStore } from "@/stores/builder-store";
 
 /**
@@ -21,9 +21,7 @@ export function WorkflowTab() {
 
   return (
     <div className="flex h-[calc(100svh-3.5rem)] flex-col">
-      <div className="flex justify-center px-4 pt-3 pb-1">
-        <BuildViewSwitcher />
-      </div>
+      <BuildToolbar />
       <div className="min-h-0 flex-1">
       <WorkflowClient
         doc={doc}

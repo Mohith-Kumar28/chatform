@@ -737,3 +737,21 @@ Driven by side-by-side comparison with Youform.
 | `POST /api/ai/add-blocks` 500'd on every request | `GenerationDraft.scale` required `min(2)`, but strict structured output forces the model to send the field for every block, and it sends `0` for non-scale types — one irrelevant field failed the whole generation | Accept `0–20`, clamp in the normalizer |
 
 Test totals: **75 passing** (40 form-schema, 30 api, 5 web).
+
+---
+
+## Phase 9 — second design pass (user feedback, side-by-side with Youform)
+
+**Toolbar.** Design and Upgrade left the top nav for the row below it — Design on the left, Questions ⇄ Flow centred, Upgrade on the right — mirroring Youform's `Design | Logic | … | Buy PRO` strip. The top nav is down to **six** places you actually navigate between. Design/Upgrade are hidden on the Flow canvas, which already carries a node library and an inspector, and Upgrade is hidden on Design.
+
+**Overflow menu removed.** Once Upgrade moved out it held only a duplicate of undo/redo and a theme toggle the dashboard already provides.
+
+**Sidebar tone.** `--sidebar` was a mid-tone that muddied every family colour sitting on it. It is now the page background exactly, with the coloured question pills carrying all the structure; the inspector lifts to `--card` instead. These are our own tokens — shadcn's `--sidebar` is a variable, not a fixed value.
+
+**Row actions.** Duplicate and delete were reserving a permanent right-hand column. They now float over the text on hover as a strip in the row's own colour, mask-faded to the left so the title slides out from under it. The required marker moved to the top-right and is always **red** — it is the one signal in that list that is not about block type, so it should not wear the family colour.
+
+**Flow canvas.** Removed the permanent "How respondents move between questions" pill. The minimap now fades in while you pan, zoom or drag and fades out ~1.4s after you stop, instead of parking a panel in the corner forever.
+
+**One inspector, finally.** The Flow view had its own `BlockInspector` covering a *different, smaller* set of fields than the Questions view — the same block offered different settings depending on which view you opened it from. This was flagged as F4.1 in the plan and is now fixed: both views render the same component, and canvas selection syncs into the builder store so the selected block survives switching between views.
+
+Test totals: **75 passing.**

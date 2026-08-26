@@ -216,7 +216,7 @@ function SortableRow({
         boxShadow: selected ? `inset 3px 0 0 0 ${TONE_ACCENT[meta.tone]}` : undefined,
       }}
       className={cn(
-        "group flex items-start gap-1.5 rounded-xl py-2 pr-1.5 pl-1",
+        "group relative flex items-start gap-1.5 overflow-hidden rounded-xl py-2 pr-1.5 pl-1",
         "transition-[background-color,box-shadow] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
         TONE_CLASSES[meta.tone],
         selected ? "ring-0" : "opacity-[0.82] hover:opacity-100",
@@ -233,7 +233,7 @@ function SortableRow({
         <GripVertical className="size-3.5" />
       </button>
 
-      <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-start gap-2 text-left">
+      <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-start gap-2 pr-5 text-left">
         <span className="mt-px flex shrink-0 items-center gap-1.5">
           <meta.icon className="size-3.5" strokeWidth={2} />
           <span className="tabular text-[0.625rem] opacity-60">{index + 1}</span>
@@ -243,15 +243,36 @@ function SortableRow({
         <span className={cn("line-clamp-2 min-w-0 flex-1 text-xs leading-snug", selected && "font-semibold")}>
           {block.title || meta.label}
         </span>
-        {block.required && (
-          <span className="mt-px shrink-0 text-xs leading-none opacity-70" aria-label="Required">
-            *
-          </span>
-        )}
       </button>
 
+      {/* Required marker, pinned top-right and always red — it is the one
+          signal in this list that is not about block type, so it should not
+          take the row's family colour. */}
+      {block.required && (
+        <span
+          className="text-destructive pointer-events-none absolute top-1.5 right-2 text-sm leading-none font-medium"
+          aria-label="Required"
+        >
+          *
+        </span>
+      )}
+
+      {/* Row actions float over the text on hover instead of reserving a
+          column for themselves. The strip carries the row's own colour and is
+          masked to fade left, so the title slides out from under it. */}
       {block.type !== "welcome" && (
-        <div className="flex shrink-0 items-center self-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+        <div
+          className={cn(
+            "absolute inset-y-0 right-0 flex items-center gap-0.5 pr-1.5 pl-6",
+            "opacity-0 transition-opacity duration-[var(--duration-micro)]",
+            "group-hover:opacity-100 focus-within:opacity-100",
+            TONE_CLASSES[meta.tone],
+          )}
+          style={{
+            maskImage: "linear-gradient(to left, black 72%, transparent)",
+            WebkitMaskImage: "linear-gradient(to left, black 72%, transparent)",
+          }}
+        >
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon-xs" aria-label="Duplicate block" onClick={onDuplicate}>

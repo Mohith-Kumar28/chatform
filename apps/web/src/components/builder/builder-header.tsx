@@ -11,24 +11,13 @@ import {
   ExternalLink,
   Link2,
   Loader2,
-  MoreHorizontal,
   Play,
   Redo2,
-  Sparkles,
   Undo2,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -217,46 +206,6 @@ export function BuilderHeader({
               </>
             )}
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-sm" aria-label="More actions">
-                  <MoreHorizontal className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onSelect={undo} disabled={!canUndo}>
-                  <Undo2 className="size-3.5" />
-                  Undo
-                  <span className="text-muted-foreground ml-auto text-xs">⌘Z</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={redo} disabled={!canRedo}>
-                  <Redo2 className="size-3.5" />
-                  Redo
-                  <span className="text-muted-foreground ml-auto text-xs">⇧⌘Z</span>
-                </DropdownMenuItem>
-
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
-                  Appearance
-                </DropdownMenuLabel>
-                <div className="px-2 pb-1.5">
-                  <ThemeToggle />
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Button
-              size="sm"
-              shape="pill"
-              variant="soft"
-              className="hidden lg:inline-flex"
-              asChild
-            >
-              <Link href="/usage">
-                <Sparkles className="size-3.5" />
-                Upgrade
-              </Link>
-            </Button>
 
             <Button
               size="sm"

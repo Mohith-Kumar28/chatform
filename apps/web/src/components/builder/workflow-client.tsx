@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -20,6 +20,9 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { cn } from "@/lib/utils";
+import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspector";
+import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
 import { Block as BlockSchema } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
@@ -123,6 +126,22 @@ export function WorkflowClient({ doc, onChange, focusRef }: WorkflowClientProps)
 
 function WorkflowEditor({ doc, onChange, focusRef }: WorkflowClientProps) {
   const { screenToFlowPosition } = useReactFlow();
+
+  /**
+   * The minimap earns its place while you are panning, zooming or dragging a
+   * node, and is dead weight the rest of the time. Reveal it on interaction
+   * and hide it again shortly after you stop.
+   */
+  const [navigating, setNavigating] = useState(false);
+  const hideMapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showMap = useCallback(() => {
+    setNavigating(true);
+    if (hideMapTimer.current) clearTimeout(hideMapTimer.current);
+    hideMapTimer.current = setTimeout(() => setNavigating(false), 1400);
+  }, []);
+  useEffect(() => () => {
+    if (hideMapTimer.current) clearTimeout(hideMapTimer.current);
+  }, []);
   const wrapper = useRef<HTMLDivElement>(null);
   const dragType = useRef<{ kind: "block" | "condition" | "ending"; blockType?: BlockType } | null>(null);
 
@@ -333,6 +352,14 @@ function WorkflowEditor({ doc, onChange, focusRef }: WorkflowClientProps) {
 
   // ── inspector targets ──────────────────────────────────────────────────
   const selBlock = selectedNodeId && !selectedNodeId.startsWith("cond_") ? doc.blocks.find((b) => b.ref === selectedNodeId) : undefined;
+
+  // The shared inspector reads the selected block from the builder store, so
+  // canvas selection has to land there too. This is also what makes selection
+  // survive switching between the Questions and Flow views.
+  const selectInStore = useBuilderStore((st) => st.select);
+  useEffect(() => {
+    if (selBlock) selectInStore(selBlock.ref);
+  }, [selBlock, selectInStore]);
   const selEnding = selectedNodeId && !selectedNodeId.startsWith("cond_") ? doc.endings.find((e) => e.ref === selectedNodeId) : undefined;
   const selCond = selectedNodeId?.startsWith("cond_") ? gotoRules.find((r) => r.id === selectedNodeId.slice(5)) : undefined;
   const selCondFalse = selCond?.pair ? gotoRules.find((r) => r.id === selCond.pair) : undefined;
@@ -448,10 +475,13 @@ function WorkflowEditor({ doc, onChange, focusRef }: WorkflowClientProps) {
       </aside>
 
       {/* center: canvas */}
-      <div ref={wrapper} data-tour="wf-canvas" className="relative min-w-0 flex-1">
-        <p className="text-muted-foreground pointer-events-none absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-[var(--card)]/90 px-3.5 py-1.5 text-xs shadow-sm backdrop-blur">
-          How respondents move between questions — click any node or wire to edit it
-        </p>
+      <div
+        ref={wrapper}
+        data-tour="wf-canvas"
+        className="relative min-w-0 flex-1"
+        onPointerDown={showMap}
+        onWheel={showMap}
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -491,7 +521,14 @@ function WorkflowEditor({ doc, onChange, focusRef }: WorkflowClientProps) {
         >
           <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
           <Controls showInteractive={false} />
-          <MiniMap pannable zoomable className="hidden md:block" />
+          <MiniMap
+            pannable
+            zoomable
+            className={cn(
+              "hidden transition-opacity duration-[var(--duration-standard)] md:block",
+              navigating ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
+          />
         </ReactFlow>
       </div>
 
@@ -522,15 +559,11 @@ function WorkflowEditor({ doc, onChange, focusRef }: WorkflowClientProps) {
                   onDelete={() => onEdgesDelete([{ id: selEdge!.id } as Edge])}
                 />
               ) : selBlock ? (
-                <BlockInspector
-                  block={selBlock}
-                  doc={doc}
-                  onChange={onChange}
-                  onPatchBlock={(ref, patch) =>
-                    onChange({ ...doc, blocks: doc.blocks.map((b) => (b.ref === ref ? ({ ...b, ...patch } as Block) : b)) })
-                  }
-                  onDelete={() => onNodesDelete([{ id: selBlock.ref } as Node])}
-                />
+                // The shared inspector — same component, same fields, whether
+                // you got here from Questions or from Flow.
+                <div className="-mx-4 -mt-3">
+                  <SharedBlockInspector />
+                </div>
               ) : selCond ? (
                 <ConditionInspector
                   rule={selCond}

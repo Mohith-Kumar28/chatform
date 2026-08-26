@@ -94,9 +94,12 @@
   --chart-6: oklch(0.7 0.13 235);
 
   /* ── sidebar / builder chrome ── */
-  /* Panels are distinguished by a shade of the page, not by a rule. */
-  --sidebar: oklch(0.966 0.010 84);
-  --panel: oklch(0.978 0.008 88);
+  /* The question list sits directly on the page — its coloured pills already
+     carry all the structure, and a mid-tone behind them muddied every family
+     colour. The inspector lifts to the card colour instead, which reads as a
+     panel without needing a rule or a tint. */
+  --sidebar: var(--background);
+  --panel: var(--card);
   --sidebar-foreground: oklch(0.255 0.01 65);
   --sidebar-primary: oklch(0.705 0.19 43);
   --sidebar-primary-foreground: oklch(0.995 0.005 85);
@@ -193,7 +196,7 @@
   --family-advanced-soft: oklch(0.32 0.06 25);
   --family-advanced-ink: oklch(0.87 0.10 25);
 
-  --sidebar: oklch(0.225 0.009 64);
+  --sidebar: var(--background);
   --panel: oklch(0.232 0.009 64);
   --sidebar-foreground: oklch(0.95 0.008 88);
   --sidebar-primary: oklch(0.75 0.17 50);

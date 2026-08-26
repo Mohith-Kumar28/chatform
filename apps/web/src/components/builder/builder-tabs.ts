@@ -3,7 +3,6 @@ import {
   Blocks,
   Bot,
   GitBranch,
-  Palette,
   Settings as SettingsIcon,
   Share2,
   Webhook,
@@ -20,9 +19,10 @@ import {
 export const BUILDER_TABS = [
   // Build and Workflow are two views of the same thing — the questions and how
   // respondents move between them — so they share one tab and switch inside it.
-  { segment: "build", label: "Build", icon: Blocks, hint: "Questions and flow", alsoMatches: ["workflow"] },
+  // Design, Questions and Flow all shape the same form, so Build owns them and
+  // they share the toolbar below the header rather than three nav slots.
+  { segment: "build", label: "Build", icon: Blocks, hint: "Questions, flow and design", alsoMatches: ["workflow", "design"] },
   { segment: "agent", label: "Agent", icon: Bot, hint: "Persona, goal and knowledge", alsoMatches: [] },
-  { segment: "design", label: "Design", icon: Palette, hint: "Colours, fonts and shape", alsoMatches: [] },
   { segment: "results", label: "Results", icon: BarChart3, hint: "Responses and analytics", alsoMatches: [] },
   { segment: "share", label: "Share", icon: Share2, hint: "Link, embed and QR", alsoMatches: [] },
   { segment: "integrate", label: "Integrate", icon: Webhook, hint: "Webhooks and destinations", alsoMatches: [] },
@@ -40,6 +40,7 @@ export type BuilderSegment = (typeof BUILDER_TABS)[number]["segment"];
 export const BUILDER_SEGMENTS = [
   ...BUILDER_TABS.map((t) => t.segment),
   "workflow",
+  "design",
 ] as readonly string[];
 
 export function isBuilderSegment(value: string): boolean {
