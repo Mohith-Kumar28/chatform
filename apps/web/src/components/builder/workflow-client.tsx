@@ -617,6 +617,15 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
                 <span className="h-0.5 w-4 rounded-full" style={{ background: "var(--primary)" }} />
                 a route you set
               </span>
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="h-px w-4"
+                  style={{
+                    backgroundImage: "repeating-linear-gradient(to right, var(--muted-foreground) 0 3px, transparent 3px 6px)",
+                  }}
+                />
+                its branch
+              </span>
             </div>
           </Panel>
           <Controls showInteractive={false} />
@@ -814,7 +823,7 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
           source: branchId,
           sourceHandle: OTHERWISE,
           target: fallback,
-          label: "otherwise",
+          label: "anything else",
           deletable: false,
           style: { stroke: "var(--border)", strokeWidth: 1.5 },
           labelStyle: { fontSize: 9, fill: "var(--muted-foreground)" },
@@ -828,12 +837,21 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
 
     // No branch here. An unconditional rule overrides fall-through entirely.
     if (always) {
+      // Drawn by hand, by dragging one question onto another. It used to be
+      // an unlabelled orange wire, identical in appearance to a conditional
+      // route but with nothing on it to say what it did — so the only visible
+      // difference between "always go here" and "go here if iPhone" was that
+      // one of them had words.
       edges.push({
         id: always.id,
         source: b.ref,
         target: always.target,
         deletable: true,
+        label: "always",
         style: { stroke: "var(--primary)", strokeWidth: 2 },
+        labelStyle: { fontSize: 10, fontWeight: 600, fill: "var(--primary)" },
+        labelBgStyle: { fill: "var(--card)" },
+        labelBgPadding: [4, 2],
         markerEnd: { type: MarkerType.ArrowClosed },
       });
       return;
@@ -1000,7 +1018,17 @@ function BranchNode({ data, selected }: NodeProps) {
         ))}
         {/* When every answer is already spoken for there is no path left for
             "otherwise" to take, so offering one is a wire to nowhere. */}
-        {!exhaustive && <BranchRow label="otherwise" handleId={OTHERWISE} muted />}
+        {/* Not a case you have to fill in: it is where an answer goes when
+            none of the cases match, which happens whether or not it is drawn.
+            It is shown so you can see it — and drag it somewhere else. */}
+        {!exhaustive && (
+          <BranchRow
+            label="anything else"
+            handleId={OTHERWISE}
+            muted
+            title="Where an answer goes when none of the cases above match. This happens automatically — drag from the dot to send it somewhere else."
+          />
+        )}
       </div>
     </div>
   );
@@ -1015,9 +1043,19 @@ function BranchNode({ data, selected }: NodeProps) {
  * near the answers they belong to. React Flow already centres a handle in its
  * positioned parent; the row is that parent, so the fix is to stop fighting it.
  */
-function BranchRow({ label, handleId, muted }: { label: string; handleId: string; muted?: boolean }) {
+function BranchRow({
+  label,
+  handleId,
+  muted,
+  title,
+}: {
+  label: string;
+  handleId: string;
+  muted?: boolean;
+  title?: string;
+}) {
   return (
-    <div className="relative flex h-[22px] items-center px-3">
+    <div className="relative flex h-[22px] items-center px-3" title={title}>
       <span className={`truncate text-[10px] ${muted ? "text-muted-foreground italic" : "font-medium"}`}>{label}</span>
       <Handle
         type="source"
@@ -1186,7 +1224,14 @@ function BranchInspector({
       </Button>
 
       <p className="text-muted-foreground rounded-lg border border-dashed px-3 py-2 text-xs leading-relaxed">
-        Any answer that matches none of these goes to <span className="font-medium">{elseTarget}</span>.
+        {rulesAreExhaustive(sourceBlock as Block, rules) ? (
+          <>Every answer is covered by a route above, so nothing falls through.</>
+        ) : (
+          <>
+            Anything the routes above do not match goes to <span className="font-medium">{elseTarget}</span>. You do
+            not have to set this up — it is what happens anyway.
+          </>
+        )}
       </p>
 
       {answerableBlocks.length === 0 && (
