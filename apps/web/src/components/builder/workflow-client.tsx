@@ -23,6 +23,7 @@ import "@xyflow/react/dist/style.css";
 import { cn } from "@/lib/utils";
 import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspector";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
+import { computeAutoLayout } from "./flow-layout";
 import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
 import { Block as BlockSchema } from "@repo/form-schema";
@@ -498,6 +499,10 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
           deleteKeyCode={["Backspace", "Delete"]}
           minZoom={0.25}
           fitView
+          // A left-to-right flow is wide, and fitting the whole graph shrank
+          // it until the node labels were unreadable. Fit to the start of the
+          // flow at a legible size and let the canvas be panned.
+          fitViewOptions={{ maxZoom: 0.9, minZoom: 0.45, padding: 0.15 }}
           proOptions={{ hideAttribution: true }}
         >
           <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
@@ -593,13 +598,15 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
 function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
+  // Where a node starts when nobody has dragged it. A saved position wins.
+  const auto = computeAutoLayout(doc).nodes;
 
   doc.blocks.forEach((b, i) => {
     const isFirst = i === 0;
     nodes.push({
       id: b.ref,
       type: isFirst ? "start" : "question",
-      position: doc.layout[b.ref] ?? { x: 80 + (i % 3) * 280, y: 60 + Math.floor(i / 3) * 160 },
+      position: doc.layout[b.ref] ?? auto.get(b.ref) ?? { x: 80, y: 80 },
       data: { block: b },
       deletable: !isFirst,
     });
@@ -624,10 +631,7 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
     nodes.push({
       id: e.ref,
       type: "ending",
-      position: doc.layout[e.ref] ?? {
-        x: 120 + (doc.blocks.length % 3) * 280,
-        y: 120 + Math.ceil(doc.blocks.length / 3) * 160 + i * 120,
-      },
+      position: doc.layout[e.ref] ?? auto.get(e.ref) ?? { x: 80, y: 80 + i * 150 },
       data: { title: e.title },
       deletable: doc.endings.length > 1,
     });
@@ -641,10 +645,9 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
       nodes.push({
         id: `cond_${r.id}`,
         type: "condition",
-        position: doc.layout[`cond_${r.id}`] ?? {
-          x: (doc.layout[r.from ?? ""]?.x ?? 80) + 60,
-          y: (doc.layout[r.from ?? ""]?.y ?? 60) + 110,
-        },
+        position:
+          doc.layout[`cond_${r.id}`] ??
+          auto.get(`cond_${r.id}`) ?? { x: 140, y: 170 },
         data: { rule: r },
       });
       if (r.from) {

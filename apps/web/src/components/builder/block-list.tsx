@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
+  GitBranch,
+  CornerDownRight,
   Copy,
   Flag,
   GripVertical,
@@ -35,6 +37,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useBuilderStore } from "@/stores/builder-store";
+import { computeBranchLayout } from "./branch-layout";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
 import { defaultBlock } from "./default-block";
 import { cn } from "@/lib/utils";
@@ -59,6 +62,8 @@ export function BlockList() {
   const removeBlock = useBuilderStore((s) => s.removeBlock);
 
   const [picker, setPicker] = useState<{ index: number } | null>(null);
+  // Which questions are only asked under a condition, and under which one.
+  const layout = useMemo(() => (doc ? computeBranchLayout(doc) : new Map()), [doc]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -99,19 +104,38 @@ export function BlockList() {
               strategy={verticalListSortingStrategy}
             >
               <ol className="space-y-0.5">
-                {doc.blocks.map((block, i) => (
-                  <li key={block.ref}>
-                    <InsertPoint onClick={() => setPicker({ index: i })} />
-                    <SortableRow
-                      block={block}
-                      index={i}
-                      selected={selectedRef === block.ref}
-                      onSelect={() => select(block.ref)}
-                      onDuplicate={() => duplicateBlock(block.ref)}
-                      onDelete={() => removeBlock(block.ref)}
-                    />
-                  </li>
-                ))}
+                {doc.blocks.map((block, i) => {
+                  const branch = layout.get(block.ref);
+                  const prev = i > 0 ? layout.get(doc.blocks[i - 1]!.ref) : undefined;
+                  return (
+                    <li key={block.ref}>
+                      <InsertPoint onClick={() => setPicker({ index: i })} />
+                      {/* The condition is stated once above the first arm that
+                          answers it; a second arm of the same question repeats
+                          only its own answer, not the whole sentence. */}
+                      {branch?.condition && (
+                        <BranchLabel
+                          condition={branch.condition}
+                          sourceTitle={branch.sourceTitle}
+                          depth={branch.depth}
+                          repeat={prev?.sourceRef === branch.sourceRef}
+                        />
+                      )}
+                      <div style={{ paddingLeft: branch ? branch.depth * 14 : 0 }}>
+                        <SortableRow
+                          block={block}
+                          index={i}
+                          selected={selectedRef === block.ref}
+                          conditional={Boolean(branch?.condition)}
+                          branches={Boolean(branch?.branches)}
+                          onSelect={() => select(block.ref)}
+                          onDuplicate={() => duplicateBlock(block.ref)}
+                          onDelete={() => removeBlock(block.ref)}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
               </ol>
             </SortableContext>
           </DndContext>
@@ -184,10 +208,38 @@ function InsertPoint({ onClick }: { onClick: () => void }) {
   );
 }
 
+/** "Only if — iPhone", sitting above the questions that answer to it. */
+function BranchLabel({
+  condition,
+  sourceTitle,
+  depth,
+  repeat,
+}: {
+  condition: string;
+  sourceTitle: string | null;
+  depth: number;
+  repeat: boolean;
+}) {
+  return (
+    <div
+      className="text-muted-foreground flex items-center gap-1.5 pt-1.5 pb-1 text-[0.625rem] leading-none"
+      style={{ paddingLeft: Math.max(0, depth - 1) * 14 + 4 }}
+    >
+      <CornerDownRight className="size-3 shrink-0 opacity-50" />
+      <span className="min-w-0 truncate">
+        {!repeat && sourceTitle && <span className="opacity-60">{sourceTitle} — </span>}
+        <span className="font-medium">{condition}</span>
+      </span>
+    </div>
+  );
+}
+
 function SortableRow({
   block,
   index,
   selected,
+  conditional,
+  branches,
   onSelect,
   onDuplicate,
   onDelete,
@@ -195,6 +247,10 @@ function SortableRow({
   block: Block;
   index: number;
   selected: boolean;
+  /** Only reached under a condition. */
+  conditional: boolean;
+  /** Splits the flow into arms. */
+  branches: boolean;
   onSelect: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -220,6 +276,9 @@ function SortableRow({
         "transition-[background-color,box-shadow] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
         TONE_CLASSES[meta.tone],
         selected ? "ring-0" : "opacity-[0.82] hover:opacity-100",
+        // An arm is set slightly back from the trunk so the column reads as a
+        // shape rather than a list.
+        conditional && "rounded-l-md",
         isDragging && "shadow-md z-10 opacity-100",
       )}
     >
@@ -243,6 +302,8 @@ function SortableRow({
         <span className={cn("line-clamp-2 min-w-0 flex-1 text-xs leading-snug", selected && "font-semibold")}>
           {block.title || meta.label}
         </span>
+        {/* This question sends different answers different ways. */}
+        {branches && <GitBranch className="mt-0.5 size-3 shrink-0 opacity-45" aria-label="Branches" />}
       </button>
 
       {/* Required marker, pinned top-right and always red — it is the one

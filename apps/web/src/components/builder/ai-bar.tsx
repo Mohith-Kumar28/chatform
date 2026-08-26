@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, Check, Loader2, Sparkles, X } from "lucide-react";
+import { ArrowUp, Check, GitBranch, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { Block as BlockSchema, type Block } from "@repo/form-schema";
+import { FormDoc as FormDocSchema, type Block, type FormDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { useBuilderStore } from "@/stores/builder-store";
 import { customFetch } from "@/lib/api/mutator";
@@ -15,8 +15,52 @@ interface Turn {
   id: string;
   role: "user" | "assistant";
   text: string;
+  /** Just for the preview list; applying uses `doc`. */
   blocks?: Block[];
+  /** How many branching rules the proposal adds. */
+  rules?: number;
+  /**
+   * The whole proposed document.
+   *
+   * Applying used to push the new blocks onto the end of the local doc, which
+   * threw away both the positions the server chose and every branching rule it
+   * wrote — the two things that make a conditional question work.
+   */
+  doc?: FormDoc;
   applied?: boolean;
+}
+
+/**
+ * The thread outlives the popover.
+ *
+ * It used to live in component state, so clicking away — which is how the bar
+ * collapses — erased what you had asked and what it answered. Kept per form,
+ * because the conversation is about this form's questions and means nothing
+ * next to another one.
+ */
+const historyKey = (formId: string) => `chatform:aibar:${formId}`;
+const MAX_TURNS = 40;
+
+function loadHistory(formId: string): Turn[] {
+  try {
+    const raw = localStorage.getItem(historyKey(formId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Turn[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(formId: string, turns: Turn[]) {
+  try {
+    // Proposed docs are large and only useful while the offer is live, so the
+    // stored copy keeps the conversation and drops the payloads.
+    const slim = turns.slice(-MAX_TURNS).map(({ doc, ...rest }) => (doc ? { ...rest, applied: rest.applied ?? false, stale: true } : rest));
+    localStorage.setItem(historyKey(formId), JSON.stringify(slim));
+  } catch {
+    // A full or blocked store is not worth failing a suggestion over.
+  }
 }
 
 /**
@@ -38,6 +82,7 @@ export function AiBar() {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [hydrated, setHydrated] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
@@ -67,6 +112,17 @@ export function AiBar() {
   }, [open]);
 
   useEffect(() => {
+    if (!formId) return;
+    setTurns(loadHistory(formId));
+    setHydrated(true);
+  }, [formId]);
+
+  useEffect(() => {
+    if (!formId || !hydrated) return;
+    saveHistory(formId, turns);
+  }, [formId, turns, hydrated]);
+
+  useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" });
   }, [turns, busy]);
 
@@ -79,27 +135,30 @@ export function AiBar() {
     setTurns((t) => [...t, { id: crypto.randomUUID(), role: "user", text }]);
 
     try {
-      const res = await customFetch<{ doc: unknown }>("/api/ai/add-blocks", {
+      const res = await customFetch<{ doc: unknown; rules?: number; summary?: string }>("/api/ai/add-blocks", {
         method: "POST",
         body: JSON.stringify({ formId, prompt: text, count: 3 }),
       });
 
-      // The endpoint returns the whole updated doc; diff it to recover just the
-      // additions so they can be reviewed rather than silently applied.
+      // The proposal is the whole document — the new questions, where they sit,
+      // and any branching. It is diffed only to list what is new; applying
+      // takes the document as a whole.
+      const proposed = FormDocSchema.safeParse(res.doc);
       const existing = new Set(doc.blocks.map((b) => b.ref));
-      const added = (res.doc as { blocks: unknown[] }).blocks
-        .map((b) => BlockSchema.safeParse(b))
-        .flatMap((r) => (r.success ? [r.data] : []))
-        .filter((b) => !existing.has(b.ref));
+      const added = proposed.success ? proposed.data.blocks.filter((b) => !existing.has(b.ref)) : [];
 
       setTurns((t) => [
         ...t,
-        added.length
+        added.length && proposed.success
           ? {
               id: crypto.randomUUID(),
               role: "assistant",
-              text: `Here ${added.length === 1 ? "is one question" : `are ${added.length} questions`} you could add.`,
+              text:
+                res.summary?.trim() ||
+                `Here ${added.length === 1 ? "is one question" : `are ${added.length} questions`} you could add.`,
               blocks: added,
+              rules: res.rules ?? 0,
+              doc: proposed.data,
             }
           : {
               id: crypto.randomUUID(),
@@ -121,14 +180,26 @@ export function AiBar() {
     }
   }
 
-  function apply(turnId: string, blocks: Block[]) {
+  function apply(turn: Turn) {
+    const next = turn.doc;
+    const added = turn.blocks ?? [];
+    if (!next || added.length === 0) return;
+
+    // Take the whole proposal. Pushing the new blocks onto the end instead —
+    // which is what this did — discarded both the positions chosen for them
+    // and every branching rule, so a question meant only for iPhone users was
+    // appended after everything and asked of everyone.
     edit((d) => {
-      d.blocks.push(...(blocks as never[]));
+      d.blocks = next.blocks as never;
+      d.logic = next.logic as never;
+      d.endings = next.endings as never;
     });
-    select(blocks[0]!.ref);
-    setTurns((t) => t.map((x) => (x.id === turnId ? { ...x, applied: true } : x)));
-    toast.success(`Added ${blocks.length} question${blocks.length > 1 ? "s" : ""}`, {
-      description: "⌘Z to undo.",
+    select(added[0]!.ref);
+    setTurns((t) => t.map((x) => (x.id === turn.id ? { ...x, applied: true } : x)));
+
+    const rules = turn.rules ?? 0;
+    toast.success(`Added ${added.length} question${added.length > 1 ? "s" : ""}`, {
+      description: rules > 0 ? `${rules} branching rule${rules > 1 ? "s" : ""} set up · ⌘Z to undo.` : "⌘Z to undo.",
     });
   }
 
@@ -186,7 +257,7 @@ export function AiBar() {
                 void run();
               }
             }}
-            placeholder="Ask AI to add questions…"
+            placeholder="Ask AI to make changes…"
             className="max-h-28 min-h-9 flex-1 resize-none bg-transparent py-2 text-sm outline-none placeholder:text-[color-mix(in_oklch,currentColor_45%,transparent)]"
           />
           <Button
@@ -210,7 +281,7 @@ function Message({
   onApply,
 }: {
   turn: Turn;
-  onApply: (id: string, blocks: Block[]) => void;
+  onApply: (turn: Turn) => void;
 }) {
   if (turn.role === "user") {
     return (
@@ -241,15 +312,25 @@ function Message({
               );
             })}
           </ul>
+          {turn.rules ? (
+            <p className="text-muted-foreground flex items-center gap-1 px-1 text-xs">
+              <GitBranch className="size-3 shrink-0" />
+              {turn.rules} branching rule{turn.rules > 1 ? "s" : ""}, so each answer only sees what applies to it
+            </p>
+          ) : null}
           {turn.applied ? (
             <p className="text-muted-foreground flex items-center gap-1 px-1 text-xs">
               <Check className="size-3" />
               Added
             </p>
-          ) : (
-            <Button size="sm" shape="pill" onClick={() => onApply(turn.id, turn.blocks!)}>
+          ) : turn.doc ? (
+            <Button size="sm" shape="pill" onClick={() => onApply(turn)}>
               Add {turn.blocks.length === 1 ? "it" : "them"}
             </Button>
+          ) : (
+            // The proposal is not kept in storage, so a thread restored from a
+            // previous visit can show what was suggested but not apply it.
+            <p className="text-muted-foreground px-1 text-xs">Ask again to add these.</p>
           )}
         </div>
       )}

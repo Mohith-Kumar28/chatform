@@ -259,10 +259,11 @@ aiRouter.post(
       doc.logic = FormDoc.parse({ ...doc, logic: [...doc.logic, ...newRules] }).logic;
     }
 
+    // Deliberately not persisted. The builder reviews the proposal and
+    // applies it, and applying is what saves — so declining leaves the form
+    // exactly as it was. Writing here meant a rejected suggestion was already
+    // in the database, and the client's own copy then had to fight it.
     const issues = lintFormDoc(doc);
-    await c.env.DB.prepare(`UPDATE forms SET working_schema = ?, updated_at = ? WHERE id = ?`)
-      .bind(JSON.stringify(doc), Date.now(), formId)
-      .run();
     return c.json({ doc, added: added.length, rules: newRules.length, summary: draft.summary, tokens, issues });
   },
 );
