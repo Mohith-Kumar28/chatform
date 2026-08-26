@@ -192,6 +192,10 @@ export function findBlock(doc: FormDoc, ref: string): Block | undefined {
 /**
  * Do this block's rules cover every possible answer?
  *
+ * Exported because the flow canvas needs the same answer: when every answer is
+ * spoken for there is no "otherwise" path, and drawing one is a wire to
+ * somewhere nobody ever goes.
+ *
  * When they do, nobody ever falls through to the next block in the list, and
  * anything sitting there is dead. Only the two shapes that actually occur are
  * detected — every option of a choice question spoken for, and a pair of
@@ -199,7 +203,7 @@ export function findBlock(doc: FormDoc, ref: string): Block | undefined {
  * treated as non-exhaustive, which errs toward calling a block reachable and
  * so never invents a problem that is not there.
  */
-function rulesAreExhaustive(block: Block, rules: GotoRule[]): boolean {
+export function rulesAreExhaustive(block: Block, rules: GotoRule[]): boolean {
   const conds: { op: string; value: unknown }[] = [];
   for (const r of rules) {
     const w = r.when;

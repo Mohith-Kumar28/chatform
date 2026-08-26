@@ -26,9 +26,10 @@ import { cn } from "@/lib/utils";
 import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspector";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
 import { layoutGraph, branchNodeHeight } from "./flow-layout";
+import { toast } from "sonner";
 import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
-import { Block as BlockSchema, conditionIsAlwaysTrue } from "@repo/form-schema";
+import { Block as BlockSchema, conditionIsAlwaysTrue, rulesAreExhaustive } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -362,6 +363,15 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
       }
       onChange({ ...doc, blocks, endings, logic, layout });
       setSelectedNodeId(null);
+
+      // Deleting a question takes its wording, its options, and every rule
+      // pointing at it. That should never happen without a word.
+      const questions = deleted.filter((n) => doc.blocks.some((b) => b.ref === n.id));
+      if (questions.length > 0) {
+        toast(`Deleted ${questions.length} question${questions.length > 1 ? "s" : ""}`, {
+          description: "⌘Z to undo.",
+        });
+      }
     },
     [doc, onChange],
   );
@@ -579,7 +589,11 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
             else if (kind.kind === "ending") addEndingAt(pos);
             dragType.current = null;
           }}
-          deleteKeyCode={["Backspace", "Delete"]}
+          // Delete only. Backspace over a canvas whose nodes are the form's
+          // actual questions means one stray keystroke — after typing in a
+          // field and clicking away, say — silently destroys a question and
+          // everything wired to it.
+          deleteKeyCode={["Delete"]}
           minZoom={0.25}
           // Framing is done by `frame()`, which anchors the left edge instead
           // of centring — see the comment there.
@@ -591,6 +605,19 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
               <LayoutGrid className="size-3.5" />
               Auto arrange
             </Button>
+          </Panel>
+          {/* Two wire colours with no explanation is a puzzle, not a diagram. */}
+          <Panel position="bottom-right">
+            <div className="bg-card/90 text-muted-foreground flex items-center gap-3 rounded-full px-3 py-1.5 text-[10px] shadow-sm backdrop-blur">
+              <span className="flex items-center gap-1.5">
+                <span className="h-px w-4" style={{ background: "var(--border)" }} />
+                asked in order
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-0.5 w-4 rounded-full" style={{ background: "var(--primary)" }} />
+                a route you set
+              </span>
+            </div>
           </Panel>
           <Controls showInteractive={false} />
             <MiniMap
@@ -753,11 +780,16 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
 
     if (cases?.length) {
       const branchId = `branch_${b.ref}`;
+      // Every option accounted for means no answer can fall past the cases.
+      const exhaustive = rulesAreExhaustive(
+        b,
+        gotoRules.filter((r) => r.from === b.ref && condOf(r)),
+      );
       nodes.push({
         id: branchId,
         type: "branch",
         position: doc.layout[branchId] ?? { x: 0, y: 0 },
-        data: { sourceRef: b.ref, sourceTitle: b.title, cases },
+        data: { sourceRef: b.ref, sourceTitle: b.title, cases, exhaustive },
         deletable: true,
       });
       edges.push({
@@ -775,7 +807,7 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
       // somewhere is the next question — or, past the last one, the ending.
       // It is worth drawing because it is the half of the decision the rules
       // never mention.
-      const fallback = always?.target ?? next?.ref ?? doc.endings[0]?.ref;
+      const fallback = exhaustive ? undefined : (always?.target ?? next?.ref ?? doc.endings[0]?.ref);
       if (fallback) {
         edges.push({
           id: `else_${b.ref}`,
@@ -941,14 +973,15 @@ function EndingNode({ data, selected }: NodeProps) {
  * used to be invisible.
  */
 function BranchNode({ data, selected }: NodeProps) {
-  const { sourceTitle, cases } = data as { sourceTitle: string; cases: BranchCase[] };
-  const rows = cases.length + 1;
-  const height = branchNodeHeight(cases.length);
+  const { sourceTitle, cases, exhaustive } = data as {
+    sourceTitle: string;
+    cases: BranchCase[];
+    exhaustive: boolean;
+  };
 
   return (
     <div
-      style={{ height }}
-      className={`w-56 rounded-xl border-2 bg-[var(--card)] shadow-sm ${
+      className={`w-56 rounded-xl border-2 bg-[var(--card)] pb-1 shadow-sm ${
         selected ? "border-primary ring-primary/30 shadow-md ring-2" : "border-amber-500/60"
       }`}
     >
@@ -961,37 +994,28 @@ function BranchNode({ data, selected }: NodeProps) {
         <span className="truncate text-[11px] font-semibold">{sourceTitle || "Branch"}</span>
       </div>
 
-      <div className="border-t border-dashed">
-        {cases.map((c, i) => (
-          <BranchRow key={c.ruleId} label={c.label} handleId={c.ruleId} index={i} rows={rows} height={height} />
+      <div className="border-t border-dashed pt-0.5">
+        {cases.map((c) => (
+          <BranchRow key={c.ruleId} label={c.label} handleId={c.ruleId} />
         ))}
-        <BranchRow label="otherwise" handleId={OTHERWISE} index={cases.length} rows={rows} height={height} muted />
+        {/* When every answer is already spoken for there is no path left for
+            "otherwise" to take, so offering one is a wire to nowhere. */}
+        {!exhaustive && <BranchRow label="otherwise" handleId={OTHERWISE} muted />}
       </div>
     </div>
   );
 }
 
-function BranchRow({
-  label,
-  handleId,
-  index,
-  rows,
-  height,
-  muted,
-}: {
-  label: string;
-  handleId: string;
-  index: number;
-  rows: number;
-  height: number;
-  muted?: boolean;
-}) {
-  // The handle sits at the vertical centre of its own row, so a wire leaves
-  // level with the answer that takes it.
-  const headerPx = 30;
-  const rowPx = (height - headerPx) / rows;
-  const top = headerPx + rowPx * (index + 0.5);
-
+/**
+ * One route out, with its dot beside it.
+ *
+ * The dot used to be positioned with a `top` measured from the top of the
+ * card, while sitting inside a row that is itself positioned — so the offset
+ * was applied twice and the handles ended up bunched below the node, nowhere
+ * near the answers they belong to. React Flow already centres a handle in its
+ * positioned parent; the row is that parent, so the fix is to stop fighting it.
+ */
+function BranchRow({ label, handleId, muted }: { label: string; handleId: string; muted?: boolean }) {
   return (
     <div className="relative flex h-[22px] items-center px-3">
       <span className={`truncate text-[10px] ${muted ? "text-muted-foreground italic" : "font-medium"}`}>{label}</span>
@@ -999,7 +1023,7 @@ function BranchRow({
         type="source"
         id={handleId}
         position={Position.Right}
-        style={{ top, background: muted ? "var(--muted-foreground)" : "var(--primary)" }}
+        style={{ background: muted ? "var(--muted-foreground)" : "var(--primary)" }}
       />
     </div>
   );
@@ -1577,8 +1601,9 @@ function applyNodeChangesShallow(nodes: Node[], changes: NodeChange[]): Node[] {
         break;
       }
       case "remove": {
-        const removedIds: string[] = (change as { ids?: string[] }).ids ?? [];
-        next = next.filter((n) => !removedIds.includes(n.id));
+        // React Flow sends `{ type: "remove", id }`, not a list of ids, so
+        // this filtered against an always-empty array and removed nothing.
+        next = next.filter((n) => n.id !== change.id);
         break;
       }
       case "dimensions": {
