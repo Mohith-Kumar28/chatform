@@ -874,3 +874,54 @@ Test totals: **48 form-schema · 46 api · 5 web.** Verified end to end: gated s
 ### Still open
 
 Email via Resend · Google Sheets · webhook retry fidelity · plan-limit enforcement · analytics rollups · responsive/a11y pass. `apps/web` lint has 6 pre-existing React Compiler errors (`use-autosave`, `theme-toggle`, `share-tab`, `chat-client`) unrelated to this work.
+
+---
+
+## Phase 15 — audit: what was wired, what only looked wired
+
+A settings-by-settings sweep of every field in `SettingsDoc` against the code that would have to read it, plus adversarial testing of the AI flow generator. The pattern throughout: a control existed in the builder, the value round-tripped and persisted, and nothing at runtime ever read it.
+
+### The gates were all inert — including the password
+
+`public.ts` read `form_versions.settings_json`. **No write path has ever populated that column**: the doc PUT writes `working_schema` only, and publish copies the NULLs forward. So the parsed settings were always `{}` and every check passed unconditionally.
+
+| Setting | Was | Now |
+|---|---|---|
+| `password` | **Anyone could open a protected form** | Verified against the published doc |
+| `captcha` | Never ran | Runs |
+| `closeRules.closeAt` | Did nothing | Closes the form |
+| `closeRules.maxSubmissions` | Never implemented | Counts completed responses |
+| `closeRules.closedMessageMd` | Read under the wrong key (`settings.closedMessage`) | Shown when closed |
+| `branding.hidePoweredBy` | Always false — paid users could not remove branding | Honoured |
+
+Eight tests cover these, each publishing with `settings_json` NULL exactly as a real publish writes it, so a gate that only works on a populated column fails them.
+
+### Other settings that did nothing
+
+- **`duplicates.strategy`** — offered in the builder, enforced nowhere. `ip_daily` now 409s a repeat, scoped to a day: an IP is a network, not a person, and an office behind one address would otherwise be locked out by whoever answered first. `requireAuth.onePerIdentity` remains the version that actually holds.
+- **`onComplete.redirectUrl` / `delaySec`** — the client only ever reads the *ending's* redirect. Now the default beneath a per-ending value, which also meant projecting through `toPublicEnding` in the DO, where the raw stored ending was being emitted complete with its internal id.
+- **`meta.ogImageKey`** — `toPublicConfig` takes an `assetUrl` resolver and `public.ts` never passed one. Every share card was blank whatever you uploaded.
+- **Builder asset uploads** — `POST /assets` replied with `url: /p/assets/<id>` and **no route served that path**. Every logo, cover image, and social preview 404'd the moment the dialog closed. The route exists now; SVG is never served inline.
+- **Embed side-tab** — the Share tab offered four modes and `embed.js` read no mode at all, so a side-tab snippet produced a popup.
+
+### The AI builder produced plausible, broken flows
+
+Tested with three prompts that demand branching. The first — B2B lead qualification with two outcomes — produced four perfectly well-formed rules and a flow that:
+
+1. asked people who use a competitor **both** "which competitor?" and "what do you use instead?", because nothing rejoined the trunk after the branch;
+2. **skipped the budget question** on that path, because a rule meant for an ending had nowhere to go;
+3. had **one ending**, because `GenerationDraft` carried a singular `endingTitle` — so "route big teams to sales, everyone else to a trial" was structurally impossible to express.
+
+Fixes: endings became an array; `buildFlowRules` derives what the model leaves out. A model is good at saying "if they use a competitor, ask which one" and bad at noticing what that implies for everyone else, so the normalizer closes each arm off and derives the complement when a lone branch targets the block that came next anyway. **Its tests walk the flow with `resolveNext` rather than asserting on rules** — the original broken form would have passed any rule-shaped assertion.
+
+Deriving rejoins introduced a regression of its own, caught by testing a fourth prompt with nested branches: arms are assumed to be contiguous runs of blocks, which stops being true when a second branch interleaves its arms with the first. An event form skipped the name question for everyone attending online. The normalizer now leaves a block that belongs to another question's arm alone.
+
+**The linter could not have caught any of it.** Reachability pooled every goto target in the document into every block's successor set, so a block counted as reachable merely for following another one in the list. Edges now come from the rules that actually leave a block, and branches that between them cover every answer (every option of a choice spoken for, or two numeric comparisons with no gap) no longer imply a fall-through. "No path reaches this question" is an error the generator's retry loop can act on.
+
+Verified after the fixes: lead qualification, support satisfaction, and event registration all produce flows where every path asks every trunk question and lands on the right outcome.
+
+### Still dead, and known
+
+`rtl` · `navigation.allowBack` · `theme.colorScheme` · `theme.avatarKey` · `theme.backgroundImageKey` · `theme.backgroundBrightness` · `duplicates.fieldRef` (only `ip_daily` is enforced) · `onComplete.notificationEmails` and `autoReplyEmail` (email is not built — Resend has a key and no sender). Integrate is webhooks-only; there is no Google Sheets, Slack, or Zapier preset. Analytics is computed live per request rather than from `analytics_rollup_daily`, which still only ever stores `views`. Templates are four hardcoded objects. No custom domain. `apps/web` lint carries 6 pre-existing React Compiler errors.
+
+Test totals: **53 form-schema · 75 api · 5 web.**
