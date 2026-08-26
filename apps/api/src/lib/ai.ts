@@ -146,9 +146,25 @@ export const GenerationDraft = z.object({
     )
     .min(2)
     .max(30),
-  endingTitle: z.string(),
-  endingBody: z.string(),
-  /** Conditional flow: when <condition on question ref> → jump to <target ref | end_thanks>. */
+  /**
+   * One entry per distinct outcome.
+   *
+   * This was a single `endingTitle`/`endingBody` pair, which made "route big
+   * teams to sales and everyone else to a trial" impossible to express: the
+   * model would emit the branch anyway and, with nowhere to send it, aim it at
+   * a question instead — silently skipping whatever sat between.
+   */
+  endings: z
+    .array(
+      z.object({
+        ref: z.string().regex(/^end_[a-z0-9_]{1,30}$/),
+        title: z.string().min(1),
+        body: z.string(),
+      }),
+    )
+    .min(1)
+    .max(5),
+  /** Conditional flow: when <condition on question ref> → jump to <target ref | ending ref>. */
   branches: z
     .array(
       z.object({

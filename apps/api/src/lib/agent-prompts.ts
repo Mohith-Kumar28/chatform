@@ -179,6 +179,11 @@ Requirements:
 - refs: lowercase snake_case, unique, prefixed by topic (e.g. q_email, q_role, q_rating)
 - Every option needs a stable id like opt_<slug> (options array MUST be present on every block — use [] when the type has no options)
 - Every block MUST include: description (use "" if none) and scale (use 5 for rating, 10 otherwise)
-- One ending titled warmly (endingBody "" if none)
-- Branching: if the flow benefits from conditions (e.g. "only ask follow-up X if Y equals Z", or "skip to the end if NPS is low"), add a "branches" array: [{ "when": { "ref": "<question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains|is_empty|is_not_empty>", "value": <option id / number / boolean, or null for is_empty and is_not_empty> }, "then": "<target question ref or end_thanks>" }]. For choice questions use the option id as value. Only add branches that genuinely make sense — linear forms should omit "branches".`;
+- "endings": one entry per distinct outcome, each { "ref": "end_<slug>", "title": <warm title>, "body": "" }. Most forms need exactly one (ref "end_thanks"). Add more ONLY when the request describes different destinations for different answers — e.g. a sales hand-off versus a self-serve trial. Never invent outcomes the request did not ask for.
+- Branching: if the flow benefits from conditions (e.g. "only ask follow-up X if Y equals Z", or "skip to the end if NPS is low"), add a "branches" array: [{ "when": { "ref": "<question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains|is_empty|is_not_empty>", "value": <option id / number / boolean, or null for is_empty and is_not_empty> }, "then": "<target question ref or ending ref>" }]. For choice questions use the option id as value. Only add branches that genuinely make sense — linear forms should omit "branches".
+
+Order blocks so that branching works by position. Questions run top to bottom, and after a question the respondent falls through to the very next block unless a branch says otherwise. So:
+- Put the follow-ups for a branch immediately after the question that triggers it, one arm after another, and put the questions everyone answers below all of them.
+- When a question sends different answers down different paths, give EVERY path a branch — including the common one. "yes → q_which_competitor" alone still sends the "no" answers there too, because it is the next block.
+- To end the form early for some answers, branch straight to an ending ref.`;
 }

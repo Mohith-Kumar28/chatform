@@ -5,6 +5,7 @@ import { Block as BlockSchema, FormDoc, lintFormDoc, hasErrors, type Block, type
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, assertFormAccess, type GuardVars } from "../lib/guards.js";
 import { generateFormDraft, type GenerationDraft } from "../lib/ai.js";
+import { buildFlowRules } from "../lib/flow-normalize.js";
 import { buildFlowGeneratorPrompt } from "../lib/agent-prompts.js";
 
 export const aiRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
@@ -85,38 +86,6 @@ function normalizeBlock(draft: GenerationDraft["blocks"][number], index: number)
   }
 }
 
-/** Map AI draft branches onto strict goto logic rules; drops anything invalid. */
-function normalizeBranches(draft: GenerationDraft, blocks: Block[]): LogicRuleInput[] {
-  const refs = new Set(blocks.map((b) => b.ref));
-  const rules: LogicRuleInput[] = [];
-  for (const br of draft.branches) {
-    if (!refs.has(br.when.ref)) continue;
-    const isEnding = br.then === "end_thanks";
-    if (!isEnding && !refs.has(br.then)) continue;
-    if (br.when.ref === br.then) continue;
-    rules.push({
-      id: `rl_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`,
-      action_kind: "goto",
-      from: br.when.ref,
-      when: {
-        op: "and",
-        conditions: [
-          {
-            left: { kind: "ref", ref: br.when.ref },
-            op: br.when.op,
-            ...(br.when.value !== null && br.when.value !== undefined ? { value: br.when.value } : {}),
-          },
-        ],
-        groups: [],
-      },
-      target: br.then,
-      targetKind: isEnding ? "ending" : "block",
-      branch: "true",
-    });
-  }
-  return rules;
-}
-
 aiRouter.post(
   "/ai/generate-form",
   validator("json", GenerateBody),
@@ -168,22 +137,30 @@ aiRouter.post(
         continue;
       }
 
+      // Dedupe ending refs the same way block refs are deduped — two endings
+      // sharing a ref would make every branch to it ambiguous.
+      const seenEndingRefs = new Set<string>();
+      const endings = draft.endings.map((e, i) => {
+        let ref = e.ref;
+        while (seenEndingRefs.has(ref)) ref = `${ref}_${i}`;
+        seenEndingRefs.add(ref);
+        return {
+          id: `end_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`,
+          ref,
+          title: e.title,
+          bodyMd: e.body,
+          redirectDelaySec: 5,
+          showSummary: false,
+        };
+      });
+
       const doc = FormDoc.parse({
         schemaVersion: 1,
         title: draft.title,
         description: draft.description,
         blocks,
-        endings: [
-          {
-            id: `end_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`,
-            ref: "end_thanks",
-            title: draft.endingTitle,
-            bodyMd: draft.endingBody,
-            redirectDelaySec: 5,
-            showSummary: false,
-          },
-        ],
-        logic: normalizeBranches(draft, blocks),
+        endings,
+        logic: buildFlowRules(draft.branches, blocks, endings.map((e) => e.ref)),
         endingRules: [],
         variables: [],
         hiddenFields: [],

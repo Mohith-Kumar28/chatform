@@ -40,6 +40,20 @@ interface RespondentCtx {
   env: Bindings;
 }
 
+/**
+ * Whether the form has stopped accepting responses.
+ *
+ * The schedule lives in the doc. `forms.close_at` is a denormalized copy kept
+ * for indexed queries, but it is only ever written by paths that know about
+ * it, so the doc has to win — reading the column alone is what made the
+ * close date do nothing at all.
+ */
+function isClosed(doc: FormDoc, closeAtColumn: number | null): boolean {
+  const scheduled = doc.settings.closeRules.closeAt;
+  if (scheduled && Date.parse(scheduled) <= Date.now()) return true;
+  return !!(closeAtColumn && closeAtColumn < Date.now());
+}
+
 function stub(env: Bindings, sessionId: string): DurableObjectStub<SessionDO> {
   return env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
 }
@@ -57,25 +71,24 @@ sessionsRouter.get(
   async (c) => {
   const { slug } = c.req.param();
   const formRow = await c.env.DB.prepare(
-    `SELECT f.slug, f.status, f.close_at, fv.schema_json, fv.settings_json
+    `SELECT f.slug, f.status, f.close_at, fv.schema_json
      FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
      WHERE f.slug = ? AND f.deleted_at IS NULL LIMIT 1`,
   )
     .bind(slug)
-    .first<{ slug: string; status: string; close_at: number | null; schema_json: string; settings_json: string | null }>();
+    .first<{ slug: string; status: string; close_at: number | null; schema_json: string }>();
 
   if (!formRow || formRow.status !== "published") {
     return c.json({ error: { code: "form_not_found", message: "Form not found or not published" } }, 404);
   }
 
-  const settings = formRow.settings_json ? (JSON.parse(formRow.settings_json) as { branding?: { hidePoweredBy?: boolean }; closedMessage?: string }) : {};
-  const closed = !!(formRow.close_at && formRow.close_at < Date.now());
   const doc = readFormDoc(JSON.parse(formRow.schema_json));
+  const closed = isClosed(doc, formRow.close_at);
   const config = toPublicConfig(doc, {
     slug: formRow.slug,
-    brandingHidden: settings?.branding?.hidePoweredBy === true,
+    brandingHidden: doc.settings.branding.hidePoweredBy,
     closed,
-    closedMessage: typeof settings?.closedMessage === "string" ? settings.closedMessage : undefined,
+    closedMessage: closed ? doc.settings.closeRules.closedMessageMd : undefined,
   });
   return c.json(config);
 });
@@ -98,26 +111,45 @@ sessionsRouter.post(
 
   // load active published form version
   const formRow = await c.env.DB.prepare(
-    `SELECT f.id, f.slug, f.status, f.close_at, fv.id AS version_id, fv.schema_json, fv.settings_json
+    `SELECT f.id, f.slug, f.status, f.close_at, fv.id AS version_id, fv.schema_json
      FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
      WHERE f.slug = ? AND f.deleted_at IS NULL LIMIT 1`,
   )
     .bind(slug)
-    .first<{ id: string; slug: string; status: string; close_at: number | null; version_id: string; schema_json: string; settings_json: string | null }>();
+    .first<{ id: string; slug: string; status: string; close_at: number | null; version_id: string; schema_json: string }>();
 
   if (!formRow || formRow.status !== "published") {
     return c.json({ error: { code: "form_not_found", message: "Form not found or not published" } }, 404);
   }
-  if (formRow.close_at && formRow.close_at < Date.now()) {
+  // Every gate below reads the published document.
+  //
+  // They used to read `form_versions.settings_json`, a column that no write
+  // path has ever populated — the settings live inside the doc. So the parsed
+  // settings were always `{}` and every one of these checks passed
+  // unconditionally: the password gate let anyone in, the captcha never ran,
+  // and the close date did nothing.
+  const doc = readFormDoc(JSON.parse(formRow.schema_json));
+  const settings = doc.settings;
+
+  if (isClosed(doc, formRow.close_at)) {
     return c.json({ error: { code: "form_closed", message: "This form is closed" } }, 403);
   }
 
-  // Turnstile verification (adaptive: skip when token absent and mode allows)
-  const settings = formRow.settings_json ? JSON.parse(formRow.settings_json) : {};
-  const settingsParsed = settings as { password?: { enabled?: boolean; value?: string } };
-  if (settingsParsed?.password?.enabled) {
-    const supplied = (body as { password?: string }).password ?? "";
-    const stored = settingsParsed.password.value ?? "";
+  const cap = settings.closeRules.maxSubmissions;
+  if (cap) {
+    const count = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM submissions WHERE form_id = ?1 AND status = 'completed'`,
+    )
+      .bind(formRow.id)
+      .first<{ n: number }>();
+    if ((count?.n ?? 0) >= cap) {
+      return c.json({ error: { code: "form_closed", message: "This form is closed" } }, 403);
+    }
+  }
+
+  if (settings.password.enabled) {
+    const supplied = body.password ?? "";
+    const stored = settings.password.value;
     const ok = isHashedPassword(stored) ? await verifyPassword(supplied, stored) : timingSafeEqual(supplied, stored);
     if (!ok) {
       return c.json({ error: { code: "password_required", message: "This form requires a password" } }, 401);
@@ -125,7 +157,7 @@ sessionsRouter.post(
   }
   // A missing token used to skip verification entirely, so any client could
   // bypass the captcha by simply not sending one. Enabled means required.
-  if (settings?.captcha?.enabled && c.env.TURNSTILE_SECRET_KEY) {
+  if (settings.captcha.enabled && c.env.TURNSTILE_SECRET_KEY) {
     if (!body.turnstileToken) {
       return c.json({ error: { code: "captcha_required", message: "Captcha verification required" } }, 403);
     }
@@ -171,7 +203,7 @@ sessionsRouter.post(
     .first<{ id: string }>();
   void orgRow;
 
-  const brandingHidden = settings?.branding?.hidePoweredBy === true;
+  const brandingHidden = settings.branding.hidePoweredBy;
 
   const result = await stub(c.env, sessionId).init({
     sessionId,
@@ -180,7 +212,7 @@ sessionsRouter.post(
     organizationId: orgRow?.id ?? "",
     slug: formRow.slug,
     brandingHidden,
-    docJson: readFormDoc(JSON.parse(formRow.schema_json)),
+    docJson: doc,
     respondentToken,
     hiddenFields: body.hiddenFields ?? {},
     ipHash: sha256Hex(ip),

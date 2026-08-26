@@ -12,6 +12,7 @@ import {
   KNOWLEDGE_CHAR_BUDGET,
   leadFormFixture,
   toPublicConfig,
+  lintFormDoc,
   normalizeE164,
   type Block,
 } from "../src/index";
@@ -284,5 +285,95 @@ describe("respondent auth (v3 → v4)", () => {
     // No country code and no hint is ambiguous, so it must not guess.
     expect(normalizeE164("5550132")).toBeNull();
     expect(normalizeE164("not a number")).toBeNull();
+  });
+});
+
+describe("reachability linting", () => {
+  const doc = (blocks: unknown[], logic: unknown[] = [], endings = ["end_thanks"]) =>
+    FormDoc.parse({
+      title: "t",
+      blocks,
+      endings: endings.map((ref, i) => ({ id: `end_lint${i}0`, ref, title: ref })),
+      logic,
+    });
+
+  const q = (ref: string, options?: string[]) => ({
+    id: `blk_${ref}`,
+    ref,
+    type: options ? "single_select" : "short_text",
+    title: ref,
+    required: true,
+    ...(options ? { options: options.map((o) => ({ id: o, label: o })) } : {}),
+  });
+
+  const rating = (ref: string) => ({ id: `blk_${ref}`, ref, type: "rating", title: ref, required: true, scale: 5 });
+
+  const goto = (from: string, op: string, value: unknown, target: string) => ({
+    id: `rl_${from.slice(0, 8)}_${String(value)}`.slice(0, 24),
+    action_kind: "goto",
+    from,
+    when: {
+      op: "and",
+      conditions: [{ left: { kind: "ref", ref: from }, op, ...(value === null ? {} : { value }) }],
+      groups: [],
+    },
+    target,
+    targetKind: target.startsWith("end_") ? "ending" : "block",
+    branch: "true",
+  });
+
+  const codes = (d: ReturnType<typeof doc>) => lintFormDoc(d).map((i) => i.code);
+
+  it("flags a question that every branch jumps over", () => {
+    // Exactly what the AI generator produced: a rating splits the flow into
+    // two follow-ups, and the question meant for everyone sits between the
+    // split and the arms, where no path can reach it.
+    const d = doc(
+      [rating("q_rating"), q("q_channel"), q("q_bad"), q("q_good")],
+      [goto("q_rating", "lte", 3, "q_bad"), goto("q_rating", "gte", 4, "q_good")],
+    );
+    const issue = lintFormDoc(d).find((i) => i.code === "unreachable_blocks");
+    expect(issue).toBeDefined();
+    expect(issue!.level).toBe("error");
+    expect(issue!.message).toContain("q_channel");
+  });
+
+  it("does not flag it when the branches leave a gap to fall through", () => {
+    // `lte 2` and `gte 4` say nothing about 3, so a 3 still falls through.
+    const d = doc(
+      [rating("q_rating"), q("q_channel"), q("q_bad"), q("q_good")],
+      [goto("q_rating", "lte", 2, "q_bad"), goto("q_rating", "gte", 4, "q_good")],
+    );
+    expect(codes(d)).not.toContain("unreachable_blocks");
+  });
+
+  it("treats every option of a choice question being spoken for as exhaustive", () => {
+    const covered = doc(
+      [q("q_role", ["opt_alpha", "opt_beta"]), q("q_skipped"), q("q_a"), q("q_b")],
+      [goto("q_role", "eq", "opt_alpha", "q_a"), goto("q_role", "eq", "opt_beta", "q_b")],
+    );
+    expect(codes(covered)).toContain("unreachable_blocks");
+
+    // One option left unrouted, so that answer falls through as normal.
+    const partial = doc(
+      [q("q_role", ["opt_alpha", "opt_beta", "opt_gamma"]), q("q_next"), q("q_a"), q("q_b")],
+      [goto("q_role", "eq", "opt_alpha", "q_a"), goto("q_role", "eq", "opt_beta", "q_b")],
+    );
+    expect(codes(partial)).not.toContain("unreachable_blocks");
+  });
+
+  it("leaves a plain linear form alone", () => {
+    expect(codes(doc([q("q_one"), q("q_two"), q("q_three")]))).not.toContain("unreachable_blocks");
+  });
+
+  it("does not call a block unreachable just because some other rule targets it", () => {
+    // The old check pooled every goto target in the document into every
+    // block's successors, which made this pass for the wrong reason — and made
+    // the case above impossible to detect. Both must hold at once.
+    const d = doc(
+      [q("q_one", ["opt_xray", "opt_yank"]), q("q_two"), q("q_three")],
+      [goto("q_one", "eq", "opt_xray", "q_three")],
+    );
+    expect(codes(d)).not.toContain("unreachable_blocks");
   });
 });
