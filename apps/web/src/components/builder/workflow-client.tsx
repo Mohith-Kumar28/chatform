@@ -22,6 +22,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { cn } from "@/lib/utils";
 import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspector";
+import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
 import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
 import { Block as BlockSchema } from "@repo/form-schema";
@@ -39,49 +40,6 @@ import {
 const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
 
 type BlockType = Block["type"];
-
-const PALETTE: { group: string; items: { type: BlockType; label: string; icon: typeof Mail }[] }[] = [
-  {
-    group: "Content",
-    items: [{ type: "statement", label: "Message", icon: Heading }],
-  },
-  {
-    group: "Text",
-    items: [
-      { type: "short_text", label: "Short text", icon: Type },
-      { type: "long_text", label: "Long text", icon: AlignLeft },
-      { type: "email", label: "Email", icon: Mail },
-      { type: "phone", label: "Phone", icon: Phone },
-      { type: "url", label: "Website", icon: Globe },
-    ],
-  },
-  {
-    group: "Numbers & dates",
-    items: [
-      { type: "number", label: "Number", icon: Hash },
-      { type: "date", label: "Date", icon: Calendar },
-      { type: "rating", label: "Rating", icon: Star },
-      { type: "nps", label: "NPS", icon: Sigma },
-      { type: "opinion_scale", label: "Opinion scale", icon: Scale },
-    ],
-  },
-  {
-    group: "Choice",
-    items: [
-      { type: "yes_no", label: "Yes / No", icon: SquareCheck },
-      { type: "single_select", label: "Single select", icon: CircleHelp },
-      { type: "multi_select", label: "Multi select", icon: ListChecks },
-    ],
-  },
-  {
-    group: "Advanced",
-    items: [
-      { type: "file_upload", label: "File upload", icon: Upload },
-      { type: "payment", label: "Payment", icon: CreditCard },
-      { type: "legal_consent", label: "Consent", icon: UserRound },
-    ],
-  },
-];
 
 const OPS = [
   { value: "eq", label: "equals", inv: "neq" },
@@ -114,17 +72,19 @@ interface WorkflowClientProps {
   onChange: (next: FormDoc) => void;
   /** Block ref to pre-select in the canvas (e.g. arriving from Build's Logic button). */
   focusRef?: string | null;
+  /** Rendered above the canvas, between the two panels. */
+  toolbar?: React.ReactNode;
 }
 
-export function WorkflowClient({ doc, onChange, focusRef }: WorkflowClientProps) {
+export function WorkflowClient({ doc, onChange, focusRef, toolbar }: WorkflowClientProps) {
   return (
     <ReactFlowProvider>
-      <WorkflowEditor doc={doc} onChange={onChange} focusRef={focusRef} />
+      <WorkflowEditor doc={doc} onChange={onChange} focusRef={focusRef} toolbar={toolbar} />
     </ReactFlowProvider>
   );
 }
 
-function WorkflowEditor({ doc, onChange, focusRef }: WorkflowClientProps) {
+function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProps) {
   const { screenToFlowPosition } = useReactFlow();
 
   /**
@@ -441,24 +401,40 @@ function WorkflowEditor({ doc, onChange, focusRef }: WorkflowClientProps) {
                 <Flag className="text-muted-foreground size-4" />
                 <span className="font-medium">Ending</span>
               </div>
-              {PALETTE.map((g) => (
-                <div key={g.group}>
-                  <p className="text-muted-foreground mb-1.5 text-[10px] font-semibold uppercase tracking-wide">{g.group}</p>
-                  <div className="space-y-1">
-                    {g.items.map((item) => (
-                      <div
-                        key={item.type}
-                        draggable
-                        onDragStart={() => (dragType.current = { kind: "block", blockType: item.type })}
-                        className="hover:border-primary hover:text-primary flex cursor-grab items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs active:cursor-grabbing"
-                      >
-                        <item.icon className="size-3.5 shrink-0" />
-                        {item.label}
-                      </div>
-                    ))}
+              {/* The shared BLOCK_LIBRARY, tinted by family — the same colours
+                  the Questions list uses, so a block looks like itself wherever
+                  you meet it. This panel used to carry its own third copy of
+                  the block list, which had already drifted from the other two. */}
+              {BLOCK_GROUPS.map((group) => {
+                const items = BLOCK_LIBRARY.filter((b) => b.group === group);
+                if (!items.length) return null;
+                return (
+                  <div key={group}>
+                    <p className="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase">
+                      {group}
+                    </p>
+                    <div className="space-y-1">
+                      {items.map((item) => (
+                        <div
+                          key={item.type}
+                          draggable
+                          onDragStart={() => (dragType.current = { kind: "block", blockType: item.type })}
+                          title={item.description}
+                          className={cn(
+                            "flex cursor-grab items-center gap-2 rounded-lg px-2.5 py-2 text-xs",
+                            "transition-opacity duration-[var(--duration-micro)] active:cursor-grabbing",
+                            "opacity-[0.82] hover:opacity-100",
+                            TONE_CLASSES[item.tone],
+                          )}
+                        >
+                          <item.icon className="size-3.5 shrink-0" strokeWidth={2} />
+                          {item.label}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <p className="text-muted-foreground px-3 py-2 text-[10px] leading-relaxed">
               Drag nodes onto the canvas. Drag from a node&apos;s edge dot to another node to control the flow.
@@ -474,14 +450,19 @@ function WorkflowEditor({ doc, onChange, focusRef }: WorkflowClientProps) {
         )}
       </aside>
 
-      {/* center: canvas */}
-      <div
-        ref={wrapper}
-        data-tour="wf-canvas"
-        className="relative min-w-0 flex-1"
-        onPointerDown={showMap}
-        onWheel={showMap}
-      >
+      {/* center: toolbar + canvas.
+          The toolbar sits inside this column, between the two panels, exactly
+          as it does on the Questions view. Spanning it across the full width
+          pushed both panels down and left dead space above them. */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {toolbar}
+        <div
+          ref={wrapper}
+          data-tour="wf-canvas"
+          className="relative min-h-0 flex-1"
+          onPointerDown={showMap}
+          onWheel={showMap}
+        >
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -521,15 +502,16 @@ function WorkflowEditor({ doc, onChange, focusRef }: WorkflowClientProps) {
         >
           <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
           <Controls showInteractive={false} />
-          <MiniMap
-            pannable
-            zoomable
-            className={cn(
-              "hidden transition-opacity duration-[var(--duration-standard)] md:block",
-              navigating ? "opacity-100" : "pointer-events-none opacity-0",
-            )}
-          />
-        </ReactFlow>
+            <MiniMap
+              pannable
+              zoomable
+              className={cn(
+                "hidden transition-opacity duration-[var(--duration-standard)] md:block",
+                navigating ? "opacity-100" : "pointer-events-none opacity-0",
+              )}
+            />
+          </ReactFlow>
+        </div>
       </div>
 
       {/* right: inspector (collapsible) */}
@@ -539,17 +521,21 @@ function WorkflowEditor({ doc, onChange, focusRef }: WorkflowClientProps) {
       >
         {rightOpen ? (
           <>
-            <div className="flex items-center justify-between px-4 py-3">
-              <p className="text-muted-foreground text-xs font-medium uppercase">Details</p>
-              <button onClick={() => setRightOpen(false)} className="text-muted-foreground hover:text-foreground" aria-label="Collapse details">
-                <ChevronRight className="size-4" />
-              </button>
-            </div>
-            <div className="flex-1 px-4 pb-4">
+            {/* The block inspector carries its own header (type, ref, delete),
+                so a second "DETAILS" bar above it was duplicate chrome and a
+                stack of dead space. Only the collapse control stays, floated. */}
+            <button
+              onClick={() => setRightOpen(false)}
+              className="text-muted-foreground hover:text-foreground absolute top-3 right-3 z-10"
+              aria-label="Collapse details"
+            >
+              <ChevronRight className="size-4" />
+            </button>
+            <div className="flex-1">
               {selEdge && !selEdgeRule ? (
-                <SequenceEdgeInfo edgeId={selEdge.id} doc={doc} />
+                <div className="px-4 py-4"><SequenceEdgeInfo edgeId={selEdge.id} doc={doc} /></div>
               ) : selEdgeRule ? (
-                <EdgeRuleEditor
+                <div className="px-4 py-4"><EdgeRuleEditor
                   rule={selEdgeRule}
                   doc={doc}
                   isTrueBranch={selEdge!.id.startsWith("condtrue_")}
@@ -557,26 +543,24 @@ function WorkflowEditor({ doc, onChange, focusRef }: WorkflowClientProps) {
                   elseTarget={selCondFalse?.target ?? null}
                   onPatch={patchRule}
                   onDelete={() => onEdgesDelete([{ id: selEdge!.id } as Edge])}
-                />
+                /></div>
               ) : selBlock ? (
                 // The shared inspector — same component, same fields, whether
                 // you got here from Questions or from Flow.
-                <div className="-mx-4 -mt-3">
-                  <SharedBlockInspector />
-                </div>
+                <SharedBlockInspector />
               ) : selCond ? (
-                <ConditionInspector
+                <div className="px-4 py-4"><ConditionInspector
                   rule={selCond}
                   elseRule={selCondFalse}
                   doc={doc}
                   answerableBlocks={answerableBlocks}
                   onPatch={patchRule}
                   onDelete={() => onNodesDelete([{ id: `cond_${selCond.id}` } as Node])}
-                />
+                /></div>
               ) : selEnding ? (
-                <EndingInspector ending={selEnding} doc={doc} onChange={onChange} />
+                <div className="px-4 py-4"><EndingInspector ending={selEnding} doc={doc} onChange={onChange} /></div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3 px-4 py-4">
                   <p className="text-muted-foreground text-sm">Select a node or a wire to edit it.</p>
                   <div className="text-muted-foreground space-y-2 rounded-xl border border-dashed p-3 text-xs leading-relaxed">
                     <p className="flex items-center gap-1.5 font-medium">
@@ -739,21 +723,28 @@ function StartNode({ data, selected }: NodeProps) {
 
 function QuestionNode({ data, selected }: NodeProps) {
   const { block } = data as { block: Block };
-  const Icon = BLOCK_ICONS[block.type] ?? GitBranch;
+  const meta = blockMeta(block.type);
+  const accent = TONE_ACCENT[meta.tone];
   return (
+    // Selection is a spine in the block's family colour, matching the Questions
+    // list, rather than a generic orange ring.
     <div
-      className={`w-56 rounded-xl border-2 bg-[var(--card)] px-3 py-2.5 shadow-sm transition-shadow ${selected ? "border-primary ring-2 ring-primary/30 shadow-md" : "border-[var(--border)]"}`}
+      className={cn(
+        "w-56 rounded-xl bg-[var(--card)] px-3 py-2.5 transition-shadow",
+        selected ? "shadow-md" : "shadow-xs",
+      )}
+      style={{ boxShadow: selected ? `inset 3px 0 0 0 ${accent}, var(--shadow-md)` : undefined }}
     >
       <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
       <div className="flex items-center gap-2">
-        <span className="bg-primary/10 text-primary flex size-6 shrink-0 items-center justify-center rounded-md">
-          <Icon className="size-3.5" />
+        <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-md", TONE_CLASSES[meta.tone])}>
+          <meta.icon className="size-3.5" strokeWidth={2} />
         </span>
         <span className="min-w-0 flex-1 truncate text-xs font-medium">{block.title}</span>
         {block.required && <span className="text-destructive text-xs">*</span>}
       </div>
-      <p className="text-muted-foreground mt-1 text-[10px] uppercase tracking-wide">{block.type.replaceAll("_", " ")}</p>
-      <Handle type="source" position={Position.Right} className="!bg-primary" />
+      <p className="text-muted-foreground mt-1 text-[10px] tracking-wide uppercase">{meta.label}</p>
+      <Handle type="source" position={Position.Right} style={{ background: accent }} />
     </div>
   );
 }
@@ -1171,8 +1162,11 @@ function ConditionValueInput({
 
 // ────────────────────────── helpers ──────────────────────────
 
-const ALL_PALETTE_ITEMS = PALETTE.flatMap((g) => g.items);
-const BLOCK_ICONS: Partial<Record<BlockType, typeof Mail>> = Object.fromEntries(ALL_PALETTE_ITEMS.map((i) => [i.type, i.icon]));
+// Node icons come from the shared library, so a block wears the same mark on
+// the canvas, in the palette and in the Questions list.
+const BLOCK_ICONS: Partial<Record<BlockType, typeof Mail>> = Object.fromEntries(
+  BLOCK_LIBRARY.map((b) => [b.type, b.icon]),
+);
 
 function conditionText(cond: { op: string; value?: unknown }): string {
   return `${opLabel(cond.op)}${cond.value !== undefined && cond.value !== null ? ` ${String(cond.value).slice(0, 14)}` : ""}`;

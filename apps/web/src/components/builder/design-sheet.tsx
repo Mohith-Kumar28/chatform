@@ -1,26 +1,16 @@
 "use client";
 
-import { Palette } from "lucide-react";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ThemePanel } from "./theme-panel";
 import { useBuilderStore } from "@/stores/builder-store";
 
 /**
- * Theme controls in a sheet over the builder.
+ * Theme controls in a sheet over the builder, so the form stays on screen and
+ * every change lands live. Edits autosave like any other, so there is nothing
+ * to confirm.
  *
- * Design used to be its own route, which meant leaving the questions to change
- * their colours and guessing at the result. As a sheet the form stays on
- * screen behind it and every change lands live — which is the whole point of
- * having a preview.
- *
- * Edits go straight into the store and autosave like any other change, so
- * there is nothing to confirm and nothing to lose.
+ * The header is pinned and only the body scrolls — putting `overflow-y-auto`
+ * on the whole panel made the title scroll away with the content.
  */
 export function DesignSheet({
   open,
@@ -35,16 +25,12 @@ export function DesignSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full gap-0 overflow-y-auto sm:max-w-md">
-        <SheetHeader className="pb-2">
-          <SheetTitle className="flex items-center gap-2">
-            <Palette className="size-4" strokeWidth={1.75} />
-            Design
-          </SheetTitle>
-          <SheetDescription>Changes apply to the form behind this panel as you make them.</SheetDescription>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-sm">
+        <SheetHeader className="shrink-0 px-5 pt-5 pb-3">
+          <SheetTitle>Design</SheetTitle>
         </SheetHeader>
 
-        <div className="px-4 pb-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
           <ThemePanel
             theme={doc.theme}
             onChange={(theme) =>

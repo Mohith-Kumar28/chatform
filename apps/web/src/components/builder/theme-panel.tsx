@@ -5,7 +5,6 @@ import { RADIUS_PX } from "@/lib/chat-theme";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 
 type Theme = FormDoc["theme"];
@@ -14,9 +13,9 @@ const COLOR_FIELDS: { key: keyof Theme; label: string }[] = [
   { key: "background", label: "Background" },
   { key: "text", label: "Text" },
   { key: "accent", label: "Accent" },
-  { key: "botBubble", label: "Bot bubble" },
-  { key: "userBubble", label: "User bubble" },
-  { key: "userBubbleText", label: "User bubble text" },
+  { key: "botBubble", label: "Agent bubble" },
+  { key: "userBubble", label: "Their bubble" },
+  { key: "userBubbleText", label: "Their text" },
 ];
 
 const PRESETS: { name: string; theme: Partial<Theme> }[] = [
@@ -41,7 +40,7 @@ const PRESETS: { name: string; theme: Partial<Theme> }[] = [
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wide">{title}</h3>
+      <h3 className="text-muted-foreground text-[0.6875rem] font-medium tracking-wide uppercase">{title}</h3>
       {children}
     </section>
   );
@@ -57,40 +56,28 @@ export function ThemePanel({
   const patch = (p: Partial<Theme>) => onChange({ ...theme, ...p });
 
   return (
-    <div className="mx-auto w-full max-w-xl space-y-8 pb-16">
-      <header className="space-y-1">
-        <h2 className="font-display text-2xl font-semibold">Theme</h2>
-        <p className="text-muted-foreground text-sm">
-          Colors apply to the chat instantly — changes autosave to the draft.
-        </p>
-      </header>
-
+    <div className="w-full space-y-6">
       <Section title="Presets">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2">
           {PRESETS.map((p) => (
             <button
               key={p.name}
               type="button"
               onClick={() => patch(p.theme)}
-              className="hover:border-primary rounded-xl border p-3 text-left transition-colors"
+              className="hover:bg-muted/60 flex items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors"
             >
-              <div className="mb-2 flex gap-1">
-                <span className="size-5 rounded-full border" style={{ background: p.theme.background }} />
-                <span className="size-5 rounded-full border" style={{ background: p.theme.accent }} />
-                <span className="size-5 rounded-full border" style={{ background: p.theme.userBubble }} />
-              </div>
+              <span className="flex gap-1">
+                <span className="size-4 rounded-full" style={{ background: p.theme.background, boxShadow: "inset 0 0 0 1px var(--border)" }} />
+                <span className="size-4 rounded-full" style={{ background: p.theme.accent }} />
+                <span className="size-4 rounded-full" style={{ background: p.theme.userBubble }} />
+              </span>
               <span className="text-xs font-medium">{p.name}</span>
             </button>
           ))}
-          <Button variant="ghost" size="sm" className="justify-start" onClick={() => onChange(ThemeDoc.parse({}))}>
-            Reset defaults
-          </Button>
         </div>
       </Section>
 
-      <Separator />
-
-      <Section title="Colors">
+      <Section title="Colours">
         <div className="grid grid-cols-2 gap-3">
           {COLOR_FIELDS.map(({ key, label }) => {
             const value = (theme[key] as string | undefined) ?? "";
@@ -119,11 +106,9 @@ export function ThemePanel({
         </div>
       </Section>
 
-      <Separator />
-
-      <Section title="Shape & type">
+      <Section title="Shape">
         <div className="space-y-1.5">
-          <Label>Bubble corners</Label>
+          <Label>Corners</Label>
           <Select value={theme.radius} onValueChange={(v) => patch({ radius: v as Theme["radius"] })}>
             <SelectTrigger className="w-full">
               <SelectValue />
@@ -138,7 +123,7 @@ export function ThemePanel({
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="font-heading">Heading font</Label>
+          <Label htmlFor="font-heading">Heading</Label>
           <Input
             id="font-heading"
             value={theme.fontHeading}
@@ -147,7 +132,7 @@ export function ThemePanel({
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="font-body">Body font</Label>
+          <Label htmlFor="font-body">Body</Label>
           <Input
             id="font-body"
             value={theme.fontBody}
@@ -156,6 +141,15 @@ export function ThemePanel({
           />
         </div>
       </Section>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-muted-foreground w-full"
+        onClick={() => onChange(ThemeDoc.parse({}))}
+      >
+        Reset to defaults
+      </Button>
     </div>
   );
 }

@@ -20,19 +20,20 @@ export function WorkflowTab() {
   if (!doc) return null;
 
   return (
-    <div className="flex h-[calc(100svh-3.5rem)] flex-col">
-      <BuildToolbar />
-      <div className="min-h-0 flex-1">
+    <div className="h-[calc(100svh-3.5rem)]">
+      {/* The toolbar is handed to the editor so it renders above the canvas,
+          between the library and the details panel — the same place it sits on
+          the Questions view. */}
       <WorkflowClient
         doc={doc}
         focusRef={focusRef}
+        toolbar={<BuildToolbar />}
         onChange={(next) =>
           edit((d) => {
             Object.assign(d, next);
           })
         }
-        />
-      </div>
+      />
     </div>
   );
 }

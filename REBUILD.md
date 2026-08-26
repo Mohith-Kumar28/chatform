@@ -809,3 +809,15 @@ Model tiers now: interview `google/gemini-3.7-flash`, extraction `google/gemini-
 **Design is a sheet.** It was a route, so you left the questions to change their colours and guessed at the result. Now a sheet over the builder with the form live behind it. `/design` redirects to `/build`.
 
 Test totals: **75 passing.**
+
+---
+
+## Phase 12 — flow layout, the third block list, and the design sheet
+
+**Dead space above the panels.** On the Flow view the toolbar spanned the full width *above* the editor, so both the library and the details panel started below it. It is now handed to the editor and rendered above the canvas column only — between the two panels, exactly where it sits on the Questions view.
+
+**Duplicate "DETAILS" chrome.** The panel had its own header bar above an inspector that already shows type, ref and delete. Removed; only the collapse control remains, floated. The negative-margin hack compensating for the two paddings went with it.
+
+**A third block list.** `workflow-client.tsx` carried its own `PALETTE` — a third copy after Build and the picker, already drifted (no `contact_info`, no `address`). Replaced with the shared `BLOCK_LIBRARY`, which also brings the family colours: the palette rows and the canvas nodes are now tinted like the Questions list, so a block looks like itself everywhere. Node icons come from the same source. Selection on canvas is a family-coloured spine rather than a generic orange ring.
+
+**Design sheet.** `overflow-y-auto` was on the whole panel, so the title scrolled away with the content — now a flex column with a pinned header and a scrolling body. All subtext removed, labels shortened ("Bubble corners" → "Corners", "User bubble text" → "Their text"), presets compacted to swatch rows, and "Reset to defaults" moved out of the preset grid — where it read as a fifth preset — to the bottom.
