@@ -3,80 +3,160 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
- chatform design tokens — warm cream base, ink text, orange accent.
- Chat theming uses scoped --cf-* vars applied at runtime from ThemeDoc.
-*/
+/* ═══════════════════════════════════════════════════════════════════════════
+   chatform design tokens
+
+   Warm cream paper, ink text, orange accent. Deliberately not blue-grey: the
+   product is a conversation, and the surface should feel like paper rather
+   than a dashboard. Dark mode is warm charcoal for the same reason — never
+   blue-black.
+
+   Two theming systems live here and they are NOT the same thing:
+     1. these `--*` app tokens, consumed through Tailwind utilities
+     2. the `--cf-*` chat tokens at the bottom, set per-form at runtime from a
+        ThemeDoc. `chatThemeVars()` in lib/chat-theme.ts is the single writer,
+        used by BOTH the builder preview and the live runtime — that shared
+        function is what makes "preview ≡ production" true.
+   ═════════════════════════════════════════════════════════════════════════ */
+
 :root {
   --radius: 0.75rem;
 
-  --background: oklch(0.98 0.008 85);        /* warm cream */
-  --foreground: oklch(0.22 0.02 60);         /* warm ink */
+  /* ── surfaces ── */
+  --background: oklch(0.984 0.007 95); /* warm cream  */
+  --foreground: oklch(0.255 0.01 65); /* ink, stone-leaning */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.02 60);
+  --card-foreground: oklch(0.255 0.01 65);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.02 60);
-  --primary: oklch(0.7 0.17 45);             /* orange */
-  --primary-foreground: oklch(0.99 0.005 85);
-  --secondary: oklch(0.95 0.012 80);
+  --popover-foreground: oklch(0.255 0.01 65);
+  --muted: oklch(0.962 0.008 88); /* sand */
+  --muted-foreground: oklch(0.52 0.014 68);
+  --secondary: oklch(0.945 0.018 82);
   --secondary-foreground: oklch(0.3 0.02 60);
-  --muted: oklch(0.95 0.012 80);
-  --muted-foreground: oklch(0.52 0.02 70);
-  --accent: oklch(0.94 0.03 70);
+  --accent: oklch(0.935 0.042 70); /* peach wash */
   --accent-foreground: oklch(0.3 0.03 60);
-  --destructive: oklch(0.58 0.22 27);
-  --destructive-foreground: oklch(0.99 0 0);
-  --border: oklch(0.9 0.012 75);
-  --input: oklch(0.9 0.012 75);
-  --ring: oklch(0.7 0.17 45);
-  --chart-1: oklch(0.7 0.17 45);
-  --chart-2: oklch(0.62 0.14 255);
-  --chart-3: oklch(0.68 0.15 145);
-  --chart-4: oklch(0.75 0.15 85);
-  --chart-5: oklch(0.62 0.2 330);
+  --border: oklch(0.905 0.011 80);
+  --input: oklch(0.905 0.011 80);
+  --ring: oklch(0.705 0.19 43);
+
+  /* ── brand ── */
+  --primary: oklch(0.705 0.19 43); /* chatform orange */
+  --primary-foreground: oklch(0.995 0.005 85);
+  --primary-hover: oklch(0.655 0.195 41);
+  --primary-soft: oklch(0.952 0.038 60); /* tinted background for badges/wash */
+
+  /* ── status ── */
+  --destructive: oklch(0.585 0.215 27);
+  --destructive-foreground: oklch(0.995 0 0);
+  --destructive-soft: oklch(0.955 0.028 25);
+  --success: oklch(0.63 0.165 152);
+  --success-foreground: oklch(0.995 0 0);
+  --success-soft: oklch(0.955 0.035 152);
+  --warning: oklch(0.775 0.155 75);
+  --warning-foreground: oklch(0.24 0.03 60);
+  --warning-soft: oklch(0.965 0.045 85);
+  --info: oklch(0.62 0.135 250);
+  --info-foreground: oklch(0.995 0 0);
+  --info-soft: oklch(0.955 0.03 250);
+
+  /* ── charts: orange / teal / violet / amber / rose / sky ── */
+  --chart-1: oklch(0.705 0.19 43);
+  --chart-2: oklch(0.68 0.115 195);
+  --chart-3: oklch(0.6 0.16 295);
+  --chart-4: oklch(0.79 0.14 80);
+  --chart-5: oklch(0.65 0.19 15);
+  --chart-6: oklch(0.7 0.13 235);
+
+  /* ── sidebar / builder chrome ── */
   --sidebar: oklch(0.97 0.01 82);
-  --sidebar-foreground: oklch(0.22 0.02 60);
-  --sidebar-primary: oklch(0.7 0.17 45);
-  --sidebar-primary-foreground: oklch(0.99 0.005 85);
+  --sidebar-foreground: oklch(0.255 0.01 65);
+  --sidebar-primary: oklch(0.705 0.19 43);
+  --sidebar-primary-foreground: oklch(0.995 0.005 85);
   --sidebar-accent: oklch(0.93 0.02 75);
   --sidebar-accent-foreground: oklch(0.3 0.02 60);
-  --sidebar-border: oklch(0.9 0.012 75);
-  --sidebar-ring: oklch(0.7 0.17 45);
+  --sidebar-border: oklch(0.905 0.011 80);
+  --sidebar-ring: oklch(0.705 0.19 43);
+
+  /* ── elevation: warm-tinted, never neutral grey ── */
+  --shadow-xs: 0 1px 2px oklch(0.25 0.02 65 / 0.06);
+  --shadow-sm: 0 1px 3px oklch(0.25 0.02 65 / 0.07), 0 1px 2px oklch(0.25 0.02 65 / 0.05);
+  --shadow-md: 0 4px 12px -2px oklch(0.25 0.02 65 / 0.09);
+  --shadow-lg: 0 12px 32px -8px oklch(0.25 0.02 65 / 0.14);
+  --shadow-xl: 0 24px 56px -16px oklch(0.25 0.02 65 / 0.18);
+
+  /* ── motion ── */
+  --duration-micro: 120ms;
+  --duration-standard: 180ms;
+  --duration-enter: 220ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ── layering ── */
+  --z-sticky: 20;
+  --z-dropdown: 40;
+  --z-overlay: 50;
+  --z-modal: 60;
+  --z-toast: 80;
 }
 
 .dark {
-  --background: oklch(0.19 0.015 60);
-  --foreground: oklch(0.94 0.01 80);
-  --card: oklch(0.23 0.018 60);
-  --card-foreground: oklch(0.94 0.01 80);
-  --popover: oklch(0.23 0.018 60);
-  --popover-foreground: oklch(0.94 0.01 80);
-  --primary: oklch(0.72 0.17 45);
-  --primary-foreground: oklch(0.16 0.02 60);
-  --secondary: oklch(0.27 0.02 60);
-  --secondary-foreground: oklch(0.94 0.01 80);
-  --muted: oklch(0.27 0.02 60);
-  --muted-foreground: oklch(0.68 0.02 70);
-  --accent: oklch(0.3 0.03 60);
-  --accent-foreground: oklch(0.94 0.01 80);
-  --destructive: oklch(0.62 0.2 25);
-  --destructive-foreground: oklch(0.97 0 0);
-  --border: oklch(0.3 0.02 60);
-  --input: oklch(0.3 0.02 60);
-  --ring: oklch(0.72 0.17 45);
-  --chart-1: oklch(0.72 0.17 45);
-  --chart-2: oklch(0.65 0.14 255);
-  --chart-3: oklch(0.7 0.15 145);
-  --chart-4: oklch(0.78 0.15 85);
-  --chart-5: oklch(0.65 0.2 330);
-  --sidebar: oklch(0.21 0.015 60);
-  --sidebar-foreground: oklch(0.94 0.01 80);
-  --sidebar-primary: oklch(0.72 0.17 45);
-  --sidebar-primary-foreground: oklch(0.16 0.02 60);
-  --sidebar-accent: oklch(0.28 0.02 60);
-  --sidebar-accent-foreground: oklch(0.94 0.01 80);
-  --sidebar-border: oklch(0.3 0.02 60);
-  --sidebar-ring: oklch(0.72 0.17 45);
+  --background: oklch(0.205 0.008 65); /* warm charcoal */
+  --foreground: oklch(0.95 0.008 88);
+  --card: oklch(0.245 0.009 63);
+  --card-foreground: oklch(0.95 0.008 88);
+  --popover: oklch(0.245 0.009 63);
+  --popover-foreground: oklch(0.95 0.008 88);
+  --muted: oklch(0.28 0.01 62);
+  --muted-foreground: oklch(0.7 0.012 70);
+  --secondary: oklch(0.29 0.012 62);
+  --secondary-foreground: oklch(0.95 0.008 88);
+  --accent: oklch(0.32 0.028 55);
+  --accent-foreground: oklch(0.95 0.008 88);
+  --border: oklch(0.32 0.011 62);
+  --input: oklch(0.34 0.011 62);
+  --ring: oklch(0.75 0.17 50);
+
+  --primary: oklch(0.75 0.17 50); /* lifted for contrast on charcoal */
+  --primary-foreground: oklch(0.19 0.02 60);
+  --primary-hover: oklch(0.79 0.16 52);
+  --primary-soft: oklch(0.32 0.05 50);
+
+  --destructive: oklch(0.65 0.2 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --destructive-soft: oklch(0.3 0.06 25);
+  --success: oklch(0.7 0.15 152);
+  --success-foreground: oklch(0.19 0.02 60);
+  --success-soft: oklch(0.29 0.05 152);
+  --warning: oklch(0.82 0.14 78);
+  --warning-foreground: oklch(0.22 0.03 60);
+  --warning-soft: oklch(0.32 0.05 78);
+  --info: oklch(0.7 0.13 245);
+  --info-foreground: oklch(0.19 0.02 60);
+  --info-soft: oklch(0.29 0.05 245);
+
+  --chart-1: oklch(0.75 0.17 50);
+  --chart-2: oklch(0.74 0.11 195);
+  --chart-3: oklch(0.7 0.15 295);
+  --chart-4: oklch(0.83 0.13 80);
+  --chart-5: oklch(0.72 0.17 15);
+  --chart-6: oklch(0.75 0.12 235);
+
+  --sidebar: oklch(0.225 0.009 64);
+  --sidebar-foreground: oklch(0.95 0.008 88);
+  --sidebar-primary: oklch(0.75 0.17 50);
+  --sidebar-primary-foreground: oklch(0.19 0.02 60);
+  --sidebar-accent: oklch(0.3 0.02 60);
+  --sidebar-accent-foreground: oklch(0.95 0.008 88);
+  --sidebar-border: oklch(0.32 0.011 62);
+  --sidebar-ring: oklch(0.75 0.17 50);
+
+  /* Shadows read as depth on paper and as noise on charcoal — deepen and
+     tighten them rather than reusing the light values. */
+  --shadow-xs: 0 1px 2px oklch(0 0 0 / 0.24);
+  --shadow-sm: 0 1px 3px oklch(0 0 0 / 0.3), 0 1px 2px oklch(0 0 0 / 0.24);
+  --shadow-md: 0 4px 12px -2px oklch(0 0 0 / 0.36);
+  --shadow-lg: 0 12px 32px -8px oklch(0 0 0 / 0.46);
+  --shadow-xl: 0 24px 56px -16px oklch(0 0 0 / 0.55);
 }
 
 @theme inline {
@@ -88,6 +168,8 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -96,6 +178,16 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-soft: var(--info-soft);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -104,6 +196,7 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -112,37 +205,251 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 12px);
+
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-bricolage), var(--font-inter), sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+
+  --ease-out: var(--ease-out);
+  --ease-spring: var(--ease-spring);
+}
+
+/* ── typography scale ───────────────────────────────────────────────────────
+   Named steps so screens stop repeating `text-3xl font-semibold tracking-tight`
+   and drifting apart. Display steps use Bricolage; body steps use Inter.       */
+
+@utility text-display-xl {
+  font-family: var(--font-display);
+  font-size: 3rem;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+@utility text-display-lg {
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}
+@utility text-display {
+  font-family: var(--font-display);
+  font-size: 1.875rem;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+@utility text-h1 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+@utility text-h2 {
+  font-size: 1.25rem;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+  font-weight: 600;
+}
+@utility text-h3 {
+  font-size: 1rem;
+  line-height: 1.4;
+  font-weight: 600;
+}
+@utility text-body-lg {
+  font-size: 1rem;
+  line-height: 1.55;
+}
+@utility text-body {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+@utility text-caption {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+@utility text-micro {
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+/* Numeric columns and metrics: keep digits from jittering as values change. */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: "cv02", "cv03", "cv04";
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
-  h1, h2, h3 {
+
+  h1,
+  h2,
+  h3 {
     font-family: var(--font-display);
+  }
+
+  /* Visible focus everywhere, without the permanent ring on mouse clicks. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--primary-soft);
+    color: var(--foreground);
+  }
+
+  /* Warm, unobtrusive scrollbars — the default macOS/Windows ones read as
+     cold grey against cream. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
   }
 }
 
-/* chat surface theming — set per-form at runtime */
+/* ── motion ─────────────────────────────────────────────────────────────────
+   Durations and easings live as tokens above; these are the shared keyframes.
+   Every looping or transform animation collapses under reduced-motion.        */
+
+@keyframes cf-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cf-typing-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes cf-caret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes cf-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@utility animate-message-in {
+  animation: cf-message-in var(--duration-enter) var(--ease-out) both;
+}
+@utility animate-caret {
+  animation: cf-caret 800ms steps(1, end) infinite;
+}
+
+/* Skeletons shimmer instead of pulsing — a pulse reads as "broken", a sweep
+   reads as "loading". */
+@utility shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    color-mix(in oklch, var(--muted) 60%, var(--card)) 50%,
+    var(--muted) 100%
+  );
+  background-size: 200% 100%;
+  animation: cf-shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── chat surface ───────────────────────────────────────────────────────────
+   Per-form runtime theming. These defaults are what renders before a ThemeDoc
+   is applied; `chatThemeVars()` overwrites them inline on the same element.   */
+
 .chat-surface {
-  --cf-bg: var(--card);
+  --cf-bg: var(--background);
+  --cf-surface: var(--card);
   --cf-text: var(--foreground);
+  --cf-muted: var(--muted-foreground);
   --cf-accent: var(--primary);
+  --cf-accent-text: var(--primary-foreground);
   --cf-bot-bubble: var(--card);
+  --cf-bot-bubble-text: var(--foreground);
+  --cf-bot-bubble-border: var(--border);
   --cf-user-bubble: var(--primary);
   --cf-user-bubble-text: var(--primary-foreground);
+  --cf-composer-bg: var(--card);
+  --cf-chip-bg: var(--card);
+  --cf-chip-border: var(--border);
   --cf-radius: var(--radius);
+
   background: var(--cf-bg);
   color: var(--cf-text);
+}
+
+/* Bubbles: rounded on three corners, tucked on the one nearest the speaker. */
+@utility bubble-bot {
+  border-radius: var(--cf-radius);
+  border-bottom-left-radius: min(var(--cf-radius), 0.25rem);
+}
+@utility bubble-user {
+  border-radius: var(--cf-radius);
+  border-bottom-right-radius: min(var(--cf-radius), 0.25rem);
 }
