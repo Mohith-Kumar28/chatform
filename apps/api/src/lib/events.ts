@@ -33,6 +33,11 @@ export type ServerEvent =
   | { type: "answer_recorded"; data: { ref: string; pct: number } }
   | { type: "branch_jump"; data: { from: string; to: string } }
   | { type: "escalate_ui"; data: EscalatePayload }
+  | {
+      /** Every question answered; waiting on an explicit submit. */
+      type: "review";
+      data: { answers: { ref: string; title: string; display: string }[] };
+    }
   | { type: "ending"; data: { ending: PublicEnding } }
   | { type: "complete"; data: { submissionId: string; durationMs: number } }
   | { type: "error"; data: { code: string; message: string } }

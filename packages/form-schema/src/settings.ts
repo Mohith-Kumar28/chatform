@@ -50,6 +50,14 @@ export const SettingsDoc = z.object({
 
   onComplete: z
     .object({
+      /**
+       * Ask for an explicit submit once every question is answered.
+       *
+       * Answers persist as they are given either way — this is about the
+       * respondent's sense of having finished, and a last chance to fix
+       * something before it counts as a completed response.
+       */
+      requireSubmit: z.boolean().default(true),
       redirectUrl: z.string().url().optional(),
       delaySec: z.number().int().min(0).max(120).default(5),
       notificationEmails: z.array(z.string().email()).max(10).default([]),
@@ -61,11 +69,7 @@ export const SettingsDoc = z.object({
         })
         .default({ enabled: false, subject: "Thanks for your response", bodyMd: "" }),
     })
-    .default({
-      delaySec: 5,
-      notificationEmails: [],
-      autoReplyEmail: { enabled: false, subject: "Thanks for your response", bodyMd: "" },
-    }),
+    .prefault({}),
 
   meta: z
     .object({

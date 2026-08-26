@@ -30,6 +30,11 @@ export interface EndingState {
 
 export type ConnectionStatus = "connecting" | "ready" | "reconnecting" | "ended" | "error";
 
+/** Everything answered, waiting on an explicit submit. */
+export interface ReviewState {
+  answers: { ref: string; title: string; display: string }[];
+}
+
 export interface UploadSpec {
   ref: string;
   accept: string[];
@@ -109,6 +114,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
   /** True between sending a turn and the agent's first token. */
   const [thinking, setThinking] = useState(false);
   const [rateLimited, setRateLimited] = useState<string | null>(null);
+  const [review, setReview] = useState<ReviewState | null>(null);
   /** True when a replay rebuilt a transcript we did not start in this tab. */
   const [resumed, setResumed] = useState(false);
 
@@ -242,10 +248,17 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
         setThinking(false);
       });
 
+      es.addEventListener("review", (e) => {
+        setReview(JSON.parse((e as MessageEvent).data) as ReviewState);
+        setQuestion(null);
+        setThinking(false);
+      });
+
       es.addEventListener("ending", (e) => {
         const { ending } = JSON.parse((e as MessageEvent).data) as { ending: EndingState };
         setEnding(ending);
         setQuestion(null);
+        setReview(null);
         setThinking(false);
       });
 
@@ -401,7 +414,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
   );
 
   const sendAction = useCallback(
-    async (action: "skip" | "restart" | "stop") => {
+    async (action: "skip" | "restart" | "stop" | "submit") => {
       setThinking(true);
       await post("actions", { action });
     },
@@ -413,6 +426,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
     async (ref: string) => {
       setThinking(true);
       setEnding(null);
+      setReview(null);
       await post("actions", { action: "edit", ref });
     },
     [post],
@@ -427,6 +441,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
     setMessages([]);
     setQuestion(null);
     setEnding(null);
+    setReview(null);
     setResumed(false);
     setError(null);
     setStatus("connecting");
@@ -453,6 +468,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
   return {
     messages,
     question,
+    review,
     ending,
     status,
     error,

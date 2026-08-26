@@ -14,6 +14,7 @@ import {
   needsExtraction,
   extractionSchema,
   extractionGuidance,
+  resolveEnding,
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { ServerEvent, SSEEnvelope } from "../lib/events.js";
@@ -63,6 +64,7 @@ interface StoredSession {
   invalidCounts?: Record<string, number>;
   sessionTokensUsed?: number;
   degraded?: boolean;
+  pendingEndingRef?: string | null;
 }
 
 /**
@@ -104,6 +106,8 @@ export class SessionDO extends DurableObject<Bindings> {
   private pendingEffects: NonNullable<ToolOutcome["effect"]>[] = [];
   /** True when the agent already asked the next question in this same turn. */
   private suppressNextAsk = false;
+  /** Ending awaiting an explicit submit, when `requireSubmit` is on. */
+  private pendingEndingRef: string | null = null;
   private pendingUserTextPersisted = false;
 
   // ────────────────────────── lifecycle ──────────────────────────
@@ -182,6 +186,7 @@ export class SessionDO extends DurableObject<Bindings> {
     this.invalidCounts = new Map(Object.entries(stored.invalidCounts ?? {}));
     this.sessionTokensUsed = stored.sessionTokensUsed ?? 0;
     this.degraded = stored.degraded ?? false;
+    this.pendingEndingRef = stored.pendingEndingRef ?? null;
     this.loaded = true;
     return true;
   }
@@ -199,6 +204,7 @@ export class SessionDO extends DurableObject<Bindings> {
       invalidCounts: Object.fromEntries(this.invalidCounts),
       sessionTokensUsed: this.sessionTokensUsed,
       degraded: this.degraded,
+      pendingEndingRef: this.pendingEndingRef,
     } satisfies StoredSession);
   }
 
@@ -783,15 +789,52 @@ export class SessionDO extends DurableObject<Bindings> {
       await this.persistMeta();
       return;
     }
-    // ending
+    // ── ending ──
+    const ending = next.ending;
+
+    /**
+     * Pause for an explicit submit.
+     *
+     * Answers are already saved — they have been written as each one landed —
+     * so nothing is at risk here. This exists because finishing a form should
+     * feel like a decision, and because it is the natural moment to show
+     * someone everything they said and let them fix one thing.
+     */
+    if (this.doc.settings.onComplete.requireSubmit && this.meta.status === "active") {
+      this.meta.currentRef = null;
+      this.pendingEndingRef = ending.ref;
+      await this.persistMeta();
+      await this.emit("review", { answers: this.answerSummary() });
+      return;
+    }
+
+    await this.completeWith(ending);
+  }
+
+  /** Finalize against an ending and tell the client. */
+  private async completeWith(ending: Ending): Promise<void> {
+    if (!this.meta) return;
     this.meta.currentRef = null;
     this.meta.status = "completed";
-    const ending = next.ending;
+    this.pendingEndingRef = null;
     await this.emitMessage(closingText(ending.title));
     await this.emit("ending", { ending });
     const submissionId = await this.finalize("completed", ending.ref);
     await this.emit("complete", { submissionId, durationMs: Date.now() - this.meta.startedAt });
     await this.persistMeta();
+  }
+
+  /** Everything answered so far, in question order, for the review step. */
+  private answerSummary(): { ref: string; title: string; display: string }[] {
+    if (!this.doc) return [];
+    return this.doc.blocks
+      .filter((b) => !["welcome", "statement"].includes(b.type))
+      .filter((b) => this.state.answers[b.ref] !== undefined)
+      .map((b) => ({
+        ref: b.ref,
+        title: b.title,
+        display: summarizeAnswer(b, this.state.answers[b.ref]),
+      }));
   }
 
   private async emitQuestion(): Promise<void> {
@@ -818,7 +861,7 @@ export class SessionDO extends DurableObject<Bindings> {
   }
 
   async action(input: {
-    action: "skip" | "stop" | "restart" | "edit";
+    action: "skip" | "stop" | "restart" | "edit" | "submit";
     /** For `edit`: the block to go back and re-answer. */
     ref?: string;
   }): Promise<{ accepted: boolean; error?: string }> {
@@ -836,6 +879,17 @@ export class SessionDO extends DurableObject<Bindings> {
       await this.advanceTo(next, block.ref);
       return { accepted: true };
     }
+    /** The explicit finish, once every question is answered. */
+    if (input.action === "submit") {
+      const ending =
+        (this.pendingEndingRef && this.doc.endings.find((e) => e.ref === this.pendingEndingRef)) ||
+        resolveEnding(this.doc, this.state) ||
+        this.doc.endings[0];
+      if (!ending) return { accepted: false, error: "no_ending" };
+      await this.completeWith(ending);
+      return { accepted: true };
+    }
+
     if (input.action === "stop") {
       await this.abandon("user_stop");
       return { accepted: true };
@@ -865,6 +919,8 @@ export class SessionDO extends DurableObject<Bindings> {
       this.invalidCounts.delete(target.ref);
       this.meta.currentRef = target.ref;
       this.meta.status = "active";
+      // Leaving the review step: the form is no longer finished.
+      this.pendingEndingRef = null;
       await this.persistMeta();
 
       await this.emitMessage(`Sure — let's redo that one.`);

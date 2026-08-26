@@ -1,7 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, PartyPopper, Pencil, SkipForward, TriangleAlert } from "lucide-react";
+import {
+  ArrowDown,
+  MoreHorizontal,
+  PartyPopper,
+  Pencil,
+  RotateCcw,
+  SkipForward,
+  TriangleAlert,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
@@ -91,22 +105,10 @@ export function ChatClient({
         answered={chat.question?.progress.answered ?? 0}
         total={chat.question?.progress.totalEstimate ?? 0}
         status={chat.status}
+        // Always offered once anything has been said, rather than only in a
+        // "welcome back" banner that appeared once and then vanished.
+        onStartOver={chat.messages.length > 0 && !chat.ending ? () => void chat.startOver() : undefined}
       />
-
-      {chat.resumed && !chat.ending && (
-        <div className="animate-message-in mx-auto mt-3 w-full max-w-2xl px-4">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-[var(--cf-chip-bg)] px-3 py-2 text-sm">
-            <span className="min-w-0 flex-1">👋 Welcome back — we picked up where you left off.</span>
-            <button
-              type="button"
-              onClick={() => void chat.startOver()}
-              className="shrink-0 text-xs underline opacity-60 transition-opacity hover:opacity-100"
-            >
-              Start over
-            </button>
-          </div>
-        </div>
-      )}
 
       <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-2xl space-y-3 px-4 py-6">
@@ -146,6 +148,15 @@ export function ChatClient({
                 onSkip={() => void chat.sendAction("skip")}
               />
             </div>
+          )}
+
+          {chat.review && (
+            <ReviewCard
+              review={chat.review}
+              onEdit={(ref) => void chat.editAnswer(ref)}
+              onSubmit={() => void chat.sendAction("submit")}
+              busy={chat.thinking}
+            />
           )}
 
           {chat.ending && <EndingCard ending={chat.ending} theme={config.theme} />}
@@ -192,7 +203,7 @@ export function ChatClient({
         </div>
       )}
 
-      {!chat.ending && (
+      {!chat.ending && !chat.review && (
         <footer className="sticky bottom-0 bg-[var(--cf-bg)]/95 backdrop-blur">
           <div className="mx-auto w-full max-w-2xl px-4 py-3">
             <Composer chat={chat} config={config} />
@@ -220,6 +231,7 @@ function ChatHeader({
   answered,
   total,
   status,
+  onStartOver,
 }: {
   title: string;
   brandName?: string;
@@ -229,6 +241,7 @@ function ChatHeader({
   answered: number;
   total: number;
   status: string;
+  onStartOver?: () => void;
 }) {
   return (
     <header className="sticky top-0 z-10 bg-[var(--cf-bg)]/95 backdrop-blur">
@@ -262,6 +275,23 @@ function ChatHeader({
             )
           )}
         </div>
+
+        {onStartOver && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="Form options"
+              className="shrink-0 rounded-full p-1.5 opacity-50 transition-opacity hover:opacity-100"
+            >
+              <MoreHorizontal className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem variant="destructive" onSelect={onStartOver}>
+                <RotateCcw className="size-3.5" />
+                Start over
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* An actual bar. `progressBar` supported percent/steps/none and only the
@@ -349,6 +379,62 @@ function TypingDots() {
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The review step: everything answered, nothing submitted yet.
+ *
+ * Answers have been saved all along, so this is not about durability — it is
+ * the moment a respondent sees the whole of what they said, can fix one line,
+ * and finishes deliberately instead of the form ending out from under them.
+ * It is also the natural home for "re-answer question 3", which is awkward to
+ * hunt for by scrolling the transcript.
+ */
+function ReviewCard({
+  review,
+  onEdit,
+  onSubmit,
+  busy,
+}: {
+  review: NonNullable<ReturnType<typeof useChat>["review"]>;
+  onEdit: (ref: string) => void;
+  onSubmit: () => void;
+  busy: boolean;
+}) {
+  return (
+    <div className="animate-message-in space-y-3 rounded-2xl bg-[var(--cf-chip-bg)] p-4">
+      <p className="text-sm font-medium">That&apos;s everything — have a look before you send it.</p>
+
+      <ul className="space-y-1.5">
+        {review.answers.map((a) => (
+          <li key={a.ref} className="group flex items-start gap-2 text-sm">
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs opacity-55">{a.title}</span>
+              <span className="block break-words">{a.display || "—"}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => onEdit(a.ref)}
+              aria-label={`Change your answer to ${a.title}`}
+              className="mt-3.5 shrink-0 rounded-full p-1 opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 focus-visible:opacity-100"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onSubmit}
+        className="h-11 w-full rounded-full text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-60"
+        style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+      >
+        {busy ? "Submitting…" : "Submit form"}
+      </button>
     </div>
   );
 }
