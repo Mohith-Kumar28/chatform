@@ -111,6 +111,18 @@ export function AgentTab() {
               />
             </SettingRow>
 
+            <SettingRow
+              label="Let the agent reword questions"
+              description="Off, each question is asked exactly as you wrote it."
+              control={
+                <SwitchField
+                  label=""
+                  checked={agent.rephraseQuestions}
+                  onChange={(rephraseQuestions) => patch({ rephraseQuestions })}
+                />
+              }
+            />
+
             <SettingRow label="Tone" control={
               <SegmentedControl
                 size="sm"

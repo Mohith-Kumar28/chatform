@@ -47,13 +47,29 @@ describe("migration chain", () => {
     expect(doc.settings.agent.model).toBeUndefined();
     // per-block additions
     expect(doc.blocks[0]!.agentHints).toBeNull();
-    expect(doc.blocks[0]!.coverImageKey).toBeNull();
-    expect(doc.blocks[0]!.coverLayout).toBe("float");
+    expect(doc.blocks[0]!.media).toBeNull();
+    expect(doc.settings.agent.rephraseQuestions).toBe(true);
   });
 
   it("needsMigration is true for v1 and false once migrated", () => {
     expect(needsMigration(v1Doc)).toBe(true);
     expect(needsMigration(migrateFormDoc(v1Doc))).toBe(false);
+  });
+
+  it("v2 cover images fold into the media object", () => {
+    const v2 = {
+      ...v1Doc,
+      schemaVersion: 2,
+      blocks: [
+        { id: "blk_aaa1", ref: "q_a", type: "short_text", title: "A", coverImageKey: "img_abc" },
+        { id: "blk_bbb1", ref: "q_b", type: "short_text", title: "B", coverImageKey: null },
+      ],
+    };
+    const doc = FormDoc.parse(migrateFormDoc(v2));
+    expect(doc.blocks[0]!.media).toEqual({ kind: "image", key: "img_abc", url: null });
+    expect(doc.blocks[1]!.media).toBeNull();
+    // The superseded fields are gone, not merely ignored.
+    expect("coverImageKey" in doc.blocks[0]!).toBe(false);
   });
 
   it("leaves an unparseable value alone for FormDoc to reject", () => {
@@ -100,7 +116,7 @@ describe("agent layer", () => {
 });
 
 describe("per-block agent hints", () => {
-  it("round-trips hints and cover fields", () => {
+  it("round-trips hints and media", () => {
     const doc = FormDoc.parse({
       ...v1Doc,
       blocks: [
@@ -110,8 +126,7 @@ describe("per-block agent hints", () => {
           type: "number",
           title: "Budget?",
           agentHints: { askStyle: "casual", whyWeAsk: "To size the proposal", examples: ["50000"] },
-          coverImageKey: "img_1",
-          coverPosition: "right",
+          media: { kind: "image", key: "img_1", alt: "Pricing tiers" },
           prefillParam: "utm_budget",
           buttonLabel: "Next",
         },
@@ -120,7 +135,8 @@ describe("per-block agent hints", () => {
     const b = doc.blocks[0]!;
     expect(b.agentHints?.askStyle).toBe("casual");
     expect(b.agentHints?.examples).toEqual(["50000"]);
-    expect(b.coverPosition).toBe("right");
+    expect(b.media?.kind).toBe("image");
+    expect(b.media?.alt).toBe("Pricing tiers");
     expect(b.prefillParam).toBe("utm_budget");
   });
 });

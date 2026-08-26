@@ -29,7 +29,7 @@ export function SettingRow({
   return (
     <div
       className={cn(
-        "border-border bg-card rounded-xl border p-4",
+        "bg-card rounded-xl p-4",
         stacked ? "space-y-3" : "flex items-start justify-between gap-6",
         className,
       )}

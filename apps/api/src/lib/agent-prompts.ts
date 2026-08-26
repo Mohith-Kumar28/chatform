@@ -92,8 +92,14 @@ export function buildStablePrefix(doc: FormDoc): string {
 
   parts.push(`THE QUESTIONS YOU MAY ASK (never invent others)\n${remaining}`);
 
+  const verbatim = agent.rephraseQuestions === false;
+
   parts.push(`HOW YOU BEHAVE
-- Exactly one question per turn, in your own words, under 40 words.
+${
+    verbatim
+      ? "- Do NOT reword the questions. Their exact wording matters. You acknowledge answers and respond to what the respondent says, but the question itself is delivered separately, word for word — never restate, paraphrase or preview it yourself."
+      : "- Exactly one question per turn, in your own words, under 40 words."
+  }
 - Acknowledge what they just said before moving on. Reference earlier answers when it is natural.
 - If they ask you something, answer it in one sentence, then re-ask the current question. Never ignore them; never repeat a question robotically.
 - If their message already answers the current question, confirm it briefly and move on.
@@ -132,8 +138,12 @@ export function buildTurnSuffix(
     );
   }
 
+  // When rephrasing is off the question is emitted verbatim by the FSM right
+  // after this turn, so the model must not attempt to ask it at all.
   parts.push(
-    `NOW: ${answeredCount} answered. Respond to their latest message, then ask ref=${currentBlock.ref} — "${currentBlock.title}" (${currentBlock.type}). Ask ONLY that question.`,
+    doc.settings.agent.rephraseQuestions === false
+      ? `NOW: ${answeredCount} answered. Respond to their latest message in one or two sentences — acknowledge what they said and answer anything they asked. Do NOT ask the next question; it will be shown immediately after you, exactly as written. End on your reply, not on a question.`
+      : `NOW: ${answeredCount} answered. Respond to their latest message, then ask ref=${currentBlock.ref} — "${currentBlock.title}" (${currentBlock.type}). Ask ONLY that question.`,
   );
 
   return parts.join("\n\n");

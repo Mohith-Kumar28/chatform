@@ -12,7 +12,9 @@ import {
   Link2,
   Loader2,
   MoreHorizontal,
+  Play,
   Redo2,
+  Sparkles,
   Undo2,
 } from "lucide-react";
 import { motion } from "motion/react";
@@ -33,7 +35,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { BUILDER_TABS } from "./builder-tabs";
+import { BUILDER_TABS, tabMatches } from "./builder-tabs";
 import { useBuilderStore, useCanRedo, useCanUndo } from "@/stores/builder-store";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +52,7 @@ export function BuilderHeader({
   activeVersion,
   onPublish,
   publishing,
+  onPreview,
 }: {
   formId: string;
   title: string;
@@ -58,6 +61,8 @@ export function BuilderHeader({
   activeVersion: number | null;
   onPublish: () => void | Promise<void>;
   publishing: boolean;
+  /** Opens the full conversation preview. */
+  onPreview: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -73,7 +78,7 @@ export function BuilderHeader({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <header className="bg-card/95 border-border sticky top-0 z-[var(--z-sticky)] border-b backdrop-blur">
+      <header className="bg-card/95 sticky top-0 z-[var(--z-sticky)] backdrop-blur">
         <div className="flex h-14 items-center gap-3 px-3 sm:px-4">
           {/* left: back + identity */}
           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -99,11 +104,11 @@ export function BuilderHeader({
           {/* center: tabs */}
           <nav
             aria-label="Builder sections"
-            className="border-border bg-muted/50 hidden items-center gap-0.5 rounded-full border p-1 lg:flex"
+            className="bg-muted/60 hidden items-center gap-0.5 rounded-full p-1 lg:flex"
           >
             {BUILDER_TABS.map((tab) => {
               const href = `/forms/${formId}/${tab.segment}`;
-              const active = pathname === href;
+              const active = tabMatches(tab, pathname);
               return (
                 <Tooltip key={tab.segment}>
                   <TooltipTrigger asChild>
@@ -153,15 +158,64 @@ export function BuilderHeader({
             ))}
           </select>
 
-          {/* right: undo/redo, one overflow menu, publish.
-              Everything else — theme, copy link, open live — moved into the
-              menu. Seven controls competing beside the tab strip made the bar
-              read as a toolbar rather than a header. */}
-          <div className="flex flex-1 items-center justify-end gap-1">
-            <div className="border-border mr-1 hidden items-center rounded-full border md:flex">
+          {/* right: the three things you actually reach for — preview, share,
+              open — then publish. Each is a tinted target rather than a grey
+              icon, so they read as actions and not decoration. */}
+          <div className="flex flex-1 items-center justify-end gap-1.5">
+            <div className="mr-0.5 hidden items-center rounded-full md:flex">
               <IconAction label="Undo" shortcut="⌘Z" icon={Undo2} disabled={!canUndo} onClick={undo} />
               <IconAction label="Redo" shortcut="⇧⌘Z" icon={Redo2} disabled={!canRedo} onClick={redo} />
             </div>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onPreview}
+                  aria-label="Preview the conversation"
+                  className="grid size-8 place-items-center rounded-lg bg-[var(--success-soft)] text-[var(--success)] transition-transform duration-[var(--duration-micro)] active:scale-95 motion-reduce:active:scale-100"
+                >
+                  <Play className="size-3.5 fill-current" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Preview</TooltipContent>
+            </Tooltip>
+
+            {slug && published && (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Copy public link"
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(publicUrl);
+                        toast.success("Link copied");
+                      }}
+                      className="grid size-8 place-items-center rounded-lg bg-[var(--info-soft)] text-[var(--info)] transition-transform duration-[var(--duration-micro)] active:scale-95 motion-reduce:active:scale-100"
+                    >
+                      <Link2 className="size-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Copy link</TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <a
+                      href={`/f/${slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="Open the live form"
+                      className="bg-muted text-muted-foreground hover:text-foreground grid size-8 place-items-center rounded-lg transition-colors"
+                    >
+                      <ExternalLink className="size-3.5" />
+                    </a>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Open live</TooltipContent>
+                </Tooltip>
+              </>
+            )}
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -170,27 +224,6 @@ export function BuilderHeader({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                {slug && published ? (
-                  <>
-                    <DropdownMenuItem
-                      onSelect={async () => {
-                        await navigator.clipboard.writeText(publicUrl);
-                        toast.success("Link copied");
-                      }}
-                    >
-                      <Link2 className="size-3.5" />
-                      Copy public link
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <a href={`/f/${slug}`} target="_blank" rel="noreferrer">
-                        <ExternalLink className="size-3.5" />
-                        Open live form
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                  </>
-                ) : null}
-
                 <DropdownMenuItem onSelect={undo} disabled={!canUndo}>
                   <Undo2 className="size-3.5" />
                   Undo
@@ -211,6 +244,19 @@ export function BuilderHeader({
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            <Button
+              size="sm"
+              shape="pill"
+              variant="soft"
+              className="hidden lg:inline-flex"
+              asChild
+            >
+              <Link href="/usage">
+                <Sparkles className="size-3.5" />
+                Upgrade
+              </Link>
+            </Button>
 
             <Button
               size="sm"

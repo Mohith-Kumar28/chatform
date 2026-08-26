@@ -149,7 +149,7 @@ export function ChatClient({
       )}
 
       {!chat.ending && (
-        <footer className="sticky bottom-0 border-t border-[var(--cf-chip-border)] bg-[var(--cf-bg)]/95 backdrop-blur">
+        <footer className="sticky bottom-0 bg-[var(--cf-bg)]/95 backdrop-blur">
           <div className="mx-auto w-full max-w-2xl px-4 py-3">
             <Composer chat={chat} config={config} />
           </div>
@@ -183,7 +183,7 @@ function ChatHeader({
   status: string;
 }) {
   return (
-    <header className="sticky top-0 z-10 border-b border-[var(--cf-chip-border)] bg-[var(--cf-bg)]/95 backdrop-blur">
+    <header className="sticky top-0 z-10 bg-[var(--cf-bg)]/95 backdrop-blur">
       <div className="mx-auto flex w-full max-w-2xl items-center gap-3 px-4 py-3">
         <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-[var(--cf-accent)] text-sm font-semibold text-[var(--cf-accent-text)]">
           {title.charAt(0).toUpperCase()}

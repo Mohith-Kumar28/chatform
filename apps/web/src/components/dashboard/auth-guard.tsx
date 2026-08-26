@@ -25,7 +25,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   if (isPending) {
     return (
       <div className="flex min-h-svh flex-col">
-        <div className="border-border bg-card flex h-14 items-center gap-3 border-b px-6">
+        <div className="bg-card flex h-14 items-center gap-3 px-6">
           <div className="shimmer size-7 rounded-lg" />
           <div className="shimmer h-4 w-24 rounded" />
           <div className="mx-auto flex gap-2">

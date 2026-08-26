@@ -707,3 +707,33 @@ The middle row is the acceptance test for the entire product thesis, and it is t
 | Hand-written QR produced unscannable codes | Structurally valid but undecodable matrices | Replaced with `qrcode-generator`; `tests/qr.test.ts` round-trips through a real scanner |
 
 Test totals: **68 passing** (39 form-schema, 24 api, 5 web) — from 22 in one package at session start. `apps/web` had no test runner at all.
+
+---
+
+## Phase 8 — design pass on user feedback
+
+Driven by side-by-side comparison with Youform.
+
+**Lines → tone.** Hard rules removed across the app — header, sidebars, cards, settings, tables, chat chrome, panels. Regions are now separated by a shade (`--panel`, `--sidebar`) and by elevation. A rule is the exception, not the baseline.
+
+**Colour.** New block-family tokens (`--family-content|text|contact|number|choice|scale|advanced`, each with `-soft` and `-ink`, defined for both themes). All 26 block types map to a family, so the question list reads as coloured cards the way Youform's does, and the same colours key the picker, the inspector chip and the results column headers. The header's primary actions are tinted targets rather than grey icons.
+
+**Build ⇄ Flow merged.** They were two views of one thing competing for two tabs. Now one Build tab with a Questions/Flow switcher; separate routes are kept so the flow editor's bundle still loads only when needed. Eight tabs became seven.
+
+**Centre pane = the selected question.** It ran a live conversation, so you had to answer your way to the question you were editing. It now renders just that question exactly as a respondent sees it — via `toPublicBlock` and `chatThemeVars`, the same functions the runtime uses. The full conversation moved behind a **Preview** button in the header, with desktop/mobile sizes.
+
+**AI bar.** Docked at the bottom; expands into a thread on focus and collapses on click-away or Escape. Suggestions are reviewed before they land and apply as one undo step.
+
+**Question media.** New `BlockMedia` on every block — an image, a short video, or a downloadable file — with a `v2 → v3` migration folding the old image-only `coverImageKey`/`coverLayout`/`coverPosition` triple into it. New `POST /api/assets` (org-scoped, MIME-allowlisted, 25 MB) and `GET /p/assets/:id` for public serving; SVG stays off the allowlist so no uploaded asset can execute script.
+
+**Verbatim questions.** `settings.agent.rephraseQuestions` (default on). Off, the FSM emits the question text itself and the model is told not to ask it — so the exact wording is *guaranteed*, not merely requested. Matters for compliance and research instruments. Covered by `tests/agent-prompts.test.ts`.
+
+**Less text.** Explanatory subtext stripped from the inspector — only two hints survive, both about ISO date format. Section descriptions removed. Left-hand rows wrap to two lines instead of truncating after three words.
+
+### Bugs found while testing this pass
+
+| Bug | Cause | Fix |
+|---|---|---|
+| `POST /api/ai/add-blocks` 500'd on every request | `GenerationDraft.scale` required `min(2)`, but strict structured output forces the model to send the field for every block, and it sends `0` for non-scale types — one irrelevant field failed the whole generation | Accept `0–20`, clamp in the normalizer |
+
+Test totals: **75 passing** (40 form-schema, 30 api, 5 web).

@@ -385,7 +385,7 @@ function WorkflowEditor({ doc, onChange, focusRef }: WorkflowClientProps) {
       {/* left: node library (collapsible) */}
       <aside
         data-tour="wf-palette"
-        className={`bg-sidebar relative flex shrink-0 flex-col overflow-y-auto border-r transition-all duration-200 ${leftOpen ? "w-60" : "w-12"}`}
+        className={`bg-sidebar relative flex shrink-0 flex-col overflow-y-auto transition-all duration-200 ${leftOpen ? "w-60" : "w-12"}`}
       >
         {leftOpen ? (
           <>
@@ -433,7 +433,7 @@ function WorkflowEditor({ doc, onChange, focusRef }: WorkflowClientProps) {
                 </div>
               ))}
             </div>
-            <p className="text-muted-foreground border-t px-3 py-2 text-[10px] leading-relaxed">
+            <p className="text-muted-foreground px-3 py-2 text-[10px] leading-relaxed">
               Drag nodes onto the canvas. Drag from a node&apos;s edge dot to another node to control the flow.
             </p>
           </>
@@ -498,7 +498,7 @@ function WorkflowEditor({ doc, onChange, focusRef }: WorkflowClientProps) {
       {/* right: inspector (collapsible) */}
       <aside
         data-tour="wf-inspector"
-        className={`bg-sidebar relative flex shrink-0 flex-col overflow-y-auto border-l transition-all duration-200 ${rightOpen ? "w-80" : "w-12"}`}
+        className={`bg-panel relative flex shrink-0 flex-col overflow-y-auto transition-all duration-200 ${rightOpen ? "w-80" : "w-12"}`}
       >
         {rightOpen ? (
           <>

@@ -52,7 +52,6 @@ export function TypeFields({
         <>
           <TextField
             label="Placeholder"
-            hint="Shown in the input before they type."
             value={block.placeholder ?? ""}
             onChange={(v) => patch({ placeholder: v || undefined } as Partial<Block>, key("placeholder"))}
             maxLength={200}
@@ -74,7 +73,6 @@ export function TypeFields({
           {block.type === "short_text" && (
             <TextField
               label="Pattern"
-              hint="Optional regular expression the answer must match."
               value={block.pattern ?? ""}
               onChange={(v) => patch({ pattern: v || undefined } as Partial<Block>, key("pattern"))}
             />
@@ -86,7 +84,6 @@ export function TypeFields({
       return (
         <SwitchField
           label="Business emails only"
-          hint="Rejects gmail, yahoo, hotmail, outlook, icloud, proton, aol and live."
           checked={block.businessOnly}
           onChange={(v) => patch({ businessOnly: v } as Partial<Block>)}
         />
@@ -96,7 +93,6 @@ export function TypeFields({
       return (
         <TextField
           label="Country hint"
-          hint="Two-letter code (US, GB, IN…). Used to expand local numbers to E.164."
           value={block.countryHint ?? ""}
           onChange={(v) =>
             patch({ countryHint: v.toUpperCase().slice(0, 2) || undefined } as Partial<Block>, key("countryHint"))
@@ -129,7 +125,6 @@ export function TypeFields({
           />
           <TextField
             label="Currency"
-            hint="Three-letter code. Leave empty for a plain number."
             value={block.currency ?? ""}
             onChange={(v) =>
               patch({ currency: v.toUpperCase().slice(0, 3) || undefined } as Partial<Block>, key("currency"))
@@ -214,7 +209,6 @@ export function TypeFields({
           {(block.type === "single_select" || block.type === "multi_select") && (
             <SwitchField
               label={'Allow an "Other" answer'}
-              hint="Respondents can type something outside the list."
               checked={block.allowOther}
               onChange={(v) => patch({ allowOther: v } as Partial<Block>)}
             />
@@ -249,7 +243,6 @@ export function TypeFields({
       return (
         <ListEditor
           label="Items to rank"
-          hint="Respondents order all of them."
           items={block.items}
           onChange={(items) => patch({ items } as Partial<Block>)}
           makeItem={() => ({ id: uid("itm"), label: "" })}
@@ -263,7 +256,6 @@ export function TypeFields({
         <>
           <ListEditor
             label="Rows"
-            hint="What is being rated."
             items={block.rows}
             onChange={(rows) => patch({ rows } as Partial<Block>)}
             makeItem={() => ({ id: uid("row"), label: "" })}
@@ -271,7 +263,6 @@ export function TypeFields({
           />
           <ListEditor
             label="Columns"
-            hint="The scale they are rated on."
             items={block.columns}
             onChange={(columns) => patch({ columns } as Partial<Block>)}
             makeItem={() => ({ id: uid("col"), label: "" })}
@@ -291,7 +282,6 @@ export function TypeFields({
         <>
           <NumberField
             label="Scale"
-            hint="Between 1 and 10."
             value={block.scale}
             min={1}
             max={10}
@@ -403,7 +393,6 @@ export function TypeFields({
       return (
         <SwitchField
           label="Require a typed name"
-          hint="Ask for the signer's name alongside the drawn signature."
           checked={block.drawnNameRequired}
           onChange={(v) => patch({ drawnNameRequired: v } as Partial<Block>)}
         />
@@ -431,7 +420,6 @@ export function TypeFields({
           ) : (
             <TextField
               label="Variable name"
-              hint="A form variable holding the amount."
               value={block.amountVariable ?? ""}
               onChange={(v) => patch({ amountVariable: v || undefined } as Partial<Block>, key("amountVar"))}
             />
@@ -449,7 +437,6 @@ export function TypeFields({
       return (
         <TextField
           label="Booking link"
-          hint="Cal.com, Calendly or any scheduling URL."
           value={block.url}
           onChange={(v) => patch({ url: v } as Partial<Block>, key("url"))}
         />
@@ -490,7 +477,6 @@ export function TypeFields({
       return (
         <TextField
           label="Consent text"
-          hint="Stored hashed with the answer, so you can prove what was agreed to."
           value={block.consentText}
           onChange={(v) => patch({ consentText: v } as Partial<Block>, key("consent"))}
           multiline

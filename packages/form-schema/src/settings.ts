@@ -102,6 +102,17 @@ export const SettingsDoc = z.object({
       /** OpenRouter model slug. Undefined = the plan's default tier. */
       model: z.string().max(80).optional(),
 
+      /**
+       * Whether the agent may reword each question.
+       *
+       * On (the default) it asks in its own words, using the block's title as
+       * the objective. Off, the question is delivered verbatim — which matters
+       * for compliance, research instruments, and anywhere the exact wording
+       * has been signed off. The agent still greets, acknowledges answers and
+       * responds to the respondent's own questions either way.
+       */
+      rephraseQuestions: z.boolean().default(true),
+
       /** What a good conversation achieves, beyond "every field is filled". */
       goal: z.string().max(1000).optional(),
       successCriteria: z.string().max(1000).optional(),

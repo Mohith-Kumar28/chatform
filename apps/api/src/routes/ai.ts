@@ -17,6 +17,12 @@ const GenerateBody = z.object({
   questionCount: z.number().int().min(2).max(20).default(6),
 });
 
+/** The model's placeholder scale is often 0; fall back rather than fail. */
+function clampScale(value: number | undefined, min: number, max: number, fallback: number): number {
+  if (value === undefined || value < min || value > max) return fallback;
+  return value;
+}
+
 /** Map a loose generated block onto the strict Block schema; falls back to short_text. */
 function normalizeBlock(draft: GenerationDraft["blocks"][number], index: number): Block | null {
   const type = draft.type as Block["type"];
@@ -56,11 +62,21 @@ function normalizeBlock(draft: GenerationDraft["blocks"][number], index: number)
         return BlockSchema.parse({ ...base, type, options, allowOther: false });
       }
       case "rating":
-        return BlockSchema.parse({ ...base, type: "rating", scale: draft.scale ?? 5, shape: "star" });
+        return BlockSchema.parse({
+          ...base,
+          type: "rating",
+          scale: clampScale(draft.scale, 1, 10, 5),
+          shape: "star",
+        });
       case "nps":
         return BlockSchema.parse({ ...base, type: "nps" });
       case "opinion_scale":
-        return BlockSchema.parse({ ...base, type: "opinion_scale", steps: draft.scale ?? 10, startAt: 1 });
+        return BlockSchema.parse({
+          ...base,
+          type: "opinion_scale",
+          steps: clampScale(draft.scale, 2, 11, 5),
+          startAt: 1,
+        });
       default:
         return null;
     }

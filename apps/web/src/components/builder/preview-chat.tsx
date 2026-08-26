@@ -18,7 +18,16 @@ const API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8787"
  * (blocks added, removed, reordered or retyped) or when you ask it to. Editing
  * a title mid-conversation leaves the conversation alone.
  */
-export function PreviewChat({ formId, doc }: { formId: string; doc: FormDoc }) {
+export function PreviewChat({
+  formId,
+  doc,
+  chromeless = false,
+}: {
+  formId: string;
+  doc: FormDoc;
+  /** Hide the label strip — the preview dialog supplies its own controls. */
+  chromeless?: boolean;
+}) {
   const [session, setSession] = useState<{ sessionId: string; token: string; eventsUrl: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,25 +81,23 @@ export function PreviewChat({ formId, doc }: { formId: string; doc: FormDoc }) {
 
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="flex w-full items-center justify-between px-1 pb-2">
-        <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-          <span className="inline-block size-1.5 rounded-full bg-[var(--success)]" />
-          Live preview — this is exactly what respondents see
-        </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          shape="pill"
-          className="h-7 px-2.5 text-xs"
-          onClick={() => setNonce((n) => n + 1)}
-          disabled={loading}
-        >
-          <RefreshCw className="size-3" />
-          Restart
-        </Button>
-      </div>
+      {!chromeless && (
+        <div className="flex w-full items-center justify-end pb-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            shape="pill"
+            className="h-7 px-2.5 text-xs"
+            onClick={() => setNonce((n) => n + 1)}
+            disabled={loading}
+          >
+            <RefreshCw className="size-3" />
+            Restart
+          </Button>
+        </div>
+      )}
 
-      <div className="border-border bg-card shadow-md flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border">
+      <div className="bg-card shadow-md flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl">
         {loading && (
           <div className="flex flex-1 flex-col justify-end gap-2 p-4">
             <div className="shimmer h-9 w-3/5 rounded-2xl" />

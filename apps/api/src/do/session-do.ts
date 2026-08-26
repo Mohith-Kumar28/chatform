@@ -604,6 +604,8 @@ export class SessionDO extends DurableObject<Bindings> {
       const ok = await this.aiStreamMessage(buildRetryObjective(block, count, hint));
       if (ok) {
         await this.applyPendingEffects();
+        // Same rule on a retry: the question text is never reworded.
+        if (agent.rephraseQuestions === false) await this.emitMessage(questionText(block));
         await this.emitQuestion();
         return { accepted: true };
       }
@@ -673,12 +675,22 @@ export class SessionDO extends DurableObject<Bindings> {
         return;
       }
       const answeredBlock = this.doc.blocks.find((b) => b.ref === fromRef);
+      const verbatim = this.doc.settings.agent.rephraseQuestions === false;
+
       const aiOk = await this.aiStreamMessage(
-        `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
-          `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref} — which is: "${next.block.title}" (${next.block.type}) — in your own words. Ask ONLY that question.`,
+        verbatim
+          ? `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
+              `Acknowledge it in one short sentence and answer anything they asked. Do NOT ask the next question — it follows immediately, word for word.`
+          : `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
+              `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref} — which is: "${next.block.title}" (${next.block.type}) — in your own words. Ask ONLY that question.`,
       );
       if (aiOk) await this.applyPendingEffects();
-      else await this.emitMessage(questionText(next.block));
+
+      // Verbatim mode: the FSM emits the question itself, so the exact wording
+      // is guaranteed rather than merely requested of the model. Also covers
+      // the fallback when the AI turn failed entirely.
+      if (verbatim || !aiOk) await this.emitMessage(questionText(next.block));
+
       await this.emitQuestion();
       await this.persistMeta();
       return;

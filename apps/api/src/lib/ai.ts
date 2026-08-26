@@ -101,7 +101,14 @@ export const GenerationDraft = z.object({
         options: z.array(
           z.object({ id: z.string().regex(/^[a-z0-9_]{3,30}$/), label: z.string().min(1) }),
         ),
-        scale: z.number().int().min(2).max(10),
+        /**
+         * Only meaningful for rating and opinion_scale. Strict structured
+         * output requires every property to be present, so the model sends a
+         * placeholder for other block types — commonly 0. Accept anything and
+         * let the normalizer clamp it; rejecting 0 here failed the whole
+         * generation because one unrelated field was out of range.
+         */
+        scale: z.number().int().min(0).max(20),
       }),
     )
     .min(2)

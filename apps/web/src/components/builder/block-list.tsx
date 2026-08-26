@@ -35,7 +35,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useBuilderStore } from "@/stores/builder-store";
-import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_CLASSES } from "./block-library";
+import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
 import { defaultBlock } from "./default-block";
 import { cn } from "@/lib/utils";
 
@@ -78,9 +78,9 @@ export function BlockList() {
   return (
     <TooltipProvider delayDuration={400}>
       <div className="flex h-full flex-col">
-        <div className="border-border flex items-center justify-between border-b px-3 py-2.5">
+        <div className="flex items-center justify-between px-3 pt-3 pb-2">
           <span className="text-muted-foreground text-micro font-medium tracking-wide uppercase">
-            {doc.blocks.length} block{doc.blocks.length === 1 ? "" : "s"}
+            {doc.blocks.length} question{doc.blocks.length === 1 ? "" : "s"}
           </span>
           <Button
             variant="ghost"
@@ -130,17 +130,18 @@ export function BlockList() {
                     type="button"
                     onClick={() => selectEnding(ending.ref)}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors",
-                      "duration-[var(--duration-micro)] ease-[var(--ease-out)]",
-                      selectedEndingRef === ending.ref
-                        ? "bg-primary-soft text-primary"
-                        : "hover:bg-muted/60",
+                      "flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left",
+                      "bg-primary-soft text-primary transition-opacity duration-[var(--duration-micro)]",
+                      selectedEndingRef === ending.ref ? "opacity-100" : "opacity-[0.82] hover:opacity-100",
                     )}
+                    style={
+                      selectedEndingRef === ending.ref
+                        ? { boxShadow: "inset 3px 0 0 0 var(--primary)" }
+                        : undefined
+                    }
                   >
-                    <div className="bg-muted text-muted-foreground grid size-6 shrink-0 place-items-center rounded-md">
-                      <Flag className="size-3" strokeWidth={1.75} />
-                    </div>
-                    <span className="truncate text-xs">{ending.title}</span>
+                    <Flag className="size-3.5 shrink-0" strokeWidth={2} />
+                    <span className="line-clamp-1 min-w-0 flex-1 text-xs">{ending.title}</span>
                   </button>
                 </li>
               ))}
@@ -206,12 +207,20 @@ function SortableRow({
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        // The selected row gets a saturated spine in its family colour instead
+        // of a border, so the list reads as coloured cards rather than a ruled
+        // table.
+        boxShadow: selected ? `inset 3px 0 0 0 ${TONE_ACCENT[meta.tone]}` : undefined,
+      }}
       className={cn(
-        "group flex items-center gap-1.5 rounded-lg px-1.5 py-1.5",
-        "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
-        selected ? "bg-primary-soft" : "hover:bg-muted/60",
-        isDragging && "shadow-md ring-primary/40 z-10 ring-2",
+        "group flex items-start gap-1.5 rounded-xl py-2 pr-1.5 pl-1",
+        "transition-[background-color,box-shadow] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
+        TONE_CLASSES[meta.tone],
+        selected ? "ring-0" : "opacity-[0.82] hover:opacity-100",
+        isDragging && "shadow-md z-10 opacity-100",
       )}
     >
       <button
@@ -219,32 +228,30 @@ function SortableRow({
         {...attributes}
         {...listeners}
         aria-label={`Reorder ${block.title}`}
-        className="text-muted-foreground/40 hover:text-muted-foreground shrink-0 cursor-grab touch-none active:cursor-grabbing"
+        className="mt-0.5 shrink-0 cursor-grab touch-none opacity-0 transition-opacity group-hover:opacity-40 hover:!opacity-80 active:cursor-grabbing"
       >
         <GripVertical className="size-3.5" />
       </button>
 
-      <button
-        type="button"
-        onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2 text-left"
-      >
-        <div className={cn("grid size-6 shrink-0 place-items-center rounded-md", TONE_CLASSES[meta.tone])}>
-          <meta.icon className="size-3" strokeWidth={1.75} />
-        </div>
-        <span className="text-muted-foreground tabular w-3 shrink-0 text-[0.625rem]">{index + 1}</span>
-        <span className={cn("truncate text-xs", selected && "text-primary font-medium")}>
+      <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-start gap-2 text-left">
+        <span className="mt-px flex shrink-0 items-center gap-1.5">
+          <meta.icon className="size-3.5" strokeWidth={2} />
+          <span className="tabular text-[0.625rem] opacity-60">{index + 1}</span>
+        </span>
+        {/* Two lines before the ellipsis: one line truncated after ~three
+            words made the list unreadable. */}
+        <span className={cn("line-clamp-2 min-w-0 flex-1 text-xs leading-snug", selected && "font-semibold")}>
           {block.title || meta.label}
         </span>
         {block.required && (
-          <span className="text-destructive shrink-0 text-xs leading-none" aria-label="Required">
+          <span className="mt-px shrink-0 text-xs leading-none opacity-70" aria-label="Required">
             *
           </span>
         )}
       </button>
 
       {block.type !== "welcome" && (
-        <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+        <div className="flex shrink-0 items-center self-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon-xs" aria-label="Duplicate block" onClick={onDuplicate}>
@@ -297,10 +304,10 @@ function BlockPicker({
       onClick={onClose}
     >
       <div
-        className="bg-card border-border shadow-lg flex max-h-[70vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border"
+        className="bg-card shadow-xl flex max-h-[70vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="border-border flex items-center gap-2 border-b px-3 py-2.5">
+        <div className="bg-muted/40 flex items-center gap-2 px-3 py-2.5">
           <Search className="text-muted-foreground size-4 shrink-0" />
           <Input
             autoFocus

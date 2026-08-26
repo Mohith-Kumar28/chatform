@@ -16,10 +16,12 @@ describe("docs are migrated on read", () => {
     // The seeded form is written as a raw v1 document.
     const res = await fetchApi(`/api/forms/${t.formId}`, { headers: auth() });
     const body = await res.json<{ workingSchema: Record<string, any> }>();
-    expect(body.workingSchema.schemaVersion).toBe(2);
+    expect(body.workingSchema.schemaVersion).toBe(3);
     expect(body.workingSchema.settings.agent.guardrails.maxTurns).toBe(60);
     expect(body.workingSchema.settings.agent.knowledge).toEqual([]);
     expect(body.workingSchema.blocks[0].agentHints).toBeNull();
+    expect(body.workingSchema.blocks[0].media).toBeNull();
+    expect(body.workingSchema.settings.agent.rephraseQuestions).toBe(true);
   });
 
   it("stored rows are not rewritten by a read", async () => {

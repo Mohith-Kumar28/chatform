@@ -146,7 +146,7 @@ export function ResultsClient({ formId }: ResultsClientProps) {
               }
             />
           ) : (
-            <div className="border-border overflow-hidden rounded-xl border">
+            <div className="bg-card overflow-hidden rounded-xl">
               {/* Wide tables scroll inside their own container so the page
                   itself never scrolls sideways. */}
               <div className="overflow-x-auto">
@@ -225,7 +225,7 @@ function SubmissionRow({
       <tr
         onClick={onToggle}
         className={cn(
-          "border-border hover:bg-muted/40 cursor-pointer border-t transition-colors",
+          "hover:bg-muted/40 cursor-pointer transition-colors",
           open && "bg-muted/50",
         )}
       >
@@ -244,14 +244,14 @@ function SubmissionRow({
         ))}
       </tr>
       {open && (
-        <tr className="border-border border-t">
+        <tr>
           <td colSpan={columns.length + 1} className="bg-muted/20 p-4">
             <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
               <div className="space-y-2">
                 <p className="text-muted-foreground text-micro font-medium tracking-wide uppercase">
                   The conversation
                 </p>
-                <div className="border-border bg-card max-h-80 space-y-2 overflow-y-auto rounded-xl border p-3">
+                <div className="bg-card max-h-80 space-y-2 overflow-y-auto rounded-xl p-3">
                   {row.transcript.length === 0 ? (
                     <p className="text-muted-foreground text-sm">No transcript recorded.</p>
                   ) : (
@@ -280,7 +280,7 @@ function SubmissionRow({
                 <p className="text-muted-foreground text-micro font-medium tracking-wide uppercase">
                   What we extracted
                 </p>
-                <dl className="border-border bg-card space-y-2 rounded-xl border p-3">
+                <dl className="bg-card space-y-2 rounded-xl p-3">
                   {columns.map((b) => (
                     <div key={b.ref}>
                       <dt className="text-muted-foreground text-xs">{b.title}</dt>
@@ -317,7 +317,7 @@ function SummaryTab({ analytics }: { analytics?: Analytics }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {dists.map((d) => (
-        <div key={d.blockRef} className="border-border bg-card rounded-xl border p-4">
+        <div key={d.blockRef} className="bg-card rounded-xl p-4">
           <p className="text-h3 mb-3">{d.title}</p>
           {d.counts && d.counts.length > 0 ? (
             <ResponsiveContainer width="100%" height={Math.max(140, d.counts.length * 34)}>
@@ -387,7 +387,7 @@ function AnalyticsTab({ analytics }: { analytics?: Analytics }) {
         />
       </div>
 
-      <div className="border-border bg-card rounded-xl border p-4">
+      <div className="bg-card rounded-xl p-4">
         <p className="text-h3 mb-1">Where people drop off</p>
         <p className="text-muted-foreground text-caption mb-4">
           The share of respondents who answered each question.

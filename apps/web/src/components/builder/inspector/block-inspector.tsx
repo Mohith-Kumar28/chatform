@@ -22,6 +22,7 @@ import { useBuilderStore, useSelectedBlock } from "@/stores/builder-store";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_CLASSES } from "../block-library";
 import { defaultBlock } from "../default-block";
 import { Field, SwitchField, TextField } from "./fields";
+import { MediaField } from "./media-field";
 import { TypeFields } from "./type-fields";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +65,7 @@ export function BlockInspector() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-border flex items-center justify-between gap-2 border-b px-4 py-3">
+      <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
         <div className="flex min-w-0 items-center gap-2">
           <div className={cn("grid size-7 shrink-0 place-items-center rounded-lg", TONE_CLASSES[meta.tone])}>
             <meta.icon className="size-3.5" strokeWidth={1.75} />
@@ -90,7 +91,7 @@ export function BlockInspector() {
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
         {/* type switcher */}
         {block.type !== "welcome" && (
-          <Field label="Block type" hint="Changing type keeps the question and ref.">
+          <Field label="Type">
             <Select
               value={block.type}
               onValueChange={(next) => {
@@ -137,7 +138,6 @@ export function BlockInspector() {
 
         <TextField
           label="Question"
-          hint="What the agent is trying to find out. It rephrases this naturally."
           value={block.title}
           onChange={(v) => patch({ title: v }, key("title"))}
           multiline
@@ -146,33 +146,25 @@ export function BlockInspector() {
 
         <TextField
           label="Description"
-          hint="Extra context shown with the question."
           value={block.description ?? ""}
           onChange={(v) => patch({ description: v || undefined }, key("description"))}
           multiline
           maxLength={5000}
         />
 
+        <Field label="Media">
+          <MediaField media={block.media} onChange={(media) => patch({ media })} />
+        </Field>
+
         {block.type !== "welcome" && block.type !== "statement" && (
-          <SwitchField
-            label="Required"
-            hint="The agent will keep asking until it gets a usable answer."
-            checked={block.required}
-            onChange={(v) => patch({ required: v })}
-          />
+          <SwitchField label="Required" checked={block.required} onChange={(v) => patch({ required: v })} />
         )}
 
         <TypeFields block={block} patch={patch} />
 
-        <Section
-          title="Agent hints"
-          icon={Bot}
-          badge={block.agentHints ? "Set" : undefined}
-          description="Coach the interviewer on how to ask for this one."
-        >
+        <Section title="Agent hints" icon={Bot} badge={block.agentHints ? "Set" : undefined}>
           <TextField
             label="How to ask"
-            hint='e.g. "casually, and mention it is optional"'
             value={block.agentHints?.askStyle ?? ""}
             onChange={(v) =>
               patch({ agentHints: { ...(block.agentHints ?? { examples: [] }), askStyle: v || undefined } }, key("askStyle"))
@@ -180,7 +172,6 @@ export function BlockInspector() {
           />
           <TextField
             label="Why we ask"
-            hint="Used when the respondent asks why this is needed."
             value={block.agentHints?.whyWeAsk ?? ""}
             onChange={(v) =>
               patch({ agentHints: { ...(block.agentHints ?? { examples: [] }), whyWeAsk: v || undefined } }, key("whyWeAsk"))
@@ -188,7 +179,6 @@ export function BlockInspector() {
           />
           <TextField
             label="If they push back"
-            hint="What to say when they refuse or give something unusable."
             value={block.agentHints?.retryHint ?? ""}
             onChange={(v) =>
               patch({ agentHints: { ...(block.agentHints ?? { examples: [] }), retryHint: v || undefined } }, key("retryHint"))
@@ -196,16 +186,15 @@ export function BlockInspector() {
           />
         </Section>
 
-        <Section title="Advanced" icon={GitBranch} description="Prefill, cover image and logic.">
+        <Section title="Advanced" icon={GitBranch}>
           <TextField
             label="Auto-fill from URL parameter"
-            hint="Prefills this answer from ?param=value on the form link."
+            hint="?param=value on the form link"
             value={block.prefillParam ?? ""}
             onChange={(v) => patch({ prefillParam: v || undefined }, key("prefill"))}
           />
           <TextField
             label="Button text"
-            hint="Label on the advance control. Leave empty for the default."
             value={block.buttonLabel ?? ""}
             onChange={(v) => patch({ buttonLabel: v || undefined }, key("btn"))}
             maxLength={60}
@@ -237,24 +226,22 @@ export function BlockInspector() {
 function Section({
   title,
   icon: Icon,
-  description,
   badge,
   children,
 }: {
   title: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  description?: string;
   badge?: string;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border-border rounded-lg border">
+    <div className="bg-muted/25 rounded-xl">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="hover:bg-muted/40 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors"
+        className="hover:bg-muted/50 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors"
       >
         <Icon className="text-muted-foreground size-3.5 shrink-0" strokeWidth={1.75} />
         <span className="text-caption flex-1 font-medium">{title}</span>
@@ -271,10 +258,7 @@ function Section({
         />
       </button>
       {open && (
-        <div className="border-border space-y-4 border-t px-3 py-3">
-          {description && <p className="text-muted-foreground text-micro">{description}</p>}
-          {children}
-        </div>
+        <div className="space-y-4 px-3 pb-3">{children}</div>
       )}
     </div>
   );

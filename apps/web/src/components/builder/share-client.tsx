@@ -49,7 +49,7 @@ export function ShareClient({
         </div>
       )}
 
-      <div className="border-border bg-card space-y-6 rounded-xl border p-6">
+      <div className="bg-card space-y-6 rounded-2xl p-6">
         <SegmentedControl
           className="mx-auto flex"
           options={[
@@ -206,7 +206,7 @@ function QrPanel({ url, slug }: { url: string; slug: string }) {
   const svg = qrSvg(url);
   const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
   return (
-    <div className="flex flex-col items-center gap-3 border-t pt-4">
+    <div className="flex flex-col items-center gap-3 pt-2">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={dataUrl} alt={`QR code for ${slug}`} className="size-40 rounded-lg bg-white p-2" />
       <Button variant="outline" size="sm" shape="pill" asChild>

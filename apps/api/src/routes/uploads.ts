@@ -146,6 +146,64 @@ export const filesAdminRouter = new Hono<{ Bindings: Bindings; Variables: Partia
 filesAdminRouter.use("*", requireSession);
 filesAdminRouter.use("*", requireOrg);
 
+/**
+ * Builder-owned assets: question media, cover images, favicons.
+ *
+ * Distinct from respondent uploads, which are scoped to a chat session. These
+ * belong to the organization and are served publicly, because a respondent
+ * must be able to see the image attached to a question.
+ */
+const ASSET_MIME = new Set([
+  "image/png", "image/jpeg", "image/gif", "image/webp",
+  "video/mp4", "video/webm",
+  "application/pdf", "text/csv", "text/plain",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+const MAX_ASSET_MB = 25;
+
+filesAdminRouter.post("/assets", async (c) => {
+  const orgId = c.get("orgId");
+  const userId = c.get("userId");
+  if (!orgId || !userId) return c.json({ error: { code: "unauthorized", message: "Sign in required" } }, 401);
+
+  const form = await c.req.formData();
+  const file = form.get("file");
+  if (!(file instanceof File)) {
+    return c.json({ error: { code: "no_file", message: "Send a file" } }, 400);
+  }
+  if (!ASSET_MIME.has(file.type)) {
+    return c.json({ error: { code: "unsupported_type", message: `${file.type} is not allowed` } }, 415);
+  }
+  if (file.size > MAX_ASSET_MB * 1024 * 1024) {
+    return c.json({ error: { code: "too_large", message: `Max ${MAX_ASSET_MB}MB` } }, 413);
+  }
+
+  const fileId = `ast_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
+  const r2Key = `assets/${orgId}/${fileId}-${safeName}`;
+
+  await c.env.R2.put(r2Key, await file.arrayBuffer(), {
+    httpMetadata: { contentType: file.type },
+  });
+  await c.env.DB.prepare(
+    `INSERT INTO files (id, organization_id, uploaded_by, uploader_user_id, r2_key, filename, mime, size_bytes, status, created_at, confirmed_at)
+     VALUES (?, ?, 'builder', ?, ?, ?, ?, ?, 'confirmed', ?, ?)`,
+  )
+    .bind(fileId, orgId, userId, r2Key, safeName, file.type, file.size, Date.now(), Date.now())
+    .run();
+
+  return c.json({
+    fileId,
+    key: r2Key,
+    url: `/p/assets/${fileId}`,
+    filename: safeName,
+    mime: file.type,
+    sizeBytes: file.size,
+  });
+});
+
 filesAdminRouter.get("/files/:id/download", async (c) => {
   const fileId = c.req.param("id");
   const orgId = c.get("orgId");

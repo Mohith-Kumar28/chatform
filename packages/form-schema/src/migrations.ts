@@ -31,6 +31,24 @@ const MIGRATIONS: ((doc: AnyDoc) => AnyDoc)[] = [
   // field carries a schema default, so the only work here is stamping the
   // version and letting `FormDoc.parse` materialize the rest.
   (doc) => ({ ...doc, schemaVersion: 2 }),
+
+  // ── v2 → v3 ────────────────────────────────────────────────────────────
+  // Replaces the image-only `coverImageKey`/`coverLayout`/`coverPosition`
+  // triple with a single `media` object that can also carry a video or a
+  // downloadable file.
+  (doc) => {
+    const blocks = Array.isArray(doc.blocks) ? doc.blocks : [];
+    return {
+      ...doc,
+      schemaVersion: 3,
+      blocks: blocks.map((raw) => {
+        const block = raw as Record<string, unknown>;
+        const { coverImageKey, coverLayout, coverPosition, ...rest } = block;
+        if (block.media || typeof coverImageKey !== "string" || !coverImageKey) return rest;
+        return { ...rest, media: { kind: "image", key: coverImageKey, url: null } };
+      }),
+    };
+  },
 ];
 
 export function migrateFormDoc(raw: unknown): unknown {

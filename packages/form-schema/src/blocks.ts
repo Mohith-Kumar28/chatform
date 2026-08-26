@@ -49,6 +49,29 @@ export const AgentHints = z.object({
 });
 export type AgentHints = z.output<typeof AgentHints>;
 
+/**
+ * Media attached to a question.
+ *
+ * `image` and `video` render inline above the question; `file` renders as a
+ * download the respondent can take away (a brief, a price list, a consent PDF).
+ * `url` is resolved server-side from `key` for R2-hosted assets, or set
+ * directly when the builder pasted a link.
+ */
+export const BlockMedia = z.object({
+  kind: z.enum(["image", "video", "file"]),
+  /** R2 object key, when the asset was uploaded here. */
+  key: z.string().max(500).nullable().default(null),
+  /** Direct URL, when the builder pasted one. */
+  url: z.string().max(1000).nullable().default(null),
+  filename: z.string().max(300).optional(),
+  mime: z.string().max(120).optional(),
+  sizeBytes: z.number().int().min(0).optional(),
+  /** Alt text for images — required for the question to be accessible. */
+  alt: z.string().max(300).optional(),
+  caption: z.string().max(300).optional(),
+});
+export type BlockMedia = z.output<typeof BlockMedia>;
+
 const BlockBase = {
   id: NanoId,
   ref: RefString,
@@ -61,10 +84,8 @@ const BlockBase = {
 
   agentHints: AgentHints.nullable().default(null),
 
-  /** Cover image shown alongside the question. */
-  coverImageKey: z.string().nullable().default(null),
-  coverLayout: z.enum(["float", "fill", "stack"]).default("float"),
-  coverPosition: z.enum(["left", "right"]).default("left"),
+  /** Media shown with the question — an image, a short video, or a download. */
+  media: BlockMedia.nullable().default(null),
 
   /** Prefill this block's answer from a URL query parameter. */
   prefillParam: HiddenFieldName.optional(),

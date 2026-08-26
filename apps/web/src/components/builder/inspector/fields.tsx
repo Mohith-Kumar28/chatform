@@ -40,7 +40,7 @@ export function Field({
     <div className={cn("space-y-1.5", className)}>
       <Label className="text-caption font-medium">{label}</Label>
       {children}
-      {hint && <p className="text-muted-foreground text-micro">{hint}</p>}
+      {hint && <p className="text-muted-foreground text-[0.6875rem] leading-snug">{hint}</p>}
     </div>
   );
 }
@@ -135,7 +135,7 @@ export function SwitchField({
         <Label htmlFor={id} className="text-caption font-medium">
           {label}
         </Label>
-        {hint && <p className="text-muted-foreground text-micro">{hint}</p>}
+        {hint && <p className="text-muted-foreground text-[0.6875rem] leading-snug">{hint}</p>}
       </div>
       <Switch id={id} checked={checked} onCheckedChange={onChange} className="mt-0.5 shrink-0" />
     </div>

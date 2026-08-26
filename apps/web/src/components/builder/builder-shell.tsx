@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { useBuilderStore } from "@/stores/builder-store";
 import { useAutosave } from "@/hooks/use-autosave";
 import { BuilderHeader } from "./builder-header";
+import { PreviewDialog } from "./preview-dialog";
 
 /**
  * Owns everything shared by the builder tabs: document loading, store
@@ -38,6 +39,7 @@ export function BuilderShell({
 
   const { flush } = useAutosave(formId);
   const [publishing, setPublishing] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const row = form as
     | { id: string; title: string; slug: string; status: string; workingSchema: unknown; activeVersion: number | null }
@@ -104,6 +106,7 @@ export function BuilderShell({
             activeVersion={row.activeVersion}
             onPublish={onPublish}
             publishing={publishing}
+            onPreview={() => setPreviewOpen(true)}
           />
         )}
 
@@ -130,6 +133,17 @@ export function BuilderShell({
             children
           )}
         </div>
+
+        {doc && row && (
+          <PreviewDialog
+            open={previewOpen}
+            onOpenChange={setPreviewOpen}
+            formId={formId}
+            doc={doc}
+            slug={row.slug}
+            published={row.status === "published"}
+          />
+        )}
       </div>
     </AuthGuard>
   );
@@ -138,7 +152,7 @@ export function BuilderShell({
 /** Matches the real header's geometry so the page doesn't jump on load. */
 function HeaderSkeleton() {
   return (
-    <div className="bg-card border-border flex h-14 items-center gap-3 border-b px-4">
+    <div className="bg-card flex h-14 items-center gap-3 px-4">
       <div className="shimmer size-8 rounded-md" />
       <div className="shimmer h-4 w-40 rounded" />
       <div className="ml-auto flex gap-2">

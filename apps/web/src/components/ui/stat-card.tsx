@@ -29,7 +29,7 @@ export function StatCard({
   }[tone];
 
   return (
-    <div className={cn("border-border bg-card shadow-xs rounded-xl border p-4", className)}>
+    <div className={cn("bg-card shadow-xs rounded-xl p-4", className)}>
       <div className="flex items-start justify-between gap-3">
         <p className="text-muted-foreground text-caption min-w-0">{label}</p>
         {Icon && (

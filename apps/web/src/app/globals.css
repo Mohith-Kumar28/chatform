@@ -59,6 +59,32 @@
   --info-foreground: oklch(0.995 0 0);
   --info-soft: oklch(0.955 0.03 250);
 
+  /* ── block families ──────────────────────────────────────────────────────
+     Questions are colour-coded by what they collect, the way Youform tints its
+     block list. Saturated enough to scan at a glance, soft enough to sit under
+     text. `-ink` is the readable foreground on the matching `-soft`.          */
+  --family-content: oklch(0.72 0.16 350);      /* pink   — messages, welcome */
+  --family-content-soft: oklch(0.95 0.04 350);
+  --family-content-ink: oklch(0.45 0.16 350);
+  --family-text: oklch(0.62 0.15 255);         /* blue   — free text        */
+  --family-text-soft: oklch(0.95 0.035 255);
+  --family-text-ink: oklch(0.44 0.15 255);
+  --family-contact: oklch(0.66 0.13 200);      /* teal   — email, phone     */
+  --family-contact-soft: oklch(0.95 0.035 200);
+  --family-contact-ink: oklch(0.42 0.11 200);
+  --family-number: oklch(0.75 0.15 75);        /* amber  — numbers, dates   */
+  --family-number-soft: oklch(0.955 0.05 85);
+  --family-number-ink: oklch(0.48 0.12 70);
+  --family-choice: oklch(0.68 0.16 150);       /* green  — choices          */
+  --family-choice-soft: oklch(0.95 0.045 150);
+  --family-choice-ink: oklch(0.42 0.13 150);
+  --family-scale: oklch(0.62 0.17 300);        /* violet — ratings, scales  */
+  --family-scale-soft: oklch(0.95 0.04 300);
+  --family-scale-ink: oklch(0.44 0.16 300);
+  --family-advanced: oklch(0.66 0.18 25);      /* coral  — uploads, payment */
+  --family-advanced-soft: oklch(0.95 0.04 25);
+  --family-advanced-ink: oklch(0.46 0.17 25);
+
   /* ── charts: orange / teal / violet / amber / rose / sky ── */
   --chart-1: oklch(0.705 0.19 43);
   --chart-2: oklch(0.68 0.115 195);
@@ -68,7 +94,9 @@
   --chart-6: oklch(0.7 0.13 235);
 
   /* ── sidebar / builder chrome ── */
-  --sidebar: oklch(0.97 0.01 82);
+  /* Panels are distinguished by a shade of the page, not by a rule. */
+  --sidebar: oklch(0.966 0.010 84);
+  --panel: oklch(0.978 0.008 88);
   --sidebar-foreground: oklch(0.255 0.01 65);
   --sidebar-primary: oklch(0.705 0.19 43);
   --sidebar-primary-foreground: oklch(0.995 0.005 85);
@@ -141,7 +169,32 @@
   --chart-5: oklch(0.72 0.17 15);
   --chart-6: oklch(0.75 0.12 235);
 
+  /* Dark: the families keep their hue but lift for contrast, and the soft
+     fills become tints of the surface rather than near-white. */
+  --family-content: oklch(0.76 0.15 350);
+  --family-content-soft: oklch(0.32 0.06 350);
+  --family-content-ink: oklch(0.86 0.10 350);
+  --family-text: oklch(0.72 0.13 255);
+  --family-text-soft: oklch(0.31 0.055 255);
+  --family-text-ink: oklch(0.85 0.09 255);
+  --family-contact: oklch(0.74 0.11 200);
+  --family-contact-soft: oklch(0.30 0.045 200);
+  --family-contact-ink: oklch(0.86 0.08 200);
+  --family-number: oklch(0.82 0.13 78);
+  --family-number-soft: oklch(0.32 0.05 78);
+  --family-number-ink: oklch(0.88 0.09 80);
+  --family-choice: oklch(0.75 0.14 150);
+  --family-choice-soft: oklch(0.30 0.05 150);
+  --family-choice-ink: oklch(0.86 0.10 150);
+  --family-scale: oklch(0.72 0.15 300);
+  --family-scale-soft: oklch(0.32 0.055 300);
+  --family-scale-ink: oklch(0.86 0.10 300);
+  --family-advanced: oklch(0.74 0.16 25);
+  --family-advanced-soft: oklch(0.32 0.06 25);
+  --family-advanced-ink: oklch(0.87 0.10 25);
+
   --sidebar: oklch(0.225 0.009 64);
+  --panel: oklch(0.232 0.009 64);
   --sidebar-foreground: oklch(0.95 0.008 88);
   --sidebar-primary: oklch(0.75 0.17 50);
   --sidebar-primary-foreground: oklch(0.19 0.02 60);
@@ -198,6 +251,28 @@
   --color-chart-5: var(--chart-5);
   --color-chart-6: var(--chart-6);
   --color-sidebar: var(--sidebar);
+  --color-panel: var(--panel);
+  --color-family-content: var(--family-content);
+  --color-family-content-soft: var(--family-content-soft);
+  --color-family-content-ink: var(--family-content-ink);
+  --color-family-text: var(--family-text);
+  --color-family-text-soft: var(--family-text-soft);
+  --color-family-text-ink: var(--family-text-ink);
+  --color-family-contact: var(--family-contact);
+  --color-family-contact-soft: var(--family-contact-soft);
+  --color-family-contact-ink: var(--family-contact-ink);
+  --color-family-number: var(--family-number);
+  --color-family-number-soft: var(--family-number-soft);
+  --color-family-number-ink: var(--family-number-ink);
+  --color-family-choice: var(--family-choice);
+  --color-family-choice-soft: var(--family-choice-soft);
+  --color-family-choice-ink: var(--family-choice-ink);
+  --color-family-scale: var(--family-scale);
+  --color-family-scale-soft: var(--family-scale-soft);
+  --color-family-scale-ink: var(--family-scale-ink);
+  --color-family-advanced: var(--family-advanced);
+  --color-family-advanced-soft: var(--family-advanced-soft);
+  --color-family-advanced-ink: var(--family-advanced-ink);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
@@ -289,6 +364,8 @@
 }
 
 @layer base {
+  /* Elements get a border COLOUR, never a border by default. Regions are
+     separated by tone; a rule is the exception, not the baseline. */
   * {
     @apply border-border outline-ring/50;
   }

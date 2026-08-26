@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { AnswerMap } from "./answers";
-import { Block } from "./blocks";
+import { Block, type BlockMedia } from "./blocks";
 import { Ending, HiddenField, LogicRule, Variable } from "./logic";
 import { SettingsDoc, ThemeDoc } from "./settings";
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const FormDoc = z.object({
   schemaVersion: z.number().int().positive().default(SCHEMA_VERSION),
@@ -75,6 +75,8 @@ export interface PublicBlock {
   minSelections?: number;
   maxSelections?: number;
   allowOther?: boolean;
+  /** Image, video or downloadable file shown with the question. */
+  media?: BlockMedia | null;
 }
 
 export function toPublicBlock(b: Block): PublicBlock {
@@ -86,6 +88,7 @@ export function toPublicBlock(b: Block): PublicBlock {
     description: b.description,
     required: b.required,
     imageKey: b.image_key,
+    media: b.media,
   };
   switch (b.type) {
     case "welcome":

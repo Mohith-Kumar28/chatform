@@ -308,7 +308,7 @@ function FormCard({
 
   if (layout === "list") {
     return (
-      <div className="border-border bg-card hover:border-muted-foreground/30 flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors">
+      <div className="bg-card hover:bg-muted/40 flex items-center gap-3 rounded-xl px-4 py-3 transition-colors">
         <Link href={`/forms/${form.id}/build`} className="min-w-0 flex-1">
           <p className="truncate font-medium">{form.title}</p>
           <div className="mt-0.5 flex items-center gap-2">{meta}</div>
@@ -321,9 +321,9 @@ function FormCard({
   return (
     <div
       className={cn(
-        "border-border bg-card group relative overflow-hidden rounded-xl border",
+        "bg-card group relative overflow-hidden rounded-2xl",
         "shadow-xs hover:shadow-md transition-[box-shadow,border-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
-        "hover:border-muted-foreground/25",
+        ""
       )}
     >
       {/* The whole card is the target — it used to be a plain div with a tiny

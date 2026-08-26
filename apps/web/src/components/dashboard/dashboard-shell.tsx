@@ -19,7 +19,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <AuthGuard>
       <div className="flex min-h-svh flex-col">
-        <header className="bg-card/95 border-border sticky top-0 z-[var(--z-sticky)] border-b backdrop-blur">
+        <header className="bg-card/95 sticky top-0 z-[var(--z-sticky)] backdrop-blur">
           <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-3 px-4 sm:px-6">
             <Link href="/dashboard" className="flex shrink-0 items-center gap-2">
               <span className="bg-primary text-primary-foreground grid size-7 place-items-center rounded-lg text-sm font-bold">

@@ -60,9 +60,9 @@ export function SettingsPanel({
       <h1 className="font-display mb-6 text-xl font-semibold">
         Settings{formTitle ? <span className="text-muted-foreground font-normal"> for {formTitle}</span> : null}
       </h1>
-      <div className="bg-card flex gap-0 overflow-hidden rounded-2xl border">
+      <div className="bg-card flex gap-0 overflow-hidden rounded-2xl">
         {/* sub-nav */}
-        <nav className="w-56 shrink-0 space-y-0.5 border-r p-3">
+        <nav className="bg-muted/30 w-56 shrink-0 space-y-0.5 p-3">
           {SECTIONS.map((s) => (
             <button
               key={s.id}
