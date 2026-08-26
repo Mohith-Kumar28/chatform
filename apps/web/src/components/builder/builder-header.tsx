@@ -1,153 +1,282 @@
 "use client";
 
 import Link from "next/link";
-import {
-  ArrowLeft, BarChart3, Blocks, Check, Copy, Check as CheckIcon, ExternalLink,
-  GitBranch, Loader2, Palette, Settings as SettingsIcon, Share2, Webhook, CircleHelp,
-} from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  ArrowLeft,
+  Check,
+  CircleAlert,
+  CloudOff,
+  ExternalLink,
+  Loader2,
+  Redo2,
+  Undo2,
+} from "lucide-react";
+import { motion } from "motion/react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { startTour } from "@/components/tour/product-tour";
+import { CopyButton } from "@/components/ui/copy-button";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { BUILDER_TABS } from "./builder-tabs";
+import { useBuilderStore, useCanRedo, useCanUndo } from "@/stores/builder-store";
+import { cn } from "@/lib/utils";
 
-export type BuilderView = "build" | "workflow" | "design" | "integrate" | "settings" | "share" | "results";
-
-const TABS: { view: BuilderView; label: string; icon: typeof Blocks }[] = [
-  { view: "build", label: "Build", icon: Blocks },
-  { view: "workflow", label: "Workflow", icon: GitBranch },
-  { view: "design", label: "Design", icon: Palette },
-  { view: "integrate", label: "Integrate", icon: Webhook },
-  { view: "settings", label: "Settings", icon: SettingsIcon },
-  { view: "share", label: "Share", icon: Share2 },
-  { view: "results", label: "Results", icon: BarChart3 },
-];
-
+/**
+ * The single builder header, mounted in the layout so it persists across tab
+ * navigation. Tabs are real links now, so each has a URL, the back button
+ * works, and only the active tab's code is loaded.
+ */
 export function BuilderHeader({
-  title,
   formId,
+  title,
   slug,
   status,
   activeVersion,
-  view,
-  onViewChange,
-  saveState,
-  saveError,
   onPublish,
-  publishPending,
-  dirty,
+  publishing,
 }: {
-  title: string;
   formId: string;
+  title: string;
   slug: string | null;
   status: string | undefined;
   activeVersion: number | null;
-  view: BuilderView;
-  onViewChange: (v: BuilderView) => void;
-  saveState: "saving" | "dirty" | "saved";
-  saveError: string | null;
-  onPublish: () => void;
-  publishPending: boolean;
-  dirty: boolean;
+  onPublish: () => void | Promise<void>;
+  publishing: boolean;
 }) {
+  const pathname = usePathname();
+  const router = useRouter();
   const published = status === "published";
-  const [copied, setCopied] = useState(false);
 
-  const copyLink = async () => {
-    if (!slug) return;
-    await navigator.clipboard.writeText(`${window.location.origin}/f/${slug}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
+  const undo = useBuilderStore((s) => s.undo);
+  const redo = useBuilderStore((s) => s.redo);
+  const canUndo = useCanUndo();
+  const canRedo = useCanRedo();
+
+  const publicUrl =
+    slug && typeof window !== "undefined" ? `${window.location.origin}/f/${slug}` : "";
 
   return (
-    <header className="bg-background flex items-center justify-between gap-4 border-b px-4 py-2.5">
-      {/* left: back + identity */}
-      <div className="flex min-w-0 items-center gap-3">
-        <Button asChild variant="ghost" size="icon" className="size-8 shrink-0">
-          <Link href="/dashboard" aria-label="Back to dashboard">
-            <ArrowLeft className="size-4" />
-          </Link>
-        </Button>
-        <span className="font-display truncate font-semibold">{title}</span>
-        <Badge variant={published ? "default" : "secondary"}>
-          {published ? `✓ v${activeVersion ?? 1}` : "draft"}
-        </Badge>
-        {saveState === "saving" ? (
-          <span className="text-muted-foreground flex items-center gap-1 text-xs">
-            <Loader2 className="size-3 animate-spin" /> saving…
-          </span>
-        ) : saveState === "dirty" ? (
-          <span className="text-muted-foreground text-xs">unsaved</span>
-        ) : (
-          <span className="text-muted-foreground flex items-center gap-1 text-xs">
-            <Check className="size-3" /> saved
-          </span>
-        )}
-        {saveError && <span className="text-destructive truncate text-xs">{saveError}</span>}
-      </div>
+    <TooltipProvider delayDuration={300}>
+      <header className="bg-card/95 border-border sticky top-0 z-[var(--z-sticky)] border-b backdrop-blur">
+        <div className="flex h-14 items-center gap-3 px-3 sm:px-4">
+          {/* left: back + identity */}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <Button variant="ghost" size="icon-sm" asChild aria-label="Back to forms">
+              <Link href="/dashboard">
+                <ArrowLeft className="size-4" />
+              </Link>
+            </Button>
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 className="truncate text-sm font-semibold">{title}</h1>
+              <Badge
+                variant={published ? "secondary" : "outline"}
+                className={cn("shrink-0 gap-1", published && "text-[var(--success)]")}
+              >
+                {published ? `v${activeVersion ?? 1}` : "Draft"}
+              </Badge>
+              <SaveIndicator />
+            </div>
+          </div>
 
-      {/* center: view tabs */}
-      <nav data-tour="builder-tabs" className="bg-card hidden items-center gap-1 rounded-xl border p-1 shadow-sm lg:flex">
-        {TABS.map((t) => (
-          <button
-            key={t.view}
-            onClick={() => onViewChange(t.view)}
-            data-tour={t.view === "workflow" ? "builder-workflow-tab" : undefined}
-            className={`flex w-16 flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors ${
-              view === t.view
-                ? "bg-background text-foreground border shadow-sm"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-transparent"
-            }`}
-            aria-current={view === t.view ? "page" : undefined}
+          {/* center: tabs */}
+          <nav
+            aria-label="Builder sections"
+            className="border-border bg-muted/50 hidden items-center gap-0.5 rounded-full border p-1 lg:flex"
           >
-            <t.icon className={`size-4 ${view === t.view ? "text-primary" : ""}`} />
-            {t.label}
-          </button>
-        ))}
-      </nav>
+            {BUILDER_TABS.map((tab) => {
+              const href = `/forms/${formId}/${tab.segment}`;
+              const active = pathname === href;
+              return (
+                <Tooltip key={tab.segment}>
+                  <TooltipTrigger asChild>
+                    <Link
+                      href={href}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "relative isolate flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
+                        "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
+                        active
+                          ? "text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {active && (
+                        <motion.span
+                          layoutId="builder-tab-pill"
+                          className="bg-card shadow-xs absolute inset-0 -z-10 rounded-full"
+                          transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                        />
+                      )}
+                      <tab.icon className="size-3.5" strokeWidth={1.75} />
+                      <span className="hidden xl:inline">{tab.label}</span>
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p className="font-medium">{tab.label}</p>
+                    <p className="text-muted-foreground text-micro">{tab.hint}</p>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </nav>
 
-      {/* right: actions */}
-      <div className="flex shrink-0 items-center gap-1.5">
-        <select
-          value={view}
-          onChange={(e) => onViewChange(e.target.value as BuilderView)}
-          className="rounded-md border px-2 py-1.5 text-xs lg:hidden"
-          aria-label="Switch view"
-        >
-          {TABS.map((t) => (
-            <option key={t.view} value={t.view}>{t.label}</option>
-          ))}
-        </select>
-        {slug && (
-          <Button asChild variant="ghost" size="icon" className="size-8" aria-label="Open live form">
-            <a href={`/f/${slug}`} target="_blank" rel="noreferrer">
-              <ExternalLink className="size-4" />
-            </a>
-          </Button>
-        )}
-        {slug && (
-          <Button variant="ghost" size="icon" className="size-8" aria-label="Copy form link" onClick={() => void copyLink()}>
-            {copied ? <CheckIcon className="size-4 text-green-600" /> : <Copy className="size-4" />}
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8 rounded-full"
-          aria-label="Replay product tour"
-          onClick={() => startTour("builder")}
-        >
-          <CircleHelp className="size-4" />
+          {/* Below lg the tab strip collapses. A select is a poor nav control,
+              but it beats a horizontally scrolling icon row on a phone. */}
+          <select
+            aria-label="Builder section"
+            className="border-input bg-background h-8 rounded-md border px-2 text-xs lg:hidden"
+            value={BUILDER_TABS.find((t) => pathname.endsWith(`/${t.segment}`))?.segment ?? "build"}
+            onChange={(e) => router.push(`/forms/${formId}/${e.target.value}`)}
+          >
+            {BUILDER_TABS.map((t) => (
+              <option key={t.segment} value={t.segment}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+
+          {/* right: history, links, publish */}
+          <div className="flex flex-1 items-center justify-end gap-1">
+            <div className="mr-1 hidden items-center gap-0.5 md:flex">
+              <IconAction
+                label="Undo"
+                shortcut="⌘Z"
+                icon={Undo2}
+                disabled={!canUndo}
+                onClick={undo}
+              />
+              <IconAction
+                label="Redo"
+                shortcut="⇧⌘Z"
+                icon={Redo2}
+                disabled={!canRedo}
+                onClick={redo}
+              />
+            </div>
+
+            <ThemeToggle className="mr-1 hidden sm:inline-flex" />
+
+            {slug && published && (
+              <>
+                <CopyButton value={publicUrl} label={undefined} toastMessage="Link copied" />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon-sm" asChild>
+                      <a href={`/f/${slug}`} target="_blank" rel="noreferrer" aria-label="Open live form">
+                        <ExternalLink className="size-3.5" />
+                      </a>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Open live form</TooltipContent>
+                </Tooltip>
+              </>
+            )}
+
+            <Button
+              size="sm"
+              shape="pill"
+              onClick={async () => {
+                await onPublish();
+                toast.success(published ? "Changes published" : "Form published");
+              }}
+              disabled={publishing}
+              className="ml-1"
+            >
+              {publishing ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : published ? (
+                <Check className="size-3.5" />
+              ) : null}
+              {published ? "Publish changes" : "Publish"}
+            </Button>
+          </div>
+        </div>
+      </header>
+    </TooltipProvider>
+  );
+}
+
+function IconAction({
+  label,
+  shortcut,
+  icon: Icon,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  shortcut?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="ghost" size="icon-sm" onClick={onClick} disabled={disabled} aria-label={label}>
+          <Icon className="size-3.5" />
         </Button>
-        <span className="mx-1 hidden h-6 w-px bg-border sm:block" data-form-id={formId} />
-        {published && !dirty ? (
-          <Badge variant="default" className="h-8 rounded-lg px-3">✓ Published</Badge>
-        ) : (
-          <Button size="sm" className="rounded-lg" disabled={publishPending || dirty} onClick={onPublish}>
-            {publishPending ? "Publishing…" : published ? "Publish changes" : "Publish"}
-          </Button>
-        )}
-      </div>
-    </header>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        {label}
+        {shortcut && <span className="text-muted-foreground ml-2">{shortcut}</span>}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * Save status. Every state is nameable — the old header showed three bare
+ * strings ("saving…", "unsaved", "saved") and nothing at all when a save failed.
+ */
+function SaveIndicator() {
+  const saveState = useBuilderStore((s) => s.saveState);
+  const saveError = useBuilderStore((s) => s.saveError);
+  const lastSavedAt = useBuilderStore((s) => s.lastSavedAt);
+  const [, force] = useState(0);
+
+  if (saveState === "error") {
+    return (
+      <span className="text-destructive text-micro flex shrink-0 items-center gap-1" title={saveError ?? undefined}>
+        <CircleAlert className="size-3" />
+        Not saved
+      </span>
+    );
+  }
+  if (saveState === "offline") {
+    return (
+      <span className="text-muted-foreground text-micro flex shrink-0 items-center gap-1">
+        <CloudOff className="size-3" />
+        Offline
+      </span>
+    );
+  }
+  if (saveState === "saving") {
+    return (
+      <span className="text-muted-foreground text-micro flex shrink-0 items-center gap-1">
+        <Loader2 className="size-3 animate-spin" />
+        Saving
+      </span>
+    );
+  }
+  if (saveState === "dirty") {
+    return <span className="text-muted-foreground text-micro shrink-0">Unsaved</span>;
+  }
+  return (
+    <span
+      className="text-muted-foreground text-micro shrink-0"
+      onMouseEnter={() => force((n) => n + 1)}
+    >
+      {lastSavedAt
+        ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+        : "Saved"}
+    </span>
   );
 }

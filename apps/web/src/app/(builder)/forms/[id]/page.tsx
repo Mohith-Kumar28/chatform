@@ -1,5 +1,7 @@
-import { BuilderClient } from "@/components/builder/builder-client";
+import { redirect } from "next/navigation";
 
-export default function FormBuilderPage() {
-  return <BuilderClient />;
+/** /forms/[id] has no content of its own — Build is the entry point. */
+export default async function FormIndexPage({ params }: PageProps<"/forms/[id]">) {
+  const { id } = await params;
+  redirect(`/forms/${id}/build`);
 }

@@ -610,3 +610,35 @@ Append one line per completed task. This is how a future session knows where exe
 - **Also** ✅ `SessionDO` now persists `invalidCounts` and `sessionTokensUsed` into the session blob. Both were memory-only, so a DO eviction reset the escalation counter (respondent could loop forever on a bad answer) and reset the token budget to zero (`sessionTokenBudget` was not actually a cap).
 
 Monorepo tests: **58 passing** (was 22 at session start).
+
+---
+
+## Phase 2 — design system
+
+- **F1** ✅ `globals.css` rewritten as a real system: token values reconciled with DESIGN.md §4.1 (shipped values had drifted), the four missing brand/status tokens added (`primary-hover`, `primary-soft`, `success`/`warning`/`info` + soft variants), spec chart palette, warm-tinted shadow scale, named typography scale (`text-display-lg` … `text-micro`, `tabular`), motion duration/easing tokens, z-index scale, warm scrollbars, visible focus, shared keyframes, global `prefers-reduced-motion` collapse, and the full `--cf-*` chat surface with `bubble-bot`/`bubble-user` utilities.
+- **F1.3** ✅ **Dark mode now exists.** `.dark` was fully defined and completely dead — no `ThemeProvider`, so the class was never applied and `dark:` never fired anywhere. Added `components/theme/theme-provider.tsx` + a three-state light/system/dark `ThemeToggle`, and `suppressHydrationWarning` on `<html>`. Verified in-browser.
+- **F1.4** ✅ `motion` installed. Also `cmdk`, `recharts`, `@tanstack/react-table`, `react-markdown`, `remark-gfm`, `date-fns`, `zustand`, `immer`. Dropped 10 redundant individual `@radix-ui/*` packages.
+- **F1.5** ✅ `chatThemeVars` emits the full `--cf-*` set and derives muted/border/chip states from the theme's own colors. The bot-bubble border was previously decided by string-comparing the background against a hardcoded default hex, which broke for every custom theme.
+- **F2** ✅ New primitives: `SegmentedControl` (replaces four hand-rolled copies; sliding pill via scoped `layoutId`), `EmptyState`, `PageHeader`, `ConfirmDialog` + `useConfirm` (replaces `window.confirm`), `CopyButton`, `SettingRow`/`SettingGroup`, `StatCard`. `Button` gains `shape="pill"` (every call site was appending `rounded-full`), a `soft` variant, and press-scale motion instead of a hover lift.
+
+---
+
+## Phase 3 — information architecture
+
+- **F3.1** ✅ **Builder tabs are real routes.** `(builder)/forms/[id]/{build,agent,workflow,design,results,share,integrate,settings}` each have a `page.tsx` under a shared `layout.tsx`. `/forms/[id]` redirects to `/build`. Every tab now has a URL, the back button works, and code splits per tab — the 202 KB xyflow chunk is no longer in the builder's initial bundle (verified in the build manifest).
+- **F3.2** ✅ One `BuilderHeader` in the layout, driven by a single `BUILDER_TABS` const. The running app previously showed "Settings" twice and labelled the theme tab "Theme" while the state value was `"design"`. Publish now **flushes** the pending autosave instead of being disabled while dirty. Save state has five named states including error and offline; there was previously no indication at all when a save failed. Removed the duplicate `AuthGuard` layout (double chrome).
+- **F3.3** ✅ `stores/builder-store.ts` — zustand + immer, bounded 100-step undo/redo with 600ms coalescing so a burst of typing is one undo step, selection state, and block operations. Deleting a block also drops logic rules that referenced it, so the builder can never hold a doc that fails publish lint. ⌘Z/⇧⌘Z wired.
+- **F3.4** ✅ `hooks/use-autosave.ts` — debounced save with in-flight queueing, a `beforeunload` guard (edits inside the 800 ms debounce were silently lost), and `flush()` for publish.
+- **Removed** ✅ `builder-client.tsx` (592-line monolith) deleted.
+
+---
+
+## Phase 4 — builder depth
+
+- **F4.1/F4.2** ✅ `block-library.ts` — one library, **all 25 addable types**. Nine were previously unreachable from the builder entirely (`url`, `dropdown`, `picture_choice`, `ranking`, `matrix`, `signature`, `scheduling`, `contact_info`, `address`), and the Build and Workflow palettes had drifted into two different lists. Each type carries an icon, colour family and description. `default-block.ts` gives every type a sensible starting shape with collision-safe refs.
+- **F4.3** ✅ `inspector/` — `fields.tsx` primitives plus `type-fields.tsx` covering **every schema field for all 26 types**. The old inspector rendered exactly three controls (title, description, required) regardless of type, so length limits, placeholders, min/max, `allowOther`, selection counts, rating shape, scale bounds, accepted file types, currency, consent text, button labels and `businessOnly` were all unreachable. Adds the block **type switcher**, agent hints (`askStyle`/`whyWeAsk`/`retryHint`), `prefillParam` (Youform "auto fill via URL parameter") and per-block `buttonLabel`.
+- **F4.4** ✅ `block-list.tsx` — colour-coded typed rows, hover insertion points between blocks, duplicate, real focusable buttons with tooltips (delete was a bare `<svg onClick>`), confirm-on-delete, and an **Endings section** (previously only reachable from the workflow canvas). New searchable grouped block picker replaces the cramped 16-button grid.
+- **F4.5** ✅ `ai-bar.tsx` — proposes blocks and shows them for accept/reject, applied as **one undo step**. The old bar called `window.location.reload()` 600 ms after the request, losing selection, scroll and any unsaved edit.
+- **F4.6** ✅ `preview-chat.tsx` restarts only on structural change or explicit request. It was wired to the autosave counter, so the preview conversation reset itself on every keystroke.
+- **F5** ✅ **Agent tab** — persona/mode/tone, goal + success criteria, knowledge base with a live character-budget meter, guardrails (off-topic policy, forbidden topics, refusal line, max turns, escalation), and model selection defaulting to Claude Sonnet 5. Live preview pinned beside it.
+- **F3.1 bonus** ✅ The inspector's "Add branching logic" now passes `?focus=<ref>` to the workflow route — `WorkflowClient` always accepted a `focusRef` and nothing ever supplied one.

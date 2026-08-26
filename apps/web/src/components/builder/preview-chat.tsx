@@ -1,18 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { RefreshCw, TriangleAlert } from "lucide-react";
 import { FormDoc, toPublicConfig } from "@repo/form-schema";
 import { ChatClient } from "@/components/chat/chat-client";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8787";
 
-/** Live chat preview — runs the real interview runtime against the working draft. */
-export function PreviewChat({ formId, doc, refreshKey }: { formId: string; doc: FormDoc; refreshKey: number }) {
+/**
+ * Live preview — the real interview runtime against the working draft, so the
+ * builder and a respondent see the same thing.
+ *
+ * It used to restart on every `refreshKey` change, which was wired to the
+ * autosave counter: the conversation reset itself every time you typed a
+ * character into a question. Now it restarts only when the *structure* changes
+ * (blocks added, removed, reordered or retyped) or when you ask it to. Editing
+ * a title mid-conversation leaves the conversation alone.
+ */
+export function PreviewChat({ formId, doc }: { formId: string; doc: FormDoc }) {
   const [session, setSession] = useState<{ sessionId: string; token: string; eventsUrl: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [nonce, setNonce] = useState(0);
+
+  // Identity of the conversation's shape. Titles and descriptions are excluded
+  // deliberately — they change on every keystroke.
+  const structureKey = useMemo(
+    () => doc.blocks.map((b) => `${b.ref}:${b.type}:${b.required ? 1 : 0}`).join("|"),
+    [doc.blocks],
+  );
 
   const start = useCallback(async () => {
     setLoading(true);
@@ -23,7 +40,7 @@ export function PreviewChat({ formId, doc, refreshKey }: { formId: string; doc: 
         method: "POST",
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Could not start preview");
+      if (!res.ok) throw new Error(res.status === 404 ? "Form not found" : "Could not start preview");
       const data = (await res.json()) as { sessionId: string; respondentToken: string; sseUrl: string };
       setSession({ sessionId: data.sessionId, token: data.respondentToken, eventsUrl: data.sseUrl });
     } catch (err) {
@@ -33,36 +50,65 @@ export function PreviewChat({ formId, doc, refreshKey }: { formId: string; doc: 
     }
   }, [formId]);
 
+  // React strict mode double-mounts effects in dev; guard so we don't open two
+  // sessions and then race their SSE streams.
+  const pending = useRef(false);
   useEffect(() => {
-    const t = setTimeout(() => void start(), 0);
-    return () => clearTimeout(t);
-  }, [start, refreshKey]);
+    if (pending.current) return;
+    pending.current = true;
+    void start().finally(() => {
+      pending.current = false;
+    });
+  }, [start, structureKey, nonce]);
 
-  const config = toPublicConfig(doc, { slug: doc.title.toLowerCase().replace(/\s+/g, "-"), brandingHidden: true });
+  const config = useMemo(
+    () =>
+      toPublicConfig(doc, {
+        slug: doc.title.toLowerCase().replace(/\s+/g, "-"),
+        brandingHidden: true,
+      }),
+    [doc],
+  );
 
   return (
-    <div className="flex h-full w-full flex-col items-center">
-      <div className="flex w-full items-center justify-between px-2 pb-2.5">
+    <div className="flex h-full w-full flex-col">
+      <div className="flex w-full items-center justify-between px-1 pb-2">
         <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-          <span className="inline-block size-1.5 animate-pulse rounded-full bg-green-500" />
-          Live preview — talks to your working draft
+          <span className="inline-block size-1.5 rounded-full bg-[var(--success)]" />
+          Live preview — this is exactly what respondents see
         </p>
-        <Button variant="outline" size="sm" className="h-7 rounded-full px-3 text-xs" onClick={() => void start()} disabled={loading}>
-          <RefreshCw className="size-3" /> Restart
+        <Button
+          variant="ghost"
+          size="sm"
+          shape="pill"
+          className="h-7 px-2.5 text-xs"
+          onClick={() => setNonce((n) => n + 1)}
+          disabled={loading}
+        >
+          <RefreshCw className="size-3" />
+          Restart
         </Button>
       </div>
-      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border bg-[var(--card)] shadow-md">
+
+      <div className="border-border bg-card shadow-md flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border">
         {loading && (
-          <div className="text-muted-foreground flex flex-1 items-center justify-center text-sm">Starting preview…</div>
+          <div className="flex flex-1 flex-col justify-end gap-2 p-4">
+            <div className="shimmer h-9 w-3/5 rounded-2xl" />
+            <div className="shimmer h-9 w-2/5 self-end rounded-2xl" />
+            <div className="shimmer h-9 w-1/2 rounded-2xl" />
+          </div>
         )}
         {error && (
-          <div className="text-destructive flex flex-1 flex-col items-center justify-center gap-2 text-sm">
-            {error}
-            <Button variant="outline" size="sm" onClick={() => void start()}>Retry</Button>
+          <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center text-sm">
+            <TriangleAlert className="text-destructive size-5" />
+            <p>{error}</p>
+            <Button variant="outline" size="sm" shape="pill" onClick={() => setNonce((n) => n + 1)}>
+              Try again
+            </Button>
           </div>
         )}
         {session && (
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1">
             <ChatClient config={config} existingSession={session} previewMode />
           </div>
         )}

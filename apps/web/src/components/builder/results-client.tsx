@@ -9,7 +9,6 @@ import type { Block, FormDoc, PublicFormConfig } from "@repo/form-schema";
 
 interface ResultsClientProps {
   formId: string;
-  config: Pick<PublicFormConfig, "title">;
 }
 
 type Dist = {
