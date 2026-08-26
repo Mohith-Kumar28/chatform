@@ -87,14 +87,15 @@ resultsRouter.get(
   async (c) => {
     const id = c.get("form")!.id;
     const { status, limit } = c.req.valid("query");
-    // Bound, never interpolated: `status` is enum-guarded today but string
-    // interpolation into SQL is one refactor away from being a hole.
+    // Bound, never interpolated. All placeholders are positional: SQLite
+    // continues auto-numbering `?` from the highest explicit index, so mixing
+    // `?` with `?1` silently changes how many bindings the statement wants.
     const subs = await c.env.DB.prepare(
       `SELECT s.id, s.status, s.started_at, s.completed_at, s.duration_ms, s.session_id
-       FROM submissions s WHERE s.form_id = ? AND (?1 = 'all' OR s.status = ?1)
+       FROM submissions s WHERE s.form_id = ? AND (? = 'all' OR s.status = ?)
        ORDER BY s.started_at DESC LIMIT ?`,
     )
-      .bind(id, status, limit)
+      .bind(id, status, status, limit)
       .all<{ id: string; status: string; started_at: number; completed_at: number | null; duration_ms: number | null; session_id: string | null }>();
 
     const out = [];
