@@ -35,6 +35,12 @@ export interface ReviewState {
   answers: { ref: string; title: string; display: string }[];
 }
 
+/** A response this device already sent for this form. */
+export interface SubmittedState {
+  at: number;
+  answers: { ref: string; title: string; display: string }[];
+}
+
 export interface UploadSpec {
   ref: string;
   accept: string[];
@@ -63,6 +69,8 @@ const MAX_RECONNECT_ATTEMPTS = 8;
  * Scoped per form, so two forms on one device do not collide.
  */
 const storageKey = (slug: string) => `chatform:session:${slug}`;
+/** Kept after completion so a return visit knows it has already been filled. */
+const submittedKey = (slug: string) => `chatform:submitted:${slug}`;
 
 function loadSaved(slug: string): { sessionId: string; token: string } | null {
   try {
@@ -95,6 +103,36 @@ function clearSaved(slug: string): void {
   }
 }
 
+function loadSubmitted(slug: string): { sessionId: string; token: string; at: number } | null {
+  try {
+    const raw = localStorage.getItem(submittedKey(slug));
+    if (!raw) return null;
+    const p = JSON.parse(raw) as { sessionId?: string; token?: string; at?: number };
+    return p.sessionId && p.token ? { sessionId: p.sessionId, token: p.token, at: p.at ?? 0 } : null;
+  } catch {
+    return null;
+  }
+}
+
+function markSubmitted(slug: string, session: { sessionId: string; token: string }): void {
+  try {
+    localStorage.setItem(
+      submittedKey(slug),
+      JSON.stringify({ ...session, at: Date.now() }),
+    );
+  } catch {
+    /* not fatal */
+  }
+}
+
+function clearSubmitted(slug: string): void {
+  try {
+    localStorage.removeItem(submittedKey(slug));
+  } catch {
+    /* not fatal */
+  }
+}
+
 /** Exponential backoff with jitter, capped — a fixed linear retry hammers a
  *  server that is already struggling. */
 function backoffMs(attempt: number): number {
@@ -115,6 +153,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
   const [thinking, setThinking] = useState(false);
   const [rateLimited, setRateLimited] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewState | null>(null);
+  const [submitted, setSubmitted] = useState<SubmittedState | null>(null);
   /** True when a replay rebuilt a transcript we did not start in this tab. */
   const [resumed, setResumed] = useState(false);
 
@@ -264,8 +303,11 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
 
       es.addEventListener("complete", () => {
         setStatus("ended");
-        // Finished: the next visit to this link should be a new response.
+        // The active session is done, but remember that this device answered —
+        // a return visit should say so rather than silently starting over.
+        const finished = sessionRef.current;
         clearSaved(slug);
+        if (finished) markSubmitted(slug, finished);
         es.close();
       });
 
@@ -307,6 +349,29 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
       if (existing) connectStream(existing.sessionId, existing.token, 0);
       return;
     }
+    // Already answered on this device? Say so instead of starting over.
+    const done = loadSubmitted(slug);
+    if (done) {
+      try {
+        const probe = await fetch(`${apiOrigin}/p/sessions/${done.sessionId}?t=${done.token}`);
+        if (probe.ok) {
+          const state = (await probe.json()) as {
+            status?: string;
+            summary?: SubmittedState["answers"];
+            completedAt?: number | null;
+          };
+          if (state.status === "completed") {
+            setSubmitted({ at: state.completedAt ?? done.at, answers: state.summary ?? [] });
+            setStatus("ended");
+            return;
+          }
+        }
+        clearSubmitted(slug);
+      } catch {
+        clearSubmitted(slug);
+      }
+    }
+
     // Reuse the saved session when the form is being reopened, so the
     // respondent lands where they left off rather than at question one.
     const saved = loadSaved(slug);
@@ -435,6 +500,8 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
   /** Abandon this attempt and begin a fresh one. */
   const startOver = useCallback(async () => {
     clearSaved(slug);
+    clearSubmitted(slug);
+    setSubmitted(null);
     sessionRef.current = null;
     esRef.current?.close();
     esRef.current = null;
@@ -469,6 +536,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
     messages,
     question,
     review,
+    submitted,
     ending,
     status,
     error,

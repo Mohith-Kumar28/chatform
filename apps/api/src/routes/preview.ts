@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { z } from "zod";
-import { sha256Hex, migrateFormDoc, type FormDoc } from "@repo/form-schema";
+import { sha256Hex, readFormDoc, type FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { SessionDO } from "../do/session-do.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
@@ -53,7 +53,7 @@ previewRouter.post(
       organizationId: row.organization_id,
       slug: row.slug,
       brandingHidden: true,
-      docJson: migrateFormDoc(JSON.parse(row.working_schema)) as FormDoc,
+      docJson: readFormDoc(JSON.parse(row.working_schema)),
       respondentToken,
       hiddenFields: {},
       ipHash: null,

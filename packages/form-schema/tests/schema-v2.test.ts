@@ -4,6 +4,8 @@ import {
   SCHEMA_VERSION,
   migrateFormDoc,
   needsMigration,
+  readFormDoc,
+  safeReadFormDoc,
   extractionSchema,
   needsExtraction,
   knowledgeSize,
@@ -74,6 +76,33 @@ describe("migration chain", () => {
 
   it("leaves an unparseable value alone for FormDoc to reject", () => {
     expect(migrateFormDoc("not a doc")).toBe("not a doc");
+  });
+});
+
+describe("readFormDoc", () => {
+  /**
+   * The bug this guards: stored docs were migrated and then CAST with
+   * `as FormDoc`, which skips every Zod default. Any field added after a
+   * version was published came back undefined — `requireSubmit` was missing
+   * from the public config for exactly this reason.
+   */
+  it("materializes defaults added after the doc was written", () => {
+    const doc = readFormDoc(v1Doc);
+    expect(doc.settings.onComplete.requireSubmit).toBe(true);
+    expect(doc.settings.agent.rephraseQuestions).toBe(true);
+    expect(doc.settings.agent.guardrails.maxTurns).toBe(60);
+    expect(doc.schemaVersion).toBe(SCHEMA_VERSION);
+  });
+
+  it("throws on a document it cannot read", () => {
+    // Serving a form we cannot parse as though it were fine is worse than
+    // failing loudly.
+    expect(() => readFormDoc({ schemaVersion: 1, title: "" })).toThrow();
+  });
+
+  it("safeReadFormDoc returns null instead of throwing", () => {
+    expect(safeReadFormDoc({ schemaVersion: 1, title: "" })).toBeNull();
+    expect(safeReadFormDoc(v1Doc)?.title).toBe("Old form");
   });
 });
 

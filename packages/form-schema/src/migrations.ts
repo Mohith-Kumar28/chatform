@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SCHEMA_VERSION } from "./form-doc";
+import { FormDoc, SCHEMA_VERSION } from "./form-doc";
 
 /**
  * Form document migrations.
@@ -70,6 +70,28 @@ export function migrateFormDoc(raw: unknown): unknown {
     version += 1;
   }
   return { ...out, schemaVersion: SCHEMA_VERSION };
+}
+
+/**
+ * Migrate a stored document AND validate it.
+ *
+ * Casting the migration's output with `as FormDoc` was silently skipping every
+ * Zod default, so any field added after a version was published came back
+ * `undefined` — `settings.onComplete.requireSubmit` was missing from the public
+ * config for exactly this reason. Parsing is what makes defaults real; the cast
+ * only made TypeScript stop asking.
+ *
+ * Throws on a document that cannot be parsed, which is the correct outcome:
+ * a form we cannot read must not be served as if it were fine.
+ */
+export function readFormDoc(raw: unknown): FormDoc {
+  return FormDoc.parse(migrateFormDoc(raw));
+}
+
+/** Non-throwing variant for paths that can degrade rather than 500. */
+export function safeReadFormDoc(raw: unknown): FormDoc | null {
+  const parsed = FormDoc.safeParse(migrateFormDoc(raw));
+  return parsed.success ? parsed.data : null;
 }
 
 /** True when the doc would be changed by migration — useful for lazy re-saves. */

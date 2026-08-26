@@ -238,6 +238,10 @@ export interface PublicFormConfig {
   };
   /** The agent's display name, when the builder set one. */
   agentName?: string;
+  /** Whether one person may answer more than once. */
+  duplicates: "none" | "ip_daily" | "field";
+  /** Whether the form asks for an explicit submit once everything is answered. */
+  requireSubmit: boolean;
 }
 
 export function toPublicConfig(
@@ -261,6 +265,8 @@ export function toPublicConfig(
       noIndex: metaSettings.noIndex,
     },
     agentName: doc.settings.agent.displayName,
+    duplicates: doc.settings.duplicates.strategy,
+    requireSubmit: doc.settings.onComplete.requireSubmit,
     slug: opts.slug,
     title: doc.title,
     description: doc.description,

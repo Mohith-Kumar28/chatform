@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
+  CheckCheck,
   MoreHorizontal,
   PartyPopper,
   Pencil,
@@ -84,9 +85,33 @@ export function ChatClient({
   }, [chat.ending, previewMode]);
 
   const themeVars = useMemo(() => chatThemeVars(config.theme), [config.theme]);
+
+  if (chat.submitted) {
+    return (
+      <div
+        className={cn(
+          "chat-surface flex items-center justify-center",
+          previewMode ? "h-full min-h-0" : "h-svh",
+        )}
+        style={themeVars}
+      >
+        <AlreadySubmittedCard
+          submitted={chat.submitted}
+          theme={config.theme}
+          title={config.agentName || config.title}
+          // A form that fingerprints respondents is not expecting a second answer.
+          allowRepeat={config.duplicates === "none"}
+          onResubmit={() => void chat.startOver()}
+        />
+      </div>
+    );
+  }
   // The builder can name the interviewer; fall back to the form title.
   const agentName = config.agentName || config.title;
-  const pct = chat.question?.progress.pct ?? (chat.ending ? 100 : 0);
+  // Review and the ending both mean every question is answered; without this
+  // the bar dropped to zero at the last step because there is no current
+  // question to read progress from.
+  const pct = chat.review || chat.ending ? 100 : (chat.question?.progress.pct ?? 0);
 
   return (
     <div
@@ -381,6 +406,95 @@ function TypingDots() {
       </div>
     </div>
   );
+}
+
+/**
+ * What a respondent sees on returning to a form they already completed.
+ *
+ * Silently starting a blank conversation made it look like the first response
+ * had been lost. This says plainly that it landed, shows what was sent, and
+ * only offers a repeat when the form actually accepts one.
+ */
+function AlreadySubmittedCard({
+  submitted,
+  theme,
+  title,
+  allowRepeat,
+  onResubmit,
+}: {
+  submitted: NonNullable<ReturnType<typeof useChat>["submitted"]>;
+  theme: PublicFormConfig["theme"];
+  title: string;
+  allowRepeat: boolean;
+  onResubmit: () => void;
+}) {
+  const [showAnswers, setShowAnswers] = useState(false);
+
+  return (
+    <div className="animate-message-in w-full max-w-md px-6 py-10 text-center">
+      {theme.logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={theme.logoUrl} alt="" className="mx-auto mb-5 h-10 object-contain" />
+      ) : (
+        <div
+          className="mx-auto mb-5 grid size-14 place-items-center rounded-full"
+          style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+        >
+          <CheckCheck className="size-7" strokeWidth={1.75} />
+        </div>
+      )}
+
+      <h2 className="text-xl font-semibold" style={{ fontFamily: "var(--cf-font-heading)" }}>
+        You&apos;ve already answered this
+      </h2>
+      <p className="mt-1 text-sm opacity-60">
+        {title} · {relativeDay(submitted.at)}
+      </p>
+
+      {showAnswers && submitted.answers.length > 0 && (
+        <ul className="mt-5 space-y-2 rounded-2xl bg-[var(--cf-chip-bg)] p-4 text-left text-sm">
+          {submitted.answers.map((a) => (
+            <li key={a.ref}>
+              <span className="block text-xs opacity-55">{a.title}</span>
+              <span className="block break-words">{a.display || "—"}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-6 flex flex-col items-center gap-2">
+        {submitted.answers.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowAnswers((v) => !v)}
+            className="text-sm underline opacity-60 transition-opacity hover:opacity-100"
+          >
+            {showAnswers ? "Hide my answers" : "View my answers"}
+          </button>
+        )}
+
+        {allowRepeat && (
+          <button
+            type="button"
+            onClick={onResubmit}
+            className="h-11 w-full rounded-full text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
+            style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+          >
+            Resubmit
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function relativeDay(ts: number): string {
+  if (!ts) return "earlier";
+  const days = Math.floor((Date.now() - ts) / 86_400_000);
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days} days ago`;
+  return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 /**

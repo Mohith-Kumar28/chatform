@@ -50,6 +50,8 @@ interface DoSessionMeta {
   ipHash: string | null;
   country: string | null;
   userAgent: string | null;
+  /** Set when the respondent submits, for the already-submitted screen. */
+  completedAt?: number | null;
 }
 
 /** The single `"session"` storage blob. Everything here survives eviction. */
@@ -801,6 +803,10 @@ export class SessionDO extends DurableObject<Bindings> {
      * someone everything they said and let them fix one thing.
      */
     if (this.doc.settings.onComplete.requireSubmit && this.meta.status === "active") {
+      // Already parked here — do not announce it twice. Terminal-ish events
+      // reach the headless /v1 contract too, where a duplicate reads as a
+      // second state transition that never happened.
+      if (this.pendingEndingRef === ending.ref) return;
       this.meta.currentRef = null;
       this.pendingEndingRef = ending.ref;
       await this.persistMeta();
@@ -816,6 +822,7 @@ export class SessionDO extends DurableObject<Bindings> {
     if (!this.meta) return;
     this.meta.currentRef = null;
     this.meta.status = "completed";
+    this.meta.completedAt = Date.now();
     this.pendingEndingRef = null;
     await this.emitMessage(closingText(ending.title));
     await this.emit("ending", { ending });
@@ -966,7 +973,17 @@ export class SessionDO extends DurableObject<Bindings> {
     await this.record(block, [file]);
   }
 
-  async getStatus(): Promise<{ status: string; currentRef: string | null; collected: number; answers: AnswerMap; variables: Record<string, string | number> } | null> {
+  async getStatus(): Promise<{
+    status: string;
+    currentRef: string | null;
+    collected: number;
+    answers: AnswerMap;
+    variables: Record<string, string | number>;
+    /** Human-readable answers, for the review and already-submitted screens. */
+    summary: { ref: string; title: string; display: string }[];
+    awaitingSubmit: boolean;
+    completedAt: number | null;
+  } | null> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta) return null;
     return {
@@ -975,6 +992,9 @@ export class SessionDO extends DurableObject<Bindings> {
       collected: this.collectedCount,
       answers: this.state.answers,
       variables: this.state.variables,
+      summary: this.answerSummary(),
+      awaitingSubmit: this.pendingEndingRef !== null,
+      completedAt: this.meta.status === "completed" ? (this.meta.completedAt ?? null) : null,
     };
   }
 
