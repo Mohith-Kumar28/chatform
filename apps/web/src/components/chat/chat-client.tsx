@@ -1,18 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, RotateCcw, SkipForward, TriangleAlert } from "lucide-react";
+import { ArrowDown, PartyPopper, Pencil, SkipForward, TriangleAlert } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { useChat, type ChatMessage } from "./use-chat";
 import { FileUploadControl } from "./file-upload";
-import { Chip, ComposerShell, SendRow, TextInput } from "./composers/primitives";
-import { RatingComposer, ScaleComposer } from "./composers/rating";
-import { DateComposer } from "./composers/date";
-import { SignatureComposer } from "./composers/signature";
-import { FieldsComposer, MatrixComposer, RankingComposer } from "./composers/structured";
+import { SendRow, TextInput } from "./composers/primitives";
+import { QuestionAffordance } from "./question-affordance";
+import { Confetti } from "./confetti";
 import { cn } from "@/lib/utils";
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8787";
@@ -55,8 +53,12 @@ export function ChatClient({
 
   useEffect(() => {
     if (!pinned) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [chat.messages, chat.thinking, chat.question, pinned]);
+    const el = scrollRef.current;
+    if (!el) return;
+    // Drive the container directly. scrollIntoView targeted the window and put
+    // the anchor behind the sticky composer.
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [chat.messages, chat.thinking, chat.question, chat.ending, pinned]);
 
   // Honour the ending's redirect, which was parsed and then ignored.
   useEffect(() => {
@@ -74,7 +76,10 @@ export function ChatClient({
 
   return (
     <div
-      className={cn("chat-surface flex flex-col", previewMode ? "h-full min-h-0" : "min-h-svh")}
+      // h-svh, not min-h-svh: with a minimum the container grew past the
+      // viewport and the WINDOW scrolled, so the inner div never scrolled and
+      // auto-scroll silently did nothing.
+      className={cn("chat-surface flex flex-col", previewMode ? "h-full min-h-0" : "h-svh")}
       style={themeVars}
     >
       <ChatHeader
@@ -86,11 +91,18 @@ export function ChatClient({
         status={chat.status}
       />
 
-      {chat.resumed && (
+      {chat.resumed && !chat.ending && (
         <div className="animate-message-in mx-auto mt-3 w-full max-w-2xl px-4">
-          <p className="rounded-xl border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3 py-2 text-sm">
-            👋 Welcome back — we picked up where you left off.
-          </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-[var(--cf-chip-bg)] px-3 py-2 text-sm">
+            <span className="min-w-0 flex-1">👋 Welcome back — we picked up where you left off.</span>
+            <button
+              type="button"
+              onClick={() => void chat.startOver()}
+              className="shrink-0 text-xs underline opacity-60 transition-opacity hover:opacity-100"
+            >
+              Start over
+            </button>
+          </div>
         </div>
       )}
 
@@ -102,12 +114,39 @@ export function ChatClient({
           </div>
 
           {chat.messages.map((m) => (
-            <Bubble key={m.id} message={m} />
+            <Bubble
+              key={m.id}
+              message={m}
+              // A user message can be edited when we know which question it
+              // answered and the form is still open.
+              onEdit={
+                m.role === "user" && !m.optimistic && m.answeredRef && !chat.ending
+                  ? () => void chat.editAnswer(m.answeredRef!)
+                  : undefined
+              }
+            />
           ))}
 
           {chat.thinking && <TypingDots />}
 
-          {chat.ending && <EndingCard ending={chat.ending} />}
+          {/* The current question's controls live here, under the agent's
+              message — not in place of the composer. */}
+          {!chat.ending && chat.question && (
+            <div className="animate-message-in pt-0.5 pl-1">
+              <QuestionAffordance
+                block={chat.question.block}
+                disabled={chat.status === "error"}
+                uploadBase={chat.getUploadBase()}
+                respondentToken={chat.getRespondentToken()}
+                onStructured={(value, display) =>
+                  void chat.sendStructured(chat.question!.block.ref, value, display)
+                }
+                onSkip={() => void chat.sendAction("skip")}
+              />
+            </div>
+          )}
+
+          {chat.ending && <EndingCard ending={chat.ending} theme={config.theme} />}
 
           <div ref={bottomRef} />
         </div>
@@ -117,7 +156,10 @@ export function ChatClient({
             type="button"
             onClick={() => {
               setPinned(true);
-              bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+              scrollRef.current?.scrollTo({
+                top: scrollRef.current.scrollHeight,
+                behavior: "smooth",
+              });
             }}
             className="sticky bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3 py-1.5 text-xs shadow-md"
           >
@@ -216,10 +258,23 @@ function ChatHeader({
   );
 }
 
-function Bubble({ message }: { message: ChatMessage }) {
+function Bubble({ message, onEdit }: { message: ChatMessage; onEdit?: () => void }) {
   const isUser = message.role === "user";
   return (
-    <div className={cn("flex animate-message-in", isUser ? "justify-end" : "justify-start")}>
+    <div className={cn("group flex animate-message-in items-center gap-1.5", isUser ? "justify-end" : "justify-start")}>
+      {/* Change-your-mind affordance, revealed on hover so it never competes
+          with the conversation itself. */}
+      {isUser && onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          aria-label="Change this answer"
+          title="Change this answer"
+          className="order-first shrink-0 rounded-full p-1.5 opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 focus-visible:opacity-100"
+        >
+          <Pencil className="size-3.5" />
+        </button>
+      )}
       <div
         className={cn(
           "max-w-[85%] px-4 py-2.5 text-[0.9375rem] leading-relaxed",
@@ -278,56 +333,85 @@ function TypingDots() {
   );
 }
 
-function EndingCard({ ending }: { ending: NonNullable<ReturnType<typeof useChat>["ending"]> }) {
+/**
+ * The completion screen.
+ *
+ * Finishing a form is the one moment the respondent has actually given you
+ * something, and it used to be a small grey card. Now it lands: a burst of
+ * confetti in the form's own colours, a big thank-you, and the CTA if there is
+ * one. Confetti is skipped under reduced-motion.
+ */
+function EndingCard({
+  ending,
+  theme,
+}: {
+  ending: NonNullable<ReturnType<typeof useChat>["ending"]>;
+  theme: PublicFormConfig["theme"];
+}) {
   return (
-    <div className="animate-message-in rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-5 py-6 text-center">
-      <h2 className="text-lg font-semibold" style={{ fontFamily: "var(--cf-font-heading)" }}>
-        {ending.title}
-      </h2>
-      {ending.bodyMd && (
-        <div className="chat-prose mt-1.5 text-sm opacity-80">
-          <Markdown remarkPlugins={[remarkGfm]} allowedElements={SAFE_ELEMENTS} unwrapDisallowed>
-            {ending.bodyMd}
-          </Markdown>
-        </div>
-      )}
-      {/* ctaLabel/ctaUrl were parsed by the hook and never rendered. */}
-      {ending.ctaLabel && ending.ctaUrl && (
-        <a
-          href={ending.ctaUrl}
-          className="mt-4 inline-flex h-11 items-center rounded-full bg-[var(--cf-accent)] px-5 text-sm font-medium text-[var(--cf-accent-text)]"
+    <>
+      <Confetti colors={[theme.accent, theme.userBubble, "#ffffff", theme.text]} />
+
+      <div className="animate-message-in flex flex-col items-center px-6 py-10 text-center">
+        <div
+          className="mb-5 grid size-16 place-items-center rounded-full"
+          style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
         >
-          {ending.ctaLabel}
-        </a>
-      )}
-      {ending.redirectUrl && (
-        <p className="mt-3 text-xs opacity-50">
-          Taking you to the next step in {ending.redirectDelaySec ?? 5}s…
-        </p>
-      )}
-    </div>
+          <PartyPopper className="size-8" strokeWidth={1.75} />
+        </div>
+
+        <h2
+          className="text-2xl font-semibold text-balance sm:text-3xl"
+          style={{ fontFamily: "var(--cf-font-heading)" }}
+        >
+          {ending.title}
+        </h2>
+
+        {ending.bodyMd && (
+          <div className="chat-prose mt-2 max-w-sm text-[0.9375rem] opacity-75">
+            <Markdown remarkPlugins={[remarkGfm]} allowedElements={SAFE_ELEMENTS} unwrapDisallowed>
+              {ending.bodyMd}
+            </Markdown>
+          </div>
+        )}
+
+        {ending.ctaLabel && ending.ctaUrl && (
+          <a
+            href={ending.ctaUrl}
+            className="mt-6 inline-flex h-11 items-center rounded-full px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
+            style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+          >
+            {ending.ctaLabel}
+          </a>
+        )}
+
+        {ending.redirectUrl && (
+          <p className="mt-4 text-xs opacity-50">
+            Taking you to the next step in {ending.redirectDelaySec ?? 5}s…
+          </p>
+        )}
+      </div>
+    </>
   );
 }
 
-/** Per-block composer. Every block type now has a real control. */
-function Composer({
-  chat,
-  config,
-}: {
-  chat: ReturnType<typeof useChat>;
-  config: PublicFormConfig;
-}) {
+/**
+ * The composer is now only ever a text box.
+ *
+ * Whatever the current question is, the respondent can type — "weekly I guess",
+ * "4 stars", "next Friday". The agent reads it. Widgets still exist, but they
+ * sit in the thread as an offer (see `QuestionAffordance`), not as a
+ * replacement for the ability to speak.
+ */
+function Composer({ chat, config }: { chat: ReturnType<typeof useChat>; config: PublicFormConfig }) {
   const [text, setText] = useState("");
-  const [multi, setMulti] = useState<string[]>([]);
   const block = chat.question?.block;
 
-  // Clear per-question local state when the question changes.
   useEffect(() => {
     setText("");
-    setMulti([]);
   }, [block?.ref]);
 
-  // Number keys pick options — a genuine speed-up on long choice lists.
+  // Number keys still pick an option, for anyone who prefers the keyboard.
   useEffect(() => {
     const options = block?.options;
     const ref = block?.ref;
@@ -347,28 +431,47 @@ function Composer({
   if (!block) {
     return (
       <p className="text-center text-sm opacity-50">
-        {chat.status === "connecting" ? "Connecting…" : " "}
+        {chat.status === "connecting" ? "Connecting…" : " "}
       </p>
     );
   }
 
   const disabled = chat.status === "error";
-  const uploadBase = chat.getUploadBase();
-  const token = chat.getRespondentToken();
-
-  const control = renderControl(block);
   const canSkip = config.allowSkip && !block.required;
 
+  function submit() {
+    const value = text.trim();
+    if (!value) return;
+    setText("");
+    void chat.send(value);
+  }
+
   return (
-    <div className="space-y-2.5">
-      {chat.escalatedRef === block.ref && (
-        <p className="rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "var(--cf-accent)" }}>
-          No problem — here&apos;s an easier way to answer.
-        </p>
-      )}
+    <div className="space-y-2">
       {chat.validationHint && <p className="px-1 text-sm opacity-70">{chat.validationHint}</p>}
 
-      {control}
+      <SendRow onSend={submit} disabled={disabled || !text.trim()}>
+        <TextInput
+          value={text}
+          onChange={setText}
+          onSubmit={submit}
+          autoFocus
+          multiline={block.type === "long_text"}
+          placeholder={block.placeholder || placeholderFor(block.type)}
+          type={block.type === "email" ? "email" : "text"}
+          inputMode={
+            block.type === "email"
+              ? "email"
+              : block.type === "phone"
+                ? "tel"
+                : block.type === "url"
+                  ? "url"
+                  : block.type === "number"
+                    ? "decimal"
+                    : "text"
+          }
+        />
+      </SendRow>
 
       {canSkip && (
         <button
@@ -382,272 +485,27 @@ function Composer({
       )}
     </div>
   );
+}
 
-  function renderControl(block: PublicBlock) {
-    switch (block.type) {
-      case "welcome":
-      case "statement":
-        return (
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => void chat.sendStructured(block.ref, true, "")}
-            className="h-11 w-full rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
-          >
-            {block.buttonLabel || "Continue"}
-          </button>
-        );
-
-      case "yes_no":
-        return (
-          <ComposerShell>
-            <Chip shortcut={1} onClick={() => void chat.sendStructured(block.ref, true, (block.yesLabel ?? "Yes"))}>
-              {(block.yesLabel ?? "Yes")}
-            </Chip>
-            <Chip shortcut={2} onClick={() => void chat.sendStructured(block.ref, false, (block.noLabel ?? "No"))}>
-              {(block.noLabel ?? "No")}
-            </Chip>
-          </ComposerShell>
-        );
-
-      case "single_select":
-      case "dropdown":
-      case "picture_choice":
-        return (
-          <ComposerShell>
-            {(block.options ?? []).map((o, i) => (
-              <Chip
-                key={o.id}
-                shortcut={i + 1}
-                disabled={disabled}
-                onClick={() => void chat.sendStructured(block.ref, o.id, o.label)}
-              >
-                {o.label}
-              </Chip>
-            ))}
-          </ComposerShell>
-        );
-
-      case "multi_select":
-        return (
-          <div className="space-y-2">
-            <ComposerShell>
-              {(block.options ?? []).map((o) => (
-                <Chip
-                  key={o.id}
-                  selected={multi.includes(o.id)}
-                  disabled={disabled}
-                  onClick={() =>
-                    setMulti((m) => (m.includes(o.id) ? m.filter((x) => x !== o.id) : [...m, o.id]))
-                  }
-                >
-                  {o.label}
-                </Chip>
-              ))}
-            </ComposerShell>
-            <button
-              type="button"
-              disabled={multi.length === 0}
-              onClick={() =>
-                void chat.sendStructured(
-                  block.ref,
-                  multi,
-                  multi.map((id) => (block.options ?? []).find((o) => o.id === id)?.label).join(", "),
-                )
-              }
-              className="h-11 w-full rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
-            >
-              Continue{multi.length > 0 ? ` · ${multi.length}` : ""}
-            </button>
-          </div>
-        );
-
-      case "rating":
-        return (
-          <RatingComposer
-            scale={block.scale ?? 5}
-            shape={(block.shape as "star" | "heart" | "number") ?? "star"}
-            onPick={(v, d) => void chat.sendStructured(block.ref, v, d)}
-          />
-        );
-
-      case "nps":
-        return (
-          <ScaleComposer
-            min={0}
-            max={10}
-            labelLow={block.labels?.low}
-            labelHigh={block.labels?.high}
-            onPick={(v, d) => void chat.sendStructured(block.ref, v, d)}
-          />
-        );
-
-      case "opinion_scale": {
-        const start = block.startAt ?? 1;
-        const steps = block.steps ?? 5;
-        return (
-          <ScaleComposer
-            min={start}
-            max={start + steps - 1}
-            labelLow={block.labels?.low}
-            labelHigh={block.labels?.high}
-            onPick={(v, d) => void chat.sendStructured(block.ref, v, d)}
-          />
-        );
-      }
-
-      case "date":
-        return (
-          <DateComposer
-            min={block.minDate}
-            max={block.maxDate}
-            disablePast={block.disablePast}
-            onPick={(iso, d) => void chat.sendStructured(block.ref, iso, d)}
-          />
-        );
-
-      case "ranking":
-        return (
-          <RankingComposer
-            items={block.items ?? []}
-            onSubmit={(order, d) => void chat.sendStructured(block.ref, order, d)}
-          />
-        );
-
-      case "matrix":
-        return (
-          <MatrixComposer
-            rows={block.rows ?? []}
-            columns={block.columns ?? []}
-            multiple={block.multiplePerRow ?? false}
-            onSubmit={(v, d) => void chat.sendStructured(block.ref, v, d)}
-          />
-        );
-
-      case "contact_info":
-      case "address":
-        return (
-          <FieldsComposer
-            fields={block.fields ?? []}
-            onSubmit={(v, d) => void chat.sendStructured(block.ref, v, d)}
-          />
-        );
-
-      case "legal_consent":
-        return (
-          <div className="space-y-2">
-            {block.consentText && (
-              <p className="rounded-xl border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3 py-2.5 text-sm">
-                {block.consentText}
-              </p>
-            )}
-            <ComposerShell>
-              <Chip onClick={() => void chat.sendStructured(block.ref, true, "I agree")}>I agree</Chip>
-            </ComposerShell>
-          </div>
-        );
-
-      case "signature":
-        return (
-          <SignatureComposer
-            requireName={block.drawnNameRequired ?? false}
-            onSubmit={(dataUrl, name) =>
-              void chat.sendStructured(block.ref, { dataUrl, signedName: name }, name ?? "Signed")
-            }
-          />
-        );
-
-      case "file_upload":
-        return uploadBase && token ? (
-          <FileUploadControl
-            blockRef={block.ref}
-            accept={block.accept ?? ["image/png"]}
-            maxFiles={block.maxFiles ?? 1}
-            maxSizeMB={block.maxSizeMB ?? 10}
-            uploadBase={uploadBase}
-            respondentToken={token}
-            disabled={disabled}
-          />
-        ) : (
-          <p className="text-sm opacity-50">Preparing upload…</p>
-        );
-
-      case "scheduling":
-        return (
-          <div className="space-y-2">
-            <a
-              href={block.url ?? "#"}
-              target="_blank"
-              rel="noreferrer"
-              className="flex h-11 items-center justify-center rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)]"
-            >
-              Open the calendar
-            </a>
-            <button
-              type="button"
-              onClick={() =>
-                void chat.sendStructured(
-                  block.ref,
-                  { provider: "external", url: block.url ?? "", confirmedAt: Date.now() },
-                  "Booked",
-                )
-              }
-              className="w-full text-xs opacity-60 transition-opacity hover:opacity-100"
-            >
-              I&apos;ve booked a time →
-            </button>
-          </div>
-        );
-
-      case "payment":
-        // Honest placeholder rather than "Payments are coming soon." presented
-        // as if it were the control.
-        return (
-          <div className="rounded-2xl border border-dashed border-[var(--cf-chip-border)] px-4 py-5 text-center">
-            <p className="text-sm">Payment collection isn&apos;t enabled on this form yet.</p>
-            <button
-              type="button"
-              onClick={() => void chat.sendAction("skip")}
-              className="mt-2 text-xs underline opacity-60"
-            >
-              Continue without paying
-            </button>
-          </div>
-        );
-
-      default:
-        return (
-          <SendRow onSend={submitText} disabled={disabled || !text.trim()}>
-            <TextInput
-              value={text}
-              onChange={setText}
-              onSubmit={submitText}
-              autoFocus
-              multiline={block.type === "long_text"}
-              placeholder={block.placeholder || "Type your answer…"}
-              type={block.type === "email" ? "email" : block.type === "number" ? "number" : "text"}
-              inputMode={
-                block.type === "email"
-                  ? "email"
-                  : block.type === "phone"
-                    ? "tel"
-                    : block.type === "url"
-                      ? "url"
-                      : block.type === "number"
-                        ? "decimal"
-                        : "text"
-              }
-            />
-          </SendRow>
-        );
-    }
+/** Nudges people that typing is allowed even when chips are on offer. */
+function placeholderFor(type: PublicBlock["type"]): string {
+  switch (type) {
+    case "single_select":
+    case "multi_select":
+    case "dropdown":
+    case "picture_choice":
+    case "yes_no":
+      return "Pick one above, or just tell me…";
+    case "rating":
+    case "nps":
+    case "opinion_scale":
+      return "Tap a number, or type it…";
+    case "date":
+      return "Pick a date, or type one…";
+    case "file_upload":
+    case "signature":
+      return "Use the box above, or say something…";
+    default:
+      return "Type your answer…";
   }
-
-  function submitText() {
-    const value = text.trim();
-    if (!value) return;
-    setText("");
-    void chat.send(value);
-  }
-
 }

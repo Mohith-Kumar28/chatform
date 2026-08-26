@@ -24,7 +24,9 @@ const messageSchema = z.discriminatedUnion("type", [
 ]);
 
 const actionSchema = z.object({
-  action: z.enum(["skip", "stop", "restart"]),
+  action: z.enum(["skip", "stop", "restart", "edit"]),
+  /** Required for `edit`: which question to go back to. */
+  ref: z.string().optional(),
 });
 
 function stub(env: Bindings, sessionId: string): DurableObjectStub<SessionDO> {

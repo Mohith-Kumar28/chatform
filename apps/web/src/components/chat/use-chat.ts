@@ -10,6 +10,8 @@ export interface ChatMessage {
   streaming?: boolean;
   /** Locally-rendered echo awaiting its server-confirmed twin. */
   optimistic?: boolean;
+  /** The question this message answered, when it was an answer. */
+  answeredRef?: string;
 }
 
 export interface QuestionState {
@@ -44,6 +46,49 @@ interface UseChatOptions {
 }
 
 const MAX_RECONNECT_ATTEMPTS = 8;
+
+/**
+ * Where a respondent's place in a form is remembered.
+ *
+ * Partial answers already persist server-side — every accepted answer is
+ * written to D1 immediately — but the token that identifies the session lived
+ * only in memory, so closing the tab orphaned it and reopening the link
+ * started from scratch. Keeping it here is what makes the link resumable.
+ *
+ * Scoped per form, so two forms on one device do not collide.
+ */
+const storageKey = (slug: string) => `chatform:session:${slug}`;
+
+function loadSaved(slug: string): { sessionId: string; token: string } | null {
+  try {
+    const raw = localStorage.getItem(storageKey(slug));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { sessionId?: string; token?: string };
+    return parsed.sessionId && parsed.token
+      ? { sessionId: parsed.sessionId, token: parsed.token }
+      : null;
+  } catch {
+    // Private mode, blocked storage, corrupt value — resume is a convenience,
+    // never a requirement.
+    return null;
+  }
+}
+
+function saveSession(slug: string, session: { sessionId: string; token: string }): void {
+  try {
+    localStorage.setItem(storageKey(slug), JSON.stringify(session));
+  } catch {
+    /* not fatal */
+  }
+}
+
+function clearSaved(slug: string): void {
+  try {
+    localStorage.removeItem(storageKey(slug));
+  } catch {
+    /* not fatal */
+  }
+}
 
 /** Exponential backoff with jitter, capped — a fixed linear retry hammers a
  *  server that is already struggling. */
@@ -100,10 +145,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
       esRef.current?.close();
       // Replay rebuilds the full transcript from durable DO storage, so local
       // state is always cleared — otherwise re-streamed tokens double-append.
-      setMessages((prev) => {
-        if (prev.length > 0) setResumed(true);
-        return [];
-      });
+      setMessages([]);
 
       const es = new EventSource(`${apiOrigin}/p/sessions/${sessionId}/events?t=${token}`);
       esRef.current = es;
@@ -114,8 +156,26 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
       });
 
       es.addEventListener("user_message", (e) => {
-        const { messageId, text } = JSON.parse((e as MessageEvent).data) as { messageId: string; text: string };
-        pushMessage({ id: messageId, role: "user", text });
+        const { messageId, text, blockRef } = JSON.parse((e as MessageEvent).data) as {
+          messageId: string;
+          text: string;
+          blockRef?: string;
+        };
+        pushMessage({ id: messageId, role: "user", text, answeredRef: blockRef });
+      });
+
+      // The server confirms which question an answer landed against; attach it
+      // to the most recent user message so it can be edited.
+      es.addEventListener("answer_recorded", (e) => {
+        const { ref } = JSON.parse((e as MessageEvent).data) as { ref: string };
+        setMessages((prev) => {
+          const idx = [...prev].reverse().findIndex((m) => m.role === "user" && !m.answeredRef);
+          if (idx === -1) return prev;
+          const realIdx = prev.length - 1 - idx;
+          const next = [...prev];
+          next[realIdx] = { ...next[realIdx]!, answeredRef: ref };
+          return next;
+        });
       });
 
       es.addEventListener("message_start", (e) => {
@@ -139,10 +199,6 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
         setQuestion(data);
         setThinking(false);
         setEscalatedRef(null);
-        setValidationHint(null);
-      });
-
-      es.addEventListener("answer_recorded", () => {
         setValidationHint(null);
       });
 
@@ -195,6 +251,8 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
 
       es.addEventListener("complete", () => {
         setStatus("ended");
+        // Finished: the next visit to this link should be a new response.
+        clearSaved(slug);
         es.close();
       });
 
@@ -213,7 +271,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
         }
       };
     },
-    [apiOrigin, appendToken, pushMessage],
+    [apiOrigin, appendToken, pushMessage, slug],
   );
 
   useEffect(() => {
@@ -236,6 +294,30 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
       if (existing) connectStream(existing.sessionId, existing.token, 0);
       return;
     }
+    // Reuse the saved session when the form is being reopened, so the
+    // respondent lands where they left off rather than at question one.
+    const saved = loadSaved(slug);
+    if (saved) {
+      try {
+        const probe = await fetch(
+          `${apiOrigin}/p/sessions/${saved.sessionId}?t=${saved.token}`,
+        );
+        if (probe.ok) {
+          const state = (await probe.json()) as { status?: string };
+          if (state.status === "active") {
+            sessionRef.current = saved;
+            setResumed(true);
+            connectStream(saved.sessionId, saved.token, 0);
+            return;
+          }
+        }
+        // Completed, abandoned or gone — do not resurrect it.
+        clearSaved(slug);
+      } catch {
+        clearSaved(slug);
+      }
+    }
+
     pendingRef.current = (async () => {
       try {
         const res = await fetch(`${apiOrigin}/p/forms/${slug}/sessions`, {
@@ -249,6 +331,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
         }
         const data = (await res.json()) as { sessionId: string; respondentToken: string };
         sessionRef.current = { sessionId: data.sessionId, token: data.respondentToken };
+        saveSession(slug, sessionRef.current);
         connectStream(data.sessionId, data.respondentToken, 0);
       } catch (err) {
         setStatus("error");
@@ -325,6 +408,31 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
     [post],
   );
 
+  /** Go back and change a previous answer. */
+  const editAnswer = useCallback(
+    async (ref: string) => {
+      setThinking(true);
+      setEnding(null);
+      await post("actions", { action: "edit", ref });
+    },
+    [post],
+  );
+
+  /** Abandon this attempt and begin a fresh one. */
+  const startOver = useCallback(async () => {
+    clearSaved(slug);
+    sessionRef.current = null;
+    esRef.current?.close();
+    esRef.current = null;
+    setMessages([]);
+    setQuestion(null);
+    setEnding(null);
+    setResumed(false);
+    setError(null);
+    setStatus("connecting");
+    await start();
+  }, [slug, start]);
+
   const getUploadBase = useCallback(() => {
     const s = sessionRef.current;
     return s ? `${apiOrigin}/p/sessions/${s.sessionId}/uploads` : null;
@@ -359,6 +467,8 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
     send,
     sendStructured,
     sendAction,
+    editAnswer,
+    startOver,
     retry,
     dismissRateLimit: () => setRateLimited(null),
   };

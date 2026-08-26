@@ -349,14 +349,22 @@ export class SessionDO extends DurableObject<Bindings> {
         providerOptions: INTERVIEW_PROVIDER_OPTIONS,
       });
 
+      // Open the bubble lazily, on the first token. A turn that spends itself
+      // on tool calls and says nothing used to leave an empty bubble in the
+      // transcript, immediately followed by the deterministic fallback.
       const messageId = crypto.randomUUID();
-      await this.emit("message_start", { messageId, role: "assistant" });
+      let opened = false;
       let text = "";
       for await (const delta of result.textStream) {
+        if (!delta) continue;
+        if (!opened) {
+          opened = true;
+          await this.emit("message_start", { messageId, role: "assistant" });
+        }
         text += delta;
         await this.emit("token", { messageId, delta });
       }
-      await this.emit("message_end", { messageId });
+      if (opened) await this.emit("message_end", { messageId });
 
       const usage = await result.usage;
       const inTok = usage?.inputTokens ?? 0;
@@ -474,6 +482,20 @@ export class SessionDO extends DurableObject<Bindings> {
     }
   }
 
+  /** Remove a retracted answer from the D1 projection. */
+  private async unprojectAnswer(ref: string): Promise<void> {
+    if (!this.meta || this.meta.formVersionId === "preview") return;
+    const submissionId = await this.ctx.storage.get<string>("submission_id");
+    if (!submissionId) return;
+    try {
+      await this.env.DB.prepare(`DELETE FROM submission_answers WHERE submission_id = ? AND block_ref = ?`)
+        .bind(submissionId, ref)
+        .run();
+    } catch (err) {
+      console.error("unproject_failed", err);
+    }
+  }
+
   /** Recent conversation + collected answers, for the agent's system prompt. */
   private async conversationContext(): Promise<{ transcript: string; answers: string }> {
     const entries = await this.ctx.storage.list<{ id: string; role: string; content: string; createdAt: number }>({ prefix: "msg:" });
@@ -560,77 +582,73 @@ export class SessionDO extends DurableObject<Bindings> {
     const block = await this.currentBlock();
     if (!block) return { accepted: false, error: "no_question" };
 
-    // Choice-type blocks: try to match option by label (template mode NLU)
+    // ── 1. Exact matching first: free, instant, and incapable of inventing an
+    //    option that does not exist. Covers the common case where someone taps
+    //    a chip or types the option back verbatim.
     if ("options" in block && block.options) {
       const normalized = text.trim().toLowerCase().replace(/[.!?]+$/, "");
       const match = block.options.find(
-        (o) => o.label.toLowerCase() === normalized || o.label.toLowerCase().startsWith(normalized) || normalized === o.id,
+        (o) =>
+          o.label.toLowerCase() === normalized ||
+          o.label.toLowerCase().startsWith(normalized) ||
+          normalized === o.id,
       );
-      if (!match) {
-        return this.recordInvalid(block, "invalid_option", "Please pick one of the available options.");
-      }
-      return this.record(block, match.id);
-    }
-    if (block.type === "yes_no") {
-      const t = text.trim().toLowerCase();
-      if (["yes", "y", "yeah", "yep", "sure", "ok"].includes(t)) return this.record(block, true);
+      if (match) return this.record(block, match.id);
+    } else if (block.type === "yes_no") {
+      const t = text.trim().toLowerCase().replace(/[.!?]+$/, "");
+      if (["yes", "y", "yeah", "yep", "sure", "ok", "okay"].includes(t)) return this.record(block, true);
       if (["no", "n", "nope", "nah"].includes(t)) return this.record(block, false);
-      return this.recordInvalid(block, "invalid_yes_no", "Please answer yes or no.");
-    }
-    if (block.type === "rating" || block.type === "nps" || block.type === "opinion_scale") {
-      const n = Number(text.trim().replace(/[^\d.-]/g, ""));
-      if (Number.isNaN(n)) return this.recordInvalid(block, "not_a_number", `Please reply with a number.`);
-      return this.record(block, n);
+    } else if (block.type === "rating" || block.type === "nps" || block.type === "opinion_scale") {
+      // Only when the whole message is a number — "4" yes, "4 was great but…" no.
+      const bare = text.trim();
+      if (/^-?\d+(\.\d+)?$/.test(bare)) return this.record(block, Number(bare));
     }
 
-    // Everything above is matched exactly and for free — no model involved, so
-    // no chance of a hallucinated option. Everything below may need a real
-    // reading of the sentence: "next Friday", "12 Rue de Rivoli, Paris",
-    // "about fifty people". Without extraction these block types were only
-    // answerable through a widget, which is backwards in a chat product.
     const direct = validateAnswer(block, text);
 
-    /**
-     * Free-text blocks accept ANY non-empty string, so `validateAnswer` says
-     * yes to "what is this form even for?" and the FSM would record a question
-     * as the respondent's name and move on.
-     *
-     * A person talking to an interviewer does not only ever answer: they ask
-     * back, push back, and think out loud. Deciding which of those a message is
-     * requires reading it, so in AI mode the agent gets the turn and records
-     * the answer itself via `record_answer` — the whole reason the toolset
-     * exists. The deterministic path below still covers template mode and any
-     * turn the model fails.
-     */
-    if (this.aiEnabled() && (acceptsAnyString(block) || needsExtraction(block))) {
-      // The agent can read the sentence AND shape the value, so a separate
-      // extraction call before this one was a wasted round trip — a full
-      // second on every typed answer, and pointless whenever the message
-      // turned out to be a question rather than an answer.
-      const shape = extractionGuidance(block, new Date().toISOString().slice(0, 10));
+    // ── 2. Otherwise, let the agent read it.
+    //
+    // People do not speak in form fields. They answer and ask in the same
+    // breath ("Nothing else — also, do I get any offers for this?"), they
+    // answer sideways ("weekly I guess", "4 stars"), and they push back. None
+    // of that can be settled by validation: for free-text blocks ANY string
+    // validates, so the FSM used to record the question itself as the answer.
+    //
+    // Exact-match types reach here only when matching failed, so the fast path
+    // above is never given up.
+    if (this.aiEnabled()) {
+      const shape = needsExtraction(block)
+        ? extractionGuidance(block, new Date().toISOString().slice(0, 10))
+        : "";
+      const options =
+        "options" in block && block.options
+          ? ` The allowed values are: ${block.options.map((o) => `${o.id} (${o.label})`).join(", ")} — use the id.`
+          : "";
+
       const ok = await this.aiStreamMessage(
         `The respondent replied: "${text}"\n\n` +
-          `Decide what that was. If it answers "${block.title}", call record_answer with ref=${block.ref}. ${shape} ` +
-          `Then acknowledge it in a few words and go straight on to the next question in the same message. ` +
-          `If it is a question, an objection, or small talk, answer it in one or two sentences and ask "${block.title}" again — and do NOT call record_answer.`,
+          `Their message may contain an answer, a question of their own, or both — handle everything in it.\n` +
+          `1. If any part of it answers "${block.title}", call record_answer with ref=${block.ref}.${shape}${options}\n` +
+          `2. If they also asked something, answer that too, in one or two sentences.\n` +
+          `3. Then, if you recorded an answer, go straight on to the next question in the same message. ` +
+          `If you did not, ask "${block.title}" again.\n` +
+          `Never ignore a question they asked, even when they also answered.`,
       );
+
       if (ok) {
         const before = this.meta?.currentRef;
-        // The agent has already asked the next question in the message it just
-        // streamed, so advancing must not trigger a second turn — that used to
-        // produce the acknowledgement twice and doubled the latency.
+        // The agent already asked whatever comes next inside that same message.
         this.suppressNextAsk = true;
         await this.applyPendingEffects();
         this.suppressNextAsk = false;
-        // Still on the same question means nothing was recorded, so re-arm the
-        // composer for another attempt at it.
         if (this.meta?.currentRef === before) await this.emitQuestion();
         return { accepted: true };
       }
-      // Model unavailable — fall through to the deterministic path rather than
-      // stranding the respondent.
+      // Model unavailable — fall through rather than strand the respondent.
     }
 
+    // ── 3. Deterministic fallback: template mode, degraded sessions, or a
+    //    failed turn.
     if (direct.ok) return this.record(block, text);
 
     const extracted = await this.extractTypedAnswer(block, text);
@@ -799,7 +817,11 @@ export class SessionDO extends DurableObject<Bindings> {
     }
   }
 
-  async action(input: { action: "skip" | "stop" | "restart" }): Promise<{ accepted: boolean; error?: string }> {
+  async action(input: {
+    action: "skip" | "stop" | "restart" | "edit";
+    /** For `edit`: the block to go back and re-answer. */
+    ref?: string;
+  }): Promise<{ accepted: boolean; error?: string }> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta || !this.doc) return { accepted: false, error: "session_not_found" };
     if (this.meta.status !== "active") return { accepted: false, error: "session_closed" };
@@ -818,6 +840,47 @@ export class SessionDO extends DurableObject<Bindings> {
       await this.abandon("user_stop");
       return { accepted: true };
     }
+    /**
+     * Go back and change an answer.
+     *
+     * Discards the stored answer, returns the cursor to that block, and asks
+     * again. Later answers are kept: re-answering "how many people" should not
+     * wipe an email given three questions ago. If the change reroutes the flow,
+     * `resolveNext` handles that on the way forward as it always does.
+     */
+    if (input.action === "edit") {
+      const target = this.doc.blocks.find((b) => b.ref === input.ref);
+      if (!target) return { accepted: false, error: "unknown_ref" };
+      if (["welcome", "statement"].includes(target.type)) {
+        return { accepted: false, error: "not_answerable" };
+      }
+
+      if (this.state.answers[target.ref] !== undefined) {
+        delete this.state.answers[target.ref];
+        this.collectedCount = Math.max(0, this.collectedCount - 1);
+        // Drop the projected row too, or the submission keeps a value the
+        // respondent has explicitly retracted.
+        this.ctx.waitUntil(this.unprojectAnswer(target.ref));
+      }
+      this.invalidCounts.delete(target.ref);
+      this.meta.currentRef = target.ref;
+      this.meta.status = "active";
+      await this.persistMeta();
+
+      await this.emitMessage(`Sure — let's redo that one.`);
+      if (this.doc.settings.agent.rephraseQuestions === false || !this.aiEnabled()) {
+        await this.emitMessage(questionText(target));
+      } else {
+        const ok = await this.aiStreamMessage(
+          `The respondent wants to change their answer to "${target.title}". Ask it again in one short sentence. Do not comment on the change.`,
+        );
+        if (ok) await this.applyPendingEffects();
+        else await this.emitMessage(questionText(target));
+      }
+      await this.emitQuestion();
+      return { accepted: true };
+    }
+
     if (input.action === "restart") {
       this.state = { answers: {}, variables: {}, hidden: this.meta.hiddenFields };
       this.collectedCount = 0;

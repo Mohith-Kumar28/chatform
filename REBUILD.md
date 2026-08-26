@@ -783,3 +783,29 @@ Reported as far too slow. Three compounding causes, all now fixed:
 Output tokens per turn: **576 → ~90**. Typical turn: **~19s → 2–5s**. Occasional outliers remain (one 14s turn with an 859-token prompt and 25 output tokens) — that is OpenRouter routing variance, not our path.
 
 Model tiers now: interview `google/gemini-3.7-flash`, extraction `google/gemini-3.1-flash-lite`, generation stays on `anthropic/claude-sonnet-5` (runs once in the builder behind a spinner, so quality beats latency).
+
+---
+
+## Phase 11 — respondent experience
+
+**Auto-scroll fixed.** The chat container used `min-h-svh`, so it grew past the viewport and the *window* scrolled while `scrollRef` never did — auto-scroll silently did nothing, and `scrollIntoView` parked the anchor behind the sticky composer. Now `h-svh` with the container scrolled directly.
+
+**The composer is always a text box.** Chips used to *replace* the input, which said "you may only click". Question controls moved into the thread under the agent's message as an offer (`question-affordance.tsx`); the input stays. Either route works — tap a chip, or type "weekly I guess" / "4 stars" and let the agent read it. Placeholders nudge that typing is allowed.
+
+**Free text is matched, then interpreted.** Exact matching runs first (free, instant, cannot invent an option). Only when it fails does the agent take the turn — so clean input stays fast and messy input still works.
+
+**Answering and asking in one breath.** *"Nothing else. And also, do I get any offers for this?"* recorded the answer and ignored the question. The turn objective now explicitly handles messages containing both: record what answers, reply to what asks, then move on. Verified: *"about a dozen. also, when do I get access if I sign up?"* → recorded `12` **and** answered from the knowledge base.
+
+**No more empty bubbles.** A turn that spent itself on tool calls emitted an empty bubble followed by a raw block title. The bubble now opens lazily on the first token.
+
+**Upload errors say what to do.** "Over 10MB" became *"This one is 14.2 MB — the limit is 10MB. Try a smaller version, or a screenshot instead."* Wrong file types name the accepted formats. MIME types are translated to human words, errors are dismissible, and the row is tinted rather than crushing the message to the right.
+
+**Completion lands.** A small grey card became a confetti burst in the form's own colours, a large thank-you, and the CTA. Skipped under `prefers-reduced-motion`.
+
+**Resume across visits.** Partial answers always persisted server-side, but the session token lived only in memory, so closing the tab orphaned it. It is now kept in `localStorage` per form; reopening the link probes the session and resumes it if still active, with a **Start over** escape. Completing a form clears it, so the next visit is a new response.
+
+**Change an answer.** New `edit` action on the DO: discards the stored answer, removes its projected row, returns the cursor to that block and re-asks — keeping later answers. In the chat, hovering a user message reveals a pencil.
+
+**Design is a sheet.** It was a route, so you left the questions to change their colours and guessed at the result. Now a sheet over the builder with the form live behind it. `/design` redirects to `/build`.
+
+Test totals: **75 passing.**

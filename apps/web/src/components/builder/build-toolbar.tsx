@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
@@ -7,6 +8,7 @@ import { Palette, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BUILD_VIEWS } from "./builder-tabs";
 import { useBuilderStore } from "@/stores/builder-store";
+import { DesignSheet } from "./design-sheet";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,7 +23,7 @@ import { cn } from "@/lib/utils";
 export function BuildToolbar() {
   const pathname = usePathname();
   const formId = useBuilderStore((s) => s.formId);
-  const onDesign = pathname.endsWith("/design");
+  const [designOpen, setDesignOpen] = useState(false);
   const onFlow = pathname.endsWith("/workflow");
 
   // The flow canvas already carries a node library on the left and an
@@ -33,20 +35,20 @@ export function BuildToolbar() {
     <div className="flex items-center gap-2 px-4 pt-3">
       <div className="flex flex-1 justify-start">
         {showSideActions && (
-        <Link
-          href={`/forms/${formId}/design`}
-          aria-current={onDesign ? "page" : undefined}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
-            "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
-            onDesign
-              ? "bg-primary-soft text-primary"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
-          )}
-        >
-          <Palette className="size-3.5" strokeWidth={1.75} />
-          Design
-        </Link>
+          <button
+            type="button"
+            onClick={() => setDesignOpen(true)}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
+              "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
+              designOpen
+                ? "bg-primary-soft text-primary"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+            )}
+          >
+            <Palette className="size-3.5" strokeWidth={1.75} />
+            Design
+          </button>
         )}
       </div>
 
@@ -82,7 +84,7 @@ export function BuildToolbar() {
       </div>
 
       <div className="flex flex-1 justify-end">
-        {showSideActions && !onDesign && (
+        {showSideActions && (
           <Button size="sm" shape="pill" variant="soft" asChild>
             <Link href="/usage">
               <Sparkles className="size-3.5" />
@@ -91,6 +93,8 @@ export function BuildToolbar() {
           </Button>
         )}
       </div>
+
+      <DesignSheet open={designOpen} onOpenChange={setDesignOpen} />
     </div>
   );
 }
