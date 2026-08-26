@@ -28,7 +28,7 @@ import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } fro
 import { layoutGraph, branchNodeHeight } from "./flow-layout";
 import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
-import { Block as BlockSchema } from "@repo/form-schema";
+import { Block as BlockSchema, conditionIsAlwaysTrue } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -719,11 +719,14 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
     const cond = condOf(rule);
     const from = rule.from;
     if (!from) continue;
-    if (!cond) {
+    const fromBlock = doc.blocks.find((b) => b.ref === from) ?? null;
+    // A test that cannot fail is a jump, however it was written down. Drawing
+    // it as a decision put a branch node on the canvas with one live arm and
+    // one dead one, over a question the form never actually chooses about.
+    if (!cond || conditionIsAlwaysTrue(cond, fromBlock)) {
       alwaysBySource.set(from, rule);
       continue;
     }
-    const fromBlock = doc.blocks.find((b) => b.ref === from) ?? null;
     const list = casesBySource.get(from) ?? [];
     list.push({
       ruleId: rule.id,

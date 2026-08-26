@@ -1,4 +1,4 @@
-import type { Block, LogicRuleInput } from "@repo/form-schema";
+import { conditionIsAlwaysTrue, type Block, type LogicRuleInput } from "@repo/form-schema";
 
 /**
  * Turning a model's branch list into a flow that actually works.
@@ -121,6 +121,20 @@ export function buildFlowRules(
     // A backwards jump is how a form loops forever; the FSM would allow it and
     // the respondent would never escape.
     if (!isEnding && index.get(br.then)! <= index.get(br.when.ref)!) continue;
+
+    // `is_not_empty` on a required question is how the model spells "and
+    // then": it can never be false, so keeping it as a condition would draw a
+    // decision with one live arm and one dead one. Store what it means.
+    const sourceBlock = blocks.find((b) => b.ref === br.when.ref);
+    const unconditional = conditionIsAlwaysTrue(
+      { left: { kind: "ref", ref: br.when.ref }, op: br.when.op, ...(br.when.value === null ? {} : { value: br.when.value }) },
+      sourceBlock,
+    );
+    if (unconditional) {
+      rules.push(alwaysRule(br.when.ref, br.then, isEnding ? "ending" : "block"));
+      routed.add(br.when.ref);
+      continue;
+    }
 
     rules.push(gotoRule(br.when.ref, br.when, br.then, isEnding ? "ending" : "block"));
     routed.add(br.when.ref);

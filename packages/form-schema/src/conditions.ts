@@ -93,3 +93,25 @@ export const unaryOps = new Set<ConditionOp>([
   "is_checked",
   "is_not_checked",
 ]);
+
+/**
+ * Can this condition ever be false?
+ *
+ * The flow generator writes `is_not_empty` on a question as a way of saying
+ * "and then" — a rule that carries one arm of a branch back to the trunk. On a
+ * required question that test can never fail, because the respondent cannot
+ * move past it without answering. Kept as a condition it draws a decision node
+ * with a live branch and a dead one, which reads as a choice the form does not
+ * actually make.
+ *
+ * Callers should treat a true result as an unconditional jump.
+ */
+export function conditionIsAlwaysTrue(
+  condition: Condition,
+  sourceBlock: { ref: string; required: boolean } | null | undefined,
+): boolean {
+  if (condition.op !== "is_not_empty") return false;
+  if (condition.left.kind !== "ref") return false;
+  if (!sourceBlock || !sourceBlock.required) return false;
+  return condition.left.ref === sourceBlock.ref;
+}

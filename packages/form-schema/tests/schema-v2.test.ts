@@ -13,6 +13,7 @@ import {
   leadFormFixture,
   toPublicConfig,
   lintFormDoc,
+  conditionIsAlwaysTrue,
   normalizeE164,
   type Block,
 } from "../src/index";
@@ -375,5 +376,34 @@ describe("reachability linting", () => {
       [goto("q_one", "eq", "opt_xray", "q_three")],
     );
     expect(codes(d)).not.toContain("unreachable_blocks");
+  });
+});
+
+describe("conditions that cannot fail", () => {
+  const required = { ref: "q_email", required: true };
+  const optional = { ref: "q_email", required: false };
+  const cond = (op: string, ref = "q_email") =>
+    ({ left: { kind: "ref" as const, ref }, op }) as Parameters<typeof conditionIsAlwaysTrue>[0];
+
+  it("treats is_not_empty on a required question as always true", () => {
+    // The generator writes this to mean "and then", and it can never fail:
+    // the respondent cannot move past a required question without answering.
+    expect(conditionIsAlwaysTrue(cond("is_not_empty"), required)).toBe(true);
+  });
+
+  it("leaves it alone when the question is optional", () => {
+    // Here it is a real test — the answer genuinely may be blank.
+    expect(conditionIsAlwaysTrue(cond("is_not_empty"), optional)).toBe(false);
+  });
+
+  it("only applies to the question the rule hangs off", () => {
+    expect(conditionIsAlwaysTrue(cond("is_not_empty", "q_other"), required)).toBe(false);
+    expect(conditionIsAlwaysTrue(cond("is_not_empty"), null)).toBe(false);
+  });
+
+  it("says nothing about any other operator", () => {
+    for (const op of ["eq", "neq", "is_empty", "gt", "contains"]) {
+      expect(conditionIsAlwaysTrue(cond(op), required)).toBe(false);
+    }
   });
 });

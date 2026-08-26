@@ -351,3 +351,52 @@ describe("arms that converge on a shared question", () => {
     }
   });
 });
+
+describe("a test that cannot fail", () => {
+  const blocks = [block("q_device", ["opt_iphone", "opt_android"]), block("q_icloud"), block("q_playstore"), block("q_email")];
+
+  it("stores an always-true condition as a plain jump", () => {
+    // The generator wrote `q_icloud is_not_empty → q_email` to close the
+    // iPhone arm. On a required question that can never be false, and kept as
+    // a condition it draws a decision node with one dead arm.
+    const rules = buildFlowRules(
+      [{ when: { ref: "q_icloud", op: "is_not_empty", value: null }, then: "q_email" }],
+      blocks,
+      ["end_thanks"],
+    );
+    expect(rules).toHaveLength(1);
+    expect(rules[0]!.when?.conditions).toHaveLength(0);
+    expect(rules[0]!.target).toBe("q_email");
+  });
+
+  it("keeps it as a condition when the question is optional", () => {
+    const optional = blocks.map((b) => (b.ref === "q_icloud" ? { ...b, required: false } : b));
+    const rules = buildFlowRules(
+      [{ when: { ref: "q_icloud", op: "is_not_empty", value: null }, then: "q_email" }],
+      optional,
+      ["end_thanks"],
+    );
+    expect(rules[0]!.when?.conditions).toHaveLength(1);
+  });
+
+  it("routes the same either way", () => {
+    const branches: DraftBranch[] = [
+      { when: { ref: "q_device", op: "eq", value: "opt_iphone" }, then: "q_icloud" },
+      { when: { ref: "q_device", op: "eq", value: "opt_android" }, then: "q_playstore" },
+      { when: { ref: "q_icloud", op: "is_not_empty", value: null }, then: "q_email" },
+    ];
+    const answers = { q_icloud: "a@icloud.com", q_playstore: "a@gmail.com", q_email: "a@b.co" };
+    expect(walk(blocks, branches, ["end_thanks"], { ...answers, q_device: "opt_iphone" })).toEqual([
+      "q_device",
+      "q_icloud",
+      "q_email",
+      "end_thanks",
+    ]);
+    expect(walk(blocks, branches, ["end_thanks"], { ...answers, q_device: "opt_android" })).toEqual([
+      "q_device",
+      "q_playstore",
+      "q_email",
+      "end_thanks",
+    ]);
+  });
+});
