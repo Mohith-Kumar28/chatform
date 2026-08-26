@@ -180,6 +180,17 @@ export const ThemeDoc = z.object({
   avatarKey: z.string().nullable().default(null),
   backgroundImageKey: z.string().nullable().default(null),
   backgroundBrightness: z.number().min(0).max(1).default(1),
+
+  /**
+   * Optional branding. Both are opt-in: a form with neither still looks
+   * finished, using the form's initial and title.
+   *
+   * `logoUrl` is a public asset URL (see `POST /api/assets`); `logoKey` keeps
+   * the R2 key so the object can be replaced or cleaned up later.
+   */
+  brandName: z.string().max(60).optional(),
+  logoUrl: z.string().max(1000).nullable().default(null),
+  logoKey: z.string().max(500).nullable().default(null),
 });
 
 export type ThemeDoc = z.output<typeof ThemeDoc>;

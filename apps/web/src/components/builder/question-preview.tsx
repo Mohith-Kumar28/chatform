@@ -30,10 +30,20 @@ export function QuestionPreview({ doc, block }: { doc: FormDoc; block: Block }) 
       style={themeVars}
     >
       <header className="flex items-center gap-2.5 px-4 py-3">
-        <div className="grid size-7 shrink-0 place-items-center rounded-lg bg-[var(--cf-accent)] text-xs font-semibold text-[var(--cf-accent-text)]">
-          {agentName.charAt(0).toUpperCase()}
-        </div>
-        <p className="truncate text-sm font-medium">{agentName}</p>
+        {doc.theme.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={doc.theme.logoUrl} alt="" className="size-7 shrink-0 rounded-lg object-contain" />
+        ) : (
+          <div className="grid size-7 shrink-0 place-items-center rounded-lg bg-[var(--cf-accent)] text-xs font-semibold text-[var(--cf-accent-text)]">
+            {agentName.charAt(0).toUpperCase()}
+          </div>
+        )}
+        <p className="min-w-0 truncate text-sm font-medium">
+          {agentName}
+          {doc.theme.brandName && (
+            <span className="ml-1.5 font-normal opacity-50">· {doc.theme.brandName}</span>
+          )}
+        </p>
       </header>
 
       <div className="min-h-0 overflow-y-auto px-4 pt-2 pb-4">

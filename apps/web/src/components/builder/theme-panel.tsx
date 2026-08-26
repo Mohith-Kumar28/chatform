@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { BrandField } from "./brand-field";
 
 type Theme = FormDoc["theme"];
 
@@ -57,6 +58,10 @@ export function ThemePanel({
 
   return (
     <div className="w-full space-y-6">
+      <Section title="Brand">
+        <BrandField theme={theme} onChange={patch} />
+      </Section>
+
       <Section title="Presets">
         <div className="grid grid-cols-2 gap-2">
           {PRESETS.map((p) => (

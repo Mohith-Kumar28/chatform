@@ -821,3 +821,15 @@ Test totals: **75 passing.**
 **A third block list.** `workflow-client.tsx` carried its own `PALETTE` — a third copy after Build and the picker, already drifted (no `contact_info`, no `address`). Replaced with the shared `BLOCK_LIBRARY`, which also brings the family colours: the palette rows and the canvas nodes are now tinted like the Questions list, so a block looks like itself everywhere. Node icons come from the same source. Selection on canvas is a family-coloured spine rather than a generic orange ring.
 
 **Design sheet.** `overflow-y-auto` was on the whole panel, so the title scrolled away with the content — now a flex column with a pinned header and a scrolling body. All subtext removed, labels shortened ("Bubble corners" → "Corners", "User bubble text" → "Their text"), presets compacted to swatch rows, and "Reset to defaults" moved out of the preset grid — where it read as a fifth preset — to the bottom.
+
+---
+
+## Phase 13 — brand logo and name
+
+Optional branding on `ThemeDoc`: `brandName`, `logoUrl`, `logoKey`. Both opt-in — a form with neither still looks finished, falling back to the form's initial and title, so nothing is required to look deliberate.
+
+- **Design sheet** gains a Brand section at the top: click the tile to upload a logo, type a name beside it. Uploads reuse `POST /api/assets` (org-scoped, MIME-allowlisted), so no new endpoint.
+- **Where it shows** — the logo takes the avatar slot in the chat header and appears on the completion screen; the name sits beside the agent's as `Form title · Brand`. The builder's question preview renders both, so it is visible while you set it.
+- **No schema version bump.** The fields are optional with defaults, which Zod materializes on read; the migration chain is reserved for changes that actually need transforming, and diluting it with no-op steps would make it harder to trust.
+
+Verified: typing a brand name updates the preview live and autosaves.

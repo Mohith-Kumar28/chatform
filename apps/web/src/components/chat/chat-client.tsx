@@ -84,6 +84,8 @@ export function ChatClient({
     >
       <ChatHeader
         title={agentName}
+        brandName={config.theme.brandName}
+        logoUrl={config.theme.logoUrl}
         pct={pct}
         mode={config.progressBar}
         answered={chat.question?.progress.answered ?? 0}
@@ -211,6 +213,8 @@ export function ChatClient({
 
 function ChatHeader({
   title,
+  brandName,
+  logoUrl,
   pct,
   mode,
   answered,
@@ -218,6 +222,8 @@ function ChatHeader({
   status,
 }: {
   title: string;
+  brandName?: string;
+  logoUrl?: string | null;
   pct: number;
   mode: PublicFormConfig["progressBar"];
   answered: number;
@@ -227,11 +233,25 @@ function ChatHeader({
   return (
     <header className="sticky top-0 z-10 bg-[var(--cf-bg)]/95 backdrop-blur">
       <div className="mx-auto flex w-full max-w-2xl items-center gap-3 px-4 py-3">
-        <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-[var(--cf-accent)] text-sm font-semibold text-[var(--cf-accent-text)]">
-          {title.charAt(0).toUpperCase()}
-        </div>
+        {/* The brand logo takes the avatar slot when there is one; otherwise
+            the form's initial, so an unbranded form still looks deliberate. */}
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={logoUrl}
+            alt={brandName ?? title}
+            className="size-8 shrink-0 rounded-xl object-contain"
+          />
+        ) : (
+          <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-[var(--cf-accent)] text-sm font-semibold text-[var(--cf-accent-text)]">
+            {title.charAt(0).toUpperCase()}
+          </div>
+        )}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{title}</p>
+          <p className="truncate text-sm font-semibold">
+            {title}
+            {brandName && <span className="ml-1.5 font-normal opacity-50">· {brandName}</span>}
+          </p>
           {status === "reconnecting" ? (
             <p className="text-xs opacity-60">Reconnecting…</p>
           ) : (
@@ -353,12 +373,17 @@ function EndingCard({
       <Confetti colors={[theme.accent, theme.userBubble, "#ffffff", theme.text]} />
 
       <div className="animate-message-in flex flex-col items-center px-6 py-10 text-center">
-        <div
-          className="mb-5 grid size-16 place-items-center rounded-full"
-          style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
-        >
-          <PartyPopper className="size-8" strokeWidth={1.75} />
-        </div>
+        {theme.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={theme.logoUrl} alt={theme.brandName ?? ""} className="mb-5 h-12 object-contain" />
+        ) : (
+          <div
+            className="mb-5 grid size-16 place-items-center rounded-full"
+            style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+          >
+            <PartyPopper className="size-8" strokeWidth={1.75} />
+          </div>
+        )}
 
         <h2
           className="text-2xl font-semibold text-balance sm:text-3xl"
