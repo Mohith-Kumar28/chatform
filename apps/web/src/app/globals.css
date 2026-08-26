@@ -444,6 +444,81 @@
   color: var(--cf-text);
 }
 
+/* Markdown inside a bubble. Tight rhythm: a chat message is not an article,
+   so paragraph spacing is minimal and headings barely differ in size. */
+.chat-prose > :first-child {
+  margin-top: 0;
+}
+.chat-prose > :last-child {
+  margin-bottom: 0;
+}
+.chat-prose p {
+  margin-block: 0.5em;
+}
+.chat-prose ul,
+.chat-prose ol {
+  margin-block: 0.5em;
+  padding-inline-start: 1.25em;
+}
+.chat-prose ul {
+  list-style: disc;
+}
+.chat-prose ol {
+  list-style: decimal;
+}
+.chat-prose li {
+  margin-block: 0.15em;
+}
+.chat-prose h1,
+.chat-prose h2,
+.chat-prose h3,
+.chat-prose h4 {
+  margin-block: 0.6em 0.3em;
+  font-size: 1em;
+  font-weight: 600;
+}
+.chat-prose a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.chat-prose code {
+  border-radius: 0.25rem;
+  background: color-mix(in oklch, currentColor 10%, transparent);
+  padding: 0.1em 0.3em;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.chat-prose pre {
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: color-mix(in oklch, currentColor 8%, transparent);
+  padding: 0.6em 0.75em;
+  margin-block: 0.5em;
+}
+.chat-prose pre code {
+  background: none;
+  padding: 0;
+}
+.chat-prose blockquote {
+  border-inline-start: 2px solid color-mix(in oklch, currentColor 25%, transparent);
+  padding-inline-start: 0.75em;
+  margin-block: 0.5em;
+  opacity: 0.85;
+}
+.chat-prose table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin-block: 0.5em;
+  font-size: 0.9em;
+}
+.chat-prose th,
+.chat-prose td {
+  border: 1px solid color-mix(in oklch, currentColor 18%, transparent);
+  padding: 0.3em 0.5em;
+  text-align: start;
+}
+
 /* Bubbles: rounded on three corners, tucked on the one nearest the speaker. */
 @utility bubble-bot {
   border-radius: var(--cf-radius);

@@ -8,18 +8,31 @@ export interface ChatMessage {
   role: "assistant" | "user";
   text: string;
   streaming?: boolean;
+  /** Locally-rendered echo awaiting its server-confirmed twin. */
+  optimistic?: boolean;
 }
 
-interface QuestionState {
+export interface QuestionState {
   block: PublicBlock;
   progress: { answered: number; totalEstimate: number; pct: number };
 }
 
-interface EndingState {
+export interface EndingState {
   title: string;
   bodyMd: string;
   ctaLabel?: string;
   ctaUrl?: string;
+  redirectUrl?: string;
+  redirectDelaySec?: number;
+}
+
+export type ConnectionStatus = "connecting" | "ready" | "reconnecting" | "ended" | "error";
+
+export interface UploadSpec {
+  ref: string;
+  accept: string[];
+  maxFiles: number;
+  maxSizeMB: number;
 }
 
 interface UseChatOptions {
@@ -30,27 +43,54 @@ interface UseChatOptions {
   existingSession?: { sessionId: string; token: string; eventsUrl: string } | null;
 }
 
+const MAX_RECONNECT_ATTEMPTS = 8;
+
+/** Exponential backoff with jitter, capped — a fixed linear retry hammers a
+ *  server that is already struggling. */
+function backoffMs(attempt: number): number {
+  const base = Math.min(500 * 2 ** attempt, 8000);
+  return base * (0.7 + Math.random() * 0.6);
+}
+
 export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseChatOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState<QuestionState | null>(null);
   const [ending, setEnding] = useState<EndingState | null>(null);
-  const [status, setStatus] = useState<"connecting" | "ready" | "ended" | "error">("connecting");
+  const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [escalatedRef, setEscalatedRef] = useState<string | null>(null);
   const [validationHint, setValidationHint] = useState<string | null>(null);
-  const [uploadSpec, setUploadSpec] = useState<{ ref: string; accept: string[]; maxFiles: number; maxSizeMB: number } | null>(null);
+  const [uploadSpec, setUploadSpec] = useState<UploadSpec | null>(null);
+  /** True between sending a turn and the agent's first token. */
+  const [thinking, setThinking] = useState(false);
+  const [rateLimited, setRateLimited] = useState<string | null>(null);
+  /** True when a replay rebuilt a transcript we did not start in this tab. */
+  const [resumed, setResumed] = useState(false);
+
   const sessionRef = useRef<{ sessionId: string; token: string } | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const pendingRef = useRef<Promise<void> | null>(null);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pushMessage = useCallback((msg: ChatMessage) => {
-    setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === msg.id)) return prev;
+      // A server-confirmed user message replaces its optimistic echo rather
+      // than appearing twice.
+      if (msg.role === "user") {
+        const echoIndex = prev.findIndex((m) => m.optimistic && m.text === msg.text);
+        if (echoIndex !== -1) {
+          const next = [...prev];
+          next[echoIndex] = msg;
+          return next;
+        }
+      }
+      return [...prev, msg];
+    });
   }, []);
 
   const appendToken = useCallback((messageId: string, delta: string) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === messageId ? { ...m, text: m.text + delta } : m)),
-    );
+    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, text: m.text + delta } : m)));
   }, []);
 
   const reconnectRef = useRef<((sessionId: string, token: string, attempt: number) => void) | null>(null);
@@ -58,13 +98,20 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
   const connectStream = useCallback(
     (sessionId: string, token: string, attempt: number) => {
       esRef.current?.close();
-      // replay rebuilds the full transcript, so always clear local state —
-      // otherwise re-streamed tokens double-append onto existing bubbles
-      setMessages([]);
+      // Replay rebuilds the full transcript from durable DO storage, so local
+      // state is always cleared — otherwise re-streamed tokens double-append.
+      setMessages((prev) => {
+        if (prev.length > 0) setResumed(true);
+        return [];
+      });
+
       const es = new EventSource(`${apiOrigin}/p/sessions/${sessionId}/events?t=${token}`);
       esRef.current = es;
 
-      es.addEventListener("session_ready", () => setStatus("ready"));
+      es.addEventListener("session_ready", () => {
+        setStatus("ready");
+        setError(null);
+      });
 
       es.addEventListener("user_message", (e) => {
         const { messageId, text } = JSON.parse((e as MessageEvent).data) as { messageId: string; text: string };
@@ -73,6 +120,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
 
       es.addEventListener("message_start", (e) => {
         const { messageId } = JSON.parse((e as MessageEvent).data) as { messageId: string };
+        setThinking(false);
         pushMessage({ id: messageId, role: "assistant", text: "", streaming: true });
       });
 
@@ -89,33 +137,60 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
       es.addEventListener("question", (e) => {
         const data = JSON.parse((e as MessageEvent).data) as QuestionState;
         setQuestion(data);
+        setThinking(false);
         setEscalatedRef(null);
+        setValidationHint(null);
+      });
+
+      es.addEventListener("answer_recorded", () => {
         setValidationHint(null);
       });
 
       es.addEventListener("validation_error", (e) => {
         const { message } = JSON.parse((e as MessageEvent).data) as { message: string };
         setValidationHint(message);
+        setThinking(false);
       });
 
       es.addEventListener("upload_request", (e) => {
-        const data = JSON.parse((e as MessageEvent).data) as { ref: string; accept?: string[]; maxFiles?: number; maxSizeMB?: number };
-        setUploadSpec({ ref: data.ref, accept: data.accept ?? ["image/png", "image/jpeg", "application/pdf"], maxFiles: data.maxFiles ?? 1, maxSizeMB: data.maxSizeMB ?? 10 });
+        const data = JSON.parse((e as MessageEvent).data) as Partial<UploadSpec> & { ref: string };
+        setUploadSpec({
+          ref: data.ref,
+          accept: data.accept ?? ["image/png", "image/jpeg", "application/pdf"],
+          maxFiles: data.maxFiles ?? 1,
+          maxSizeMB: data.maxSizeMB ?? 10,
+        });
       });
 
-      es.addEventListener("upload_received", () => {
-        setUploadSpec(null);
-      });
+      es.addEventListener("upload_received", () => setUploadSpec(null));
 
       es.addEventListener("escalate_ui", (e) => {
         const { ref } = JSON.parse((e as MessageEvent).data) as { ref: string };
         setEscalatedRef(ref);
+        setThinking(false);
+      });
+
+      es.addEventListener("branch_jump", () => setThinking(true));
+
+      // Declared in lib/events.ts and previously never emitted by the server
+      // and never listened for here.
+      es.addEventListener("error_event", (e) => {
+        const { message } = JSON.parse((e as MessageEvent).data) as { message?: string };
+        setError(message ?? "Something went wrong");
+        setThinking(false);
+      });
+
+      es.addEventListener("rate_limited", (e) => {
+        const { message } = JSON.parse((e as MessageEvent).data) as { message?: string };
+        setRateLimited(message ?? "You're going a bit fast — give it a moment.");
+        setThinking(false);
       });
 
       es.addEventListener("ending", (e) => {
         const { ending } = JSON.parse((e as MessageEvent).data) as { ending: EndingState };
-        setEnding({ title: ending.title, bodyMd: ending.bodyMd, ctaLabel: ending.ctaLabel, ctaUrl: ending.ctaUrl });
+        setEnding(ending);
         setQuestion(null);
+        setThinking(false);
       });
 
       es.addEventListener("complete", () => {
@@ -125,16 +200,22 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
 
       es.onerror = () => {
         es.close();
-        if (attempt < 5) {
-          setTimeout(() => reconnectRef.current?.(sessionId, token, attempt + 1), 800 * (attempt + 1));
+        if (attempt < MAX_RECONNECT_ATTEMPTS) {
+          // Say we are reconnecting rather than silently blanking the UI.
+          setStatus("reconnecting");
+          retryTimer.current = setTimeout(
+            () => reconnectRef.current?.(sessionId, token, attempt + 1),
+            backoffMs(attempt),
+          );
         } else {
           setStatus("error");
-          setError("Connection lost");
+          setError("We lost the connection and couldn't get it back.");
         }
       };
     },
     [apiOrigin, appendToken, pushMessage],
   );
+
   useEffect(() => {
     reconnectRef.current = connectStream;
   }, [connectStream]);
@@ -177,41 +258,73 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
       }
     })();
     await pendingRef.current;
-  }, [slug, apiOrigin, hiddenFields, connectStream]);
+  }, [slug, apiOrigin, hiddenFields, connectStream, existingSession]);
 
-  const send = useCallback(async (text: string) => {
-    const session = sessionRef.current;
-    if (!session) return;
-    // user turn is echoed back via the `user_message` SSE event (replay-safe)
-    await fetch(`${apiOrigin}/p/sessions/${session.sessionId}/messages`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-respondent-token": session.token },
-      body: JSON.stringify({ type: "text", text }),
-    });
-  }, [apiOrigin]);
+  /** Manual retry after a hard failure — replaces a full page reload. */
+  const retry = useCallback(() => {
+    setError(null);
+    setStatus("connecting");
+    const s = sessionRef.current;
+    if (s) connectStream(s.sessionId, s.token, 0);
+    else void start();
+  }, [connectStream, start]);
 
-  const sendStructured = useCallback(async (ref: string, value: unknown, display?: string) => {
-    const session = sessionRef.current;
-    if (!session) return;
-    await fetch(`${apiOrigin}/p/sessions/${session.sessionId}/messages`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-respondent-token": session.token },
-      body: JSON.stringify({ type: "structured", ref, value }),
-    });
-    void display;
-  }, [apiOrigin]);
+  const post = useCallback(
+    async (path: string, body: unknown) => {
+      const session = sessionRef.current;
+      if (!session) return;
+      try {
+        const res = await fetch(`${apiOrigin}/p/sessions/${session.sessionId}/${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-respondent-token": session.token },
+          body: JSON.stringify(body),
+        });
+        if (res.status === 429) {
+          setRateLimited("You're going a bit fast — give it a moment.");
+          setThinking(false);
+        }
+      } catch {
+        setThinking(false);
+        setError("That didn't send. Check your connection and try again.");
+      }
+    },
+    [apiOrigin],
+  );
 
-  const sendAction = useCallback(async (action: "skip" | "restart" | "stop") => {
-    const session = sessionRef.current;
-    if (!session) return;
-    await fetch(`${apiOrigin}/p/sessions/${session.sessionId}/actions`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-respondent-token": session.token },
-      body: JSON.stringify({ action }),
-    });
-  }, [apiOrigin]);
+  const send = useCallback(
+    async (text: string) => {
+      // Echo locally so the bubble appears the instant they hit send; the
+      // server's `user_message` event replaces it on arrival.
+      pushMessage({ id: `local_${crypto.randomUUID()}`, role: "user", text, optimistic: true });
+      setThinking(true);
+      setValidationHint(null);
+      await post("messages", { type: "text", text });
+    },
+    [post, pushMessage],
+  );
 
-  /** Base URL for the upload endpoints of the live session (null before connect). */
+  const sendStructured = useCallback(
+    async (ref: string, value: unknown, display?: string) => {
+      // `display` used to be discarded (`void display`), so tapping a chip
+      // showed nothing until the server echoed it back.
+      if (display) {
+        pushMessage({ id: `local_${crypto.randomUUID()}`, role: "user", text: display, optimistic: true });
+      }
+      setThinking(true);
+      setValidationHint(null);
+      await post("messages", { type: "structured", ref, value });
+    },
+    [post, pushMessage],
+  );
+
+  const sendAction = useCallback(
+    async (action: "skip" | "restart" | "stop") => {
+      setThinking(true);
+      await post("actions", { action });
+    },
+    [post],
+  );
+
   const getUploadBase = useCallback(() => {
     const s = sessionRef.current;
     return s ? `${apiOrigin}/p/sessions/${s.sessionId}/uploads` : null;
@@ -223,10 +336,30 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
     const t = setTimeout(() => void start(), 0);
     return () => {
       clearTimeout(t);
+      if (retryTimer.current) clearTimeout(retryTimer.current);
       esRef.current?.close();
       esRef.current = null;
     };
   }, [start]);
 
-  return { messages, question, ending, status, error, escalatedRef, validationHint, uploadSpec, getUploadBase, getRespondentToken, send, sendStructured, sendAction };
+  return {
+    messages,
+    question,
+    ending,
+    status,
+    error,
+    thinking,
+    rateLimited,
+    resumed,
+    escalatedRef,
+    validationHint,
+    uploadSpec,
+    getUploadBase,
+    getRespondentToken,
+    send,
+    sendStructured,
+    sendAction,
+    retry,
+    dismissRateLimit: () => setRateLimited(null),
+  };
 }

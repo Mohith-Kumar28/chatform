@@ -642,3 +642,20 @@ Monorepo tests: **58 passing** (was 22 at session start).
 - **F4.6** ✅ `preview-chat.tsx` restarts only on structural change or explicit request. It was wired to the autosave counter, so the preview conversation reset itself on every keystroke.
 - **F5** ✅ **Agent tab** — persona/mode/tone, goal + success criteria, knowledge base with a live character-budget meter, guardrails (off-topic policy, forbidden topics, refusal line, max turns, escalation), and model selection defaulting to Claude Sonnet 5. Live preview pinned beside it.
 - **F3.1 bonus** ✅ The inspector's "Add branching logic" now passes `?focus=<ref>` to the workflow route — `WorkflowClient` always accepted a `focusRef` and nothing ever supplied one.
+
+---
+
+## Phase 5 — chat runtime
+
+- **F6.1 bugs fixed** ✅
+  - **Auto-scroll** — there was none at all, so any conversation longer than the viewport needed manual scrolling after every turn. Follows the bottom, releases when the respondent scrolls up, offers a "Jump to latest" pill.
+  - `sendStructured`'s `display` argument was discarded (`void display`), so tapping a chip showed nothing until the server echoed back. Now optimistically echoed and de-duplicated against the server's `user_message`.
+  - `uploadSpec` was destructured and never referenced — the `upload_request` event drove nothing.
+  - `FileUploadControl.onSubmit` was an empty function; a failed confirm looked identical to a success. Rewritten with real drag-and-drop, per-file state and surfaced errors.
+  - `f/[slug]` silently fell back to a hardcoded empty `PublicFormConfig` on API failure, so a bad slug rendered a plausible chat that would never ask anything. Now `notFound()`.
+  - Bot-bubble border was decided by comparing the theme background to a literal hex; now derived in `chatThemeVars`.
+  - Duplicate `inputRef` in the composer removed.
+- **F6.2 missing UX** ✅ Real **progress bar** (`percent` and `steps` — only the percent *text* existed, no bar anywhere); **typing indicator during generation** (previously shown only while connecting); blinking streaming caret; **markdown rendering** with a strict element allowlist (model output is untrusted); **ending CTA** (`ctaLabel`/`ctaUrl` were parsed and never rendered) and **redirect** honoured; resume banner; `aria-live` announcements; reconnect with exponential backoff + jitter and a visible "Reconnecting…" state; inline retry that reconnects the stream instead of reloading the page.
+- **F6.3 composers** ✅ Every block type now has a real control. Rating uses fill-to-the-left lucide icons instead of emoji; NPS/opinion scales show anchor labels; **date gets a real calendar** with min/max/`disablePast` and quick options (it was a plain text input); **signature gets a real pointer-events pad** (it reused the file uploader, and the recorded shape was one `validateAnswer` rejects outright, so signatures could never succeed); ranking, matrix, contact_info and address get purpose-built composers (all four previously fell through to a text input that could not produce the required shape); payment shows an honest state rather than presenting "coming soon" as the control. Number-key shortcuts for choice lists, 44px touch targets.
+- **Schema** ✅ `toPublicBlock` now projects the fields the runtime needs (`minDate`/`maxDate`/`disablePast`, `url`, `drawnNameRequired`, number bounds, selection bounds, `allowOther`). `toPublicConfig` projects `settings.meta` — the hosted form previously had **no OG tags at all**, so every share preview was blank — plus the agent's display name.
+- **Verified E2E over HTTP**: session create → SSE greeting → conversational question → answer accepted → `answer_recorded` at 50% → contextual next question referencing the actual answer. `/f/<slug>` returns a real title and OG tags; an unknown slug 404s.

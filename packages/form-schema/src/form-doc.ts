@@ -59,6 +59,22 @@ export interface PublicBlock {
   dateFormat?: string;
   placeholder?: string;
   maxLength?: number;
+  /** date: ISO bounds the composer must respect. */
+  minDate?: string;
+  maxDate?: string;
+  disablePast?: boolean;
+  /** scheduling: the external booking link. */
+  url?: string;
+  /** signature: whether to also collect a typed name. */
+  drawnNameRequired?: boolean;
+  /** number: bounds, so the composer can constrain input. */
+  min?: number;
+  max?: number;
+  integerOnly?: boolean;
+  /** multi_select: how many may be picked. */
+  minSelections?: number;
+  maxSelections?: number;
+  allowOther?: boolean;
 }
 
 export function toPublicBlock(b: Block): PublicBlock {
@@ -86,9 +102,34 @@ export function toPublicBlock(b: Block): PublicBlock {
         description: o.description,
         imageKey: o.image_key,
       }));
+      if (b.type === "multi_select") {
+        pub.minSelections = b.minSelections;
+        pub.maxSelections = b.maxSelections;
+      }
+      if (b.type === "single_select" || b.type === "multi_select") {
+        pub.allowOther = b.allowOther;
+      }
       break;
     case "ranking":
       pub.items = b.items;
+      break;
+    case "date":
+      pub.minDate = b.min;
+      pub.maxDate = b.max;
+      pub.disablePast = b.disablePast;
+      pub.dateFormat = b.dateFormat;
+      break;
+    case "scheduling":
+      pub.url = b.url;
+      break;
+    case "signature":
+      pub.drawnNameRequired = b.drawnNameRequired;
+      break;
+    case "number":
+      pub.min = b.min;
+      pub.max = b.max;
+      pub.integerOnly = b.integerOnly;
+      pub.currency = b.currency;
       break;
     case "matrix":
       pub.rows = b.rows;
@@ -128,9 +169,6 @@ export function toPublicBlock(b: Block): PublicBlock {
     case "payment":
       pub.currency = b.currency;
       pub.amount = b.amount;
-      break;
-    case "date":
-      pub.dateFormat = b.dateFormat;
       break;
     case "short_text":
     case "long_text":
@@ -185,13 +223,41 @@ export interface PublicFormConfig {
   captchaEnabled: boolean;
   closed?: boolean;
   closedMessage?: string;
+  /**
+   * Social/SEO metadata. `settings.meta` existed but was never projected, so
+   * the hosted form had no OG tags and every share preview was blank.
+   */
+  meta?: {
+    ogTitle?: string;
+    ogDescription?: string;
+    ogImageUrl?: string;
+    noIndex: boolean;
+  };
+  /** The agent's display name, when the builder set one. */
+  agentName?: string;
 }
 
 export function toPublicConfig(
   doc: FormDoc,
-  opts: { slug: string; brandingHidden: boolean; closed?: boolean; closedMessage?: string },
+  opts: {
+    slug: string;
+    brandingHidden: boolean;
+    closed?: boolean;
+    closedMessage?: string;
+    /** Resolves `settings.meta.ogImageKey` to a public URL. */
+    assetUrl?: (key: string) => string;
+  },
 ): PublicFormConfig {
+  const metaSettings = doc.settings.meta;
+  const ogImageKey = metaSettings.ogImageKey;
   return {
+    meta: {
+      ogTitle: metaSettings.ogTitle,
+      ogDescription: metaSettings.ogDescription,
+      ogImageUrl: ogImageKey && opts.assetUrl ? opts.assetUrl(ogImageKey) : undefined,
+      noIndex: metaSettings.noIndex,
+    },
+    agentName: doc.settings.agent.displayName,
     slug: opts.slug,
     title: doc.title,
     description: doc.description,
