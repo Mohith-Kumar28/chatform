@@ -18,7 +18,14 @@ import {
 import type { Bindings } from "../env.js";
 import type { ServerEvent, SSEEnvelope } from "../lib/events.js";
 import { clarifyText, closingText, escalateText, greeting, questionText, transitionAck } from "../lib/phrasing.js";
-import { chatModel, interviewModel, extractAnswer, MODELS } from "../lib/ai.js";
+import {
+  chatModel,
+  interviewModel,
+  extractAnswer,
+  MODELS,
+  INTERVIEW_PROVIDER_OPTIONS,
+  REASONING_HEADROOM_TOKENS,
+} from "../lib/ai.js";
 import {
   buildStablePrefix,
   buildTurnSuffix,
@@ -58,6 +65,14 @@ interface StoredSession {
   degraded?: boolean;
 }
 
+/**
+ * Block types whose validator accepts any non-empty string, so "is this an
+ * answer or a question back?" cannot be decided by validation alone.
+ */
+function acceptsAnyString(block: Block): boolean {
+  return block.type === "short_text" || block.type === "long_text";
+}
+
 const IDLE_ALARM_MS = 30 * 60 * 1000;
 const MAX_REPLAY = 200;
 
@@ -87,6 +102,8 @@ export class SessionDO extends DurableObject<Bindings> {
   private degraded = false;
   /** Tool effects awaiting application after the model's turn completes. */
   private pendingEffects: NonNullable<ToolOutcome["effect"]>[] = [];
+  /** True when the agent already asked the next question in this same turn. */
+  private suppressNextAsk = false;
   private pendingUserTextPersisted = false;
 
   // ────────────────────────── lifecycle ──────────────────────────
@@ -326,7 +343,10 @@ export class SessionDO extends DurableObject<Bindings> {
         // respondent sees the deterministic fallback instead of a reply.
         // Four steps is enough for look-up → answer → record → ask.
         stopWhen: stepCountIs(4),
-        maxOutputTokens: this.doc.settings.agent.responseMaxTokens,
+        // The author's setting governs the visible reply; reasoning gets its
+        // own headroom on top so it can never starve the answer.
+        maxOutputTokens: this.doc.settings.agent.responseMaxTokens + REASONING_HEADROOM_TOKENS,
+        providerOptions: INTERVIEW_PROVIDER_OPTIONS,
       });
 
       const messageId = crypto.randomUUID();
@@ -569,6 +589,48 @@ export class SessionDO extends DurableObject<Bindings> {
     // "about fifty people". Without extraction these block types were only
     // answerable through a widget, which is backwards in a chat product.
     const direct = validateAnswer(block, text);
+
+    /**
+     * Free-text blocks accept ANY non-empty string, so `validateAnswer` says
+     * yes to "what is this form even for?" and the FSM would record a question
+     * as the respondent's name and move on.
+     *
+     * A person talking to an interviewer does not only ever answer: they ask
+     * back, push back, and think out loud. Deciding which of those a message is
+     * requires reading it, so in AI mode the agent gets the turn and records
+     * the answer itself via `record_answer` — the whole reason the toolset
+     * exists. The deterministic path below still covers template mode and any
+     * turn the model fails.
+     */
+    if (this.aiEnabled() && (acceptsAnyString(block) || needsExtraction(block))) {
+      // The agent can read the sentence AND shape the value, so a separate
+      // extraction call before this one was a wasted round trip — a full
+      // second on every typed answer, and pointless whenever the message
+      // turned out to be a question rather than an answer.
+      const shape = extractionGuidance(block, new Date().toISOString().slice(0, 10));
+      const ok = await this.aiStreamMessage(
+        `The respondent replied: "${text}"\n\n` +
+          `Decide what that was. If it answers "${block.title}", call record_answer with ref=${block.ref}. ${shape} ` +
+          `Then acknowledge it in a few words and go straight on to the next question in the same message. ` +
+          `If it is a question, an objection, or small talk, answer it in one or two sentences and ask "${block.title}" again — and do NOT call record_answer.`,
+      );
+      if (ok) {
+        const before = this.meta?.currentRef;
+        // The agent has already asked the next question in the message it just
+        // streamed, so advancing must not trigger a second turn — that used to
+        // produce the acknowledgement twice and doubled the latency.
+        this.suppressNextAsk = true;
+        await this.applyPendingEffects();
+        this.suppressNextAsk = false;
+        // Still on the same question means nothing was recorded, so re-arm the
+        // composer for another attempt at it.
+        if (this.meta?.currentRef === before) await this.emitQuestion();
+        return { accepted: true };
+      }
+      // Model unavailable — fall through to the deterministic path rather than
+      // stranding the respondent.
+    }
+
     if (direct.ok) return this.record(block, text);
 
     const extracted = await this.extractTypedAnswer(block, text);
@@ -676,6 +738,14 @@ export class SessionDO extends DurableObject<Bindings> {
       }
       const answeredBlock = this.doc.blocks.find((b) => b.ref === fromRef);
       const verbatim = this.doc.settings.agent.rephraseQuestions === false;
+
+      // The agent asked this question already, as part of the turn that
+      // recorded the previous answer. Just arm the composer.
+      if (this.suppressNextAsk && !verbatim) {
+        await this.emitQuestion();
+        await this.persistMeta();
+        return;
+      }
 
       const aiOk = await this.aiStreamMessage(
         verbatim

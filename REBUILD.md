@@ -755,3 +755,31 @@ Test totals: **75 passing** (40 form-schema, 30 api, 5 web).
 **One inspector, finally.** The Flow view had its own `BlockInspector` covering a *different, smaller* set of fields than the Questions view — the same block offered different settings depending on which view you opened it from. This was flagged as F4.1 in the plan and is now fixed: both views render the same component, and canvas selection syncs into the builder store so the selected block survives switching between views.
 
 Test totals: **75 passing.**
+
+---
+
+## Phase 10 — the skipped-question bug, and latency
+
+### The agent was recording questions as answers
+
+Reported: the agent asked for a name, the respondent asked *"I'm actually a bit confused what this form is for?"*, and the agent answered — then asked for the **email**, silently skipping the name.
+
+Cause: `validateAnswer` accepts any non-empty string for `short_text`/`long_text`, so the FSM recorded *"I'm actually a bit confused what this form is for?"* **as the respondent's name** and advanced. Validation cannot tell an answer from a question, because both are valid strings.
+
+Fix: in AI mode the FSM no longer auto-records for block types where validation cannot decide. The agent gets the turn and records via `record_answer` — which is what the toolset was built for and was being bypassed. The deterministic path still covers template mode, degraded sessions, and any turn the model fails. Exact-match types (choices, yes/no, scales) stay deterministic and instant.
+
+Then widened: the gate now also covers every type that needed extraction, and the agent shapes the typed value itself inside `record_answer`. That removed the pre-emptive extraction call entirely — a wasted round trip on every typed answer, and completely pointless whenever the message turned out to be a question.
+
+### Latency
+
+Reported as far too slow. Three compounding causes, all now fixed:
+
+| Cause | Fix |
+|---|---|
+| Interview ran on `anthropic/claude-sonnet-5` | → `google/gemini-3.7-flash` (user's suggestion; ~5× cheaper, supports tools + structured outputs — verified against OpenRouter's live model list rather than assumed) |
+| **Reasoning tokens ate the whole reply budget.** At `responseMaxTokens: 400` the model spent all 576 output tokens thinking, emitted *no visible text*, so the turn was scored a failure and fell back to scripted phrasing — after ~19s | Reasoning capped at `effort: "minimal"`, excluded from the stream, and given `REASONING_HEADROOM_TOKENS` on top of the author's setting so it can never starve the reply. Reasoning **cannot** be disabled — the API answers `enabled: false` with *"Reasoning is mandatory for this endpoint and cannot be disabled"* |
+| Recording an answer fired **two** sequential model calls — one to interpret, one to ask the next question — which also produced the acknowledgement twice | One turn now records *and* asks; `suppressNextAsk` stops `advanceTo` firing a second |
+
+Output tokens per turn: **576 → ~90**. Typical turn: **~19s → 2–5s**. Occasional outliers remain (one 14s turn with an 859-token prompt and 25 output tokens) — that is OpenRouter routing variance, not our path.
+
+Model tiers now: interview `google/gemini-3.7-flash`, extraction `google/gemini-3.1-flash-lite`, generation stays on `anthropic/claude-sonnet-5` (runs once in the builder behind a spinner, so quality beats latency).

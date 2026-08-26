@@ -20,11 +20,18 @@ import type { Bindings } from "../env.js";
  * before changing them — a wrong slug fails at request time, not build time.
  */
 export const MODELS = {
-  /** Conversation turns. */
-  interview: "anthropic/claude-sonnet-5",
-  /** Free-text → structured answer, validation classification. */
-  extraction: "openai/gpt-4o-mini",
-  /** Form generation from a prompt. */
+  /**
+   * Conversation turns. Latency is felt directly by the respondent — every
+   * second here is a second of watching a typing indicator — so this tier is
+   * optimised for speed, with tool calling as a hard requirement.
+   */
+  interview: "google/gemini-3.7-flash",
+  /** Free-text → structured answer. Narrow, schema-bound, wants to be cheap. */
+  extraction: "google/gemini-3.1-flash-lite",
+  /**
+   * Form generation runs once, in the builder, behind a spinner — quality
+   * matters more than latency, so it keeps the stronger model.
+   */
   generation: "anthropic/claude-sonnet-5",
 } as const;
 
@@ -43,6 +50,32 @@ export function interviewModel(env: Bindings, override?: string): { model: Langu
   const id = override?.trim() || MODELS.interview;
   return { model: openrouter(env).chat(id), id };
 }
+
+/**
+ * Provider options for a conversation turn.
+ *
+ * An interview turn is phrasing plus a tool call, not a problem to think
+ * through, so reasoning is pushed as low as the model allows. It cannot be
+ * switched off — Gemini 3.7 Flash answers `enabled: false` with
+ * "Reasoning is mandatory for this endpoint and cannot be disabled" — so it is
+ * capped at minimal and excluded from the response stream instead.
+ *
+ * This matters for more than cost: reasoning tokens are billed against the
+ * same output budget as the reply. At `responseMaxTokens: 400` the model spent
+ * the entire budget thinking, produced no visible text, and the turn was
+ * treated as a failure and fell back to scripted phrasing — after ~19 seconds.
+ */
+export const INTERVIEW_PROVIDER_OPTIONS = {
+  openrouter: { reasoning: { effort: "minimal" as const, exclude: true } },
+} as const;
+
+/**
+ * Headroom added to the author's `responseMaxTokens` to cover reasoning.
+ *
+ * `responseMaxTokens` means "how long should the reply be" to whoever set it;
+ * they should not have to budget for tokens they never see.
+ */
+export const REASONING_HEADROOM_TOKENS = 1200;
 
 export interface AgentTurnResult {
   text: string;
