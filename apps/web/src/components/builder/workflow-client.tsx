@@ -161,6 +161,25 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
     setEdges(derived.edges);
   }
 
+  // Clicking a wire already selected it and opened its editor, but the wire
+  // itself looked exactly as it had a moment before — so there was no way to
+  // tell which one the panel was talking about.
+  const shownEdges = useMemo(
+    () =>
+      edges.map((e) =>
+        e.id === selectedEdgeId
+          ? {
+              ...e,
+              style: { ...e.style, stroke: "var(--destructive)", strokeWidth: 3 },
+              labelStyle: { ...e.labelStyle, fill: "var(--destructive)" },
+              markerEnd: { type: MarkerType.ArrowClosed, color: "var(--destructive)" },
+              zIndex: 10,
+            }
+          : e,
+      ),
+    [edges, selectedEdgeId],
+  );
+
   // real-time drag/selection: apply RF changes to local state immediately
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setNodes((prev) => applyNodeChangesShallow(prev, changes));
@@ -569,7 +588,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
         >
         <ReactFlow
           nodes={nodes}
-          edges={edges}
+          edges={shownEdges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
           onNodeClick={(_, n) => {
