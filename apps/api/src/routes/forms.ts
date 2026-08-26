@@ -3,19 +3,18 @@ import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import { FormDoc, lintFormDoc, hasErrors } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
-import { createAuth } from "../lib/auth.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
+import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 
-export const formsRouter = new Hono<{ Bindings: Bindings; Variables: { userId: string } }>();
+export const formsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
 
-// ─── middleware: session + org resolution ───
-formsRouter.use("*", async (c, next) => {
-  const auth = createAuth(c.env);
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  if (!session) return c.json({ error: { code: "unauthorized", message: "Sign in required" } }, 401);
-  c.set("userId", session.user.id);
-  await next();
-});
+// ─── middleware: session, then organization, then per-form ownership ───
+formsRouter.use("*", requireSession);
+formsRouter.use("*", requireOrg);
+// Every `/forms/:id...` route is org-scoped: a form id belonging to another
+// tenant 404s here and never reaches a handler.
+formsRouter.use("/forms/:id", requireFormAccess);
+formsRouter.use("/forms/:id/*", requireFormAccess);
 
 const FormSummary = z.object({
   id: z.string(),
@@ -61,12 +60,11 @@ function defaultDoc(title: string): string {
   });
 }
 
-async function requireWorkspace(c: { env: Bindings; get: (k: string) => unknown; req: { raw: { headers: Headers } } }, workspaceId?: string): Promise<{ orgId: string; wsId: string } | null> {
+async function requireWorkspace(c: { env: Bindings; get: (k: string) => unknown }, workspaceId?: string): Promise<{ orgId: string; wsId: string } | null> {
   const userId = c.get("userId") as string;
-  const auth = createAuth(c.env);
-  const orgs = await auth.api.listOrganizations({ headers: c.req.raw.headers });
-  if (!orgs || orgs.length === 0) return null;
-  const org = orgs[0]!;
+  const orgId = c.get("orgId") as string | undefined;
+  if (!orgId) return null;
+  const org = { id: orgId };
   let wsId = workspaceId;
   if (!wsId) {
     const ws = await c.env.DB.prepare(`SELECT id FROM workspaces WHERE organization_id = ? ORDER BY created_at LIMIT 1`).bind(org.id).first<{ id: string }>();
@@ -144,8 +142,10 @@ formsRouter.delete(
   "/forms/:id",
   describeRoute({ tags: ["dashboard"], summary: "Soft-delete a form", responses: { 200: { description: "Deleted", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } } } }),
   async (c) => {
-    const id = c.req.param("id");
-    await c.env.DB.prepare(`UPDATE forms SET deleted_at = ?, status = 'archived' WHERE id = ? AND deleted_at IS NULL`).bind(Date.now(), id).run();
+    const form = c.get("form")!;
+    await c.env.DB.prepare(`UPDATE forms SET deleted_at = ?, status = 'archived' WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`)
+      .bind(Date.now(), form.id, form.organization_id)
+      .run();
     return c.json({ ok: true });
   },
 );
@@ -154,7 +154,7 @@ formsRouter.get(
   "/forms/:id",
   describeRoute({ tags: ["dashboard"], summary: "Get a form with its working document", responses: { 200: { description: "Form", content: { "application/json": { schema: resolver(FormFull) } } }, 404: { description: "Not found", content: { "application/json": { schema: resolver(ErrorEnvelope) } } } } }),
   async (c) => {
-    const id = c.req.param("id");
+    const id = c.get("form")!.id;
     const row = await c.env.DB.prepare(
       `SELECT f.id, f.title, f.slug, f.status, f.working_schema, f.updated_at, fv.version
        FROM forms f LEFT JOIN form_versions fv ON fv.id = f.active_version_id
@@ -184,7 +184,7 @@ formsRouter.put(
   validator("json", UpdateDocBody),
   describeRoute({ tags: ["dashboard"], summary: "Update the working document (autosave target)", responses: { 200: { description: "Saved", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean(), issues: z.array(z.any()) })) } } } } }),
   async (c) => {
-    const id = c.req.param("id");
+    const id = c.get("form")!.id;
     const body = c.req.valid("json");
     const parsed = FormDoc.safeParse(body.doc);
     if (!parsed.success) {
@@ -202,7 +202,7 @@ formsRouter.post(
   "/forms/:id/publish",
   describeRoute({ tags: ["dashboard"], summary: "Publish the working document as a new version", responses: { 200: { description: "Published", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean(), version: z.number() })) } } }, 422: { description: "Lint errors", content: { "application/json": { schema: resolver(ErrorEnvelope) } } } } }),
   async (c) => {
-    const id = c.req.param("id");
+    const id = c.get("form")!.id;
     const userId = c.get("userId") as string;
     const row = await c.env.DB.prepare(`SELECT working_schema, theme_json, settings_json FROM forms WHERE id = ? AND deleted_at IS NULL`).bind(id).first<{ working_schema: string; theme_json: string | null; settings_json: string | null }>();
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);

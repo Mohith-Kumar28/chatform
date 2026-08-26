@@ -2,18 +2,13 @@ import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
-import { createAuth } from "../lib/auth.js";
+import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
 import { generateApiKey } from "../lib/apikeys.js";
 
-export const keysRouter = new Hono<{ Bindings: Bindings; Variables: { userId: string } }>();
+export const keysRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
 
-keysRouter.use("*", async (c, next) => {
-  const auth = createAuth(c.env);
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  if (!session) return c.json({ error: { code: "unauthorized", message: "Sign in required" } }, 401);
-  c.set("userId", session.user.id);
-  await next();
-});
+keysRouter.use("*", requireSession);
+keysRouter.use("*", requireOrg);
 
 const KeyMeta = z.object({
   id: z.string(),
@@ -61,10 +56,8 @@ keysRouter.post(
     const { raw, hash, start } = generateApiKey();
     const id = `key_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 
-    // resolve the user's first org for scoping
-    const auth = createAuth(c.env);
-    const orgs = await auth.api.listOrganizations({ headers: c.req.raw.headers });
-    const orgId = orgs?.[0]?.id ?? null;
+    // org resolved by requireOrg
+    const orgId = c.get("orgId") ?? null;
 
     await c.env.DB.prepare(
       `INSERT INTO api_keys (id, name, start, key, user_id, organization_id, scopes, enabled, environment, created_at, updated_at)

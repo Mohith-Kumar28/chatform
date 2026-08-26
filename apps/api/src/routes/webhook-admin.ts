@@ -2,18 +2,13 @@ import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
-import { createAuth } from "../lib/auth.js";
+import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
 import { hmac } from "../lib/webhooks.js";
 
-export const webhooksRouter = new Hono<{ Bindings: Bindings; Variables: { userId: string } }>();
+export const webhooksRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
 
-webhooksRouter.use("*", async (c, next) => {
-  const auth = createAuth(c.env);
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  if (!session) return c.json({ error: { code: "unauthorized", message: "Sign in required" } }, 401);
-  c.set("userId", session.user.id);
-  await next();
-});
+webhooksRouter.use("*", requireSession);
+webhooksRouter.use("*", requireOrg);
 
 const WebhookRow = z.object({
   id: z.string(),
@@ -22,15 +17,14 @@ const WebhookRow = z.object({
   formId: z.string().nullable(),
   active: z.boolean(),
   createdAt: z.number(),
+  secretPreview: z.string().optional(),
 });
 
 webhooksRouter.get(
   "/webhooks",
   describeRoute({ tags: ["dashboard"], summary: "List webhooks", responses: { 200: { description: "Webhooks", content: { "application/json": { schema: resolver(z.array(WebhookRow)) } } } } }),
   async (c) => {
-    const auth = createAuth(c.env);
-    const orgs = await auth.api.listOrganizations({ headers: c.req.raw.headers });
-    const orgId = orgs?.[0]?.id;
+    const orgId = c.get("orgId");
     if (!orgId) return c.json([]);
     const rows = await c.env.DB.prepare(
       `SELECT id, url, secret, events, form_id, active, created_at FROM webhooks WHERE organization_id = ? ORDER BY created_at DESC`,
@@ -45,7 +39,9 @@ webhooksRouter.get(
         formId: r.form_id,
         active: r.active === 1,
         createdAt: r.created_at,
-        secret: r.secret,
+        // Never return the full signing secret on a list. It is shown exactly
+        // once, at creation, the same way API keys are handled.
+        secretPreview: `${r.secret.slice(0, 11)}…`,
       })),
     );
   },
@@ -63,9 +59,7 @@ webhooksRouter.post(
   ),
   describeRoute({ tags: ["dashboard"], summary: "Create a webhook (secret returned once)", responses: { 200: { description: "Created", content: { "application/json": { schema: resolver(WebhookRow.extend({ secret: z.string() })) } } } } }),
   async (c) => {
-    const auth = createAuth(c.env);
-    const orgs = await auth.api.listOrganizations({ headers: c.req.raw.headers });
-    const orgId = orgs?.[0]?.id;
+    const orgId = c.get("orgId");
     if (!orgId) return c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
     const { url, events, formId } = c.req.valid("json");
     const id = `wh_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
@@ -83,7 +77,11 @@ webhooksRouter.delete(
   "/webhooks/:id",
   describeRoute({ tags: ["dashboard"], summary: "Delete a webhook", responses: { 200: { description: "Deleted", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } } } }),
   async (c) => {
-    await c.env.DB.prepare(`DELETE FROM webhooks WHERE id = ?`).bind(c.req.param("id")).run();
+    const orgId = c.get("orgId");
+    const res = await c.env.DB.prepare(`DELETE FROM webhooks WHERE id = ? AND organization_id = ?`)
+      .bind(c.req.param("id"), orgId ?? "")
+      .run();
+    if (!res.meta.changes) return c.json({ error: { code: "not_found", message: "Webhook not found" } }, 404);
     return c.json({ ok: true });
   },
 );
@@ -93,10 +91,14 @@ webhooksRouter.get(
   describeRoute({ tags: ["dashboard"], summary: "Recent deliveries for a webhook", responses: { 200: { description: "Deliveries", content: { "application/json": { schema: resolver(z.array(z.any())) } } } } }),
   async (c) => {
     const id = c.req.param("id");
+    const orgId = c.get("orgId");
     const rows = await c.env.DB.prepare(
-      `SELECT id, event_type, status, response_status, last_error, attempt, created_at FROM webhook_deliveries WHERE webhook_id = ? ORDER BY created_at DESC LIMIT 25`,
+      `SELECT d.id, d.event_type, d.status, d.response_status, d.last_error, d.attempt, d.created_at
+         FROM webhook_deliveries d
+         JOIN webhooks w ON w.id = d.webhook_id AND w.organization_id = ?
+        WHERE d.webhook_id = ? ORDER BY d.created_at DESC LIMIT 25`,
     )
-      .bind(id)
+      .bind(orgId ?? "", id)
       .all();
     return c.json(rows.results ?? []);
   },
@@ -107,7 +109,10 @@ webhooksRouter.post(
   describeRoute({ tags: ["dashboard"], summary: "Send a signed test event", responses: { 200: { description: "Test sent", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean(), signature: z.string() })) } } } } }),
   async (c) => {
     const id = c.req.param("id");
-    const hook = await c.env.DB.prepare(`SELECT url, secret FROM webhooks WHERE id = ?`).bind(id).first<{ url: string; secret: string }>();
+    const orgId = c.get("orgId");
+    const hook = await c.env.DB.prepare(`SELECT url, secret FROM webhooks WHERE id = ? AND organization_id = ?`)
+      .bind(id, orgId ?? "")
+      .first<{ url: string; secret: string }>();
     if (!hook) return c.json({ error: { code: "not_found", message: "Webhook not found" } }, 404);
     const body = JSON.stringify({ event: "test", timestamp: Date.now(), formId: null });
     const timestamp = Math.floor(Date.now() / 1000);

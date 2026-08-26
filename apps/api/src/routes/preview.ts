@@ -3,22 +3,18 @@ import { describeRoute, resolver } from "hono-openapi";
 import { z } from "zod";
 import { sha256Hex } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
-import { createAuth } from "../lib/auth.js";
 import { SessionDO } from "../do/session-do.js";
+import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 
 /**
  * Preview sessions — authenticated, run against the WORKING schema (drafts).
  * Powers the live chat preview inside the builder.
  */
-export const previewRouter = new Hono<{ Bindings: Bindings; Variables: { userId: string } }>();
+export const previewRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
 
-previewRouter.use("*", async (c, next) => {
-  const auth = createAuth(c.env);
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  if (!session) return c.json({ error: { code: "unauthorized", message: "Sign in required" } }, 401);
-  c.set("userId", session.user.id);
-  await next();
-});
+previewRouter.use("*", requireSession);
+previewRouter.use("*", requireOrg);
+previewRouter.use("/forms/:id/*", requireFormAccess);
 
 previewRouter.post(
   "/forms/:id/preview/sessions",
@@ -31,7 +27,7 @@ previewRouter.post(
     },
   }),
   async (c) => {
-    const id = c.req.param("id");
+    const id = c.get("form")!.id;
     const row = await c.env.DB.prepare(
       `SELECT f.id, f.slug, f.working_schema, f.organization_id FROM forms f WHERE f.id = ? AND f.deleted_at IS NULL`,
     )

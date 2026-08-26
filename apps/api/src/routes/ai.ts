@@ -3,19 +3,14 @@ import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import { Block as BlockSchema, FormDoc, lintFormDoc, hasErrors, type Block, type FormDocInput, type LogicRuleInput } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
-import { createAuth } from "../lib/auth.js";
+import { requireSession, requireOrg, assertFormAccess, type GuardVars } from "../lib/guards.js";
 import { generateFormDraft, type GenerationDraft } from "../lib/ai.js";
 import { buildFlowGeneratorPrompt } from "../lib/agent-prompts.js";
 
-export const aiRouter = new Hono<{ Bindings: Bindings; Variables: { userId: string } }>();
+export const aiRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
 
-aiRouter.use("*", async (c, next) => {
-  const auth = createAuth(c.env);
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  if (!session) return c.json({ error: { code: "unauthorized", message: "Sign in required" } }, 401);
-  c.set("userId", session.user.id);
-  await next();
-});
+aiRouter.use("*", requireSession);
+aiRouter.use("*", requireOrg);
 
 const GenerateBody = z.object({
   prompt: z.string().min(5).max(2000),
@@ -213,6 +208,9 @@ aiRouter.post(
       return c.json({ error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } }, 503);
     }
     const { formId, prompt, count } = c.req.valid("json");
+    // formId arrives in the body, so path middleware cannot guard it — check here.
+    const form = await assertFormAccess(c, formId);
+    if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     const row = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ? AND deleted_at IS NULL`)
       .bind(formId)
       .first<{ working_schema: string }>();

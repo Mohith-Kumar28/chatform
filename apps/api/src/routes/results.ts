@@ -2,16 +2,14 @@ import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
-import { createAuth } from "../lib/auth.js";
+import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 
-export const resultsRouter = new Hono<{ Bindings: Bindings; Variables: { userId: string } }>();
+export const resultsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
 
-resultsRouter.use("*", async (c, next) => {
-  const auth = createAuth(c.env);
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  if (!session) return c.json({ error: { code: "unauthorized", message: "Sign in required" } }, 401);
-  await next();
-});
+resultsRouter.use("*", requireSession);
+resultsRouter.use("*", requireOrg);
+// Results are per-form and therefore per-tenant: another org's form id 404s.
+resultsRouter.use("/forms/:id/*", requireFormAccess);
 
 const SubmissionRow = z.object({
   id: z.string(),
@@ -86,15 +84,16 @@ resultsRouter.get(
     }),
   ),
   async (c) => {
-    const id = c.req.param("id");
+    const id = c.get("form")!.id;
     const { status, limit } = c.req.valid("query");
-    const where = status === "all" ? "" : `AND s.status = '${status}'`;
+    // Bound, never interpolated: `status` is enum-guarded today but string
+    // interpolation into SQL is one refactor away from being a hole.
     const subs = await c.env.DB.prepare(
       `SELECT s.id, s.status, s.started_at, s.completed_at, s.duration_ms, s.session_id
-       FROM submissions s WHERE s.form_id = ? ${where}
+       FROM submissions s WHERE s.form_id = ? AND (?1 = 'all' OR s.status = ?1)
        ORDER BY s.started_at DESC LIMIT ?`,
     )
-      .bind(id, limit)
+      .bind(id, status, limit)
       .all<{ id: string; status: string; started_at: number; completed_at: number | null; duration_ms: number | null; session_id: string | null }>();
 
     const out = [];
@@ -138,7 +137,7 @@ resultsRouter.get(
   "/forms/:id/submissions/export",
   describeRoute({ tags: ["dashboard"], summary: "Export submissions as CSV" }),
   async (c) => {
-    const id = c.req.param("id");
+    const id = c.get("form")!.id;
     const form = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`).bind(id).first<{ working_schema: string }>();
     if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     const doc = JSON.parse(form.working_schema);
@@ -194,7 +193,7 @@ resultsRouter.get(
     responses: { 200: { description: "Summary", content: { "application/json": { schema: resolver(Summary) } } } },
   }),
   async (c) => {
-    const id = c.req.param("id");
+    const id = c.get("form")!.id;
     const counts = await c.env.DB.prepare(
       `SELECT
          COUNT(*) AS starts,

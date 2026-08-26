@@ -3,9 +3,13 @@ import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import { FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
-import { createAuth } from "../lib/auth.js";
+import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
 
-export const templatesRouter = new Hono<{ Bindings: Bindings; Variables: { userId: string } }>();
+export const templatesRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
+
+// This router had NO middleware at all, so GET /api/templates was fully public.
+templatesRouter.use("*", requireSession);
+templatesRouter.use("*", requireOrg);
 
 const SEEDS: { slug: string; title: string; category: string; description: string; doc: FormDoc }[] = [
   {
@@ -80,12 +84,8 @@ templatesRouter.post(
     const slug = c.req.param("slug");
     const tpl = SEEDS.find((t) => t.slug === slug);
     if (!tpl) return c.json({ error: { code: "not_found", message: "Template not found" } }, 404);
-    const auth = createAuth(c.env);
-    const session = await auth.api.getSession({ headers: c.req.raw.headers });
-    if (!session) return c.json({ error: { code: "unauthorized", message: "Sign in required" } }, 401);
-    const userId = session.user.id;
-    const orgs = await auth.api.listOrganizations({ headers: c.req.raw.headers });
-    const orgId = orgs?.[0]?.id;
+    const userId = c.get("userId")!;
+    const orgId = c.get("orgId");
     if (!orgId) return c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
     let ws = await c.env.DB.prepare(`SELECT id FROM workspaces WHERE organization_id = ? ORDER BY created_at LIMIT 1`).bind(orgId).first<{ id: string }>();
     if (!ws) {

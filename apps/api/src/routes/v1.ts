@@ -1,10 +1,9 @@
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
-import { createAuth } from "../lib/auth.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
-import { verifyApiKey } from "../lib/apikeys.js";
+import { requireApiKey, assertChatSessionAccess, type GuardVars } from "../lib/guards.js";
 
 /**
  * Developer API v1 — API-key auth, headless chat contract.
@@ -12,22 +11,25 @@ import { verifyApiKey } from "../lib/apikeys.js";
  * `Authorization: Bearer sk_...`.
  */
 
-export const v1Router = new Hono<{ Bindings: Bindings; Variables: { keyId: string; userId: string } }>();
+export const v1Router = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
 
-v1Router.use("*", async (c, next) => {
-  const authHeader = c.req.header("authorization") ?? "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!token) {
-    return c.json({ error: { code: "unauthorized", message: "Missing API key. Send Authorization: Bearer sk_..." } }, 401);
+v1Router.use("*", requireApiKey);
+
+/**
+ * A chat session may only be driven or read by the org that owns its form.
+ * Without this any valid API key could drive any session by guessing an id.
+ */
+const assertSessionOwnership: MiddlewareHandler<{ Bindings: Bindings; Variables: Partial<GuardVars> }> = async (c, next) => {
+  const orgId = c.get("orgId");
+  const sid = c.req.param("sid");
+  if (!orgId || !sid || !(await assertChatSessionAccess(c.env, sid, orgId))) {
+    return c.json({ error: { code: "not_found", message: "Session not found" } }, 404);
   }
-  const keyRow = await verifyApiKey(c.env, token);
-  if (!keyRow) {
-    return c.json({ error: { code: "unauthorized", message: "Invalid or expired API key" } }, 401);
-  }
-  c.set("keyId", keyRow.id);
-  c.set("userId", keyRow.userId);
   await next();
-});
+};
+
+v1Router.use("/chat/sessions/:sid", assertSessionOwnership);
+v1Router.use("/chat/sessions/:sid/*", assertSessionOwnership);
 
 // ─── forms (read) ───
 
@@ -60,11 +62,12 @@ v1Router.get(
   }),
   async (c) => {
     const id = c.req.param("id");
+    const orgId = c.get("orgId");
     const row = await c.env.DB.prepare(
       `SELECT fv.schema_json, f.slug FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
-       WHERE f.id = ? AND f.status = 'published' AND f.deleted_at IS NULL`,
+       WHERE f.id = ? AND f.organization_id = ? AND f.status = 'published' AND f.deleted_at IS NULL`,
     )
-      .bind(id)
+      .bind(id, orgId ?? "")
       .first<{ schema_json: string; slug: string }>();
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     const { toPublicConfig } = await import("@repo/form-schema");
@@ -95,9 +98,9 @@ v1Router.post(
     const row = await c.env.DB.prepare(
       `SELECT f.id, f.slug, fv.id AS version_id, fv.schema_json, f.organization_id
        FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
-       WHERE f.id = ? AND f.status = 'published' AND f.deleted_at IS NULL`,
+       WHERE f.id = ? AND f.organization_id = ? AND f.status = 'published' AND f.deleted_at IS NULL`,
     )
-      .bind(id)
+      .bind(id, c.get("orgId") ?? "")
       .first<{ id: string; slug: string; version_id: string; schema_json: string; organization_id: string }>();
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
 

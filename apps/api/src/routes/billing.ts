@@ -2,18 +2,26 @@ import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
-import { createAuth } from "../lib/auth.js";
+import { getAuth, resolveOrgId, type GuardVars } from "../lib/guards.js";
 
 /**
  * M9 billing — Dodo Payments (MoR): hosted checkout + signed webhooks +
  * usage_counters enforcement. E2E requires DODO_API_KEY + DODO_WEBHOOK_SECRET.
  */
 
-export const billingRouter = new Hono<{ Bindings: Bindings; Variables: { userId: string } }>();
+/** Shim keeping the two checkout/usage handlers on one org-resolution path. */
+async function listOrgsFor(c: { env: Bindings; get: (k: string) => unknown }): Promise<{ id: string }[]> {
+  const userId = c.get("userId") as string | undefined;
+  if (!userId) return [];
+  const orgId = await resolveOrgId(c.env, userId);
+  return orgId ? [{ id: orgId }] : [];
+}
+
+export const billingRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
 
 billingRouter.use("*", async (c, next) => {
   if (c.req.path === "/api/billing/webhook") return next(); // Dodo calls this
-  const auth = createAuth(c.env);
+  const auth = getAuth(c.env);
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (!session) return c.json({ error: { code: "unauthorized", message: "Sign in required" } }, 401);
   c.set("userId", session.user.id);
@@ -90,8 +98,7 @@ billingRouter.get(
     responses: { 200: { description: "Usage", content: { "application/json": { schema: resolver(z.object({ plan: z.string(), planId: z.string(), status: z.string(), limits: z.record(z.string(), z.number()), usage: z.record(z.string(), z.number()) })) } } } },
   }),
   async (c) => {
-    const auth = createAuth(c.env);
-    const orgs = await auth.api.listOrganizations({ headers: c.req.raw.headers });
+    const orgs = await listOrgsFor(c);
     const orgId = orgs?.[0]?.id;
     if (!orgId) return c.json({ error: { code: "no_organization", message: "No organization" } }, 403);
     const limits = await getPlanLimits(c.env, orgId);
@@ -117,8 +124,7 @@ billingRouter.post(
     if (!c.env.DODO_API_KEY) {
       return c.json({ error: { code: "billing_not_configured", message: "DODO_API_KEY is not set — add it to .dev.vars to enable checkout" } }, 503);
     }
-    const auth = createAuth(c.env);
-    const orgs = await auth.api.listOrganizations({ headers: c.req.raw.headers });
+    const orgs = await listOrgsFor(c);
     const orgId = orgs?.[0]?.id;
     if (!orgId) return c.json({ error: { code: "no_organization", message: "No organization" } }, 403);
     const { planId, cycle } = c.req.valid("json");

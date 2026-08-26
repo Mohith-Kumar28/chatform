@@ -469,7 +469,7 @@ export class SessionDO extends DurableObject<Bindings> {
       const answeredBlock = this.doc.blocks.find((b) => b.ref === fromRef);
       const aiOk = await this.aiStreamMessage(
         `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
-          `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref} in your own words.`,
+          `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref} — which is: "${next.block.title}" (${next.block.type}) — in your own words. Ask ONLY that question.`,
       );
       if (!aiOk) await this.emitMessage(questionText(next.block));
       await this.emitQuestion();

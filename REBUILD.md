@@ -591,3 +591,8 @@ Append one line per completed task. This is how a future session knows where exe
 
 - **P0.1** ✅ `apps/web` gitlink removed, nested `.git` absorbed, 57 source files now tracked (`9d2df0a`).
 - **P0.2** ✅ `REBUILD.md` created at repo root.
+- **P0.3 (B1)** ✅ Tenancy closed. New `apps/api/src/lib/guards.ts` (`requireSession`/`requireOrg`/`requireFormAccess`/`requireApiKey`/`requireSessionOwner`/`assertFormAccess`/`assertChatSessionAccess`, memoized Better Auth). Applied across forms, results, preview, ai, keys, webhook-admin, templates, billing, uploads, v1. Cross-tenant ids now 404. Also: `GET /api/templates` no longer public; webhook list returns `secretPreview` not `secret`; webhook delete/test/deliveries org-scoped; SVG dropped from the upload allowlist and `/api/files/:id/download` forced to `application/octet-stream` + `nosniff` + CSP sandbox and org-scoped; captcha no longer bypassable by omitting the token; `results.ts` status filter bound instead of interpolated; new `lib/crypto.ts` with `timingSafeEqual` + PBKDF2 `hashPassword`/`verifyPassword`, form-password compare now constant-time and hash-aware.
+- **P0.4** ✅ Test harness for `apps/api`: vitest 4 + `@cloudflare/vitest-pool-workers` 0.22 running in the real Workers runtime against real bindings and the real drizzle migrations. `tests/tenancy.test.ts` — 15 tests, verified to fail when a guard is removed. Monorepo total 37 tests.
+
+### Deferred, deliberately
+- **Password at rest** is still stored as plaintext in `settings.password.value`. The compare is now constant-time and already accepts PBKDF2 hashes (`lib/crypto.ts`), but converting storage needs a `SettingsDoc` change — done in Phase 1 (S1) where that schema is edited anyway.

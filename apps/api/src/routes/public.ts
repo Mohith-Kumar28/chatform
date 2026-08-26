@@ -5,6 +5,7 @@ import { z } from "zod";
 import { sha256Hex, toPublicConfig, type FormDoc } from "@repo/form-schema";
 import { respondentToken, hashToken } from "./helpers.js";
 import type { Bindings } from "../env.js";
+import { timingSafeEqual, isHashedPassword, verifyPassword } from "../lib/crypto.js";
 import { SessionDO } from "../do/session-do.js";
 import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
 
@@ -102,12 +103,19 @@ sessionsRouter.post(
   const settings = formRow.settings_json ? JSON.parse(formRow.settings_json) : {};
   const settingsParsed = settings as { password?: { enabled?: boolean; value?: string } };
   if (settingsParsed?.password?.enabled) {
-    const supplied = (body as { password?: string }).password;
-    if (supplied !== settingsParsed.password.value) {
+    const supplied = (body as { password?: string }).password ?? "";
+    const stored = settingsParsed.password.value ?? "";
+    const ok = isHashedPassword(stored) ? await verifyPassword(supplied, stored) : timingSafeEqual(supplied, stored);
+    if (!ok) {
       return c.json({ error: { code: "password_required", message: "This form requires a password" } }, 401);
     }
   }
-  if (settings?.captcha?.enabled && body.turnstileToken && c.env.TURNSTILE_SECRET_KEY) {
+  // A missing token used to skip verification entirely, so any client could
+  // bypass the captcha by simply not sending one. Enabled means required.
+  if (settings?.captcha?.enabled && c.env.TURNSTILE_SECRET_KEY) {
+    if (!body.turnstileToken) {
+      return c.json({ error: { code: "captcha_required", message: "Captcha verification required" } }, 403);
+    }
     const verify = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
       method: "POST",
       headers: { "content-type": "application/json" },

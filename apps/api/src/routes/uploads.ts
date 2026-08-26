@@ -1,10 +1,8 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { sha256Hex } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
-import { verifyApiKey } from "../lib/apikeys.js";
-import { respondentToken } from "./helpers.js";
+import { requireSession, requireOrg, requireSessionOwner, type GuardVars } from "../lib/guards.js";
 
 /**
  * File uploads — R2 binding based (no S3 credentials needed).
@@ -17,24 +15,13 @@ const MAX_FILE_MB = 25;
 export const uploadsRouter = new Hono<{ Bindings: Bindings }>();
 
 const ALLOWED_MIME = new Set([
-  "image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml",
+  "image/png", "image/jpeg", "image/gif", "image/webp",
   "application/pdf", "text/plain", "text/csv",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "audio/mpeg", "audio/wav", "video/mp4", "video/webm",
 ]);
-
-async function requireSessionOwner(c: { req: { param: (k: string) => string; url: string; header: (k: string) => string | undefined }; env: Bindings }): Promise<string | null> {
-  const sessionId = c.req.param("id");
-  const token = respondentToken(c);
-  if (!token || !sessionId) return null;
-  const row = await c.env.DB.prepare(`SELECT respondent_token_hash FROM chat_sessions WHERE id = ?`)
-    .bind(sessionId)
-    .first<{ respondent_token_hash: string }>();
-  if (!row || row.respondent_token_hash !== sha256Hex(token)) return null;
-  return sessionId;
-}
 
 uploadsRouter.post(
   "/sessions/:id/uploads/intent",
@@ -154,28 +141,31 @@ uploadsRouter.post(
 
 // ─── dashboard: list + download files for a form ───
 
-export const filesAdminRouter = new Hono<{ Bindings: Bindings; Variables: { userId: string } }>();
+export const filesAdminRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
 
-filesAdminRouter.use("*", async (c, next) => {
-  const { createAuth } = await import("../lib/auth.js");
-  const auth = createAuth(c.env);
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  if (!session) return c.json({ error: { code: "unauthorized", message: "Sign in required" } }, 401);
-  await next();
-});
+filesAdminRouter.use("*", requireSession);
+filesAdminRouter.use("*", requireOrg);
 
 filesAdminRouter.get("/files/:id/download", async (c) => {
   const fileId = c.req.param("id");
-  const row = await c.env.DB.prepare(`SELECT r2_key, filename, mime FROM files WHERE id = ? AND status = 'confirmed'`)
-    .bind(fileId)
+  const orgId = c.get("orgId");
+  // Scope by organization: a file id from another tenant must 404.
+  const row = await c.env.DB.prepare(
+    `SELECT r2_key, filename, mime FROM files WHERE id = ? AND organization_id = ? AND status = 'confirmed'`,
+  )
+    .bind(fileId, orgId ?? "")
     .first<{ r2_key: string; filename: string; mime: string }>();
   if (!row) return c.json({ error: { code: "not_found", message: "File not found" } }, 404);
   const obj = await c.env.R2.get(row.r2_key);
   if (!obj) return c.json({ error: { code: "not_found", message: "Object missing" } }, 404);
+  // Respondent-supplied bytes are never served with a renderable content type
+  // from an origin that holds auth cookies. Force download + sandbox.
   return new Response(obj.body, {
     headers: {
-      "content-type": row.mime,
-      "content-disposition": `attachment; filename="${row.filename.replace(/"/g, "")}"`,
+      "content-type": "application/octet-stream",
+      "content-disposition": `attachment; filename="${row.filename.replace(/[""\r\n]/g, "")}"`,
+      "x-content-type-options": "nosniff",
+      "content-security-policy": "sandbox; default-src 'none'",
     },
   });
 });

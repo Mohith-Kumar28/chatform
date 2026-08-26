@@ -9,7 +9,9 @@
     "typecheck": "tsc --noEmit",
     "deploy": "wrangler deploy",
     "d1:migrate:local": "wrangler d1 migrations apply chatform --local",
-    "d1:migrate:remote": "wrangler d1 migrations apply chatform --remote"
+    "d1:migrate:remote": "wrangler d1 migrations apply chatform --remote",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@hono/standard-validator": "^0.4.0",
@@ -27,9 +29,11 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^4.20250810.0",
     "@repo/config": "workspace:*",
     "typescript": "^5.7.0",
+    "vitest": "^4.1.11",
     "wrangler": "^4.0.0"
   }
 }
