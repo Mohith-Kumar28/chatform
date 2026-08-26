@@ -685,3 +685,25 @@ Monorepo tests: **58 passing** (was 22 at session start).
 | Full completion | `answer_recorded` 50% → 100% → `complete` with a submission id |
 
 The middle row is the acceptance test for the entire product thesis, and it is the thing Youform structurally cannot do.
+
+---
+
+## Phase 7 (partial) — remaining surfaces + fixes found by using it
+
+- **App shell** ✅ Workspace switcher (`useListOrganizations`/`useActiveOrganization` were exported and unused), usage pill (`/api/billing/usage` had never been called from anywhere, so users hit their cap with no warning), avatar menu, ⌘K command palette (promised in DESIGN.md, never built), theme toggle. `AuthGuard` is now the single session gate and preserves deep links through sign-in.
+- **Dashboard** ✅ Search and sort now render — both were declared as state and never displayed, leaving their icons imported and unused, and sort compared form ids as a proxy for recency. Grid/list layouts, per-card actions menu, relative timestamps, whole-card links, real empty states, `ConfirmDialog` instead of `window.confirm`, matching skeletons instead of the string "Loading…".
+- **Results** ✅ Real recharts visualisations, typed lucide column headers (they were emoji glyphs), fixed KPI grid, Completed/Partial counts, and the **transcript-first detail view** — conversation on the left, extracted answers on the right.
+- **Builder header** ✅ Simplified on user feedback: the right side carried seven competing controls. Now a grouped undo/redo pair, one overflow menu (copy link, open live, appearance), and Publish. The left folds version and save state into one quiet status line.
+- **Share** ✅ Rebuilt. QR generated locally and downloadable as SVG — it was fetched from `api.qrserver.com`, sending every form's URL to a third party — and the stray orphan `QrCode` icon is gone. Four real embed modes with correct snippets.
+- **Settings** ✅ "Access" and "Access & closing" merged (they covered one concern), native `<select>` replaced with the shadcn `Select` that had exactly one consumer, and the cramped AI-interviewer section replaced by a signpost to the Agent tab.
+
+### Bugs found by actually using it
+
+| Bug | Cause | Fix |
+|---|---|---|
+| Results showed "No responses yet" while the dashboard counted responses | `/api/forms/:id/submissions` 500'd. Moving the status filter off string interpolation mixed `?` and `?1`; SQLite renumbers `?` from the highest explicit index, so the statement wanted two bindings and three were supplied | All-positional placeholders; `tests/results.test.ts` added (the tenancy suite only asserted the 404 path) |
+| Agent answered with scripted fallback instead of the knowledge base | A tool call ends a step in AI SDK v7; without `stopWhen` the turn ended having said nothing | `stopWhen: stepCountIs(4)` |
+| Every extraction call returned 400 | An optional `note` in the envelope is rejected by strict structured output | Nullable-and-required |
+| Hand-written QR produced unscannable codes | Structurally valid but undecodable matrices | Replaced with `qrcode-generator`; `tests/qr.test.ts` round-trips through a real scanner |
+
+Test totals: **68 passing** (39 form-schema, 24 api, 5 web) — from 22 in one package at session start. `apps/web` had no test runner at all.

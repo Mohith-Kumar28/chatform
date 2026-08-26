@@ -1,8 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,11 +29,12 @@ interface SettingsPanelProps {
   onVariablesChange: (variables: FormDoc["variables"]) => void;
 }
 
+// "Access" and "Access & closing" were two sections covering one concern —
+// who can respond and until when. Merged. The AI Interviewer settings moved to
+// the dedicated Agent tab.
 const SECTIONS = [
   { id: "general", label: "General" },
-  { id: "interviewer", label: "AI Interviewer" },
-  { id: "access", label: "Access" },
-  { id: "closing", label: "Access & closing" },
+  { id: "access", label: "Access & closing" },
   { id: "hidden", label: "Hidden fields & variables" },
   { id: "link", label: "Link & social" },
   { id: "completion", label: "On completion" },
@@ -41,6 +52,7 @@ export function SettingsPanel({
   onVariablesChange,
 }: SettingsPanelProps) {
   const [section, setSection] = useState<SectionId>("general");
+  const params = useParams<{ id: string }>();
   const patch = (p: Partial<FormDoc["settings"]>) => onChange({ ...settings, ...p });
 
   return (
@@ -62,6 +74,16 @@ export function SettingsPanel({
               {s.label}
             </button>
           ))}
+
+          {/* The interviewer settings used to live here as a cramped section.
+              They have their own tab now — leave a signpost so nobody hunts. */}
+          <Link
+            href={`/forms/${params.id}/agent`}
+            className="text-muted-foreground hover:bg-accent/50 mt-2 flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-sm transition-colors"
+          >
+            <Bot className="size-3.5" />
+            AI interviewer →
+          </Link>
         </nav>
 
         {/* content */}
@@ -72,15 +94,16 @@ export function SettingsPanel({
                 label="Progress bar"
                 description="Show respondents how far they are."
               >
-                <select
-                  className="rounded-md border px-2 py-1.5 text-sm"
-                  value={settings.progressBar}
-                  onChange={(e) => patch({ progressBar: e.target.value as "percent" | "steps" | "none" })}
-                >
-                  <option value="percent">Percent</option>
-                  <option value="steps">Steps</option>
-                  <option value="none">None</option>
-                </select>
+                <Select value={settings.progressBar} onValueChange={(v) => patch({ progressBar: v as "percent" | "steps" | "none" })}>
+                  <SelectTrigger className="w-auto min-w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percent">Percent</SelectItem>
+                    <SelectItem value="steps">Steps</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
+                  </SelectContent>
+                </Select>
               </SettingRow>
               <SettingRow
                 label="Allow skipping optional questions"
@@ -95,58 +118,29 @@ export function SettingsPanel({
                 onCheckedChange={(v) => patch({ branding: { ...settings.branding, hidePoweredBy: v } })}
               />
               <SettingRow label="Duplicate responses" description="Control whether the same person can respond twice.">
-                <select
-                  className="rounded-md border px-2 py-1.5 text-sm"
+                <Select
                   value={settings.duplicates.strategy}
-                  onChange={(e) =>
-                    patch({ duplicates: { ...settings.duplicates, strategy: e.target.value as FormDoc["settings"]["duplicates"]["strategy"] } })
+                  onValueChange={(v) =>
+                    patch({ duplicates: { ...settings.duplicates, strategy: v as FormDoc["settings"]["duplicates"]["strategy"] } })
                   }
                 >
-                  <option value="none">Allow repeats</option>
-                  <option value="ip_daily">One per device per day</option>
-                  <option value="field">Fingerprint by answer field</option>
-                </select>
+                  <SelectTrigger className="w-auto min-w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Allow repeats</SelectItem>
+                    <SelectItem value="ip_daily">One per device per day</SelectItem>
+                    <SelectItem value="field">Fingerprint by answer field</SelectItem>
+                  </SelectContent>
+                </Select>
               </SettingRow>
             </SettingSection>
           )}
 
-          {section === "interviewer" && (
-            <SettingSection title="AI Interviewer">
-              <SettingRow label="Mode" description="How much the AI improvises when talking to respondents.">
-                <select
-                  className="max-w-56 rounded-md border px-2 py-1.5 text-sm"
-                  value={settings.agent.mode}
-                  onChange={(e) => patch({ agent: { ...settings.agent, mode: e.target.value as "template" | "hybrid" | "ai" } })}
-                >
-                  <option value="template">Template — deterministic, free</option>
-                  <option value="hybrid">Hybrid — AI phrasing, deterministic parsing</option>
-                  <option value="ai">AI — full agentic phrasing + validation</option>
-                </select>
-              </SettingRow>
-              <SettingRow label="Tone" description="Personality of the interviewer.">
-                <select
-                  className="rounded-md border px-2 py-1.5 text-sm"
-                  value={settings.agent.tone}
-                  onChange={(e) => patch({ agent: { ...settings.agent, tone: e.target.value as "friendly" | "professional" | "playful" } })}
-                >
-                  <option value="friendly">Friendly</option>
-                  <option value="professional">Professional</option>
-                  <option value="playful">Playful</option>
-                </select>
-              </SettingRow>
-              <SettingRow label="Persona prompt" description="Optional extra character for the AI interviewer.">
-                <Input
-                  className="max-w-md"
-                  value={settings.agent.personaPrompt ?? ""}
-                  placeholder="e.g. You are onboarding new beta users for a memory app"
-                  onChange={(e) => patch({ agent: { ...settings.agent, personaPrompt: e.target.value || undefined } })}
-                />
-              </SettingRow>
-            </SettingSection>
-          )}
-
+          {/* The AI Interviewer settings moved to the Agent tab, which has room
+              for the persona, goal, knowledge base and guardrails. */}
           {section === "access" && (
-            <SettingSection title="Access">
+            <SettingSection title="Access & closing">
               <SettingRow
                 label="Require password"
                 description="Only people with the password can respond."
@@ -168,11 +162,6 @@ export function SettingsPanel({
                 checked={settings.captcha.enabled}
                 onCheckedChange={(v) => patch({ captcha: { ...settings.captcha, enabled: v } })}
               />
-            </SettingSection>
-          )}
-
-          {section === "closing" && (
-            <SettingSection title="Access & closing">
               <SettingRow label="Close automatically at" description="Stop accepting responses after this date.">
                 <Input
                   type="datetime-local"
