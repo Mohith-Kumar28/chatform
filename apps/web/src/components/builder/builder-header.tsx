@@ -9,16 +9,24 @@ import {
   CircleAlert,
   CloudOff,
   ExternalLink,
+  Link2,
   Loader2,
+  MoreHorizontal,
   Redo2,
   Undo2,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { CopyButton } from "@/components/ui/copy-button";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -74,15 +82,17 @@ export function BuilderHeader({
                 <ArrowLeft className="size-4" />
               </Link>
             </Button>
-            <div className="flex min-w-0 items-center gap-2">
+            {/* Title over one quiet status line, rather than a title flanked
+                by two competing chips. */}
+            <div className="min-w-0 leading-tight">
               <h1 className="truncate text-sm font-semibold">{title}</h1>
-              <Badge
-                variant={published ? "secondary" : "outline"}
-                className={cn("shrink-0 gap-1", published && "text-[var(--success)]")}
-              >
-                {published ? `v${activeVersion ?? 1}` : "Draft"}
-              </Badge>
-              <SaveIndicator />
+              <p className="text-muted-foreground flex items-center gap-1.5 text-[0.6875rem]">
+                <span className={cn(published && "text-[var(--success)]")}>
+                  {published ? `Live · v${activeVersion ?? 1}` : "Draft"}
+                </span>
+                <span aria-hidden>·</span>
+                <SaveIndicator />
+              </p>
             </div>
           </div>
 
@@ -143,42 +153,64 @@ export function BuilderHeader({
             ))}
           </select>
 
-          {/* right: history, links, publish */}
+          {/* right: undo/redo, one overflow menu, publish.
+              Everything else — theme, copy link, open live — moved into the
+              menu. Seven controls competing beside the tab strip made the bar
+              read as a toolbar rather than a header. */}
           <div className="flex flex-1 items-center justify-end gap-1">
-            <div className="mr-1 hidden items-center gap-0.5 md:flex">
-              <IconAction
-                label="Undo"
-                shortcut="⌘Z"
-                icon={Undo2}
-                disabled={!canUndo}
-                onClick={undo}
-              />
-              <IconAction
-                label="Redo"
-                shortcut="⇧⌘Z"
-                icon={Redo2}
-                disabled={!canRedo}
-                onClick={redo}
-              />
+            <div className="border-border mr-1 hidden items-center rounded-full border md:flex">
+              <IconAction label="Undo" shortcut="⌘Z" icon={Undo2} disabled={!canUndo} onClick={undo} />
+              <IconAction label="Redo" shortcut="⇧⌘Z" icon={Redo2} disabled={!canRedo} onClick={redo} />
             </div>
 
-            <ThemeToggle className="mr-1 hidden sm:inline-flex" />
-
-            {slug && published && (
-              <>
-                <CopyButton value={publicUrl} label={undefined} toastMessage="Link copied" />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon-sm" asChild>
-                      <a href={`/f/${slug}`} target="_blank" rel="noreferrer" aria-label="Open live form">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon-sm" aria-label="More actions">
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {slug && published ? (
+                  <>
+                    <DropdownMenuItem
+                      onSelect={async () => {
+                        await navigator.clipboard.writeText(publicUrl);
+                        toast.success("Link copied");
+                      }}
+                    >
+                      <Link2 className="size-3.5" />
+                      Copy public link
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <a href={`/f/${slug}`} target="_blank" rel="noreferrer">
                         <ExternalLink className="size-3.5" />
+                        Open live form
                       </a>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Open live form</TooltipContent>
-                </Tooltip>
-              </>
-            )}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                ) : null}
+
+                <DropdownMenuItem onSelect={undo} disabled={!canUndo}>
+                  <Undo2 className="size-3.5" />
+                  Undo
+                  <span className="text-muted-foreground ml-auto text-xs">⌘Z</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={redo} disabled={!canRedo}>
+                  <Redo2 className="size-3.5" />
+                  Redo
+                  <span className="text-muted-foreground ml-auto text-xs">⇧⌘Z</span>
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
+                  Appearance
+                </DropdownMenuLabel>
+                <div className="px-2 pb-1.5">
+                  <ThemeToggle />
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <Button
               size="sm"
@@ -188,7 +220,6 @@ export function BuilderHeader({
                 toast.success(published ? "Changes published" : "Form published");
               }}
               disabled={publishing}
-              className="ml-1"
             >
               {publishing ? (
                 <Loader2 className="size-3.5 animate-spin" />
@@ -220,7 +251,14 @@ function IconAction({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon-sm" onClick={onClick} disabled={disabled} aria-label={label}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onClick}
+          disabled={disabled}
+          aria-label={label}
+          className="rounded-full"
+        >
           <Icon className="size-3.5" />
         </Button>
       </TooltipTrigger>
@@ -244,7 +282,7 @@ function SaveIndicator() {
 
   if (saveState === "error") {
     return (
-      <span className="text-destructive text-micro flex shrink-0 items-center gap-1" title={saveError ?? undefined}>
+      <span className="text-destructive flex shrink-0 items-center gap-1" title={saveError ?? undefined}>
         <CircleAlert className="size-3" />
         Not saved
       </span>
@@ -252,7 +290,7 @@ function SaveIndicator() {
   }
   if (saveState === "offline") {
     return (
-      <span className="text-muted-foreground text-micro flex shrink-0 items-center gap-1">
+      <span className="flex shrink-0 items-center gap-1">
         <CloudOff className="size-3" />
         Offline
       </span>
@@ -260,20 +298,17 @@ function SaveIndicator() {
   }
   if (saveState === "saving") {
     return (
-      <span className="text-muted-foreground text-micro flex shrink-0 items-center gap-1">
+      <span className="flex shrink-0 items-center gap-1">
         <Loader2 className="size-3 animate-spin" />
         Saving
       </span>
     );
   }
   if (saveState === "dirty") {
-    return <span className="text-muted-foreground text-micro shrink-0">Unsaved</span>;
+    return <span className="shrink-0">Unsaved</span>;
   }
   return (
-    <span
-      className="text-muted-foreground text-micro shrink-0"
-      onMouseEnter={() => force((n) => n + 1)}
-    >
+    <span className="shrink-0" onMouseEnter={() => force((n) => n + 1)}>
       {lastSavedAt
         ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
         : "Saved"}
