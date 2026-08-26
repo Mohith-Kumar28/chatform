@@ -616,28 +616,6 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
               Auto arrange
             </Button>
           </Panel>
-          {/* Two wire colours with no explanation is a puzzle, not a diagram. */}
-          <Panel position="bottom-right">
-            <div className="bg-card/90 text-muted-foreground flex items-center gap-3 rounded-full px-3 py-1.5 text-[10px] shadow-sm backdrop-blur">
-              <span className="flex items-center gap-1.5">
-                <span className="h-px w-4" style={{ background: "var(--border)" }} />
-                asked in order
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-0.5 w-4 rounded-full" style={{ background: "var(--primary)" }} />
-                a route you set
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span
-                  className="h-px w-4"
-                  style={{
-                    backgroundImage: "repeating-linear-gradient(to right, var(--muted-foreground) 0 3px, transparent 3px 6px)",
-                  }}
-                />
-                its branch
-              </span>
-            </div>
-          </Panel>
           <Controls showInteractive={false} />
             <MiniMap
               pannable
@@ -816,7 +794,7 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
         source: b.ref,
         target: branchId,
         deletable: false,
-        style: { stroke: "var(--muted-foreground)", strokeWidth: 1.5, strokeDasharray: "3 3" },
+        style: { stroke: "var(--border)", strokeWidth: 1.5 },
         markerEnd: { type: MarkerType.ArrowClosed },
       });
       for (const c of cases) {
