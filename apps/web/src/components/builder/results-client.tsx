@@ -20,7 +20,7 @@ import {
   MessageSquare,
   TrendingDown,
   Users,
-} from "lucide-react";
+  ShieldCheck,} from "lucide-react";
 import type { FormDoc } from "@repo/form-schema";
 import {
   useGetApiFormsById,
@@ -68,6 +68,8 @@ interface SubRow {
   durationMs: number | null;
   answers: { blockRef: string; blockType: string; value: unknown }[];
   transcript: { role: string; content: string; createdAt: number }[];
+  /** Only for forms that required sign-in. */
+  respondent: { provider: string; label: string; name: string | null } | null;
 }
 
 export function ResultsClient({ formId }: ResultsClientProps) {
@@ -88,6 +90,7 @@ export function ResultsClient({ formId }: ResultsClientProps) {
     [doc],
   );
 
+  const hasRespondents = subs.some((s) => s.respondent);
   const completedCount = subs.filter((s) => s.status === "completed").length;
   const partialCount = subs.length - completedCount;
   const rows = subs.filter((s) =>
@@ -156,6 +159,13 @@ export function ResultsClient({ formId }: ResultsClientProps) {
                       <th className="text-muted-foreground px-3 py-2.5 text-left text-xs font-medium">
                         Submitted
                       </th>
+                      {/* Only present when the form asked people to sign in;
+                          an always-empty column is worse than no column. */}
+                      {hasRespondents && (
+                        <th className="text-muted-foreground px-3 py-2.5 text-left text-xs font-medium">
+                          Respondent
+                        </th>
+                      )}
                       {columns.map((b) => {
                         const meta = blockMeta(b.type);
                         return (
@@ -182,6 +192,7 @@ export function ResultsClient({ formId }: ResultsClientProps) {
                         key={row.id}
                         row={row}
                         columns={columns}
+                        showRespondent={hasRespondents}
                         open={openRow === row.id}
                         onToggle={() => setOpenRow(openRow === row.id ? null : row.id)}
                       />
@@ -210,11 +221,13 @@ export function ResultsClient({ formId }: ResultsClientProps) {
 function SubmissionRow({
   row,
   columns,
+  showRespondent,
   open,
   onToggle,
 }: {
   row: SubRow;
   columns: { ref: string; title: string; type: string }[];
+  showRespondent: boolean;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -237,6 +250,18 @@ function SubmissionRow({
             minute: "2-digit",
           })}
         </td>
+        {showRespondent && (
+          <td className="px-3 py-2.5 whitespace-nowrap">
+            {row.respondent ? (
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck className="size-3.5 shrink-0 text-[var(--success)]" />
+                <span className="truncate">{row.respondent.label}</span>
+              </span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </td>
+        )}
         {columns.map((b) => (
           <td key={b.ref} className="max-w-[14rem] truncate px-3 py-2.5">
             {formatAnswer(byRef.get(b.ref))}
@@ -245,7 +270,7 @@ function SubmissionRow({
       </tr>
       {open && (
         <tr>
-          <td colSpan={columns.length + 1} className="bg-muted/20 p-4">
+          <td colSpan={columns.length + (showRespondent ? 2 : 1)} className="bg-muted/20 p-4">
             <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
               <div className="space-y-2">
                 <p className="text-muted-foreground text-micro font-medium tracking-wide uppercase">

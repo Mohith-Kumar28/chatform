@@ -833,3 +833,44 @@ Optional branding on `ThemeDoc`: `brandName`, `logoUrl`, `logoKey`. Both opt-in 
 - **No schema version bump.** The fields are optional with defaults, which Zod materializes on read; the migration chain is reserved for changes that actually need transforming, and diluting it with no-op steps would make it harder to trust.
 
 Verified: typing a brand name updates the preview live and autosaves.
+
+---
+
+## Phase 14 — explicit submit, resubmit, and respondent authentication
+
+### Finishing a form is now an act
+
+The conversation used to end itself: the last answer resolved an ending and the submission was written before the respondent had any say. There is now a **review step** — `settings.onComplete.requireSubmit`, on by default. Every answer is listed with a pencil to change it, and a **Submit form** button (never "Send") is what completes the response. Hovering any earlier answer in the thread offers the same re-answer, which retracts the answer, un-projects it, and rewinds progress.
+
+Returning to a form already answered on that device shows **"You've already answered this"** with *View my answers* and *Resubmit*, instead of silently opening a second empty session.
+
+**Bug found on the way:** `migrateFormDoc(...)` was being cast `as FormDoc` at seven call sites instead of parsed, so Zod defaults never materialized and any field added after a version was published came back `undefined` — `requireSubmit` and `duplicates` were missing from every public config for exactly this reason. `readFormDoc` / `safeReadFormDoc` parse; the casts are gone. Three regression tests.
+
+### Respondent authentication
+
+`settings.requireAuth` was a bare boolean nothing read. It is now an object — `{ enabled, methods, message, onePerIdentity }` — because "require auth" says nothing without naming which methods are acceptable. **Schema v3 → v4**; a legacy `true` migrates to `{enabled: true, methods: ["google"]}`.
+
+Two decisions shaped the implementation:
+
+1. **A respondent is not a user.** Verifying an identity creates no Better Auth account, joins no organization, and sets no cookie. It produces an attestation the DO holds on the session and `finalize` copies onto the submission (`respondent_provider`/`_subject`/`_email`/`_phone`/`_name`) — denormalized, because sessions get pruned and a submission has to stay attributable.
+2. **It has to work headlessly.** `/v1` lets a customer drive the whole conversation from their own server, so neither method may assume our page is open. That ruled out **Firebase phone auth**, which is a browser SDK flow with a reCAPTCHA step and no server-side entry point. Instead: Google is verified from an ID token the caller supplies, and phone is our own OTP over plain HTTP. The three routes are written once and mounted on both `/p/sessions/:id/auth/*` and `/v1/chat/sessions/:sid/auth/*`.
+
+**Google** — the ID token is verified properly: RS256 signature against Google's JWKS (cached per isolate, with one refetch on a `kid` miss so key rotation is a non-event), then issuer, **audience**, and expiry. Decoding the payload without checking the signature — what most snippets do — would let anyone sign in as anyone by editing a base64 string. An unverified `email_verified` still signs the person in but records no email.
+
+**Phone** — six-digit codes, stored hashed and salted with the session id, 10-minute TTL, 5 attempts, 5 codes per session, 30-second resend cooldown. Every outstanding challenge is consumed on success so an older code cannot be replayed. `sendSms` is provider-shaped: Twilio when configured, and in development the code is logged and returned in the response so the flow is testable for free. That fallback is gated on `ENVIRONMENT === "development"`, never on "is Twilio missing" — a production deploy that lost its credentials must fail closed, not start handing out codes.
+
+**The gate itself** lives in the DO, which is the only thing that can enforce it: `authGateBlocks()` refuses turns and actions (except `stop` and `restart` — someone who cannot sign in must still be able to leave) and re-emits `auth_required` rather than dropping them, so a reloaded tab gets its card back.
+
+**In the chat**, sign-in is a card in the thread under the agent's message asking for it — no interstitial, no redirect. A redirect-based OAuth flow would lose the session mid-form, which is the exact moment people abandon forms. Verification is recorded as a quiet in-thread line ("Verified as …") so it keeps its place in the conversation.
+
+New env: `GOOGLE_CLIENT_ID` (API, for audience validation), `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (web, for the button), `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` (optional). With no Google client id the button degrades to a plain "not available" line rather than breaking the card.
+
+**Also:** `onePerIdentity` is checked when the identity becomes known — before any question is asked — rather than at submit time, when the respondent has already done the work. Results grows a Respondent column, rendered only when the form actually asked for sign-in.
+
+**A second bug found on the way:** the optimistic echo reconciled on text equality, so tapping the fourth star showed "4/5" locally while the server confirmed "4" — nothing matched and both bubbles stayed. It now replaces the one pending echo and keeps its own label.
+
+Test totals: **48 form-schema · 46 api · 5 web.** Verified end to end: gated session refuses turns (400 `auth_required`), OTP start → wrong code → right code → interview begins → submit → identity on the submission row and in Results.
+
+### Still open
+
+Email via Resend · Google Sheets · webhook retry fidelity · plan-limit enforcement · analytics rollups · responsive/a11y pass. `apps/web` lint has 6 pre-existing React Compiler errors (`use-autosave`, `theme-toggle`, `share-tab`, `chat-client`) unrelated to this work.

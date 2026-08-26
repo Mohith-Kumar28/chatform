@@ -8,6 +8,7 @@ import type { Bindings } from "../env.js";
 import { timingSafeEqual, isHashedPassword, verifyPassword } from "../lib/crypto.js";
 import { SessionDO } from "../do/session-do.js";
 import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
+import { mountRespondentAuth } from "./respondent-auth.js";
 
 const sessionsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -28,6 +29,16 @@ const actionSchema = z.object({
   /** Required for `edit`: which question to go back to. */
   ref: z.string().optional(),
 });
+
+/**
+ * The slice of a Hono context this guard actually needs. Structural rather
+ * than `Context<...>` so the same function serves handlers whose routers
+ * declare different Variables.
+ */
+interface RespondentCtx {
+  req: { param: (k: string) => string | undefined; url: string; header: (k: string) => string | undefined };
+  env: Bindings;
+}
 
 function stub(env: Bindings, sessionId: string): DurableObjectStub<SessionDO> {
   return env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
@@ -188,7 +199,7 @@ sessionsRouter.post(
   });
 });
 
-async function requireRespondent(c: { req: { param: (k: string) => string; url: string; header: (k: string) => string | undefined }; env: Bindings }): Promise<string | null> {
+async function requireRespondent(c: RespondentCtx): Promise<string | null> {
   const sessionId = c.req.param("id");
   const token = respondentToken(c);
   if (!token || !sessionId) return null;
@@ -232,6 +243,12 @@ sessionsRouter.get("/sessions/:id", async (c) => {
   const status = await stub(c.env, sessionId).getStatus();
   if (!status) return c.json({ error: { code: "not_found", message: "Session not found" } }, 404);
   return c.json(status);
+});
+
+mountRespondentAuth(sessionsRouter, {
+  base: "/sessions/:id",
+  stub,
+  resolve: (c) => requireRespondent(c),
 });
 
 export default sessionsRouter;

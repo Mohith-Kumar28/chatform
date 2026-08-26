@@ -91,12 +91,24 @@ resultsRouter.get(
     // continues auto-numbering `?` from the highest explicit index, so mixing
     // `?` with `?1` silently changes how many bindings the statement wants.
     const subs = await c.env.DB.prepare(
-      `SELECT s.id, s.status, s.started_at, s.completed_at, s.duration_ms, s.session_id
+      `SELECT s.id, s.status, s.started_at, s.completed_at, s.duration_ms, s.session_id,
+              s.respondent_provider, s.respondent_email, s.respondent_phone, s.respondent_name
        FROM submissions s WHERE s.form_id = ? AND (? = 'all' OR s.status = ?)
        ORDER BY s.started_at DESC LIMIT ?`,
     )
       .bind(id, status, status, limit)
-      .all<{ id: string; status: string; started_at: number; completed_at: number | null; duration_ms: number | null; session_id: string | null }>();
+      .all<{
+        id: string;
+        status: string;
+        started_at: number;
+        completed_at: number | null;
+        duration_ms: number | null;
+        session_id: string | null;
+        respondent_provider: string | null;
+        respondent_email: string | null;
+        respondent_phone: string | null;
+        respondent_name: string | null;
+      }>();
 
     const out = [];
     for (const s of subs.results ?? []) {
@@ -118,6 +130,14 @@ resultsRouter.get(
         startedAt: s.started_at,
         completedAt: s.completed_at,
         durationMs: s.duration_ms,
+        // Present only for forms that required sign-in.
+        respondent: s.respondent_provider
+          ? {
+              provider: s.respondent_provider,
+              label: s.respondent_email ?? s.respondent_phone ?? s.respondent_name ?? "Verified",
+              name: s.respondent_name,
+            }
+          : null,
         answers: (answers.results ?? []).map((a) => ({
           blockRef: a.block_ref,
           blockType: a.block_type,

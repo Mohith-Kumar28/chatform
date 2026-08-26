@@ -24,6 +24,13 @@ export interface Bindings {
   DODO_WEBHOOK_SECRET?: string;
   TURNSTILE_SECRET_KEY?: string;
   FILE_ENCRYPTION_KEY?: string;
+
+  /** Respondent sign-in. Public — the client needs it to render the Google button. */
+  GOOGLE_CLIENT_ID?: string;
+  /** SMS for phone OTP. Absent in dev, where codes are logged instead of sent. */
+  TWILIO_ACCOUNT_SID?: string;
+  TWILIO_AUTH_TOKEN?: string;
+  TWILIO_FROM?: string;
   SIGNING_SALT: string;
 }
 

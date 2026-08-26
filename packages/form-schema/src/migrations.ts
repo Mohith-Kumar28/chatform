@@ -49,6 +49,20 @@ const MIGRATIONS: ((doc: AnyDoc) => AnyDoc)[] = [
       }),
     };
   },
+
+  // ── v3 → v4 ────────────────────────────────────────────────────────────
+  // `settings.requireAuth` was a bare boolean that no code read. Widened to an
+  // object, because "require auth" says nothing without naming which methods
+  // are acceptable. A doc that had it on keeps it on, defaulting to Google.
+  (doc) => {
+    const settings = (doc.settings ?? {}) as Record<string, unknown>;
+    const prior = settings.requireAuth;
+    const requireAuth =
+      typeof prior === "boolean"
+        ? { enabled: prior, methods: ["google"] }
+        : (prior ?? { enabled: false });
+    return { ...doc, schemaVersion: 4, settings: { ...settings, requireAuth } };
+  },
 ];
 
 export function migrateFormDoc(raw: unknown): unknown {

@@ -33,6 +33,7 @@ import {
   buildRetryObjective,
 } from "../lib/agent-prompts.js";
 import { buildAgentTools, type ToolOutcome } from "./agent-tools.js";
+import type { RespondentIdentity, RespondentAuthMethod } from "@repo/form-schema";
 import { streamText, stepCountIs } from "ai";
 
 interface DoSessionMeta {
@@ -52,6 +53,8 @@ interface DoSessionMeta {
   userAgent: string | null;
   /** Set when the respondent submits, for the already-submitted screen. */
   completedAt?: number | null;
+  /** Set once the sign-in gate is satisfied. Null while it still blocks. */
+  identity?: RespondentIdentity | null;
 }
 
 /** The single `"session"` storage blob. Everything here survives eviction. */
@@ -159,12 +162,83 @@ export class SessionDO extends DurableObject<Bindings> {
 
     await this.persistMeta();
     await this.appendMessage("assistant", greeting(this.doc));
+    await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
+
+    // Sign-in comes before the first question, not after it. Asking someone to
+    // answer and then telling them it does not count without an account is the
+    // worst possible order.
+    if (this.authGateBlocks()) {
+      await this.emitAuthRequired();
+      return { ok: true };
+    }
 
     // seed variables/score rules that apply pre-flow
+    await this.beginInterview();
+    return { ok: true };
+  }
+
+  /** Ask the first question. Split out so the auth gate can defer it. */
+  private async beginInterview(): Promise<void> {
+    if (!this.doc) return;
     const next = resolveNext(this.doc, null, this.state);
     await this.advanceTo(next);
-    await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
-    return { ok: true };
+  }
+
+  // ────────────────────────── respondent auth ──────────────────────────
+
+  /** True while the form requires a verified respondent and has not got one. */
+  private authGateBlocks(): boolean {
+    if (!this.doc || !this.meta) return false;
+    return this.doc.settings.requireAuth.enabled && !this.meta.identity;
+  }
+
+  private async emitAuthRequired(): Promise<void> {
+    if (!this.doc || !this.meta) return;
+    const gate = this.doc.settings.requireAuth;
+    // The prompt is a real assistant message so it lands in the transcript and
+    // survives replay; the card below it is the event.
+    await this.emitMessage(gate.message);
+    await this.appendMessage("assistant", gate.message);
+    await this.emit("auth_required", { methods: gate.methods, message: gate.message });
+  }
+
+  /**
+   * Record a verified identity and start (or resume) the interview.
+   *
+   * Verification itself happens in the route — the DO never sees an ID token or
+   * an OTP, only the attested result — so this method must stay the single
+   * place that clears the gate.
+   */
+  async attachIdentity(identity: RespondentIdentity): Promise<{ accepted: boolean; error?: string }> {
+    const ok = await this.ensureLoaded();
+    if (!ok || !this.meta || !this.doc) return { accepted: false, error: "session_not_found" };
+    if (this.meta.status !== "active") return { accepted: false, error: "session_closed" };
+    if (this.meta.identity) return { accepted: true }; // idempotent: a double-submit is not an error
+
+    this.meta.identity = identity;
+    await this.persistMeta();
+    await this.emit("auth_verified", {
+      provider: identity.provider,
+      label: identity.email ?? identity.phone ?? identity.name ?? "Verified",
+      name: identity.name,
+      pictureUrl: identity.pictureUrl,
+    });
+    await this.appendMessage(
+      "system_event",
+      `Respondent verified via ${identity.provider}: ${identity.email ?? identity.phone ?? identity.subject}`,
+    );
+
+    // Only start the flow if the gate is what was holding it. A session that
+    // verified mid-conversation (a settings change, a resumed session) must not
+    // be rewound to question one.
+    if (!this.meta.currentRef && this.collectedCount === 0) await this.beginInterview();
+    return { accepted: true };
+  }
+
+  /** The identity, for the route that needs to enforce `onePerIdentity`. */
+  async getIdentity(): Promise<RespondentIdentity | null> {
+    const ok = await this.ensureLoaded();
+    return ok ? (this.meta?.identity ?? null) : null;
   }
 
   /** Cold hydration after eviction. */
@@ -565,6 +639,12 @@ export class SessionDO extends DurableObject<Bindings> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta || !this.doc) return { accepted: false, error: "session_not_found" };
     if (this.meta.status !== "active") return { accepted: false, error: "session_closed" };
+    // Re-emit rather than silently dropping: a client that lost the card (a
+    // reload, a stale tab) needs it back, not a dead input box.
+    if (this.authGateBlocks()) {
+      await this.emitAuthRequired();
+      return { accepted: false, error: "auth_required" };
+    }
     if (this.turnCount >= 500) return { accepted: false, error: "too_many_turns" };
 
     this.turnCount += 1;
@@ -875,6 +955,12 @@ export class SessionDO extends DurableObject<Bindings> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta || !this.doc) return { accepted: false, error: "session_not_found" };
     if (this.meta.status !== "active") return { accepted: false, error: "session_closed" };
+    // `stop` and `restart` stay open while gated — someone who cannot sign in
+    // must still be able to walk away or start over.
+    if (this.authGateBlocks() && input.action !== "stop" && input.action !== "restart") {
+      await this.emitAuthRequired();
+      return { accepted: false, error: "auth_required" };
+    }
 
     if (input.action === "skip") {
       const block = await this.currentBlock();
@@ -983,6 +1069,13 @@ export class SessionDO extends DurableObject<Bindings> {
     summary: { ref: string; title: string; display: string }[];
     awaitingSubmit: boolean;
     completedAt: number | null;
+    /** Null when the form is open to anyone. */
+    auth: {
+      methods: RespondentAuthMethod[];
+      message: string;
+      verified: boolean;
+      label: string | null;
+    } | null;
   } | null> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta) return null;
@@ -995,6 +1088,16 @@ export class SessionDO extends DurableObject<Bindings> {
       summary: this.answerSummary(),
       awaitingSubmit: this.pendingEndingRef !== null,
       completedAt: this.meta.status === "completed" ? (this.meta.completedAt ?? null) : null,
+      auth: this.doc?.settings.requireAuth.enabled
+        ? {
+            methods: this.doc.settings.requireAuth.methods,
+            message: this.doc.settings.requireAuth.message,
+            verified: Boolean(this.meta.identity),
+            label: this.meta.identity
+              ? (this.meta.identity.email ?? this.meta.identity.phone ?? this.meta.identity.name ?? "Verified")
+              : null,
+          }
+        : null,
     };
   }
 
@@ -1090,13 +1193,36 @@ export class SessionDO extends DurableObject<Bindings> {
       .toLowerCase()
       .slice(0, 5000);
 
+    // The verified respondent is copied onto the submission rather than left to
+    // be joined from the session, because sessions get pruned and a submission
+    // has to stay attributable for as long as it is kept.
+    const id = this.meta.identity ?? null;
+
     await this.env.DB.batch([
       this.env.DB.prepare(
-        `UPDATE submissions SET status = ?, completed_at = ?, duration_ms = ?, search_text = ?, meta = json_set(coalesce(meta,'{}'), '$.endingRef', ?, '$.abandonReason', ?) WHERE id = ?`,
-      ).bind(status, status === "completed" ? Date.now() : null, durationMs, searchText, endingRef, reason ?? null, submissionId),
+        `UPDATE submissions
+            SET status = ?1, completed_at = ?2, duration_ms = ?3, search_text = ?4,
+                meta = json_set(coalesce(meta,'{}'), '$.endingRef', ?5, '$.abandonReason', ?6),
+                respondent_provider = ?7, respondent_subject = ?8,
+                respondent_email = ?9, respondent_phone = ?10, respondent_name = ?11
+          WHERE id = ?12`,
+      ).bind(
+        status,
+        status === "completed" ? Date.now() : null,
+        durationMs,
+        searchText,
+        endingRef,
+        reason ?? null,
+        id?.provider ?? null,
+        id?.subject ?? null,
+        id?.email ?? null,
+        id?.phone ?? null,
+        id?.name ?? null,
+        submissionId,
+      ),
       this.env.DB.prepare(
-        `UPDATE chat_sessions SET status = ?, current_block_ref = NULL, collected_count = ?, turn_count = ?, submission_id = ?, state_snapshot_json = NULL, last_activity_at = ? WHERE id = ?`,
-      ).bind(this.meta.status, this.collectedCount, this.turnCount, submissionId, Date.now(), this.meta.sessionId),
+        `UPDATE chat_sessions SET status = ?, current_block_ref = NULL, collected_count = ?, turn_count = ?, submission_id = ?, state_snapshot_json = NULL, respondent_identity = ?, last_activity_at = ? WHERE id = ?`,
+      ).bind(this.meta.status, this.collectedCount, this.turnCount, submissionId, id ? JSON.stringify(id) : null, Date.now(), this.meta.sessionId),
     ]);
 
     // project transcript to D1 for the results dashboard

@@ -1,4 +1,4 @@
-import type { PublicBlock, PublicEnding } from "@repo/form-schema";
+import type { PublicBlock, PublicEnding, RespondentAuthMethod } from "@repo/form-schema";
 
 export interface SSEEnvelope {
   v: 1;
@@ -37,6 +37,15 @@ export type ServerEvent =
       /** Every question answered; waiting on an explicit submit. */
       type: "review";
       data: { answers: { ref: string; title: string; display: string }[] };
+    }
+  | {
+      /** The form wants a verified respondent before the first question. */
+      type: "auth_required";
+      data: { methods: RespondentAuthMethod[]; message: string };
+    }
+  | {
+      type: "auth_verified";
+      data: { provider: RespondentAuthMethod; label: string; name: string | null; pictureUrl: string | null };
     }
   | { type: "ending"; data: { ending: PublicEnding } }
   | { type: "complete"; data: { submissionId: string; durationMs: number } }

@@ -1,10 +1,11 @@
 import { z } from "zod";
+import type { RespondentAuthMethod } from "./respondent";
 import { AnswerMap } from "./answers";
 import { Block, type BlockMedia } from "./blocks";
 import { Ending, HiddenField, LogicRule, Variable } from "./logic";
 import { SettingsDoc, ThemeDoc } from "./settings";
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const FormDoc = z.object({
   schemaVersion: z.number().int().positive().default(SCHEMA_VERSION),
@@ -222,7 +223,15 @@ export interface PublicFormConfig {
   brandingHidden: boolean;
   agentMode: "template" | "hybrid" | "ai";
   theme: ThemeDoc;
-  requireAuth: boolean;
+  /**
+   * Null when the form is open to anyone. When set, the client must not send a
+   * turn until the session reports a verified identity — but the gate is
+   * enforced in the DO, not here; this only says what to render.
+   */
+  requireAuth: {
+    methods: RespondentAuthMethod[];
+    message: string;
+  } | null;
   captchaEnabled: boolean;
   closed?: boolean;
   closedMessage?: string;
@@ -279,7 +288,9 @@ export function toPublicConfig(
     brandingHidden: opts.brandingHidden,
     agentMode: doc.settings.agent.mode,
     theme: doc.theme,
-    requireAuth: doc.settings.requireAuth,
+    requireAuth: doc.settings.requireAuth.enabled
+      ? { methods: doc.settings.requireAuth.methods, message: doc.settings.requireAuth.message }
+      : null,
     captchaEnabled: doc.settings.captcha.enabled,
     closed: opts.closed,
     closedMessage: opts.closedMessage,

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { NanoId } from "./ids";
+import { RespondentAuthMethod } from "./respondent";
 
 export const SettingsDoc = z.object({
   language: z.string().length(2).default("en"),
@@ -21,7 +22,32 @@ export const SettingsDoc = z.object({
     })
     .default({ closedMessageMd: "This form is no longer accepting responses." }),
 
-  requireAuth: z.boolean().default(false),
+  /**
+   * Make the respondent prove who they are before the first question.
+   *
+   * This used to be a bare boolean that nothing read. It is an object now
+   * because "require auth" is meaningless without saying which methods are
+   * acceptable, and because the gate message is shown inside the conversation
+   * rather than on an interstitial — the respondent should never leave the
+   * chat to sign in.
+   */
+  requireAuth: z
+    .object({
+      enabled: z.boolean().default(false),
+      methods: z.array(RespondentAuthMethod).min(1).default(["google"]),
+      /** Said by the agent just above the sign-in card. */
+      message: z
+        .string()
+        .max(300)
+        .default("Before we start, could you verify who you are? It only takes a moment."),
+      /**
+       * Only one response per verified identity. Distinct from
+       * `duplicates.strategy`, which keys on IP or an answer and is trivially
+       * evaded; a verified identity is not.
+       */
+      onePerIdentity: z.boolean().default(false),
+    })
+    .prefault({}),
   password: z
     .object({
       enabled: z.boolean().default(false),

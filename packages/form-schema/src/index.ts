@@ -2,6 +2,7 @@ export * from "./ids";
 export * from "./conditions";
 export * from "./blocks";
 export * from "./logic";
+export * from "./respondent";
 export * from "./settings";
 export * from "./answers";
 export * from "./form-doc";

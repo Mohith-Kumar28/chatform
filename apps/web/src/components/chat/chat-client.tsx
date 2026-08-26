@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Check,
   ArrowDown,
   CheckCheck,
   MoreHorizontal,
@@ -21,6 +22,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
+import { AuthCard } from "./auth-card";
 import { useChat, type ChatMessage } from "./use-chat";
 import { FileUploadControl } from "./file-upload";
 import { SendRow, TextInput } from "./composers/primitives";
@@ -73,7 +75,7 @@ export function ChatClient({
     // Drive the container directly. scrollIntoView targeted the window and put
     // the anchor behind the sticky composer.
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [chat.messages, chat.thinking, chat.question, chat.ending, pinned]);
+  }, [chat.messages, chat.thinking, chat.question, chat.ending, chat.auth, chat.review, pinned]);
 
   // Honour the ending's redirect, which was parsed and then ignored.
   useEffect(() => {
@@ -175,6 +177,18 @@ export function ChatClient({
             </div>
           )}
 
+          {/* Sign-in sits in the thread, under the agent's message asking for
+              it — not as an interstitial the respondent has to get past. */}
+          {chat.auth && (
+            <AuthCard
+              auth={chat.auth}
+              onGoogle={(t) => void chat.signInWithGoogle(t)}
+              onRequestCode={(phone, hint) => void chat.requestPhoneCode(phone, hint)}
+              onVerifyCode={(code) => void chat.verifyPhoneCode(code)}
+              onChangeNumber={chat.changePhoneNumber}
+            />
+          )}
+
           {chat.review && (
             <ReviewCard
               review={chat.review}
@@ -228,7 +242,7 @@ export function ChatClient({
         </div>
       )}
 
-      {!chat.ending && !chat.review && (
+      {!chat.ending && !chat.review && !chat.auth && (
         <footer className="sticky bottom-0 bg-[var(--cf-bg)]/95 backdrop-blur">
           <div className="mx-auto w-full max-w-2xl px-4 py-3">
             <Composer chat={chat} config={config} />
@@ -334,6 +348,17 @@ function ChatHeader({
 }
 
 function Bubble({ message, onEdit }: { message: ChatMessage; onEdit?: () => void }) {
+  // A note about the conversation, not a turn in it: quiet, unbubbled, and
+  // left in place in the thread.
+  if (message.role === "system") {
+    return (
+      <p className="animate-message-in flex items-center gap-1.5 pl-1 text-[0.6875rem] opacity-45">
+        <Check className="size-3" />
+        {message.text}
+      </p>
+    );
+  }
+
   const isUser = message.role === "user";
   return (
     <div className={cn("group flex animate-message-in items-center gap-1.5", isUser ? "justify-end" : "justify-start")}>

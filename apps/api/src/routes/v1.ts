@@ -5,6 +5,8 @@ import { readFormDoc, type FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
 import { requireApiKey, assertChatSessionAccess, type GuardVars } from "../lib/guards.js";
+import { mountRespondentAuth, type AuthRouter } from "./respondent-auth.js";
+import type { SessionDO } from "../do/session-do.js";
 
 /**
  * Developer API v1 — API-key auth, headless chat contract.
@@ -223,3 +225,18 @@ v1Router.get(
     return c.json(status);
   },
 );
+
+/**
+ * Respondent sign-in over the headless API.
+ *
+ * `assertSessionOwnership` above already scoped `/chat/sessions/:sid/*` to the
+ * API key's organization, so the resolver here is just the path param — the
+ * caller is the customer's server, not the respondent themselves. The customer
+ * collects a Google ID token or drives the OTP from their own UI and relays it.
+ */
+mountRespondentAuth(v1Router as unknown as AuthRouter, {
+  base: "/chat/sessions/:sid",
+  stub: (env, sessionId) =>
+    env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>,
+  resolve: async (c) => c.req.param("sid") ?? null,
+});

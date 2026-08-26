@@ -11,6 +11,8 @@ import {
   knowledgeSize,
   KNOWLEDGE_CHAR_BUDGET,
   leadFormFixture,
+  toPublicConfig,
+  normalizeE164,
   type Block,
 } from "../src/index";
 
@@ -219,5 +221,68 @@ describe("extraction schemas", () => {
   it("a null value with confident=false is always valid — that is the clarify path", () => {
     const s = extractionSchema(block({ type: "date", title: "When?" }))!;
     expect(s.safeParse({ value: null, confident: false, note: "ambiguous" }).success).toBe(true);
+  });
+});
+
+describe("respondent auth (v3 → v4)", () => {
+  // The fixture leans on schema defaults and carries no `settings` key at all.
+  const base = () => {
+    const doc = structuredClone(leadFormFixture) as Record<string, unknown>;
+    doc.settings ??= {};
+    return doc;
+  };
+
+  it("carries a legacy boolean requireAuth: true into the object form", () => {
+    const doc = base();
+    doc.schemaVersion = 3;
+    (doc.settings as Record<string, unknown>).requireAuth = true;
+    const out = readFormDoc(doc);
+    expect(out.settings.requireAuth.enabled).toBe(true);
+    expect(out.settings.requireAuth.methods).toEqual(["google"]);
+    // The gate message has to materialize, or the chat renders an empty prompt.
+    expect(out.settings.requireAuth.message.length).toBeGreaterThan(0);
+  });
+
+  it("treats a legacy false — and a missing field — as no gate", () => {
+    const off = base();
+    off.schemaVersion = 3;
+    (off.settings as Record<string, unknown>).requireAuth = false;
+    expect(readFormDoc(off).settings.requireAuth.enabled).toBe(false);
+
+    const absent = base();
+    absent.schemaVersion = 1;
+    delete (absent.settings as Record<string, unknown>).requireAuth;
+    expect(readFormDoc(absent).settings.requireAuth.enabled).toBe(false);
+  });
+
+  it("does not clobber an already-migrated object on a second pass", () => {
+    const doc = base();
+    (doc.settings as Record<string, unknown>).requireAuth = {
+      enabled: true,
+      methods: ["phone"],
+      message: "Verify your number",
+    };
+    const once = migrateFormDoc(doc);
+    expect(migrateFormDoc(once)).toEqual(once);
+    expect(readFormDoc(doc).settings.requireAuth.methods).toEqual(["phone"]);
+  });
+
+  it("projects the gate into the public config, and null when it is off", () => {
+    const on = base();
+    (on.settings as Record<string, unknown>).requireAuth = { enabled: true, methods: ["google", "phone"] };
+    const cfg = toPublicConfig(readFormDoc(on), { slug: "s", brandingHidden: false });
+    expect(cfg.requireAuth?.methods).toEqual(["google", "phone"]);
+
+    const offCfg = toPublicConfig(readFormDoc(base()), { slug: "s", brandingHidden: false });
+    expect(offCfg.requireAuth).toBeNull();
+  });
+
+  it("normalizes phone numbers the same way the phone block validator does", () => {
+    expect(normalizeE164("+1 (415) 555-0132")).toBe("+14155550132");
+    expect(normalizeE164("004915112345678")).toBe("+4915112345678");
+    expect(normalizeE164("9986543210", "91")).toBe("+919986543210");
+    // No country code and no hint is ambiguous, so it must not guess.
+    expect(normalizeE164("5550132")).toBeNull();
+    expect(normalizeE164("not a number")).toBeNull();
   });
 });

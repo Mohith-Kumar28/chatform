@@ -2,6 +2,7 @@ import type { Bindings } from "./env.js";
 import { createApp } from "./app.js";
 import { SessionDO } from "./do/session-do.js";
 import { deliverWebhookEvent, retryFailedDeliveries, type WebhookEvent } from "./lib/webhooks.js";
+import { pruneOtpChallenges } from "./lib/respondent-auth.js";
 
 export { SessionDO };
 
@@ -31,6 +32,9 @@ export default {
     if (controller.cron === "*/5 * * * *") {
       const n = await retryFailedDeliveries(env);
       if (n > 0) console.log(`webhook_retries_requeued: ${n}`);
+      // Spent and expired OTP rows have no reason to be kept; they are only
+      // ever read by the challenge that created them.
+      await pruneOtpChallenges(env).catch((err) => console.error("otp_prune_failed", err));
     }
   },
 } satisfies ExportedHandler<Bindings>;

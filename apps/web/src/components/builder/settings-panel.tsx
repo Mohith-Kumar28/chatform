@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -141,6 +142,60 @@ export function SettingsPanel({
               for the persona, goal, knowledge base and guardrails. */}
           {section === "access" && (
             <SettingSection title="Access & closing">
+              <SettingRow
+                label="Require sign-in"
+                description="Respondents verify who they are before the first question."
+                checked={settings.requireAuth.enabled}
+                onCheckedChange={(v) => patch({ requireAuth: { ...settings.requireAuth, enabled: v } })}
+              />
+              {settings.requireAuth.enabled && (
+                <>
+                  <SettingRow label="Accepted methods">
+                    <div className="flex gap-1.5">
+                      {(["google", "phone"] as const).map((m) => {
+                        const on = settings.requireAuth.methods.includes(m);
+                        return (
+                          <button
+                            key={m}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() => {
+                              const next = on
+                                ? settings.requireAuth.methods.filter((x) => x !== m)
+                                : [...settings.requireAuth.methods, m];
+                              // At least one method has to stay on, or the form
+                              // becomes impossible to answer.
+                              if (next.length === 0) return;
+                              patch({ requireAuth: { ...settings.requireAuth, methods: next } });
+                            }}
+                            className={cn(
+                              "h-8 rounded-full border px-3 text-xs font-medium transition-colors",
+                              on
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border text-muted-foreground hover:bg-muted",
+                            )}
+                          >
+                            {m === "google" ? "Google" : "Phone (SMS)"}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </SettingRow>
+                  <SettingRow label="What the agent says">
+                    <Input
+                      className="max-w-md"
+                      value={settings.requireAuth.message}
+                      onChange={(e) => patch({ requireAuth: { ...settings.requireAuth, message: e.target.value } })}
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    label="One response per person"
+                    description="A verified identity can only answer once."
+                    checked={settings.requireAuth.onePerIdentity}
+                    onCheckedChange={(v) => patch({ requireAuth: { ...settings.requireAuth, onePerIdentity: v } })}
+                  />
+                </>
+              )}
               <SettingRow
                 label="Require password"
                 description="Only people with the password can respond."

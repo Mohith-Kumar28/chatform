@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
 import { applySchema, seedTenant, fetchApi, minimalDoc, type Tenant } from "./helpers.js";
+import { SCHEMA_VERSION } from "@repo/form-schema";
 
 let t: Tenant;
 
@@ -16,7 +17,7 @@ describe("docs are migrated on read", () => {
     // The seeded form is written as a raw v1 document.
     const res = await fetchApi(`/api/forms/${t.formId}`, { headers: auth() });
     const body = await res.json<{ workingSchema: Record<string, any> }>();
-    expect(body.workingSchema.schemaVersion).toBe(3);
+    expect(body.workingSchema.schemaVersion).toBe(SCHEMA_VERSION);
     expect(body.workingSchema.settings.agent.guardrails.maxTurns).toBe(60);
     expect(body.workingSchema.settings.agent.knowledge).toEqual([]);
     expect(body.workingSchema.blocks[0].agentHints).toBeNull();

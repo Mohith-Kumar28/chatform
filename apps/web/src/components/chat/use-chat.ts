@@ -5,7 +5,14 @@ import type { PublicBlock } from "@repo/form-schema";
 
 export interface ChatMessage {
   id: string;
-  role: "assistant" | "user";
+  /**
+   * `system` is a note about the conversation rather than a turn in it —
+   * currently only "verified as …". It is a message so that it keeps its
+   * place in the thread; rendering it outside the list pinned it to the
+   * bottom, where it drifted further from the moment it described with every
+   * subsequent answer.
+   */
+  role: "assistant" | "user" | "system";
   text: string;
   streaming?: boolean;
   /** Locally-rendered echo awaiting its server-confirmed twin. */
@@ -39,6 +46,26 @@ export interface ReviewState {
 export interface SubmittedState {
   at: number;
   answers: { ref: string; title: string; display: string }[];
+}
+
+/** The sign-in gate, while it is blocking the conversation. */
+export interface AuthState {
+  methods: ("google" | "phone")[];
+  message: string;
+  /** Set once a code has been sent; the card switches to the code step. */
+  phoneSentTo: string | null;
+  pending: boolean;
+  error: string | null;
+  /** Dev convenience: with no SMS provider the API returns the code. */
+  devCode?: string;
+}
+
+/** Who the respondent turned out to be, once the gate is cleared. */
+export interface VerifiedIdentity {
+  provider: "google" | "phone";
+  label: string;
+  name: string | null;
+  pictureUrl: string | null;
 }
 
 export interface UploadSpec {
@@ -156,6 +183,8 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
   const [submitted, setSubmitted] = useState<SubmittedState | null>(null);
   /** True when a replay rebuilt a transcript we did not start in this tab. */
   const [resumed, setResumed] = useState(false);
+  const [auth, setAuth] = useState<AuthState | null>(null);
+  const [identity, setIdentity] = useState<VerifiedIdentity | null>(null);
 
   const sessionRef = useRef<{ sessionId: string; token: string } | null>(null);
   const esRef = useRef<EventSource | null>(null);
@@ -167,11 +196,17 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
       if (prev.some((m) => m.id === msg.id)) return prev;
       // A server-confirmed user message replaces its optimistic echo rather
       // than appearing twice.
+      //
+      // Matching on text equality was wrong for structured answers: tapping
+      // the fourth star echoes "4/5" locally while the server confirms "4", so
+      // nothing matched and both bubbles stayed on screen. There is only ever
+      // one send in flight, so the pending echo is the one to replace — and it
+      // keeps its own label, which says more than the raw value does.
       if (msg.role === "user") {
-        const echoIndex = prev.findIndex((m) => m.optimistic && m.text === msg.text);
+        const echoIndex = prev.findIndex((m) => m.optimistic);
         if (echoIndex !== -1) {
           const next = [...prev];
-          next[echoIndex] = msg;
+          next[echoIndex] = { ...msg, text: prev[echoIndex]!.text || msg.text };
           return next;
         }
       }
@@ -285,6 +320,29 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
         const { message } = JSON.parse((e as MessageEvent).data) as { message?: string };
         setRateLimited(message ?? "You're going a bit fast — give it a moment.");
         setThinking(false);
+      });
+
+      es.addEventListener("auth_required", (e) => {
+        const data = JSON.parse((e as MessageEvent).data) as AuthState;
+        // Replay re-delivers this on every reconnect. Keep whatever step the
+        // card had reached — re-mounting it at "enter your number" would throw
+        // away a code the respondent is in the middle of typing.
+        setAuth((prev) =>
+          prev ?? { methods: data.methods, message: data.message, phoneSentTo: null, pending: false, error: null },
+        );
+        setThinking(false);
+      });
+
+      es.addEventListener("auth_verified", (e) => {
+        const who = JSON.parse((e as MessageEvent).data) as VerifiedIdentity;
+        setIdentity(who);
+        setAuth(null);
+        setMessages((prev) =>
+          // Replay re-delivers this event, and it must not stack up.
+          prev.some((m) => m.id === "sys_verified")
+            ? prev
+            : [...prev, { id: "sys_verified", role: "system", text: `Verified as ${who.label}` }],
+        );
       });
 
       es.addEventListener("review", (e) => {
@@ -510,10 +568,89 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
     setEnding(null);
     setReview(null);
     setResumed(false);
+    setAuth(null);
+    setIdentity(null);
     setError(null);
     setStatus("connecting");
     await start();
   }, [slug, start]);
+
+  /**
+   * Sign-in calls, which differ from every other client → server call here:
+   * they need the response body, both to surface a precise failure ("that code
+   * didn't match, 3 tries left") and because the code arrives in it in dev.
+   */
+  const authPost = useCallback(
+    async (path: string, body: unknown): Promise<{ ok: boolean; data: Record<string, unknown> }> => {
+      const session = sessionRef.current;
+      if (!session) return { ok: false, data: {} };
+      try {
+        const res = await fetch(`${apiOrigin}/p/sessions/${session.sessionId}/auth/${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-respondent-token": session.token },
+          body: JSON.stringify(body),
+        });
+        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        return { ok: res.ok, data };
+      } catch {
+        return { ok: false, data: { error: { message: "Check your connection and try again." } } };
+      }
+    },
+    [apiOrigin],
+  );
+
+  const authError = (data: Record<string, unknown>): string =>
+    ((data.error as { message?: string } | undefined)?.message) ?? "That didn't work. Please try again.";
+
+  const signInWithGoogle = useCallback(
+    async (idToken: string) => {
+      setAuth((a) => (a ? { ...a, pending: true, error: null } : a));
+      const { ok, data } = await authPost("google", { idToken });
+      if (ok) {
+        setIdentity(data.identity as VerifiedIdentity);
+        setAuth(null);
+        setThinking(true);
+        return;
+      }
+      setAuth((a) => (a ? { ...a, pending: false, error: authError(data) } : a));
+    },
+    [authPost],
+  );
+
+  const requestPhoneCode = useCallback(
+    async (phone: string, dialHint?: string) => {
+      setAuth((a) => (a ? { ...a, pending: true, error: null } : a));
+      const { ok, data } = await authPost("phone/start", { phone, dialHint });
+      setAuth((a) =>
+        a
+          ? ok
+            ? { ...a, pending: false, error: null, phoneSentTo: String(data.destination ?? phone), devCode: data.devCode as string | undefined }
+            : { ...a, pending: false, error: authError(data) }
+          : a,
+      );
+    },
+    [authPost],
+  );
+
+  const verifyPhoneCode = useCallback(
+    async (code: string) => {
+      setAuth((a) => (a ? { ...a, pending: true, error: null } : a));
+      const { ok, data } = await authPost("phone/verify", { code });
+      if (ok) {
+        setIdentity(data.identity as VerifiedIdentity);
+        setAuth(null);
+        setThinking(true);
+        return;
+      }
+      setAuth((a) => (a ? { ...a, pending: false, error: authError(data) } : a));
+    },
+    [authPost],
+  );
+
+  /** Back out of the code step to correct a mistyped number. */
+  const changePhoneNumber = useCallback(() => {
+    setAuth((a) => (a ? { ...a, phoneSentTo: null, error: null, devCode: undefined } : a));
+  }, []);
 
   const getUploadBase = useCallback(() => {
     const s = sessionRef.current;
@@ -543,6 +680,12 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
     thinking,
     rateLimited,
     resumed,
+    auth,
+    identity,
+    signInWithGoogle,
+    requestPhoneCode,
+    verifyPhoneCode,
+    changePhoneNumber,
     escalatedRef,
     validationHint,
     uploadSpec,

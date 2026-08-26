@@ -214,6 +214,16 @@ export const submissions = sqliteTable(
     fingerprint: text("fingerprint"),
     hiddenFields: text("hidden_fields"),
     meta: text("meta"),
+    /**
+     * The verified respondent, when the form required sign-in. Denormalized
+     * onto the submission rather than joined from the session, because
+     * sessions are pruned and a submission has to stay attributable.
+     */
+    respondentProvider: text("respondent_provider"),
+    respondentSubject: text("respondent_subject"),
+    respondentEmail: text("respondent_email"),
+    respondentPhone: text("respondent_phone"),
+    respondentName: text("respondent_name"),
     startedAt: ts("started_at").notNull().$defaultFn(() => new Date()),
     completedAt: ts("completed_at"),
     durationMs: integer("duration_ms"),
@@ -222,6 +232,8 @@ export const submissions = sqliteTable(
     index("idx_submissions_form_status").on(t.formId, t.status, t.startedAt),
     index("idx_submissions_org_started").on(t.organizationId, t.startedAt),
     index("idx_submissions_form_fp").on(t.formId, t.fingerprint),
+    // Backs `requireAuth.onePerIdentity`: one lookup, not a table scan.
+    index("idx_submissions_form_respondent").on(t.formId, t.respondentProvider, t.respondentSubject),
   ],
 );
 
@@ -240,6 +252,34 @@ export const submissionAnswers = sqliteTable(
   (t) => [
     uniqueIndex("uq_answers_sub_ref").on(t.submissionId, t.blockRef),
     index("idx_answers_form_ref").on(t.formId, t.blockRef),
+  ],
+);
+
+/**
+ * One-time codes for phone sign-in.
+ *
+ * Codes are stored hashed — a leaked read of this table must not let anyone
+ * complete a challenge. Rows are consumed on success and swept by the existing
+ * cron; `attempts` caps brute force at a handful of guesses per code, and
+ * `sendCount` caps how many SMS one session can make us pay for.
+ */
+export const otpChallenges = sqliteTable(
+  "otp_challenges",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id").notNull(),
+    /** E.164. */
+    destination: text("destination").notNull(),
+    codeHash: text("code_hash").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    sendCount: integer("send_count").notNull().default(1),
+    consumedAt: ts("consumed_at"),
+    expiresAt: ts("expires_at").notNull(),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("idx_otp_session").on(t.sessionId, t.createdAt),
+    index("idx_otp_expires").on(t.expiresAt),
   ],
 );
 
@@ -264,6 +304,8 @@ export const chatSessions = sqliteTable(
     country: text("country"),
     hiddenFields: text("hidden_fields"),
     meta: text("meta"),
+    /** JSON `RespondentIdentity`, set once the sign-in gate is satisfied. */
+    respondentIdentity: text("respondent_identity"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
     lastActivityAt: ts("last_activity_at").notNull().$defaultFn(() => new Date()),
     expiresAt: ts("expires_at"),
