@@ -1,83 +1,67 @@
-import type { FormDoc } from "@repo/form-schema";
-import { computeBranchLayout } from "./branch-layout";
+import dagre from "@dagrejs/dagre";
+import type { Edge, Node } from "@xyflow/react";
 
 /**
- * Where the nodes go on the canvas, when nobody has dragged them yet.
+ * Automatic placement for the flow canvas.
  *
- * The fallback used to be `x: 80 + (i % 3) * 280, y: 60 + floor(i / 3) * 160`
- * — a three-column grid over the blocks in document order, which says nothing
- * about the flow. It looked tolerable while every form ran straight through
- * and became unreadable the moment branching was real: arms landed wherever
- * the modulo put them and the wires crossed the whole canvas.
+ * The first version of this was a three-column grid over the blocks in
+ * document order, which said nothing about the flow; the second walked the
+ * branch structure by hand and still crossed wires as soon as arms rejoined.
+ * Both were re-implementing, badly, a solved problem — so this hands the graph
+ * to dagre, which is what the layered-DAG layout in every flow editor is.
  *
- * The flow runs left to right. Each question that everyone answers takes the
- * next column; the arms of a branch sit in the column beside the question that
- * decides them, stacked one per row. A saved position always wins — this only
- * decides where a node starts.
+ * Left to right, so the form reads the way it is answered.
  */
 
-const COL = 300;
-const ROW = 150;
-const X0 = 80;
-const Y0 = 80;
+/** Roughly the rendered size of each node type; dagre needs real boxes. */
+const SIZES: Record<string, { width: number; height: number }> = {
+  start: { width: 180, height: 44 },
+  question: { width: 210, height: 56 },
+  ending: { width: 190, height: 44 },
+  branch: { width: 220, height: 64 },
+};
 
-export interface FlowPositions {
-  nodes: Map<string, { x: number; y: number }>;
-  /** One past the last column, for endings and anything appended. */
-  columns: number;
+const DEFAULT_SIZE = { width: 210, height: 56 };
+
+/** A branch node grows a row per case, so its height is not fixed. */
+export function branchNodeHeight(cases: number): number {
+  return 44 + Math.max(1, cases) * 22;
 }
 
-export function computeAutoLayout(doc: FormDoc): FlowPositions {
-  const branch = computeBranchLayout(doc);
-  const nodes = new Map<string, { x: number; y: number }>();
-  const colOf = new Map<string, number>();
-  const nextRow = new Map<string, number>();
-  let maxCol = -1;
-
-  for (const block of doc.blocks) {
-    const info = branch.get(block.ref);
-    const source = info?.sourceRef;
-    let col: number;
-    let row: number;
-
-    if (source && colOf.has(source)) {
-      // An arm belongs beside the question it hangs off, not after everything
-      // that happens to precede it in the list.
-      col = colOf.get(source)! + 1;
-      row = nextRow.get(source) ?? 0;
-      nextRow.set(source, row + 1);
-    } else {
-      // Trunk: past every column used so far, so it never lands on an arm.
-      col = maxCol + 1;
-      row = 0;
-    }
-
-    colOf.set(block.ref, col);
-    maxCol = Math.max(maxCol, col);
-    nodes.set(block.ref, { x: X0 + col * COL, y: Y0 + row * ROW });
-  }
-
-  // Endings are where the flow stops, so they belong at the end of it.
-  doc.endings.forEach((ending, i) => {
-    nodes.set(ending.ref, { x: X0 + (maxCol + 1) * COL, y: Y0 + i * ROW });
+export function layoutGraph(nodes: Node[], edges: Edge[]): Map<string, { x: number; y: number }> {
+  const g = new dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({
+    rankdir: "LR",
+    // Generous separation: the wires carry labels, and tight ranks put those
+    // labels on top of each other.
+    ranksep: 110,
+    nodesep: 36,
+    edgesep: 24,
+    marginx: 40,
+    marginy: 40,
   });
 
-  // A condition node goes below every arm of the question it belongs to.
-  // Half a row down from the source — the obvious place — is exactly where the
-  // first arm already sits, so they landed on top of each other.
-  const condRow = new Map<string, number>();
-  for (const rule of doc.logic) {
-    if (rule.action_kind !== "goto" || !rule.from) continue;
-    const anchor = nodes.get(rule.from);
-    if (!anchor) continue;
-    const below = nextRow.get(rule.from) ?? 1;
-    const stacked = condRow.get(rule.from) ?? 0;
-    condRow.set(rule.from, stacked + 1);
-    nodes.set(`cond_${rule.id}`, {
-      x: anchor.x + COL / 2,
-      y: anchor.y + (below + stacked) * ROW,
-    });
+  for (const node of nodes) {
+    const size = SIZES[node.type ?? ""] ?? DEFAULT_SIZE;
+    const height =
+      node.type === "branch"
+        ? branchNodeHeight(((node.data as { cases?: unknown[] }).cases ?? []).length)
+        : size.height;
+    g.setNode(node.id, { width: size.width, height });
+  }
+  for (const edge of edges) {
+    if (g.hasNode(edge.source) && g.hasNode(edge.target)) g.setEdge(edge.source, edge.target);
   }
 
-  return { nodes, columns: maxCol + 2 };
+  dagre.layout(g);
+
+  const out = new Map<string, { x: number; y: number }>();
+  for (const node of nodes) {
+    const placed = g.node(node.id);
+    if (!placed) continue;
+    // dagre centres its boxes; React Flow positions by the top-left corner.
+    out.set(node.id, { x: placed.x - placed.width / 2, y: placed.y - placed.height / 2 });
+  }
+  return out;
 }

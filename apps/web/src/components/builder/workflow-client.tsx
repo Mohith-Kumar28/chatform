@@ -8,6 +8,8 @@ import {
   Handle,
   MarkerType,
   MiniMap,
+  Panel,
+  getNodesBounds,
   Position,
   ReactFlow,
   ReactFlowProvider,
@@ -23,7 +25,7 @@ import "@xyflow/react/dist/style.css";
 import { cn } from "@/lib/utils";
 import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspector";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
-import { computeAutoLayout } from "./flow-layout";
+import { layoutGraph, branchNodeHeight } from "./flow-layout";
 import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
 import { Block as BlockSchema } from "@repo/form-schema";
@@ -33,6 +35,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  LayoutGrid,
+  Plus,
   AlignLeft, Calendar, ChevronLeft, ChevronRight, CircleHelp, CreditCard, Flag,
   GitBranch, GripVertical, Hash, Heading, ListChecks, Mail, Phone, Play, Scale,
   Sigma, Sparkles, SquareCheck, Star, Trash2, Type, Upload, UserRound, Globe, X,
@@ -57,6 +61,9 @@ const OPS = [
 
 type Op = (typeof OPS)[number]["value"];
 const opInverse = (op: string): Op | null => OPS.find((o) => o.value === op)?.inv ?? null;
+/** Shared by the initial fit and the Auto arrange button. */
+const FIT_VIEW = { maxZoom: 0.85, minZoom: 0.65, padding: 0.12 } as const;
+
 const opLabel = (op: string): string => OPS.find((o) => o.value === op)?.label ?? op;
 const opsValueNeeded = (op: string): boolean => !["is_empty", "is_not_empty", "is_checked", "is_not_checked"].includes(op);
 
@@ -86,7 +93,7 @@ export function WorkflowClient({ doc, onChange, focusRef, toolbar }: WorkflowCli
 }
 
 function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProps) {
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, setViewport } = useReactFlow();
 
   /**
    * The minimap earns its place while you are panning, zooming or dragging a
@@ -172,12 +179,101 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
         targetKind: "ending",
         branch: "true",
       };
-      onChange({ ...doc, logic: [...doc.logic, rule], layout: { ...doc.layout, [`cond_${rule.id}`]: position } });
-      setSelectedNodeId(`cond_${rule.id}`);
+      // Cases live on the question they branch from, so the node id follows
+      // the question rather than the rule — dropping a second case onto the
+      // same question grows that node instead of adding another one.
+      onChange({ ...doc, logic: [...doc.logic, rule], layout: { ...doc.layout, [`branch_${firstQ.ref}`]: position } });
+      setSelectedNodeId(`branch_${firstQ.ref}`);
       setSelectedEdgeId(null);
     },
     [doc, onChange, answerableBlocks],
   );
+
+  /** Add another route out of a question that already branches. */
+  const addCase = useCallback(
+    (fromRef: string) => {
+      const block = doc.blocks.find((b) => b.ref === fromRef);
+      if (!block) return;
+      const options = "options" in block ? block.options : undefined;
+      // Default to an option the question actually has, so a new case is
+      // meaningful before it is touched.
+      const taken = new Set(
+        gotoRules.filter((r) => r.from === fromRef).map((r) => String(condOf(r)?.value ?? "")),
+      );
+      const free = options?.find((o) => !taken.has(o.id));
+      const rule: GotoRule = {
+        id: uid("rl"),
+        action_kind: "goto",
+        from: fromRef,
+        when: {
+          op: "and",
+          conditions: [
+            free
+              ? { left: { kind: "ref", ref: fromRef }, op: "eq", value: free.id }
+              : { left: { kind: "ref", ref: fromRef }, op: "is_not_empty" },
+          ],
+          groups: [],
+        },
+        target: doc.endings[0]?.ref ?? fromRef,
+        targetKind: doc.endings[0] ? "ending" : "block",
+        branch: "true",
+      };
+      setRules([...doc.logic, rule]);
+    },
+    [doc, gotoRules, setRules],
+  );
+
+  /**
+   * Frame the flow: start at the start.
+   *
+   * `fitView` centres what it fits, which for a form longer than the viewport
+   * puts the welcome block off the left edge — you arrive in the middle of a
+   * conversation. This anchors the left edge instead and only centres
+   * vertically, so opening the canvas shows the first question.
+   */
+  const frame = useCallback(
+    (duration = 0) => {
+      const box = wrapper.current?.getBoundingClientRect();
+      if (!box || nodes.length === 0) return;
+      const bounds = getNodesBounds(nodes);
+      const fit = Math.min(box.width / (bounds.width + 80), box.height / (bounds.height + 80));
+      const zoom = Math.min(FIT_VIEW.maxZoom, Math.max(FIT_VIEW.minZoom, fit));
+      void setViewport(
+        {
+          x: 48 - bounds.x * zoom,
+          y: Math.max(24, (box.height - bounds.height * zoom) / 2) - bounds.y * zoom,
+          zoom,
+        },
+        { duration },
+      );
+    },
+    [nodes, setViewport],
+  );
+
+  // Frame once, when the graph first has something in it.
+  const framed = useRef(false);
+  useEffect(() => {
+    if (framed.current || nodes.length === 0) return;
+    framed.current = true;
+    frame();
+  }, [nodes, frame]);
+
+  /**
+   * Re-run the layout over the current graph and keep the result.
+   *
+   * Dragged positions are what make the canvas drift out of shape — one moved
+   * node and the wires no longer read. This throws every saved position away
+   * and lets dagre place the whole graph again, which is the point: it is a
+   * reset, not a nudge.
+   */
+  const autoArrange = useCallback(() => {
+    const placed = layoutGraph(nodes, edges);
+    const layout: FormDoc["layout"] = {};
+    for (const [id, pos] of placed) layout[id] = pos;
+    onChange({ ...doc, layout });
+    // Let the new positions land before framing them.
+    setTimeout(() => frame(300), 60);
+  }, [nodes, edges, doc, onChange, frame]);
 
   const addEndingAt = useCallback(
     (position: { x: number; y: number }) => {
@@ -200,52 +296,35 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
   const onConnect = useCallback(
     (conn: Connection) => {
       if (!conn.source || !conn.target || conn.source === conn.target) return;
-      const sourceIsCond = conn.source.startsWith("cond_");
-      const ruleId = sourceIsCond ? conn.source.slice(5) : null;
+      const targetKind = doc.endings.some((e) => e.ref === conn.target) ? "ending" : "block";
 
-      if (ruleId) {
-        const rule = gotoRules.find((r) => r.id === ruleId);
-        if (!rule) return;
-        const targetKind = doc.endings.some((e) => e.ref === conn.target) ? "ending" : "block";
-
-        if (conn.sourceHandle === "true") {
-          setRules(doc.logic.map((r) => (isGoto(r) && r.id === ruleId ? { ...r, target: conn.target!, targetKind } : r)));
-          return;
-        }
-        if (conn.sourceHandle === "false") {
-          const cond = condOf(rule);
-          const inv = opInverse(cond?.op ?? "eq");
-          if (!inv) return;
-          const existing = rule.pair ? gotoRules.find((r) => r.id === rule.pair) : undefined;
-          const falseRule: GotoRule = {
+      // Dragging from a branch row re-points that case.
+      if (conn.source.startsWith("branch_")) {
+        const handle = conn.sourceHandle;
+        if (!handle) return;
+        if (handle === OTHERWISE) {
+          // "Otherwise" is fall-through, which has no rule of its own until
+          // you aim it somewhere; then it becomes an unconditional jump.
+          const from = conn.source.slice("branch_".length);
+          const existing = gotoRules.find((r) => !condOf(r) && r.from === from);
+          const rule: GotoRule = {
             id: existing?.id ?? uid("rl"),
             action_kind: "goto",
-            from: rule.from,
-            when: {
-              op: "and",
-              conditions: [{ ...(cond as { left: { kind: "ref"; ref: string } }), op: inv, value: cond?.value }],
-              groups: [],
-            },
+            from,
+            when: null,
             target: conn.target,
             targetKind,
-            branch: "false",
-            pair: rule.id,
           };
-          const kept = doc.logic.filter((r) => !(isGoto(r) && existing && r.id === existing.id));
-          setRules([...kept.map((r) => (isGoto(r) && r.id === ruleId ? { ...r, pair: falseRule.id } : r)), falseRule]);
+          setRules([...doc.logic.filter((r) => r.id !== rule.id), rule]);
           return;
         }
+        setRules(doc.logic.map((r) => (isGoto(r) && r.id === handle ? { ...r, target: conn.target!, targetKind } : r)));
         return;
       }
 
-      if (conn.target?.startsWith("cond_")) {
-        const rid = conn.target.slice(5);
-        setRules(doc.logic.map((r) => (isGoto(r) && r.id === rid ? { ...r, from: conn.source } : r)));
-        return;
-      }
+      if (conn.target?.startsWith("branch_")) return; // a branch is fed by its own question
 
       if (!doc.blocks.some((b) => b.ref === conn.source)) return;
-      const targetKind = doc.endings.some((e) => e.ref === conn.target) ? "ending" : "block";
       const duplicate = gotoRules.some((r) => !condOf(r) && r.from === conn.source && r.target === conn.target);
       if (duplicate) return;
       const rule: GotoRule = { id: uid("rl"), action_kind: "goto", from: conn.source, when: null, target: conn.target!, targetKind };
@@ -262,10 +341,10 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
       const layout = { ...doc.layout };
 
       for (const n of deleted) {
-        if (n.id.startsWith("cond_")) {
-          const ruleId = n.id.slice(5);
-          const rule = logic.find((r): r is GotoRule => isGoto(r) && r.id === ruleId);
-          logic = logic.filter((r) => !(isGoto(r) && (r.id === ruleId || r.id === rule?.pair)));
+        if (n.id.startsWith("branch_")) {
+          // Deleting the node deletes the decision — every case on it.
+          const from = n.id.slice("branch_".length);
+          logic = logic.filter((r) => !(isGoto(r) && r.from === from && condOf(r)));
           delete layout[n.id];
           continue;
         }
@@ -291,16 +370,13 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
     (deleted: Edge[]) => {
       let logic = [...doc.logic];
       for (const e of deleted) {
-        if (e.id.startsWith("condtrue_")) {
-          const ruleId = e.id.slice("condtrue_".length);
-          const rule = logic.find((r): r is GotoRule => isGoto(r) && r.id === ruleId);
-          logic = logic.filter((r) => !(isGoto(r) && (r.id === ruleId || r.id === rule?.pair)));
-        } else if (e.id.startsWith("condfalse_")) {
-          const ruleId = e.id.slice("condfalse_".length);
-          const rule = logic.find((r): r is GotoRule => isGoto(r) && r.id === ruleId);
-          logic = logic
-            .filter((r) => !(isGoto(r) && rule?.pair != null && r.id === rule.pair))
-            .map((r) => (isGoto(r) && rule != null && r.id === ruleId ? ({ ...r, pair: undefined } as LogicRule) : r));
+        if (e.id.startsWith("case_")) {
+          logic = logic.filter((r) => r.id !== e.id.slice("case_".length));
+        } else if (e.id.startsWith("else_")) {
+          // The fall-through wire only exists as a rule when it was aimed
+          // somewhere; cutting it returns the question to plain fall-through.
+          const from = e.id.slice("else_".length);
+          logic = logic.filter((r) => !(isGoto(r) && r.from === from && !condOf(r)));
         } else {
           logic = logic.filter((r) => r.id !== e.id);
         }
@@ -312,7 +388,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
   );
 
   // ── inspector targets ──────────────────────────────────────────────────
-  const selBlock = selectedNodeId && !selectedNodeId.startsWith("cond_") ? doc.blocks.find((b) => b.ref === selectedNodeId) : undefined;
+  const selBlock = selectedNodeId && !selectedNodeId.startsWith("branch_") ? doc.blocks.find((b) => b.ref === selectedNodeId) : undefined;
 
   // The shared inspector reads the selected block from the builder store, so
   // canvas selection has to land there too. This is also what makes selection
@@ -321,11 +397,18 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
   useEffect(() => {
     if (selBlock) selectInStore(selBlock.ref);
   }, [selBlock, selectInStore]);
-  const selEnding = selectedNodeId && !selectedNodeId.startsWith("cond_") ? doc.endings.find((e) => e.ref === selectedNodeId) : undefined;
-  const selCond = selectedNodeId?.startsWith("cond_") ? gotoRules.find((r) => r.id === selectedNodeId.slice(5)) : undefined;
-  const selCondFalse = selCond?.pair ? gotoRules.find((r) => r.id === selCond.pair) : undefined;
+  const selEnding = selectedNodeId && !selectedNodeId.startsWith("branch_") ? doc.endings.find((e) => e.ref === selectedNodeId) : undefined;
+  const selBranchRef = selectedNodeId?.startsWith("branch_") ? selectedNodeId.slice("branch_".length) : null;
+  const selBranchRules = useMemo(
+    () => (selBranchRef ? gotoRules.filter((r) => r.from === selBranchRef && condOf(r)) : []),
+    [selBranchRef, gotoRules],
+  );
   const selEdge = selectedEdgeId ? edges.find((e) => e.id === selectedEdgeId) : undefined;
-  const selEdgeRule = selEdge && !selEdge.id.startsWith("seq-") ? gotoRules.find((r) => r.id === selEdge.id) : undefined;
+  const selEdgeRule = useMemo(() => {
+    if (!selEdge) return undefined;
+    const id = selEdge.id.startsWith("case_") ? selEdge.id.slice("case_".length) : selEdge.id;
+    return gotoRules.find((r) => r.id === id);
+  }, [selEdge, gotoRules]);
 
   const clearSelection = useCallback(() => {
     setSelectedNodeId(null);
@@ -392,7 +475,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
                 className="flex cursor-grab items-center gap-2 rounded-lg border border-dashed border-primary/50 bg-primary/5 px-2.5 py-2 text-sm active:cursor-grabbing"
               >
                 <GitBranch className="text-primary size-4" />
-                <span className="font-medium">If / Else</span>
+                <span className="font-medium">Branch</span>
               </div>
               <div
                 draggable
@@ -498,14 +581,17 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
           }}
           deleteKeyCode={["Backspace", "Delete"]}
           minZoom={0.25}
-          fitView
-          // A left-to-right flow is wide, and fitting the whole graph shrank
-          // it until the node labels were unreadable. Fit to the start of the
-          // flow at a legible size and let the canvas be panned.
-          fitViewOptions={{ maxZoom: 0.9, minZoom: 0.45, padding: 0.15 }}
+          // Framing is done by `frame()`, which anchors the left edge instead
+          // of centring — see the comment there.
           proOptions={{ hideAttribution: true }}
         >
           <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
+          <Panel position="top-right">
+            <Button variant="outline" size="sm" shape="pill" onClick={autoArrange} className="shadow-sm">
+              <LayoutGrid className="size-3.5" />
+              Auto arrange
+            </Button>
+          </Panel>
           <Controls showInteractive={false} />
             <MiniMap
               pannable
@@ -543,9 +629,9 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
                 <div className="px-4 py-4"><EdgeRuleEditor
                   rule={selEdgeRule}
                   doc={doc}
-                  isTrueBranch={selEdge!.id.startsWith("condtrue_")}
-                  isFalseBranch={selEdge!.id.startsWith("condfalse_")}
-                  elseTarget={selCondFalse?.target ?? null}
+                  isTrueBranch={false}
+                  isFalseBranch={false}
+                  elseTarget={null}
                   onPatch={patchRule}
                   onDelete={() => onEdgesDelete([{ id: selEdge!.id } as Edge])}
                 /></div>
@@ -553,15 +639,19 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
                 // The shared inspector — same component, same fields, whether
                 // you got here from Questions or from Flow.
                 <SharedBlockInspector />
-              ) : selCond ? (
-                <div className="px-4 py-4"><ConditionInspector
-                  rule={selCond}
-                  elseRule={selCondFalse}
-                  doc={doc}
-                  answerableBlocks={answerableBlocks}
-                  onPatch={patchRule}
-                  onDelete={() => onNodesDelete([{ id: `cond_${selCond.id}` } as Node])}
-                /></div>
+              ) : selBranchRef ? (
+                <div className="px-4 py-4">
+                  <BranchInspector
+                    sourceRef={selBranchRef}
+                    rules={selBranchRules}
+                    doc={doc}
+                    answerableBlocks={answerableBlocks}
+                    onPatch={patchRule}
+                    onAddCase={() => addCase(selBranchRef)}
+                    onDeleteCase={(id) => onEdgesDelete([{ id: `case_${id}` } as Edge])}
+                    onDelete={() => onNodesDelete([{ id: `branch_${selBranchRef}` } as Node])}
+                  />
+                </div>
               ) : selEnding ? (
                 <div className="px-4 py-4"><EndingInspector ending={selEnding} doc={doc} onChange={onChange} /></div>
               ) : (
@@ -573,7 +663,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
                     </p>
                     <p>1. Drag questions from the library onto the canvas.</p>
                     <p>2. Drag from a node&apos;s edge dot to another node to wire the flow.</p>
-                    <p>3. Drop an If / Else node for conditional branches.</p>
+                    <p>3. Drop a Branch onto a question to send answers different ways.</p>
                     <p>4. Click any wire to edit its condition.</p>
                   </div>
                 </div>
@@ -595,104 +685,175 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
 
 // ────────────────────────── graph derivation ──────────────────────────
 
+/** A single case on a branch: one condition, one destination. */
+export interface BranchCase {
+  ruleId: string;
+  label: string;
+  target: string;
+  targetKind: "block" | "ending";
+}
+
+export const OTHERWISE = "__otherwise";
+
+/**
+ * The graph the canvas draws.
+ *
+ * Every conditional rule used to become its own If/Else node with a Yes and a
+ * No leg. A question with four options therefore produced four boxes, each
+ * answering a yes/no question nobody asked, wired in a chain — and since only
+ * one leg of each was ever taken, three of the eight legs were noise. One
+ * question that splits the flow is one decision, so it is one node with a row
+ * per case.
+ */
 function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
-  // Where a node starts when nobody has dragged it. A saved position wins.
-  const auto = computeAutoLayout(doc).nodes;
+  const endingRefs = new Set(doc.endings.map((e) => e.ref));
+
+  // Conditional rules, grouped by the question they hang off.
+  const casesBySource = new Map<string, BranchCase[]>();
+  /** Unconditional jumps: they replace fall-through, they do not branch. */
+  const alwaysBySource = new Map<string, GotoRule>();
+
+  for (const rule of gotoRules) {
+    const cond = condOf(rule);
+    const from = rule.from;
+    if (!from) continue;
+    if (!cond) {
+      alwaysBySource.set(from, rule);
+      continue;
+    }
+    const fromBlock = doc.blocks.find((b) => b.ref === from) ?? null;
+    const list = casesBySource.get(from) ?? [];
+    list.push({
+      ruleId: rule.id,
+      label: edgeLabel(fromBlock, cond),
+      target: rule.target,
+      targetKind: endingRefs.has(rule.target) ? "ending" : "block",
+    });
+    casesBySource.set(from, list);
+  }
 
   doc.blocks.forEach((b, i) => {
     const isFirst = i === 0;
     nodes.push({
       id: b.ref,
       type: isFirst ? "start" : "question",
-      position: doc.layout[b.ref] ?? auto.get(b.ref) ?? { x: 80, y: 80 },
+      position: doc.layout[b.ref] ?? { x: 0, y: 0 },
       data: { block: b },
       deletable: !isFirst,
     });
+
+    const cases = casesBySource.get(b.ref);
+    const always = alwaysBySource.get(b.ref);
     const next = doc.blocks[i + 1];
-    if (next) {
+
+    if (cases?.length) {
+      const branchId = `branch_${b.ref}`;
+      nodes.push({
+        id: branchId,
+        type: "branch",
+        position: doc.layout[branchId] ?? { x: 0, y: 0 },
+        data: { sourceRef: b.ref, sourceTitle: b.title, cases },
+        deletable: true,
+      });
+      edges.push({
+        id: `into_${b.ref}`,
+        source: b.ref,
+        target: branchId,
+        deletable: false,
+        style: { stroke: "var(--muted-foreground)", strokeWidth: 1.5, strokeDasharray: "3 3" },
+        markerEnd: { type: MarkerType.ArrowClosed },
+      });
+      for (const c of cases) {
+        edges.push(caseEdge(c, branchId));
+      }
+      // Whatever no case matched still has to go somewhere, and that
+      // somewhere is the next question — or, past the last one, the ending.
+      // It is worth drawing because it is the half of the decision the rules
+      // never mention.
+      const fallback = always?.target ?? next?.ref ?? doc.endings[0]?.ref;
+      if (fallback) {
+        edges.push({
+          id: `else_${b.ref}`,
+          source: branchId,
+          sourceHandle: OTHERWISE,
+          target: fallback,
+          label: "otherwise",
+          deletable: false,
+          style: { stroke: "var(--border)", strokeWidth: 1.5 },
+          labelStyle: { fontSize: 9, fill: "var(--muted-foreground)" },
+          labelBgStyle: { fill: "var(--card)" },
+          labelBgPadding: [4, 2],
+          markerEnd: { type: MarkerType.ArrowClosed },
+        });
+      }
+      return;
+    }
+
+    // No branch here. An unconditional rule overrides fall-through entirely.
+    if (always) {
+      edges.push({
+        id: always.id,
+        source: b.ref,
+        target: always.target,
+        deletable: true,
+        style: { stroke: "var(--primary)", strokeWidth: 2 },
+        markerEnd: { type: MarkerType.ArrowClosed },
+      });
+      return;
+    }
+    // Past the last question the flow reaches the ending, and that wire was
+    // never drawn — so the ending had nothing pointing at it and the layout
+    // stranded it back at the start, beside the welcome block.
+    const onward = next?.ref ?? doc.endings[0]?.ref;
+    if (onward) {
+      // Unlabelled: "default" on every single wire in the form was a word
+      // repeated until it stopped meaning anything. A plain line already says
+      // "and then this".
       edges.push({
         id: `seq-${b.ref}`,
         source: b.ref,
-        target: next.ref,
+        target: onward,
         deletable: false,
-        label: "default",
         style: { stroke: "var(--border)", strokeWidth: 1.5 },
-        labelStyle: { fontSize: 9, fill: "var(--muted-foreground)" },
-        labelBgStyle: { fill: "var(--card)" },
-        labelBgPadding: [4, 2],
         markerEnd: { type: MarkerType.ArrowClosed },
       });
     }
   });
 
-  doc.endings.forEach((e, i) => {
+  doc.endings.forEach((e) => {
     nodes.push({
       id: e.ref,
       type: "ending",
-      position: doc.layout[e.ref] ?? auto.get(e.ref) ?? { x: 80, y: 80 + i * 150 },
+      position: doc.layout[e.ref] ?? { x: 0, y: 0 },
       data: { title: e.title },
       deletable: doc.endings.length > 1,
     });
   });
 
-  const pairedFalse = new Set(gotoRules.map((r) => r.pair ?? "").filter(Boolean));
-  gotoRules.forEach((r) => {
-    const cond = condOf(r);
-    if (cond && r.branch !== "false") {
-      const falseRule = r.pair ? gotoRules.find((x) => x.id === r.pair) : undefined;
-      nodes.push({
-        id: `cond_${r.id}`,
-        type: "condition",
-        position:
-          doc.layout[`cond_${r.id}`] ??
-          auto.get(`cond_${r.id}`) ?? { x: 140, y: 170 },
-        data: { rule: r },
-      });
-      if (r.from) {
-        edges.push({
-          id: `condin_${r.id}`,
-          source: r.from,
-          target: `cond_${r.id}`,
-          deletable: false,
-          style: { stroke: "var(--muted-foreground)", strokeWidth: 1.5, strokeDasharray: "2 2" },
-        });
-      }
-      edges.push(conditionEdge(`condtrue_${r.id}`, `cond_${r.id}`, "true", r.target, "YES", "#16a34a"));
-      if (falseRule) {
-        edges.push(conditionEdge(`condfalse_${r.id}`, `cond_${r.id}`, "false", falseRule.target, "NO", "#dc2626"));
-      }
-    } else if (!cond && !pairedFalse.has(r.id)) {
-      const fromBlock = doc.blocks.find((b) => b.ref === r.from);
-      edges.push({
-        id: r.id,
-        source: r.from ?? doc.blocks[0]?.ref ?? "",
-        target: r.target,
-        label: cond ? edgeLabel(fromBlock ?? null, cond) : "always",
-        animated: !!cond,
-        style: { stroke: "var(--primary)", strokeWidth: 2, strokeDasharray: cond ? "5 3" : undefined },
-        labelStyle: { fontSize: 10 },
-        labelBgStyle: { fill: "var(--card)" },
-        labelBgPadding: [4, 2],
-        markerEnd: { type: MarkerType.ArrowClosed },
-      });
-    }
-  });
+  // Anything nobody has dragged gets placed by dagre. A saved position wins,
+  // so hand-arranged canvases stay where they were put.
+  const auto = layoutGraph(nodes, edges);
+  for (const node of nodes) {
+    if (doc.layout[node.id]) continue;
+    const at = auto.get(node.id);
+    if (at) node.position = at;
+  }
 
   return { nodes, edges };
 }
 
-function conditionEdge(id: string, source: string, handle: string, target: string, label: string, color: string): Edge {
+function caseEdge(c: BranchCase, branchId: string): Edge {
   return {
-    id,
-    source,
-    sourceHandle: handle,
-    target,
-    label,
-    deletable: false,
-    style: { stroke: color, strokeWidth: 2 },
-    labelStyle: { fill: color, fontSize: 10, fontWeight: 700 },
+    id: `case_${c.ruleId}`,
+    source: branchId,
+    sourceHandle: c.ruleId,
+    target: c.target,
+    label: c.label,
+    deletable: true,
+    style: { stroke: "var(--primary)", strokeWidth: 2 },
+    labelStyle: { fontSize: 10, fontWeight: 600, fill: "var(--primary)" },
     labelBgStyle: { fill: "var(--card)" },
     labelBgPadding: [4, 2],
     markerEnd: { type: MarkerType.ArrowClosed },
@@ -705,7 +866,7 @@ const nodeTypes: NodeTypes = {
   start: StartNode,
   question: QuestionNode,
   ending: EndingNode,
-  condition: ConditionNode,
+  branch: BranchNode,
 };
 
 function StartNode({ data, selected }: NodeProps) {
@@ -768,27 +929,75 @@ function EndingNode({ data, selected }: NodeProps) {
   );
 }
 
-function ConditionNode({ data, selected }: NodeProps) {
-  const { rule } = data as { rule: GotoRule };
-  const cond = condOf(rule);
+/**
+ * One question, every route out of it.
+ *
+ * Each case gets its own row and its own handle on the right, so the wire
+ * leaving the node starts level with the answer that takes it. The last row is
+ * always "otherwise" — the path taken when no case matches, which is real and
+ * used to be invisible.
+ */
+function BranchNode({ data, selected }: NodeProps) {
+  const { sourceTitle, cases } = data as { sourceTitle: string; cases: BranchCase[] };
+  const rows = cases.length + 1;
+  const height = branchNodeHeight(cases.length);
+
   return (
     <div
-      className={`w-52 rounded-xl border-2 bg-[var(--card)] px-3 py-2.5 shadow-sm ${selected ? "border-primary ring-2 ring-primary/30 shadow-md" : "border-amber-500/60"}`}
+      style={{ height }}
+      className={`w-56 rounded-xl border-2 bg-[var(--card)] shadow-sm ${
+        selected ? "border-primary ring-primary/30 shadow-md ring-2" : "border-amber-500/60"
+      }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
-      <div className="flex items-center gap-2">
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-amber-500/15">
-          <GitBranch className="size-3.5 text-amber-600" />
+
+      <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-amber-500/15">
+          <GitBranch className="size-3 text-amber-600" />
         </span>
-        <span className="text-xs font-semibold">If / Else</span>
+        <span className="truncate text-[11px] font-semibold">{sourceTitle || "Branch"}</span>
       </div>
-      <p className="text-muted-foreground mt-1.5 line-clamp-2 text-[10px] leading-snug">
-        {cond ? conditionText(cond) : "always"}
-      </p>
-      <Handle type="source" id="true" position={Position.Right} style={{ top: "38%" }} className="!bg-green-600" />
-      <Handle type="source" id="false" position={Position.Right} style={{ top: "72%" }} className="!bg-red-600" />
-      <span className="absolute right-6 top-[30%] text-[9px] font-bold text-green-600">Y</span>
-      <span className="absolute right-6 top-[64%] text-[9px] font-bold text-red-600">N</span>
+
+      <div className="border-t border-dashed">
+        {cases.map((c, i) => (
+          <BranchRow key={c.ruleId} label={c.label} handleId={c.ruleId} index={i} rows={rows} height={height} />
+        ))}
+        <BranchRow label="otherwise" handleId={OTHERWISE} index={cases.length} rows={rows} height={height} muted />
+      </div>
+    </div>
+  );
+}
+
+function BranchRow({
+  label,
+  handleId,
+  index,
+  rows,
+  height,
+  muted,
+}: {
+  label: string;
+  handleId: string;
+  index: number;
+  rows: number;
+  height: number;
+  muted?: boolean;
+}) {
+  // The handle sits at the vertical centre of its own row, so a wire leaves
+  // level with the answer that takes it.
+  const headerPx = 30;
+  const rowPx = (height - headerPx) / rows;
+  const top = headerPx + rowPx * (index + 0.5);
+
+  return (
+    <div className="relative flex h-[22px] items-center px-3">
+      <span className={`truncate text-[10px] ${muted ? "text-muted-foreground italic" : "font-medium"}`}>{label}</span>
+      <Handle
+        type="source"
+        id={handleId}
+        position={Position.Right}
+        style={{ top, background: muted ? "var(--muted-foreground)" : "var(--primary)" }}
+      />
     </div>
   );
 }
@@ -881,68 +1090,177 @@ function BlockInspector({
   );
 }
 
-function ConditionInspector({
-  rule,
-  elseRule,
+/**
+ * Everything that leaves one question.
+ *
+ * There used to be one panel per If/Else node, each editing a single yes/no
+ * test — so a four-option question meant four panels to keep consistent by
+ * hand. A decision is one thing; this edits all of its cases together, and
+ * says out loud where an unmatched answer goes.
+ */
+function BranchInspector({
+  sourceRef,
+  rules,
   doc,
   answerableBlocks,
+  onPatch,
+  onAddCase,
+  onDeleteCase,
+  onDelete,
+}: {
+  sourceRef: string;
+  rules: GotoRule[];
+  doc: FormDoc;
+  answerableBlocks: Block[];
+  onPatch: (ruleId: string, patch: RulePatch) => void;
+  onAddCase: () => void;
+  onDeleteCase: (ruleId: string) => void;
+  onDelete: () => void;
+}) {
+  const sourceBlock = doc.blocks.find((b) => b.ref === sourceRef) ?? null;
+  const sourceIndex = doc.blocks.findIndex((b) => b.ref === sourceRef);
+  const fallthrough = doc.blocks[sourceIndex + 1];
+  const explicitElse = doc.logic.find((r): r is GotoRule => isGoto(r) && r.from === sourceRef && !condOf(r));
+  const elseTarget = explicitElse
+    ? (doc.blocks.find((b) => b.ref === explicitElse.target)?.title ?? doc.endings.find((e) => e.ref === explicitElse.target)?.title ?? explicitElse.target)
+    : (fallthrough?.title ?? "the ending");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-sm font-semibold">
+            <GitBranch className="text-primary size-4 shrink-0" />
+            Branch
+          </p>
+          <p className="text-muted-foreground mt-0.5 truncate text-xs">{sourceBlock?.title ?? sourceRef}</p>
+        </div>
+        <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={onDelete} aria-label="Delete branch">
+          <Trash2 className="size-3.5" />
+        </Button>
+      </div>
+
+      <div className="space-y-3">
+        {rules.map((rule) => (
+          <BranchCaseRow
+            key={rule.id}
+            rule={rule}
+            sourceBlock={sourceBlock}
+            doc={doc}
+            onPatch={onPatch}
+            onDelete={() => onDeleteCase(rule.id)}
+          />
+        ))}
+      </div>
+
+      <Button variant="outline" size="sm" shape="pill" className="w-full" onClick={onAddCase}>
+        <Plus className="size-3.5" />
+        Add a route
+      </Button>
+
+      <p className="text-muted-foreground rounded-lg border border-dashed px-3 py-2 text-xs leading-relaxed">
+        Any answer that matches none of these goes to <span className="font-medium">{elseTarget}</span>.
+      </p>
+
+      {answerableBlocks.length === 0 && (
+        <p className="text-muted-foreground text-xs">Add a question before wiring conditions.</p>
+      )}
+    </div>
+  );
+}
+
+/** One case: a test on the branch's question, and where a match goes. */
+function BranchCaseRow({
+  rule,
+  sourceBlock,
+  doc,
   onPatch,
   onDelete,
 }: {
   rule: GotoRule;
-  elseRule: GotoRule | undefined;
+  sourceBlock: Block | null;
   doc: FormDoc;
-  answerableBlocks: Block[];
   onPatch: (ruleId: string, patch: RulePatch) => void;
   onDelete: () => void;
 }) {
   const cond = condOf(rule);
-  const sourceBlock = doc.blocks.find((b) => b.ref === rule.from) ?? null;
+  const op = (cond?.op ?? "is_not_empty") as Op;
+  const options = sourceBlock && "options" in sourceBlock ? sourceBlock.options : undefined;
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <GitBranch className="text-primary size-4" />
-          <p className="text-sm font-semibold">If / Else</p>
-        </div>
-        <Button variant="ghost" size="icon" className="size-7" onClick={onDelete}>
-          <Trash2 className="size-3.5" />
-        </Button>
+    <div className="bg-muted/40 space-y-2 rounded-xl p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">If</span>
+        <button
+          type="button"
+          onClick={onDelete}
+          aria-label="Remove this route"
+          className="text-muted-foreground hover:text-destructive shrink-0"
+        >
+          <X className="size-3" />
+        </button>
       </div>
-      <div className="space-y-1.5">
-        <Label>Question</Label>
-        <select className="w-full rounded-md border px-2 py-1.5 text-sm" value={rule.from ?? ""} onChange={(e) => onPatch(rule.id, { from: e.target.value })}>
-          {answerableBlocks.map((b) => (
-            <option key={b.ref} value={b.ref}>{b.title.slice(0, 40)}</option>
-          ))}
-        </select>
-      </div>
-      <div className="space-y-1.5">
-        <Label>Condition</Label>
-        <select className="w-full rounded-md border px-2 py-1.5 text-sm" value={cond?.op ?? "is_not_empty"} onChange={(e) => onPatch(rule.id, { op: e.target.value as Op })}>
+
+      <div className="flex gap-1.5">
+        <select
+          className="min-w-0 flex-1 rounded-md border px-2 py-1 text-xs"
+          value={op}
+          onChange={(e) => onPatch(rule.id, { op: e.target.value as Op, makeConditional: true })}
+        >
           {OPS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
           ))}
         </select>
-        {opsValueNeeded(cond?.op ?? "is_not_empty") && (
-          <ConditionValueInput
-            block={sourceBlock}
-            value={cond?.value}
-            onChange={(v) => onPatch(rule.id, { value: v })}
-          />
-        )}
+        {opsValueNeeded(op) &&
+          (options?.length ? (
+            <select
+              className="min-w-0 flex-1 rounded-md border px-2 py-1 text-xs"
+              value={String(cond?.value ?? "")}
+              onChange={(e) => onPatch(rule.id, { value: e.target.value, makeConditional: true })}
+            >
+              <option value="">Choose…</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <Input
+              className="h-7 min-w-0 flex-1 text-xs"
+              value={String(cond?.value ?? "")}
+              onChange={(e) => onPatch(rule.id, { value: e.target.value, makeConditional: true })}
+            />
+          ))}
       </div>
-      <div className="space-y-1.5 rounded-lg border border-green-600/30 bg-green-500/5 p-2.5">
-        <p className="text-xs font-semibold text-green-600">YES →</p>
-        <TargetSelect doc={doc} value={rule.target} onChange={(t, kind) => onPatch(rule.id, { target: t, targetKind: kind })} />
-      </div>
-      <div className="space-y-1.5 rounded-lg border border-red-600/30 bg-red-500/5 p-2.5">
-        <p className="text-xs font-semibold text-red-600">NO →</p>
-        {elseRule ? (
-          <TargetSelect doc={doc} value={elseRule.target} onChange={(t, kind) => onPatch(elseRule.id, { target: t, targetKind: kind })} />
-        ) : (
-          <p className="text-muted-foreground text-xs">Falls through to the next node — drag the red handle to route it.</p>
-        )}
+
+      <div className="flex items-center gap-1.5">
+        <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">Go to</span>
+        <select
+          className="min-w-0 flex-1 rounded-md border px-2 py-1 text-xs"
+          value={rule.target}
+          onChange={(e) => {
+            const isEnding = doc.endings.some((x) => x.ref === e.target.value);
+            onPatch(rule.id, { target: e.target.value, targetKind: isEnding ? "ending" : "block" });
+          }}
+        >
+          <optgroup label="Questions">
+            {doc.blocks.map((b) => (
+              <option key={b.ref} value={b.ref}>
+                {b.title.slice(0, 40)}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Endings">
+            {doc.endings.map((e) => (
+              <option key={e.ref} value={e.ref}>
+                {e.title.slice(0, 40)}
+              </option>
+            ))}
+          </optgroup>
+        </select>
       </div>
     </div>
   );
@@ -1049,7 +1367,7 @@ function SequenceEdgeInfo({ edgeId, doc }: { edgeId: string; doc: FormDoc }) {
       <p className="text-sm font-semibold">Default flow</p>
       <p className="text-muted-foreground text-xs leading-relaxed">
         Runs after <span className="font-medium text-foreground">{from?.title ?? "this block"}</span> when no matching rule
-        redirects the flow. This wire follows the block order and can&apos;t be deleted — add an If / Else node or a custom
+        redirects the flow. This wire follows the block order and can&apos;t be deleted — add a Branch or a custom
         wire to override it.
       </p>
     </div>
