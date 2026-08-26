@@ -6,7 +6,6 @@ import {
   BookOpen,
   Plus,
   Shield,
-  Sparkles,
   Target,
   Trash2,
   Cpu,
@@ -20,7 +19,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingGroup, SettingRow } from "@/components/ui/setting-row";
 import { Field, SelectField, NumberField, SwitchField, TextField } from "../inspector/fields";
-import { PreviewChat } from "../preview-chat";
 import { useBuilderStore } from "@/stores/builder-store";
 import { cn } from "@/lib/utils";
 
@@ -44,7 +42,6 @@ const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0
  */
 export function AgentTab() {
   const doc = useBuilderStore((s) => s.doc);
-  const formId = useBuilderStore((s) => s.formId);
   const edit = useBuilderStore((s) => s.edit);
   const [section, setSection] = useState<Section>("persona");
 
@@ -65,7 +62,7 @@ export function AgentTab() {
   const overBudget = used > KNOWLEDGE_CHAR_BUDGET;
 
   return (
-    <div className="mx-auto grid h-[calc(100svh-3.5rem)] w-full max-w-6xl grid-cols-1 gap-6 overflow-y-auto p-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+    <div className="mx-auto h-[calc(100svh-3.5rem)] w-full max-w-3xl overflow-y-auto p-6">
       <div className="min-w-0 space-y-6">
         <div className="space-y-1">
           <h1 className="text-h1">Agent</h1>
@@ -359,14 +356,6 @@ export function AgentTab() {
         )}
       </div>
 
-      {/* Test it here rather than switching tabs to find out what changed. */}
-      <aside className="hidden h-[34rem] lg:sticky lg:top-6 lg:block">
-        <div className="mb-2 flex items-center gap-1.5">
-          <Sparkles className="text-primary size-3.5" />
-          <p className="text-caption font-medium">Try it</p>
-        </div>
-        <PreviewChat formId={formId} doc={doc} />
-      </aside>
     </div>
   );
 }
