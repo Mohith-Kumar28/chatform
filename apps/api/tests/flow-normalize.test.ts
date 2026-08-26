@@ -240,3 +240,59 @@ describe("one block arm alongside an ending arm", () => {
     ).toEqual(["q_issue", "q_callback_want", "q_phone", "q_positive", "end_apology"]);
   });
 });
+
+describe("two branch structures whose arms interleave", () => {
+  // Generated from "if in person ask dietary needs and parking; if online ask
+  // timezone; everyone gives name and email". The parking arm runs
+  // q_car_reg → q_name, and q_timezone sits between them in block order while
+  // belonging to the *other* branch entirely.
+  const blocks = [
+    block("q_attendance", ["opt_in_person", "opt_online"]),
+    block("q_needs", ["opt_parking", "opt_vegan"]),
+    block("q_car_reg"),
+    block("q_timezone"),
+    block("q_name"),
+    block("q_email"),
+  ];
+  const branches: DraftBranch[] = [
+    { when: { ref: "q_attendance", op: "eq", value: "opt_in_person" }, then: "q_needs" },
+    { when: { ref: "q_attendance", op: "eq", value: "opt_online" }, then: "q_timezone" },
+    { when: { ref: "q_needs", op: "contains", value: "opt_parking" }, then: "q_car_reg" },
+    { when: { ref: "q_needs", op: "not_contains", value: "opt_parking" }, then: "q_name" },
+    { when: { ref: "q_car_reg", op: "is_not_empty", value: null }, then: "q_name" },
+  ];
+  const run = (attendance: string, needs: string) =>
+    walk(blocks, branches, ["end_thanks"], {
+      q_attendance: attendance,
+      q_needs: needs,
+      q_car_reg: "AB12 CDE",
+      q_timezone: "UTC",
+      q_name: "Grace",
+      q_email: "a@b.co",
+    });
+
+  it("does not cut the online path short at the question it does not own", () => {
+    // The naive arm-boundary rule gave q_timezone an unconditional jump to
+    // q_email, so everyone attending online was never asked their name.
+    expect(run("opt_online", "opt_vegan")).toEqual(["q_attendance", "q_timezone", "q_name", "q_email", "end_thanks"]);
+  });
+
+  it("routes the in-person paths through their own follow-ups", () => {
+    expect(run("opt_in_person", "opt_parking")).toEqual([
+      "q_attendance",
+      "q_needs",
+      "q_car_reg",
+      "q_name",
+      "q_email",
+      "end_thanks",
+    ]);
+    expect(run("opt_in_person", "opt_vegan")).toEqual(["q_attendance", "q_needs", "q_name", "q_email", "end_thanks"]);
+  });
+
+  it("asks everyone the questions the form said everyone answers", () => {
+    for (const path of [run("opt_online", "opt_vegan"), run("opt_in_person", "opt_parking"), run("opt_in_person", "opt_vegan")]) {
+      expect(path).toContain("q_name");
+      expect(path).toContain("q_email");
+    }
+  });
+});

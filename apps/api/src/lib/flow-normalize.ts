@@ -96,6 +96,8 @@ export function buildFlowRules(
   const bySource = new Map<string, DraftBranch[]>();
   /** Blocks the model already routes away from, so we do not override it. */
   const routed = new Set<string>();
+  /** Which question each block is an arm of, so arms are not confused. */
+  const armOf = new Map<string, Set<string>>();
 
   for (const br of branches) {
     if (!index.has(br.when.ref)) continue;
@@ -108,6 +110,11 @@ export function buildFlowRules(
 
     rules.push(gotoRule(br.when.ref, br.when, br.then, isEnding ? "ending" : "block"));
     routed.add(br.when.ref);
+    if (!isEnding) {
+      const owners = armOf.get(br.then);
+      if (owners) owners.add(br.when.ref);
+      else armOf.set(br.then, new Set([br.when.ref]));
+    }
     const list = bySource.get(br.when.ref);
     if (list) list.push(br);
     else bySource.set(br.when.ref, [br]);
@@ -155,6 +162,15 @@ export function buildFlowRules(
       // The model sometimes closes the arm itself. Adding a second,
       // unconditional rule on top would shadow whatever it decided.
       if (routed.has(tail.ref)) continue;
+      // Arms are assumed to be contiguous runs of blocks, which holds until a
+      // second branch elsewhere in the form interleaves its own arms with this
+      // one. Then the block sitting at what looks like this arm's end actually
+      // belongs to that other question, and sending it onward would cut its
+      // own path short — an event form did exactly this, skipping the name
+      // question for everyone attending online. Somebody else's arm is left
+      // alone.
+      const owners = armOf.get(tail.ref);
+      if (owners && !owners.has(source)) continue;
       rules.push(alwaysRule(tail.ref, rejoin.ref, rejoin.kind));
     }
   }
