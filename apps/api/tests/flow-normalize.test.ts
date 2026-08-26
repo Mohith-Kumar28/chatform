@@ -296,3 +296,58 @@ describe("two branch structures whose arms interleave", () => {
     }
   });
 });
+
+describe("arms that converge on a shared question", () => {
+  // The AI bar, asked to collect an iCloud address from iPhone users and a
+  // Play Store address from Android users, hung four conditions off the
+  // device question that was already in the form — two to new follow-ups and
+  // two sending the remaining options straight on to the existing email
+  // question.
+  const blocks = [
+    block("q_device", ["opt_iphone", "opt_android", "opt_chrome", "opt_multiple"]),
+    block("q_apple_email"),
+    block("q_playstore_email"),
+    block("q_email"),
+    block("q_phone"),
+  ];
+  const branches: DraftBranch[] = [
+    { when: { ref: "q_device", op: "eq", value: "opt_iphone" }, then: "q_apple_email" },
+    { when: { ref: "q_device", op: "eq", value: "opt_android" }, then: "q_playstore_email" },
+    { when: { ref: "q_device", op: "eq", value: "opt_chrome" }, then: "q_email" },
+    { when: { ref: "q_device", op: "eq", value: "opt_multiple" }, then: "q_email" },
+  ];
+  const run = (device: string) =>
+    walk(blocks, branches, ["end_thanks"], {
+      q_device: device,
+      q_apple_email: "a@icloud.com",
+      q_playstore_email: "a@gmail.com",
+      q_email: "a@b.co",
+      q_phone: "+14155550132",
+    });
+
+  it("treats the block two conditions share as the rejoin, not as an arm", () => {
+    // Reading q_email as the last arm put the rejoin one block further down,
+    // so both platform arms jumped to q_phone and skipped it.
+    expect(run("opt_iphone")).toEqual(["q_device", "q_apple_email", "q_email", "q_phone", "end_thanks"]);
+    expect(run("opt_android")).toEqual(["q_device", "q_playstore_email", "q_email", "q_phone", "end_thanks"]);
+  });
+
+  it("sends the options with no follow-up straight to the shared question", () => {
+    expect(run("opt_chrome")).toEqual(["q_device", "q_email", "q_phone", "end_thanks"]);
+    expect(run("opt_multiple")).toEqual(["q_device", "q_email", "q_phone", "end_thanks"]);
+  });
+
+  it("never asks one platform the other platform's question", () => {
+    expect(run("opt_iphone")).not.toContain("q_playstore_email");
+    expect(run("opt_android")).not.toContain("q_apple_email");
+    expect(run("opt_chrome")).not.toContain("q_apple_email");
+    expect(run("opt_chrome")).not.toContain("q_playstore_email");
+  });
+
+  it("still asks everyone the questions that follow the branch", () => {
+    for (const d of ["opt_iphone", "opt_android", "opt_chrome", "opt_multiple"]) {
+      expect(run(d)).toContain("q_email");
+      expect(run(d)).toContain("q_phone");
+    }
+  });
+});

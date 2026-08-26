@@ -181,6 +181,70 @@ export const GenerationDraft = z.object({
 });
 export type GenerationDraft = z.output<typeof GenerationDraft>;
 
+/**
+ * Extending a form that already exists.
+ *
+ * Separate from `GenerationDraft` because the two jobs are genuinely
+ * different: this one has to place its questions inside a flow it did not
+ * write, and may hang them off questions that were already there. Asked to
+ * collect an iCloud address from iOS users and a Play Store address from
+ * Android users, the old path appended both to the end and wired nothing — so
+ * every respondent was asked both, and the "which device?" question already
+ * sitting in the form went unused.
+ */
+export const ExtensionDraft = z.object({
+  blocks: z
+    .array(
+      z.object({
+        ref: z.string().regex(/^[a-z][a-z0-9_]{1,40}$/),
+        type: z.string(),
+        title: z.string().min(1),
+        description: z.string(),
+        required: z.boolean(),
+        options: z.array(z.object({ id: z.string().regex(/^[a-z0-9_]{3,30}$/), label: z.string().min(1) })),
+        scale: z.number().int().min(0).max(20),
+        /**
+         * Ref of the block this one goes directly after — existing or newly
+         * added. Empty string puts it at the end. Position is what makes a
+         * branch possible at all: the arms of a condition have to sit
+         * immediately below the question that decides it.
+         */
+        insertAfter: z.string(),
+      }),
+    )
+    .min(1)
+    .max(12),
+  /** May hang off a question that was already in the form. */
+  branches: z
+    .array(
+      z.object({
+        when: z.object({
+          ref: z.string(),
+          op: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains", "not_contains", "is_empty", "is_not_empty"]),
+          value: z.union([z.string(), z.number(), z.boolean()]).nullable(),
+        }),
+        then: z.string(),
+      }),
+    )
+    .max(12),
+  /** One sentence on what changed, shown to the builder. */
+  summary: z.string(),
+});
+export type ExtensionDraft = z.output<typeof ExtensionDraft>;
+
+/** Extend an existing form: new blocks, where they go, and how they branch. */
+export async function generateExtension(opts: { env: Bindings; prompt: string }): Promise<{ draft: ExtensionDraft; tokens: number }> {
+  const result = await generateObject({
+    model: chatModel(opts.env, MODELS.generation),
+    schema: ExtensionDraft,
+    prompt: opts.prompt,
+  });
+  return {
+    draft: result.object as ExtensionDraft,
+    tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
+  };
+}
+
 /** AI flow generator: prompt → loose draft (normalized to FormDoc by the caller). */
 export async function generateFormDraft(opts: { env: Bindings; prompt: string }): Promise<{ draft: GenerationDraft; tokens: number }> {
   const result = await generateObject({

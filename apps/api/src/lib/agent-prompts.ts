@@ -187,3 +187,66 @@ Order blocks so that branching works by position. Questions run top to bottom, a
 - When a question sends different answers down different paths, give EVERY path a branch — including the common one. "yes → q_which_competitor" alone still sends the "no" answers there too, because it is the next block.
 - To end the form early for some answers, branch straight to an ending ref.`;
 }
+
+
+/**
+ * Extending a form that already exists.
+ *
+ * The old version of this passed `ref (type): title` and nothing else — no
+ * option ids, no existing logic, no notion of position — then appended
+ * whatever came back. So the model could not have written a condition even if
+ * it wanted to: it had no option id to compare against. Everything it needs to
+ * reuse the flow is in the manifest below.
+ */
+export function buildExtensionPrompt(doc: FormDoc, request: string): string {
+  const blocks = doc.blocks
+    .map((b, i) => {
+      const options = "options" in b && b.options?.length
+        ? ` options: [${b.options.map((o) => `${o.id}="${o.label}"`).join(", ")}]`
+        : "";
+      return `  ${i + 1}. ${b.ref} (${b.type}${b.required ? ", required" : ""}): "${b.title}"${options}`;
+    })
+    .join("\n");
+
+  const gotos = doc.logic.filter((r) => r.action_kind === "goto");
+  const rules = gotos.length
+    ? gotos
+        .map((r) => {
+          const c = r.when?.conditions?.[0];
+          const left = c && c.left.kind === "ref" ? c.left.ref : "?";
+          const cond = c ? `${left} ${c.op}${"value" in c ? ` ${JSON.stringify(c.value)}` : ""}` : "always";
+          return `  from ${r.from ?? "(any)"} — if ${cond} → ${r.target}`;
+        })
+        .join("\n")
+    : "  (none — the form runs straight through)";
+
+  return `You are editing an EXISTING conversational form, not writing a new one.
+
+FORM: "${doc.title}"
+
+QUESTIONS, in the order they are asked:
+${blocks}
+
+ENDINGS: ${doc.endings.map((e) => e.ref).join(", ")}
+
+EXISTING BRANCHING RULES:
+${rules}
+
+WHAT THE BUILDER ASKED FOR:
+${request}
+
+Return only the NEW questions. Never restate or duplicate one that is already listed above.
+
+Placement — "insertAfter" is the ref of the block a new question goes directly after, and "" means the end of the form. Do not default to the end. A question belongs next to the ones it relates to, and a question that is only asked in some cases MUST sit immediately below the question that decides it, with the alternative arms following it one after another.
+
+Branching — read the request for words like "if", "when", "only for", "otherwise". When you find one:
+- Look for a question ALREADY in the list that answers it, and hang the condition off that. If the builder says "if they are on iOS ask X, if Android ask Y" and the form already asks which device they use, use that question's ref and its exact option ids. Do not add a second question asking the same thing.
+- Give EVERY case its own branch, including the common one. A single branch to the block that comes next changes nothing, because that is where the respondent was going anyway.
+- Add a question only when nothing in the form can answer the condition.
+
+Rules for "branches": [{ "when": { "ref": "<existing or new question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains|is_empty|is_not_empty>", "value": <option id / number / boolean, or null for is_empty and is_not_empty> }, "then": "<question ref or ending ref>" }]. For choice questions the value MUST be one of that question's option ids exactly as listed. Return [] when the request needs no conditions.
+
+Every block needs: ref (lowercase snake_case, unique, not already used), type, title, description ("" if none), required, options ([] when the type has no options, otherwise ids like opt_<slug>), scale (5 for rating, 10 otherwise), insertAfter.
+
+"summary" is one plain sentence telling the builder what you changed, mentioning any condition you set up.`;
+}

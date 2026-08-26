@@ -87,6 +87,11 @@ export function buildFlowRules(
   branches: DraftBranch[],
   blocks: Block[],
   endingRefs: string[],
+  /**
+   * Rules already on the form, when extending rather than generating. They are
+   * not returned — only used so derivation does not fight or duplicate them.
+   */
+  existing: { from?: string | null; target: string; targetKind?: "block" | "ending" }[] = [],
 ): LogicRuleInput[] {
   const index = new Map(blocks.map((b, i) => [b.ref, i]));
   const endings = new Set(endingRefs);
@@ -98,6 +103,15 @@ export function buildFlowRules(
   const routed = new Set<string>();
   /** Which question each block is an arm of, so arms are not confused. */
   const armOf = new Map<string, Set<string>>();
+
+  for (const r of existing) {
+    if (r.from) routed.add(r.from);
+    if (r.from && (r.targetKind ?? "block") === "block") {
+      const owners = armOf.get(r.target);
+      if (owners) owners.add(r.from);
+      else armOf.set(r.target, new Set([r.from]));
+    }
+  }
 
   for (const br of branches) {
     if (!index.has(br.when.ref)) continue;
@@ -150,14 +164,34 @@ export function buildFlowRules(
     // up to the block before the next arm starts; the last arm ends where the
     // trunk resumes. Every arm but the last needs closing off, or it spills
     // into the one below it.
-    const lastArmStart = index.get(arms[arms.length - 1]!.then)!;
-    const rejoin = destinationAfter(lastArmStart, blocks, endingRefs);
+    //
+    // When two of the conditions point at the same block, that block is where
+    // the flow converges — not an arm of its own. A device question routing
+    // iPhone and Android to their own follow-ups while sending Chrome and
+    // "several" straight on to the shared next question says exactly this, and
+    // reading that shared target as the last arm put the rejoin one block too
+    // far down, skipping the question everyone was supposed to answer.
+    const counts = new Map<string, number>();
+    for (const a of arms) counts.set(a.then, (counts.get(a.then) ?? 0) + 1);
+    const shared = [...counts.entries()]
+      .filter(([, n]) => n > 1)
+      .map(([ref]) => ref)
+      .sort((a, b) => index.get(a)! - index.get(b)!)[0];
+
+    const trueArms = shared
+      ? arms.filter((a) => a.then !== shared && index.get(a.then)! < index.get(shared)!)
+      : dedupeByTarget(arms);
+    if (trueArms.length === 0) continue;
+
+    const rejoin = shared
+      ? { ref: shared, kind: "block" as const }
+      : destinationAfter(index.get(trueArms[trueArms.length - 1]!.then)!, blocks, endingRefs);
     if (!rejoin) continue;
 
-    for (let i = 0; i < arms.length - 1; i++) {
-      const armEnd = index.get(arms[i + 1]!.then)! - 1;
+    for (let i = 0; i < trueArms.length - 1; i++) {
+      const armEnd = index.get(trueArms[i + 1]!.then)! - 1;
       const tail = blocks[armEnd];
-      if (!tail || armEnd < index.get(arms[i]!.then)!) continue;
+      if (!tail || armEnd < index.get(trueArms[i]!.then)!) continue;
       if (tail.ref === rejoin.ref) continue;
       // The model sometimes closes the arm itself. Adding a second,
       // unconditional rule on top would shadow whatever it decided.
@@ -176,6 +210,12 @@ export function buildFlowRules(
   }
 
   return rules;
+}
+
+/** Two conditions sending answers to the same follow-up are still one arm. */
+function dedupeByTarget(arms: DraftBranch[]): DraftBranch[] {
+  const seen = new Set<string>();
+  return arms.filter((a) => (seen.has(a.then) ? false : (seen.add(a.then), true)));
 }
 
 /** What follows position `i` — the next block, or the first ending. */

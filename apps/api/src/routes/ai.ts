@@ -4,9 +4,9 @@ import { z } from "zod";
 import { Block as BlockSchema, FormDoc, lintFormDoc, hasErrors, type Block, type FormDocInput, type LogicRuleInput, migrateFormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, assertFormAccess, type GuardVars } from "../lib/guards.js";
-import { generateFormDraft, type GenerationDraft } from "../lib/ai.js";
+import { generateFormDraft, generateExtension, type GenerationDraft } from "../lib/ai.js";
 import { buildFlowRules } from "../lib/flow-normalize.js";
-import { buildFlowGeneratorPrompt } from "../lib/agent-prompts.js";
+import { buildFlowGeneratorPrompt, buildExtensionPrompt } from "../lib/agent-prompts.js";
 
 export const aiRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
 
@@ -210,32 +210,59 @@ aiRouter.post(
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     const doc = FormDoc.parse(migrateFormDoc(JSON.parse(row.working_schema)));
 
-    const existing = doc.blocks.map((b) => `${b.ref} (${b.type}): ${b.title}`).join("; ");
-    const { draft, tokens } = await generateFormDraft({
+    const { draft, tokens } = await generateExtension({
       env: c.env,
-      prompt: `You are extending an EXISTING form. Current questions: [${existing}].
-Create ${count} NEW question blocks only (no welcome block, no endings) that: ${prompt}
-Avoid duplicating existing questions. Return them in "blocks" (title/description may be "" if none).`,
+      prompt: buildExtensionPrompt(doc, prompt),
     });
 
+    // Insert each block where the model asked for it, resolving against the
+    // list as it grows so one new block can follow another. Appending
+    // everything to the end — which is all this route used to do — puts the
+    // arms of a condition below the questions they are supposed to skip.
     const added: Block[] = [];
+    const renamed = new Map<string, string>();
     for (const b of draft.blocks) {
       if (b.type === "welcome" || b.type === "statement") continue;
       let ref = b.ref;
       while (doc.blocks.some((x) => x.ref === ref)) ref = `${ref}_x`;
+      if (ref !== b.ref) renamed.set(b.ref, ref);
+
       const normalized = normalizeBlock({ ...b, ref }, 1); // index 1 = never treated as welcome
-      if (normalized) {
-        added.push(normalized);
-        doc.blocks.push(normalized);
-      }
+      if (!normalized) continue;
+
+      const anchor = renamed.get(b.insertAfter) ?? b.insertAfter;
+      const at = anchor ? doc.blocks.findIndex((x) => x.ref === anchor) : -1;
+      if (at >= 0) doc.blocks.splice(at + 1, 0, normalized);
+      else doc.blocks.push(normalized);
+      added.push(normalized);
     }
     if (added.length === 0) {
       return c.json({ error: { code: "generation_failed", message: "AI could not produce new blocks. Try a different prompt." } }, 502);
     }
+
+    // Branches may hang off a question that was already in the form, so rules
+    // are built against the merged block list and folded in beside the
+    // existing ones rather than replacing them.
+    const branches = draft.branches.map((br) => ({
+      ...br,
+      when: { ...br.when, ref: renamed.get(br.when.ref) ?? br.when.ref },
+      then: renamed.get(br.then) ?? br.then,
+    }));
+    const priorGotos = doc.logic.filter((r) => r.action_kind === "goto");
+    const newRules = buildFlowRules(
+      branches,
+      doc.blocks,
+      doc.endings.map((e) => e.ref),
+      priorGotos,
+    );
+    if (newRules.length > 0) {
+      doc.logic = FormDoc.parse({ ...doc, logic: [...doc.logic, ...newRules] }).logic;
+    }
+
     const issues = lintFormDoc(doc);
     await c.env.DB.prepare(`UPDATE forms SET working_schema = ?, updated_at = ? WHERE id = ?`)
       .bind(JSON.stringify(doc), Date.now(), formId)
       .run();
-    return c.json({ doc, added: added.length, tokens, issues });
+    return c.json({ doc, added: added.length, rules: newRules.length, summary: draft.summary, tokens, issues });
   },
 );
