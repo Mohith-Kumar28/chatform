@@ -19,6 +19,13 @@ import { motion } from "motion/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -134,18 +141,21 @@ export function BuilderHeader({
 
           {/* Below lg the tab strip collapses. A select is a poor nav control,
               but it beats a horizontally scrolling icon row on a phone. */}
-          <select
-            aria-label="Builder section"
-            className="border-input bg-background h-8 rounded-md border px-2 text-xs lg:hidden"
+          <Select
             value={BUILDER_TABS.find((t) => pathname.endsWith(`/${t.segment}`))?.segment ?? "build"}
-            onChange={(e) => router.push(`/forms/${formId}/${e.target.value}`)}
+            onValueChange={(v) => router.push(`/forms/${formId}/${v}`)}
           >
-            {BUILDER_TABS.map((t) => (
-              <option key={t.segment} value={t.segment}>
-                {t.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger size="sm" aria-label="Builder section" className="w-36 lg:hidden">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {BUILDER_TABS.map((t) => (
+                <SelectItem key={t.segment} value={t.segment}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           {/* right: the three things you actually reach for — preview, share,
               open — then publish. Each is a tinted target rather than a grey

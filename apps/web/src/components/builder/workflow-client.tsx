@@ -22,6 +22,7 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import "./flow.css";
 import { cn } from "@/lib/utils";
 import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspector";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
@@ -32,6 +33,15 @@ import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
 import { Block as BlockSchema, conditionIsAlwaysTrue, rulesAreExhaustive } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -1139,15 +1149,17 @@ function BlockInspector({
       {block.type === "rating" && (
         <div className="flex items-center justify-between">
           <Label>Scale</Label>
-          <select
-            className="rounded-md border px-2 py-1 text-sm"
-            value={block.scale ?? 5}
-            onChange={(e) => onPatchBlock(block.ref, { scale: Number(e.target.value) } as Partial<Block>)}
+          <Picker
+            className="w-24"
+            value={String(block.scale ?? 5)}
+            onValueChange={(v) => onPatchBlock(block.ref, { scale: Number(v) } as Partial<Block>)}
           >
             {[3, 4, 5, 7, 10].map((n) => (
-              <option key={n} value={n}>{n}</option>
+              <SelectItem key={n} value={String(n)}>
+                {n}
+              </SelectItem>
             ))}
-          </select>
+          </Picker>
         </div>
       )}
       {doc.endings.length > 1 && <p className="text-muted-foreground text-[10px]">{doc.blocks.length} blocks in this form.</p>}
@@ -1274,31 +1286,31 @@ function BranchCaseRow({
       </div>
 
       <div className="flex gap-1.5">
-        <select
-          className="min-w-0 flex-1 rounded-md border px-2 py-1 text-xs"
+        <Picker
           value={op}
-          onChange={(e) => onPatch(rule.id, { op: e.target.value as Op, makeConditional: true })}
+          onValueChange={(v) => onPatch(rule.id, { op: v as Op, makeConditional: true })}
+          className="min-w-0 flex-1"
         >
           {OPS.map((o) => (
-            <option key={o.value} value={o.value}>
+            <SelectItem key={o.value} value={o.value}>
               {o.label}
-            </option>
+            </SelectItem>
           ))}
-        </select>
+        </Picker>
         {opsValueNeeded(op) &&
           (options?.length ? (
-            <select
-              className="min-w-0 flex-1 rounded-md border px-2 py-1 text-xs"
+            <Picker
               value={String(cond?.value ?? "")}
-              onChange={(e) => onPatch(rule.id, { value: e.target.value, makeConditional: true })}
+              onValueChange={(v) => onPatch(rule.id, { value: v, makeConditional: true })}
+              placeholder="Choose…"
+              className="min-w-0 flex-1"
             >
-              <option value="">Choose…</option>
               {options.map((o) => (
-                <option key={o.id} value={o.id}>
+                <SelectItem key={o.id} value={o.id}>
                   {o.label}
-                </option>
+                </SelectItem>
               ))}
-            </select>
+            </Picker>
           ) : (
             <Input
               className="h-7 min-w-0 flex-1 text-xs"
@@ -1310,29 +1322,33 @@ function BranchCaseRow({
 
       <div className="flex items-center gap-1.5">
         <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">Go to</span>
-        <select
-          className="min-w-0 flex-1 rounded-md border px-2 py-1 text-xs"
+        <Picker
           value={rule.target}
-          onChange={(e) => {
-            const isEnding = doc.endings.some((x) => x.ref === e.target.value);
-            onPatch(rule.id, { target: e.target.value, targetKind: isEnding ? "ending" : "block" });
-          }}
+          onValueChange={(v) =>
+            onPatch(rule.id, {
+              target: v,
+              targetKind: doc.endings.some((x) => x.ref === v) ? "ending" : "block",
+            })
+          }
+          className="min-w-0 flex-1"
         >
-          <optgroup label="Questions">
+          <SelectGroup>
+            <SelectLabel>Questions</SelectLabel>
             {doc.blocks.map((b) => (
-              <option key={b.ref} value={b.ref}>
+              <SelectItem key={b.ref} value={b.ref}>
                 {b.title.slice(0, 40)}
-              </option>
+              </SelectItem>
             ))}
-          </optgroup>
-          <optgroup label="Endings">
+          </SelectGroup>
+          <SelectGroup>
+            <SelectLabel>Endings</SelectLabel>
             {doc.endings.map((e) => (
-              <option key={e.ref} value={e.ref}>
+              <SelectItem key={e.ref} value={e.ref}>
                 {e.title.slice(0, 40)}
-              </option>
+              </SelectItem>
             ))}
-          </optgroup>
-        </select>
+          </SelectGroup>
+        </Picker>
       </div>
     </div>
   );
@@ -1373,11 +1389,11 @@ function EdgeRuleEditor({
       {!isTrueBranch && !isFalseBranch && (
         <div className="space-y-1.5">
           <Label>Source question</Label>
-          <select className="w-full rounded-md border px-2 py-1.5 text-sm" value={rule.from ?? ""} onChange={(e) => onPatch(rule.id, { from: e.target.value })}>
+          <Picker value={rule.from ?? ""} onValueChange={(v) => onPatch(rule.id, { from: v })}>
             {doc.blocks.filter((b) => b.type !== "welcome").map((b) => (
-              <option key={b.ref} value={b.ref}>{b.title.slice(0, 40)}</option>
+              <SelectItem key={b.ref} value={b.ref}>{b.title.slice(0, 40)}</SelectItem>
             ))}
-          </select>
+          </Picker>
         </div>
       )}
       {isYesNo && !isFalseBranch ? (
@@ -1405,11 +1421,11 @@ function EdgeRuleEditor({
       ) : (
         <div className="space-y-1.5">
           <Label>Condition</Label>
-          <select className="w-full rounded-md border px-2 py-1.5 text-sm" value={cond?.op ?? "is_not_empty"} onChange={(e) => onPatch(rule.id, { op: e.target.value as Op })}>
+          <Picker value={cond?.op ?? "is_not_empty"} onValueChange={(v) => onPatch(rule.id, { op: v as Op })}>
             {OPS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
             ))}
-          </select>
+          </Picker>
           {opsValueNeeded(cond?.op ?? "is_not_empty") && (
             <ConditionValueInput block={sourceBlock} value={cond?.value} onChange={(v) => onPatch(rule.id, { value: v })} />
           )}
@@ -1482,6 +1498,39 @@ function EndingInspector({
 
 // ────────────────────────── shared bits ──────────────────────────
 
+/**
+ * The styled select, in the shape this file keeps needing.
+ *
+ * Native `<select>` elements were scattered through the flow inspectors while
+ * the shadcn Select sat unused — so the panel rendered the operating system's
+ * dropdown next to the app's own controls, in a different font at a different
+ * height with a different focus ring.
+ */
+function Picker({
+  value,
+  onValueChange,
+  placeholder,
+  className,
+  size = "sm",
+  children,
+}: {
+  value: string;
+  onValueChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+  size?: "sm" | "default";
+  children: React.ReactNode;
+}) {
+  return (
+    <Select value={value} onValueChange={onValueChange}>
+      <SelectTrigger size={size} className={cn("w-full", className)}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>{children}</SelectContent>
+    </Select>
+  );
+}
+
 function TargetSelect({
   doc,
   value,
@@ -1492,21 +1541,27 @@ function TargetSelect({
   onChange: (ref: string, kind: "block" | "ending") => void;
 }) {
   return (
-    <select
-      className="w-full rounded-md border px-2 py-1.5 text-sm"
+    <Picker
       value={value}
-      onChange={(e) => {
-        const t = e.target.value;
-        onChange(t, doc.endings.some((x) => x.ref === t) ? "ending" : "block");
-      }}
+      onValueChange={(t) => onChange(t, doc.endings.some((x) => x.ref === t) ? "ending" : "block")}
     >
-      {doc.blocks.map((b) => (
-        <option key={b.ref} value={b.ref}>{b.title.slice(0, 36)}</option>
-      ))}
-      {doc.endings.map((e) => (
-        <option key={e.ref} value={e.ref}>🏁 {e.title.slice(0, 30)}</option>
-      ))}
-    </select>
+      <SelectGroup>
+        <SelectLabel>Questions</SelectLabel>
+        {doc.blocks.map((b) => (
+          <SelectItem key={b.ref} value={b.ref}>
+            {b.title.slice(0, 36)}
+          </SelectItem>
+        ))}
+      </SelectGroup>
+      <SelectGroup>
+        <SelectLabel>Endings</SelectLabel>
+        {doc.endings.map((e) => (
+          <SelectItem key={e.ref} value={e.ref}>
+            {e.title.slice(0, 30)}
+          </SelectItem>
+        ))}
+      </SelectGroup>
+    </Picker>
   );
 }
 
@@ -1522,29 +1577,21 @@ function ConditionValueInput({
   if (!block) return null;
   if (block.type === "yes_no") {
     return (
-      <select
-        className="w-full rounded-md border px-2 py-1.5 text-sm"
-        value={String(value ?? "")}
-        onChange={(e) => onChange(e.target.value === "true")}
-      >
-        <option value="">pick…</option>
-        <option value="true">{block.yesLabel ?? "Yes"}</option>
-        <option value="false">{block.noLabel ?? "No"}</option>
-      </select>
+      <Picker value={String(value ?? "")} onValueChange={(v) => onChange(v === "true")} placeholder="Pick…">
+        <SelectItem value="true">{block.yesLabel ?? "Yes"}</SelectItem>
+        <SelectItem value="false">{block.noLabel ?? "No"}</SelectItem>
+      </Picker>
     );
   }
   if ("options" in block && block.options) {
     return (
-      <select
-        className="w-full rounded-md border px-2 py-1.5 text-sm"
-        value={String(value ?? "")}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        <option value="">pick an option…</option>
+      <Picker value={String(value ?? "")} onValueChange={onChange} placeholder="Pick an option…">
         {block.options.map((o) => (
-          <option key={o.id} value={o.id}>{o.label}</option>
+          <SelectItem key={o.id} value={o.id}>
+            {o.label}
+          </SelectItem>
         ))}
-      </select>
+      </Picker>
     );
   }
   if (["rating", "nps", "opinion_scale", "number"].includes(block.type)) {

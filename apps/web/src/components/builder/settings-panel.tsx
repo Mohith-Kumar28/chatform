@@ -441,10 +441,15 @@ function VariablesEditor({
       </div>
       <div className="flex gap-1.5">
         <Input value={name} placeholder="score" onChange={(e) => setName(e.target.value)} />
-        <select className="rounded-md border px-2 text-sm" value={type} onChange={(e) => setType(e.target.value as "number" | "text")}>
-          <option value="number">number</option>
-          <option value="text">text</option>
-        </select>
+        <Select value={type} onValueChange={(v) => setType(v as "number" | "text")}>
+          <SelectTrigger size="sm" aria-label="Variable type" className="w-28">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="number">number</SelectItem>
+            <SelectItem value="text">text</SelectItem>
+          </SelectContent>
+        </Select>
         <Button
           size="sm"
           variant="outline"

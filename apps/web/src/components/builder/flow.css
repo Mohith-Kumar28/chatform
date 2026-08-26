@@ -1,0 +1,55 @@
+/**
+ * Flow canvas overrides, loaded only on the Flow route.
+ *
+ * React Flow's connection handle is a 6px dot, and that dot *is* the hit area
+ * — so starting a wire meant landing the pointer inside six pixels. The dot is
+ * the right size visually; it is the target that was wrong.
+ */
+
+/*
+ * An invisible disc around each handle, four times its width. It belongs to
+ * the handle, so a press anywhere inside it starts a connection exactly as a
+ * press on the dot would — no extra element, no hit-testing of our own.
+ */
+.react-flow__handle::after {
+  content: "";
+  position: absolute;
+  inset: -11px;
+  border-radius: 9999px;
+}
+
+/* Say it is draggable before the press, not after. */
+.react-flow__handle {
+  cursor: crosshair;
+  transition:
+    box-shadow var(--duration-micro, 120ms) var(--ease-out, ease),
+    transform var(--duration-micro, 120ms) var(--ease-out, ease);
+}
+
+/*
+ * A halo on approach. The dot stays its own size — this is the target
+ * becoming visible, which is the only way to know it is bigger than it looks.
+ */
+.react-flow__handle:hover {
+  box-shadow: 0 0 0 6px color-mix(in oklch, currentColor 18%, transparent);
+  transform: scale(1.15);
+}
+
+.react-flow__handle.connectingfrom,
+.react-flow__handle.connectingto {
+  box-shadow: 0 0 0 7px color-mix(in oklch, var(--primary) 26%, transparent);
+}
+
+/* Wires are worth clicking too; the stroke alone is a 2px target. */
+.react-flow__edge .react-flow__edge-interaction {
+  stroke-width: 22;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__handle {
+    transition: none;
+  }
+  .react-flow__handle:hover {
+    transform: none;
+  }
+}
