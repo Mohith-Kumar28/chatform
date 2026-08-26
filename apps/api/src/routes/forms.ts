@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { FormDoc, lintFormDoc, hasErrors } from "@repo/form-schema";
+import { FormDoc, lintFormDoc, hasErrors, migrateFormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
+import { hashPassword, isHashedPassword } from "../lib/crypto.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 
 export const formsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
@@ -41,6 +42,17 @@ const UpdateDocBody = z.object({
   theme: z.unknown().optional(),
   settings: z.unknown().optional(),
 });
+
+/**
+ * Form passwords are hashed before they touch storage. Legacy docs may still
+ * carry plaintext; this upgrades them on the next save, and the verifier in
+ * `routes/public.ts` accepts both while old rows drain.
+ */
+async function withHashedPassword(doc: FormDoc): Promise<FormDoc> {
+  const pw = doc.settings.password;
+  if (!pw.enabled || !pw.value || isHashedPassword(pw.value)) return doc;
+  return { ...doc, settings: { ...doc.settings, password: { ...pw, value: await hashPassword(pw.value) } } };
+}
 
 function defaultDoc(title: string): string {
   return JSON.stringify({
@@ -164,7 +176,9 @@ formsRouter.get(
       .first<{ id: string; title: string; slug: string; status: string; working_schema: string; updated_at: number; version: number | null }>();
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     // normalize legacy docs (missing settings/theme sub-objects) through the schema
-    const rawDoc = JSON.parse(row.working_schema);
+    // Migrate on read. Stored rows are never rewritten in place — published
+    // versions must render forever exactly as they were published.
+    const rawDoc = migrateFormDoc(JSON.parse(row.working_schema));
     const normalized = FormDoc.safeParse(rawDoc);
     return c.json({
       id: row.id,
@@ -186,13 +200,14 @@ formsRouter.put(
   async (c) => {
     const id = c.get("form")!.id;
     const body = c.req.valid("json");
-    const parsed = FormDoc.safeParse(body.doc);
+    const parsed = FormDoc.safeParse(migrateFormDoc(body.doc));
     if (!parsed.success) {
       return c.json({ error: { code: "invalid_doc", message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") } }, 422);
     }
-    const issues = lintFormDoc(parsed.data);
+    const doc = await withHashedPassword(parsed.data);
+    const issues = lintFormDoc(doc);
     await c.env.DB.prepare(`UPDATE forms SET working_schema = ?, updated_at = ? WHERE id = ?`)
-      .bind(JSON.stringify(parsed.data), Date.now(), id)
+      .bind(JSON.stringify(doc), Date.now(), id)
       .run();
     return c.json({ ok: true, issues });
   },
@@ -206,7 +221,7 @@ formsRouter.post(
     const userId = c.get("userId") as string;
     const row = await c.env.DB.prepare(`SELECT working_schema, theme_json, settings_json FROM forms WHERE id = ? AND deleted_at IS NULL`).bind(id).first<{ working_schema: string; theme_json: string | null; settings_json: string | null }>();
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
-    const parsed = FormDoc.safeParse(JSON.parse(row.working_schema));
+    const parsed = FormDoc.safeParse(migrateFormDoc(JSON.parse(row.working_schema)));
     if (!parsed.success) return c.json({ error: { code: "invalid_doc", message: "Working document is invalid" } }, 422);
     const issues = lintFormDoc(parsed.data);
     if (hasErrors(issues)) {

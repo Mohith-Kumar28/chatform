@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NanoId } from "./ids";
 
 export const SettingsDoc = z.object({
   language: z.string().length(2).default("en"),
@@ -24,7 +25,12 @@ export const SettingsDoc = z.object({
   password: z
     .object({
       enabled: z.boolean().default(false),
-      value: z.string().max(200).default(""),
+      /**
+       * Stored as `pbkdf2$<iterations>$<salt>$<hash>` (see api `lib/crypto.ts`).
+       * Legacy docs may still hold plaintext here; the verifier accepts both and
+       * the API upgrades the value on the next save. Never returned to a client.
+       */
+      value: z.string().max(300).default(""),
     })
     .default({ enabled: false, value: "" }),
   captcha: z
@@ -76,27 +82,73 @@ export const SettingsDoc = z.object({
     })
     .default({ hidePoweredBy: false }),
 
+  /**
+   * The agent layer — what makes this a conversation rather than a form.
+   *
+   * Blocks remain the source of truth for WHAT must be collected (so results
+   * stay a typed table and logic stays deterministic). This config governs HOW
+   * the agent collects it: who it is, what it is trying to achieve, what it may
+   * answer from, and what it must not do.
+   */
   agent: z
     .object({
-      mode: z.enum(["template", "hybrid", "ai"]).default("hybrid"),
+      mode: z.enum(["template", "hybrid", "ai"]).default("ai"),
       tone: z.enum(["friendly", "professional", "playful"]).default("friendly"),
       personaPrompt: z.string().max(2000).optional(),
+      /** Display name for the interviewer, shown in the chat header. */
+      displayName: z.string().max(60).optional(),
       language: z.string().length(2).default("en"),
+
+      /** OpenRouter model slug. Undefined = the plan's default tier. */
+      model: z.string().max(80).optional(),
+
+      /** What a good conversation achieves, beyond "every field is filled". */
+      goal: z.string().max(1000).optional(),
+      successCriteria: z.string().max(1000).optional(),
+
+      /**
+       * Inline knowledge the agent answers respondent questions from. Kept small
+       * and inlined into a stable system-prompt prefix so it stays cacheable —
+       * no embeddings, no vector store.
+       */
+      knowledge: z
+        .array(
+          z.object({
+            id: NanoId,
+            title: z.string().min(1).max(200),
+            body: z.string().max(20000),
+          }),
+        )
+        .max(20)
+        .default([]),
+
+      guardrails: z
+        .object({
+          /** May it answer questions the knowledge base does not cover? */
+          answerOffTopic: z.boolean().default(true),
+          maxTurns: z.number().int().min(5).max(200).default(60),
+          refusalMessage: z
+            .string()
+            .max(500)
+            .default("I'm not sure about that one — but I can pass it on. Back to the form:"),
+          forbiddenTopics: z.array(z.string().max(120)).max(20).default([]),
+        })
+        .prefault({}),
+
       maxClarificationsPerBlock: z.number().int().min(0).max(5).default(2),
       escalateAfterInvalid: z.number().int().min(1).max(10).default(3),
       sessionTokenBudget: z.number().int().min(1000).max(200000).default(12000),
       responseMaxTokens: z.number().int().min(50).max(2000).default(400),
     })
-    .default({
-      mode: "hybrid",
-      tone: "friendly",
-      language: "en",
-      maxClarificationsPerBlock: 2,
-      escalateAfterInvalid: 3,
-      sessionTokenBudget: 12000,
-      responseMaxTokens: 400,
-    }),
+    .prefault({}),
 });
+
+/** Total characters across all knowledge entries — the budget the UI meters. */
+export const KNOWLEDGE_CHAR_BUDGET = 20000;
+
+export function knowledgeSize(entries: { title: string; body: string }[]): number {
+  return entries.reduce((n, e) => n + e.title.length + e.body.length, 0);
+}
 
 export type SettingsDoc = z.output<typeof SettingsDoc>;
 export type SettingsInput = z.input<typeof SettingsDoc>;

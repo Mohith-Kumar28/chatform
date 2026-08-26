@@ -21,8 +21,8 @@ const state = (partial: Partial<EvalState> = {}): EvalState => ({
 describe("FormDoc parsing", () => {
   it("parses the lead fixture with defaults applied", () => {
     const doc = FormDoc.parse(leadFormFixture);
-    expect(doc.schemaVersion).toBe(1);
-    expect(doc.settings.agent.mode).toBe("hybrid");
+    expect(doc.schemaVersion).toBe(2);
+    expect(doc.settings.agent.mode).toBe("ai");
     expect(doc.blocks).toHaveLength(7);
     expect(doc.endings[0]!.showSummary).toBe(true);
   });

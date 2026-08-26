@@ -12,6 +12,15 @@ export type GetHealth200 = {
   ts: number;
 };
 
+export type GetPFormsBySlugConfig404Error = {
+  code: string;
+  message: string;
+};
+
+export type GetPFormsBySlugConfig404 = {
+  error: GetPFormsBySlugConfig404Error;
+};
+
 export type PostPFormsBySlugSessionsBodyHiddenFields = {[key: string]: string};
 
 export type PostPFormsBySlugSessionsBodyEmbed = {
@@ -20,6 +29,8 @@ export type PostPFormsBySlugSessionsBodyEmbed = {
 
 export type PostPFormsBySlugSessionsBody = {
   turnstileToken?: string;
+  /** @maxLength 200 */
+  password?: string;
   hiddenFields?: PostPFormsBySlugSessionsBodyHiddenFields;
   embed?: PostPFormsBySlugSessionsBodyEmbed;
 };
@@ -187,6 +198,26 @@ export type PostApiAiGenerateForm200 = {
   tokens: number;
 };
 
+export type PostApiAiAddBlocksBody = {
+  formId: string;
+  /**
+     * @minLength 3
+     * @maxLength 1000
+     */
+  prompt: string;
+  /**
+     * @minimum 1
+     * @maximum 10
+     */
+  count?: number;
+};
+
+export type PostApiAiAddBlocks200 = {
+  doc: unknown;
+  added: number;
+  tokens: number;
+};
+
 export type GetApiFormsByIdSubmissionsParams = {
 status?: GetApiFormsByIdSubmissionsStatus;
 /**
@@ -325,6 +356,7 @@ export type GetApiWebhooks200Item = {
   formId: string | null;
   active: boolean;
   createdAt: number;
+  secretPreview?: string;
 };
 
 export type PostApiWebhooksBodyEventsItem = typeof PostApiWebhooksBodyEventsItem[keyof typeof PostApiWebhooksBodyEventsItem];
@@ -351,6 +383,7 @@ export type PostApiWebhooks200 = {
   formId: string | null;
   active: boolean;
   createdAt: number;
+  secretPreview?: string;
   secret: string;
 };
 
@@ -398,5 +431,18 @@ export type PostApiBillingCheckoutBody = {
 
 export type PostApiBillingCheckout200 = {
   url: string;
+};
+
+export type PostApiFormsByIdPreviewSessions200 = {
+  sessionId: string;
+  sseUrl: string;
+  respondentToken: string;
+};
+
+export type GetApiTemplates200Item = {
+  slug: string;
+  title: string;
+  category: string;
+  description: string;
 };
 

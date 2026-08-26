@@ -6,15 +6,21 @@
  * OpenAPI spec version: 1.0.0
  */
 import {
-  useMutation
+  useMutation,
+  useQuery
 } from '@tanstack/react-query';
 import type {
   MutationFunction,
+  QueryFunction,
+  QueryKey,
   UseMutationOptions,
-  UseMutationResult
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
+  GetPFormsBySlugConfig404,
   PostPFormsBySlugSessions200,
   PostPFormsBySlugSessions403,
   PostPFormsBySlugSessions404,
@@ -28,6 +34,116 @@ import { customFetch } from '.././mutator';
 
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
+
+export type getPFormsBySlugConfigResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getPFormsBySlugConfigResponse404 = {
+  data: GetPFormsBySlugConfig404
+  status: 404
+}
+
+export type getPFormsBySlugConfigResponseSuccess = (getPFormsBySlugConfigResponse200) & {
+  headers: Headers;
+};
+export type getPFormsBySlugConfigResponseError = (getPFormsBySlugConfigResponse404) & {
+  headers: Headers;
+};
+
+export type getPFormsBySlugConfigResponse = (getPFormsBySlugConfigResponseSuccess | getPFormsBySlugConfigResponseError)
+
+export const getGetPFormsBySlugConfigUrl = (slug: string,) => {
+
+
+
+
+  return `http://localhost:8787/p/forms/${slug}/config`
+}
+
+/**
+ * @summary Public rendering config for a published form
+ */
+export const getPFormsBySlugConfig = async (slug: string, options?: Parameters<typeof customFetch>[1]): Promise<getPFormsBySlugConfigResponse> => {
+
+  return customFetch<getPFormsBySlugConfigResponse>(getGetPFormsBySlugConfigUrl(slug),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPFormsBySlugConfigQueryKey = (slug: string,) => {
+    return [
+    `http://localhost:8787/p/forms/${slug}/config`
+    ] as const;
+    }
+
+
+export const getGetPFormsBySlugConfigQueryOptions = <TData = Awaited<ReturnType<typeof getPFormsBySlugConfig>>, TError = GetPFormsBySlugConfig404>(slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPFormsBySlugConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPFormsBySlugConfigQueryKey(slug);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPFormsBySlugConfig>>> = ({ signal }) => getPFormsBySlugConfig(slug, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: slug !== null && slug !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPFormsBySlugConfig>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPFormsBySlugConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getPFormsBySlugConfig>>>
+export type GetPFormsBySlugConfigQueryError = GetPFormsBySlugConfig404
+
+
+/**
+ * @summary Public rendering config for a published form
+ */
+
+export function useGetPFormsBySlugConfig<TData = Awaited<ReturnType<typeof getPFormsBySlugConfig>>, TError = GetPFormsBySlugConfig404>(
+ slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPFormsBySlugConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPFormsBySlugConfigQueryOptions(slug,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
 
 
 

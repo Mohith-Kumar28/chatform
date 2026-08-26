@@ -1,0 +1,63 @@
+import { z } from "zod";
+import { SCHEMA_VERSION } from "./form-doc";
+
+/**
+ * Form document migrations.
+ *
+ * Published versions are immutable: `form_versions.schema_json` is written once
+ * and must render forever. So migration happens on READ, never as a rewrite of
+ * a stored row. Every migration must be:
+ *
+ *   - idempotent — `migrate(migrate(x))` equals `migrate(x)`
+ *   - total      — it may not throw on a document that parsed under its own
+ *                  schema version, however old
+ *   - additive   — prefer new fields with defaults over reshaping old ones
+ *
+ * Call this in exactly two places: when the API reads a doc out of D1, and when
+ * SessionDO hydrates one. Everything downstream can then assume the current
+ * shape.
+ */
+
+/** A doc with only the fields migration needs to branch on. */
+const Versioned = z.object({ schemaVersion: z.number().int().optional() }).loose();
+
+type AnyDoc = Record<string, unknown>;
+
+/** Ordered chain. Index i migrates a doc at version i+1 to version i+2. */
+const MIGRATIONS: ((doc: AnyDoc) => AnyDoc)[] = [
+  // ── v1 → v2 ────────────────────────────────────────────────────────────
+  // Adds the agent layer (goal, knowledge, guardrails, model) and per-block
+  // agent hints plus cover-image/prefill fields. Purely additive: every new
+  // field carries a schema default, so the only work here is stamping the
+  // version and letting `FormDoc.parse` materialize the rest.
+  (doc) => ({ ...doc, schemaVersion: 2 }),
+];
+
+export function migrateFormDoc(raw: unknown): unknown {
+  const parsed = Versioned.safeParse(raw);
+  if (!parsed.success) return raw; // let FormDoc.parse produce the real error
+
+  const doc = parsed.data as AnyDoc;
+  let version = typeof doc.schemaVersion === "number" && doc.schemaVersion > 0 ? doc.schemaVersion : 1;
+
+  // A doc from the future is left untouched: we cannot know how to downgrade,
+  // and guessing would corrupt it.
+  if (version > SCHEMA_VERSION) return doc;
+
+  let out = doc;
+  while (version < SCHEMA_VERSION) {
+    const step = MIGRATIONS[version - 1];
+    if (!step) break;
+    out = step(out);
+    version += 1;
+  }
+  return { ...out, schemaVersion: SCHEMA_VERSION };
+}
+
+/** True when the doc would be changed by migration — useful for lazy re-saves. */
+export function needsMigration(raw: unknown): boolean {
+  const parsed = Versioned.safeParse(raw);
+  if (!parsed.success) return false;
+  const v = parsed.data.schemaVersion ?? 1;
+  return v < SCHEMA_VERSION;
+}

@@ -9,6 +9,7 @@ import {
   type Block,
   type Ending,
   type EvalState,
+  migrateFormDoc,
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { ServerEvent, SSEEnvelope } from "../lib/events.js";
@@ -32,6 +33,19 @@ interface DoSessionMeta {
   ipHash: string | null;
   country: string | null;
   userAgent: string | null;
+}
+
+/** The single `"session"` storage blob. Everything here survives eviction. */
+interface StoredSession {
+  meta: DoSessionMeta;
+  docJson: unknown;
+  answers: AnswerMap;
+  variables: Record<string, string | number>;
+  seq: number;
+  turnCount: number;
+  collectedCount: number;
+  invalidCounts?: Record<string, number>;
+  sessionTokensUsed?: number;
 }
 
 const IDLE_ALARM_MS = 30 * 60 * 1000;
@@ -117,9 +131,10 @@ export class SessionDO extends DurableObject<Bindings> {
   /** Cold hydration after eviction. */
   private async ensureLoaded(): Promise<boolean> {
     if (this.loaded) return true;
-    const stored = await this.ctx.storage.get<{ meta: DoSessionMeta; docJson: unknown; answers: AnswerMap; variables: Record<string, string | number>; seq: number; turnCount: number; collectedCount: number }>("session");
+    const stored = await this.ctx.storage.get<StoredSession>("session");
     if (!stored) return false;
-    const parsed = FormDoc.safeParse(stored.docJson);
+    // A session started under an older schema version must keep running.
+    const parsed = FormDoc.safeParse(migrateFormDoc(stored.docJson));
     if (!parsed.success) return false;
     this.meta = stored.meta;
     this.doc = parsed.data;
@@ -127,6 +142,12 @@ export class SessionDO extends DurableObject<Bindings> {
     this.seq = stored.seq;
     this.turnCount = stored.turnCount;
     this.collectedCount = stored.collectedCount;
+    // These two used to live only in memory. A DO eviction therefore reset the
+    // escalation counter (so a respondent could loop on a bad answer forever)
+    // and reset the token budget to zero (so `sessionTokenBudget` was not
+    // actually a cap). They are part of session state and must survive.
+    this.invalidCounts = new Map(Object.entries(stored.invalidCounts ?? {}));
+    this.sessionTokensUsed = stored.sessionTokensUsed ?? 0;
     this.loaded = true;
     return true;
   }
@@ -141,7 +162,9 @@ export class SessionDO extends DurableObject<Bindings> {
       seq: this.seq,
       turnCount: this.turnCount,
       collectedCount: this.collectedCount,
-    });
+      invalidCounts: Object.fromEntries(this.invalidCounts),
+      sessionTokensUsed: this.sessionTokensUsed,
+    } satisfies StoredSession);
   }
 
   override async alarm(): Promise<void> {

@@ -8,3 +8,5 @@ export * from "./form-doc";
 export * from "./engine/index";
 export * from "./fixtures";
 export { SCHEMA_VERSION } from "./form-doc";
+export * from "./migrations";
+export * from "./extraction";

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ConditionGroup } from "./conditions";
-import { NanoId, RefString } from "./ids";
+import { NanoId, RefString, HiddenFieldName } from "./ids";
 
 export const BLOCK_TYPES = [
   "welcome",
@@ -34,6 +34,21 @@ export const BLOCK_TYPES = [
 export const BlockType = z.enum(BLOCK_TYPES);
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
+/**
+ * Per-block guidance for the interview agent. The block still defines WHAT is
+ * collected and how it validates; this only shapes how the agent asks for it.
+ */
+export const AgentHints = z.object({
+  /** "casual, mention it's optional" */
+  askStyle: z.string().max(500).optional(),
+  /** What to say when the respondent refuses or gives something unusable. */
+  retryHint: z.string().max(500).optional(),
+  /** The answer to "why do you need this?" */
+  whyWeAsk: z.string().max(500).optional(),
+  examples: z.array(z.string().max(200)).max(5).default([]),
+});
+export type AgentHints = z.output<typeof AgentHints>;
+
 const BlockBase = {
   id: NanoId,
   ref: RefString,
@@ -43,6 +58,19 @@ const BlockBase = {
   /** When defined and evaluates false, block is skipped deterministically. */
   visibility: ConditionGroup.nullable().default(null),
   image_key: z.string().nullable().default(null),
+
+  agentHints: AgentHints.nullable().default(null),
+
+  /** Cover image shown alongside the question. */
+  coverImageKey: z.string().nullable().default(null),
+  coverLayout: z.enum(["float", "fill", "stack"]).default("float"),
+  coverPosition: z.enum(["left", "right"]).default("left"),
+
+  /** Prefill this block's answer from a URL query parameter. */
+  prefillParam: HiddenFieldName.optional(),
+
+  /** Label on the advance control in non-conversational renderings and widgets. */
+  buttonLabel: z.string().max(60).optional(),
 };
 
 const Option = z.object({

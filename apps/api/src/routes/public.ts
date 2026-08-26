@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { sha256Hex, toPublicConfig, type FormDoc } from "@repo/form-schema";
+import { sha256Hex, toPublicConfig, type FormDoc, migrateFormDoc } from "@repo/form-schema";
 import { respondentToken, hashToken } from "./helpers.js";
 import type { Bindings } from "../env.js";
 import { timingSafeEqual, isHashedPassword, verifyPassword } from "../lib/crypto.js";
@@ -57,7 +57,7 @@ sessionsRouter.get(
 
   const settings = formRow.settings_json ? (JSON.parse(formRow.settings_json) as { branding?: { hidePoweredBy?: boolean }; closedMessage?: string }) : {};
   const closed = !!(formRow.close_at && formRow.close_at < Date.now());
-  const doc = JSON.parse(formRow.schema_json) as FormDoc;
+  const doc = migrateFormDoc(JSON.parse(formRow.schema_json)) as FormDoc;
   const config = toPublicConfig(doc, {
     slug: formRow.slug,
     brandingHidden: settings?.branding?.hidePoweredBy === true,
@@ -167,7 +167,7 @@ sessionsRouter.post(
     organizationId: orgRow?.id ?? "",
     slug: formRow.slug,
     brandingHidden,
-    docJson: JSON.parse(formRow.schema_json),
+    docJson: migrateFormDoc(JSON.parse(formRow.schema_json)) as FormDoc,
     respondentToken,
     hiddenFields: body.hiddenFields ?? {},
     ipHash: sha256Hex(ip),

@@ -1,6 +1,7 @@
 import { Hono, type MiddlewareHandler } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
+import { migrateFormDoc, type FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
 import { requireApiKey, assertChatSessionAccess, type GuardVars } from "../lib/guards.js";
@@ -71,7 +72,7 @@ v1Router.get(
       .first<{ schema_json: string; slug: string }>();
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     const { toPublicConfig } = await import("@repo/form-schema");
-    const doc = JSON.parse(row.schema_json);
+    const doc = migrateFormDoc(JSON.parse(row.schema_json)) as FormDoc;
     return c.json(toPublicConfig(doc, { slug: row.slug, brandingHidden: doc.settings?.branding?.hidePoweredBy === true }));
   },
 );
@@ -124,7 +125,7 @@ v1Router.post(
       organizationId: row.organization_id,
       slug: row.slug,
       brandingHidden: true,
-      docJson: JSON.parse(row.schema_json),
+      docJson: migrateFormDoc(JSON.parse(row.schema_json)) as FormDoc,
       respondentToken,
       hiddenFields: body.hiddenFields ?? {},
       ipHash: null,
@@ -137,7 +138,7 @@ v1Router.post(
     const transcript = await stub.getTranscript();
     const lastAssistant = [...transcript].reverse().find((m) => m.role === "assistant");
     const { toPublicBlock } = await import("@repo/form-schema");
-    const doc = JSON.parse(row.schema_json);
+    const doc = migrateFormDoc(JSON.parse(row.schema_json)) as FormDoc;
     const current = status?.currentRef ? doc.blocks.find((b: { ref: string }) => b.ref === status.currentRef) : null;
     return c.json({
       sessionId,

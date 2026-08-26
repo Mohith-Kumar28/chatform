@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { Block as BlockSchema, FormDoc, lintFormDoc, hasErrors, type Block, type FormDocInput, type LogicRuleInput } from "@repo/form-schema";
+import { Block as BlockSchema, FormDoc, lintFormDoc, hasErrors, type Block, type FormDocInput, type LogicRuleInput, migrateFormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, assertFormAccess, type GuardVars } from "../lib/guards.js";
 import { generateFormDraft, type GenerationDraft } from "../lib/ai.js";
@@ -215,7 +215,7 @@ aiRouter.post(
       .bind(formId)
       .first<{ working_schema: string }>();
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
-    const doc = FormDoc.parse(JSON.parse(row.working_schema));
+    const doc = FormDoc.parse(migrateFormDoc(JSON.parse(row.working_schema)));
 
     const existing = doc.blocks.map((b) => `${b.ref} (${b.type}): ${b.title}`).join("; ");
     const { draft, tokens } = await generateFormDraft({

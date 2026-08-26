@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
+import { migrateFormDoc, type FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 
@@ -135,12 +136,19 @@ resultsRouter.get(
 /** CSV export — streams all submissions with one column per block. */
 resultsRouter.get(
   "/forms/:id/submissions/export",
-  describeRoute({ tags: ["dashboard"], summary: "Export submissions as CSV" }),
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Export submissions as CSV",
+    responses: {
+      200: { description: "CSV file", content: { "text/csv": { schema: resolver(z.string()) } } },
+      404: { description: "Form not found" },
+    },
+  }),
   async (c) => {
     const id = c.get("form")!.id;
     const form = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`).bind(id).first<{ working_schema: string }>();
     if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
-    const doc = JSON.parse(form.working_schema);
+    const doc = migrateFormDoc(JSON.parse(form.working_schema)) as FormDoc;
     const answerable = doc.blocks.filter((b: { type: string }) => !["welcome", "statement"].includes(b.type));
 
     const subs = await c.env.DB.prepare(

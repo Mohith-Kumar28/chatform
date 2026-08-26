@@ -595,4 +595,18 @@ Append one line per completed task. This is how a future session knows where exe
 - **P0.4** ✅ Test harness for `apps/api`: vitest 4 + `@cloudflare/vitest-pool-workers` 0.22 running in the real Workers runtime against real bindings and the real drizzle migrations. `tests/tenancy.test.ts` — 15 tests, verified to fail when a guard is removed. Monorepo total 37 tests.
 
 ### Deferred, deliberately
-- **Password at rest** is still stored as plaintext in `settings.password.value`. The compare is now constant-time and already accepts PBKDF2 hashes (`lib/crypto.ts`), but converting storage needs a `SettingsDoc` change — done in Phase 1 (S1) where that schema is edited anyway.
+- ~~**Password at rest**~~ — resolved in P1 below.
+
+---
+
+## Phase 1 — shared contract (`form-schema` v2)
+
+- **S1** ✅ Agent layer on `SettingsDoc.agent`: `model`, `goal`, `successCriteria`, `displayName`, `knowledge[]` (≤20 entries, `KNOWLEDGE_CHAR_BUDGET` 20k, `knowledgeSize()` helper), `guardrails{answerOffTopic,maxTurns,refusalMessage,forbiddenTopics}`. `mode` default flipped `hybrid` → **`ai`** (D1). `password.value` documented and now stored as a PBKDF2 hash.
+- **S2** ✅ `BlockBase` gains `agentHints{askStyle,retryHint,whyWeAsk,examples}`, `coverImageKey`/`coverLayout`/`coverPosition`, `prefillParam` (Youform "auto fill via URL parameter"), and `buttonLabel` on every block — applies to all 26 types.
+- **S3** ✅ `packages/form-schema/src/migrations.ts` — `migrateFormDoc`/`needsMigration`, `SCHEMA_VERSION` 1 → 2. Migration happens **on read, never as a rewrite**: published `form_versions` rows stay byte-identical. Wired into every read path — `routes/forms.ts` (get/publish/doc), `public.ts`, `v1.ts`, `preview.ts`, `ai.ts`, `results.ts` export, and `SessionDO.ensureLoaded`.
+- **S4** ✅ `packages/form-schema/src/extraction.ts` — per-block Zod extraction targets built *from* the block so the model is bounded by the same limits `validateAnswer` enforces, plus `DETERMINISTIC_TYPES` / `OUT_OF_BAND_TYPES` / `needsExtraction()` / `extractionGuidance()`. The `{value, confident, note}` envelope routes low confidence to a clarify turn instead of recording a guess.
+- **S5** ✅ `tests/schema-v2.test.ts` (17 tests): migration idempotency, future-version safety, every new default materializing, agent config round-trip, knowledge cap, per-block hints, and each extraction schema's accept/reject behavior. `apps/api/tests/schema-migration.test.ts` (4 tests): v1 rows read back as v2, stored rows unchanged by a read, password hashed on save, no double-hashing.
+- **S6** ✅ `openapi.json` regenerated (25 → 31 paths — the committed spec was stale) and orval client regenerated. Fixed the CSV export route's missing `responses`, which was failing orval's spec validation.
+- **Also** ✅ `SessionDO` now persists `invalidCounts` and `sessionTokensUsed` into the session blob. Both were memory-only, so a DO eviction reset the escalation counter (respondent could loop forever on a bad answer) and reset the token budget to zero (`sessionTokenBudget` was not actually a cap).
+
+Monorepo tests: **58 passing** (was 22 at session start).

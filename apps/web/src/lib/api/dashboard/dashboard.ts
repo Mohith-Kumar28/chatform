@@ -32,7 +32,10 @@ import type {
   GetApiFormsByIdSubmissions200Item,
   GetApiFormsByIdSubmissionsParams,
   GetApiKeys200Item,
+  GetApiTemplates200Item,
   GetApiWebhooks200Item,
+  PostApiAiAddBlocks200,
+  PostApiAiAddBlocksBody,
   PostApiAiGenerateForm200,
   PostApiAiGenerateFormBody,
   PostApiBillingCheckout200,
@@ -40,6 +43,7 @@ import type {
   PostApiForms200,
   PostApiForms403,
   PostApiFormsBody,
+  PostApiFormsByIdPreviewSessions200,
   PostApiFormsByIdPublish200,
   PostApiFormsByIdPublish422,
   PostApiKeys200,
@@ -804,6 +808,102 @@ export const usePostApiAiGenerateForm = <TError = void,
       > => {
       return useMutation(getPostApiAiGenerateFormMutationOptions(options));
     }
+    export type postApiAiAddBlocksResponse200 = {
+  data: PostApiAiAddBlocks200
+  status: 200
+}
+
+export type postApiAiAddBlocksResponse503 = {
+  data: void
+  status: 503
+}
+
+export type postApiAiAddBlocksResponseSuccess = (postApiAiAddBlocksResponse200) & {
+  headers: Headers;
+};
+export type postApiAiAddBlocksResponseError = (postApiAiAddBlocksResponse503) & {
+  headers: Headers;
+};
+
+export type postApiAiAddBlocksResponse = (postApiAiAddBlocksResponseSuccess | postApiAiAddBlocksResponseError)
+
+export const getPostApiAiAddBlocksUrl = () => {
+
+
+
+
+  return `http://localhost:8787/api/ai/add-blocks`
+}
+
+/**
+ * @summary AI-generate additional blocks appended to an existing form
+ */
+export const postApiAiAddBlocks = async (postApiAiAddBlocksBody: PostApiAiAddBlocksBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAiAddBlocksResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiAiAddBlocksResponse>(getPostApiAiAddBlocksUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiAiAddBlocksBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiAiAddBlocksMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiAddBlocks>>, TError,PostApiAiAddBlocksMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAiAddBlocks>>, TError,PostApiAiAddBlocksMutationVariables, TContext> => {
+
+const mutationKey = ['postApiAiAddBlocks'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAiAddBlocks>>, PostApiAiAddBlocksMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiAiAddBlocks(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiAiAddBlocksMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAiAddBlocks>>>
+    export type PostApiAiAddBlocksMutationBody = PostApiAiAddBlocksBody
+    export type PostApiAiAddBlocksMutationError = void
+    export type PostApiAiAddBlocksMutationVariables = {data: PostApiAiAddBlocksBody}
+
+    /**
+ * @summary AI-generate additional blocks appended to an existing form
+ */
+export const usePostApiAiAddBlocks = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiAddBlocks>>, TError,PostApiAiAddBlocksMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiAiAddBlocks>>,
+        TError,
+        PostApiAiAddBlocksMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiAiAddBlocksMutationOptions(options));
+    }
     export type getApiFormsByIdSubmissionsResponse200 = {
   data: GetApiFormsByIdSubmissions200Item[]
   status: 200
@@ -893,6 +993,101 @@ export function useGetApiFormsByIdSubmissions<TData = Awaited<ReturnType<typeof 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetApiFormsByIdSubmissionsQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiFormsByIdSubmissionsExportResponse200 = {
+  data: string
+  status: 200
+}
+
+export type getApiFormsByIdSubmissionsExportResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiFormsByIdSubmissionsExportResponseSuccess = (getApiFormsByIdSubmissionsExportResponse200) & {
+  headers: Headers;
+};
+export type getApiFormsByIdSubmissionsExportResponseError = (getApiFormsByIdSubmissionsExportResponse404) & {
+  headers: Headers;
+};
+
+export type getApiFormsByIdSubmissionsExportResponse = (getApiFormsByIdSubmissionsExportResponseSuccess | getApiFormsByIdSubmissionsExportResponseError)
+
+export const getGetApiFormsByIdSubmissionsExportUrl = (id: string,) => {
+
+
+
+
+  return `http://localhost:8787/api/forms/${id}/submissions/export`
+}
+
+/**
+ * @summary Export submissions as CSV
+ */
+export const getApiFormsByIdSubmissionsExport = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdSubmissionsExportResponse> => {
+
+  return customFetch<getApiFormsByIdSubmissionsExportResponse>(getGetApiFormsByIdSubmissionsExportUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiFormsByIdSubmissionsExportQueryKey = (id: string,) => {
+    return [
+    `http://localhost:8787/api/forms/${id}/submissions/export`
+    ] as const;
+    }
+
+
+export const getGetApiFormsByIdSubmissionsExportQueryOptions = <TData = Awaited<ReturnType<typeof getApiFormsByIdSubmissionsExport>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdSubmissionsExport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsByIdSubmissionsExportQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFormsByIdSubmissionsExport>>> = ({ signal }) => getApiFormsByIdSubmissionsExport(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdSubmissionsExport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiFormsByIdSubmissionsExportQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFormsByIdSubmissionsExport>>>
+export type GetApiFormsByIdSubmissionsExportQueryError = void
+
+
+/**
+ * @summary Export submissions as CSV
+ */
+
+export function useGetApiFormsByIdSubmissionsExport<TData = Awaited<ReturnType<typeof getApiFormsByIdSubmissionsExport>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdSubmissionsExport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiFormsByIdSubmissionsExportQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -1866,4 +2061,265 @@ export const usePostApiBillingCheckout = <TError = void,
         TContext
       > => {
       return useMutation(getPostApiBillingCheckoutMutationOptions(options));
+    }
+    export type postApiFormsByIdPreviewSessionsResponse200 = {
+  data: PostApiFormsByIdPreviewSessions200
+  status: 200
+}
+
+export type postApiFormsByIdPreviewSessionsResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiFormsByIdPreviewSessionsResponseSuccess = (postApiFormsByIdPreviewSessionsResponse200) & {
+  headers: Headers;
+};
+export type postApiFormsByIdPreviewSessionsResponseError = (postApiFormsByIdPreviewSessionsResponse404) & {
+  headers: Headers;
+};
+
+export type postApiFormsByIdPreviewSessionsResponse = (postApiFormsByIdPreviewSessionsResponseSuccess | postApiFormsByIdPreviewSessionsResponseError)
+
+export const getPostApiFormsByIdPreviewSessionsUrl = (id: string,) => {
+
+
+
+
+  return `http://localhost:8787/api/forms/${id}/preview/sessions`
+}
+
+/**
+ * @summary Start a preview chat session against the working draft
+ */
+export const postApiFormsByIdPreviewSessions = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postApiFormsByIdPreviewSessionsResponse> => {
+
+  return customFetch<postApiFormsByIdPreviewSessionsResponse>(getPostApiFormsByIdPreviewSessionsUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiFormsByIdPreviewSessionsMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdPreviewSessions>>, TError,PostApiFormsByIdPreviewSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdPreviewSessions>>, TError,PostApiFormsByIdPreviewSessionsMutationVariables, TContext> => {
+
+const mutationKey = ['postApiFormsByIdPreviewSessions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFormsByIdPreviewSessions>>, PostApiFormsByIdPreviewSessionsMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postApiFormsByIdPreviewSessions(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFormsByIdPreviewSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFormsByIdPreviewSessions>>>
+
+    export type PostApiFormsByIdPreviewSessionsMutationError = void
+    export type PostApiFormsByIdPreviewSessionsMutationVariables = {id: string}
+
+    /**
+ * @summary Start a preview chat session against the working draft
+ */
+export const usePostApiFormsByIdPreviewSessions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdPreviewSessions>>, TError,PostApiFormsByIdPreviewSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFormsByIdPreviewSessions>>,
+        TError,
+        PostApiFormsByIdPreviewSessionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFormsByIdPreviewSessionsMutationOptions(options));
+    }
+    export type getApiTemplatesResponse200 = {
+  data: GetApiTemplates200Item[]
+  status: 200
+}
+
+export type getApiTemplatesResponseSuccess = (getApiTemplatesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiTemplatesResponse = (getApiTemplatesResponseSuccess)
+
+export const getGetApiTemplatesUrl = () => {
+
+
+
+
+  return `http://localhost:8787/api/templates`
+}
+
+/**
+ * @summary List official templates
+ */
+export const getApiTemplates = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiTemplatesResponse> => {
+
+  return customFetch<getApiTemplatesResponse>(getGetApiTemplatesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiTemplatesQueryKey = () => {
+    return [
+    `http://localhost:8787/api/templates`
+    ] as const;
+    }
+
+
+export const getGetApiTemplatesQueryOptions = <TData = Awaited<ReturnType<typeof getApiTemplates>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiTemplates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTemplatesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTemplates>>> = ({ signal }) => getApiTemplates({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTemplates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiTemplatesQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTemplates>>>
+export type GetApiTemplatesQueryError = unknown
+
+
+/**
+ * @summary List official templates
+ */
+
+export function useGetApiTemplates<TData = Awaited<ReturnType<typeof getApiTemplates>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiTemplates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiTemplatesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postApiTemplatesBySlugUseResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postApiTemplatesBySlugUseResponseSuccess = (postApiTemplatesBySlugUseResponse200) & {
+  headers: Headers;
+};
+;
+
+export type postApiTemplatesBySlugUseResponse = (postApiTemplatesBySlugUseResponseSuccess)
+
+export const getPostApiTemplatesBySlugUseUrl = (slug: string,) => {
+
+
+
+
+  return `http://localhost:8787/api/templates/${slug}/use`
+}
+
+/**
+ * @summary Create a form from a template
+ */
+export const postApiTemplatesBySlugUse = async (slug: string, options?: Parameters<typeof customFetch>[1]): Promise<postApiTemplatesBySlugUseResponse> => {
+
+  return customFetch<postApiTemplatesBySlugUseResponse>(getPostApiTemplatesBySlugUseUrl(slug),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiTemplatesBySlugUseMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTemplatesBySlugUse>>, TError,PostApiTemplatesBySlugUseMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiTemplatesBySlugUse>>, TError,PostApiTemplatesBySlugUseMutationVariables, TContext> => {
+
+const mutationKey = ['postApiTemplatesBySlugUse'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiTemplatesBySlugUse>>, PostApiTemplatesBySlugUseMutationVariables> = (props) => {
+          const {slug} = props ?? {};
+
+          return  postApiTemplatesBySlugUse(slug,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiTemplatesBySlugUseMutationResult = NonNullable<Awaited<ReturnType<typeof postApiTemplatesBySlugUse>>>
+
+    export type PostApiTemplatesBySlugUseMutationError = unknown
+    export type PostApiTemplatesBySlugUseMutationVariables = {slug: string}
+
+    /**
+ * @summary Create a form from a template
+ */
+export const usePostApiTemplatesBySlugUse = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTemplatesBySlugUse>>, TError,PostApiTemplatesBySlugUseMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiTemplatesBySlugUse>>,
+        TError,
+        PostApiTemplatesBySlugUseMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiTemplatesBySlugUseMutationOptions(options));
     }

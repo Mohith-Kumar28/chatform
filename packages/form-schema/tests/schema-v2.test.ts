@@ -1,0 +1,178 @@
+import { describe, it, expect } from "vitest";
+import {
+  FormDoc,
+  SCHEMA_VERSION,
+  migrateFormDoc,
+  needsMigration,
+  extractionSchema,
+  needsExtraction,
+  knowledgeSize,
+  KNOWLEDGE_CHAR_BUDGET,
+  leadFormFixture,
+  type Block,
+} from "../src/index";
+
+const v1Doc = {
+  schemaVersion: 1,
+  title: "Old form",
+  blocks: [
+    { id: "blk_aaa1", ref: "welcome", type: "welcome", title: "Hi" },
+    { id: "blk_bbb1", ref: "q_email", type: "email", title: "Email?", required: true },
+  ],
+  endings: [{ id: "end_aaa1", ref: "end_thanks", title: "Thanks" }],
+};
+
+describe("migration chain", () => {
+  it("stamps a v1 doc up to the current version", () => {
+    const out = migrateFormDoc(v1Doc) as { schemaVersion: number };
+    expect(out.schemaVersion).toBe(SCHEMA_VERSION);
+  });
+
+  it("is idempotent", () => {
+    const once = migrateFormDoc(v1Doc);
+    const twice = migrateFormDoc(once);
+    expect(twice).toEqual(once);
+  });
+
+  it("does not touch a doc from a future version", () => {
+    const future = { ...v1Doc, schemaVersion: 999 };
+    expect((migrateFormDoc(future) as { schemaVersion: number }).schemaVersion).toBe(999);
+  });
+
+  it("a migrated v1 doc parses and materializes every new default", () => {
+    const doc = FormDoc.parse(migrateFormDoc(v1Doc));
+    expect(doc.settings.agent.knowledge).toEqual([]);
+    expect(doc.settings.agent.guardrails.answerOffTopic).toBe(true);
+    expect(doc.settings.agent.guardrails.maxTurns).toBe(60);
+    expect(doc.settings.agent.model).toBeUndefined();
+    // per-block additions
+    expect(doc.blocks[0]!.agentHints).toBeNull();
+    expect(doc.blocks[0]!.coverImageKey).toBeNull();
+    expect(doc.blocks[0]!.coverLayout).toBe("float");
+  });
+
+  it("needsMigration is true for v1 and false once migrated", () => {
+    expect(needsMigration(v1Doc)).toBe(true);
+    expect(needsMigration(migrateFormDoc(v1Doc))).toBe(false);
+  });
+
+  it("leaves an unparseable value alone for FormDoc to reject", () => {
+    expect(migrateFormDoc("not a doc")).toBe("not a doc");
+  });
+});
+
+describe("agent layer", () => {
+  it("defaults new forms to ai mode", () => {
+    expect(FormDoc.parse(leadFormFixture).settings.agent.mode).toBe("ai");
+  });
+
+  it("accepts a full agent config", () => {
+    const doc = FormDoc.parse({
+      ...v1Doc,
+      schemaVersion: SCHEMA_VERSION,
+      settings: {
+        agent: {
+          mode: "ai",
+          model: "anthropic/claude-sonnet-5",
+          goal: "Qualify the lead and book a demo",
+          knowledge: [{ id: "kb_0001", title: "Pricing", body: "Pro is $29/month." }],
+          guardrails: { answerOffTopic: false, forbiddenTopics: ["competitors"] },
+        },
+      },
+    });
+    expect(doc.settings.agent.goal).toBe("Qualify the lead and book a demo");
+    expect(doc.settings.agent.knowledge[0]!.title).toBe("Pricing");
+    expect(doc.settings.agent.guardrails.answerOffTopic).toBe(false);
+    // unspecified guardrails still default
+    expect(doc.settings.agent.guardrails.maxTurns).toBe(60);
+  });
+
+  it("rejects more knowledge entries than the cap", () => {
+    const tooMany = Array.from({ length: 21 }, (_, i) => ({ id: `kb_x${String(i).padStart(4, "0")}`, title: "t", body: "b" }));
+    const res = FormDoc.safeParse({ ...v1Doc, settings: { agent: { knowledge: tooMany } } });
+    expect(res.success).toBe(false);
+  });
+
+  it("meters knowledge size against the budget", () => {
+    expect(knowledgeSize([{ title: "ab", body: "cde" }])).toBe(5);
+    expect(KNOWLEDGE_CHAR_BUDGET).toBe(20000);
+  });
+});
+
+describe("per-block agent hints", () => {
+  it("round-trips hints and cover fields", () => {
+    const doc = FormDoc.parse({
+      ...v1Doc,
+      blocks: [
+        {
+          id: "blk_aaa1",
+          ref: "q_budget",
+          type: "number",
+          title: "Budget?",
+          agentHints: { askStyle: "casual", whyWeAsk: "To size the proposal", examples: ["50000"] },
+          coverImageKey: "img_1",
+          coverPosition: "right",
+          prefillParam: "utm_budget",
+          buttonLabel: "Next",
+        },
+      ],
+    });
+    const b = doc.blocks[0]!;
+    expect(b.agentHints?.askStyle).toBe("casual");
+    expect(b.agentHints?.examples).toEqual(["50000"]);
+    expect(b.coverPosition).toBe("right");
+    expect(b.prefillParam).toBe("utm_budget");
+  });
+});
+
+describe("extraction schemas", () => {
+  const block = (b: Record<string, unknown>) =>
+    FormDoc.parse({ ...v1Doc, blocks: [{ id: "blk_xxx1", ref: "q_x", ...b }] }).blocks[0]! as Block;
+
+  it("skips deterministic and out-of-band types", () => {
+    expect(needsExtraction(block({ type: "yes_no", title: "?" }))).toBe(false);
+    expect(
+      needsExtraction(
+        block({ type: "single_select", title: "?", options: [{ id: "opt_aaa1", label: "A" }] }),
+      ),
+    ).toBe(false);
+    expect(needsExtraction(block({ type: "file_upload", title: "?", accept: ["image/png"] }))).toBe(false);
+    expect(needsExtraction(block({ type: "date", title: "?" }))).toBe(true);
+  });
+
+  it("date accepts ISO and rejects anything else", () => {
+    const s = extractionSchema(block({ type: "date", title: "When?" }))!;
+    expect(s.safeParse({ value: "2026-03-04", confident: true }).success).toBe(true);
+    expect(s.safeParse({ value: "next friday", confident: true }).success).toBe(false);
+  });
+
+  it("number honors the block's own bounds", () => {
+    const s = extractionSchema(block({ type: "number", title: "Age?", min: 18, max: 99, integerOnly: true }))!;
+    expect(s.safeParse({ value: 30, confident: true }).success).toBe(true);
+    expect(s.safeParse({ value: 12, confident: true }).success).toBe(false);
+    expect(s.safeParse({ value: 30.5, confident: true }).success).toBe(false);
+  });
+
+  it("ranking demands every item exactly once", () => {
+    const b = block({
+      type: "ranking",
+      title: "Rank",
+      items: [{ id: "it_aaa1", label: "A" }, { id: "it_bbb1", label: "B" }],
+    });
+    const s = extractionSchema(b)!;
+    expect(s.safeParse({ value: ["it_bbb1", "it_aaa1"], confident: true }).success).toBe(true);
+    expect(s.safeParse({ value: ["it_aaa1"], confident: true }).success).toBe(false);
+    expect(s.safeParse({ value: ["it_aaa1", "it_zzz1"], confident: true }).success).toBe(false);
+  });
+
+  it("address only allows the fields the block declares", () => {
+    const s = extractionSchema(block({ type: "address", title: "Where?", fields: ["city", "country"] }))!;
+    const res = s.safeParse({ value: { city: "Berlin", country: "DE" }, confident: true });
+    expect(res.success).toBe(true);
+  });
+
+  it("a null value with confident=false is always valid — that is the clarify path", () => {
+    const s = extractionSchema(block({ type: "date", title: "When?" }))!;
+    expect(s.safeParse({ value: null, confident: false, note: "ambiguous" }).success).toBe(true);
+  });
+});
