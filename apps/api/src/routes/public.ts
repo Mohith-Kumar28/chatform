@@ -54,6 +54,16 @@ function isClosed(doc: FormDoc, closeAtColumn: number | null): boolean {
   return !!(closeAtColumn && closeAtColumn < Date.now());
 }
 
+/**
+ * Asset keys are stored as the R2 path (`assets/<org>/<fileId>-<name>`) but
+ * served by file id, so the id is recovered from the key rather than adding a
+ * lookup on a path that is otherwise a single query.
+ */
+function assetIdFromKey(key: string): string {
+  const last = key.split("/").pop() ?? key;
+  return last.split("-")[0] ?? last;
+}
+
 function stub(env: Bindings, sessionId: string): DurableObjectStub<SessionDO> {
   return env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
 }
@@ -89,6 +99,9 @@ sessionsRouter.get(
     brandingHidden: doc.settings.branding.hidePoweredBy,
     closed,
     closedMessage: closed ? doc.settings.closeRules.closedMessageMd : undefined,
+    // Without this the social preview image was parsed, stored, and never
+    // turned into a URL, so every share card came out blank.
+    assetUrl: (key) => `${new URL(c.req.url).origin}/p/assets/${assetIdFromKey(key)}`,
   });
   return c.json(config);
 });
@@ -176,6 +189,29 @@ sessionsRouter.post(
   const respondentToken = crypto.randomUUID().replace(/-/g, "");
   const ip = c.req.header("cf-connecting-ip") ?? "";
   const country = c.req.header("cf-ipcountry") ?? null;
+  const ipHash = sha256Hex(ip);
+
+  // "One response per person, per day" — offered in the builder since the
+  // settings panel was written, and enforced nowhere until now.
+  //
+  // Scoped to a day rather than forever because an IP identifies a network,
+  // not a person: an office or a campus shares one, and a permanent block
+  // would lock out everyone behind the first respondent. For a guarantee that
+  // actually holds, `requireAuth.onePerIdentity` keys on a verified identity.
+  if (settings.duplicates.strategy === "ip_daily" && ip) {
+    const since = Date.now() - 24 * 60 * 60 * 1000;
+    const prior = await c.env.DB.prepare(
+      `SELECT 1 FROM chat_sessions WHERE form_id = ?1 AND ip_hash = ?2 AND created_at > ?3 LIMIT 1`,
+    )
+      .bind(formRow.id, ipHash, since)
+      .first();
+    if (prior) {
+      return c.json(
+        { error: { code: "already_responded", message: "It looks like you have already answered this form today." } },
+        409,
+      );
+    }
+  }
 
   // persist session row (D1) — DO is source of truth during session, D1 is the index
   await c.env.DB.prepare(
@@ -187,7 +223,7 @@ sessionsRouter.post(
       sessionId,
       hashToken(respondentToken),
       JSON.stringify(body.hiddenFields ?? {}),
-      sha256Hex(ip),
+      ipHash,
       country,
       Date.now(),
       Date.now(),
@@ -215,7 +251,7 @@ sessionsRouter.post(
     docJson: doc,
     respondentToken,
     hiddenFields: body.hiddenFields ?? {},
-    ipHash: sha256Hex(ip),
+    ipHash,
     country,
     userAgent: c.req.header("user-agent") ?? null,
   });

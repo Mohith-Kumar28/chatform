@@ -196,15 +196,22 @@ export interface PublicEnding {
   showSummary: boolean;
 }
 
-export function toPublicEnding(e: Ending): PublicEnding {
+/**
+ * `fallback` carries `settings.onComplete`, which is the form-level "redirect
+ * after completion" the builder offers. It was parsed and stored and never
+ * reached the respondent, because the client only ever reads the ending's own
+ * redirect — so setting it did nothing. A per-ending value still wins; this is
+ * the default beneath it.
+ */
+export function toPublicEnding(e: Ending, fallback?: { redirectUrl?: string; delaySec: number }): PublicEnding {
   return {
     ref: e.ref,
     title: e.title,
     bodyMd: e.bodyMd,
     ctaLabel: e.ctaLabel,
     ctaUrl: e.ctaUrl,
-    redirectUrl: e.redirectUrl,
-    redirectDelaySec: e.redirectDelaySec,
+    redirectUrl: e.redirectUrl ?? fallback?.redirectUrl,
+    redirectDelaySec: e.redirectUrl ? e.redirectDelaySec : (fallback?.delaySec ?? e.redirectDelaySec),
     showSummary: e.showSummary,
   };
 }
@@ -280,7 +287,7 @@ export function toPublicConfig(
     title: doc.title,
     description: doc.description,
     blocks: doc.blocks.map(toPublicBlock),
-    endings: doc.endings.map(toPublicEnding),
+    endings: doc.endings.map((e) => toPublicEnding(e, doc.settings.onComplete)),
     hiddenFieldNames: doc.hiddenFields.map((h) => h.name),
     progressBar: doc.settings.progressBar,
     allowBack: doc.settings.navigation.allowBack,

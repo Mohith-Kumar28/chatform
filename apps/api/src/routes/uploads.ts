@@ -228,4 +228,42 @@ filesAdminRouter.get("/files/:id/download", async (c) => {
   });
 });
 
+/**
+ * Serve a builder-owned asset publicly.
+ *
+ * `POST /assets` has always answered with `url: /p/assets/<id>`, and nothing
+ * has ever served that path — so every logo, cover image, and social preview
+ * a builder uploaded resolved to a 404 the moment it left the upload dialog.
+ *
+ * Public by design: these are the images on a published form, and a
+ * respondent has no session to authenticate with. That is also why the
+ * response is pinned to image and font types only. The respondent-upload
+ * download route above force-downloads everything precisely because those
+ * bytes come from strangers; these come from the tenant, are MIME-checked at
+ * upload, and have to render in an `<img>` to be worth anything.
+ */
+uploadsRouter.get("/assets/:id", async (c) => {
+  const row = await c.env.DB.prepare(
+    `SELECT r2_key, mime FROM files WHERE id = ?1 AND uploaded_by = 'builder' AND status = 'confirmed'`,
+  )
+    .bind(c.req.param("id"))
+    .first<{ r2_key: string; mime: string }>();
+  if (!row) return c.json({ error: { code: "not_found", message: "Asset not found" } }, 404);
+
+  // SVG renders script, so it is never served inline from any origin of ours.
+  const renderable = /^(image\/(png|jpeg|gif|webp|avif)|font\/)/.test(row.mime);
+  const obj = await c.env.R2.get(row.r2_key);
+  if (!obj) return c.json({ error: { code: "not_found", message: "Object missing" } }, 404);
+
+  return new Response(obj.body, {
+    headers: {
+      "content-type": renderable ? row.mime : "application/octet-stream",
+      "x-content-type-options": "nosniff",
+      // Assets are immutable: the id changes whenever the bytes do.
+      "cache-control": "public, max-age=31536000, immutable",
+      "content-security-policy": "sandbox; default-src 'none'",
+    },
+  });
+});
+
 export default uploadsRouter;

@@ -143,3 +143,74 @@ describe("branding", () => {
     expect(await read(off)).toBe(false);
   });
 });
+
+describe("duplicate responses", () => {
+  const withIp = (slug: string, ip: string) =>
+    fetchApi(`/p/forms/${slug}/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-connecting-ip": ip },
+      body: JSON.stringify({}),
+    });
+
+  it("turns one-per-day away on a repeat, and lets a different address through", async () => {
+    const slug = await publish("dup", { duplicates: { strategy: "ip_daily" } });
+    expect((await withIp(slug, "203.0.113.9")).status).toBe(200);
+    expect((await withIp(slug, "203.0.113.9")).status).toBe(409);
+    // An IP identifies a network, not a person, so the block must be per-address.
+    expect((await withIp(slug, "203.0.113.10")).status).toBe(200);
+  });
+
+  it("lets everyone through when the strategy is none", async () => {
+    const slug = await publish("nodup", { duplicates: { strategy: "none" } });
+    expect((await withIp(slug, "203.0.113.11")).status).toBe(200);
+    expect((await withIp(slug, "203.0.113.11")).status).toBe(200);
+  });
+});
+
+describe("on completion", () => {
+  it("applies the form-level redirect to endings that have none", async () => {
+    const slug = await publish("redir", {
+      onComplete: { redirectUrl: "https://example.com/thanks", delaySec: 3 },
+    });
+    const config = (await (await fetchApi(`/p/forms/${slug}/config`)).json()) as {
+      endings: { redirectUrl?: string; redirectDelaySec?: number }[];
+    };
+    expect(config.endings[0]!.redirectUrl).toBe("https://example.com/thanks");
+    expect(config.endings[0]!.redirectDelaySec).toBe(3);
+  });
+
+  it("leaves an ending that sets its own redirect alone", async () => {
+    const slug = `gate-redir2`;
+    const doc = {
+      ...minimalDoc("redir2"),
+      settings: { agent: { mode: "template" }, onComplete: { redirectUrl: "https://example.com/form-level" } },
+      endings: [
+        {
+          id: "end_own001",
+          ref: "end_thanks",
+          title: "Thanks",
+          bodyMd: "",
+          redirectUrl: "https://example.com/ending-level",
+          redirectDelaySec: 9,
+        },
+      ],
+    };
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO forms (id, organization_id, workspace_id, created_by, title, slug, status, working_schema, fingerprint_salt, active_version_id, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, 'r2', ?5, 'published', ?6, 'salt', ?7, ?8, ?8)`,
+      ).bind("frm_gate_redir2", t.orgId, t.workspaceId, t.userId, slug, JSON.stringify(doc), "fv_gate_redir2", now),
+      env.DB.prepare(
+        `INSERT INTO form_versions (id, form_id, version, schema_json, checksum, published_at, created_by, created_at)
+         VALUES (?1, ?2, 1, ?3, 'ck', ?4, ?5, ?4)`,
+      ).bind("fv_gate_redir2", "frm_gate_redir2", JSON.stringify(doc), now, t.userId),
+    ]);
+
+    const config = (await (await fetchApi(`/p/forms/${slug}/config`)).json()) as {
+      endings: { redirectUrl?: string; redirectDelaySec?: number }[];
+    };
+    expect(config.endings[0]!.redirectUrl).toBe("https://example.com/ending-level");
+    expect(config.endings[0]!.redirectDelaySec).toBe(9);
+  });
+});

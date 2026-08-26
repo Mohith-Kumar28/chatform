@@ -899,13 +899,16 @@ export class SessionDO extends DurableObject<Bindings> {
 
   /** Finalize against an ending and tell the client. */
   private async completeWith(ending: Ending): Promise<void> {
-    if (!this.meta) return;
+    if (!this.meta || !this.doc) return;
     this.meta.currentRef = null;
     this.meta.status = "completed";
     this.meta.completedAt = Date.now();
     this.pendingEndingRef = null;
     await this.emitMessage(closingText(ending.title));
-    await this.emit("ending", { ending });
+    // Project rather than emitting the stored ending: the raw object carries
+    // internal ids, and only the projection applies the form-level redirect
+    // default that `settings.onComplete` is supposed to provide.
+    await this.emit("ending", { ending: toPublicEnding(ending, this.doc.settings.onComplete) });
     const submissionId = await this.finalize("completed", ending.ref);
     await this.emit("complete", { submissionId, durationMs: Date.now() - this.meta.startedAt });
     await this.persistMeta();
