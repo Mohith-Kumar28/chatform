@@ -13,3 +13,6 @@ coverage/
 next-env.d.ts
 .vercel
 drizzle/meta/_journal.json.bak
+
+# Generated knowledge graph — rebuilt by `graphify update .`
+graphify-out/

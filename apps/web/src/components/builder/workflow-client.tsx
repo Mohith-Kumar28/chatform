@@ -123,7 +123,47 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
   const wrapper = useRef<HTMLDivElement>(null);
   const dragType = useRef<{ kind: "block" | "condition" | "ending"; blockType?: BlockType } | null>(null);
 
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(focusRef ?? null);
+  /**
+   * Canvas selection, owned by the builder store.
+   *
+   * This was local state, mirrored INTO the store by an effect so the shared
+   * inspector could read it. That made the store a copy rather than the source:
+   * selecting a question in the Questions list left the canvas pointing at
+   * whatever it had been showing, and switching views lost your place. The two
+   * views are one document and one inspector; the selection is one thing too.
+   *
+   * `branch_*` nodes are the exception — the store has no concept of them, since
+   * they are a drawing of rules rather than a part of the document — so they are
+   * the only selection still held here.
+   */
+  const storeSelectedRef = useBuilderStore((st) => st.selectedRef);
+  const storeSelectedEnding = useBuilderStore((st) => st.selectedEndingRef);
+  const selectInStore = useBuilderStore((st) => st.select);
+  const selectEndingInStore = useBuilderStore((st) => st.selectEnding);
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(
+    focusRef?.startsWith("branch_") ? focusRef : null,
+  );
+  const selectedNodeId = selectedBranchId ?? storeSelectedRef ?? storeSelectedEnding;
+
+  const setSelectedNodeId = useCallback(
+    (id: string | null) => {
+      if (id === null) {
+        setSelectedBranchId(null);
+        selectInStore(null);
+        return;
+      }
+      if (id.startsWith("branch_")) {
+        setSelectedBranchId(id);
+        selectInStore(null);
+        return;
+      }
+      setSelectedBranchId(null);
+      if (doc.endings.some((e) => e.ref === id)) selectEndingInStore(id);
+      else selectInStore(id);
+    },
+    [doc.endings, selectInStore, selectEndingInStore],
+  );
+
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
@@ -192,7 +232,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
       setSelectedNodeId(b.ref);
       setSelectedEdgeId(null);
     },
-    [doc, onChange],
+    [doc, onChange, setSelectedNodeId],
   );
 
   const addConditionAt = useCallback(
@@ -215,7 +255,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
       setSelectedNodeId(`branch_${firstQ.ref}`);
       setSelectedEdgeId(null);
     },
-    [doc, onChange, answerableBlocks],
+    [doc, onChange, answerableBlocks, setSelectedNodeId],
   );
 
   /** Add another route out of a question that already branches. */
@@ -319,7 +359,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
       setSelectedNodeId(e.ref);
       setSelectedEdgeId(null);
     },
-    [doc, onChange],
+    [doc, onChange, setSelectedNodeId],
   );
 
   const onConnect = useCallback(
@@ -401,7 +441,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
         });
       }
     },
-    [doc, onChange],
+    [doc, onChange, setSelectedNodeId],
   );
 
   const onEdgesDelete = useCallback(
@@ -450,13 +490,6 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
   // ── inspector targets ──────────────────────────────────────────────────
   const selBlock = selectedNodeId && !selectedNodeId.startsWith("branch_") ? doc.blocks.find((b) => b.ref === selectedNodeId) : undefined;
 
-  // The shared inspector reads the selected block from the builder store, so
-  // canvas selection has to land there too. This is also what makes selection
-  // survive switching between the Questions and Flow views.
-  const selectInStore = useBuilderStore((st) => st.select);
-  useEffect(() => {
-    if (selBlock) selectInStore(selBlock.ref);
-  }, [selBlock, selectInStore]);
 
   const selEnding = selectedNodeId && !selectedNodeId.startsWith("branch_") ? doc.endings.find((e) => e.ref === selectedNodeId) : undefined;
   const selBranchRef = selectedNodeId?.startsWith("branch_") ? selectedNodeId.slice("branch_".length) : null;
@@ -474,7 +507,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
   const clearSelection = useCallback(() => {
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
-  }, []);
+  }, [setSelectedNodeId]);
 
   // ── edge rule editing (click a wire to edit it) ───────────────────────
   const patchRule = useCallback(

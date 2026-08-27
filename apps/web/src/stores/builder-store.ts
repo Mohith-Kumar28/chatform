@@ -63,7 +63,14 @@ export interface BuilderState {
   selectEnding: (ref: string | null) => void;
 
   // ── block operations ──
-  addBlock: (block: Block, atIndex?: number) => void;
+  /**
+   * Insert a block, optionally with the rule that makes it conditional.
+   *
+   * The rule travels with the insert rather than in a second call, so adding a
+   * conditional question is one edit and therefore one undo — and there is no
+   * intermediate state where the question exists but nothing routes to it.
+   */
+  addBlock: (block: Block, atIndex?: number, rule?: LogicRuleInput) => void;
   updateBlock: (ref: string, patch: Partial<Block>, coalesceKey?: string) => void;
   removeBlock: (ref: string) => void;
   duplicateBlock: (ref: string) => void;
@@ -206,10 +213,11 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   select: (ref) => set({ selectedRef: ref, selectedEndingRef: null }),
   selectEnding: (ref) => set({ selectedEndingRef: ref, selectedRef: null }),
 
-  addBlock: (block, atIndex) => {
+  addBlock: (block, atIndex, rule) => {
     get().edit((d) => {
       const i = atIndex ?? d.blocks.length;
       d.blocks.splice(i, 0, block as never);
+      if (rule) d.logic.push(rule as never);
       repairLogic(d);
     });
     set({ selectedRef: block.ref, selectedEndingRef: null });

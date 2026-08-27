@@ -38,6 +38,14 @@ import {
 } from "@/components/ui/tooltip";
 import { useBuilderStore } from "@/stores/builder-store";
 import { computeBranchLayout } from "./branch-layout";
+import {
+  ConditionRow,
+  choicesFor,
+  conditionalRule,
+  deciderFor,
+  opsFor,
+  type DraftCondition,
+} from "./condition-row";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
 import { defaultBlock } from "./default-block";
 import { cn } from "@/lib/utils";
@@ -176,9 +184,18 @@ export function BlockList() {
         {picker && (
           <BlockPicker
             onClose={() => setPicker(null)}
-            onPick={(type) => {
+            decider={deciderFor(doc.blocks, picker.index)}
+            onPick={(type, condition) => {
               const refs = new Set(doc.blocks.map((b) => b.ref));
-              addBlock(defaultBlock(type, refs), picker.index);
+              const block = defaultBlock(type, refs);
+              const decider = condition ? deciderFor(doc.blocks, picker.index) : null;
+              // Only the positive branch is written. `repairFlow`, which every
+              // structural edit runs through, derives the complement that skips
+              // the question when the condition fails — the half that actually
+              // does the skipping, and the half people forget.
+              const rule =
+                condition && decider ? conditionalRule(decider, condition, block.ref) : undefined;
+              addBlock(block, picker.index, rule);
               setPicker(null);
             }}
           />
@@ -370,11 +387,29 @@ function SortableRow({
 function BlockPicker({
   onPick,
   onClose,
+  decider,
 }: {
-  onPick: (type: Block["type"]) => void;
+  onPick: (type: Block["type"], condition: DraftCondition | null) => void;
   onClose: () => void;
+  /**
+   * The question directly above the insertion point, when there is one that
+   * could decide whether the new question is asked at all.
+   */
+  decider: Block | null;
 }) {
   const [query, setQuery] = useState("");
+  const [conditional, setConditional] = useState(false);
+  const [condition, setCondition] = useState<DraftCondition | null>(null);
+
+  // Default the condition to the decider's first answer, which is the one
+  // people mean nine times out of ten.
+  const draft: DraftCondition =
+    condition ??
+    (decider
+      ? { ref: decider.ref, op: opsFor(decider)[0]!.value, value: choicesFor(decider)[0]?.value ?? "" }
+      : { ref: "", op: "is_not_empty", value: "" });
+
+  const pick = (type: Block["type"]) => onPick(type, conditional && decider ? draft : null);
   const q = query.trim().toLowerCase();
   const matches = BLOCK_LIBRARY.filter(
     (b) => !q || b.label.toLowerCase().includes(q) || b.description.toLowerCase().includes(q),
@@ -397,7 +432,7 @@ function BlockPicker({
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") onClose();
-              if (e.key === "Enter" && matches[0]) onPick(matches[0].type);
+              if (e.key === "Enter" && matches[0]) pick(matches[0].type);
             }}
             placeholder="Search blocks…"
             className="h-8 border-0 shadow-none focus-visible:ring-0"
@@ -422,7 +457,7 @@ function BlockPicker({
                     <button
                       key={b.type}
                       type="button"
-                      onClick={() => onPick(b.type)}
+                      onClick={() => pick(b.type)}
                       className="hover:bg-muted/70 flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors"
                     >
                       <div className={cn("grid size-7 shrink-0 place-items-center rounded-lg", TONE_CLASSES[b.tone])}>
@@ -441,6 +476,36 @@ function BlockPicker({
             })
           )}
         </div>
+
+        {/*
+          The condition lives with the insert, not in a second dialog.
+          Making a question conditional after the fact meant going to the Flow
+          view, finding the node and wiring an edge — so in practice questions
+          got added unconditionally and the branching was fixed up later, or
+          not at all.
+        */}
+        {decider && (
+          <div className="bg-muted/40 space-y-2 px-3 py-2.5">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={conditional}
+                onChange={(e) => setConditional(e.target.checked)}
+                className="accent-[var(--primary)]"
+              />
+              <GitBranch className="text-muted-foreground size-3.5" />
+              Only ask this sometimes
+            </label>
+            {conditional && (
+              <>
+                <ConditionRow decider={decider} condition={draft} onChange={setCondition} />
+                <p className="text-muted-foreground text-xs">
+                  Everyone else skips straight past it.
+                </p>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
