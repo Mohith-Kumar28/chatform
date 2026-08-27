@@ -26,7 +26,7 @@ import "./flow.css";
 import { cn } from "@/lib/utils";
 import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspector";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
-import { layoutGraph } from "./flow-layout";
+import { layoutGraph, placeNodes } from "./flow-layout";
 import { toast } from "sonner";
 import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
@@ -180,10 +180,6 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
   const answerableBlocks = useMemo(() => doc.blocks.filter((b) => b.type !== "welcome"), [doc.blocks]);
 
   const setRules = useCallback((rules: LogicRule[]) => onChange({ ...doc, logic: rules }), [doc, onChange]);
-  const updateLayout = useCallback(
-    (id: string, pos: { x: number; y: number }) => onChange({ ...doc, layout: { ...doc.layout, [id]: pos } }),
-    [doc, onChange],
-  );
 
   // ── derive graph from doc ──────────────────────────────────────────────
   const derived = useMemo(() => deriveGraph(doc, gotoRules), [doc, gotoRules]);
@@ -199,6 +195,25 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
     setNodes(derived.nodes);
     setEdges(derived.edges);
   }
+
+  /**
+   * Dragging one node records where all of them are.
+   *
+   * `deriveGraph` honours the saved layout only while it covers every node, so
+   * writing a single dragged position into an otherwise-empty layout would
+   * leave it incomplete and the drag would be thrown away on the next render.
+   * Committing the whole canvas keeps that invariant — and drops positions for
+   * nodes that no longer exist, which is the other half of keeping the layout
+   * a description of this graph rather than of every graph it has ever been.
+   */
+  const updateLayout = useCallback(
+    (id: string, pos: { x: number; y: number }) => {
+      const layout: FormDoc["layout"] = {};
+      for (const n of nodes) layout[n.id] = n.id === id ? pos : n.position;
+      onChange({ ...doc, layout });
+    },
+    [doc, nodes, onChange],
+  );
 
   // Clicking a wire already selected it and opened its editor, but the wire
   // itself looked exactly as it had a moment before — so there was no way to
@@ -866,7 +881,10 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
       id: b.ref,
       type: isFirst ? "start" : "question",
       position: doc.layout[b.ref] ?? { x: 0, y: 0 },
-      data: { block: b },
+      // The same number the Questions list puts on the row, so the two views
+      // name a question the same way and you can carry a position in the list
+      // over to a box on the canvas without re-reading its title.
+      data: { block: b, index: i + 1 },
       deletable: !isFirst,
     });
 
@@ -885,7 +903,9 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
         id: branchId,
         type: "branch",
         position: doc.layout[branchId] ?? { x: 0, y: 0 },
-        data: { sourceRef: b.ref, sourceTitle: b.title, cases, exhaustive },
+        // A branch is drawn beside the question it hangs off, so it carries
+        // that question's number rather than one of its own.
+        data: { sourceRef: b.ref, sourceTitle: b.title, index: i + 1, cases, exhaustive },
         deletable: true,
       });
       edges.push(wire(`into_${b.ref}`, b.ref, branchId));
@@ -935,12 +955,11 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
     });
   });
 
-  // Anything nobody has dragged gets placed by dagre. A saved position wins,
-  // so hand-arranged canvases stay where they were put.
-  const auto = layoutGraph(nodes, edges);
+  // Saved positions while the layout still describes this graph, a fresh dagre
+  // run the moment it does not — see `placeNodes`.
+  const placed = placeNodes(nodes, edges, doc.layout);
   for (const node of nodes) {
-    if (doc.layout[node.id]) continue;
-    const at = auto.get(node.id);
+    const at = placed.get(node.id);
     if (at) node.position = at;
   }
 
@@ -958,7 +977,7 @@ const nodeTypes: NodeTypes = {
 };
 
 function StartNode({ data, selected }: NodeProps) {
-  const { block } = data as { block: Block };
+  const { block, index } = data as { block: Block; index: number };
   return (
     <div
       className={`rounded-full border-2 px-4 py-2 shadow-sm ${selected ? "border-primary ring-2 ring-primary/30" : "border-green-600/50"}`}
@@ -966,6 +985,7 @@ function StartNode({ data, selected }: NodeProps) {
     >
       <div className="flex items-center gap-2">
         <Play className="size-3 fill-green-600 text-green-600" />
+        <span className="tabular text-[0.625rem] opacity-60">{index}</span>
         <span className="max-w-44 truncate text-xs font-semibold">{block.title}</span>
       </div>
       <Handle type="source" position={Position.Right} className="!bg-green-600" />
@@ -974,7 +994,7 @@ function StartNode({ data, selected }: NodeProps) {
 }
 
 function QuestionNode({ data, selected }: NodeProps) {
-  const { block } = data as { block: Block };
+  const { block, index } = data as { block: Block; index: number };
   const meta = blockMeta(block.type);
   const accent = TONE_ACCENT[meta.tone];
   return (
@@ -992,6 +1012,7 @@ function QuestionNode({ data, selected }: NodeProps) {
         <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-md", TONE_CLASSES[meta.tone])}>
           <meta.icon className="size-3.5" strokeWidth={2} />
         </span>
+        <span className="tabular text-[0.625rem] opacity-60">{index}</span>
         <span className="min-w-0 flex-1 truncate text-xs font-medium">{block.title}</span>
         {block.required && <span className="text-destructive text-xs">*</span>}
       </div>
@@ -1026,8 +1047,9 @@ function EndingNode({ data, selected }: NodeProps) {
  * used to be invisible.
  */
 function BranchNode({ data, selected }: NodeProps) {
-  const { sourceTitle, cases, exhaustive } = data as {
+  const { sourceTitle, index, cases, exhaustive } = data as {
     sourceTitle: string;
+    index: number;
     cases: BranchCase[];
     exhaustive: boolean;
   };
@@ -1044,6 +1066,7 @@ function BranchNode({ data, selected }: NodeProps) {
         <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-amber-500/15">
           <GitBranch className="size-3 text-amber-600" />
         </span>
+        <span className="tabular text-[0.625rem] opacity-60">{index}</span>
         <span className="truncate text-[11px] font-semibold">{sourceTitle || "Branch"}</span>
       </div>
 

@@ -73,3 +73,34 @@ export function layoutGraph(nodes: Node[], edges: Edge[]): Map<string, { x: numb
   }
   return out;
 }
+
+/**
+ * Where the nodes actually go: saved positions, or a fresh layout.
+ *
+ * A saved layout is a photograph of one particular graph. This used to be done
+ * at the call site by taking a saved position wherever there was one and
+ * filling the gaps from a fresh dagre run — which quietly mixes two coordinate
+ * spaces the moment the flow gains a node the layout has never seen. Ask the
+ * AI bar for a branch and its new questions are placed in the frame of the
+ * graph they belong to while the old ones stay in the frame of the graph they
+ * were photographed in, so the canvas draws question 3 to the left of the
+ * welcome block with wires doubling back across it. Nothing was wrong with the
+ * flow; the picture of it was two pictures.
+ *
+ * So a saved layout is trusted only while it accounts for every node. The
+ * first node it does not know about makes it a picture of a different form,
+ * and dagre lays the whole graph out again — which is also what you want when
+ * the shape of the form changes under you.
+ */
+export function placeNodes(
+  nodes: Node[],
+  edges: Edge[],
+  saved: Record<string, { x: number; y: number }>,
+): Map<string, { x: number; y: number }> {
+  if (nodes.every((node) => saved[node.id])) {
+    const kept = new Map<string, { x: number; y: number }>();
+    for (const node of nodes) kept.set(node.id, saved[node.id]!);
+    return kept;
+  }
+  return layoutGraph(nodes, edges);
+}
