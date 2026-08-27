@@ -12,7 +12,7 @@ import { openPaywall } from "@/stores/paywall-store";
  * Trailing slash stripped because every caller concatenates a path beginning with "/".
  */
 export const API_ORIGIN = (
-  process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://chatform-api.mohithkumar808.workers.dev"
+  process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.in"
 ).replace(/\/$/, "");
 
 export const customFetch = async <T>(url: string, options?: RequestInit): Promise<T> => {

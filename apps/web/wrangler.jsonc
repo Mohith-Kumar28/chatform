@@ -8,6 +8,11 @@
   // Both are required by OpenNext: Next's server code reaches for node builtins, and
   // `nodejs_compat_populate_process_env` is what makes `process.env` readable at runtime.
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // Apex domain. `www` is deliberately not a second custom domain — one canonical host
+  // keeps the session cookie, the OAuth origins and the CORS allow-list to a single value.
+  "routes": [{ "pattern": "chatform.in", "custom_domain": true }],
+  // Kept on as a fallback host while DNS and certificates settle.
+  "workers_dev": true,
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"

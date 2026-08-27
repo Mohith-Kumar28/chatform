@@ -4,7 +4,7 @@ import { createAuthClient } from "better-auth/react";
 import { organizationClient } from "better-auth/client/plugins";
 
 export const API_ORIGIN =
-  process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://chatform-api.mohithkumar808.workers.dev";
+  process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.in";
 
 export const authClient = createAuthClient({
   baseURL: API_ORIGIN,

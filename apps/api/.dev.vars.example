@@ -26,7 +26,7 @@ DODO_WEBHOOK_SECRET=
 # Set DODO_API_KEY above, then run this once — it creates the products, the collection and
 # the webhook, reads the signing key back into this file, and links every product id:
 #
-#   pnpm dodo:provision -- --webhook-url https://chatform-api.mohithkumar808.workers.dev \
+#   pnpm dodo:provision -- --webhook-url https://api.chatform.in \
 #                          --remote --push-secrets
 #
 # Confirm with GET /api/billing/config-check as an owner.
@@ -77,7 +77,7 @@ GOOGLE_RESPONDENT_CLIENT_ID=
 #   Application type:              Web application
 #   Name:                          chatform-dashboard
 #   Authorized JavaScript origins: none needed
-#   Authorized redirect URIs:      https://chatform-api.mohithkumar808.workers.dev/api/auth/callback/google
+#   Authorized redirect URIs:      https://api.chatform.in/api/auth/callback/google
 #                                  http://localhost:8787/api/auth/callback/google   ← add for local testing
 # Create → copy "Client ID" and "Client secret" (the secret is shown once; reopen the
 # client to copy it again).

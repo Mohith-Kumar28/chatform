@@ -4,6 +4,14 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
+  // The custom domain is declared here rather than clicked into the dashboard, so a fresh
+  // account can reproduce the deployment from this file alone. Wrangler creates the DNS
+  // record and the edge certificate on deploy; the workers.dev URL keeps working too.
+  "routes": [{ "pattern": "api.chatform.in", "custom_domain": true }],
+  // Declaring `routes` turns the workers.dev URL off by default. It has to stay on: the
+  // Dodo webhook endpoint is registered at the workers.dev host, and a dead endpoint means
+  // deliveries fail and subscriptions never activate.
+  "workers_dev": true,
   "observability": {
     "enabled": true
   },
@@ -92,7 +100,7 @@
     "ENVIRONMENT": "production",
     // This API's own public origin. Better Auth uses it as `baseURL`, so it must be where
     // the API actually answers — never where the browser app lives.
-    "APP_ORIGIN": "https://chatform-api.mohithkumar808.workers.dev",
+    "APP_ORIGIN": "https://api.chatform.in",
     // Every browser origin allowed to drive this API, comma-separated. The first is the
     // default redirect target after checkout.
     //
@@ -100,6 +108,6 @@
     // to serve both without a redeploy between them, and `returnOrigin()` picks whichever
     // origin the request actually came from. The first is the fallback when the request
     // carries no recognisable origin, so the deployed app leads.
-    "WEB_ORIGINS": "https://chatform-web.mohithkumar808.workers.dev,http://localhost:3000"
+    "WEB_ORIGINS": "https://chatform.in,http://localhost:3000,https://chatform-web.mohithkumar808.workers.dev"
   }
 }
