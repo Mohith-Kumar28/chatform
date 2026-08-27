@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signIn, signUp } from "@/lib/auth/auth-client";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { API_ORIGIN } from "@/lib/api/mutator";
 
 function SignInForm() {
-  const router = useRouter();
+  // No router here on purpose: every success path on this page is a full
+  // navigation, because the session cookie has just changed. See `submit`.
   const params = useSearchParams();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -64,7 +65,11 @@ function SignInForm() {
         const res = await signIn.email({ email, password });
         if (res.error) throw new Error(res.error.message ?? "Sign in failed");
       }
-      // full navigation: guarantees the fresh session cookie is used server-side
+      // A full navigation, deliberately. `router.push` is a client transition:
+      // it keeps the RSC payload and every cached query from before sign-in, so
+      // the dashboard would render against the previous session. Leaving the
+      // page is what guarantees the server reads the new cookie.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");

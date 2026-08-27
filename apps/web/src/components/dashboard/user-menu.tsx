@@ -64,7 +64,9 @@ export function UserMenu() {
           variant="destructive"
           onSelect={async () => {
             await signOut();
-            // Full navigation so the server sees the cleared cookie.
+            // Full navigation so the server sees the cleared cookie — and so
+            // no cached query from the signed-in session survives the exit.
+            // eslint-disable-next-line @next/next/no-location-assign-relative-destination
             window.location.assign("/signin");
           }}
         >

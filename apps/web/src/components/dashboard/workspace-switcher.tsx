@@ -49,7 +49,9 @@ export function WorkspaceSwitcher() {
     try {
       await authClient.organization.setActive({ organizationId: id });
       // The active org lives in the session cookie and the server reads it on
-      // every request, so this has to be a real navigation.
+      // every request, so this has to be a real navigation — a client
+      // transition would show the previous workspace's cached data.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/dashboard");
     } catch (err) {
       setSwitching(null);
@@ -135,6 +137,8 @@ function CreateOrgDialog({
       if (created.data?.id) {
         await authClient.organization.setActive({ organizationId: created.data.id });
       }
+      // As above: the new workspace is only active once the server re-reads the cookie.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/dashboard");
     } catch (err) {
       setBusy(false);

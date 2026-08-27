@@ -1,7 +1,6 @@
 "use client";
 
 import { FormDoc, ThemeDoc } from "@repo/form-schema";
-import { RADIUS_PX } from "@/lib/chat-theme";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";

@@ -74,7 +74,10 @@ export function DashboardContent() {
     queryKey: ["forms"],
     queryFn: () => customFetch<unknown>("/api/forms"),
   });
-  const allForms = (Array.isArray(data) ? data : []) as FormRow[];
+  // Memoised so it is not a fresh array on every render — the sort below
+  // depends on it, and an unstable dependency re-sorts the whole grid whenever
+  // anything else in this component changes.
+  const allForms = useMemo(() => (Array.isArray(data) ? data : []) as FormRow[], [data]);
 
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("newest");

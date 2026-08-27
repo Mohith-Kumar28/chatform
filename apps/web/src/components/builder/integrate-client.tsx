@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Trash2, Webhook, Send } from "lucide-react";
 
 const EVENTS = ["submission.completed", "submission.abandoned", "session.started", "form.published"] as const;

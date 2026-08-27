@@ -43,14 +43,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   LayoutGrid,
   Plus,
-  AlignLeft, Calendar, ChevronLeft, ChevronRight, CircleHelp, CreditCard, Flag,
-  GitBranch, GripVertical, Hash, Heading, ListChecks, Mail, Phone, Play, Scale,
-  Sigma, Sparkles, SquareCheck, Star, Trash2, Type, Upload, UserRound, Globe, X,
+  ChevronLeft, ChevronRight, Flag,
+  GitBranch, GripVertical, Play,
+  Sparkles, Trash2, X,
 } from "lucide-react";
 
 const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
@@ -1071,93 +1070,6 @@ function BranchRow({
 
 // ────────────────────────── inspectors ──────────────────────────
 
-function BlockInspector({
-  block,
-  doc,
-  onPatchBlock,
-  onDelete,
-}: {
-  block: Block;
-  doc: FormDoc;
-  onChange: (d: FormDoc) => void;
-  onPatchBlock: (ref: string, patch: Partial<Block>) => void;
-  onDelete: () => void;
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-muted-foreground text-xs font-medium uppercase">{block.type}</p>
-        {block.type !== "welcome" && (
-          <Button variant="ghost" size="icon" className="size-7" onClick={onDelete}>
-            <Trash2 className="size-3.5" />
-          </Button>
-        )}
-      </div>
-      <div className="space-y-1.5">
-        <Label>Question</Label>
-        <Textarea rows={2} value={block.title} onChange={(e) => onPatchBlock(block.ref, { title: e.target.value })} />
-      </div>
-      <div className="flex items-center justify-between">
-        <Label>Required</Label>
-        <Switch checked={block.required} onCheckedChange={(v) => onPatchBlock(block.ref, { required: v })} />
-      </div>
-      {"options" in block && block.options && (
-        <div className="space-y-1.5">
-          <Label>Options</Label>
-          {block.options.map((o, i) => (
-            <div key={o.id} className="flex items-center gap-1.5">
-              <Input
-                value={o.label}
-                onChange={(e) => {
-                  const opts = [...block.options];
-                  opts[i] = { ...o, label: e.target.value };
-                  onPatchBlock(block.ref, { options: opts } as Partial<Block>);
-                }}
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8 shrink-0"
-                onClick={() => onPatchBlock(block.ref, { options: block.options!.filter((x) => x.id !== o.id) } as Partial<Block>)}
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
-            </div>
-          ))}
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() =>
-              onPatchBlock(block.ref, {
-                options: [...block.options!, { id: uid("opt"), label: `Option ${block.options!.length + 1}` }],
-              } as Partial<Block>)
-            }
-          >
-            Add option
-          </Button>
-        </div>
-      )}
-      {block.type === "rating" && (
-        <div className="flex items-center justify-between">
-          <Label>Scale</Label>
-          <Picker
-            className="w-24"
-            value={String(block.scale ?? 5)}
-            onValueChange={(v) => onPatchBlock(block.ref, { scale: Number(v) } as Partial<Block>)}
-          >
-            {[3, 4, 5, 7, 10].map((n) => (
-              <SelectItem key={n} value={String(n)}>
-                {n}
-              </SelectItem>
-            ))}
-          </Picker>
-        </div>
-      )}
-      {doc.endings.length > 1 && <p className="text-muted-foreground text-[10px]">{doc.blocks.length} blocks in this form.</p>}
-    </div>
-  );
-}
 
 /**
  * Everything that leaves one question.
@@ -1615,11 +1527,6 @@ function ConditionValueInput({
 
 // ────────────────────────── helpers ──────────────────────────
 
-// Node icons come from the shared library, so a block wears the same mark on
-// the canvas, in the palette and in the Questions list.
-const BLOCK_ICONS: Partial<Record<BlockType, typeof Mail>> = Object.fromEntries(
-  BLOCK_LIBRARY.map((b) => [b.type, b.icon]),
-);
 
 function conditionText(cond: { op: string; value?: unknown }): string {
   return `${opLabel(cond.op)}${cond.value !== undefined && cond.value !== null ? ` ${String(cond.value).slice(0, 14)}` : ""}`;

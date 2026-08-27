@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingGroup, SettingRow } from "@/components/ui/setting-row";
-import { Field, NumberField, SwitchField, TextField } from "../inspector/fields";
+import {  NumberField, SwitchField } from "../inspector/fields";
 import { useBuilderStore } from "@/stores/builder-store";
 import { cn } from "@/lib/utils";
 

@@ -8,7 +8,6 @@ import { QuestionPreview } from "../question-preview";
 import { EmptyState } from "@/components/ui/empty-state";
 import { BuildToolbar } from "../build-toolbar";
 import { useBuilderStore, useSelectedBlock } from "@/stores/builder-store";
-import { cn } from "@/lib/utils";
 
 /**
  * Build: the questions, and the one you are editing.

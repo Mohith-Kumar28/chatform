@@ -1,18 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { ShareClient } from "../share-client";
 import { useBuilderStore } from "@/stores/builder-store";
 import { useGetApiFormsById } from "@/lib/api/dashboard/dashboard";
+import { useClientValue } from "@/hooks/use-client-value";
 
 export function ShareTab() {
   const formId = useBuilderStore((s) => s.formId);
   const { data } = useGetApiFormsById(formId as never);
   const row = data as { slug: string; status: string } | undefined;
 
-  // window.location is not available during SSR.
-  const [origin, setOrigin] = useState("");
-  useEffect(() => setOrigin(window.location.origin), []);
+  // window.location is not available during SSR; "" is what the server renders.
+  const origin = useClientValue(() => window.location.origin, "");
 
   if (!row) return null;
   return (

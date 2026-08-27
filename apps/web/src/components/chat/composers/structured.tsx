@@ -2,9 +2,7 @@
 
 import { useState } from "react";
 import { GripVertical } from "lucide-react";
-import type { PublicBlock } from "@repo/form-schema";
 import { cn } from "@/lib/utils";
-import { SendRow, TextInput } from "./primitives";
 
 /**
  * Composers for the record-shaped block types.

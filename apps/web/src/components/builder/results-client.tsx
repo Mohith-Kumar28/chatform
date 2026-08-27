@@ -28,7 +28,6 @@ import {
   useGetApiFormsByIdSubmissions,
 } from "@/lib/api/dashboard/dashboard";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { StatCard } from "@/components/ui/stat-card";

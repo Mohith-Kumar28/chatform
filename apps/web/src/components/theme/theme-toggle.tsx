@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { Check, Monitor, Moon, Sun } from "lucide-react";
 import {
@@ -10,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { useHydrated } from "@/hooks/use-client-value";
 import { cn } from "@/lib/utils";
 
 const OPTIONS = [
@@ -28,11 +28,9 @@ const OPTIONS = [
  */
 export function ThemeToggle({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
   // The server cannot know the resolved theme, so show a stable icon until
   // hydration rather than flashing the wrong one.
-  useEffect(() => setMounted(true), []);
+  const mounted = useHydrated();
 
   const current = OPTIONS.find((o) => o.value === theme) ?? OPTIONS[2];
   const Icon = mounted ? current.icon : Monitor;

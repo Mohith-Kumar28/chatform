@@ -24,7 +24,6 @@ import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { AuthCard } from "./auth-card";
 import { useChat, type ChatMessage } from "./use-chat";
-import { FileUploadControl } from "./file-upload";
 import { SendRow, TextInput } from "./composers/primitives";
 import { QuestionAffordance } from "./question-affordance";
 import { Confetti } from "./confetti";
@@ -245,7 +244,14 @@ export function ChatClient({
       {!chat.ending && !chat.review && !chat.auth && (
         <footer className="sticky bottom-0 bg-[var(--cf-bg)]/95 backdrop-blur">
           <div className="mx-auto w-full max-w-2xl px-4 py-3">
-            <Composer chat={chat} config={config} />
+            {/*
+              Keyed on the question, so moving to the next one gives the
+              composer a fresh instance with an empty box. It used to clear
+              itself from an effect after rendering the new question with the
+              previous answer still in it — one frame of the wrong text, and a
+              cascading render to remove it.
+            */}
+            <Composer key={chat.question?.block?.ref ?? "composer"} chat={chat} config={config} />
           </div>
           {!config.brandingHidden && (
             <p className="pb-2 text-center text-[0.6875rem] opacity-40">
@@ -654,12 +660,10 @@ function EndingCard({
  * replacement for the ability to speak.
  */
 function Composer({ chat, config }: { chat: ReturnType<typeof useChat>; config: PublicFormConfig }) {
+  // Reset on a new question comes from the `key` at the call site, not from an
+  // effect — remounting is how React clears state that belongs to one question.
   const [text, setText] = useState("");
   const block = chat.question?.block;
-
-  useEffect(() => {
-    setText("");
-  }, [block?.ref]);
 
   // Number keys still pick an option, for anyone who prefers the keyboard.
   useEffect(() => {
