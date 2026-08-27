@@ -36,7 +36,7 @@ import {
   previewChangePlan,
   DodoError,
 } from "../lib/dodo.js";
-import { returnOrigin } from "../lib/origins.js";
+import { returnOrigin, webOrigins } from "../lib/origins.js";
 import {
   verifyWebhook,
   statusForFailure,
@@ -556,9 +556,24 @@ billingRouter.get(
     const catalogue = await verifyCatalogue(c.env);
     problems.push(...catalogue.problems);
 
+    /**
+     * The origins are reported here on purpose.
+     *
+     * "Is production accidentally using my local URL?" should not require reading config
+     * files and reasoning about which ones wrangler uploads. Owner-only, because
+     * `webOrigins` is effectively the CORS allowlist.
+     */
+    if (!c.env.APP_ORIGIN.startsWith("https://")) {
+      problems.push(`APP_ORIGIN is "${c.env.APP_ORIGIN}" — not HTTPS, so session cookies cannot be Secure`);
+    }
+
     return c.json({
       ok: problems.length === 0,
       environment: c.env.DODO_ENVIRONMENT === "live" ? "live" : "test",
+      // What this deployment actually resolved, not what any config file says.
+      appOrigin: c.env.APP_ORIGIN,
+      webOrigins: webOrigins(c.env),
+      returnsTo: returnOrigin(c.env, c.req),
       problems,
     });
   },
