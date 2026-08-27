@@ -4,11 +4,22 @@ import { z } from "zod";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
 import { hmac } from "../lib/webhooks.js";
+import { requirePermission, type AuthzVars } from "../lib/authorize.js";
+import { getEntitlements, countWebhooks } from "../lib/entitlements.js";
+import { limitReached } from "@repo/entitlements";
 
-export const webhooksRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
+export const webhooksRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
-webhooksRouter.use("*", requireSession);
-webhooksRouter.use("*", requireOrg);
+webhooksRouter.use("/webhooks/*", requireSession);
+webhooksRouter.use("/webhooks", requireSession);
+webhooksRouter.use("/webhooks/*", requireOrg);
+webhooksRouter.use("/webhooks", requireOrg);
+
+// Webhooks are free on every plan — Youform gives them away and so do we. What the plan
+// bounds is how many per form, which is a fair-use ceiling rather than a paywall.
+webhooksRouter.use("/webhooks", requirePermission("webhook", "read"));
+webhooksRouter.post("/webhooks", requirePermission("webhook", "create"));
+webhooksRouter.delete("/webhooks/:id", requirePermission("webhook", "delete"));
 
 const WebhookRow = z.object({
   id: z.string(),
@@ -62,6 +73,26 @@ webhooksRouter.post(
     const orgId = c.get("orgId");
     if (!orgId) return c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
     const { url, events, formId } = c.req.valid("json");
+
+    /**
+     * Per-form ceiling, counted live rather than metered — a counter would drift the
+     * moment a webhook is deleted. `formId: null` means an org-wide webhook, which is not
+     * bounded per form; the plan's form limit already bounds how many of those matter.
+     */
+    if (formId) {
+      const ent = await getEntitlements(c.env, orgId);
+      const limit = ent.limits.webhooks_per_form;
+      if (limit != null) {
+        const used = await countWebhooks(c.env, formId);
+        if (used >= limit) {
+          return c.json(
+            limitReached({ limitKey: "webhooks_per_form", plan: ent.planId, used, limit, context: { surface: "integrate.webhooks" } }),
+            402,
+          );
+        }
+      }
+    }
+
     const id = `wh_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
     const secret = `whsec_${crypto.randomUUID().replace(/-/g, "")}`;
     await c.env.DB.prepare(

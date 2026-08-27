@@ -4,14 +4,21 @@ import { z } from "zod";
 import { Block as BlockSchema, FormDoc, lintFormDoc, hasErrors, type Block, type FormDocInput, type LogicRuleInput, migrateFormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, assertFormAccess, type GuardVars } from "../lib/guards.js";
+import { requirePermission, requireQuota, type AuthzVars } from "../lib/authorize.js";
+import { meter } from "../lib/entitlements.js";
 import { generateFormDraft, generateExtension, type GenerationDraft } from "../lib/ai.js";
 import { buildFlowRules } from "../lib/flow-normalize.js";
 import { buildFlowGeneratorPrompt, buildExtensionPrompt } from "../lib/agent-prompts.js";
 
-export const aiRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
+export const aiRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
-aiRouter.use("*", requireSession);
-aiRouter.use("*", requireOrg);
+aiRouter.use("/ai/*", requireSession);
+aiRouter.use("/ai/*", requireOrg);
+// AI generation is a real cost, so it is both role-gated and quota-gated. The quota is
+// checked here and consumed only on success, inside each handler — a generation that
+// fails upstream must not spend someone's monthly allowance.
+aiRouter.use("/ai/*", requirePermission("ai", "generate"));
+aiRouter.use("/ai/*", requireQuota("ai_generations", "ai.generate"));
 
 const GenerateBody = z.object({
   prompt: z.string().min(5).max(2000),
@@ -170,6 +177,13 @@ aiRouter.post(
 
       const issues = lintFormDoc(doc);
       if (!hasErrors(issues)) {
+        // Consumed only now that a valid document exists. A generation that failed
+        // upstream, or produced something unusable, must not spend the allowance.
+        const orgId = c.get("orgId");
+        if (orgId) {
+          await meter(c.env, orgId, "ai_generations");
+          if (tokens > 0) await meter(c.env, orgId, "ai_tokens", tokens);
+        }
         return c.json({ doc, issues, tokens });
       }
       lastError = issues.filter((i) => i.level === "error").map((i) => `${i.path ?? ""}: ${i.message}`).join("\n");
@@ -264,6 +278,11 @@ aiRouter.post(
     // exactly as it was. Writing here meant a rejected suggestion was already
     // in the database, and the client's own copy then had to fight it.
     const issues = lintFormDoc(doc);
+    const orgId = c.get("orgId");
+    if (orgId) {
+      await meter(c.env, orgId, "ai_generations");
+      if (tokens > 0) await meter(c.env, orgId, "ai_tokens", tokens);
+    }
     return c.json({ doc, added: added.length, rules: newRules.length, summary: draft.summary, tokens, issues });
   },
 );

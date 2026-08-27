@@ -6,6 +6,9 @@ import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
 import { requireApiKey, assertChatSessionAccess, type GuardVars } from "../lib/guards.js";
 import { mountRespondentAuth, type AuthRouter } from "./respondent-auth.js";
+import { entitlementsFor, type AuthzVars } from "../lib/authorize.js";
+import { meter } from "../lib/entitlements.js";
+import { featureLocked, limitReached } from "@repo/entitlements";
 import type { SessionDO } from "../do/session-do.js";
 
 /**
@@ -14,9 +17,45 @@ import type { SessionDO } from "../do/session-do.js";
  * `Authorization: Bearer sk_...`.
  */
 
-export const v1Router = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
+export const v1Router = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
 v1Router.use("*", requireApiKey);
+
+/**
+ * The headless API is a paid feature, metered per request.
+ *
+ * Gated here rather than at key creation because a plan can lapse while a key stays
+ * valid — and a key that silently keeps working after a downgrade is a feature nobody is
+ * paying for. The 402 body is the same envelope a browser gets, so an integrator sees a
+ * machine-readable reason rather than a bare 403.
+ *
+ * Metered on the way in rather than on success: an API request costs us the work whether
+ * or not the caller liked the answer, and an error loop must not be free.
+ */
+v1Router.use("*", async (c, next) => {
+  const orgId = c.get("orgId");
+  if (!orgId) return next();
+  const ent = await entitlementsFor(c as never);
+  if (!ent.features.api_access) {
+    return c.json(featureLocked("api_access", ent.planId, { surface: "v1" }), 402);
+  }
+  const result = await meter(c.env, orgId, "api_requests", 1, ent);
+  if (!result.ok && result.limitKey && result.limit != null) {
+    c.header("retry-after", String(Math.max(1, Math.ceil((result.resetsAt - Date.now()) / 1000))));
+    return c.json(
+      limitReached({
+        limitKey: result.limitKey,
+        plan: ent.planId,
+        used: result.used,
+        limit: result.limit,
+        resetsAt: result.resetsAt,
+        context: { surface: "v1" },
+      }),
+      402,
+    );
+  }
+  await next();
+});
 
 /**
  * A chat session may only be driven or read by the org that owns its form.

@@ -444,14 +444,37 @@ export const aiGenerations = sqliteTable(
 
 // ─────────────────────────── Billing & usage ───────────────────────────
 
+/**
+ * The plan catalogue, seeded from `@repo/entitlements` — see `tooling/seed-plans.sql`.
+ *
+ * A Dodo subscription product carries its own billing frequency, so there is no separate
+ * price object: a monthly plan and a yearly plan are two *products*. The
+ * `dodo_price_*_id` columns below are the old, wrongly-named version of that idea; they
+ * are unused and a later migration drops them (D1 migrations are forward-only and SQLite
+ * column drops are awkward, so they linger rather than churn a migration).
+ */
 export const plans = sqliteTable("plans", {
   id: text("id").primaryKey(),
+  /** Mirrors `id`; kept so a rename of the primary key never breaks the catalogue join. */
+  slug: text("slug"),
   name: text("name").notNull(),
   dodoProductId: text("dodo_product_id"),
+  /** @deprecated superseded by `dodoProductMonthlyId` */
   dodoPriceMonthlyId: text("dodo_price_monthly_id"),
+  /** @deprecated superseded by `dodoProductYearlyId` */
   dodoPriceYearlyId: text("dodo_price_yearly_id"),
+  dodoProductMonthlyId: text("dodo_product_monthly_id"),
+  dodoProductYearlyId: text("dodo_product_yearly_id"),
+  seatAddonProductId: text("seat_addon_product_id"),
   priceMonthlyCents: integer("price_monthly_cents").notNull().default(0),
+  /** Total charged once a year, not the per-month equivalent. */
+  priceYearlyCents: integer("price_yearly_cents").notNull().default(0),
+  /** Per extra seat above the plan's included count; 0 when extras are not sold. */
+  seatPriceCents: integer("seat_price_cents").notNull().default(0),
   currency: text("currency").notNull().default("USD"),
+  /** `FeatureKey[]` as JSON. Booleans the plan grants. */
+  featuresJson: text("features_json").notNull().default("[]"),
+  /** `Record<LimitKey, number | null>` as JSON. Quantities the plan allows. */
   limitsJson: text("limits_json").notNull(),
   isActive: bool("is_active").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -473,16 +496,71 @@ export const subscriptions = sqliteTable(
     planId: text("plan_id").notNull().references(() => plans.id),
     dodoSubscriptionId: text("dodo_subscription_id").notNull().unique(),
     dodoProductId: text("dodo_product_id"),
+    dodoCustomerId: text("dodo_customer_id"),
+    cycle: text("cycle").notNull().default("monthly"),
     status: text("status").notNull().default("active"),
     currentPeriodStart: ts("current_period_start"),
     currentPeriodEnd: ts("current_period_end"),
     cancelAtPeriodEnd: bool("cancel_at_period_end").notNull().default(false),
+    trialEndsAt: ts("trial_ends_at"),
+    /**
+     * How long a failed renewal keeps its paid entitlements. Dodo's dunning retries a
+     * declining card for days; revoking a paying customer's analytics the instant their
+     * card blips is how you manufacture churn. Set by the webhook on the first failure.
+     */
+    graceUntil: ts("grace_until"),
+    /** A downgrade Dodo will apply at the period boundary, not now. */
+    scheduledPlanId: text("scheduled_plan_id"),
+    scheduledAt: ts("scheduled_at"),
     seats: integer("seats").notNull().default(1),
     metadata: text("metadata"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
     updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
   },
   (t) => [index("idx_subscriptions_org_status").on(t.organizationId, t.status)],
+);
+
+/**
+ * Per-org grants that beat the plan — comps, enterprise deals, "we bumped you to 500
+ * this month while you evaluate". Keeps one-off arrangements out of the plan catalogue.
+ */
+export const entitlementOverrides = sqliteTable(
+  "entitlement_overrides",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    /** `feature` | `limit` */
+    kind: text("kind").notNull(),
+    key: text("key").notNull(),
+    /** `"true"`/`"false"` for features; a decimal string or `""` (unlimited) for limits. */
+    value: text("value").notNull(),
+    reason: text("reason"),
+    expiresAt: ts("expires_at"),
+    createdBy: text("created_by"),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [uniqueIndex("uq_override_org_key").on(t.organizationId, t.kind, t.key)],
+);
+
+/**
+ * Which lock an org hit, how many times, and whether they then bought — the conversion
+ * funnel. One row per (org, feature); high-volume per-evaluation telemetry goes to
+ * Analytics Engine instead, and anything a human needs to audit goes to `audit_logs`.
+ */
+export const featureAccessLog = sqliteTable(
+  "feature_access_log",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    feature: text("feature").notNull(),
+    /** Where they hit it: "results.partial", "publish", "design.branding". */
+    surface: text("surface"),
+    firstDeniedAt: ts("first_denied_at").notNull(),
+    lastDeniedAt: ts("last_denied_at").notNull(),
+    denialCount: integer("denial_count").notNull().default(1),
+    convertedAt: ts("converted_at"),
+  },
+  (t) => [uniqueIndex("uq_fal_org_feature").on(t.organizationId, t.feature)],
 );
 
 export const payments = sqliteTable("payments", {

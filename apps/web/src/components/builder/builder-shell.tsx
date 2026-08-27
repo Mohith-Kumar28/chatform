@@ -15,6 +15,7 @@ import { useBuilderStore } from "@/stores/builder-store";
 import { useAutosave } from "@/hooks/use-autosave";
 import { BuilderHeader } from "./builder-header";
 import { PreviewDialog } from "./preview-dialog";
+import { PublishStrippedDialog, type StrippedSetting } from "./publish-stripped-dialog";
 
 /**
  * Owns everything shared by the builder tabs: document loading, store
@@ -40,6 +41,14 @@ export function BuilderShell({
   const { flush } = useAutosave(formId);
   const [publishing, setPublishing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  /**
+   * What the publish dropped because the plan does not include it.
+   *
+   * Shown rather than swallowed. This is the highest-intent moment in the product: they
+   * have just built the thing, they can see it, and the only thing between them and
+   * shipping it as authored is the price.
+   */
+  const [stripped, setStripped] = useState<StrippedSetting[]>([]);
 
   const row = form as
     | { id: string; title: string; slug: string; status: string; workingSchema: unknown; activeVersion: number | null }
@@ -82,7 +91,10 @@ export function BuilderShell({
       // Flush first: Publish used to be disabled while the doc was dirty, so a
       // user who had just typed had to wait out the autosave debounce.
       await flush();
-      await publish.mutateAsync({ id: formId as never });
+      const result = (await publish.mutateAsync({ id: formId as never })) as unknown as {
+        stripped?: StrippedSetting[];
+      };
+      if (result?.stripped?.length) setStripped(result.stripped);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Publish failed";
       toast.error("Could not publish", { description: message });
@@ -144,6 +156,8 @@ export function BuilderShell({
             published={row.status === "published"}
           />
         )}
+
+        <PublishStrippedDialog stripped={stripped} onClose={() => setStripped([])} />
       </div>
     </AuthGuard>
   );

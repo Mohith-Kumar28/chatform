@@ -1,0 +1,16 @@
+{
+  "name": "@repo/tooling",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "gen:plans": "tsx gen-seed-plans.ts"
+  },
+  "dependencies": {
+    "@repo/entitlements": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

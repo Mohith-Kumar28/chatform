@@ -34,6 +34,9 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { StatCard } from "@/components/ui/stat-card";
 import { blockMeta, TONE_CLASSES } from "./block-library";
 import { cn } from "@/lib/utils";
+import { useEntitlements } from "@/hooks/use-entitlements";
+import { LockedOverlay, LockChip, SkeletonRows, SkeletonChart, useUpgrade } from "@/components/billing/gate";
+import { FirstPartialToast } from "@/components/billing/first-partial-toast";
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8787";
 
@@ -58,6 +61,19 @@ interface Analytics {
     min?: number;
     max?: number;
   }[];
+  /** Field names the server withheld because the plan does not include them. */
+  locked?: string[];
+  /**
+   * Enough truth to make the upsell honest: the question count and where the worst
+   * drop-off is, without the numbers behind it.
+   */
+  lockedContext?: {
+    feature: string;
+    requiredPlan: string;
+    questionCount: number;
+    worstBlockTitle: string | null;
+    worstBlockIndex: number | null;
+  } | null;
 }
 
 interface SubRow {
@@ -84,6 +100,11 @@ export function ResultsClient({ formId }: ResultsClientProps) {
   const analytics = rawAnalytics as Analytics | undefined;
   const subs = (Array.isArray(rawSubs) ? rawSubs : []) as SubRow[];
   const doc = (rawForm as { workingSchema?: FormDoc } | undefined)?.workingSchema;
+  const ent = useEntitlements();
+  const upgrade = useUpgrade();
+
+  const canPartials = ent.can("partial_responses");
+  const canAnalytics = ent.can("advanced_analytics");
 
   const columns = useMemo(
     () => (doc?.blocks ?? []).filter((b) => !["welcome", "statement"].includes(b.type)),
@@ -92,13 +113,25 @@ export function ResultsClient({ formId }: ResultsClientProps) {
 
   const hasRespondents = subs.some((s) => s.respondent);
   const completedCount = subs.filter((s) => s.status === "completed").length;
-  const partialCount = subs.length - completedCount;
+  /**
+   * The real number of unfinished responses, even when the rows themselves are locked.
+   *
+   * Read from analytics rather than counted from `subs`, because on Free the server sends
+   * completed rows only — so counting the array would say zero and the badge would lie.
+   * `abandoned` is basic analytics and free on every plan, which is what lets the gate say
+   * "3 people started and didn't finish" truthfully while holding none of what they said.
+   */
+  const partialCount = canPartials ? subs.length - completedCount : (analytics?.abandoned ?? 0);
   const rows = subs.filter((s) =>
     statusFilter === "completed" ? s.status === "completed" : s.status !== "completed",
   );
 
   return (
     <div className="space-y-6">
+      {/* Renders nothing; fires once per form, the first time there is both a response and
+          an unfinished one to see. */}
+      <FirstPartialToast formId={formId} completed={completedCount} partials={partialCount} />
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SegmentedControl
           options={[
@@ -110,13 +143,36 @@ export function ResultsClient({ formId }: ResultsClientProps) {
           onChange={setTab}
           ariaLabel="Results view"
         />
-        <Button variant="outline" size="sm" shape="pill" asChild>
-          {/* Goes through the browser so the session cookie rides along. */}
-          <a href={`${API_ORIGIN}/api/forms/${formId}/submissions/export`} download>
-            <Download className="size-3.5" />
-            Export CSV
-          </a>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" shape="pill" asChild>
+            {/* Goes through the browser so the session cookie rides along. Exporting what
+                you finished collecting is free — taking your own data out is never the
+                thing behind the paywall. */}
+            <a href={`${API_ORIGIN}/api/forms/${formId}/submissions/export`} download>
+              <Download className="size-3.5" />
+              Export {completedCount > 0 ? `${completedCount} ` : ""}responses
+            </a>
+          </Button>
+          {/* The same slice that is gated everywhere else, offered here by name and count
+              rather than hidden. */}
+          {!canPartials && partialCount > 0 && (
+            <button
+              type="button"
+              onClick={() => upgrade("export_partials", { count: partialCount, noun: "partial responses" })}
+              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
+            >
+              + {partialCount} partial
+              <LockChip feature="export_partials" context={{ count: partialCount }} />
+            </button>
+          )}
+          {canPartials && partialCount > 0 && (
+            <Button variant="ghost" size="sm" shape="pill" asChild>
+              <a href={`${API_ORIGIN}/api/forms/${formId}/submissions/export?includePartials=true`} download>
+                + {partialCount} partial
+              </a>
+            </Button>
+          )}
+        </div>
       </div>
 
       {tab === "submissions" && (
@@ -125,14 +181,39 @@ export function ResultsClient({ formId }: ResultsClientProps) {
             size="sm"
             options={[
               { value: "completed", label: "Completed", badge: completedCount },
-              { value: "abandoned", label: "Partial", badge: partialCount },
+              {
+                value: "abandoned",
+                label: "Partial",
+                badge: partialCount,
+              },
             ]}
             value={statusFilter}
             onChange={setStatusFilter}
             ariaLabel="Submission status"
           />
 
-          {isLoading ? (
+          {/*
+            The gate that pays for everything.
+            The tab is visible with its real count, and opening it shows a blurred
+            *synthetic* table — never the withheld rows, which the server does not send.
+            The number and the sentence are what convert; the blur only says "there is
+            something here".
+          */}
+          {statusFilter === "abandoned" && !canPartials ? (
+            <LockedOverlay
+              feature="partial_responses"
+              count={partialCount}
+              noun={partialCount === 1 ? "person started" : "people started"}
+              headline={
+                partialCount > 0
+                  ? "…and didn't finish. See what they told you before they left."
+                  : "When someone starts and doesn't finish, you'll see what they said here."
+              }
+              className="bg-card"
+            >
+              <SkeletonRows rows={Math.min(6, Math.max(3, partialCount))} />
+            </LockedOverlay>
+          ) : isLoading ? (
             <div className="space-y-2">
               {[0, 1, 2].map((i) => (
                 <div key={i} className="shimmer h-12 rounded-lg" />
@@ -205,8 +286,8 @@ export function ResultsClient({ formId }: ResultsClientProps) {
         </div>
       )}
 
-      {tab === "summary" && <SummaryTab analytics={analytics} />}
-      {tab === "analytics" && <AnalyticsTab analytics={analytics} />}
+      {tab === "summary" && <SummaryTab analytics={analytics} entitled={canAnalytics} />}
+      {tab === "analytics" && <AnalyticsTab analytics={analytics} entitled={canAnalytics} />}
     </div>
   );
 }
@@ -327,8 +408,48 @@ function SubmissionRow({
   );
 }
 
-function SummaryTab({ analytics }: { analytics?: Analytics }) {
+function SummaryTab({ analytics, entitled }: { analytics?: Analytics; entitled: boolean }) {
   const dists = analytics?.distributions ?? [];
+
+  /**
+   * Charted answers are advanced analytics.
+   *
+   * The real response count sits above the blur, because a number the user already knows
+   * is true is what makes the locked chart worth unlocking. An empty form gets the
+   * ordinary empty state instead — the rule is never to gate before there is data.
+   */
+  if (!entitled) {
+    const answered = analytics?.completed ?? 0;
+    if (answered === 0) {
+      return (
+        <EmptyState
+          icon={MessageSquare}
+          title="Nothing to summarise yet"
+          description="Once responses come in, you'll see how people answered each question."
+        />
+      );
+    }
+    const questions = analytics?.lockedContext?.questionCount ?? 0;
+    return (
+      <LockedOverlay
+        feature="advanced_analytics"
+        count={answered}
+        noun={answered === 1 ? "response" : "responses"}
+        headline={
+          questions > 0
+            ? `See how people answered each of your ${questions} questions.`
+            : "See how people answered each question."
+        }
+        className="bg-card"
+      >
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SkeletonChart />
+          <SkeletonChart bars={5} />
+        </div>
+      </LockedOverlay>
+    );
+  }
+
   if (dists.length === 0) {
     return (
       <EmptyState
@@ -386,10 +507,16 @@ function SummaryTab({ analytics }: { analytics?: Analytics }) {
   );
 }
 
-function AnalyticsTab({ analytics }: { analytics?: Analytics }) {
+function AnalyticsTab({ analytics, entitled }: { analytics?: Analytics; entitled: boolean }) {
+  // Before the early return: a hook after one is called on some renders and not others,
+  // which changes hook order and breaks every hook below it.
+  const upgrade = useUpgrade();
+  const upgradeAnalytics = () => upgrade("advanced_analytics", { surface: "results.analytics" });
+
   if (!analytics) return <div className="shimmer h-64 rounded-xl" />;
 
   const funnel = analytics.perBlock ?? [];
+  const locked = analytics.lockedContext;
 
   return (
     <div className="space-y-6">
@@ -405,13 +532,55 @@ function AnalyticsTab({ analytics }: { analytics?: Analytics }) {
           tone="primary"
         />
         <StatCard label="Abandoned" value={analytics.abandoned} icon={Inbox} tone="warning" />
-        <StatCard
-          label="Average time"
-          value={analytics.avgDurationMs ? `${Math.round(analytics.avgDurationMs / 1000)}s` : "—"}
-          icon={Clock}
-        />
+        {/* Views, starts, completions, rate and abandoned stay real and unblurred on every
+            plan — those are the numbers that make someone curious. Average time is part of
+            the detail that answers the curiosity, so it goes behind the gate with the rest. */}
+        {entitled ? (
+          <StatCard
+            label="Average time"
+            value={analytics.avgDurationMs ? `${Math.round(analytics.avgDurationMs / 1000)}s` : "—"}
+            icon={Clock}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => upgradeAnalytics()}
+            className="bg-card hover:bg-muted/40 flex items-center justify-between gap-2 rounded-xl p-4 text-left transition-colors"
+          >
+            <div>
+              <p className="text-muted-foreground text-caption">Average time</p>
+              <p className="text-h3 blur-[5px] select-none" aria-hidden>
+                48s
+              </p>
+            </div>
+            <LockChip feature="advanced_analytics" />
+          </button>
+        )}
       </div>
 
+      {!entitled ? (
+        /**
+         * The drop-off funnel, named but withheld.
+         *
+         * The server sends `worstBlockTitle` and `worstBlockIndex` without the numbers
+         * behind them, so this can truthfully say *where* people leave while the *why*
+         * stays locked. That one sentence is the entire upsell for this surface.
+         */
+        <LockedOverlay
+          feature="advanced_analytics"
+          headline={
+            locked?.worstBlockIndex
+              ? `Most people drop off at question ${locked.worstBlockIndex} — “${locked.worstBlockTitle}”. Unlock to see why.`
+              : "See exactly which question people leave on."
+          }
+          className="bg-card"
+        >
+          <div className="p-4">
+            <p className="text-h3 mb-4">Where people drop off</p>
+            <SkeletonChart bars={Math.min(9, Math.max(4, locked?.questionCount ?? 5))} />
+          </div>
+        </LockedOverlay>
+      ) : (
       <div className="bg-card rounded-xl p-4">
         <p className="text-h3 mb-1">Where people drop off</p>
         <p className="text-muted-foreground text-caption mb-4">
@@ -447,6 +616,7 @@ function AnalyticsTab({ analytics }: { analytics?: Analytics }) {
           </ResponsiveContainer>
         )}
       </div>
+      )}
     </div>
   );
 }

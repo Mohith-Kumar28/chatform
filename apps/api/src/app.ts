@@ -13,9 +13,10 @@ import { resultsRouter } from "./routes/results.js";
 import { v1Router } from "./routes/v1.js";
 import { keysRouter } from "./routes/keys.js";
 import { webhooksRouter } from "./routes/webhook-admin.js";
-import { billingRouter } from "./routes/billing.js";
+import { billingRouter, billingPublicRouter } from "./routes/billing.js";
 import { previewRouter } from "./routes/preview.js";
 import { templatesRouter } from "./routes/templates.js";
+import { auditRouter } from "./routes/audit.js";
 import { mountOpenApiSpec } from "./lib/openapi.js";
 
 export function createApp() {
@@ -49,6 +50,18 @@ export function createApp() {
     return c.json({ error: { code: "internal_error", message: "Internal server error" } }, 500);
   });
 
+  /**
+   * Mounted before every other `/api` router, and that placement is load-bearing.
+   *
+   * Each mounted router declares `.use("*", requireSession)`, which `app.route("/api", …)`
+   * expands to `/api/*` — so those middlewares match every `/api` request, not just the
+   * routes of the router that declared them. The Dodo webhook and the public pricing
+   * catalogue are rejected with "Sign in required" no matter how they are written unless
+   * they are registered first, which is the second reason billing never worked. Registering
+   * them here means they answer and return before any session middleware runs.
+   */
+  app.route("/api", billingPublicRouter);
+
   app.route("/health", healthRouter);
   publicRouter.route("/", uploadsRouter);
   app.route("/p", viewsRouter);
@@ -64,6 +77,7 @@ export function createApp() {
   app.route("/api", previewRouter);
   app.route("/api", templatesRouter);
   app.route("/api", filesAdminRouter);
+  app.route("/api", auditRouter);
 
   // OpenAPI spec + Scalar docs
   mountOpenApiSpec(app);

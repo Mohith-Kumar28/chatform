@@ -14,6 +14,26 @@ import { applySchema, seedTenant, fetchApi, minimalDoc, type Tenant } from "./he
 
 let t: Tenant;
 
+/** Put the tenant on Pro. The plan row exists because `subscriptions.plan_id` is an FK. */
+async function subscribePro(orgId: string): Promise<void> {
+  const { PLANS } = await import("@repo/entitlements");
+  const { invalidateEntitlements } = await import("../src/lib/entitlements.js");
+  await env.DB.prepare(
+    `INSERT INTO plans (id, slug, name, price_monthly_cents, price_yearly_cents, currency, features_json, limits_json, is_active, sort_order)
+     VALUES ('pro', 'pro', 'Pro', ?, ?, 'USD', ?, ?, 1, 1) ON CONFLICT (id) DO NOTHING`,
+  )
+    .bind(PLANS.pro.priceMonthlyCents, PLANS.pro.priceYearlyCents, JSON.stringify(PLANS.pro.features), JSON.stringify(PLANS.pro.limits))
+    .run();
+  await env.DB.prepare(
+    `INSERT INTO subscriptions (id, organization_id, plan_id, dodo_subscription_id, cycle, status,
+                                current_period_start, current_period_end, seats, created_at, updated_at)
+     VALUES (?, ?, 'pro', ?, 'monthly', 'active', ?, ?, 1, ?, ?) ON CONFLICT (dodo_subscription_id) DO NOTHING`,
+  )
+    .bind(`sub_rs_${orgId}`, orgId, `dodo_rs_${orgId}`, Date.now() - 1000, Date.now() + 86_400_000 * 20, Date.now(), Date.now())
+    .run();
+  await invalidateEntitlements(env as never, orgId);
+}
+
 beforeAll(async () => {
   await applySchema();
   t = await seedTenant("results");
@@ -73,7 +93,18 @@ describe("submissions list", () => {
     expect(rows.some((r) => r.id === "sbm_partial")).toBe(false);
   });
 
-  it("status=all returns both", async () => {
+  it("status=all degrades to completed-only on Free rather than erroring", async () => {
+    // Unfinished responses are a Pro feature. `all` is what the dashboard sends by
+    // default, so it narrows instead of failing — the results page must still render.
+    const res = await fetchApi(`/api/forms/${t.formId}/submissions?status=all`, { headers: auth() });
+    expect(res.status).toBe(200);
+    const rows = await res.json<Row[]>();
+    expect(rows.some((r) => r.id === "sbm_done")).toBe(true);
+    expect(rows.some((r) => r.id === "sbm_partial")).toBe(false);
+  });
+
+  it("status=all returns both once the plan includes partials", async () => {
+    await subscribePro(t.orgId);
     const res = await fetchApi(`/api/forms/${t.formId}/submissions?status=all`, { headers: auth() });
     const rows = await res.json<Row[]>();
     expect(rows.some((r) => r.id === "sbm_done")).toBe(true);

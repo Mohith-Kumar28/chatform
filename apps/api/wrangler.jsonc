@@ -11,14 +11,14 @@
     {
       "binding": "DB",
       "database_name": "chatform",
-      "database_id": "local-dev-db",
+      "database_id": "fa46b30f-26d4-4076-a7c3-d609401c3e15",
       "migrations_dir": "../../packages/db/drizzle"
     }
   ],
   "kv_namespaces": [
     {
       "binding": "KV_CONFIG",
-      "id": "local-dev-kv"
+      "id": "a72116dbd29c4e07b7d887272c1e999e"
     }
   ],
   "r2_buckets": [
@@ -89,7 +89,12 @@
     "crons": ["*/5 * * * *"]
   },
   "vars": {
-    "ENVIRONMENT": "development",
-    "APP_ORIGIN": "http://localhost:3000"
+    "ENVIRONMENT": "production",
+    // The API's own public origin — Better Auth uses this as its baseURL.
+    "APP_ORIGIN": "https://chatform-api.mohithkumar808.workers.dev",
+    // Where the browser app lives. Anything a customer is redirected back to — the
+    // post-checkout return, the cancel URL, the portal's back link — uses this, not
+    // APP_ORIGIN. Point it at the deployed web app once there is one.
+    "WEB_ORIGIN": "http://localhost:3000"
   }
 }

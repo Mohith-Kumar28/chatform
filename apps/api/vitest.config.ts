@@ -23,6 +23,10 @@ export default defineConfig({
           APP_ORIGIN: "http://localhost",
           BETTER_AUTH_SECRET: "test-secret-at-least-32-characters-long",
           SIGNING_SALT: "test-salt",
+          // Billing tests sign their own Standard Webhooks deliveries with this secret.
+          // DODO_API_KEY stays unset so nothing can reach the real API from a test run.
+          DODO_WEBHOOK_SECRET: "whsec_test_dodo_secret",
+          DODO_ENVIRONMENT: "test",
         },
       },
     }),

@@ -5,6 +5,42 @@
  * Agentic chatbot forms platform. /p/* = public respondent surface, /v1/* = developer API (API key), /api/* = dashboard (session auth).
  * OpenAPI spec version: 1.0.0
  */
+export type GetApiBillingPlans200PlansItemLimits = {[key: string]: number | null};
+
+export type GetApiBillingPlans200PlansItem = {
+  id: string;
+  name: string;
+  tagline: string;
+  priceMonthlyCents: number;
+  priceYearlyCents: number;
+  priceYearlyPerMonthCents: number;
+  yearlySavingPercent: number;
+  seatPriceCents: number;
+  currency: string;
+  features: string[];
+  limits: GetApiBillingPlans200PlansItemLimits;
+  checkoutReady: boolean;
+};
+
+export type GetApiBillingPlans200Features = {[key: string]: {
+  label: string;
+  blurb: string;
+  minPlan: string;
+  soon: boolean;
+}};
+
+export type GetApiBillingPlans200Limits = {[key: string]: {
+  label: string;
+  unit: string;
+  mode: string;
+}};
+
+export type GetApiBillingPlans200 = {
+  plans: GetApiBillingPlans200PlansItem[];
+  features: GetApiBillingPlans200Features;
+  limits: GetApiBillingPlans200Limits;
+};
+
 export type GetHealth200 = {
   ok: boolean;
   env: string;
@@ -165,9 +201,26 @@ export type PutApiFormsByIdDoc200 = {
   issues: unknown[];
 };
 
+export type PostApiFormsByIdPublish200StrippedItem = {
+  path: string;
+  feature: string;
+  label: string;
+  requiredPlan: string;
+};
+
 export type PostApiFormsByIdPublish200 = {
   ok: boolean;
   version: number;
+  stripped: PostApiFormsByIdPublish200StrippedItem[];
+};
+
+export type PostApiFormsByIdPublish402Error = {
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdPublish402 = {
+  error: PostApiFormsByIdPublish402Error;
 };
 
 export type PostApiFormsByIdPublish422Error = {
@@ -267,6 +320,14 @@ export type GetApiFormsByIdAnalytics200PerBlockItem = {
   answerRate: number;
 };
 
+export type GetApiFormsByIdAnalytics200LockedContext = {
+  feature: string;
+  requiredPlan: string;
+  questionCount: number;
+  worstBlockTitle: string | null;
+  worstBlockIndex: number | null;
+} | null;
+
 export type GetApiFormsByIdAnalytics200 = {
   views: number;
   starts: number;
@@ -275,6 +336,8 @@ export type GetApiFormsByIdAnalytics200 = {
   completionRate: number;
   avgDurationMs: number | null;
   perBlock: GetApiFormsByIdAnalytics200PerBlockItem[];
+  locked: string[];
+  lockedContext: GetApiFormsByIdAnalytics200LockedContext;
 };
 
 export type GetV1Forms200Item = {
@@ -396,7 +459,37 @@ export type PostApiWebhooksByIdTest200 = {
   signature: string;
 };
 
-export type GetApiBillingUsage200Limits = {[key: string]: number};
+export type GetApiBillingEntitlements200Features = {[key: string]: boolean};
+
+export type GetApiBillingEntitlements200Limits = {[key: string]: number | null};
+
+export type GetApiBillingEntitlements200Usage = {[key: string]: number};
+
+export type GetApiBillingEntitlements200Gauges = {[key: string]: number};
+
+export type GetApiBillingEntitlements200Permissions = {[key: string]: string[]};
+
+export type GetApiBillingEntitlements200 = {
+  planId: string;
+  planName: string;
+  status: string;
+  cycle: string | null;
+  periodStart: number | null;
+  periodEnd: number | null;
+  cancelAtPeriodEnd: boolean;
+  inGrace: boolean;
+  seats: number;
+  features: GetApiBillingEntitlements200Features;
+  limits: GetApiBillingEntitlements200Limits;
+  usage: GetApiBillingEntitlements200Usage;
+  gauges: GetApiBillingEntitlements200Gauges;
+  periodResetsAt: number;
+  role: string;
+  roleLabel: string;
+  permissions: GetApiBillingEntitlements200Permissions;
+};
+
+export type GetApiBillingUsage200Limits = {[key: string]: number | null};
 
 export type GetApiBillingUsage200Usage = {[key: string]: number};
 
@@ -404,6 +497,7 @@ export type GetApiBillingUsage200 = {
   plan: string;
   planId: string;
   status: string;
+  periodEnd: number | null;
   limits: GetApiBillingUsage200Limits;
   usage: GetApiBillingUsage200Usage;
 };
@@ -413,7 +507,7 @@ export type PostApiBillingCheckoutBodyPlanId = typeof PostApiBillingCheckoutBody
 
 export const PostApiBillingCheckoutBodyPlanId = {
   pro: 'pro',
-  team: 'team',
+  business: 'business',
 } as const;
 
 export type PostApiBillingCheckoutBodyCycle = typeof PostApiBillingCheckoutBodyCycle[keyof typeof PostApiBillingCheckoutBodyCycle];
@@ -427,10 +521,60 @@ export const PostApiBillingCheckoutBodyCycle = {
 export type PostApiBillingCheckoutBody = {
   planId: PostApiBillingCheckoutBodyPlanId;
   cycle?: PostApiBillingCheckoutBodyCycle;
+  /** @maxLength 64 */
+  discountCode?: string;
 };
 
 export type PostApiBillingCheckout200 = {
   url: string;
+};
+
+export type PostApiBillingPortal200 = {
+  url: string;
+};
+
+export type PostApiBillingPreviewChangeBodyPlanId = typeof PostApiBillingPreviewChangeBodyPlanId[keyof typeof PostApiBillingPreviewChangeBodyPlanId];
+
+
+export const PostApiBillingPreviewChangeBodyPlanId = {
+  free: 'free',
+  pro: 'pro',
+  business: 'business',
+} as const;
+
+export type PostApiBillingPreviewChangeBodyCycle = typeof PostApiBillingPreviewChangeBodyCycle[keyof typeof PostApiBillingPreviewChangeBodyCycle];
+
+
+export const PostApiBillingPreviewChangeBodyCycle = {
+  monthly: 'monthly',
+  yearly: 'yearly',
+} as const;
+
+export type PostApiBillingPreviewChangeBody = {
+  planId: PostApiBillingPreviewChangeBodyPlanId;
+  cycle?: PostApiBillingPreviewChangeBodyCycle;
+};
+
+export type PostApiBillingChangePlanBodyPlanId = typeof PostApiBillingChangePlanBodyPlanId[keyof typeof PostApiBillingChangePlanBodyPlanId];
+
+
+export const PostApiBillingChangePlanBodyPlanId = {
+  free: 'free',
+  pro: 'pro',
+  business: 'business',
+} as const;
+
+export type PostApiBillingChangePlanBodyCycle = typeof PostApiBillingChangePlanBodyCycle[keyof typeof PostApiBillingChangePlanBodyCycle];
+
+
+export const PostApiBillingChangePlanBodyCycle = {
+  monthly: 'monthly',
+  yearly: 'yearly',
+} as const;
+
+export type PostApiBillingChangePlanBody = {
+  planId: PostApiBillingChangePlanBodyPlanId;
+  cycle?: PostApiBillingChangePlanBodyCycle;
 };
 
 export type PostApiFormsByIdPreviewSessions200 = {
@@ -444,5 +588,38 @@ export type GetApiTemplates200Item = {
   title: string;
   category: string;
   description: string;
+};
+
+export type GetApiAuditLogsParams = {
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum -9007199254740991
+ * @maximum 9007199254740991
+ */
+before?: number;
+/**
+ * @maxLength 80
+ */
+action?: string;
+};
+
+export type GetApiAuditLogs200EntriesItem = {
+  id: string;
+  action: string;
+  actorType: string;
+  actorLabel: string | null;
+  resourceType: string | null;
+  resourceId: string | null;
+  meta: unknown | null;
+  createdAt: number;
+};
+
+export type GetApiAuditLogs200 = {
+  entries: GetApiAuditLogs200EntriesItem[];
+  nextBefore: number | null;
 };
 

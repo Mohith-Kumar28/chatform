@@ -33,6 +33,7 @@ import {
   buildRetryObjective,
 } from "../lib/agent-prompts.js";
 import { buildAgentTools, type ToolOutcome } from "./agent-tools.js";
+import { meter } from "../lib/entitlements.js";
 import type { RespondentIdentity, RespondentAuthMethod } from "@repo/form-schema";
 import { streamText, stepCountIs } from "ai";
 
@@ -124,6 +125,12 @@ export class SessionDO extends DurableObject<Bindings> {
     organizationId: string;
     slug: string;
     brandingHidden: boolean;
+    /**
+     * The organization has spent its monthly AI conversations. Start this session in
+     * deterministic template mode rather than refusing it: the respondent gets scripted
+     * questions instead of a conversation, and nothing about their experience fails.
+     */
+    aiDegraded?: boolean;
     docJson: unknown;
     respondentToken: string;
     hiddenFields: Record<string, string>;
@@ -153,6 +160,10 @@ export class SessionDO extends DurableObject<Bindings> {
       country: params.country,
       userAgent: params.userAgent,
     };
+    // Shares the `degraded` flag with the reliability floor (three guard rejections drop a
+    // session to template mode permanently) — the two reasons to stop using the LLM want
+    // exactly the same behaviour, and it is already persisted across eviction.
+    if (params.aiDegraded) this.degraded = true;
     this.loaded = true;
 
     // initialize variables from doc defaults
@@ -1245,15 +1256,22 @@ export class SessionDO extends DurableObject<Bindings> {
       console.error("transcript_projection_failed", err);
     }
 
-    // meter usage (responses)
+    /**
+     * Meter the tokens this conversation actually cost.
+     *
+     * `responses` is metered at session *creation* (see `routes/public.ts`), not here — an
+     * abandoned session still cost us the interview, and only counting completions would
+     * make the AI cap trivially avoidable. What lands here is the token total, which is
+     * only knowable once the conversation is over.
+     *
+     * This block used to be a hand-rolled `usage_counters` upsert, the only real metering
+     * in the codebase and the only caller that did not go through the shared helper — so
+     * it was guaranteed to drift from every limit decision made elsewhere.
+     */
     try {
-      const period = new Date().toISOString().slice(0, 7);
-      await this.env.DB.prepare(
-        `INSERT INTO usage_counters (id, organization_id, period, metric, used, updated_at) VALUES (?, ?, ?, 'responses', 1, ?)
-         ON CONFLICT (organization_id, period, metric) DO UPDATE SET used = used + 1, updated_at = ?`,
-      )
-        .bind(`uc_${crypto.randomUUID().slice(0, 16)}`, this.meta.organizationId, period, Date.now(), Date.now())
-        .run();
+      if (this.sessionTokensUsed > 0) {
+        await meter(this.env, this.meta.organizationId, "ai_tokens", this.sessionTokensUsed);
+      }
     } catch (err) {
       console.error("usage_increment_failed", err);
     }

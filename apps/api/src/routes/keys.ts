@@ -4,11 +4,23 @@ import { z } from "zod";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
 import { generateApiKey } from "../lib/apikeys.js";
+import { requirePermission, requireFeature, type AuthzVars } from "../lib/authorize.js";
 
-export const keysRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
+export const keysRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
-keysRouter.use("*", requireSession);
-keysRouter.use("*", requireOrg);
+keysRouter.use("/keys", requireSession);
+keysRouter.use("/keys/*", requireSession);
+keysRouter.use("/keys", requireOrg);
+keysRouter.use("/keys/*", requireOrg);
+
+/**
+ * Listing keys is free — someone on a lapsed plan must still be able to see and revoke
+ * what exists. Minting a new one needs the paid feature, so a downgrade cannot be worked
+ * around by issuing more keys.
+ */
+keysRouter.use("/keys", requirePermission("apikey", "read"));
+keysRouter.post("/keys", requirePermission("apikey", "create"), requireFeature("api_access", { surface: "api-keys" }));
+keysRouter.delete("/keys/:id", requirePermission("apikey", "revoke"));
 
 const KeyMeta = z.object({
   id: z.string(),

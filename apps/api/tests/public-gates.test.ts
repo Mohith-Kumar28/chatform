@@ -16,6 +16,36 @@ import { hashPassword } from "../src/lib/crypto.js";
 
 let t: Tenant;
 
+/**
+ * Put the tenant on Pro. `plans` needs a row because `subscriptions.plan_id` is a foreign
+ * key; the entitlement arithmetic itself comes from the shared catalogue, not the table.
+ */
+async function subscribePro(orgId: string): Promise<void> {
+  const { PLANS } = await import("@repo/entitlements");
+  const { invalidateEntitlements } = await import("../src/lib/entitlements.js");
+  await env.DB.prepare(
+    `INSERT INTO plans (id, slug, name, price_monthly_cents, price_yearly_cents, currency, features_json, limits_json, is_active, sort_order)
+     VALUES ('pro', 'pro', 'Pro', ?, ?, 'USD', ?, ?, 1, 1)
+     ON CONFLICT (id) DO NOTHING`,
+  )
+    .bind(
+      PLANS.pro.priceMonthlyCents,
+      PLANS.pro.priceYearlyCents,
+      JSON.stringify(PLANS.pro.features),
+      JSON.stringify(PLANS.pro.limits),
+    )
+    .run();
+  await env.DB.prepare(
+    `INSERT INTO subscriptions (id, organization_id, plan_id, dodo_subscription_id, cycle, status,
+                                current_period_start, current_period_end, seats, created_at, updated_at)
+     VALUES (?, ?, 'pro', ?, 'monthly', 'active', ?, ?, 1, ?, ?)
+     ON CONFLICT (dodo_subscription_id) DO NOTHING`,
+  )
+    .bind(`sub_pg_${orgId}`, orgId, `dodo_pg_${orgId}`, Date.now() - 1000, Date.now() + 86_400_000 * 20, Date.now(), Date.now())
+    .run();
+  await invalidateEntitlements(env as never, orgId);
+}
+
 /** Publish a form whose doc carries `settings`, and return its slug. */
 async function publish(label: string, settings: Record<string, unknown>): Promise<string> {
   const slug = `gate-${label}`;
@@ -134,12 +164,30 @@ describe("close rules", () => {
 });
 
 describe("branding", () => {
-  it("honours hidePoweredBy from the published document", async () => {
+  /**
+   * The watermark needs the document to ask AND the plan to allow.
+   *
+   * This used to assert only the first half, which was the bug: `hidePoweredBy` was
+   * honoured straight out of the document with no plan check, so any free user removed
+   * the footer by flipping a toggle. Both halves are asserted now, and the second one is
+   * the one that earns money.
+   */
+  const read = async (slug: string) =>
+    ((await (await fetchApi(`/p/forms/${slug}/config`)).json()) as { brandingHidden: boolean }).brandingHidden;
+
+  it("keeps the footer on Free however the document was authored", async () => {
     const on = await publish("brandon", { branding: { hidePoweredBy: true } });
     const off = await publish("brandoff", { branding: { hidePoweredBy: false } });
-    const read = async (slug: string) =>
-      ((await (await fetchApi(`/p/forms/${slug}/config`)).json()) as { brandingHidden: boolean }).brandingHidden;
+    expect(await read(on)).toBe(false);
+    expect(await read(off)).toBe(false);
+  });
+
+  it("honours the document once the plan includes it", async () => {
+    const on = await publish("brandpro", { branding: { hidePoweredBy: true } });
+    const off = await publish("brandprooff", { branding: { hidePoweredBy: false } });
+    await subscribePro(t.orgId);
     expect(await read(on)).toBe(true);
+    // Entitled but not asked for: the footer stays, which is the default.
     expect(await read(off)).toBe(false);
   });
 });

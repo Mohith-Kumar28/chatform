@@ -13,6 +13,27 @@ import { applySchema, seedTenant, fetchApi, type Tenant } from "./helpers.js";
 let alice: Tenant;
 let bob: Tenant;
 
+/** Put an org on Pro. The plan row exists because `subscriptions.plan_id` is a foreign key. */
+async function subscribePro(orgId: string): Promise<void> {
+  const { env } = await import("cloudflare:test");
+  const { PLANS } = await import("@repo/entitlements");
+  const { invalidateEntitlements } = await import("../src/lib/entitlements.js");
+  await env.DB.prepare(
+    `INSERT INTO plans (id, slug, name, price_monthly_cents, price_yearly_cents, currency, features_json, limits_json, is_active, sort_order)
+     VALUES ('pro', 'pro', 'Pro', ?, ?, 'USD', ?, ?, 1, 1) ON CONFLICT (id) DO NOTHING`,
+  )
+    .bind(PLANS.pro.priceMonthlyCents, PLANS.pro.priceYearlyCents, JSON.stringify(PLANS.pro.features), JSON.stringify(PLANS.pro.limits))
+    .run();
+  await env.DB.prepare(
+    `INSERT INTO subscriptions (id, organization_id, plan_id, dodo_subscription_id, cycle, status,
+                                current_period_start, current_period_end, seats, created_at, updated_at)
+     VALUES (?, ?, 'pro', ?, 'monthly', 'active', ?, ?, 1, ?, ?) ON CONFLICT (dodo_subscription_id) DO NOTHING`,
+  )
+    .bind(`sub_tn_${orgId}`, orgId, `dodo_tn_${orgId}`, Date.now() - 1000, Date.now() + 86_400_000 * 20, Date.now(), Date.now())
+    .run();
+  await invalidateEntitlements(env as never, orgId);
+}
+
 beforeAll(async () => {
   await applySchema();
   alice = await seedTenant("alice");
@@ -88,6 +109,15 @@ describe("unauthenticated access", () => {
 });
 
 describe("/v1 API keys are org-scoped", () => {
+  /**
+   * `/v1` is a paid surface, so a tenant who cannot use it at all cannot demonstrate
+   * anything about its tenancy. Both tenants get Pro here; what is under test is still
+   * only whether one can reach the other's data.
+   */
+  beforeAll(async () => {
+    for (const who of [alice, bob]) await subscribePro(who.orgId);
+  });
+
   it("a key cannot read another org's form", async () => {
     const res = await fetchApi(`/v1/forms/${alice.formId}`, {
       headers: { authorization: `Bearer ${bob.apiKeyRaw}` },

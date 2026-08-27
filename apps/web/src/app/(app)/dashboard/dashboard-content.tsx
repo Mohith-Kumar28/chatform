@@ -51,6 +51,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { AiCapBanner } from "@/components/billing/ai-cap-banner";
 
 interface FormRow {
   id: string;
@@ -122,6 +123,14 @@ export function DashboardContent() {
           </Button>
         }
       />
+
+      {/* Only renders past 80% of the AI cap, and only for someone with forms — the rule is
+          never to sell before there is data. */}
+      {allForms.length > 0 && (
+        <div className="mt-6">
+          <AiCapBanner />
+        </div>
+      )}
 
       {allForms.length > 0 && (
         <div className="mt-6 flex flex-wrap items-center gap-2">

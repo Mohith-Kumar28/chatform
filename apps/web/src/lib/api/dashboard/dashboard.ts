@@ -23,8 +23,9 @@ import type {
   DeleteApiFormsById200,
   DeleteApiKeysById200,
   DeleteApiWebhooksById200,
+  GetApiAuditLogs200,
+  GetApiAuditLogsParams,
   GetApiAuthOk200,
-  GetApiBillingUsage200,
   GetApiForms200Item,
   GetApiFormsById200,
   GetApiFormsById404,
@@ -38,13 +39,12 @@ import type {
   PostApiAiAddBlocksBody,
   PostApiAiGenerateForm200,
   PostApiAiGenerateFormBody,
-  PostApiBillingCheckout200,
-  PostApiBillingCheckoutBody,
   PostApiForms200,
   PostApiForms403,
   PostApiFormsBody,
   PostApiFormsByIdPreviewSessions200,
   PostApiFormsByIdPublish200,
+  PostApiFormsByIdPublish402,
   PostApiFormsByIdPublish422,
   PostApiKeys200,
   PostApiKeysBody,
@@ -622,6 +622,11 @@ export const usePutApiFormsByIdDoc = <TError = unknown,
   status: 200
 }
 
+export type postApiFormsByIdPublishResponse402 = {
+  data: PostApiFormsByIdPublish402
+  status: 402
+}
+
 export type postApiFormsByIdPublishResponse422 = {
   data: PostApiFormsByIdPublish422
   status: 422
@@ -630,7 +635,7 @@ export type postApiFormsByIdPublishResponse422 = {
 export type postApiFormsByIdPublishResponseSuccess = (postApiFormsByIdPublishResponse200) & {
   headers: Headers;
 };
-export type postApiFormsByIdPublishResponseError = (postApiFormsByIdPublishResponse422) & {
+export type postApiFormsByIdPublishResponseError = (postApiFormsByIdPublishResponse402 | postApiFormsByIdPublishResponse422) & {
   headers: Headers;
 };
 
@@ -662,7 +667,7 @@ export const postApiFormsByIdPublish = async (id: string, options?: Parameters<t
 
 
 
-export const getPostApiFormsByIdPublishMutationOptions = <TError = PostApiFormsByIdPublish422,
+export const getPostApiFormsByIdPublishMutationOptions = <TError = PostApiFormsByIdPublish402 | PostApiFormsByIdPublish422,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdPublish>>, TError,PostApiFormsByIdPublishMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdPublish>>, TError,PostApiFormsByIdPublishMutationVariables, TContext> => {
 
@@ -691,13 +696,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiFormsByIdPublishMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFormsByIdPublish>>>
 
-    export type PostApiFormsByIdPublishMutationError = PostApiFormsByIdPublish422
+    export type PostApiFormsByIdPublishMutationError = PostApiFormsByIdPublish402 | PostApiFormsByIdPublish422
     export type PostApiFormsByIdPublishMutationVariables = {id: string}
 
     /**
  * @summary Publish the working document as a new version
  */
-export const usePostApiFormsByIdPublish = <TError = PostApiFormsByIdPublish422,
+export const usePostApiFormsByIdPublish = <TError = PostApiFormsByIdPublish402 | PostApiFormsByIdPublish422,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdPublish>>, TError,PostApiFormsByIdPublishMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof postApiFormsByIdPublish>>,
@@ -1878,190 +1883,6 @@ export const usePostApiWebhooksByIdTest = <TError = unknown,
       > => {
       return useMutation(getPostApiWebhooksByIdTestMutationOptions(options));
     }
-    export type getApiBillingUsageResponse200 = {
-  data: GetApiBillingUsage200
-  status: 200
-}
-
-export type getApiBillingUsageResponseSuccess = (getApiBillingUsageResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiBillingUsageResponse = (getApiBillingUsageResponseSuccess)
-
-export const getGetApiBillingUsageUrl = () => {
-
-
-
-
-  return `http://localhost:8787/api/billing/usage`
-}
-
-/**
- * @summary Current usage vs plan limits
- */
-export const getApiBillingUsage = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiBillingUsageResponse> => {
-
-  return customFetch<getApiBillingUsageResponse>(getGetApiBillingUsageUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetApiBillingUsageQueryKey = () => {
-    return [
-    `http://localhost:8787/api/billing/usage`
-    ] as const;
-    }
-
-
-export const getGetApiBillingUsageQueryOptions = <TData = Awaited<ReturnType<typeof getApiBillingUsage>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiBillingUsage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetApiBillingUsageQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiBillingUsage>>> = ({ signal }) => getApiBillingUsage({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiBillingUsage>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetApiBillingUsageQueryResult = NonNullable<Awaited<ReturnType<typeof getApiBillingUsage>>>
-export type GetApiBillingUsageQueryError = unknown
-
-
-/**
- * @summary Current usage vs plan limits
- */
-
-export function useGetApiBillingUsage<TData = Awaited<ReturnType<typeof getApiBillingUsage>>, TError = unknown>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiBillingUsage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetApiBillingUsageQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-export type postApiBillingCheckoutResponse200 = {
-  data: PostApiBillingCheckout200
-  status: 200
-}
-
-export type postApiBillingCheckoutResponse503 = {
-  data: void
-  status: 503
-}
-
-export type postApiBillingCheckoutResponseSuccess = (postApiBillingCheckoutResponse200) & {
-  headers: Headers;
-};
-export type postApiBillingCheckoutResponseError = (postApiBillingCheckoutResponse503) & {
-  headers: Headers;
-};
-
-export type postApiBillingCheckoutResponse = (postApiBillingCheckoutResponseSuccess | postApiBillingCheckoutResponseError)
-
-export const getPostApiBillingCheckoutUrl = () => {
-
-
-
-
-  return `http://localhost:8787/api/billing/checkout`
-}
-
-/**
- * @summary Create a Dodo checkout session
- */
-export const postApiBillingCheckout = async (postApiBillingCheckoutBody: PostApiBillingCheckoutBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiBillingCheckoutResponse> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
-  };
-return customFetch<postApiBillingCheckoutResponse>(getPostApiBillingCheckoutUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(postApiBillingCheckoutBody)
-  }
-);}
-
-
-
-
-
-export const getPostApiBillingCheckoutMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingCheckout>>, TError,PostApiBillingCheckoutMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiBillingCheckout>>, TError,PostApiBillingCheckoutMutationVariables, TContext> => {
-
-const mutationKey = ['postApiBillingCheckout'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBillingCheckout>>, PostApiBillingCheckoutMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  postApiBillingCheckout(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiBillingCheckoutMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBillingCheckout>>>
-    export type PostApiBillingCheckoutMutationBody = PostApiBillingCheckoutBody
-    export type PostApiBillingCheckoutMutationError = void
-    export type PostApiBillingCheckoutMutationVariables = {data: PostApiBillingCheckoutBody}
-
-    /**
- * @summary Create a Dodo checkout session
- */
-export const usePostApiBillingCheckout = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingCheckout>>, TError,PostApiBillingCheckoutMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof postApiBillingCheckout>>,
-        TError,
-        PostApiBillingCheckoutMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiBillingCheckoutMutationOptions(options));
-    }
     export type postApiFormsByIdPreviewSessionsResponse200 = {
   data: PostApiFormsByIdPreviewSessions200
   status: 200
@@ -2323,3 +2144,200 @@ export const usePostApiTemplatesBySlugUse = <TError = unknown,
       > => {
       return useMutation(getPostApiTemplatesBySlugUseMutationOptions(options));
     }
+    export type getApiAuditLogsResponse200 = {
+  data: GetApiAuditLogs200
+  status: 200
+}
+
+export type getApiAuditLogsResponse402 = {
+  data: void
+  status: 402
+}
+
+export type getApiAuditLogsResponseSuccess = (getApiAuditLogsResponse200) & {
+  headers: Headers;
+};
+export type getApiAuditLogsResponseError = (getApiAuditLogsResponse402) & {
+  headers: Headers;
+};
+
+export type getApiAuditLogsResponse = (getApiAuditLogsResponseSuccess | getApiAuditLogsResponseError)
+
+export const getGetApiAuditLogsUrl = (params?: GetApiAuditLogsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `http://localhost:8787/api/audit-logs?${stringifiedParams}` : `http://localhost:8787/api/audit-logs`
+}
+
+/**
+ * @summary Activity log for the organization
+ */
+export const getApiAuditLogs = async (params?: GetApiAuditLogsParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAuditLogsResponse> => {
+
+  return customFetch<getApiAuditLogsResponse>(getGetApiAuditLogsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAuditLogsQueryKey = (params?: GetApiAuditLogsParams,) => {
+    return [
+    `http://localhost:8787/api/audit-logs`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiAuditLogsQueryOptions = <TData = Awaited<ReturnType<typeof getApiAuditLogs>>, TError = void>(params?: GetApiAuditLogsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAuditLogs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAuditLogsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAuditLogs>>> = ({ signal }) => getApiAuditLogs(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAuditLogs>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAuditLogsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAuditLogs>>>
+export type GetApiAuditLogsQueryError = void
+
+
+/**
+ * @summary Activity log for the organization
+ */
+
+export function useGetApiAuditLogs<TData = Awaited<ReturnType<typeof getApiAuditLogs>>, TError = void>(
+ params?: GetApiAuditLogsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAuditLogs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAuditLogsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAuditLogsExportResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getApiAuditLogsExportResponse402 = {
+  data: void
+  status: 402
+}
+
+export type getApiAuditLogsExportResponseSuccess = (getApiAuditLogsExportResponse200) & {
+  headers: Headers;
+};
+export type getApiAuditLogsExportResponseError = (getApiAuditLogsExportResponse402) & {
+  headers: Headers;
+};
+
+export type getApiAuditLogsExportResponse = (getApiAuditLogsExportResponseSuccess | getApiAuditLogsExportResponseError)
+
+export const getGetApiAuditLogsExportUrl = () => {
+
+
+
+
+  return `http://localhost:8787/api/audit-logs/export`
+}
+
+/**
+ * @summary Export the activity log as CSV
+ */
+export const getApiAuditLogsExport = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiAuditLogsExportResponse> => {
+
+  return customFetch<getApiAuditLogsExportResponse>(getGetApiAuditLogsExportUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAuditLogsExportQueryKey = () => {
+    return [
+    `http://localhost:8787/api/audit-logs/export`
+    ] as const;
+    }
+
+
+export const getGetApiAuditLogsExportQueryOptions = <TData = Awaited<ReturnType<typeof getApiAuditLogsExport>>, TError = void>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAuditLogsExport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAuditLogsExportQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAuditLogsExport>>> = ({ signal }) => getApiAuditLogsExport({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAuditLogsExport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAuditLogsExportQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAuditLogsExport>>>
+export type GetApiAuditLogsExportQueryError = void
+
+
+/**
+ * @summary Export the activity log as CSV
+ */
+
+export function useGetApiAuditLogsExport<TData = Awaited<ReturnType<typeof getApiAuditLogsExport>>, TError = void>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAuditLogsExport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAuditLogsExportQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+

@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { qrSvg } from "@/lib/qr";
 import { cn } from "@/lib/utils";
+import { CustomDomainField } from "@/components/billing/custom-domain-field";
 
 type Mode = "link" | "website" | "email";
 type EmbedStyle = "inline" | "popup" | "side-tab" | "fullpage";
@@ -106,6 +107,8 @@ export function ShareClient({
             </div>
 
             {showQr && <QrPanel url={liveUrl} slug={slug} />}
+
+            <CustomDomainField slug={slug} />
           </div>
         )}
 

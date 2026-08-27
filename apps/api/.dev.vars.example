@@ -1,0 +1,41 @@
+# Copy to .dev.vars and fill in. .dev.vars is gitignored; this file is not.
+
+BETTER_AUTH_SECRET=at-least-32-characters-of-random-text
+SIGNING_SALT=any-random-string
+
+# This API's own public origin — Better Auth uses it as its baseURL.
+APP_ORIGIN=http://localhost:8787
+# Where the browser app lives. Everything a customer is redirected back to (post-checkout
+# return, cancel, the billing portal's back link) uses this, NOT APP_ORIGIN. They are only
+# the same value while the API and the web app share a host. Falls back to APP_ORIGIN.
+WEB_ORIGIN=http://localhost:3000
+
+# ── AI ────────────────────────────────────────────────────────────────────────
+# Absent: /api/ai/* returns 503 and interviews run in deterministic template mode.
+OPENROUTER_API_KEY=
+
+# ── Billing (Dodo Payments) ───────────────────────────────────────────────────
+# "test" or "live". Absent means test — a missing value must never charge a real card.
+DODO_ENVIRONMENT=test
+# Dashboard → Developer → API Keys. Absent: checkout and the portal return 503.
+DODO_API_KEY=
+# Dashboard → Developer → Webhooks, per endpoint. Absent: subscriptions never activate,
+# because every delivery is rejected as misconfigured rather than accepted unverified.
+DODO_WEBHOOK_SECRET=
+#
+# Set DODO_API_KEY above, then run this once — it creates the products, the collection and
+# the webhook, reads the signing key back into this file, and links every product id:
+#
+#   pnpm dodo:provision -- --webhook-url https://chatform-api.mohithkumar808.workers.dev \
+#                          --remote --push-secrets
+#
+# Confirm with GET /api/billing/config-check as an owner.
+
+# ── Optional ──────────────────────────────────────────────────────────────────
+RESEND_API_KEY=
+TURNSTILE_SECRET_KEY=
+FILE_ENCRYPTION_KEY=
+GOOGLE_CLIENT_ID=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_FROM=

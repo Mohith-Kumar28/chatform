@@ -9,6 +9,8 @@ import { timingSafeEqual, isHashedPassword, verifyPassword } from "../lib/crypto
 import { SessionDO } from "../do/session-do.js";
 import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
 import { mountRespondentAuth } from "./respondent-auth.js";
+import { getEntitlements, meter, checkQuota } from "../lib/entitlements.js";
+import { brandingHiddenFor, clampForRuntime } from "../lib/doc-entitlements.js";
 
 const sessionsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -81,22 +83,36 @@ sessionsRouter.get(
   async (c) => {
   const { slug } = c.req.param();
   const formRow = await c.env.DB.prepare(
-    `SELECT f.slug, f.status, f.close_at, fv.schema_json
+    `SELECT f.slug, f.status, f.close_at, f.organization_id, fv.schema_json
      FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
      WHERE f.slug = ? AND f.deleted_at IS NULL LIMIT 1`,
   )
     .bind(slug)
-    .first<{ slug: string; status: string; close_at: number | null; schema_json: string }>();
+    .first<{ slug: string; status: string; close_at: number | null; organization_id: string; schema_json: string }>();
 
   if (!formRow || formRow.status !== "published") {
     return c.json({ error: { code: "form_not_found", message: "Form not found or not published" } }, 404);
   }
 
-  const doc = readFormDoc(JSON.parse(formRow.schema_json));
-  const closed = isClosed(doc, formRow.close_at);
+  const stored = readFormDoc(JSON.parse(formRow.schema_json));
+  const ent = await getEntitlements(c.env, formRow.organization_id);
+  // The published version is reconciled with the plan in force right now, so a lapse puts
+  // the watermark back and drops a verification step the plan no longer includes — without
+  // anyone republishing. See `clampForRuntime`.
+  const doc = clampForRuntime(stored, ent);
+  const closed = isClosed(doc, formRow.close_at) || (await ceilingReached(c.env, formRow.organization_id, ent));
   const config = toPublicConfig(doc, {
     slug: formRow.slug,
-    brandingHidden: doc.settings.branding.hidePoweredBy,
+    /**
+     * The watermark decision, made here and nowhere else.
+     *
+     * This used to read `doc.settings.branding.hidePoweredBy` straight through with no
+     * plan check, so any free user removed the footer by flipping a toggle — the single
+     * most-purchased Pro feature, given away. Publishing strips the flag too, but
+     * re-deriving it here is what puts the footer back when a subscription lapses,
+     * without anyone having to republish.
+     */
+    brandingHidden: brandingHiddenFor(doc, ent),
     closed,
     closedMessage: closed ? doc.settings.closeRules.closedMessageMd : undefined,
     // Without this the social preview image was parsed, stored, and never
@@ -124,12 +140,12 @@ sessionsRouter.post(
 
   // load active published form version
   const formRow = await c.env.DB.prepare(
-    `SELECT f.id, f.slug, f.status, f.close_at, fv.id AS version_id, fv.schema_json
+    `SELECT f.id, f.slug, f.status, f.close_at, f.organization_id, fv.id AS version_id, fv.schema_json
      FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
      WHERE f.slug = ? AND f.deleted_at IS NULL LIMIT 1`,
   )
     .bind(slug)
-    .first<{ id: string; slug: string; status: string; close_at: number | null; version_id: string; schema_json: string }>();
+    .first<{ id: string; slug: string; status: string; close_at: number | null; organization_id: string; version_id: string; schema_json: string }>();
 
   if (!formRow || formRow.status !== "published") {
     return c.json({ error: { code: "form_not_found", message: "Form not found or not published" } }, 404);
@@ -146,6 +162,19 @@ sessionsRouter.post(
 
   if (isClosed(doc, formRow.close_at)) {
     return c.json({ error: { code: "form_closed", message: "This form is closed" } }, 403);
+  }
+
+  /**
+   * The monthly response ceiling that sits behind "unlimited responses".
+   *
+   * A respondent must never see a billing error — that is the owner's problem, not
+   * theirs — so an exhausted ceiling presents as the form being closed, in the owner's
+   * own words. `responses_per_month` is `meter`-only on every plan, so this fires only at
+   * 5,000 (Free) or 50,000 (paid).
+   */
+  const ent = await getEntitlements(c.env, formRow.organization_id);
+  if (await ceilingReached(c.env, formRow.organization_id, ent)) {
+    return c.json({ error: { code: "form_closed", message: settings.closeRules.closedMessageMd } }, 403);
   }
 
   const cap = settings.closeRules.maxSubmissions;
@@ -231,24 +260,34 @@ sessionsRouter.post(
     )
     .run();
 
-  // fetch org branding preference
-  const orgRow = await c.env.DB.prepare(
-    `SELECT o.id FROM forms f JOIN organizations o ON o.id = f.organization_id WHERE f.id = ?`,
-  )
-    .bind(formRow.id)
-    .first<{ id: string }>();
-  void orgRow;
+  /**
+   * Should this interview be a conversation, or scripted questions?
+   *
+   * The AI cap is `degrade`-mode: past it the form keeps working, it just stops being a
+   * conversation. That is what makes "unlimited responses" honest on a plan where every
+   * response costs real tokens — the respondent never sees a failure, and the owner sees a
+   * banner. `meter` reserves atomically, so two simultaneous sessions cannot both take the
+   * last conversation.
+   *
+   * `responses` is metered here rather than at completion because an abandoned session
+   * still cost us the interview.
+   */
+  const aiBudget = await meter(c.env, formRow.organization_id, "ai_conversations", 1, ent);
+  await meter(c.env, formRow.organization_id, "responses", 1, ent);
 
-  const brandingHidden = settings.branding.hidePoweredBy;
+  // Plan-capped turn and token budgets are applied at read time, so a form authored on Pro
+  // keeps running after a downgrade rather than refusing to load.
+  const runtimeDoc = clampForRuntime(doc, ent);
 
   const result = await stub(c.env, sessionId).init({
     sessionId,
     formId: formRow.id,
     formVersionId: formRow.version_id,
-    organizationId: orgRow?.id ?? "",
+    organizationId: formRow.organization_id,
     slug: formRow.slug,
-    brandingHidden,
-    docJson: doc,
+    brandingHidden: brandingHiddenFor(doc, ent),
+    aiDegraded: aiBudget.degraded,
+    docJson: runtimeDoc,
     respondentToken,
     hiddenFields: body.hiddenFields ?? {},
     ipHash,
@@ -320,3 +359,20 @@ mountRespondentAuth(sessionsRouter, {
 });
 
 export default sessionsRouter;
+
+/**
+ * Has this organization used up its absolute monthly response ceiling?
+ *
+ * Checked, never consumed — the reservation happens once the session is really being
+ * created. Reads fresh from D1 rather than the cached entitlements, because the counter
+ * changes constantly while the plan does not.
+ */
+async function ceilingReached(
+  env: Bindings,
+  orgId: string,
+  ent: Awaited<ReturnType<typeof getEntitlements>>,
+): Promise<boolean> {
+  if (!orgId) return false;
+  const quota = await checkQuota(env, orgId, "responses", ent);
+  return !quota.ok;
+}

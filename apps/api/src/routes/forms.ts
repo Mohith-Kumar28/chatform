@@ -6,8 +6,11 @@ import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
 import { hashPassword, isHashedPassword } from "../lib/crypto.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
+import { requirePermission, requireGauge, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
+import { stripForPublish, checkDocLimits } from "../lib/doc-entitlements.js";
+import { limitReached } from "@repo/entitlements";
 
-export const formsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
+export const formsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
 // ─── middleware: session, then organization, then per-form ownership ───
 formsRouter.use("*", requireSession);
@@ -16,6 +19,16 @@ formsRouter.use("*", requireOrg);
 // tenant 404s here and never reaches a handler.
 formsRouter.use("/forms/:id", requireFormAccess);
 formsRouter.use("/forms/:id/*", requireFormAccess);
+
+/**
+ * Role gates. Note what is NOT here: `PUT /forms/:id/doc` is gated on `form:update` but
+ * never on a plan, because authoring is always free. A free user turns on every switch,
+ * uploads their logo and sees their form wearing it; publishing is where the plan bites.
+ */
+formsRouter.post("/forms", requirePermission("form", "create"), requireGauge("forms_count", "forms.create"));
+formsRouter.put("/forms/:id/doc", requirePermission("form", "update"));
+formsRouter.post("/forms/:id/publish", requirePermission("form", "publish"));
+formsRouter.delete("/forms/:id", requirePermission("form", "delete"));
 
 const FormSummary = z.object({
   id: z.string(),
@@ -215,7 +228,7 @@ formsRouter.put(
 
 formsRouter.post(
   "/forms/:id/publish",
-  describeRoute({ tags: ["dashboard"], summary: "Publish the working document as a new version", responses: { 200: { description: "Published", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean(), version: z.number() })) } } }, 422: { description: "Lint errors", content: { "application/json": { schema: resolver(ErrorEnvelope) } } } } }),
+  describeRoute({ tags: ["dashboard"], summary: "Publish the working document as a new version", responses: { 200: { description: "Published", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean(), version: z.number(), stripped: z.array(z.object({ path: z.string(), feature: z.string(), label: z.string(), requiredPlan: z.string() })) })) } } }, 402: { description: "A plan limit refuses the publish", content: { "application/json": { schema: resolver(ErrorEnvelope) } } }, 422: { description: "Lint errors", content: { "application/json": { schema: resolver(ErrorEnvelope) } } } } }),
   async (c) => {
     const id = c.get("form")!.id;
     const userId = c.get("userId") as string;
@@ -227,15 +240,42 @@ formsRouter.post(
     if (hasErrors(issues)) {
       return c.json({ error: { code: "lint_failed", message: issues.filter((i) => i.level === "error").map((i) => i.message).join("; ") } }, 422);
     }
+
+    const ent = await entitlementsFor(c);
+
+    /**
+     * Hard document limits refuse the publish rather than truncating.
+     *
+     * Silently dropping someone's 140th question would be data loss; telling them the
+     * number and letting them decide is not.
+     */
+    const overLimit = checkDocLimits(parsed.data, ent);
+    if (overLimit.length > 0) {
+      const first = overLimit[0]!;
+      return c.json(limitReached({ limitKey: first.limitKey, plan: ent.planId, used: first.used, limit: first.limit, context: { surface: "publish" } }), 402);
+    }
+
+    /**
+     * Gated settings are removed from the version being published, and every removal is
+     * reported. The working document is untouched, so an upgrade republishes the full
+     * thing with no re-authoring, and no uploaded asset is deleted.
+     *
+     * Reporting rather than silently dropping is deliberate on two counts: it is honest,
+     * and it is the highest-intent upsell moment in the product — they have just built the
+     * thing and can see it.
+     */
+    const { doc: publishable, stripped } = stripForPublish(parsed.data, ent);
+    const schemaJson = JSON.stringify(publishable);
+
     const max = await c.env.DB.prepare(`SELECT COALESCE(MAX(version), 0) AS v FROM form_versions WHERE form_id = ?`).bind(id).first<{ v: number }>();
     const version = (max?.v ?? 0) + 1;
     const verId = `ver_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
     const checksum = crypto.randomUUID().slice(0, 16);
     await c.env.DB.batch([
       c.env.DB.prepare(`INSERT INTO form_versions (id, form_id, version, schema_json, theme_json, settings_json, checksum, published_at, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(verId, id, version, row.working_schema, row.theme_json, row.settings_json, checksum, Date.now(), userId, Date.now()),
+        .bind(verId, id, version, schemaJson, row.theme_json, row.settings_json, checksum, Date.now(), userId, Date.now()),
       c.env.DB.prepare(`UPDATE forms SET status = 'published', active_version_id = ?, updated_at = ? WHERE id = ?`).bind(verId, Date.now(), id),
     ]);
-    return c.json({ ok: true, version });
+    return c.json({ ok: true, version, stripped });
   },
 );

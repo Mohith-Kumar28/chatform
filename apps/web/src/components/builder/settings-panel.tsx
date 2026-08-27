@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { FormDoc } from "@repo/form-schema";
+import { LockedControl } from "@/components/billing/gate";
 
 interface SettingsPanelProps {
   settings: FormDoc["settings"];
@@ -112,12 +113,21 @@ export function SettingsPanel({
                 checked={settings.navigation.allowSkip}
                 onCheckedChange={(v) => patch({ navigation: { ...settings.navigation, allowSkip: v } })}
               />
-              <SettingRow
-                label='Hide "Powered by chatform"'
-                description="Remove the chatform badge from the chat."
-                checked={settings.branding.hidePoweredBy}
-                onCheckedChange={(v) => patch({ branding: { ...settings.branding, hidePoweredBy: v } })}
-              />
+              {/*
+                Visible and locked, never hidden. The toggle sits exactly where it would
+                if it worked, switched off, with a chip naming the plan — a feature nobody
+                can see is a feature nobody will want. The server ignores the flag on an
+                unentitled plan regardless of what the document says.
+              */}
+              <LockedControl feature="remove_branding">
+                <SettingRow
+                  label='Hide "Powered by chatform"'
+                  description="Remove the chatform badge from the chat."
+                  checked={settings.branding.hidePoweredBy}
+                  onCheckedChange={(v) => patch({ branding: { ...settings.branding, hidePoweredBy: v } })}
+                />
+              </LockedControl>
+              <LockedControl feature="duplicate_prevention">
               <SettingRow label="Duplicate responses" description="Control whether the same person can respond twice.">
                 <Select
                   value={settings.duplicates.strategy}
@@ -135,6 +145,7 @@ export function SettingsPanel({
                   </SelectContent>
                 </Select>
               </SettingRow>
+              </LockedControl>
             </SettingSection>
           )}
 
@@ -142,12 +153,14 @@ export function SettingsPanel({
               for the persona, goal, knowledge base and guardrails. */}
           {section === "access" && (
             <SettingSection title="Access & closing">
-              <SettingRow
-                label="Require sign-in"
-                description="Respondents verify who they are before the first question."
-                checked={settings.requireAuth.enabled}
-                onCheckedChange={(v) => patch({ requireAuth: { ...settings.requireAuth, enabled: v } })}
-              />
+              <LockedControl feature="respondent_auth_google">
+                <SettingRow
+                  label="Require sign-in"
+                  description="Respondents verify who they are before the first question."
+                  checked={settings.requireAuth.enabled}
+                  onCheckedChange={(v) => patch({ requireAuth: { ...settings.requireAuth, enabled: v } })}
+                />
+              </LockedControl>
               {settings.requireAuth.enabled && (
                 <>
                   <SettingRow label="Accepted methods">
@@ -268,6 +281,7 @@ export function SettingsPanel({
 
           {section === "link" && (
             <SettingSection title="Link & social">
+              <LockedControl feature="form_metadata">
               <SettingRow label="OG title" description="Title when the link is shared.">
                 <Input
                   className="max-w-md"
@@ -290,6 +304,7 @@ export function SettingsPanel({
                 checked={settings.meta.noIndex}
                 onCheckedChange={(v) => patch({ meta: { ...settings.meta, noIndex: v } })}
               />
+              </LockedControl>
             </SettingSection>
           )}
 
@@ -313,6 +328,7 @@ export function SettingsPanel({
                   }
                 />
               </SettingRow>
+              <LockedControl feature="completion_redirect">
               <SettingRow label="Redirect after completion" description="Send respondents to your own thank-you page.">
                 <Input
                   className="max-w-md"
@@ -328,6 +344,7 @@ export function SettingsPanel({
                   }
                 />
               </SettingRow>
+              </LockedControl>
             </SettingSection>
           )}
         </div>

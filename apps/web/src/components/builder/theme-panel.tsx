@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { BrandField } from "./brand-field";
+import { LockedControl } from "@/components/billing/gate";
 
 type Theme = FormDoc["theme"];
 
@@ -59,6 +60,12 @@ export function ThemePanel({
   return (
     <div className="w-full space-y-6">
       <Section title="Brand">
+        {/*
+          Left fully usable in the builder on purpose: they upload their logo and see their
+          form wearing it. Publish strips the reference and says so. That is the highest-
+          intent moment in the product, and the alternative — a padlock over an empty
+          uploader — sells nothing because they never see what they are missing.
+        */}
         <BrandField theme={theme} onChange={patch} />
       </Section>
 
@@ -127,24 +134,26 @@ export function ThemePanel({
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="font-heading">Heading</Label>
-          <Input
-            id="font-heading"
-            value={theme.fontHeading}
-            onChange={(e) => patch({ fontHeading: e.target.value })}
-            placeholder="Bricolage Grotesque"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="font-body">Body</Label>
-          <Input
-            id="font-body"
-            value={theme.fontBody}
-            onChange={(e) => patch({ fontBody: e.target.value })}
-            placeholder="Inter"
-          />
-        </div>
+        <LockedControl feature="custom_fonts" className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="font-heading">Heading</Label>
+            <Input
+              id="font-heading"
+              value={theme.fontHeading}
+              onChange={(e) => patch({ fontHeading: e.target.value })}
+              placeholder="Bricolage Grotesque"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="font-body">Body</Label>
+            <Input
+              id="font-body"
+              value={theme.fontBody}
+              onChange={(e) => patch({ fontBody: e.target.value })}
+              placeholder="Inter"
+            />
+          </div>
+        </LockedControl>
       </Section>
 
       <Button

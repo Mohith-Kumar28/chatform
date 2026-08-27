@@ -1,36 +1,41 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { customFetch } from "@/lib/api/mutator";
+import { useEntitlements } from "@/hooks/use-entitlements";
 import { cn } from "@/lib/utils";
 
-interface UsageResponse {
-  plan?: { id: string; name: string };
-  limits?: Record<string, number>;
-  usage?: Record<string, number>;
-}
-
 /**
- * Responses-this-month pill. `/api/billing/usage` existed and was never called
- * from anywhere, so a user had no idea they were approaching their plan cap
- * until responses started being rejected.
+ * Responses-this-month pill.
+ *
+ * Reads the shared `useEntitlements` hook rather than fetching `/api/billing/usage`
+ * itself. The previous version typed `plan` as an object when the API returns a string,
+ * and used a different query key from the usage page — so the same data was fetched and
+ * cached twice and the plan name was unusable.
+ *
+ * Shows the AI conversation count rather than the raw response count when the AI cap is
+ * the nearer of the two. Responses are unlimited on every plan, so a responses-only meter
+ * would sit near zero forever while the number that actually bites went unwatched.
  */
 export function UsagePill() {
-  const { data } = useQuery({
-    queryKey: ["billing", "usage"],
-    queryFn: () => customFetch<UsageResponse>("/api/billing/usage"),
-    staleTime: 5 * 60_000,
-  });
+  const ent = useEntitlements();
+  if (!ent.data) return null;
 
-  const limit = data?.limits?.responses_per_month;
-  const used = data?.usage?.responses ?? 0;
+  const responseRatio = ent.ratio("responses", "responses_ceiling_per_month");
+  const aiRatio = ent.ratio("ai_conversations", "ai_conversations_per_month");
+  const showAi = aiRatio >= responseRatio;
+
+  const metric = showAi ? "ai_conversations" : "responses";
+  const limitKey = showAi ? "ai_conversations_per_month" : "responses_ceiling_per_month";
+  const label = showAi ? "AI chats" : "responses";
+
+  const limit = ent.limit(limitKey);
+  const used = ent.usage(metric);
   if (!limit) return null;
 
   const ratio = used / limit;
   return (
     <Link
-      href="/usage"
+      href="/billing"
       className={cn(
         "hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors md:inline-flex",
         ratio >= 1
@@ -39,12 +44,16 @@ export function UsagePill() {
             ? "bg-[var(--warning-soft)] text-[var(--warning-foreground)]"
             : "text-muted-foreground hover:bg-muted",
       )}
-      title={`${used} of ${limit} responses used this month`}
+      title={
+        showAi
+          ? `${used} of ${limit} AI conversations used this month. Past the cap your forms keep collecting, asking questions directly.`
+          : `${used} of ${limit} responses this month`
+      }
     >
       <span className="tabular">
-        {used}/{limit}
+        {used.toLocaleString()}/{limit.toLocaleString()}
       </span>
-      <span className="opacity-60">responses</span>
+      <span className="opacity-60">{label}</span>
     </Link>
   );
 }

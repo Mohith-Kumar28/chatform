@@ -3,6 +3,8 @@ import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, requireSessionOwner, type GuardVars } from "../lib/guards.js";
+import { getEntitlements, storageBytes } from "../lib/entitlements.js";
+import { limitReached } from "@repo/entitlements";
 
 /**
  * File uploads — R2 binding based (no S3 credentials needed).
@@ -58,6 +60,32 @@ uploadsRouter.post(
     const sess = await c.env.DB.prepare(`SELECT form_id, organization_id FROM chat_sessions WHERE id = ?`)
       .bind(sessionId)
       .first<{ form_id: string; organization_id: string }>();
+    if (sess?.organization_id) {
+      /**
+       * Two plan limits, checked before the R2 key is handed out rather than after the
+       * bytes land — there is no way to un-upload something.
+       *
+       * The message a *respondent* sees never mentions plans or billing: a form's file
+       * limit is the form owner's business, and telling a stranger filling in a survey to
+       * upgrade would be absurd. `too_large` and `storage_full` are the owner's problem to
+       * read in the dashboard.
+       */
+      const ent = await getEntitlements(c.env, sess.organization_id);
+      const perFile = ent.limits.max_upload_mb_per_file;
+      if (perFile != null && size > perFile * 1024 * 1024) {
+        return c.json({ error: { code: "too_large", message: `This form accepts files up to ${perFile}MB` } }, 413);
+      }
+      const quota = ent.limits.file_storage_mb;
+      if (quota != null) {
+        const used = await storageBytes(c.env, sess.organization_id);
+        if (used + size > quota * 1024 * 1024) {
+          return c.json(
+            { error: { code: "storage_full", message: "This form cannot accept more file uploads right now." } },
+            507,
+          );
+        }
+      }
+    }
     if (!sess) return c.json({ error: { code: "not_found", message: "Session not found" } }, 404);
 
     const fileId = `file_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;

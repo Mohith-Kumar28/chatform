@@ -81,13 +81,27 @@ export const requireOrg: MiddlewareHandler<{ Bindings: Bindings; Variables: Part
   await next();
 };
 
-/** The caller's organization id, or null. Prefers the session's active org. */
+/**
+ * The caller's organization id, or null. Prefers the session's active org.
+ *
+ * It used to claim that and not do it: the query took the oldest membership by
+ * `created_at` and ignored `sessions.active_organization_id` entirely, so a user who
+ * belonged to two organizations read, wrote, metered and billed against whichever one
+ * they had joined first — regardless of which one they had switched to in the UI. Now the
+ * active org wins, and only when it is one the user is actually a member of; the oldest
+ * membership remains the fallback for a session that never set one.
+ */
 export async function resolveOrgId(env: Bindings, userId: string): Promise<string | null> {
   const row = await env.DB.prepare(
     `SELECT m.organization_id AS org
        FROM members m
-      WHERE m.user_id = ?
-      ORDER BY m.created_at
+      WHERE m.user_id = ?1
+      ORDER BY (m.organization_id = (
+                  SELECT s.active_organization_id FROM sessions s
+                   WHERE s.user_id = ?1 AND s.active_organization_id IS NOT NULL
+                   ORDER BY s.updated_at DESC LIMIT 1
+                )) DESC,
+               m.created_at ASC
       LIMIT 1`,
   )
     .bind(userId)

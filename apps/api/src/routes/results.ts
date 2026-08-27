@@ -4,13 +4,23 @@ import { z } from "zod";
 import { readFormDoc, type FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
+import { requirePermission, assertPermission, assertFeature, hasFeature, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
 
-export const resultsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<GuardVars> }>();
+export const resultsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
 resultsRouter.use("*", requireSession);
 resultsRouter.use("*", requireOrg);
 // Results are per-form and therefore per-tenant: another org's form id 404s.
 resultsRouter.use("/forms/:id/*", requireFormAccess);
+
+/**
+ * Reading completed responses and basic analytics is a role question, not a plan one —
+ * every plan sees what it collected. The plan gates live inside the handlers, because they
+ * depend on *which* slice is being asked for: completed rows are free, the unfinished ones
+ * are not.
+ */
+resultsRouter.use("/forms/:id/submissions", requirePermission("submission", "read"));
+resultsRouter.use("/forms/:id/analytics", requirePermission("analytics", "read"));
 
 const SubmissionRow = z.object({
   id: z.string(),
@@ -50,6 +60,18 @@ const Summary = z.object({
       answerRate: z.number(),
     }),
   ),
+  /** Field names withheld because the plan or the role does not include them. */
+  locked: z.array(z.string()),
+  /** What it would take to see them, and enough truth to make that worth doing. */
+  lockedContext: z
+    .object({
+      feature: z.string(),
+      requiredPlan: z.string(),
+      questionCount: z.number(),
+      worstBlockTitle: z.string().nullable(),
+      worstBlockIndex: z.number().nullable(),
+    })
+    .nullable(),
 });
 
 // ─── views tracking (public, fire-and-forget) ───
@@ -87,6 +109,47 @@ resultsRouter.get(
   async (c) => {
     const id = c.get("form")!.id;
     const { status, limit } = c.req.valid("query");
+
+    /**
+     * The gate that pays for everything.
+     *
+     * Free sees completed responses. The unfinished ones — the people who started, told
+     * you something, and left — are Pro. The rows themselves never leave the server
+     * unentitled: a blurred table in the client is a presentation choice, not a boundary.
+     *
+     * The count that makes the upsell persuasive is NOT withheld. It rides on
+     * `GET /forms/:id/analytics` as `abandoned`, which is basic analytics and free on
+     * every plan — so the UI can say "14 people started and didn't finish" truthfully
+     * while having none of what they said.
+     *
+     * `all` is the default the dashboard sends, so it degrades to completed-only rather
+     * than refusing; the results page must still render. Asking for the partials
+     * explicitly gets a 402 carrying the count.
+     */
+    let effectiveStatus: typeof status = status;
+    if (status === "abandoned" || status === "in_progress" || status === "all") {
+      const roleDenied = await assertPermission(c, "submission", "read_partial");
+      // A viewer is not trusted with unfinished responses whatever the plan, but `all`
+      // still degrades rather than erroring, for the same reason.
+      if (roleDenied && status !== "all") return roleDenied;
+      const entitled = await hasFeature(c, "partial_responses");
+      if (roleDenied || !entitled) {
+        if (status === "all") {
+          effectiveStatus = "completed";
+        } else {
+          const partials = await c.env.DB.prepare(
+            `SELECT COUNT(*) AS n FROM submissions WHERE form_id = ? AND status IN ('abandoned','in_progress')`,
+          )
+            .bind(id)
+            .first<{ n: number }>();
+          const denied = await assertFeature(c, "partial_responses", {
+            count: partials?.n ?? 0,
+            surface: "results.partial",
+          });
+          if (denied) return denied;
+        }
+      }
+    }
     // Bound, never interpolated. All placeholders are positional: SQLite
     // continues auto-numbering `?` from the highest explicit index, so mixing
     // `?` with `?1` silently changes how many bindings the statement wants.
@@ -96,7 +159,7 @@ resultsRouter.get(
        FROM submissions s WHERE s.form_id = ? AND (? = 'all' OR s.status = ?)
        ORDER BY s.started_at DESC LIMIT ?`,
     )
-      .bind(id, status, status, limit)
+      .bind(id, effectiveStatus, effectiveStatus, limit)
       .all<{
         id: string;
         status: string;
@@ -167,15 +230,34 @@ resultsRouter.get(
   }),
   async (c) => {
     const id = c.get("form")!.id;
+    const roleDenied = await assertPermission(c, "submission", "export");
+    if (roleDenied) return roleDenied;
+
     const form = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`).bind(id).first<{ working_schema: string }>();
     if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     const doc = readFormDoc(JSON.parse(form.working_schema));
     const answerable = doc.blocks.filter((b: { type: string }) => !["welcome", "statement"].includes(b.type));
 
+    /**
+     * Exporting what you finished collecting is free — taking your own data with you must
+     * never be the thing behind the paywall. What is gated is the same slice gated
+     * everywhere else: the unfinished responses.
+     *
+     * `includePartials=false` is not a silent narrowing; the button in the UI says
+     * "Export 47 responses" and shows the locked partial count beside it.
+     */
+    const includePartials = new URL(c.req.url).searchParams.get("includePartials") === "true";
+    if (includePartials) {
+      const denied = await assertFeature(c, "export_partials", { surface: "results.export" });
+      if (denied) return denied;
+    }
+
     const subs = await c.env.DB.prepare(
-      `SELECT s.id, s.status, s.started_at, s.completed_at FROM submissions s WHERE s.form_id = ? AND s.status != 'spam' ORDER BY s.started_at DESC LIMIT 10000`,
+      `SELECT s.id, s.status, s.started_at, s.completed_at FROM submissions s
+        WHERE s.form_id = ?1 AND s.status != 'spam' AND (?2 = 1 OR s.status = 'completed')
+        ORDER BY s.started_at DESC LIMIT 10000`,
     )
-      .bind(id)
+      .bind(id, includePartials ? 1 : 0)
       .all<{ id: string; status: string; started_at: number; completed_at: number | null }>();
 
     const header = ["submission_id", "status", "started_at", ...answerable.map((b: { ref: string }) => b.ref)];
@@ -238,7 +320,7 @@ resultsRouter.get(
     const doc = form ? JSON.parse(form.working_schema) : { blocks: [] };
     const answerable = doc.blocks.filter((b: { type: string }) => !["welcome", "statement"].includes(b.type));
 
-    const perBlock = [];
+    const perBlock: { blockRef: string; blockType: string; title: string; answered: number; answerRate: number }[] = [];
     for (const b of answerable) {
       const row = await c.env.DB.prepare(
         `SELECT COUNT(DISTINCT a.submission_id) AS answered,
@@ -302,15 +384,49 @@ resultsRouter.get(
 
     const starts = counts?.starts ?? 0;
     const completed = counts?.completed ?? 0;
+
+    /**
+     * Basic analytics are free; advanced analytics are Pro.
+     *
+     * The split is deliberate about which half is which. Views, starts, completions,
+     * completion rate and the abandoned count stay real and unblurred on every plan —
+     * those are the numbers that make someone curious. What is withheld is the *detail*
+     * that answers the curiosity: which question people drop off at, how each one
+     * performed, what the answers actually were.
+     *
+     * `locked` names what was withheld and `worstBlock` names where the drop-off is
+     * without giving the number, so a free user can be told "most people drop off at
+     * question 4" truthfully. That sentence is the entire upsell.
+     */
+    const advanced = await hasFeature(c, "advanced_analytics");
+    const roleAdvanced = !(await assertPermission(c, "analytics", "read_advanced"));
+    const showDetail = advanced && roleAdvanced;
+
+    const worst = perBlock.reduce<{ title: string; index: number } | null>((acc, b, i) => {
+      if (acc === null) return { title: b.title, index: i + 1 };
+      const prev = perBlock[acc.index - 1];
+      return prev && b.answerRate < prev.answerRate ? { title: b.title, index: i + 1 } : acc;
+    }, null);
+
     return c.json({
       views: viewsRow?.v ?? starts,
       starts,
       completed,
       abandoned: counts?.abandoned ?? 0,
       completionRate: starts > 0 ? Math.round((completed / starts) * 100) : 0,
-      avgDurationMs: counts?.avg_duration ? Math.round(counts.avg_duration) : null,
-      perBlock,
-      distributions,
+      avgDurationMs: showDetail ? (counts?.avg_duration ? Math.round(counts.avg_duration) : null) : null,
+      perBlock: showDetail ? perBlock : [],
+      distributions: showDetail ? distributions : [],
+      locked: showDetail ? [] : ["perBlock", "distributions", "avgDurationMs"],
+      lockedContext: showDetail
+        ? null
+        : {
+            feature: "advanced_analytics",
+            requiredPlan: "pro",
+            questionCount: perBlock.length,
+            worstBlockTitle: worst?.title ?? null,
+            worstBlockIndex: worst?.index ?? null,
+          },
     });
   },
 );
