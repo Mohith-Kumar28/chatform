@@ -81,7 +81,7 @@ function walk(doc: ReturnType<typeof FormDoc.parse>, answers: Record<string, unk
   let current = doc.blocks[0]!.ref;
   for (let guard = 0; guard < 40; guard++) {
     path.push(current);
-    const state: EvalState = { answers, variables: {}, hiddenFields: {} };
+    const state: EvalState = { answers, variables: {}, hidden: {} };
     const next = resolveNext(doc, current, state);
     // `resolveNext` returns the block itself, not its ref — reading `.ref` off
     // the wrapper produced a path of `undefined`s and made these tests lie.

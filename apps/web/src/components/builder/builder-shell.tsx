@@ -18,6 +18,8 @@ import { useAutosave } from "@/hooks/use-autosave";
 import { BuilderHeader } from "./builder-header";
 import { PreviewDialog } from "./preview-dialog";
 import { PublishStrippedDialog, type StrippedSetting } from "./publish-stripped-dialog";
+import { ShortcutsDialog } from "./shortcuts-dialog";
+import { useBuilderShortcuts } from "./use-builder-shortcuts";
 
 /**
  * Owns everything shared by the builder tabs: document loading, store
@@ -38,8 +40,6 @@ export function BuilderShell({
   const doc = useBuilderStore((s) => s.doc);
   const hydrate = useBuilderStore((s) => s.hydrate);
   const loadedId = useBuilderStore((s) => s.formId);
-  const undo = useBuilderStore((s) => s.undo);
-  const redo = useBuilderStore((s) => s.redo);
 
   const { flush } = useAutosave(formId);
   const [publishing, setPublishing] = useState(false);
@@ -69,24 +69,21 @@ export function BuilderShell({
     hydrate(row.id, parsed.data, row.activeVersion);
   }, [row, loadedId, hydrate]);
 
-  // ⌘Z / ⇧⌘Z anywhere that isn't a text field.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const target = e.target as HTMLElement | null;
-      const typing =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.isContentEditable;
-      if (typing) return;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
-        e.preventDefault();
-        if (e.shiftKey) redo();
-        else undo();
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo]);
+  /**
+   * Every builder shortcut, in one place.
+   *
+   * This was a single handler for ⌘Z and ⇧⌘Z. The rest of the builder had no
+   * keyboard at all: no way to step between questions, reorder one, duplicate
+   * it, preview, publish, or find out that any of it existed. The registry also
+   * feeds the ? sheet, so the two cannot disagree.
+   */
+  const { shortcuts, helpOpen, setHelpOpen } = useBuilderShortcuts({
+    onPreview: () => setPreviewOpen(true),
+    onPublish: () => {
+      if (!publishing) void onPublish().catch(() => {});
+    },
+    onSave: () => void flush(),
+  });
 
   async function onPublish() {
     setPublishing(true);
@@ -173,6 +170,8 @@ export function BuilderShell({
         )}
 
         <PublishStrippedDialog stripped={stripped} onClose={() => setStripped([])} />
+
+        <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} shortcuts={shortcuts} />
       </div>
     </AuthGuard>
   );

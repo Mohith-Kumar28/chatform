@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FormDoc, repairFlow, resolveNext, type Block, type EvalState } from "@repo/form-schema";
+import { FormDoc, repairFlow, resolveNext, type Block, type EvalState, type FormDoc as FormDocType } from "@repo/form-schema";
 import { conditionalRule, choicesFor, deciderFor, opsFor } from "@/components/builder/condition-row";
 
 /**
@@ -50,12 +50,12 @@ const NEW_BLOCK = {
   required: true,
 } as unknown as Block;
 
-function walk(doc: ReturnType<typeof FormDoc.parse>, answers: Record<string, unknown>): string[] {
+function walk(doc: FormDocType, answers: EvalState["answers"]): string[] {
   const path: string[] = [];
   let current = doc.blocks[0]!.ref;
   for (let guard = 0; guard < 30; guard++) {
     path.push(current);
-    const state: EvalState = { answers, variables: {}, hiddenFields: {} };
+    const state: EvalState = { answers, variables: {}, hidden: {} };
     const next = resolveNext(doc, current, state);
     if (next.kind !== "block") break;
     current = next.block.ref;
@@ -64,13 +64,13 @@ function walk(doc: ReturnType<typeof FormDoc.parse>, answers: Record<string, unk
 }
 
 /** What the picker does: insert at `index`, add the positive branch, repair. */
-function insertConditional(index: number, optionId: string) {
+function insertConditional(index: number, optionId: string): FormDocType {
   const doc = docWithPlatform();
   const decider = deciderFor(doc.blocks, index)!;
   const rule = conditionalRule(decider, { ref: decider.ref, op: "eq", value: optionId }, NEW_BLOCK.ref);
   const blocks = [...doc.blocks];
   blocks.splice(index, 0, NEW_BLOCK);
-  return repairFlow({ ...doc, blocks, logic: [...doc.logic, rule] });
+  return repairFlow({ ...doc, blocks, logic: [...doc.logic, rule] }) as FormDocType;
 }
 
 describe("deciderFor", () => {
