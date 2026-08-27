@@ -336,7 +336,9 @@ Secrets on the worker: `BETTER_AUTH_SECRET`, `SIGNING_SALT`, and whatever
 
 ### Origins
 
-Plain vars in `wrangler.jsonc`, not secrets. Two of them, and they are not the same thing:
+Uploaded from `apps/api/.prod.vars` with `pnpm secrets:push`, like everything else the
+worker reads — `wrangler.jsonc` declares no `vars` block. Two of them, and they are not the
+same thing:
 
 | | |
 |---|---|

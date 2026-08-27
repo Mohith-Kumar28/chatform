@@ -96,18 +96,8 @@
   "triggers": {
     "crons": ["*/5 * * * *"]
   },
-  "vars": {
-    "ENVIRONMENT": "production",
-    // This API's own public origin. Better Auth uses it as `baseURL`, so it must be where
-    // the API actually answers — never where the browser app lives.
-    "APP_ORIGIN": "https://api.chatform.in",
-    // Every browser origin allowed to drive this API, comma-separated. The first is the
-    // default redirect target after checkout.
-    //
-    // Both a local dev app and a deployed one are listed on purpose: one deployed API has
-    // to serve both without a redeploy between them, and `returnOrigin()` picks whichever
-    // origin the request actually came from. The first is the fallback when the request
-    // carries no recognisable origin, so the deployed app leads.
-    "WEB_ORIGINS": "https://chatform.in,http://localhost:3000,https://chatform-web.mohithkumar808.workers.dev"
-  }
+  // No `vars` block on purpose. Every value the worker reads — ENVIRONMENT, APP_ORIGIN,
+  // WEB_ORIGINS and the secrets — lives in apps/api/.prod.vars and is uploaded with
+  // `pnpm secrets:push`. Splitting configuration between this file and a secret store is
+  // how the two drift apart; one file cannot disagree with itself.
 }

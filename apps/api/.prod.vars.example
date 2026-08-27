@@ -1,0 +1,47 @@
+# Copy to .prod.vars, fill in the blanks, then `pnpm secrets:push`.
+#
+# This is the ONLY place the deployed worker's configuration lives. wrangler.jsonc declares
+# no `vars` block at all — bindings, queues and D1 there, configuration here. Workers
+# resolve `env.X` from secrets and plain vars identically, so shipping a non-secret value
+# like APP_ORIGIN through the secret store costs nothing and buys one source of truth.
+#
+#   pnpm secrets:push               upload every value
+#   pnpm secrets:push -- --dry-run  print the names, change nothing
+#   pnpm secrets:list               what the worker currently has
+#
+# Push BEFORE deploying a fresh worker: `wrangler deploy` never reads this file, and the
+# API reads APP_ORIGIN on every request.
+#
+# Not to be confused with .dev.vars, which is the same set of keys pointed at localhost and
+# is read only by `wrangler dev`. Neither file is ever pushed to the other's environment —
+# push-secrets.py refuses to upload a localhost APP_ORIGIN.
+
+# ── Where things run ──────────────────────────────────────────────────────────
+# Non-secret, and safe to keep in this example file: all three are public.
+ENVIRONMENT=production
+# This API's own public origin. Better Auth's baseURL, and the origin the Google OAuth
+# redirect URI is built from — change it and the Google Cloud client must change with it.
+APP_ORIGIN=https://api.chatform.in
+# Every browser origin allowed to drive this API, comma-separated. The first is the
+# fallback when a request carries no recognisable origin. localhost is listed on purpose so
+# a local frontend can work against the deployed API; drop it if that stops being worth it.
+WEB_ORIGINS=https://chatform.in,http://localhost:3000,https://chatform-web.mohithkumar808.workers.dev
+
+# ── Real secrets ──────────────────────────────────────────────────────────────
+BETTER_AUTH_SECRET=
+# Declared in env.ts and currently read by nothing, so it can be regenerated freely.
+SIGNING_SALT=
+# Absent: /api/ai/* returns 503 and interviews fall back to deterministic template mode.
+OPENROUTER_API_KEY=
+
+# "test" or "live". Absent means test — a missing value must never charge a real card.
+DODO_ENVIRONMENT=test
+DODO_API_KEY=
+# Absent: every delivery is rejected as misconfigured, so subscriptions never activate.
+DODO_WEBHOOK_SECRET=
+
+# Two different Google clients on purpose — see .dev.vars.example for why, and for the
+# Google Cloud steps. Respondent = public forms, dashboard = team sign-in.
+GOOGLE_RESPONDENT_CLIENT_ID=
+GOOGLE_DASHBOARD_CLIENT_ID=
+GOOGLE_DASHBOARD_CLIENT_SECRET=

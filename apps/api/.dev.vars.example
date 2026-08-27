@@ -1,4 +1,10 @@
 # Copy to .dev.vars and fill in. .dev.vars is gitignored; this file is not.
+#
+# LOCAL DEVELOPMENT ONLY. `wrangler dev` reads .dev.vars; nothing here is ever deployed,
+# which is why the origins below point at localhost and should stay that way.
+#
+# The deployed worker's configuration is the same set of keys with production origins, in
+# apps/api/.prod.vars — see .prod.vars.example. Upload it with `pnpm secrets:push`.
 
 BETTER_AUTH_SECRET=at-least-32-characters-of-random-text
 SIGNING_SALT=any-random-string

@@ -1,0 +1,3 @@
+
+# production config — real secrets, never committed (see .prod.vars.example)
+.prod.vars
