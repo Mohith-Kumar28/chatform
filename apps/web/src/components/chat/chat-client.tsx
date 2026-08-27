@@ -26,6 +26,7 @@ import { AuthCard } from "./auth-card";
 import { useChat, type ChatMessage } from "./use-chat";
 import { SendRow, TextInput } from "./composers/primitives";
 import { QuestionAffordance } from "./question-affordance";
+import { ChatBoot } from "./chat-boot";
 import { Confetti } from "./confetti";
 import { cn } from "@/lib/utils";
 import { API_ORIGIN } from "@/lib/api/mutator";
@@ -87,6 +88,25 @@ export function ChatClient({
 
   const themeVars = useMemo(() => chatThemeVars(config.theme), [config.theme]);
 
+  /**
+   * Hold the frame until we know which screen this is.
+   *
+   * `resolving` covers the round trip that decides between a fresh
+   * conversation, a resumed one, and "you've already answered this". Rendering
+   * the chat during it and swapping afterwards threw a whole viewport away in
+   * front of the respondent.
+   */
+  if (chat.resolving) {
+    return (
+      <div
+        className={cn("chat-surface flex flex-col", previewMode ? "h-full min-h-0" : "h-svh")}
+        style={themeVars}
+      >
+        <ChatBoot title={config.agentName || config.title} logoUrl={config.theme.logoUrl} />
+      </div>
+    );
+  }
+
   if (chat.submitted) {
     return (
       <div
@@ -144,24 +164,43 @@ export function ChatClient({
           </div>
 
           {chat.messages.map((m) => (
-            <Bubble
-              key={m.id}
-              message={m}
-              // A user message can be edited when we know which question it
-              // answered and the form is still open.
-              onEdit={
-                m.role === "user" && !m.optimistic && m.answeredRef && !chat.ending
-                  ? () => void chat.editAnswer(m.answeredRef!)
-                  : undefined
-              }
-            />
+            <div key={m.id}>
+              <Bubble
+                message={m}
+                // A user message can be edited when we know which question it
+                // answered and the form is still open.
+                onEdit={
+                  m.role === "user" && !m.optimistic && m.answeredRef && !chat.ending
+                    ? () => void chat.editAnswer(m.answeredRef!)
+                    : undefined
+                }
+              />
+              {/*
+                What they were choosing between, kept after the choice is made.
+                The chips vanish once an answer is sent, and the transcript then
+                showed only the words "iOS (iPhone)" with no sign that it had
+                been one of three. This is the same row, settled: the pick
+                filled in, the rest quiet, and nothing clickable.
+              */}
+              {m.role === "user" && m.answeredRef && (
+                <SettledChoice block={chat.asked[m.answeredRef]} chosen={m.text} />
+              )}
+            </div>
           ))}
 
           {chat.thinking && <TypingDots />}
 
           {/* The current question's controls live here, under the agent's
               message — not in place of the composer. */}
-          {!chat.ending && chat.question && (
+          {/*
+              Gone the instant an answer is on its way. They used to stay live
+              through the round trip, so a respondent who tapped "iOS (iPhone)"
+              could tap again — or tap a second option — while the agent was
+              still replying, and the second tap was read as a correction:
+              "Sure — let's redo that one." The answer they picked is already on
+              screen as their own message; the offer to pick has done its job.
+          */}
+          {!chat.ending && chat.question && !chat.thinking && (
             <div className="animate-message-in pt-0.5 pl-1">
               <QuestionAffordance
                 block={chat.question.block}
@@ -197,7 +236,14 @@ export function ChatClient({
             />
           )}
 
-          {chat.ending && <EndingCard ending={chat.ending} theme={config.theme} />}
+          {chat.ending && (
+            <EndingCard
+              ending={chat.ending}
+              theme={config.theme}
+              allowRepeat={config.duplicates === "none"}
+              onRestart={() => void chat.startOver()}
+            />
+          )}
 
           <div ref={bottomRef} />
         </div>
@@ -353,6 +399,47 @@ function ChatHeader({
   );
 }
 
+/**
+ * An answered choice question, drawn as it was answered.
+ *
+ * Renders nothing at all unless the question actually offered options and one
+ * of them matches what they said — a typed answer, a skipped question or a
+ * free-text reply has no chips to settle, and inventing some would be a lie
+ * about what they were shown.
+ */
+function SettledChoice({ block, chosen }: { block?: PublicBlock; chosen: string }) {
+  const options = block?.options;
+  if (!options?.length) return null;
+  // Multi-select answers arrive as one joined string; match each part.
+  const picked = new Set(chosen.split(/,\s*/).map((p) => p.trim().toLowerCase()));
+  if (!options.some((o) => picked.has(o.label.trim().toLowerCase()))) return null;
+
+  return (
+    <ul className="mt-1.5 flex flex-wrap justify-end gap-1 pr-1">
+      {options.map((o) => {
+        const isChosen = picked.has(o.label.trim().toLowerCase());
+        return (
+          <li
+            key={o.id}
+            className={cn(
+              "rounded-full px-2.5 py-1 text-[0.6875rem] leading-none",
+              isChosen ? "font-medium" : "opacity-40",
+            )}
+            style={
+              isChosen
+                ? { background: "var(--cf-user-bubble)", color: "var(--cf-user-bubble-text)" }
+                : { background: "var(--cf-chip-bg)" }
+            }
+          >
+            {isChosen && <Check className="mr-1 inline size-2.5 align-[-1px]" strokeWidth={3} />}
+            {o.label}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function Bubble({ message, onEdit }: { message: ChatMessage; onEdit?: () => void }) {
   // A note about the conversation, not a turn in it: quiet, unbubbled, and
   // left in place in the thread.
@@ -493,12 +580,20 @@ function AlreadySubmittedCard({
         </ul>
       )}
 
-      <div className="mt-6 flex flex-col items-center gap-2">
+      {/*
+        The emphasis was backwards. Someone who lands here has already
+        answered, so the thing they came to do is look at what they said —
+        while "Resubmit" throws that away and starts again. Filling the width
+        in the accent colour made destroying the answer the obvious action and
+        reading it the afterthought.
+      */}
+      <div className="mt-6 flex flex-col items-center gap-3">
         {submitted.answers.length > 0 && (
           <button
             type="button"
             onClick={() => setShowAnswers((v) => !v)}
-            className="text-sm underline opacity-60 transition-opacity hover:opacity-100"
+            className="h-11 w-full rounded-full text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
+            style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
           >
             {showAnswers ? "Hide my answers" : "View my answers"}
           </button>
@@ -508,10 +603,9 @@ function AlreadySubmittedCard({
           <button
             type="button"
             onClick={onResubmit}
-            className="h-11 w-full rounded-full text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
-            style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+            className="text-sm underline opacity-60 transition-opacity hover:opacity-100"
           >
-            Resubmit
+            Submit another response
           </button>
         )}
       </div>
@@ -548,6 +642,19 @@ function ReviewCard({
   onSubmit: () => void;
   busy: boolean;
 }) {
+  // ⌘↵ / Ctrl+↵ submits from anywhere on this screen, including from inside the
+  // composer — which is where the caret still is when the review appears.
+  useEffect(() => {
+    if (busy) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey)) return;
+      e.preventDefault();
+      onSubmit();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, onSubmit]);
+
   return (
     <div className="animate-message-in space-y-3 rounded-2xl bg-[var(--cf-chip-bg)] p-4">
       <p className="text-sm font-medium">That&apos;s everything — have a look before you send it.</p>
@@ -575,12 +682,33 @@ function ReviewCard({
         type="button"
         disabled={busy}
         onClick={onSubmit}
-        className="h-11 w-full rounded-full text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-60"
+        className="flex h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-60"
         style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
       >
         {busy ? "Submitting…" : "Submit form"}
+        {/* Shown, not just bound. A shortcut nobody can see is a shortcut
+            nobody uses — and it is the one key press that ends the form, so it
+            is worth teaching at the moment it applies. */}
+        {!busy && <Kbd>{modKeyLabel()}↵</Kbd>}
       </button>
     </div>
+  );
+}
+
+/** The platform's own name for the modifier, so the hint matches the keyboard. */
+function modKeyLabel(): string {
+  if (typeof navigator === "undefined") return "⌘";
+  return /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl+";
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd
+      className="rounded px-1.5 py-0.5 font-sans text-[0.6875rem] leading-none opacity-70"
+      style={{ background: "color-mix(in oklch, var(--cf-accent-text) 22%, transparent)" }}
+    >
+      {children}
+    </kbd>
   );
 }
 
@@ -595,9 +723,13 @@ function ReviewCard({
 function EndingCard({
   ending,
   theme,
+  allowRepeat,
+  onRestart,
 }: {
   ending: NonNullable<ReturnType<typeof useChat>["ending"]>;
   theme: PublicFormConfig["theme"];
+  allowRepeat: boolean;
+  onRestart: () => void;
 }) {
   return (
     <>
@@ -646,6 +778,24 @@ function EndingCard({
             Taking you to the next step in {ending.redirectDelaySec ?? 5}s…
           </p>
         )}
+
+        {/*
+          Only the "you've already answered this" screen offered this, which is
+          the screen you reach by coming BACK. Someone who has just finished and
+          wants to file a second response — the same person entering a colleague,
+          a second device, another idea — had to reload and hope. Gated on the
+          form's own duplicate policy, so a form that fingerprints respondents
+          still does not invite a second answer.
+        */}
+        {allowRepeat && !ending.redirectUrl && (
+          <button
+            type="button"
+            onClick={onRestart}
+            className="mt-6 text-sm underline opacity-55 transition-opacity hover:opacity-100"
+          >
+            Submit another response
+          </button>
+        )}
       </div>
     </>
   );
@@ -665,18 +815,37 @@ function Composer({ chat, config }: { chat: ReturnType<typeof useChat>; config: 
   const [text, setText] = useState("");
   const block = chat.question?.block;
 
-  // Number keys still pick an option, for anyone who prefers the keyboard.
+  /**
+   * Number keys pick an option — including from inside the text box.
+   *
+   * The chips advertise "1", "2", "3", and the handler used to bail the moment
+   * the event came from an INPUT. But the composer takes focus automatically on
+   * every question, so the advertised shortcut typed a digit into the box
+   * instead of choosing anything: press 1 for Android and you get a message
+   * that says "1".
+   *
+   * Hijacking a keystroke inside a text field is only safe when the field is
+   * empty — someone typing "1 or 2 a week" must keep their digits — and only
+   * for questions that have chips to choose from, which is why a `number`,
+   * `rating` or `nps` answer is never affected: those blocks carry no options.
+   */
   useEffect(() => {
     const options = block?.options;
     const ref = block?.ref;
-    if (!options || !ref || block?.type === "multi_select") return;
+    if (!options?.length || !ref || block?.type === "multi_select") return;
+    if (chat.thinking) return;
     function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
-      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") return;
+      const inField = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+      if (inField && (target as HTMLInputElement).value !== "") return;
       const n = Number(e.key);
       if (!Number.isInteger(n) || n < 1) return;
       const opt = options![n - 1];
-      if (opt) void chat.sendStructured(ref!, opt.id, opt.label);
+      if (!opt) return;
+      // Claim the keystroke, or the digit lands in the box as well.
+      e.preventDefault();
+      void chat.sendStructured(ref!, opt.id, opt.label);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

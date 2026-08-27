@@ -181,6 +181,23 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
   const [rateLimited, setRateLimited] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewState | null>(null);
   const [submitted, setSubmitted] = useState<SubmittedState | null>(null);
+  /**
+   * True until we know which screen this visit belongs on.
+   *
+   * `start()` asks the server whether this device already completed the form,
+   * and that is a network round trip. Without this flag the whole chat rendered
+   * first and was then replaced by "You've already answered this" — a full
+   * screen of layout thrown away in front of the respondent.
+   */
+  const [resolving, setResolving] = useState(true);
+  /**
+   * Every question the server has asked, by ref.
+   *
+   * The transcript keeps the respondent's words but not what they were choosing
+   * between, so an answered choice question left no trace of its options. Kept
+   * so the thread can still show which one was picked once the chips are gone.
+   */
+  const [asked, setAsked] = useState<Record<string, PublicBlock>>({});
   /** True when a replay rebuilt a transcript we did not start in this tab. */
   const [resumed, setResumed] = useState(false);
   const [auth, setAuth] = useState<AuthState | null>(null);
@@ -233,6 +250,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
       es.addEventListener("session_ready", () => {
         setStatus("ready");
         setError(null);
+        setResolving(false);
       });
 
       es.addEventListener("user_message", (e) => {
@@ -277,6 +295,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
       es.addEventListener("question", (e) => {
         const data = JSON.parse((e as MessageEvent).data) as QuestionState;
         setQuestion(data);
+        setAsked((prev) => (prev[data.block.ref] ? prev : { ...prev, [data.block.ref]: data.block }));
         setThinking(false);
         setEscalatedRef(null);
         setValidationHint(null);
@@ -421,6 +440,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
           if (state.status === "completed") {
             setSubmitted({ at: state.completedAt ?? done.at, answers: state.summary ?? [] });
             setStatus("ended");
+            setResolving(false);
             return;
           }
         }
@@ -472,6 +492,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
       } catch (err) {
         setStatus("error");
         setError(err instanceof Error ? err.message : "Connection failed");
+        setResolving(false);
       } finally {
         pendingRef.current = null;
       }
@@ -500,6 +521,11 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
         });
         if (res.status === 429) {
           setRateLimited("You're going a bit fast — give it a moment.");
+          setThinking(false);
+        } else if (!res.ok) {
+          // Any other refusal. `thinking` gates the question's controls now, so
+          // leaving it true on a 4xx would hide the chips with nothing coming
+          // back.
           setThinking(false);
         }
       } catch {
@@ -559,7 +585,9 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
   const startOver = useCallback(async () => {
     clearSaved(slug);
     clearSubmitted(slug);
+    setResolving(true);
     setSubmitted(null);
+    setAsked({});
     sessionRef.current = null;
     esRef.current?.close();
     esRef.current = null;
@@ -678,6 +706,8 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
     status,
     error,
     thinking,
+    resolving,
+    asked,
     rateLimited,
     resumed,
     auth,

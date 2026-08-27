@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FormDoc, migrateFormDoc } from "@repo/form-schema";
 import {
+  getGetApiFormsByIdQueryKey,
   useGetApiFormsById,
   usePostApiFormsByIdPublish,
 } from "@/lib/api/dashboard/dashboard";
@@ -29,6 +31,7 @@ export function BuilderShell({
   formId: string;
   children: React.ReactNode;
 }) {
+  const queryClient = useQueryClient();
   const { data: form, isLoading, error } = useGetApiFormsById(formId as never);
   const publish = usePostApiFormsByIdPublish();
 
@@ -95,6 +98,18 @@ export function BuilderShell({
         stripped?: StrippedSetting[];
       };
       if (result?.stripped?.length) setStripped(result.stripped);
+      /**
+       * Publishing changes the form row — status Draft → Live, and a new active
+       * version — and nothing was re-reading it. The toast said "Form
+       * published" while the header still said "Draft" and the version was the
+       * old one, so the only way to see what had happened was to reload the
+       * page by hand. The dashboard list carries the same status, so it is
+       * refreshed too.
+       */
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getGetApiFormsByIdQueryKey(formId as never) }),
+        queryClient.invalidateQueries({ queryKey: ["forms"] }),
+      ]);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Publish failed";
       toast.error("Could not publish", { description: message });

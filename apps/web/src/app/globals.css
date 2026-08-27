@@ -488,6 +488,55 @@
   animation: cf-shimmer 1.6s linear infinite;
 }
 
+/* ── the boot screen ────────────────────────────────────────────────────────
+   Shown while the runtime works out whether this visit is a new conversation,
+   a resumed one, or an already-completed one. Plain CSS rather than a motion
+   library: this renders before anything else and must not wait on JS.        */
+
+@keyframes cf-boot-ring {
+  0% {
+    opacity: 0.45;
+    transform: scale(0.9);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(2.1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.1);
+  }
+}
+
+.chat-boot-ring {
+  position: absolute;
+  inline-size: 3rem;
+  block-size: 3rem;
+  border-radius: 1rem;
+  border: 1.5px solid var(--cf-accent);
+  animation: cf-boot-ring 2.4s var(--ease-out) infinite;
+  pointer-events: none;
+}
+
+/* Offset so the two rings read as one continuous breath, not a pair. */
+.chat-boot-ring-delayed {
+  animation-delay: 1.2s;
+}
+
+.chat-boot-dot {
+  inline-size: 0.375rem;
+  block-size: 0.375rem;
+  border-radius: 9999px;
+  background: var(--cf-accent);
+  animation: cf-typing-dot 1.3s ease-in-out infinite;
+}
+.chat-boot-dot-2 {
+  animation-delay: 0.16s;
+}
+.chat-boot-dot-3 {
+  animation-delay: 0.32s;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
