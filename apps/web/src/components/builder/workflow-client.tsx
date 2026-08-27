@@ -457,6 +457,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
   useEffect(() => {
     if (selBlock) selectInStore(selBlock.ref);
   }, [selBlock, selectInStore]);
+
   const selEnding = selectedNodeId && !selectedNodeId.startsWith("branch_") ? doc.endings.find((e) => e.ref === selectedNodeId) : undefined;
   const selBranchRef = selectedNodeId?.startsWith("branch_") ? selectedNodeId.slice("branch_".length) : null;
   const selBranchRules = useMemo(

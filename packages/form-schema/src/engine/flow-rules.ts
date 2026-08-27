@@ -305,3 +305,87 @@ function destinationAfter(
   const ending = endingRefs[0];
   return ending ? { ref: ending, kind: "ending" } : null;
 }
+
+/**
+ * Put the flow back in order after the blocks have moved.
+ *
+ * The builder's question list is a picture of the flow, and the flow is derived
+ * from two things: which answer goes where, and what order the questions sit
+ * in. Dragging a question changes the second one — and `moveBlock` was a plain
+ * array splice that never touched `logic`, so dragging the first question of an
+ * arm left its branch pointing at wherever it landed, and dragging anything
+ * across an arm boundary left the arm-closing jump behind. Both produce a form
+ * that asks the wrong people the wrong questions, and neither shows up in the
+ * list, which is derived from the same broken rules.
+ *
+ * The repair rests on a distinction the rules do not make for themselves:
+ *
+ *   - A CONDITIONAL goto is intent. "Android goes to the Play Store email" is
+ *     something a person decided, and no amount of reordering changes it.
+ *   - An UNCONDITIONAL goto is mechanism. "This arm ends here, rejoin there" is
+ *     a consequence of where the blocks sit, and is re-derivable.
+ *
+ * So intent is read back out, mechanism is thrown away, and `buildFlowRules`
+ * derives it again from the new order. A branch that has become impossible —
+ * pointing at a deleted question, or backwards, which would loop — is dropped
+ * rather than kept as a dead end.
+ *
+ * Rules with more than one condition, or with nested groups, are beyond what
+ * `DraftBranch` can express. Those are preserved exactly as they are and passed
+ * to the derivation so it does not fight them.
+ */
+export function repairFlow<T extends { blocks: Block[]; endings: { ref: string }[]; logic: LogicRuleInput[] }>(
+  doc: T,
+): T {
+  const endingRefs = doc.endings.map((e) => e.ref);
+  const refs = new Set(doc.blocks.map((b) => b.ref));
+
+  /** Anything that is not a goto — `set_variable` — is none of our business. */
+  const untouched: LogicRuleInput[] = [];
+  /** Multi-condition or grouped rules: kept verbatim, and respected. */
+  const complex: Extract<LogicRuleInput, { action_kind: "goto" }>[] = [];
+  const branches: DraftBranch[] = [];
+
+  for (const rule of doc.logic) {
+    if (rule.action_kind !== "goto") {
+      untouched.push(rule);
+      continue;
+    }
+    const when = rule.when as { conditions?: unknown[]; groups?: unknown[] } | null | undefined;
+    const conditions = when?.conditions ?? [];
+    const groups = when?.groups ?? [];
+
+    // Mechanism. Dropped, then derived again below.
+    if (conditions.length === 0 && groups.length === 0) continue;
+
+    if (conditions.length !== 1 || groups.length > 0) {
+      complex.push(rule);
+      continue;
+    }
+
+    const condition = conditions[0] as {
+      left?: { kind?: string; ref?: string };
+      op?: Op;
+      value?: string | number | boolean;
+    };
+    const from = rule.from ?? condition.left?.ref;
+    // A condition on anything but a question ref — a variable, say — is not a
+    // branch in the sense this file means.
+    if (!from || condition.left?.kind !== "ref" || !condition.op) {
+      complex.push(rule);
+      continue;
+    }
+    // Intent that can no longer be honoured is intent about a form that no
+    // longer exists.
+    if (!refs.has(from)) continue;
+    if (!refs.has(rule.target) && !endingRefs.includes(rule.target)) continue;
+
+    branches.push({
+      when: { ref: from, op: condition.op, value: condition.value ?? null },
+      then: rule.target,
+    });
+  }
+
+  const derived = buildFlowRules(branches, doc.blocks, endingRefs, complex);
+  return { ...doc, logic: [...untouched, ...complex, ...derived] };
+}

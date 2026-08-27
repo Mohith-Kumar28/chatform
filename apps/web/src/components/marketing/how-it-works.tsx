@@ -76,7 +76,7 @@ export function HowItWorks() {
           >
             <div className="border-border/70 bg-background flex flex-col gap-2 rounded-xl border p-3">
               {[
-                { icon: Link2, label: "chatform.dev/f/team-onboarding" },
+                { icon: Link2, label: "chatform.in/f/team-onboarding" },
                 { icon: QrCode, label: "Downloadable QR, generated locally" },
                 { icon: Code2, label: "<script src=\"…/embed.js\" data-mode=\"side-tab\">" },
               ].map((row) => (

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { produce } from "immer";
-import type { Block, FormDoc, Ending } from "@repo/form-schema";
+import { repairFlow, type Block, type FormDoc, type Ending, type LogicRuleInput } from "@repo/form-schema";
 
 /**
  * Builder state.
@@ -71,6 +71,30 @@ export interface BuilderState {
 
   // ── endings ──
   updateEnding: (ref: string, patch: Partial<Ending>, coalesceKey?: string) => void;
+}
+
+/**
+ * Keep the flow meaning what the list shows, after the list has changed.
+ *
+ * Arm membership in the question list is not stored anywhere — it is derived
+ * from the branch rules and the order of the blocks. So any edit that changes
+ * the order changes the flow, and `moveBlock` was a plain splice that never
+ * touched `logic`: dragging the first question of an arm left its branch
+ * pointing at wherever it landed, and dragging anything across an arm boundary
+ * left the arm-closing jump behind. Neither was visible, because the list is
+ * drawn from the same rules that had just gone wrong.
+ *
+ * `repairFlow` keeps the conditional rules — those are decisions a person made
+ * — and re-derives the unconditional ones from the new order. Applied to the
+ * immer draft inside the same edit, so it is one undo step.
+ */
+function repairLogic(draft: { blocks: unknown; endings: unknown; logic: unknown }): void {
+  const repaired = repairFlow({
+    blocks: draft.blocks as Block[],
+    endings: draft.endings as { ref: string }[],
+    logic: draft.logic as LogicRuleInput[],
+  });
+  draft.logic = repaired.logic;
 }
 
 export const useBuilderStore = create<BuilderState>((set, get) => ({
@@ -186,6 +210,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     get().edit((d) => {
       const i = atIndex ?? d.blocks.length;
       d.blocks.splice(i, 0, block as never);
+      repairLogic(d);
     });
     set({ selectedRef: block.ref, selectedEndingRef: null });
   },
@@ -209,6 +234,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         if (r.action_kind !== "goto") return true;
         return r.target !== ref && r.from !== ref;
       });
+      repairLogic(d);
     });
     // Keep something selected: prefer the block that took its place.
     const after = get().doc;
@@ -244,6 +270,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     get().edit((d) => {
       const [moved] = d.blocks.splice(fromIndex, 1);
       if (moved) d.blocks.splice(toIndex, 0, moved);
+      repairLogic(d);
     }),
 
   updateEnding: (ref, patch, coalesceKey) =>

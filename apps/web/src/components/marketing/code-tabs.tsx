@@ -19,13 +19,13 @@ const SNIPPETS: Record<TabId, { label: string; lang: string; code: string }> = {
     label: "Headless API",
     lang: "bash",
     code: `# Start a conversation from your own backend
-curl -X POST https://api.chatform.dev/v1/forms/frm_8Kd2/chat/sessions \\
+curl -X POST https://api.chatform.in/v1/forms/frm_8Kd2/chat/sessions \\
   -H "Authorization: Bearer $CHATFORM_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{ "hiddenFields": { "plan": "trial" } }'
 
 # Answer, and get the next question back synchronously
-curl -X POST https://api.chatform.dev/v1/chat/sessions/ses_91xQ/messages \\
+curl -X POST https://api.chatform.in/v1/chat/sessions/ses_91xQ/messages \\
   -H "Authorization: Bearer $CHATFORM_API_KEY" \\
   -d '{ "text": "we are about a dozen people right now" }'
 # => { "messages": [...], "recorded": { "team_size": 12 }, "done": false }`,
@@ -35,7 +35,7 @@ curl -X POST https://api.chatform.dev/v1/chat/sessions/ses_91xQ/messages \\
     lang: "html",
     code: `<!-- popup · side-tab · inline · full page -->
 <script
-  src="https://app.chatform.dev/embed.js"
+  src="https://chatform.in/embed.js"
   data-form="team-onboarding"
   data-mode="side-tab"
   data-color="#f97316"
