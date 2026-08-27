@@ -400,3 +400,56 @@ describe("a test that cannot fail", () => {
     ]);
   });
 });
+
+describe("rules already on the form", () => {
+  const blocks = [
+    { ref: "q_platform", type: "single_select", required: true, options: [
+      { id: "opt_android", label: "Android" },
+      { id: "opt_ios", label: "iOS" },
+    ] },
+    { ref: "q_play_email", type: "email", required: true },
+    { ref: "q_any_email", type: "email", required: true },
+    { ref: "q_extra", type: "short_text", required: false },
+  ] as never;
+
+  const androidBranch = { when: { ref: "q_platform", op: "eq" as const, value: "opt_android" }, then: "q_play_email" };
+  const iosBranch = { when: { ref: "q_platform", op: "eq" as const, value: "opt_ios" }, then: "q_any_email" };
+
+  it("does not restate a rule the form already has", () => {
+    // Restating a branch used to append an identical second rule, so the logic
+    // editor drew two edges where one was live.
+    const first = buildFlowRules([androidBranch, iosBranch], blocks, ["end_thanks"]);
+    expect(first.length).toBeGreaterThan(0);
+
+    const again = buildFlowRules([androidBranch, iosBranch], blocks, ["end_thanks"], first as never);
+    expect(again).toHaveLength(0);
+  });
+
+  it("still writes a rule that differs only in where it goes", () => {
+    const first = buildFlowRules([androidBranch, iosBranch], blocks, ["end_thanks"]);
+    const moved = buildFlowRules(
+      [{ when: { ref: "q_platform", op: "eq" as const, value: "opt_ios" }, then: "q_extra" }],
+      blocks,
+      ["end_thanks"],
+      first as never,
+    );
+    expect(moved.some((r) => r.action_kind === "goto" && r.target === "q_extra")).toBe(true);
+  });
+
+  it("drops a conditional jump that duplicates an unconditional one", () => {
+    // Derivation and the model's own branch list can reach the same jump from
+    // two directions; both route identically, and two edges between the same
+    // pair of nodes is only confusing.
+    const rules = buildFlowRules(
+      [
+        { when: { ref: "q_platform", op: "eq" as const, value: "opt_android" }, then: "q_play_email" },
+        { when: { ref: "q_platform", op: "eq" as const, value: "opt_ios" }, then: "q_any_email" },
+        { when: { ref: "q_play_email", op: "is_empty" as const, value: null }, then: "q_extra" },
+      ],
+      blocks,
+      ["end_thanks"],
+    );
+    const fromPlayEmail = rules.filter((r) => r.action_kind === "goto" && r.from === "q_play_email" && r.target === "q_extra");
+    expect(fromPlayEmail.length).toBeLessThanOrEqual(1);
+  });
+});

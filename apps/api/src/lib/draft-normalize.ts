@@ -6,7 +6,7 @@ import {
   type Block,
   type FormDocInput,
 } from "@repo/form-schema";
-import type { GenerationDraft, ExtensionDraft } from "./ai.js";
+import type { GenerationDraft, EditDraft } from "./ai.js";
 import { buildFlowRules, type DraftBranch } from "./flow-normalize.js";
 
 /**
@@ -411,9 +411,9 @@ export function draftToDoc(draft: GenerationDraft): NormalizedDraft {
   return { doc, issues: lintFormDoc(doc), blocks, ruleCount: logic.length };
 }
 
-/** The extension draft's blocks, normalized against a form that already exists. */
-export function normalizeExtensionBlocks(
-  draft: ExtensionDraft,
+/** The edit draft's new blocks, normalized against a form that already exists. */
+export function normalizeEditBlocks(
+  draft: EditDraft,
   existingRefs: Set<string>,
 ): { blocks: { block: Block; insertAfter: string }[]; optionIdsByRef: Map<string, Map<string, string>>; renamed: Map<string, string> } {
   const taken = new Set(existingRefs);
@@ -421,7 +421,7 @@ export function normalizeExtensionBlocks(
   const optionIdsByRef = new Map<string, Map<string, string>>();
   const renamed = new Map<string, string>();
 
-  for (const [i, b] of draft.blocks.entries()) {
+  for (const [i, b] of draft.addBlocks.entries()) {
     const resolved = resolveType(b.type);
     // The builder is asking for questions, not a new greeting or a sign-off.
     if (resolved === "welcome" || resolved === "statement") continue;

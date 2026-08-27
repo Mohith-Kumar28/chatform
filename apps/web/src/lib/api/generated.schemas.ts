@@ -269,39 +269,38 @@ export type PostApiAiGenerateFormStreamBody = {
   questionCount?: number;
 };
 
-export type PostApiAiAddBlocksBodyHistoryItemRole = typeof PostApiAiAddBlocksBodyHistoryItemRole[keyof typeof PostApiAiAddBlocksBodyHistoryItemRole];
+export type PostApiAiEditFormBodyHistoryItemRole = typeof PostApiAiEditFormBodyHistoryItemRole[keyof typeof PostApiAiEditFormBodyHistoryItemRole];
 
 
-export const PostApiAiAddBlocksBodyHistoryItemRole = {
+export const PostApiAiEditFormBodyHistoryItemRole = {
   user: 'user',
   assistant: 'assistant',
 } as const;
 
-export type PostApiAiAddBlocksBodyHistoryItem = {
-  role: PostApiAiAddBlocksBodyHistoryItemRole;
+export type PostApiAiEditFormBodyHistoryItem = {
+  role: PostApiAiEditFormBodyHistoryItemRole;
   /** @maxLength 2000 */
   text: string;
 };
 
-export type PostApiAiAddBlocksBody = {
+export type PostApiAiEditFormBody = {
   formId: string;
   /**
      * @minLength 3
      * @maxLength 1000
      */
   prompt: string;
-  /**
-     * @minimum 1
-     * @maximum 10
-     */
-  count?: number;
   /** @maxItems 20 */
-  history?: PostApiAiAddBlocksBodyHistoryItem[];
+  history?: PostApiAiEditFormBodyHistoryItem[];
 };
 
-export type PostApiAiAddBlocks200 = {
+export type PostApiAiEditForm200 = {
   doc: unknown;
   added: number;
+  removed: number;
+  rules: number;
+  rewired: number;
+  summary: string;
   tokens: number;
 };
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, Check, GitBranch, Loader2, Sparkles } from "lucide-react";
+import { ArrowUp, Check, GitBranch, Loader2, Minus, Shuffle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { FormDoc as FormDocSchema, type Block, type FormDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
@@ -17,8 +17,12 @@ interface Turn {
   text: string;
   /** Just for the preview list; applying uses `doc`. */
   blocks?: Block[];
+  /** Refs of questions the proposal takes out. */
+  removed?: string[];
   /** How many branching rules the proposal adds. */
   rules?: number;
+  /** How many questions had their routing replaced. */
+  rewired?: number;
   /**
    * The whole proposed document.
    *
@@ -61,6 +65,15 @@ function saveHistory(formId: string, turns: Turn[]) {
   } catch {
     // A full or blocked store is not worth failing a suggestion over.
   }
+}
+
+/** Plain words for an edit whose summary came back empty. */
+function describeEdit(added: number, removed: number, rules: number): string {
+  const parts: string[] = [];
+  if (added) parts.push(`${added} new question${added > 1 ? "s" : ""}`);
+  if (removed) parts.push(`${removed} removed`);
+  if (rules) parts.push(`${rules} branching rule${rules > 1 ? "s" : ""}`);
+  return parts.length ? `Here is the change: ${parts.join(", ")}.` : "Here is the change.";
 }
 
 /**
@@ -147,36 +160,49 @@ export function AiBar() {
     const history = turns.slice(-8).map((t) => ({ role: t.role, text: t.text }));
 
     try {
-      const res = await customFetch<{ doc: unknown; rules?: number; summary?: string }>("/api/ai/add-blocks", {
+      const res = await customFetch<{
+        doc: unknown;
+        rules?: number;
+        rewired?: number;
+        removedRefs?: string[];
+        summary?: string;
+      }>("/api/ai/edit-form", {
         method: "POST",
-        body: JSON.stringify({ formId, prompt: text, count: 3, history }),
+        body: JSON.stringify({ formId, prompt: text, history }),
       });
 
       // The proposal is the whole document — the new questions, where they sit,
-      // and any branching. It is diffed only to list what is new; applying
+      // and any branching. It is diffed only to describe what changed; applying
       // takes the document as a whole.
       const proposed = FormDocSchema.safeParse(res.doc);
-      const existing = new Set(doc.blocks.map((b) => b.ref));
-      const added = proposed.success ? proposed.data.blocks.filter((b) => !existing.has(b.ref)) : [];
+      if (!proposed.success) throw new Error("The proposal came back in a shape I couldn't read.");
 
+      const existing = new Set(doc.blocks.map((b) => b.ref));
+      const added = proposed.data.blocks.filter((b) => !existing.has(b.ref));
+      const removed = res.removedRefs ?? [];
+      const rules = res.rules ?? 0;
+
+      /**
+       * An edit that adds no questions is a real edit.
+       *
+       * This used to say "I couldn't think of anything new to add" whenever
+       * `added` was empty — which was the common case for the most common kind
+       * of request, since changing who gets asked what adds nothing. The server
+       * now refuses genuinely empty edits with a 422, so anything that arrives
+       * here changed something worth describing.
+       */
       setTurns((t) => [
         ...t,
-        added.length && proposed.success
-          ? {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              text:
-                res.summary?.trim() ||
-                `Here ${added.length === 1 ? "is one question" : `are ${added.length} questions`} you could add.`,
-              blocks: added,
-              rules: res.rules ?? 0,
-              doc: proposed.data,
-            }
-          : {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              text: "I couldn't think of anything new to add. Try describing it differently.",
-            },
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text: res.summary?.trim() || describeEdit(added.length, removed.length, rules),
+          blocks: added,
+          removed,
+          rules,
+          rewired: res.rewired ?? 0,
+          doc: proposed.data,
+        },
       ]);
     } catch (err) {
       setTurns((t) => [
@@ -195,7 +221,10 @@ export function AiBar() {
   function apply(turn: Turn) {
     const next = turn.doc;
     const added = turn.blocks ?? [];
-    if (!next || added.length === 0) return;
+    // Not gated on `added.length` any more. An edit whose whole content is new
+    // routing has no new questions, and refusing to apply it was the last place
+    // this flow still assumed every change adds something.
+    if (!next) return;
 
     // Take the whole proposal. Pushing the new blocks onto the end instead —
     // which is what this did — discarded both the positions chosen for them
@@ -206,13 +235,16 @@ export function AiBar() {
       d.logic = next.logic as never;
       d.endings = next.endings as never;
     });
-    select(added[0]!.ref);
+    if (added[0]) select(added[0].ref);
     setTurns((t) => t.map((x) => (x.id === turn.id ? { ...x, applied: true } : x)));
 
     const rules = turn.rules ?? 0;
-    toast.success(`Added ${added.length} question${added.length > 1 ? "s" : ""}`, {
-      description: rules > 0 ? `${rules} branching rule${rules > 1 ? "s" : ""} set up · ⌘Z to undo.` : "⌘Z to undo.",
-    });
+    const removed = turn.removed?.length ?? 0;
+    const parts: string[] = [];
+    if (added.length) parts.push(`Added ${added.length} question${added.length > 1 ? "s" : ""}`);
+    if (removed) parts.push(`removed ${removed}`);
+    if (rules) parts.push(`${rules} branching rule${rules > 1 ? "s" : ""} set up`);
+    toast.success(parts.length ? parts.join(", ") : "Flow updated", { description: "⌘Z to undo." });
   }
 
   return (
@@ -305,44 +337,80 @@ function Message({
     );
   }
 
+  const added = turn.blocks ?? [];
+  const removed = turn.removed ?? [];
+  const rules = turn.rules ?? 0;
+  const rewired = turn.rewired ?? 0;
+  // An assistant turn is a proposal when it carries one, in any of its forms —
+  // questions, removals, or nothing but new wiring.
+  const isProposal =
+    turn.blocks !== undefined || removed.length > 0 || rules > 0 || rewired > 0;
+
   return (
     <div className="space-y-1.5">
       <p className="bg-muted max-w-[90%] rounded-2xl rounded-bl-md px-3 py-1.5 text-sm">{turn.text}</p>
 
-      {turn.blocks && (
+      {isProposal && (
         <div className="space-y-1.5 pl-1">
-          <ul className="space-y-1">
-            {turn.blocks.map((b) => {
-              const meta = blockMeta(b.type);
-              return (
-                <li key={b.ref} className="bg-muted/50 flex items-center gap-2 rounded-xl px-2 py-1.5">
-                  <span className={cn("grid size-5 shrink-0 place-items-center rounded-md", TONE_CLASSES[meta.tone])}>
-                    <meta.icon className="size-2.5" strokeWidth={2} />
+          {added.length > 0 && (
+            <ul className="space-y-1">
+              {added.map((b) => {
+                const meta = blockMeta(b.type);
+                return (
+                  <li key={b.ref} className="bg-muted/50 flex items-center gap-2 rounded-xl px-2 py-1.5">
+                    <span className={cn("grid size-5 shrink-0 place-items-center rounded-md", TONE_CLASSES[meta.tone])}>
+                      <meta.icon className="size-2.5" strokeWidth={2} />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-xs">{b.title}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {removed.length > 0 && (
+            <ul className="space-y-1">
+              {removed.map((ref) => (
+                <li
+                  key={ref}
+                  className="bg-destructive-soft/50 text-muted-foreground flex items-center gap-2 rounded-xl px-2 py-1.5"
+                >
+                  <span className="grid size-5 shrink-0 place-items-center rounded-md">
+                    <Minus className="size-2.5" strokeWidth={2.5} />
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-xs">{b.title}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs line-through">{ref}</span>
                 </li>
-              );
-            })}
-          </ul>
-          {turn.rules ? (
+              ))}
+            </ul>
+          )}
+          {rewired > 0 && (
+            <p className="text-muted-foreground flex items-center gap-1 px-1 text-xs">
+              <Shuffle className="size-3 shrink-0" />
+              Re-routes {rewired === 1 ? "1 question" : `${rewired} questions`}, replacing what was there
+            </p>
+          )}
+          {rules > 0 && (
             <p className="text-muted-foreground flex items-center gap-1 px-1 text-xs">
               <GitBranch className="size-3 shrink-0" />
-              {turn.rules} branching rule{turn.rules > 1 ? "s" : ""}, so each answer only sees what applies to it
+              {rules} branching rule{rules > 1 ? "s" : ""}, so each answer only sees what applies to it
             </p>
-          ) : null}
+          )}
           {turn.applied ? (
             <p className="text-muted-foreground flex items-center gap-1 px-1 text-xs">
               <Check className="size-3" />
-              Added
+              Applied
             </p>
           ) : turn.doc ? (
             <Button size="sm" shape="pill" onClick={() => onApply(turn)}>
-              Add {turn.blocks.length === 1 ? "it" : "them"}
+              {/* Named for what the edit does. It said "Add them" regardless,
+                  which was wrong for the many edits that add nothing. */}
+              {added.length > 0 && removed.length === 0
+                ? `Add ${added.length === 1 ? "it" : "them"}`
+                : "Apply"}
             </Button>
           ) : (
             // The proposal is not kept in storage, so a thread restored from a
             // previous visit can show what was suggested but not apply it.
-            <p className="text-muted-foreground px-1 text-xs">Ask again to add these.</p>
+            <p className="text-muted-foreground px-1 text-xs">Ask again to apply this.</p>
           )}
         </div>
       )}

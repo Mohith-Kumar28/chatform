@@ -237,20 +237,25 @@ Order blocks so that branching works by position. Questions run top to bottom, a
 
 
 /**
- * Extending a form that already exists.
+ * Editing a form that already exists.
  *
  * The old version of this passed `ref (type): title` and nothing else — no
  * option ids, no existing logic, no notion of position — then appended
  * whatever came back. So the model could not have written a condition even if
  * it wanted to: it had no option id to compare against. Everything it needs to
  * reuse the flow is in the manifest below.
+ *
+ * The manifest now also states where each question already sits in the flow —
+ * "only asked when platform = Android" — because the most common request is to
+ * change exactly that, and a model shown a flat list will re-derive the routing
+ * from scratch and contradict what is there.
  */
 export interface BuilderTurn {
   role: "user" | "assistant";
   text: string;
 }
 
-export function buildExtensionPrompt(
+export function buildEditPrompt(
   doc: FormDoc,
   request: string,
   /**
@@ -264,16 +269,41 @@ export function buildExtensionPrompt(
    */
   history: BuilderTurn[] = [],
 ): string {
+  const gotos = doc.logic.filter((r) => r.action_kind === "goto");
+
+  /** How each question is reached, in the same words the builder sees. */
+  const reachedBy = new Map<string, string[]>();
+  for (const r of gotos) {
+    if (!r.from) continue;
+    const c = r.when?.conditions?.[0];
+    const source = doc.blocks.find((b) => b.ref === r.from);
+    let how: string;
+    if (!c) {
+      how = `everyone who reaches ${r.from} continues to`;
+    } else {
+      const value = "value" in c ? c.value : undefined;
+      const option =
+        source && "options" in source && source.options
+          ? (source.options as { id: string; label: string }[]).find((o) => o.id === value)
+          : undefined;
+      how = `${r.from} ${c.op} ${option ? `"${option.label}"` : JSON.stringify(value)} →`;
+    }
+    const list = reachedBy.get(r.target);
+    if (list) list.push(how);
+    else reachedBy.set(r.target, [how]);
+  }
+
   const blocks = doc.blocks
     .map((b, i) => {
       const options = "options" in b && b.options?.length
-        ? ` options: [${b.options.map((o) => `${o.id}="${o.label}"`).join(", ")}]`
+        ? ` options: [${(b.options as { id: string; label: string }[]).map((o) => `"${o.label}"`).join(", ")}]`
         : "";
-      return `  ${i + 1}. ${b.ref} (${b.type}${b.required ? ", required" : ""}): "${b.title}"${options}`;
+      const routed = reachedBy.get(b.ref);
+      const reach = routed?.length ? `  ← reached by: ${routed.join("; ")}` : "";
+      return `  ${i + 1}. ${b.ref} (${b.type}${b.required ? ", required" : ""}): "${b.title}"${options}${reach}`;
     })
     .join("\n");
 
-  const gotos = doc.logic.filter((r) => r.action_kind === "goto");
   const rules = gotos.length
     ? gotos
         .map((r) => {
@@ -295,7 +325,7 @@ export function buildExtensionPrompt(
         .join("\n")}\n`
     : "";
 
-  return `You are editing an EXISTING conversational form, not writing a new one.
+  return `You are editing an EXISTING conversational form.
 
 FORM: "${doc.title}"
 
@@ -310,22 +340,19 @@ ${conversation}
 WHAT THE BUILDER ASKED FOR:
 ${request}
 
-Return only the NEW questions. Never restate or duplicate one that is already listed above. If what they are asking for is already in the form, return no blocks rather than a near-duplicate.
+WORK OUT WHAT KIND OF EDIT THIS IS FIRST. Most requests about a working form change the ROUTING, not the questions — who gets asked what, in which order. Those need NO new questions.
 
-"type" MUST be one of exactly: short_text · long_text · email · phone · url · number · date · yes_no · single_select · multi_select · dropdown · rating · nps · opinion_scale · file_upload · legal_consent. Any other word is wrong — pick the closest from this list.
+- "addBlocks": [] is a correct and common answer. Never invent a question to have something to return. If every question the request needs is already in the form, add nothing.
+- "rewireRefs": the refs of questions whose routing this edit changes. List them, then state their branches below.
+- "branches": every branch this edit asserts. Each one REPLACES the existing rule for that same question and the same answer, and leaves every other route untouched. So restate the routes you are changing, in full — including an answer whose destination stays the same but whose neighbours are moving. A route you do not mention keeps working exactly as it does now.
+- If a question has three options and you are changing where one of them goes, you may state just that one. But if the change means the other two should go somewhere different too, state those as well — they will not move on their own.
+- "removeRefs": only when the request actually asks for a question to go.
 
-"options" are the choices as the respondent reads them — ["Android", "iPhone"] — plain labels, no ids. Use [] when the type is not a choice.
+Rules for "branches": [{ "whenRef": "<question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains|is_empty|is_not_empty>", "value": "<for a choice question, the option's LABEL exactly as listed above; otherwise the literal value; "" for is_empty and is_not_empty>", "then": "<question ref or ending ref>" }].
 
-Placement — "insertAfter" is the ref of the block a new question goes directly after, and "" means the end of the form. Do not default to the end. A question belongs next to the ones it relates to, and a question that is only asked in some cases MUST sit immediately below the question that decides it, with the alternative arms following it one after another.
+Where a branch can point: a question BELOW the deciding one, or an ending. A branch pointing at a question above it would loop, and is dropped. So if the request needs a question asked only for some answers, that question has to sit below the one that decides it — say so by adding it with "insertAfter", or by rewiring around where it already is.
 
-Branching — read the request for words like "if", "when", "only for", "otherwise". When you find one:
-- Look for a question ALREADY in the list that answers it, and hang the condition off that. If the builder says "if they are on iOS ask X, if Android ask Y" and the form already asks which device they use, use that question's ref. Do not add a second question asking the same thing.
-- Give EVERY case its own branch, including the common one. A single branch to the block that comes next changes nothing, because that is where the respondent was going anyway.
-- Add a question only when nothing in the form can answer the condition.
+If a new question is needed: "type" MUST be one of exactly short_text · long_text · email · phone · url · number · date · yes_no · single_select · multi_select · dropdown · rating · nps · opinion_scale · file_upload · legal_consent. "options" are plain labels as the respondent reads them — ["Android", "iPhone"] — and [] when the type is not a choice. "insertAfter" is the ref it goes directly after, "" for the end; a question only asked in some cases MUST sit immediately below the question that decides it.
 
-Rules for "branches": [{ "whenRef": "<existing or new question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains|is_empty|is_not_empty>", "value": "<for a choice question, the option's LABEL exactly as listed above; otherwise the literal value; "" for is_empty and is_not_empty>", "then": "<question ref or ending ref>" }]. Return [] when the request needs no conditions.
-
-Every block needs: ref (lowercase snake_case, unique, not already used), type, title, description ("" if none), required, options ([] when not a choice), scale (5 for rating, 10 otherwise), insertAfter.
-
-"summary" is one plain sentence telling the builder what you changed, mentioning any condition you set up.`;
+"summary" is one plain sentence telling the builder what you changed. Describe only what you actually returned — if you added nothing and only rewired, say that.`;
 }

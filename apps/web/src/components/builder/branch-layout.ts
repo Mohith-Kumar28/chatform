@@ -95,9 +95,70 @@ export function computeBranchLayout(doc: FormDoc): Map<string, BranchInfo> {
     else arrivals.set(rule.target, [{ sourceRef: rule.from, words }]);
   }
 
+  /**
+   * Where each arm stops.
+   *
+   * An arm is closed off by an unconditional jump out of its last question —
+   * that is exactly what `buildFlowRules` adds to stop one arm spilling into
+   * the next. So the question carrying that jump is the final member of its
+   * arm, and everything the jump lands on is back on the trunk.
+   */
+  const closesArm = new Set<string>();
+  /**
+   * Where the arms converge again.
+   *
+   * The other end of the same rule: an unconditional jump exists to carry one
+   * arm past the others, so whatever it lands on is the question everybody
+   * reaches. Without this, the rejoin inherited the depth of the arm sitting
+   * immediately above it in the list and the whole rest of the form was drawn
+   * as though it were still inside a branch.
+   */
+  const rejoins = new Set<string>();
+  for (const rule of doc.logic) {
+    if (rule.action_kind !== "goto" || !rule.from) continue;
+    if ((rule.when?.conditions ?? []).length > 0) continue;
+    closesArm.add(rule.from);
+    if ((rule.targetKind ?? "block") === "block") rejoins.add(rule.target);
+  }
+
   doc.blocks.forEach((block, i) => {
+    // A convergence point is on the trunk even when a branch also aims at it:
+    // more than one path arrives, so no single condition describes it.
+    if (rejoins.has(block.ref)) {
+      out.set(block.ref, { condition: null, sourceRef: null, sourceTitle: null, depth: 0, branches: splits.has(block.ref) });
+      return;
+    }
     const hits = arrivals.get(block.ref);
     if (!hits || hits.length === 0) {
+      /**
+       * Not a branch target — but that does not make it a trunk question.
+       *
+       * A respondent routed into an arm answers its first question and then
+       * simply falls through to the next block; only the first question of an
+       * arm is ever a branch target. Reading "not a target" as "on the trunk"
+       * drew every arm as one question deep, so a form that asked Android users
+       * for their Play Store email and then their device model showed the
+       * device question at trunk level, looking for all the world like a
+       * question put to everyone. It was the picture that was wrong, not the
+       * flow — but the picture is what the builder trusts.
+       *
+       * So membership carries down from the question above until something
+       * ends the arm: a jump out of it, or the end of the list.
+       */
+      const previous = doc.blocks[i - 1];
+      const inherited = previous ? out.get(previous.ref) : undefined;
+      if (previous && inherited && inherited.depth > 0 && !closesArm.has(previous.ref)) {
+        out.set(block.ref, {
+          // The condition is stated once, above the arm's first question; the
+          // rest of the arm is indented under it and says nothing.
+          condition: null,
+          sourceRef: inherited.sourceRef,
+          sourceTitle: null,
+          depth: inherited.depth,
+          branches: splits.has(block.ref),
+        });
+        return;
+      }
       out.set(block.ref, { condition: null, sourceRef: null, sourceTitle: null, depth: 0, branches: splits.has(block.ref) });
       return;
     }

@@ -91,7 +91,7 @@ export function buildFlowRules(
    * Rules already on the form, when extending rather than generating. They are
    * not returned — only used so derivation does not fight or duplicate them.
    */
-  existing: { from?: string | null; target: string; targetKind?: "block" | "ending" }[] = [],
+  existing: { from?: string | null; target: string; targetKind?: "block" | "ending"; when?: unknown }[] = [],
 ): LogicRuleInput[] {
   const index = new Map(blocks.map((b, i) => [b.ref, i]));
   const endings = new Set(endingRefs);
@@ -223,7 +223,7 @@ export function buildFlowRules(
     }
   }
 
-  return dedupeRules(rules);
+  return dedupeRules(rules, existing);
 }
 
 /**
@@ -236,7 +236,18 @@ export function buildFlowRules(
  * editor draws two edges between the same pair of nodes, and an author trying
  * to change the flow has to work out which of them is doing anything.
  */
-function dedupeRules(rules: LogicRuleInput[]): LogicRuleInput[] {
+function dedupeRules(
+  rules: LogicRuleInput[],
+  /**
+   * Rules already on the form. Compared against, not returned.
+   *
+   * Without this, restating a branch that already existed appended a second,
+   * identical rule: asked to confirm the routing it had already written, the
+   * builder's AI bar doubled every `q_platform` rule and the logic editor drew
+   * eight edges where four were live.
+   */
+  existing: { from?: string | null; target: string; targetKind?: "block" | "ending"; when?: unknown }[] = [],
+): LogicRuleInput[] {
   // Every rule this file produces is a goto, but `LogicRuleInput` is the whole
   // union; read the two fields that matter through a narrow instead of casting.
   const shape = (r: LogicRuleInput): { from: string; target: string; conditions: number } | null => {
@@ -251,7 +262,12 @@ function dedupeRules(rules: LogicRuleInput[]): LogicRuleInput[] {
     if (s && s.conditions === 0) unconditional.add(`${s.from}\u0000${s.target}`);
   }
 
+  // Pre-seed with what is already on the form, so a rule identical to a live
+  // one is recognised as redundant rather than added beside it.
   const seen = new Set<string>();
+  for (const r of existing) {
+    seen.add(`${r.from ?? ""}\u0000${r.target}\u0000${JSON.stringify(r.when ?? null)}`);
+  }
   return rules.filter((r) => {
     const s = shape(r);
     if (!s) return true;

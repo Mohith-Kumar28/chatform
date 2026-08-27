@@ -6,10 +6,10 @@ import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, assertFormAccess, type GuardVars } from "../lib/guards.js";
 import { requirePermission, requireQuota, requireGauge, type AuthzVars } from "../lib/authorize.js";
 import { meter } from "../lib/entitlements.js";
-import { generateFormDraft, generateExtension, streamFormDraft, researchBrief, type GenerationDraft } from "../lib/ai.js";
+import { generateFormDraft, generateEdit, streamFormDraft, researchBrief, type GenerationDraft } from "../lib/ai.js";
 import { buildFlowRules } from "../lib/flow-normalize.js";
-import { buildFlowGeneratorPrompt, buildExtensionPrompt, type BuilderTurn } from "../lib/agent-prompts.js";
-import { draftToDoc, normalizeExtensionBlocks, resolveBranches } from "../lib/draft-normalize.js";
+import { buildFlowGeneratorPrompt, buildEditPrompt, type BuilderTurn } from "../lib/agent-prompts.js";
+import { draftToDoc, normalizeEditBlocks, resolveBranches } from "../lib/draft-normalize.js";
 import { extractUrls, readSites } from "../lib/research.js";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
 
@@ -377,14 +377,27 @@ function hostOf(url: string): string {
 
 // ─── extending an existing form ───
 
+/**
+ * "Ask AI to make changes" — an edit to a form that already exists.
+ *
+ * Was `POST /ai/add-blocks`, and the name was the bug. It could only append,
+ * so a request that changed nothing but the routing had no valid answer: the
+ * schema demanded at least one new block and this handler returned 502 when
+ * none arrived. The model duly padded. Asked to route iPhone users to a plain
+ * email question and Android users to their Play Store email — both questions
+ * already in the form — it wrote the correct summary, invented "Is there
+ * anything else you would like us to know?" to satisfy the schema, and left
+ * the old contradicting rule in place beside its new one.
+ *
+ * An edit can now be entirely about the wiring, and rewiring means replacing.
+ */
 aiRouter.post(
-  "/ai/add-blocks",
+  "/ai/edit-form",
   validator(
     "json",
     z.object({
       formId: z.string(),
       prompt: z.string().min(3).max(1000),
-      count: z.number().int().min(1).max(10).default(3),
       /**
        * The builder's AI bar thread, oldest first. Optional so an older client
        * keeps working, but without it the model cannot resolve "also", "it" or
@@ -398,10 +411,30 @@ aiRouter.post(
   ),
   describeRoute({
     tags: ["dashboard"],
-    summary: "AI-generate additional blocks appended to an existing form",
+    summary: "AI-edit an existing form: add or remove questions, and rewire the flow",
+    description:
+      "Returns the proposed document without saving it. An edit may add no questions at all — most requests about a working form change the routing.",
     responses: {
-      200: { description: "New blocks + updated doc", content: { "application/json": { schema: resolver(z.object({ doc: z.unknown(), added: z.number(), tokens: z.number() })) } } },
-      502: { description: "The model failed or produced nothing usable" },
+      200: {
+        description: "The proposed document and what changed",
+        content: {
+          "application/json": {
+            schema: resolver(
+              z.object({
+                doc: z.unknown(),
+                added: z.number(),
+                removed: z.number(),
+                rules: z.number(),
+                rewired: z.number(),
+                summary: z.string(),
+                tokens: z.number(),
+              }),
+            ),
+          },
+        },
+      },
+      422: { description: "The model proposed nothing that would change the form" },
+      502: { description: "The model failed upstream" },
       503: { description: "AI not configured" },
     },
   }),
@@ -409,8 +442,7 @@ aiRouter.post(
     if (!c.env.OPENROUTER_API_KEY) {
       return c.json({ error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } }, 503);
     }
-    const { formId, prompt, count, history } = c.req.valid("json");
-    void count;
+    const { formId, prompt, history } = c.req.valid("json");
     // formId arrives in the body, so path middleware cannot guard it — check here.
     const form = await assertFormAccess(c, formId);
     if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
@@ -427,24 +459,41 @@ aiRouter.post(
     // chatform and tells the author nothing about what to do next.
     let draft, tokens;
     try {
-      const result = await generateExtension({
+      const result = await generateEdit({
         env: c.env,
-        prompt: buildExtensionPrompt(doc, prompt, history as BuilderTurn[]),
+        prompt: buildEditPrompt(doc, prompt, history as BuilderTurn[]),
       });
       draft = result.draft;
       tokens = result.tokens;
     } catch (err) {
-      console.error("add_blocks_failed", err);
+      console.error("edit_form_failed", err);
       const message = err instanceof Error ? err.message : String(err);
       return c.json({ error: { code: "generation_failed", message: upstreamMessage(message) } }, 502);
     }
 
-    // Insert each block where the model asked for it, resolving against the
-    // list as it grows so one new block can follow another. Appending
-    // everything to the end — which is all this route used to do — puts the
-    // arms of a condition below the questions they are supposed to skip.
+    // ─── removals first, so a ref freed here can be reused below ───
+    const removable = new Set(
+      doc.blocks
+        .filter((b) => b.type !== "welcome")
+        .map((b) => b.ref),
+    );
+    const removed = draft.removeRefs.filter((ref) => removable.has(ref));
+    if (removed.length > 0) {
+      const gone = new Set(removed);
+      doc.blocks = doc.blocks.filter((b) => !gone.has(b.ref));
+      // A rule pointing at, or hanging off, a question that no longer exists is
+      // a dead end rather than a route.
+      doc.logic = doc.logic.filter(
+        (r) => !(r.action_kind === "goto" && ((r.from && gone.has(r.from)) || ((r.targetKind ?? "block") === "block" && gone.has(r.target)))),
+      );
+    }
+
+    // ─── additions, each where the model asked for it ───
+    // Resolving against the list as it grows lets one new block follow another.
+    // Appending everything to the end — which is all this route used to do —
+    // puts the arms of a condition below the questions they should skip.
     const existingRefs = new Set(doc.blocks.map((b) => b.ref));
-    const { blocks: proposed, optionIdsByRef, renamed } = normalizeExtensionBlocks(draft, existingRefs);
+    const { blocks: proposed, optionIdsByRef, renamed } = normalizeEditBlocks(draft, existingRefs);
 
     const added: Block[] = [];
     for (const { block, insertAfter } of proposed) {
@@ -454,14 +503,9 @@ aiRouter.post(
       else doc.blocks.push(block);
       added.push(block);
     }
-    if (added.length === 0) {
-      return c.json({ error: { code: "generation_failed", message: "AI could not produce new blocks. Try a different prompt." } }, 502);
-    }
 
-    // Branches may hang off a question that was already in the form, so rules
-    // are built against the merged block list and folded in beside the
-    // existing ones rather than replacing them. Option ids for questions that
-    // were already here come from the form itself, not from this draft.
+    // Option ids for questions that were already here come from the form
+    // itself; only the new ones come from this draft.
     for (const b of doc.blocks) {
       if (optionIdsByRef.has(b.ref)) continue;
       if ("options" in b && Array.isArray(b.options)) {
@@ -471,6 +515,7 @@ aiRouter.post(
         );
       }
     }
+
     const branches = resolveBranches(
       draft.branches.map((br) => ({
         ...br,
@@ -482,8 +527,54 @@ aiRouter.post(
     );
     const priorGotos = doc.logic.filter((r) => r.action_kind === "goto");
     const newRules = buildFlowRules(branches, doc.blocks, doc.endings.map((e) => e.ref), priorGotos);
+
+    /**
+     * Replacement is per ANSWER, not per question.
+     *
+     * The first version of this dropped every existing branch from any question
+     * the model listed in `rewireRefs`, on the reasoning that its new branches
+     * were then the whole truth. They are not reliably the whole truth: asked
+     * to send Chrome users straight to the ending, the model rewired
+     * `q_platform` and restated two of its three options — so the Android route
+     * was deleted and iOS was quietly pointed at the wrong question. A model
+     * that forgets one arm should cost that arm nothing.
+     *
+     * So an old rule is dropped only when a new rule speaks about exactly the
+     * same question and the same condition. Anything the edit did not mention
+     * keeps working.
+     */
+    const conditionKey = (from: string | null | undefined, when: unknown): string => {
+      const conditions = (when as { conditions?: unknown[] } | undefined)?.conditions ?? [];
+      return `${from ?? ""}\u0000${JSON.stringify(conditions)}`;
+    };
+    const replaced = new Set(newRules.map((r) => conditionKey(r.action_kind === "goto" ? r.from : null, r.when)));
+    const supersededCount = doc.logic.filter(
+      (r) => r.action_kind === "goto" && replaced.has(conditionKey(r.from, r.when)),
+    ).length;
     if (newRules.length > 0) {
-      doc.logic = FormDoc.parse({ ...doc, logic: [...doc.logic, ...newRules] }).logic;
+      const kept = doc.logic.filter(
+        (r) => !(r.action_kind === "goto" && replaced.has(conditionKey(r.from, r.when))),
+      );
+      doc.logic = FormDoc.parse({ ...doc, logic: [...kept, ...newRules] }).logic;
+    }
+    const rewired = supersededCount;
+
+    // An edit has to change something. This replaces the old "no new blocks"
+    // rejection, which is what forced the model to invent one: a routing-only
+    // edit is now a complete answer, and only an edit that touches nothing at
+    // all is worth telling the builder about.
+    if (added.length === 0 && removed.length === 0 && newRules.length === 0) {
+      return c.json(
+        {
+          error: {
+            code: "no_change",
+            message: draft.summary?.trim()
+              ? `Nothing to change — ${draft.summary.trim()}`
+              : "That already looks the way you described. Try describing the change differently.",
+          },
+        },
+        422,
+      );
     }
 
     // Deliberately not persisted. The builder reviews the proposal and
@@ -496,6 +587,17 @@ aiRouter.post(
       await meter(c.env, orgId, "ai_generations");
       if (tokens > 0) await meter(c.env, orgId, "ai_tokens", tokens);
     }
-    return c.json({ doc, added: added.length, rules: newRules.length, summary: draft.summary, tokens, issues });
+    return c.json({
+      doc,
+      added: added.length,
+      addedRefs: added.map((b) => b.ref),
+      removed: removed.length,
+      removedRefs: removed,
+      rules: newRules.length,
+      rewired,
+      summary: draft.summary,
+      tokens,
+      issues,
+    });
   },
 );

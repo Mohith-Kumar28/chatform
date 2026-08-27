@@ -36,8 +36,8 @@ import type {
   GetApiKeys200Item,
   GetApiTemplates200Item,
   GetApiWebhooks200Item,
-  PostApiAiAddBlocks200,
-  PostApiAiAddBlocksBody,
+  PostApiAiEditForm200,
+  PostApiAiEditFormBody,
   PostApiAiGenerateForm200,
   PostApiAiGenerateFormBody,
   PostApiAiGenerateFormStreamBody,
@@ -1000,42 +1000,48 @@ export const usePostApiAiGenerateFormStream = <TError = void,
       > => {
       return useMutation(getPostApiAiGenerateFormStreamMutationOptions(options));
     }
-    export type postApiAiAddBlocksResponse200 = {
-  data: PostApiAiAddBlocks200
+    export type postApiAiEditFormResponse200 = {
+  data: PostApiAiEditForm200
   status: 200
 }
 
-export type postApiAiAddBlocksResponse502 = {
+export type postApiAiEditFormResponse422 = {
+  data: void
+  status: 422
+}
+
+export type postApiAiEditFormResponse502 = {
   data: void
   status: 502
 }
 
-export type postApiAiAddBlocksResponse503 = {
+export type postApiAiEditFormResponse503 = {
   data: void
   status: 503
 }
 
-export type postApiAiAddBlocksResponseSuccess = (postApiAiAddBlocksResponse200) & {
+export type postApiAiEditFormResponseSuccess = (postApiAiEditFormResponse200) & {
   headers: Headers;
 };
-export type postApiAiAddBlocksResponseError = (postApiAiAddBlocksResponse502 | postApiAiAddBlocksResponse503) & {
+export type postApiAiEditFormResponseError = (postApiAiEditFormResponse422 | postApiAiEditFormResponse502 | postApiAiEditFormResponse503) & {
   headers: Headers;
 };
 
-export type postApiAiAddBlocksResponse = (postApiAiAddBlocksResponseSuccess | postApiAiAddBlocksResponseError)
+export type postApiAiEditFormResponse = (postApiAiEditFormResponseSuccess | postApiAiEditFormResponseError)
 
-export const getPostApiAiAddBlocksUrl = () => {
-
-
+export const getPostApiAiEditFormUrl = () => {
 
 
-  return `/api/ai/add-blocks`
+
+
+  return `/api/ai/edit-form`
 }
 
 /**
- * @summary AI-generate additional blocks appended to an existing form
+ * Returns the proposed document without saving it. An edit may add no questions at all — most requests about a working form change the routing.
+ * @summary AI-edit an existing form: add or remove questions, and rewire the flow
  */
-export const postApiAiAddBlocks = async (postApiAiAddBlocksBody: PostApiAiAddBlocksBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAiAddBlocksResponse> => {
+export const postApiAiEditForm = async (postApiAiEditFormBody: PostApiAiEditFormBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAiEditFormResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1043,12 +1049,12 @@ export const postApiAiAddBlocks = async (postApiAiAddBlocksBody: PostApiAiAddBlo
     if (Array.isArray(h)) return Object.fromEntries(h);
     return h;
   };
-return customFetch<postApiAiAddBlocksResponse>(getPostApiAiAddBlocksUrl(),
+return customFetch<postApiAiEditFormResponse>(getPostApiAiEditFormUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(postApiAiAddBlocksBody)
+    body: JSON.stringify(postApiAiEditFormBody)
   }
 );}
 
@@ -1056,11 +1062,11 @@ return customFetch<postApiAiAddBlocksResponse>(getPostApiAiAddBlocksUrl(),
 
 
 
-export const getPostApiAiAddBlocksMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiAddBlocks>>, TError,PostApiAiAddBlocksMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiAiAddBlocks>>, TError,PostApiAiAddBlocksMutationVariables, TContext> => {
+export const getPostApiAiEditFormMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiEditForm>>, TError,PostApiAiEditFormMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAiEditForm>>, TError,PostApiAiEditFormMutationVariables, TContext> => {
 
-const mutationKey = ['postApiAiAddBlocks'];
+const mutationKey = ['postApiAiEditForm'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1070,10 +1076,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAiAddBlocks>>, PostApiAiAddBlocksMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAiEditForm>>, PostApiAiEditFormMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  postApiAiAddBlocks(data,requestOptions)
+          return  postApiAiEditForm(data,requestOptions)
         }
 
 
@@ -1083,23 +1089,23 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostApiAiAddBlocksMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAiAddBlocks>>>
-    export type PostApiAiAddBlocksMutationBody = PostApiAiAddBlocksBody
-    export type PostApiAiAddBlocksMutationError = void
-    export type PostApiAiAddBlocksMutationVariables = {data: PostApiAiAddBlocksBody}
+    export type PostApiAiEditFormMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAiEditForm>>>
+    export type PostApiAiEditFormMutationBody = PostApiAiEditFormBody
+    export type PostApiAiEditFormMutationError = void
+    export type PostApiAiEditFormMutationVariables = {data: PostApiAiEditFormBody}
 
     /**
- * @summary AI-generate additional blocks appended to an existing form
+ * @summary AI-edit an existing form: add or remove questions, and rewire the flow
  */
-export const usePostApiAiAddBlocks = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiAddBlocks>>, TError,PostApiAiAddBlocksMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+export const usePostApiAiEditForm = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiEditForm>>, TError,PostApiAiEditFormMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof postApiAiAddBlocks>>,
+        Awaited<ReturnType<typeof postApiAiEditForm>>,
         TError,
-        PostApiAiAddBlocksMutationVariables,
+        PostApiAiEditFormMutationVariables,
         TContext
       > => {
-      return useMutation(getPostApiAiAddBlocksMutationOptions(options));
+      return useMutation(getPostApiAiEditFormMutationOptions(options));
     }
     export type getApiFormsByIdSubmissionsResponse200 = {
   data: GetApiFormsByIdSubmissions200Item[]

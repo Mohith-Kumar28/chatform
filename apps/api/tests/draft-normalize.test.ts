@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { draftToDoc, resolveBranches, normalizeExtensionBlocks } from "../src/lib/draft-normalize.js";
+import { draftToDoc, resolveBranches, normalizeEditBlocks } from "../src/lib/draft-normalize.js";
 import { extractUrls, htmlToText } from "../src/lib/research.js";
-import type { GenerationDraft, ExtensionDraft } from "../src/lib/ai.js";
+import type { GenerationDraft, EditDraft } from "../src/lib/ai.js";
 
 const block = (over: Partial<GenerationDraft["blocks"][number]>): GenerationDraft["blocks"][number] => ({
   ref: "q_x",
@@ -166,21 +166,37 @@ describe("resolveBranches", () => {
   });
 });
 
-describe("normalizeExtensionBlocks", () => {
+describe("normalizeEditBlocks", () => {
   it("skips a greeting and renames a ref the form already uses", () => {
-    const draft: ExtensionDraft = {
-      blocks: [
+    const draft: EditDraft = {
+      addBlocks: [
         { ref: "welcome", type: "welcome", title: "Hi again", description: "", required: false, options: [], scale: 10, insertAfter: "" },
         { ref: "q_email", type: "email", title: "Your email?", description: "", required: true, options: [], scale: 10, insertAfter: "q_platform" },
       ],
+      removeRefs: [],
+      rewireRefs: [],
       branches: [],
       summary: "",
     };
-    const { blocks, renamed } = normalizeExtensionBlocks(draft, new Set(["q_platform", "q_email"]));
+    const { blocks, renamed } = normalizeEditBlocks(draft, new Set(["q_platform", "q_email"]));
     expect(blocks).toHaveLength(1);
     expect(blocks[0]!.block.ref).toBe("q_email_2");
     expect(renamed.get("q_email")).toBe("q_email_2");
     expect(blocks[0]!.insertAfter).toBe("q_platform");
+  });
+
+  it("accepts an edit that adds no questions at all", () => {
+    // The case the old append-only schema could not express, which is why the
+    // model padded a routing change with an invented question.
+    const draft: EditDraft = {
+      addBlocks: [],
+      removeRefs: [],
+      rewireRefs: ["q_platform"],
+      branches: [{ whenRef: "q_platform", op: "eq", value: "Android", then: "q_play_email" }],
+      summary: "Re-routed Android.",
+    };
+    const { blocks } = normalizeEditBlocks(draft, new Set(["q_platform", "q_play_email"]));
+    expect(blocks).toHaveLength(0);
   });
 });
 

@@ -230,20 +230,27 @@ export const GenerationDraft = z.object({
 export type GenerationDraft = z.output<typeof GenerationDraft>;
 
 /**
- * Extending a form that already exists.
+ * Editing a form that already exists.
  *
- * Separate from `GenerationDraft` because the two jobs are genuinely
- * different: this one has to place its questions inside a flow it did not
- * write, and may hang them off questions that were already there. Asked to
- * collect an iCloud address from iOS users and a Play Store address from
- * Android users, the old path appended both to the end and wired nothing — so
- * every respondent was asked both, and the "which device?" question already
- * sitting in the form went unused.
+ * This was `ExtensionDraft`, behind a route called `add-blocks`, and it could
+ * only ever append questions: `blocks` was `.min(1)` and the route answered 502
+ * when nothing new arrived. That made a whole category of request impossible to
+ * answer honestly. Asked "if they say iPhone I need their email, if Android I
+ * need their Play Store email, that's the only thing" — a pure routing change
+ * on questions that were already there — the model had no way to say "no new
+ * questions, here is the new wiring". It complied with the schema instead, and
+ * invented a filler question ("Is there anything else you would like us to
+ * know?") to carry a routing change nobody had asked to be accompanied.
  *
- * Flat for the same reason `GenerationDraft` is; see the note there.
+ * So the shape of an edit is now the shape of the request: questions may be
+ * added, removed, or left alone, and the wiring is stated separately and can be
+ * the entire content of an edit.
+ *
+ * Flat for the reason `GenerationDraft` is; see the note there.
  */
-export const ExtensionDraft = z.object({
-  blocks: z
+export const EditDraft = z.object({
+  /** May be empty — most edits to a working form change wiring, not questions. */
+  addBlocks: z
     .array(
       z.object({
         ref: z.string(),
@@ -263,9 +270,34 @@ export const ExtensionDraft = z.object({
         insertAfter: z.string(),
       }),
     )
-    .min(1)
     .max(12),
-  /** May hang off a question that was already in the form. */
+  /** Refs of questions the request asks to be taken out. Usually empty. */
+  removeRefs: z.array(z.string()).max(12),
+  /**
+   * Questions whose routing this edit is changing.
+   *
+   * Advisory, and deliberately so. The distinction that was missing is that new
+   * rules used to be folded in beside the old ones, so restating a branch
+   * produced a duplicate and changing one left the original competing with it —
+   * a request to re-route Android users added `q_android_email →
+   * q_capture_source` while `q_android_device → q_capture_source` still stood,
+   * and which of the two won came down to evaluation order.
+   *
+   * Replacement is decided from `branches` rather than from this list, per
+   * question AND answer, because a list of questions is too coarse to be safe:
+   * dropping every branch of a question the model names, then trusting it to
+   * have restated them all, lost the Android route the one time it restated
+   * only two of three options. This field is still read as intent — it makes
+   * the model think about which routes it is changing — but a route the edit
+   * does not mention is never removed on the strength of it.
+   */
+  rewireRefs: z.array(z.string()).max(12),
+  /**
+   * Every branch this edit asserts: the ones it is changing, restated in full,
+   * plus any new ones. Each replaces the existing rule for that same question
+   * and condition, and leaves every other route alone. May hang off a question
+   * that was already in the form.
+   */
   branches: z
     .array(
       z.object({
@@ -280,7 +312,7 @@ export const ExtensionDraft = z.object({
   /** One sentence on what changed, shown to the builder. */
   summary: z.string(),
 });
-export type ExtensionDraft = z.output<typeof ExtensionDraft>;
+export type EditDraft = z.output<typeof EditDraft>;
 
 /**
  * Provider options for anything drafted in the builder.
@@ -299,16 +331,16 @@ export const GENERATION_PROVIDER_OPTIONS = {
   openrouter: { reasoning: { effort: "low" as const, exclude: true } },
 } as const;
 
-/** Extend an existing form: new blocks, where they go, and how they branch. */
-export async function generateExtension(opts: { env: Bindings; prompt: string }): Promise<{ draft: ExtensionDraft; tokens: number }> {
+/** Edit an existing form: questions added or removed, and how the flow rewires. */
+export async function generateEdit(opts: { env: Bindings; prompt: string }): Promise<{ draft: EditDraft; tokens: number }> {
   const result = await generateObject({
     model: chatModel(opts.env, MODELS.generation),
-    schema: ExtensionDraft,
+    schema: EditDraft,
     prompt: opts.prompt,
     providerOptions: GENERATION_PROVIDER_OPTIONS,
   });
   return {
-    draft: result.object as ExtensionDraft,
+    draft: result.object as EditDraft,
     tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
   };
 }
