@@ -98,8 +98,8 @@
     //
     // Both a local dev app and a deployed one are listed on purpose: one deployed API has
     // to serve both without a redeploy between them, and `returnOrigin()` picks whichever
-    // origin the request actually came from. Add the real web domain here when the frontend
-    // is deployed — nothing else needs to change.
-    "WEB_ORIGINS": "http://localhost:3000,https://chatform-api.mohithkumar808.workers.dev"
+    // origin the request actually came from. The first is the fallback when the request
+    // carries no recognisable origin, so the deployed app leads.
+    "WEB_ORIGINS": "https://chatform-web.mohithkumar808.workers.dev,http://localhost:3000"
   }
 }

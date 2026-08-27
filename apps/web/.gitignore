@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ...except the production build config, which holds only public values.
+!.env.production
+
+# opennext build output
+/.open-next/

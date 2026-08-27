@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // OpenNext build output — a bundled copy of the whole app plus its dependencies.
+    // Linting it turns 6 real errors into 650.
+    ".open-next/**",
   ]),
 ]);
 

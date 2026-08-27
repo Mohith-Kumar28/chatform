@@ -27,8 +27,10 @@
     "gen:api": "orval --config orval.config.ts",
     "gen:plans": "pnpm --filter @repo/tooling gen:plans",
     "plans:verify": "pnpm gen:plans && git diff --exit-code -- tooling/seed-plans.sql",
-    "deploy:api": "pnpm --filter @repo/api deploy",
-    "clean": "turbo run clean && rm -rf node_modules"
+    "deploy:api": "pnpm --filter @repo/api run deploy",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "deploy:web": "pnpm --filter @repo/web run cf:deploy",
+    "deploy:all": "pnpm deploy:api && pnpm deploy:web"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
