@@ -863,7 +863,7 @@ Two decisions shaped the implementation:
 
 **In the chat**, sign-in is a card in the thread under the agent's message asking for it — no interstitial, no redirect. A redirect-based OAuth flow would lose the session mid-form, which is the exact moment people abandon forms. Verification is recorded as a quiet in-thread line ("Verified as …") so it keeps its place in the conversation.
 
-New env: `GOOGLE_CLIENT_ID` (API, for audience validation), `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (web, for the button), `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` (optional). With no Google client id the button degrades to a plain "not available" line rather than breaking the card.
+New env: `GOOGLE_RESPONDENT_CLIENT_ID` (API, for audience validation), `NEXT_PUBLIC_GOOGLE_RESPONDENT_CLIENT_ID` (web, for the button), `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` (optional). With no Google client id the button degrades to a plain "not available" line rather than breaking the card.
 
 **Also:** `onePerIdentity` is checked when the identity becomes known — before any question is asked — rather than at submit time, when the respondent has already done the work. Results grows a Respondent column, rendered only when the form actually asked for sign-in.
 

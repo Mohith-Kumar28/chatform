@@ -12,9 +12,9 @@
  * place that number is knowable.
  */
 
-import { FEATURES, minPlanFor, type FeatureKey } from "./features.js";
-import { limitMeta, type LimitKey } from "./limits.js";
-import { PLANS, type PlanId } from "./plans.js";
+import { FEATURES, minPlanFor, type FeatureKey } from "./features";
+import { limitMeta, type LimitKey } from "./limits";
+import { PLANS, type PlanId } from "./plans";
 
 /**
  * `forbidden` is the odd one out and stays deliberately separate: it is a 403 about

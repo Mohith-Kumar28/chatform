@@ -35,7 +35,66 @@ DODO_WEBHOOK_SECRET=
 RESEND_API_KEY=
 TURNSTILE_SECRET_KEY=
 FILE_ENCRYPTION_KEY=
-GOOGLE_CLIENT_ID=
+
+# ── Google sign-in ────────────────────────────────────────────────────────────
+# There are TWO separate Google clients, and they must not be the same one:
+#
+#   GOOGLE_RESPONDENT_CLIENT_ID   people answering a public form  (/f/<slug>)
+#   GOOGLE_DASHBOARD_CLIENT_ID    you and your team signing in    (/signin)
+#   GOOGLE_DASHBOARD_CLIENT_SECRET
+#
+# Why two: the respondent check accepts any Google ID token whose `aud` equals the
+# respondent client id. Share one client and a token minted for a dashboard sign-in would
+# also pass as a respondent identity on every form gated on Google.
+#
+# Both live in the SAME Google Cloud project. Create the project once at
+# https://console.cloud.google.com/projectcreate, then configure the consent screen once —
+# APIs & Services → OAuth consent screen → External → app name, your support email,
+# developer email → Save. Add yourself under "Test users" while it is unpublished, or only
+# accounts you list can sign in.
+#
+# ── 1. Respondent client (public forms) ───────────────────────────────────────
+# APIs & Services → Credentials → + Create credentials → OAuth client ID
+#   Application type:              Web application
+#   Name:                          chatform-respondent
+#   Authorized JavaScript origins: (the origin the FORM PAGE is served from — the web app,
+#                                   not this API)
+#                                  https://<your-web-app-domain>
+#                                  http://localhost:3000        ← add for local testing
+#   Authorized redirect URIs:      none. Google Identity Services is a browser-only flow
+#                                  and never redirects back to us.
+# Create → copy "Client ID". There is no secret to copy, and it is not one — the browser
+# ships it. Put the same value in apps/web/.env.local as
+# NEXT_PUBLIC_GOOGLE_RESPONDENT_CLIENT_ID, or the button never renders.
+GOOGLE_RESPONDENT_CLIENT_ID=
+
+# ── 2. Dashboard client (team sign-in) ────────────────────────────────────────
+# Unset: the sign-in page shows email and password only. Both set: it also shows
+# "Continue with Google". A client id with no secret cannot complete the code exchange, so
+# half a pair is treated as unset rather than as enabled.
+#
+# APIs & Services → Credentials → + Create credentials → OAuth client ID
+#   Application type:              Web application
+#   Name:                          chatform-dashboard
+#   Authorized JavaScript origins: none needed
+#   Authorized redirect URIs:      https://chatform-api.mohithkumar808.workers.dev/api/auth/callback/google
+#                                  http://localhost:8787/api/auth/callback/google   ← add for local testing
+# Create → copy "Client ID" and "Client secret" (the secret is shown once; reopen the
+# client to copy it again).
+#
+# The redirect URI is on the API origin, NOT the web app's — Better Auth handles the
+# callback and APP_ORIGIN is its baseURL. If you ever change APP_ORIGIN, this URI has to
+# change with it, or Google returns redirect_uri_mismatch.
+#
+# For the deployed worker these are secrets, not vars — do not put them in wrangler.jsonc:
+#   pnpm --filter @repo/api exec wrangler secret put GOOGLE_RESPONDENT_CLIENT_ID
+#   pnpm --filter @repo/api exec wrangler secret put GOOGLE_DASHBOARD_CLIENT_ID
+#   pnpm --filter @repo/api exec wrangler secret put GOOGLE_DASHBOARD_CLIENT_SECRET
+GOOGLE_DASHBOARD_CLIENT_ID=
+GOOGLE_DASHBOARD_CLIENT_SECRET=
+
+# ── SMS (Twilio) ──────────────────────────────────────────────────────────────
+# Absent in dev: phone OTP codes are logged instead of sent.
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_FROM=

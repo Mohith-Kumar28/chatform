@@ -100,7 +100,7 @@ export type AuthResult =
  * a base64 string, so every check below is load-bearing.
  */
 export async function verifyGoogleIdToken(env: Bindings, idToken: string): Promise<AuthResult> {
-  const clientId = env.GOOGLE_CLIENT_ID;
+  const clientId = env.GOOGLE_RESPONDENT_CLIENT_ID;
   if (!clientId) {
     return { ok: false, code: "google_not_configured", message: "Google sign-in is not set up for this form." };
   }

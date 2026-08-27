@@ -43,8 +43,30 @@ export interface Bindings {
   TURNSTILE_SECRET_KEY?: string;
   FILE_ENCRYPTION_KEY?: string;
 
-  /** Respondent sign-in. Public — the client needs it to render the Google button. */
-  GOOGLE_CLIENT_ID?: string;
+  /**
+   * Google client for RESPONDENT sign-in on a public form — the Google Identity Services
+   * button in the chat, verified as an ID token by `verifyGoogleIdToken`.
+   *
+   * Only the id, never a secret: GIS is a browser flow with no code exchange, and the web
+   * app ships the same value as `NEXT_PUBLIC_GOOGLE_RESPONDENT_CLIENT_ID` to draw the button.
+   */
+  GOOGLE_RESPONDENT_CLIENT_ID?: string;
+  /**
+   * Google client for DASHBOARD sign-in — Better Auth's `socialProviders.google`, the
+   * server-side authorization-code flow behind "Continue with Google" on /signin.
+   *
+   * Deliberately a different Google client from `GOOGLE_RESPONDENT_CLIENT_ID` above.
+   * `verifyGoogleIdToken` accepts any token whose `aud` equals the respondent client id, so
+   * one shared client would make a token minted for a dashboard sign-in also valid as a
+   * respondent identity on every form that gates on Google. Two clients keep those
+   * audiences apart — which is what the two names are for.
+   *
+   * Both halves must be present or the provider stays unregistered: a client id with no
+   * secret cannot complete the code exchange, so a half-configured pair would render the
+   * button and then fail the callback.
+   */
+  GOOGLE_DASHBOARD_CLIENT_ID?: string;
+  GOOGLE_DASHBOARD_CLIENT_SECRET?: string;
   /** SMS for phone OTP. Absent in dev, where codes are logged instead of sent. */
   TWILIO_ACCOUNT_SID?: string;
   TWILIO_AUTH_TOKEN?: string;

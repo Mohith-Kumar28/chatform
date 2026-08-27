@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Loader2, Phone, ShieldCheck } from "lucide-react";
 import type { AuthState } from "./use-chat";
 
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
+const GOOGLE_RESPONDENT_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_RESPONDENT_CLIENT_ID ?? "";
 const GSI_SRC = "https://accounts.google.com/gsi/client";
 
 interface GsiId {
@@ -101,7 +101,7 @@ function GoogleButton({ onToken, disabled }: { onToken: (t: string) => void; dis
   const host = useRef<HTMLDivElement>(null);
   // No client id configured is knowable at first render; there is nothing to
   // wait for and nothing to load.
-  const [failed, setFailed] = useState(!GOOGLE_CLIENT_ID);
+  const [failed, setFailed] = useState(!GOOGLE_RESPONDENT_CLIENT_ID);
   // Kept in a ref so re-renders never re-initialize GSI, which would tear down
   // and re-mount its iframe under the respondent's cursor.
   const cb = useRef(onToken);
@@ -110,14 +110,14 @@ function GoogleButton({ onToken, disabled }: { onToken: (t: string) => void; dis
   }, [onToken]);
 
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID) return;
+    if (!GOOGLE_RESPONDENT_CLIENT_ID) return;
     let cancelled = false;
     loadGsi()
       .then(() => {
         const id = window.google?.accounts?.id;
         if (cancelled || !id || !host.current) return;
         id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
+          client_id: GOOGLE_RESPONDENT_CLIENT_ID,
           callback: (r) => cb.current(r.credential),
         });
         id.renderButton(host.current, {

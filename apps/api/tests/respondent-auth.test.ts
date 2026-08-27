@@ -9,10 +9,10 @@ import {
 } from "../src/lib/respondent-auth.js";
 import type { Bindings } from "../src/env.js";
 
-const GOOGLE_CLIENT_ID = "1234.apps.googleusercontent.com";
+const GOOGLE_RESPONDENT_CLIENT_ID = "1234.apps.googleusercontent.com";
 
 function bindings(over: Partial<Bindings> = {}): Bindings {
-  return { ...(env as unknown as Bindings), GOOGLE_CLIENT_ID, ENVIRONMENT: "development", ...over };
+  return { ...(env as unknown as Bindings), GOOGLE_RESPONDENT_CLIENT_ID, ENVIRONMENT: "development", ...over };
 }
 
 // ───────────────────────── Google ID tokens ─────────────────────────
@@ -40,7 +40,7 @@ async function mintToken(claims: Record<string, unknown>, signWith?: CryptoKey):
   const now = Math.floor(Date.now() / 1000);
   const payload = b64urlJson({
     iss: "https://accounts.google.com",
-    aud: GOOGLE_CLIENT_ID,
+    aud: GOOGLE_RESPONDENT_CLIENT_ID,
     sub: "google-sub-123",
     iat: now,
     exp: now + 3600,
@@ -135,12 +135,12 @@ describe("Google ID token verification", () => {
   it("rejects an alg=none token outright", async () => {
     const now = Math.floor(Date.now() / 1000);
     const header = b64urlJson({ alg: "none", kid: KID });
-    const payload = b64urlJson({ iss: "https://accounts.google.com", aud: GOOGLE_CLIENT_ID, sub: "x", iat: now, exp: now + 60 });
+    const payload = b64urlJson({ iss: "https://accounts.google.com", aud: GOOGLE_RESPONDENT_CLIENT_ID, sub: "x", iat: now, exp: now + 60 });
     expect(await verifyGoogleIdToken(bindings(), `${header}.${payload}.`)).toMatchObject({ ok: false, code: "bad_alg" });
   });
 
   it("refuses when the form's deployment has no Google client id", async () => {
-    const res = await verifyGoogleIdToken(bindings({ GOOGLE_CLIENT_ID: undefined }), await mintToken({}));
+    const res = await verifyGoogleIdToken(bindings({ GOOGLE_RESPONDENT_CLIENT_ID: undefined }), await mintToken({}));
     expect(res).toMatchObject({ ok: false, code: "google_not_configured" });
   });
 });

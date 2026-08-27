@@ -11,8 +11,8 @@
  * Pro $29/mo · $240/yr, Business $89/mo · $720/yr.
  */
 
-import { FEATURE_KEYS, type FeatureKey } from "./features.js";
-import type { LimitKey, LimitValue } from "./limits.js";
+import { FEATURE_KEYS, type FeatureKey } from "./features";
+import type { LimitKey, LimitValue } from "./limits";
 
 export const PLAN_IDS = ["free", "pro", "business"] as const;
 export type PlanId = (typeof PLAN_IDS)[number];

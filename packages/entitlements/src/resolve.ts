@@ -6,9 +6,9 @@
  * database lives in `apps/api/src/lib/entitlements.ts` and calls into here.
  */
 
-import { FEATURE_KEYS, type FeatureKey } from "./features.js";
-import { LIMIT_KEYS, type LimitKey, type LimitValue } from "./limits.js";
-import { PLANS, type PlanId } from "./plans.js";
+import { FEATURE_KEYS, type FeatureKey } from "./features";
+import { LIMIT_KEYS, type LimitKey, type LimitValue } from "./limits";
+import { PLANS, type PlanId } from "./plans";
 
 /** Dodo's subscription statuses, plus the implicit "no subscription" case. */
 export type SubscriptionStatus =
