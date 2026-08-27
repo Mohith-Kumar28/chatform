@@ -85,7 +85,7 @@ export function AiCapBanner() {
     <div
       className={
         reached
-          ? "flex flex-wrap items-center gap-3 rounded-xl bg-[var(--warning-soft)] px-4 py-3 text-sm text-[var(--warning-foreground)]"
+          ? "flex flex-wrap items-center gap-3 rounded-xl bg-[var(--warning-soft)] px-4 py-3 text-sm text-[var(--warning-soft-foreground)]"
           : "text-muted-foreground bg-muted flex flex-wrap items-center gap-3 rounded-xl px-4 py-3 text-sm"
       }
     >

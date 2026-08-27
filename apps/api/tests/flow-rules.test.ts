@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FormDoc, resolveNext, type Block, type EvalState } from "@repo/form-schema";
-import { buildFlowRules, type DraftBranch } from "../src/lib/flow-normalize.js";
+import { FormDoc, buildFlowRules, resolveNext, type Block, type DraftBranch, type EvalState } from "@repo/form-schema";
 
 /**
  * These tests drive the real engine, not the rule list.

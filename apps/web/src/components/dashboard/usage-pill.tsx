@@ -41,7 +41,7 @@ export function UsagePill() {
         ratio >= 1
           ? "bg-[var(--destructive-soft)] text-destructive"
           : ratio > 0.8
-            ? "bg-[var(--warning-soft)] text-[var(--warning-foreground)]"
+            ? "bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)]"
             : "text-muted-foreground hover:bg-muted",
       )}
       title={

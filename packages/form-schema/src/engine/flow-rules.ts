@@ -1,7 +1,15 @@
-import { conditionIsAlwaysTrue, type Block, type LogicRuleInput } from "@repo/form-schema";
+import { conditionIsAlwaysTrue } from "../conditions";
+import type { Block } from "../blocks";
+import type { LogicRuleInput } from "../logic";
 
 /**
- * Turning a model's branch list into a flow that actually works.
+ * Turning a branch list into a flow that actually works.
+ *
+ * Lives in the shared package because two very different callers need the same
+ * answer: the AI routes on the server, and the builder's question list in the
+ * browser, which has to rewrite these rules whenever a question is dragged into
+ * or out of a branch. Two implementations of "where does this arm end" is
+ * exactly how an editor and a graph come to disagree about the same form.
  *
  * A language model is good at saying "if they use a competitor, ask which
  * one" and bad at noticing what that implies for everyone else. Left alone it

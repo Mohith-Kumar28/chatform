@@ -1,13 +1,12 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { FormDoc, lintFormDoc, hasErrors, migrateFormDoc, type Block } from "@repo/form-schema";
+import { FormDoc, buildFlowRules, lintFormDoc, hasErrors, migrateFormDoc, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, assertFormAccess, type GuardVars } from "../lib/guards.js";
 import { requirePermission, requireQuota, requireGauge, type AuthzVars } from "../lib/authorize.js";
 import { meter } from "../lib/entitlements.js";
 import { generateFormDraft, generateEdit, streamFormDraft, researchBrief, type GenerationDraft } from "../lib/ai.js";
-import { buildFlowRules } from "../lib/flow-normalize.js";
 import { buildFlowGeneratorPrompt, buildEditPrompt, type BuilderTurn } from "../lib/agent-prompts.js";
 import { draftToDoc, normalizeEditBlocks, resolveBranches } from "../lib/draft-normalize.js";
 import { extractUrls, readSites } from "../lib/research.js";

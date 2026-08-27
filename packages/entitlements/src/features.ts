@@ -81,7 +81,7 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
   remove_branding: { label: "Remove chatform branding", blurb: "Drop the “Powered by chatform” footer." },
 
   duplicate_prevention: { label: "Duplicate prevention", blurb: "One response per person, by IP or by answer." },
-  multi_language: { label: "Multiple languages", blurb: "Serve one form in several languages." },
+  multi_language: { label: "Multiple languages", blurb: "Serve one form in several languages.", soon: true },
   respondent_auth_google: { label: "Google verification", blurb: "Ask respondents to verify who they are." },
   respondent_auth_phone: { label: "Phone verification", blurb: "Verify respondents by SMS code." },
   one_response_per_identity: { label: "One response per identity", blurb: "Cap responses per verified person." },
@@ -105,7 +105,7 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
 
   form_metadata: { label: "Form metadata", blurb: "Control the link preview title, description and image." },
   completion_redirect: { label: "Redirect on completion", blurb: "Send respondents somewhere when they finish." },
-  auto_reply_email: { label: "Auto-reply email", blurb: "Email the respondent after they submit." },
+  auto_reply_email: { label: "Auto-reply email", blurb: "Email the respondent after they submit.", soon: true },
   custom_domain: { label: "Custom domain", blurb: "Host the form on your own domain.", soon: true },
   refill_link: { label: "Refill link", blurb: "Let a respondent come back and edit their answers.", soon: true },
   tracking_pixels: { label: "Meta Pixel & Google Tag Manager", blurb: "Track conversions on your form.", soon: true },

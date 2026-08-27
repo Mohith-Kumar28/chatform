@@ -167,7 +167,7 @@ export default function BillingPage() {
 
       {/* A failed renewal is not a lock-out. Say what is happening and how to fix it. */}
       {d.inGrace && (
-        <div className="mb-6 flex items-start gap-2.5 rounded-xl bg-[var(--warning-soft)] p-4 text-sm text-[var(--warning-foreground)]">
+        <div className="mb-6 flex items-start gap-2.5 rounded-xl bg-[var(--warning-soft)] p-4 text-sm text-[var(--warning-soft-foreground)]">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
           <div>
             <p className="font-medium">We couldn&apos;t take your last payment.</p>

@@ -44,20 +44,32 @@
   --primary-foreground: oklch(0.995 0.005 85);
   --primary-hover: oklch(0.655 0.195 41);
   --primary-soft: oklch(0.952 0.038 60); /* tinted background for badges/wash */
+  --primary-soft-foreground: oklch(0.42 0.13 43);
 
-  /* ── status ── */
+  /* ── status ──
+     Each status has THREE colours, and the third is the one that was missing.
+     `--x-foreground` is ink for the saturated `--x` fill; `--x-soft-foreground`
+     is ink for the pale `--x-soft` wash. Pairing `soft` with `foreground` —
+     which nine components did — is white-on-cream in light mode and, worse,
+     dark-on-dark in the dark theme: `--warning-soft` sits at L=0.32 and
+     `--warning-foreground` at L=0.22, about 1.4:1, which is how an unpublished
+     warning banner became unreadable. */
   --destructive: oklch(0.585 0.215 27);
   --destructive-foreground: oklch(0.995 0 0);
   --destructive-soft: oklch(0.955 0.028 25);
+  --destructive-soft-foreground: oklch(0.42 0.17 27);
   --success: oklch(0.63 0.165 152);
   --success-foreground: oklch(0.995 0 0);
   --success-soft: oklch(0.955 0.035 152);
+  --success-soft-foreground: oklch(0.38 0.11 152);
   --warning: oklch(0.775 0.155 75);
   --warning-foreground: oklch(0.24 0.03 60);
   --warning-soft: oklch(0.965 0.045 85);
+  --warning-soft-foreground: oklch(0.4 0.1 65);
   --info: oklch(0.62 0.135 250);
   --info-foreground: oklch(0.995 0 0);
   --info-soft: oklch(0.955 0.03 250);
+  --info-soft-foreground: oklch(0.42 0.12 250);
 
   /* ── block families ──────────────────────────────────────────────────────
      Questions are colour-coded by what they collect, the way Youform tints its
@@ -151,19 +163,26 @@
   --primary-foreground: oklch(0.19 0.02 60);
   --primary-hover: oklch(0.79 0.16 52);
   --primary-soft: oklch(0.32 0.05 50);
+  --primary-soft-foreground: oklch(0.88 0.08 55);
 
+  /* The soft fills are deep here, so their ink is light. See the note in the
+     light block: this is the pairing every `*-soft` background needs. */
   --destructive: oklch(0.65 0.2 25);
   --destructive-foreground: oklch(0.98 0 0);
   --destructive-soft: oklch(0.3 0.06 25);
+  --destructive-soft-foreground: oklch(0.88 0.09 25);
   --success: oklch(0.7 0.15 152);
   --success-foreground: oklch(0.19 0.02 60);
   --success-soft: oklch(0.29 0.05 152);
+  --success-soft-foreground: oklch(0.87 0.09 152);
   --warning: oklch(0.82 0.14 78);
   --warning-foreground: oklch(0.22 0.03 60);
   --warning-soft: oklch(0.32 0.05 78);
+  --warning-soft-foreground: oklch(0.9 0.09 82);
   --info: oklch(0.7 0.13 245);
   --info-foreground: oklch(0.19 0.02 60);
   --info-soft: oklch(0.29 0.05 245);
+  --info-soft-foreground: oklch(0.88 0.07 245);
 
   --chart-1: oklch(0.75 0.17 50);
   --chart-2: oklch(0.74 0.11 195);
@@ -240,6 +259,11 @@
   --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft-foreground: var(--warning-soft-foreground);
+  --color-destructive-soft-foreground: var(--destructive-soft-foreground);
+  --color-success-soft-foreground: var(--success-soft-foreground);
+  --color-info-soft-foreground: var(--info-soft-foreground);
+  --color-primary-soft-foreground: var(--primary-soft-foreground);
   --color-warning-soft: var(--warning-soft);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
@@ -308,6 +332,14 @@
    Named steps so screens stop repeating `text-3xl font-semibold tracking-tight`
    and drifting apart. Display steps use Bricolage; body steps use Inter.       */
 
+/* One step above display-xl, for the marketing hero only. DESIGN.md 4.2
+   reserves display-xl for "landing only"; the hero needs to out-shout it. */
+@utility text-display-2xl {
+  font-family: var(--font-display);
+  font-size: clamp(2.75rem, 1.6rem + 4.6vw, 4.5rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
 @utility text-display-xl {
   font-family: var(--font-display);
   font-size: 3rem;
@@ -456,6 +488,24 @@
   50%,
   100% {
     opacity: 0;
+  }
+}
+
+@keyframes cf-accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes cf-accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
   }
 }
 

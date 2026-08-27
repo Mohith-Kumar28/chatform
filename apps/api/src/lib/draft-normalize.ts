@@ -3,11 +3,12 @@ import {
   BLOCK_TYPES,
   FormDoc,
   lintFormDoc,
+  buildFlowRules,
   type Block,
+  type DraftBranch,
   type FormDocInput,
 } from "@repo/form-schema";
 import type { GenerationDraft, EditDraft } from "./ai.js";
-import { buildFlowRules, type DraftBranch } from "./flow-normalize.js";
 
 /**
  * Loose model draft → a strict FormDoc.

@@ -80,7 +80,7 @@ export function LockChip({
       }}
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[0.625rem] font-medium",
-        "bg-[var(--warning-soft)] text-[var(--warning-foreground)] transition-opacity hover:opacity-80",
+        "bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)] transition-opacity hover:opacity-80",
         className,
       )}
       title={`${FEATURES[feature].label} — ${plan.name}`}
@@ -170,7 +170,7 @@ export function LockedOverlay({
 
       <div className="absolute inset-0 flex items-center justify-center bg-[var(--background)]/55 p-6 backdrop-blur-[2px]">
         <div className="max-w-sm text-center">
-          <div className="bg-[var(--warning-soft)] text-[var(--warning-foreground)] mx-auto mb-3 flex size-9 items-center justify-center rounded-full">
+          <div className="bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)] mx-auto mb-3 flex size-9 items-center justify-center rounded-full">
             <Lock className="size-4" aria-hidden />
           </div>
 

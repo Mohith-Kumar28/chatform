@@ -49,7 +49,7 @@ export function PublishStrippedDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md">
         <div className="flex items-start gap-3">
-          <div className="bg-[var(--warning-soft)] text-[var(--warning-foreground)] mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full">
+          <div className="bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)] mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full">
             <Lock className="size-4" aria-hidden />
           </div>
           <div>

@@ -24,7 +24,7 @@ export function StatCard({
     default: "text-muted-foreground bg-muted",
     primary: "text-primary bg-primary-soft",
     success: "text-[var(--success)] bg-[var(--success-soft)]",
-    warning: "text-[var(--warning-foreground)] bg-[var(--warning-soft)]",
+    warning: "text-[var(--warning-soft-foreground)] bg-[var(--warning-soft)]",
     destructive: "text-destructive bg-[var(--destructive-soft)]",
   }[tone];
 

@@ -42,8 +42,8 @@ export function ShareClient({
     <div className="space-y-4">
       {unpublished && (
         <div className="flex items-start gap-2 rounded-xl border border-[var(--warning)]/40 bg-[var(--warning-soft)] px-4 py-3">
-          <TriangleAlert className="text-[var(--warning-foreground)] mt-0.5 size-4 shrink-0" />
-          <p className="text-caption text-[var(--warning-foreground)]">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-[var(--warning-soft-foreground)]" />
+          <p className="text-caption text-[var(--warning-soft-foreground)]">
             This form isn&apos;t published yet. The link works, but respondents will see a closed
             message until you hit Publish.
           </p>

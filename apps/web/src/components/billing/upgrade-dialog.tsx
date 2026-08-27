@@ -64,7 +64,7 @@ export function UpgradeDialog() {
     <Dialog open onOpenChange={(o) => !o && close()}>
       <DialogContent className="max-w-md">
         <div className="text-center">
-          <div className="bg-[var(--warning-soft)] text-[var(--warning-foreground)] mx-auto mb-3 flex size-9 items-center justify-center rounded-full">
+          <div className="bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)] mx-auto mb-3 flex size-9 items-center justify-center rounded-full">
             <Lock className="size-4" aria-hidden />
           </div>
 
