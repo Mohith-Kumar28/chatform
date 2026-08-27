@@ -1,5 +1,5 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { streamText, generateText, generateObject, tool, type ToolSet, type LanguageModel } from "ai";
+import { streamText, streamObject, generateText, generateObject, tool, type ToolSet, type LanguageModel } from "ai";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
 
@@ -29,10 +29,20 @@ export const MODELS = {
   /** Free-text → structured answer. Narrow, schema-bound, wants to be cheap. */
   extraction: "google/gemini-3.1-flash-lite",
   /**
-   * Form generation runs once, in the builder, behind a spinner — quality
-   * matters more than latency, so it keeps the stronger model.
+   * Form generation and every builder-side edit.
+   *
+   * This was `anthropic/claude-sonnet-5`, chosen on the reasoning that
+   * generation happens once behind a spinner so quality could outrank
+   * latency. Measured on one real prompt, that trade was far worse than it
+   * looked: Sonnet spent 41.6s and $0.043 per draft, of which 2,740 of 3,962
+   * output tokens were reasoning. Gemini 3.7 Flash produces the same shape of
+   * document in 7.2s for $0.0018 — a quarter of the wall clock and a
+   * twenty-fourth of the cost — so the money is better spent on reading the
+   * author's site (see `researchBrief`) than on thinking tokens nobody reads.
    */
-  generation: "anthropic/claude-sonnet-5",
+  generation: "google/gemini-3.7-flash",
+  /** Reading the author's site and searching around it, before drafting. */
+  research: "google/gemini-3.7-flash",
 } as const;
 
 export const DEFAULT_MODEL = MODELS.interview;
@@ -45,9 +55,20 @@ export function chatModel(env: Bindings, model: string = DEFAULT_MODEL): Languag
   return openrouter(env).chat(model);
 }
 
-/** The interview model for a form, honouring its per-form override. */
+/**
+ * The interview model.
+ *
+ * `override` is still accepted so the caller does not have to know that the
+ * choice has been withdrawn, but it is deliberately ignored. Letting authors
+ * pick the model put the platform's per-conversation cost in the hands of
+ * whoever opened a dropdown — and the dropdown offered Opus, at roughly thirty
+ * times the tier below it. Documents saved while the control existed may still
+ * carry `settings.agent.model`; those forms now run on the same tier as
+ * everything else rather than quietly billing at their old one.
+ */
 export function interviewModel(env: Bindings, override?: string): { model: LanguageModel; id: string } {
-  const id = override?.trim() || MODELS.interview;
+  void override;
+  const id = MODELS.interview;
   return { model: openrouter(env).chat(id), id };
 }
 
@@ -119,6 +140,21 @@ export async function runAgentTurn(opts: {
  * Loose generation schema — deliberately NOT the full FormDoc (recursive
  * condition groups are rejected by provider structured-output APIs).
  * The route normalizes this draft into a strict FormDoc afterwards.
+ *
+ * FLATNESS IS A HARD REQUIREMENT, not a style choice.
+ *
+ * Google's structured-output validator enforces a budget over the whole
+ * schema, and `maxItems` multiplies into it: a draft with `blocks` capped at
+ * 30 × 7 properties alongside `branches` capped at 12 × 4 is rejected outright
+ * with "Request contains an invalid argument", before the model is even
+ * reached. Measured on `google/gemini-3.7-flash`: blocks(30) + endings(5) is
+ * accepted, blocks(30) + branches(12) is not, and blocks(20) + branches(12)
+ * is. Nesting counts double — options as `{id, label}` objects inside blocks
+ * blew the same budget on its own.
+ *
+ * Hence: 20 blocks, options as plain labels, and conditions flattened to four
+ * scalar fields. Anthropic accepted the old nested shape, which is exactly why
+ * this went unnoticed until the model changed.
  */
 export const GenerationDraft = z.object({
   title: z.string().min(1),
@@ -126,14 +162,19 @@ export const GenerationDraft = z.object({
   blocks: z
     .array(
       z.object({
-        ref: z.string().regex(/^[a-z][a-z0-9_]{1,40}$/),
+        ref: z.string(),
         type: z.string(),
         title: z.string().min(1),
         description: z.string(),
         required: z.boolean(),
-        options: z.array(
-          z.object({ id: z.string().regex(/^[a-z0-9_]{3,30}$/), label: z.string().min(1) }),
-        ),
+        /**
+         * Choice labels as the respondent reads them — "Android", not
+         * "opt_android". Ids are derived from the labels when the draft is
+         * normalized, which also removes a whole class of failure: the model
+         * used to be asked for both a label and a matching `opt_` id, then
+         * write a branch against an id it had misremembered.
+         */
+        options: z.array(z.string()),
         /**
          * Only meaningful for rating and opinion_scale. Strict structured
          * output requires every property to be present, so the model sends a
@@ -145,7 +186,7 @@ export const GenerationDraft = z.object({
       }),
     )
     .min(2)
-    .max(30),
+    .max(20),
   /**
    * One entry per distinct outcome.
    *
@@ -157,7 +198,7 @@ export const GenerationDraft = z.object({
   endings: z
     .array(
       z.object({
-        ref: z.string().regex(/^end_[a-z0-9_]{1,30}$/),
+        ref: z.string(),
         title: z.string().min(1),
         body: z.string(),
       }),
@@ -168,12 +209,19 @@ export const GenerationDraft = z.object({
   branches: z
     .array(
       z.object({
-        when: z.object({
-          ref: z.string(),
-          op: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains", "not_contains", "is_empty", "is_not_empty"]),
-          /** null when the op needs no value (is_empty / is_not_empty) — required field for strict structured output. */
-          value: z.union([z.string(), z.number(), z.boolean()]).nullable(),
-        }),
+        /** Ref of the question the condition reads. */
+        whenRef: z.string(),
+        op: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains", "not_contains", "is_empty", "is_not_empty"]),
+        /**
+         * Compared against the answer, as a string. For a choice question this
+         * is the option's LABEL, matched back to its id when normalizing;
+         * empty for `is_empty` / `is_not_empty`. A string rather than a union
+         * because a `string | number | boolean` union is one more thing for a
+         * provider's schema dialect to reject, and the normalizer knows the
+         * block's type well enough to coerce.
+         */
+        value: z.string(),
+        /** Target question ref or ending ref. */
         then: z.string(),
       }),
     )
@@ -191,17 +239,20 @@ export type GenerationDraft = z.output<typeof GenerationDraft>;
  * Android users, the old path appended both to the end and wired nothing — so
  * every respondent was asked both, and the "which device?" question already
  * sitting in the form went unused.
+ *
+ * Flat for the same reason `GenerationDraft` is; see the note there.
  */
 export const ExtensionDraft = z.object({
   blocks: z
     .array(
       z.object({
-        ref: z.string().regex(/^[a-z][a-z0-9_]{1,40}$/),
+        ref: z.string(),
         type: z.string(),
         title: z.string().min(1),
         description: z.string(),
         required: z.boolean(),
-        options: z.array(z.object({ id: z.string().regex(/^[a-z0-9_]{3,30}$/), label: z.string().min(1) })),
+        /** Choice labels as written for the respondent; ids are derived. */
+        options: z.array(z.string()),
         scale: z.number().int().min(0).max(20),
         /**
          * Ref of the block this one goes directly after — existing or newly
@@ -218,11 +269,10 @@ export const ExtensionDraft = z.object({
   branches: z
     .array(
       z.object({
-        when: z.object({
-          ref: z.string(),
-          op: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains", "not_contains", "is_empty", "is_not_empty"]),
-          value: z.union([z.string(), z.number(), z.boolean()]).nullable(),
-        }),
+        whenRef: z.string(),
+        op: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains", "not_contains", "is_empty", "is_not_empty"]),
+        /** Option label for a choice question, or the literal value; "" when the op needs none. */
+        value: z.string(),
         then: z.string(),
       }),
     )
@@ -232,12 +282,30 @@ export const ExtensionDraft = z.object({
 });
 export type ExtensionDraft = z.output<typeof ExtensionDraft>;
 
+/**
+ * Provider options for anything drafted in the builder.
+ *
+ * Reasoning is capped rather than left at the provider default, on measurement
+ * rather than principle. On one real prompt the same model and schema produced
+ * an equally usable eight-block draft at every setting, and the wall clock was
+ * the only thing that moved: 41.6s at the default, 19.6s at `low`, 12.6s at
+ * `minimal`. Drafting a form is a formatting job with a schema holding the
+ * shape — the thinking budget was buying seconds of spinner, not questions.
+ *
+ * `low` rather than `minimal` because the branching is the part that genuinely
+ * benefits from a moment's thought, and it is the part authors notice missing.
+ */
+export const GENERATION_PROVIDER_OPTIONS = {
+  openrouter: { reasoning: { effort: "low" as const, exclude: true } },
+} as const;
+
 /** Extend an existing form: new blocks, where they go, and how they branch. */
 export async function generateExtension(opts: { env: Bindings; prompt: string }): Promise<{ draft: ExtensionDraft; tokens: number }> {
   const result = await generateObject({
     model: chatModel(opts.env, MODELS.generation),
     schema: ExtensionDraft,
     prompt: opts.prompt,
+    providerOptions: GENERATION_PROVIDER_OPTIONS,
   });
   return {
     draft: result.object as ExtensionDraft,
@@ -251,11 +319,150 @@ export async function generateFormDraft(opts: { env: Bindings; prompt: string })
     model: chatModel(opts.env, MODELS.generation),
     schema: GenerationDraft,
     prompt: opts.prompt,
+    providerOptions: GENERATION_PROVIDER_OPTIONS,
   });
   return {
     draft: result.object as GenerationDraft,
     tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
   };
+}
+
+/** A question as it appears mid-stream, before the draft is complete. */
+export interface DraftBlockPreview {
+  index: number;
+  ref: string;
+  type: string;
+  title: string;
+  optionCount: number;
+}
+
+/**
+ * The same generation, streamed.
+ *
+ * Worth the extra code purely for what the author sees. Unstreamed, the first
+ * sign that anything happened is the finished document; streamed, the same run
+ * puts a real question on screen at 3.7s and the last of eight at ~7s. The
+ * spinner stops being a claim that work is happening and starts being the work
+ * itself.
+ *
+ * `onBlock` fires once per question, the first time that question has a title
+ * — partial objects arrive character by character, so a question is announced
+ * only when there is something to announce, and never twice.
+ */
+export async function streamFormDraft(opts: {
+  env: Bindings;
+  prompt: string;
+  onBlock?: (block: DraftBlockPreview) => void;
+  abortSignal?: AbortSignal;
+}): Promise<{ draft: GenerationDraft; tokens: number }> {
+  const result = streamObject({
+    model: chatModel(opts.env, MODELS.generation),
+    schema: GenerationDraft,
+    prompt: opts.prompt,
+    providerOptions: GENERATION_PROVIDER_OPTIONS,
+    abortSignal: opts.abortSignal,
+  });
+
+  const announced = new Set<number>();
+  for await (const partial of result.partialObjectStream) {
+    if (!opts.onBlock) continue;
+    const blocks = partial.blocks ?? [];
+    for (const [i, b] of blocks.entries()) {
+      // The last element of a partial array is the one still being written, so
+      // a block is only announced once its title has stopped growing — i.e.
+      // once a later block has appeared, or the stream has ended.
+      const settled = i < blocks.length - 1;
+      if (!settled || announced.has(i) || !b?.title) continue;
+      announced.add(i);
+      opts.onBlock({
+        index: i,
+        ref: b.ref ?? "",
+        type: b.type ?? "",
+        title: b.title,
+        optionCount: b.options?.filter(Boolean).length ?? 0,
+      });
+    }
+  }
+
+  const draft = (await result.object) as GenerationDraft;
+  // The final block never gets a successor to settle it against, so it is
+  // announced from the finished document instead.
+  const last = draft.blocks.length - 1;
+  if (opts.onBlock && last >= 0 && !announced.has(last)) {
+    const b = draft.blocks[last]!;
+    opts.onBlock({ index: last, ref: b.ref, type: b.type, title: b.title, optionCount: b.options.length });
+  }
+  const usage = await result.usage;
+  return { draft, tokens: (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0) };
+}
+
+/**
+ * What the author's own site says about their product.
+ *
+ * A prompt that names a URL is asking for questions about that product, and
+ * without this the generator has only the URL string to go on — it produces the
+ * same six generic questions it would for no URL at all. Given the page text,
+ * the same request produces questions in the product's own vocabulary, about
+ * the platforms it actually ships on.
+ *
+ * The page text is the reliable half; OpenRouter's `web` plugin adds what the
+ * rest of the internet says. Search alone is not enough and was measured being
+ * actively wrong: asked about "Meemo" with no page text, it confidently
+ * described three unrelated products. So search runs grounded in the scrape,
+ * never instead of it.
+ *
+ * Returns null rather than throwing. The plugin is a real dependency with real
+ * failures — two 504s from OpenRouter while this was being written — and a
+ * form must still get drafted when the research step is having a bad minute.
+ */
+export async function researchBrief(opts: {
+  env: Bindings;
+  request: string;
+  sites: { url: string; title: string | null; text: string }[];
+  abortSignal?: AbortSignal;
+}): Promise<{ brief: string; sources: string[]; tokens: number } | null> {
+  const pages = opts.sites
+    .map((s) => `PAGE ${s.url}${s.title ? ` — ${s.title}` : ""}\n"""${s.text}"""`)
+    .join("\n\n");
+
+  try {
+    const result = await generateText({
+      model: chatModel(opts.env, MODELS.research),
+      prompt: `A form author asked for: "${opts.request}"
+
+${pages || "(no page content could be read)"}
+
+Write a BRIEF for whoever drafts the survey. Under 160 words, plain lines, no preamble:
+PRODUCT: what it is, in the site's own vocabulary
+AUDIENCE: who signs up
+PLATFORMS: the exact platform and store names the site mentions
+VOCABULARY: 3-6 product-specific terms the questions should use
+WORTH ASKING: 3-4 things this product specifically needs to know from a respondent
+
+Use only what the page content and your search results support. If something is not evidenced, leave that line out rather than guessing — an invented detail becomes a question nobody can answer.`,
+      providerOptions: {
+        openrouter: {
+          plugins: [{ id: "web" as const, max_results: 3 }],
+          reasoning: { effort: "minimal" as const, exclude: true },
+        },
+      },
+      abortSignal: opts.abortSignal,
+    });
+
+    const brief = result.text.trim();
+    if (!brief) return null;
+    const sources = [
+      ...new Set(
+        (result.sources ?? [])
+          .map((src) => ("url" in src && typeof src.url === "string" ? src.url : null))
+          .filter((u): u is string => !!u),
+      ),
+    ].slice(0, 6);
+    return { brief, sources, tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0) };
+  } catch (err) {
+    console.error("research_failed", err);
+    return null;
+  }
 }
 
 /**

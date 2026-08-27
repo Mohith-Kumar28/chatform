@@ -8,7 +8,7 @@ import {
   Shield,
   Target,
   Trash2,
-  Cpu,
+  Coins,
 } from "lucide-react";
 import { KNOWLEDGE_CHAR_BUDGET, knowledgeSize } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingGroup, SettingRow } from "@/components/ui/setting-row";
-import { Field, SelectField, NumberField, SwitchField, TextField } from "../inspector/fields";
+import { Field, NumberField, SwitchField, TextField } from "../inspector/fields";
 import { useBuilderStore } from "@/stores/builder-store";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +27,7 @@ const SECTIONS = [
   { value: "goal", label: "Goal", icon: Target },
   { value: "knowledge", label: "Knowledge", icon: BookOpen },
   { value: "guardrails", label: "Guardrails", icon: Shield },
-  { value: "model", label: "Model", icon: Cpu },
+  { value: "budget", label: "Budget", icon: Coins },
 ] as const;
 
 type Section = (typeof SECTIONS)[number]["value"];
@@ -320,20 +320,15 @@ export function AgentTab() {
           </SettingGroup>
         )}
 
-        {section === "model" && (
-          <SettingGroup description="Which model runs the interview, and how much it may spend.">
-            <SelectField
-              label="Model"
-              hint="Sonnet 5 is the default and handles objections and off-topic questions best."
-              value={agent.model ?? "default"}
-              onChange={(v) => patch({ model: v === "default" ? undefined : v })}
-              options={[
-                { value: "default", label: "Claude Sonnet 5 (recommended)" },
-                { value: "anthropic/claude-opus-5", label: "Claude Opus 5 — highest quality" },
-                { value: "anthropic/claude-haiku-4-5", label: "Claude Haiku 4.5 — fastest, cheapest" },
-                { value: "openai/gpt-4o-mini", label: "GPT-4o mini" },
-              ]}
-            />
+        {/*
+          The model picker used to live here, offering Opus at roughly thirty
+          times the cost of the tier below it — which made the per-conversation
+          cost of the platform a choice for whoever opened a dropdown, on a
+          screen that gave them no way to judge it. The model is now ours to
+          pick; what is left are the two limits an author has a real stake in.
+        */}
+        {section === "budget" && (
+          <SettingGroup description="How much a single conversation may spend.">
             <div className="grid grid-cols-2 gap-3">
               <NumberField
                 label="Token budget"

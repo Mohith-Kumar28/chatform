@@ -1,14 +1,17 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { Block as BlockSchema, FormDoc, lintFormDoc, hasErrors, type Block, type FormDocInput, type LogicRuleInput, migrateFormDoc } from "@repo/form-schema";
+import { FormDoc, lintFormDoc, hasErrors, migrateFormDoc, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, assertFormAccess, type GuardVars } from "../lib/guards.js";
-import { requirePermission, requireQuota, type AuthzVars } from "../lib/authorize.js";
+import { requirePermission, requireQuota, requireGauge, type AuthzVars } from "../lib/authorize.js";
 import { meter } from "../lib/entitlements.js";
-import { generateFormDraft, generateExtension, type GenerationDraft } from "../lib/ai.js";
+import { generateFormDraft, generateExtension, streamFormDraft, researchBrief, type GenerationDraft } from "../lib/ai.js";
 import { buildFlowRules } from "../lib/flow-normalize.js";
-import { buildFlowGeneratorPrompt, buildExtensionPrompt } from "../lib/agent-prompts.js";
+import { buildFlowGeneratorPrompt, buildExtensionPrompt, type BuilderTurn } from "../lib/agent-prompts.js";
+import { draftToDoc, normalizeExtensionBlocks, resolveBranches } from "../lib/draft-normalize.js";
+import { extractUrls, readSites } from "../lib/research.js";
+import { requireWorkspace, formSlug } from "../lib/workspace.js";
 
 export const aiRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
@@ -19,78 +22,106 @@ aiRouter.use("/ai/*", requireOrg);
 // fails upstream must not spend someone's monthly allowance.
 aiRouter.use("/ai/*", requirePermission("ai", "generate"));
 aiRouter.use("/ai/*", requireQuota("ai_generations", "ai.generate"));
+// The streaming generator writes the form itself, so it is gated like creating
+// one. Denials land before the stream opens and are ordinary JSON, which is
+// what lets the client's paywall interceptor see them.
+aiRouter.post("/ai/generate-form/stream", requirePermission("form", "create"));
+aiRouter.post("/ai/generate-form/stream", requireGauge("forms_count", "forms.create"));
 
 const GenerateBody = z.object({
   prompt: z.string().min(5).max(2000),
   questionCount: z.number().int().min(2).max(20).default(6),
 });
 
-/** The model's placeholder scale is often 0; fall back rather than fail. */
-function clampScale(value: number | undefined, min: number, max: number, fallback: number): number {
-  if (value === undefined || value < min || value > max) return fallback;
-  return value;
+/** A generation that produced a valid document, plus what it cost. */
+interface Generated {
+  doc: ReturnType<typeof FormDoc.parse>;
+  issues: ReturnType<typeof lintFormDoc>;
+  tokens: number;
 }
 
-/** Map a loose generated block onto the strict Block schema; falls back to short_text. */
-function normalizeBlock(draft: GenerationDraft["blocks"][number], index: number): Block | null {
-  const type = draft.type as Block["type"];
-  const id = `blk_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
-  const base = { id, ref: draft.ref, title: draft.title, description: draft.description || undefined, required: draft.required };
+/**
+ * Turn a draft into a document, retrying once with the linter's complaints fed
+ * back in. Shared by both generation routes.
+ */
+async function generateWithRetry(opts: {
+  env: Bindings;
+  prompt: string;
+  questionCount: number;
+  research: { brief: string; sources: string[] } | null;
+  /** Called for each question as it is drafted; enables the streaming path. */
+  onBlock?: (b: { index: number; title: string; type: string }) => void;
+  onRetry?: (reason: string) => void;
+}): Promise<Generated> {
+  let lastError = "";
+  let tokens = 0;
 
-  if (index === 0 && (type === "welcome" || draft.ref === "welcome")) {
-    return BlockSchema.parse({ ...base, type: "welcome", buttonLabel: "Start" });
-  }
-  try {
-    switch (type) {
-      case "welcome":
-        return BlockSchema.parse({ ...base, type: "welcome", buttonLabel: "Start" });
-      case "statement":
-        return BlockSchema.parse({ ...base, type: "statement", buttonLabel: "Continue" });
-      case "short_text":
-        return BlockSchema.parse({ ...base, type: "short_text", minLength: 0, maxLength: 300 });
-      case "long_text":
-        return BlockSchema.parse({ ...base, type: "long_text", minLength: 0, maxLength: 1500 });
-      case "email":
-      case "phone":
-      case "url":
-      case "date":
-      case "number":
-        return BlockSchema.parse({ ...base, type });
-      case "yes_no":
-        return BlockSchema.parse({ ...base, type: "yes_no" });
-      case "single_select":
-      case "multi_select":
-      case "dropdown": {
-        const options = (draft.options ?? []).map((o) => ({ id: o.id, label: o.label }));
-        void options;
-        if (options.length < 2) return null;
-        if (type === "multi_select") {
-          return BlockSchema.parse({ ...base, type, options, minSelections: 1, maxSelections: options.length, allowOther: false });
-        }
-        return BlockSchema.parse({ ...base, type, options, allowOther: false });
-      }
-      case "rating":
-        return BlockSchema.parse({
-          ...base,
-          type: "rating",
-          scale: clampScale(draft.scale, 1, 10, 5),
-          shape: "star",
-        });
-      case "nps":
-        return BlockSchema.parse({ ...base, type: "nps" });
-      case "opinion_scale":
-        return BlockSchema.parse({
-          ...base,
-          type: "opinion_scale",
-          steps: clampScale(draft.scale, 2, 11, 5),
-          startAt: 1,
-        });
-      default:
-        return null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const fixNote =
+      attempt === 0 ? "" : `\n\nYour previous attempt had these problems — fix them:\n${lastError}`;
+    const prompt = buildFlowGeneratorPrompt(opts.prompt, opts.questionCount, opts.research) + fixNote;
+
+    let draft: GenerationDraft;
+    try {
+      const result = opts.onBlock
+        ? await streamFormDraft({ env: opts.env, prompt, onBlock: opts.onBlock })
+        : await generateFormDraft({ env: opts.env, prompt });
+      draft = result.draft;
+      tokens += result.tokens;
+    } catch (err) {
+      // An upstream failure — OpenRouter 5xx, a provider timeout, a schema the
+      // provider rejected. Worth one retry; the second is the author's problem
+      // to hear about rather than wait through.
+      lastError = err instanceof Error ? err.message : String(err);
+      console.error("generation_call_failed", lastError);
+      if (attempt === 1) throw new Error(upstreamMessage(lastError));
+      opts.onRetry?.("The model didn't respond — trying once more");
+      continue;
     }
-  } catch {
-    return null;
+
+    let normalized;
+    try {
+      normalized = draftToDoc(draft);
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      if (attempt === 1) throw new Error("The AI couldn't produce a usable form. Try rephrasing the request.");
+      opts.onRetry?.("The draft came back incomplete — trying once more");
+      continue;
+    }
+
+    if (!hasErrors(normalized.issues)) {
+      return { doc: normalized.doc, issues: normalized.issues, tokens };
+    }
+
+    lastError = normalized.issues
+      .filter((i) => i.level === "error")
+      .map((i) => `${i.path ?? ""}: ${i.message}`)
+      .join("\n");
+    if (attempt === 1) {
+      // Second attempt still has lint errors. The document is structurally
+      // valid — it parsed — so the author is better served by a form with a
+      // flagged issue in the builder than by nothing at all.
+      return { doc: normalized.doc, issues: normalized.issues, tokens };
+    }
+    opts.onRetry?.("Fixing a problem with the flow");
   }
+
+  throw new Error("The AI couldn't produce a usable form. Try rephrasing the request.");
+}
+
+/** Upstream error text is for logs; this is what the author is told. */
+function upstreamMessage(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (lower.includes("abort") || lower.includes("timeout") || lower.includes("504")) {
+    return "The AI provider timed out. Please try again.";
+  }
+  if (lower.includes("rate") && lower.includes("limit")) {
+    return "The AI provider is rate-limiting us right now. Please try again in a moment.";
+  }
+  if (lower.includes("credit") || lower.includes("402") || lower.includes("insufficient")) {
+    return "The AI provider rejected the request (billing). Please contact support.";
+  }
+  return "The AI provider failed to respond. Please try again.";
 }
 
 aiRouter.post(
@@ -118,79 +149,233 @@ aiRouter.post(
     }
     const { prompt, questionCount } = c.req.valid("json");
 
-    let lastError = "";
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const fixNote =
-        attempt === 0
-          ? ""
-          : `\n\nYour previous attempt had these problems — fix them:\n${lastError}`;
-      const { draft, tokens } = await generateFormDraft({
+    const research = await researchFor(c.env, prompt);
+    try {
+      const { doc, issues, tokens } = await generateWithRetry({
         env: c.env,
-        prompt: buildFlowGeneratorPrompt(prompt, questionCount) + fixNote,
+        prompt,
+        questionCount,
+        research: research.brief,
       });
-
-      // normalize loose draft → strict blocks
-      const blocks: Block[] = [];
-      const seenRefs = new Set<string>();
-      for (const [i, b] of draft.blocks.entries()) {
-        let ref = b.ref;
-        while (seenRefs.has(ref)) ref = `${ref}_${i}`;
-        seenRefs.add(ref);
-        const block = normalizeBlock({ ...b, ref }, i);
-        if (block) blocks.push(block);
+      // Consumed only now that a valid document exists. A generation that failed
+      // upstream, or produced something unusable, must not spend the allowance.
+      const orgId = c.get("orgId");
+      if (orgId) {
+        await meter(c.env, orgId, "ai_generations");
+        const total = tokens + research.tokens;
+        if (total > 0) await meter(c.env, orgId, "ai_tokens", total);
       }
-      if (blocks.length < 2 || blocks[0]!.type !== "welcome") {
-        lastError = "First block must be a welcome block; include at least 2 blocks with valid options for choice questions.";
-        continue;
-      }
-
-      // Dedupe ending refs the same way block refs are deduped — two endings
-      // sharing a ref would make every branch to it ambiguous.
-      const seenEndingRefs = new Set<string>();
-      const endings = draft.endings.map((e, i) => {
-        let ref = e.ref;
-        while (seenEndingRefs.has(ref)) ref = `${ref}_${i}`;
-        seenEndingRefs.add(ref);
-        return {
-          id: `end_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`,
-          ref,
-          title: e.title,
-          bodyMd: e.body,
-          redirectDelaySec: 5,
-          showSummary: false,
-        };
-      });
-
-      const doc = FormDoc.parse({
-        schemaVersion: 1,
-        title: draft.title,
-        description: draft.description,
-        blocks,
-        endings,
-        logic: buildFlowRules(draft.branches, blocks, endings.map((e) => e.ref)),
-        endingRules: [],
-        variables: [],
-        hiddenFields: [],
-        settings: {},
-        theme: {},
-      } satisfies FormDocInput);
-
-      const issues = lintFormDoc(doc);
-      if (!hasErrors(issues)) {
-        // Consumed only now that a valid document exists. A generation that failed
-        // upstream, or produced something unusable, must not spend the allowance.
-        const orgId = c.get("orgId");
-        if (orgId) {
-          await meter(c.env, orgId, "ai_generations");
-          if (tokens > 0) await meter(c.env, orgId, "ai_tokens", tokens);
-        }
-        return c.json({ doc, issues, tokens });
-      }
-      lastError = issues.filter((i) => i.level === "error").map((i) => `${i.path ?? ""}: ${i.message}`).join("\n");
+      return c.json({ doc, issues, tokens });
+    } catch (err) {
+      return c.json(
+        { error: { code: "generation_failed", message: err instanceof Error ? err.message : "Generation failed" } },
+        502,
+      );
     }
-    return c.json({ error: { code: "generation_failed", message: "AI could not produce a valid form. Try rephrasing." } }, 502);
   },
 );
+
+/** Read whatever sites the prompt mentions. Never throws; never blocks for long. */
+async function researchFor(
+  env: Bindings,
+  prompt: string,
+): Promise<{ brief: { brief: string; sources: string[] } | null; urls: string[]; tokens: number }> {
+  const urls = extractUrls(prompt);
+  if (urls.length === 0) return { brief: null, urls, tokens: 0 };
+  const sites = await readSites(urls);
+  if (sites.length === 0) return { brief: null, urls, tokens: 0 };
+  const brief = await researchBrief({ env, request: prompt, sites });
+  return { brief: brief ? { brief: brief.brief, sources: brief.sources } : null, urls, tokens: brief?.tokens ?? 0 };
+}
+
+// ─── streaming generation ───
+
+/**
+ * The same generation, narrated.
+ *
+ * Two problems with the JSON route above, both felt by the author rather than
+ * visible in a log.
+ *
+ * The first is honesty. Drafting takes tens of seconds, and the dashboard could
+ * only show one indefinite spinner labelled "Drafting your form…", which is
+ * indistinguishable from a hang — an author reasonably assumed it was broken and
+ * reloaded. Every stage here is a real step with a real duration, and questions
+ * appear as the model writes them, so the wait shows its work.
+ *
+ * The second is Cloudflare's edge. A Worker that sends no response headers for
+ * 100 seconds has its request terminated with a 524, and the old flow was three
+ * sequential requests — generate, create, save — with two model calls inside the
+ * first. Streaming flushes headers immediately, so the connection is never idle,
+ * and doing all three steps in one request removes two round trips as well.
+ */
+const streamHeaders = {
+  "content-type": "text/event-stream; charset=utf-8",
+  // no-transform is what stops an intermediary from buffering the whole
+  // response and delivering it at the end, which would undo all of the above.
+  "cache-control": "no-cache, no-transform",
+  connection: "keep-alive",
+  "x-accel-buffering": "no",
+} as const;
+
+/** One stage of the pipeline, as the client renders it. */
+type StageId = "reading" | "researching" | "drafting" | "logic" | "saving";
+
+aiRouter.post(
+  "/ai/generate-form/stream",
+  validator("json", GenerateBody),
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Generate a form and create it, streaming progress as server-sent events",
+    description:
+      "Server-sent events: `stage` (a step started or finished), `question` (one drafted question), `sources` (pages read), `done` (the created form), `error`. The form is created and saved server-side, so a `done` event means it exists.",
+    responses: {
+      200: { description: "text/event-stream" },
+      503: { description: "AI not configured" },
+    },
+  }),
+  async (c) => {
+    if (!c.env.OPENROUTER_API_KEY) {
+      return c.json({ error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } }, 503);
+    }
+    const { prompt, questionCount } = c.req.valid("json");
+    const ws = await requireWorkspace(c);
+    if (!ws) {
+      return c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
+    }
+    const userId = c.get("userId") as string;
+    const orgId = c.get("orgId");
+
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+    let closed = false;
+
+    const send = async (event: string, data: unknown) => {
+      if (closed) return;
+      try {
+        await writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      } catch {
+        // The author navigated away or hit cancel. Stop writing; the pipeline
+        // below checks `closed` and unwinds.
+        closed = true;
+      }
+    };
+    const stage = (id: StageId, status: "start" | "done" | "skip", label?: string) =>
+      send("stage", { id, status, label });
+
+    const pipeline = async () => {
+      try {
+        const urls = extractUrls(prompt);
+        let research: { brief: string; sources: string[] } | null = null;
+        let researchTokens = 0;
+
+        if (urls.length > 0) {
+          await stage("reading", "start", urls.length === 1 ? hostOf(urls[0]!) : `${urls.length} pages`);
+          const sites = await readSites(urls);
+          await stage("reading", sites.length > 0 ? "done" : "skip");
+
+          if (sites.length > 0) {
+            await send("sources", { pages: sites.map((s) => ({ url: s.url, title: s.title })) });
+            await stage("researching", "start");
+            const brief = await researchBrief({ env: c.env, request: prompt, sites });
+            if (brief) {
+              research = { brief: brief.brief, sources: brief.sources };
+              researchTokens = brief.tokens;
+              if (brief.sources.length > 0) {
+                await send("sources", { searched: brief.sources.map((u) => ({ url: u, title: hostOf(u) })) });
+              }
+            }
+            await stage("researching", brief ? "done" : "skip");
+          } else {
+            // The site could not be read — client-rendered, bot-walled, down.
+            // Say so rather than implying the questions know about it.
+            await stage("researching", "skip");
+          }
+        } else {
+          await stage("reading", "skip");
+          await stage("researching", "skip");
+        }
+
+        await stage("drafting", "start");
+        const { doc, issues, tokens } = await generateWithRetry({
+          env: c.env,
+          prompt,
+          questionCount,
+          research,
+          onBlock: (b) => {
+            // Fire-and-forget: the model is not waiting on the socket, and an
+            // author who closed the tab must not stall the generation.
+            void send("question", { index: b.index, title: b.title, type: b.type });
+          },
+          onRetry: (reason) => void send("retry", { reason }),
+        });
+        await stage("drafting", "done");
+
+        const questions = doc.blocks.filter((b) => b.type !== "welcome" && b.type !== "statement").length;
+        const rules = doc.logic.filter((r) => r.action_kind === "goto").length;
+        await stage("logic", "start");
+        await stage("logic", rules > 0 ? "done" : "skip", rules > 0 ? String(rules) : undefined);
+
+        await stage("saving", "start");
+        const id = `frm_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+        const title = doc.title || "AI form";
+        const now = Date.now();
+        await c.env.DB.prepare(
+          `INSERT INTO forms (id, organization_id, workspace_id, created_by, title, slug, status, working_schema, fingerprint_salt, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
+        )
+          .bind(id, ws.orgId, ws.wsId, userId, title, formSlug(title), JSON.stringify(doc), crypto.randomUUID().slice(0, 16), now, now)
+          .run();
+        await stage("saving", "done");
+
+        // Metered after the form exists, for the same reason as the JSON route:
+        // an allowance should only be spent on something the author can open.
+        if (orgId) {
+          await meter(c.env, orgId, "ai_generations");
+          const total = tokens + researchTokens;
+          if (total > 0) await meter(c.env, orgId, "ai_tokens", total);
+        }
+
+        await send("done", {
+          formId: id,
+          title,
+          questions,
+          rules,
+          issues: issues.filter((i) => i.level === "error").length,
+        });
+      } catch (err) {
+        console.error("generate_form_stream_failed", err);
+        await send("error", {
+          message: err instanceof Error ? err.message : "Generation failed",
+        });
+      } finally {
+        closed = true;
+        try {
+          await writer.close();
+        } catch {
+          // Already closed by the client disconnecting.
+        }
+      }
+    };
+
+    // Held open explicitly. The response returns immediately so headers reach
+    // the edge inside its window; without waitUntil the runtime is free to
+    // consider the request finished and cancel the work still writing to it.
+    c.executionCtx.waitUntil(pipeline());
+
+    return new Response(readable, { headers: streamHeaders });
+  },
+);
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+// ─── extending an existing form ───
 
 aiRouter.post(
   "/ai/add-blocks",
@@ -200,6 +385,15 @@ aiRouter.post(
       formId: z.string(),
       prompt: z.string().min(3).max(1000),
       count: z.number().int().min(1).max(10).default(3),
+      /**
+       * The builder's AI bar thread, oldest first. Optional so an older client
+       * keeps working, but without it the model cannot resolve "also", "it" or
+       * "instead" and answers a question nobody asked.
+       */
+      history: z
+        .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().max(2000) }))
+        .max(20)
+        .default([]),
     }),
   ),
   describeRoute({
@@ -207,6 +401,7 @@ aiRouter.post(
     summary: "AI-generate additional blocks appended to an existing form",
     responses: {
       200: { description: "New blocks + updated doc", content: { "application/json": { schema: resolver(z.object({ doc: z.unknown(), added: z.number(), tokens: z.number() })) } } },
+      502: { description: "The model failed or produced nothing usable" },
       503: { description: "AI not configured" },
     },
   }),
@@ -214,7 +409,8 @@ aiRouter.post(
     if (!c.env.OPENROUTER_API_KEY) {
       return c.json({ error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } }, 503);
     }
-    const { formId, prompt, count } = c.req.valid("json");
+    const { formId, prompt, count, history } = c.req.valid("json");
+    void count;
     // formId arrives in the body, so path middleware cannot guard it — check here.
     const form = await assertFormAccess(c, formId);
     if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
@@ -224,31 +420,39 @@ aiRouter.post(
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     const doc = FormDoc.parse(migrateFormDoc(JSON.parse(row.working_schema)));
 
-    const { draft, tokens } = await generateExtension({
-      env: c.env,
-      prompt: buildExtensionPrompt(doc, prompt),
-    });
+    // The model call is a network call to a third party, and it fails: two 504s
+    // from OpenRouter in one afternoon while this was being written. Uncaught,
+    // it reached the app's error handler and the builder's chat printed
+    // "Internal server error" into the thread — which reads as a bug in
+    // chatform and tells the author nothing about what to do next.
+    let draft, tokens;
+    try {
+      const result = await generateExtension({
+        env: c.env,
+        prompt: buildExtensionPrompt(doc, prompt, history as BuilderTurn[]),
+      });
+      draft = result.draft;
+      tokens = result.tokens;
+    } catch (err) {
+      console.error("add_blocks_failed", err);
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: { code: "generation_failed", message: upstreamMessage(message) } }, 502);
+    }
 
     // Insert each block where the model asked for it, resolving against the
     // list as it grows so one new block can follow another. Appending
     // everything to the end — which is all this route used to do — puts the
     // arms of a condition below the questions they are supposed to skip.
+    const existingRefs = new Set(doc.blocks.map((b) => b.ref));
+    const { blocks: proposed, optionIdsByRef, renamed } = normalizeExtensionBlocks(draft, existingRefs);
+
     const added: Block[] = [];
-    const renamed = new Map<string, string>();
-    for (const b of draft.blocks) {
-      if (b.type === "welcome" || b.type === "statement") continue;
-      let ref = b.ref;
-      while (doc.blocks.some((x) => x.ref === ref)) ref = `${ref}_x`;
-      if (ref !== b.ref) renamed.set(b.ref, ref);
-
-      const normalized = normalizeBlock({ ...b, ref }, 1); // index 1 = never treated as welcome
-      if (!normalized) continue;
-
-      const anchor = renamed.get(b.insertAfter) ?? b.insertAfter;
+    for (const { block, insertAfter } of proposed) {
+      const anchor = renamed.get(insertAfter) ?? insertAfter;
       const at = anchor ? doc.blocks.findIndex((x) => x.ref === anchor) : -1;
-      if (at >= 0) doc.blocks.splice(at + 1, 0, normalized);
-      else doc.blocks.push(normalized);
-      added.push(normalized);
+      if (at >= 0) doc.blocks.splice(at + 1, 0, block);
+      else doc.blocks.push(block);
+      added.push(block);
     }
     if (added.length === 0) {
       return c.json({ error: { code: "generation_failed", message: "AI could not produce new blocks. Try a different prompt." } }, 502);
@@ -256,19 +460,28 @@ aiRouter.post(
 
     // Branches may hang off a question that was already in the form, so rules
     // are built against the merged block list and folded in beside the
-    // existing ones rather than replacing them.
-    const branches = draft.branches.map((br) => ({
-      ...br,
-      when: { ...br.when, ref: renamed.get(br.when.ref) ?? br.when.ref },
-      then: renamed.get(br.then) ?? br.then,
-    }));
-    const priorGotos = doc.logic.filter((r) => r.action_kind === "goto");
-    const newRules = buildFlowRules(
-      branches,
+    // existing ones rather than replacing them. Option ids for questions that
+    // were already here come from the form itself, not from this draft.
+    for (const b of doc.blocks) {
+      if (optionIdsByRef.has(b.ref)) continue;
+      if ("options" in b && Array.isArray(b.options)) {
+        optionIdsByRef.set(
+          b.ref,
+          new Map((b.options as { id: string; label: string }[]).map((o) => [o.label.toLowerCase(), o.id])),
+        );
+      }
+    }
+    const branches = resolveBranches(
+      draft.branches.map((br) => ({
+        ...br,
+        whenRef: renamed.get(br.whenRef) ?? br.whenRef,
+        then: renamed.get(br.then) ?? br.then,
+      })),
       doc.blocks,
-      doc.endings.map((e) => e.ref),
-      priorGotos,
+      optionIdsByRef,
     );
+    const priorGotos = doc.logic.filter((r) => r.action_kind === "goto");
+    const newRules = buildFlowRules(branches, doc.blocks, doc.endings.map((e) => e.ref), priorGotos);
     if (newRules.length > 0) {
       doc.logic = FormDoc.parse({ ...doc, logic: [...doc.logic, ...newRules] }).logic;
     }

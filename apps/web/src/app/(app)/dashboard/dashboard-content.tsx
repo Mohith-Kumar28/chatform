@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { AiCapBanner } from "@/components/billing/ai-cap-banner";
+import { FormGenerationProgress, useFormGeneration } from "@/components/forms/form-generation";
 
 interface FormRow {
   id: string;
@@ -379,34 +380,42 @@ function CreateFormDialog({
   const [mode, setMode] = useState<"ai" | "blank">("ai");
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
+  const generation = useFormGeneration();
 
-  const create = useMutation({
-    mutationFn: async () => {
-      if (mode === "blank") {
-        return customFetch<{ id: string }>("/api/forms", {
-          method: "POST",
-          body: JSON.stringify({ title: title.trim() || "Untitled form" }),
-        });
-      }
-      const gen = await customFetch<{ doc: { title?: string } }>("/api/ai/generate-form", {
+  /**
+   * Describing a form is now one request, not three.
+   *
+   * It used to generate, then create the form, then save the document — three
+   * round trips the author waited through in silence, the first of which held
+   * the connection open long enough to risk Cloudflare's 100-second edge
+   * timeout on its own. The streaming route does all three server-side and
+   * narrates them, so `done` means the form exists and there is nothing left
+   * to do but open it.
+   */
+  const generate = () => {
+    void generation.start({ prompt: prompt.trim(), questionCount: 6 }, (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["forms"] });
+      setPrompt("");
+      // A beat on the finished checklist, so the last step is seen landing
+      // rather than replaced mid-animation by a route change.
+      window.setTimeout(() => {
+        onOpenChange(false);
+        generation.reset();
+        router.push(`/forms/${result.formId}/build`);
+      }, 450);
+    });
+  };
+
+  const createBlank = useMutation({
+    mutationFn: () =>
+      customFetch<{ id: string }>("/api/forms", {
         method: "POST",
-        body: JSON.stringify({ prompt: prompt.trim(), questionCount: 6 }),
-      });
-      const created = await customFetch<{ id: string }>("/api/forms", {
-        method: "POST",
-        body: JSON.stringify({ title: gen.doc?.title || "AI form" }),
-      });
-      await customFetch(`/api/forms/${created.id}/doc`, {
-        method: "PUT",
-        body: JSON.stringify({ doc: gen.doc }),
-      });
-      return created;
-    },
+        body: JSON.stringify({ title: title.trim() || "Untitled form" }),
+      }),
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: ["forms"] });
       onOpenChange(false);
       setTitle("");
-      setPrompt("");
       // Land in the builder, not back on the grid.
       router.push(`/forms/${created.id}/build`);
     },
@@ -414,65 +423,97 @@ function CreateFormDialog({
       toast.error("Couldn't create the form", { description: (e as Error).message }),
   });
 
+  const busy = generation.running || createBlank.isPending;
   const canSubmit = mode === "blank" ? title.trim().length > 0 : prompt.trim().length > 5;
 
+  // Closing mid-generation cancels it. The form is only written at the very
+  // end, so nothing half-made is left behind.
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      generation.cancel();
+      generation.reset();
+    }
+    onOpenChange(next);
+  };
+
+  const drafting = generation.running || generation.error !== null;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>New form</DialogTitle>
+          <DialogTitle>{drafting ? "Building your form" : "New form"}</DialogTitle>
           <DialogDescription>
-            Describe what you want to find out and the AI drafts the conversation.
+            {drafting
+              ? "Reading what you gave me and drafting the conversation."
+              : "Describe what you want to find out and the AI drafts the conversation."}
           </DialogDescription>
         </DialogHeader>
 
-        <SegmentedControl
-          options={[
-            { value: "ai", label: "Describe it", icon: Sparkles },
-            { value: "blank", label: "Start blank", icon: Plus },
-          ]}
-          value={mode}
-          onChange={setMode}
-        />
-
-        {mode === "ai" ? (
-          <div className="space-y-1.5">
-            <Label htmlFor="ai-prompt">What should it find out?</Label>
-            <Textarea
-              id="ai-prompt"
-              rows={4}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="A waitlist form for our launch — collect email, company size, and what problem they're hoping we solve."
-            />
-          </div>
+        {drafting ? (
+          <FormGenerationProgress
+            stages={generation.stages}
+            questions={generation.questions}
+            pages={generation.pages}
+            notice={generation.notice}
+            error={generation.error}
+            onCancel={() => {
+              generation.cancel();
+              generation.reset();
+            }}
+            onRetry={generate}
+          />
         ) : (
-          <div className="space-y-1.5">
-            <Label htmlFor="form-title">Form name</Label>
-            <Input
-              id="form-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Customer feedback"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && canSubmit) void create.mutateAsync();
-              }}
+          <>
+            <SegmentedControl
+              options={[
+                { value: "ai", label: "Describe it", icon: Sparkles },
+                { value: "blank", label: "Start blank", icon: Plus },
+              ]}
+              value={mode}
+              onChange={setMode}
             />
-          </div>
-        )}
 
-        <Button
-          shape="pill"
-          disabled={!canSubmit || create.isPending}
-          onClick={() => void create.mutateAsync()}
-        >
-          {create.isPending && <Loader2 className="size-3.5 animate-spin" />}
-          {create.isPending
-            ? mode === "ai"
-              ? "Drafting your form…"
-              : "Creating…"
-            : "Create form"}
-        </Button>
+            {mode === "ai" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="ai-prompt">What should it find out?</Label>
+                <Textarea
+                  id="ai-prompt"
+                  rows={4}
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="A waitlist form for our launch at example.com — collect email, company size, and what problem they're hoping we solve."
+                />
+                <p className="text-muted-foreground text-xs">
+                  Paste your site&apos;s URL and it will read the page first, so the questions know
+                  your product.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label htmlFor="form-title">Form name</Label>
+                <Input
+                  id="form-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Customer feedback"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && canSubmit) void createBlank.mutateAsync();
+                  }}
+                />
+              </div>
+            )}
+
+            <Button
+              shape="pill"
+              disabled={!canSubmit || busy}
+              onClick={() => (mode === "ai" ? generate() : void createBlank.mutateAsync())}
+            >
+              {createBlank.isPending && <Loader2 className="size-3.5 animate-spin" />}
+              {createBlank.isPending ? "Creating…" : "Create form"}
+            </Button>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

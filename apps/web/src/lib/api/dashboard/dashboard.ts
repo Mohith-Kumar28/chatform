@@ -26,6 +26,7 @@ import type {
   GetApiAuditLogs200,
   GetApiAuditLogsParams,
   GetApiAuthOk200,
+  GetApiAuthProviders200,
   GetApiForms200Item,
   GetApiFormsById200,
   GetApiFormsById404,
@@ -39,6 +40,7 @@ import type {
   PostApiAiAddBlocksBody,
   PostApiAiGenerateForm200,
   PostApiAiGenerateFormBody,
+  PostApiAiGenerateFormStreamBody,
   PostApiForms200,
   PostApiForms403,
   PostApiFormsBody,
@@ -76,6 +78,94 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export type getApiAuthProvidersResponse200 = {
+  data: GetApiAuthProviders200
+  status: 200
+}
+
+export type getApiAuthProvidersResponseSuccess = (getApiAuthProvidersResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiAuthProvidersResponse = (getApiAuthProvidersResponseSuccess)
+
+export const getGetApiAuthProvidersUrl = () => {
+
+
+
+
+  return `/api/auth-providers`
+}
+
+/**
+ * @summary Configured sign-in providers
+ */
+export const getApiAuthProviders = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiAuthProvidersResponse> => {
+
+  return customFetch<getApiAuthProvidersResponse>(getGetApiAuthProvidersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAuthProvidersQueryKey = () => {
+    return [
+    `/api/auth-providers`
+    ] as const;
+    }
+
+
+export const getGetApiAuthProvidersQueryOptions = <TData = Awaited<ReturnType<typeof getApiAuthProviders>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAuthProviders>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAuthProvidersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAuthProviders>>> = ({ signal }) => getApiAuthProviders({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAuthProviders>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAuthProvidersQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAuthProviders>>>
+export type GetApiAuthProvidersQueryError = unknown
+
+
+/**
+ * @summary Configured sign-in providers
+ */
+
+export function useGetApiAuthProviders<TData = Awaited<ReturnType<typeof getApiAuthProviders>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAuthProviders>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAuthProvidersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
 
 export type getApiAuthOkResponse200 = {
   data: GetApiAuthOk200
@@ -813,9 +903,111 @@ export const usePostApiAiGenerateForm = <TError = void,
       > => {
       return useMutation(getPostApiAiGenerateFormMutationOptions(options));
     }
+    export type postApiAiGenerateFormStreamResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postApiAiGenerateFormStreamResponse503 = {
+  data: void
+  status: 503
+}
+
+export type postApiAiGenerateFormStreamResponseSuccess = (postApiAiGenerateFormStreamResponse200) & {
+  headers: Headers;
+};
+export type postApiAiGenerateFormStreamResponseError = (postApiAiGenerateFormStreamResponse503) & {
+  headers: Headers;
+};
+
+export type postApiAiGenerateFormStreamResponse = (postApiAiGenerateFormStreamResponseSuccess | postApiAiGenerateFormStreamResponseError)
+
+export const getPostApiAiGenerateFormStreamUrl = () => {
+
+
+
+
+  return `/api/ai/generate-form/stream`
+}
+
+/**
+ * Server-sent events: `stage` (a step started or finished), `question` (one drafted question), `sources` (pages read), `done` (the created form), `error`. The form is created and saved server-side, so a `done` event means it exists.
+ * @summary Generate a form and create it, streaming progress as server-sent events
+ */
+export const postApiAiGenerateFormStream = async (postApiAiGenerateFormStreamBody: PostApiAiGenerateFormStreamBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAiGenerateFormStreamResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiAiGenerateFormStreamResponse>(getPostApiAiGenerateFormStreamUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiAiGenerateFormStreamBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiAiGenerateFormStreamMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiGenerateFormStream>>, TError,PostApiAiGenerateFormStreamMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAiGenerateFormStream>>, TError,PostApiAiGenerateFormStreamMutationVariables, TContext> => {
+
+const mutationKey = ['postApiAiGenerateFormStream'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAiGenerateFormStream>>, PostApiAiGenerateFormStreamMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiAiGenerateFormStream(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiAiGenerateFormStreamMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAiGenerateFormStream>>>
+    export type PostApiAiGenerateFormStreamMutationBody = PostApiAiGenerateFormStreamBody
+    export type PostApiAiGenerateFormStreamMutationError = void
+    export type PostApiAiGenerateFormStreamMutationVariables = {data: PostApiAiGenerateFormStreamBody}
+
+    /**
+ * @summary Generate a form and create it, streaming progress as server-sent events
+ */
+export const usePostApiAiGenerateFormStream = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiGenerateFormStream>>, TError,PostApiAiGenerateFormStreamMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiAiGenerateFormStream>>,
+        TError,
+        PostApiAiGenerateFormStreamMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiAiGenerateFormStreamMutationOptions(options));
+    }
     export type postApiAiAddBlocksResponse200 = {
   data: PostApiAiAddBlocks200
   status: 200
+}
+
+export type postApiAiAddBlocksResponse502 = {
+  data: void
+  status: 502
 }
 
 export type postApiAiAddBlocksResponse503 = {
@@ -826,7 +1018,7 @@ export type postApiAiAddBlocksResponse503 = {
 export type postApiAiAddBlocksResponseSuccess = (postApiAiAddBlocksResponse200) & {
   headers: Headers;
 };
-export type postApiAiAddBlocksResponseError = (postApiAiAddBlocksResponse503) & {
+export type postApiAiAddBlocksResponseError = (postApiAiAddBlocksResponse502 | postApiAiAddBlocksResponse503) & {
   headers: Headers;
 };
 

@@ -123,6 +123,11 @@ export type PostPSessionsByIdUploadsByFileIdConfirm200 = {
   ok: boolean;
 };
 
+export type GetApiAuthProviders200 = {
+  emailPassword: boolean;
+  google: boolean;
+};
+
 export type GetApiAuthOk200 = {
   ok: boolean;
 };
@@ -251,6 +256,33 @@ export type PostApiAiGenerateForm200 = {
   tokens: number;
 };
 
+export type PostApiAiGenerateFormStreamBody = {
+  /**
+     * @minLength 5
+     * @maxLength 2000
+     */
+  prompt: string;
+  /**
+     * @minimum 2
+     * @maximum 20
+     */
+  questionCount?: number;
+};
+
+export type PostApiAiAddBlocksBodyHistoryItemRole = typeof PostApiAiAddBlocksBodyHistoryItemRole[keyof typeof PostApiAiAddBlocksBodyHistoryItemRole];
+
+
+export const PostApiAiAddBlocksBodyHistoryItemRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export type PostApiAiAddBlocksBodyHistoryItem = {
+  role: PostApiAiAddBlocksBodyHistoryItemRole;
+  /** @maxLength 2000 */
+  text: string;
+};
+
 export type PostApiAiAddBlocksBody = {
   formId: string;
   /**
@@ -263,6 +295,8 @@ export type PostApiAiAddBlocksBody = {
      * @maximum 10
      */
   count?: number;
+  /** @maxItems 20 */
+  history?: PostApiAiAddBlocksBodyHistoryItem[];
 };
 
 export type PostApiAiAddBlocks200 = {

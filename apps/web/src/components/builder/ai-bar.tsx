@@ -134,10 +134,22 @@ export function AiBar() {
     setBusy(true);
     setTurns((t) => [...t, { id: crypto.randomUUID(), role: "user", text }]);
 
+    /**
+     * The thread goes with the request.
+     *
+     * It was on screen and nowhere else: every message was sent as if it were
+     * the first, so "even if it's iOS, we still need their email" arrived with
+     * no idea what "even" was qualifying, and came back with a question about
+     * iOS devices instead of an email field. The proposals themselves are left
+     * out — an applied one is already in the form the server reads, and an
+     * unapplied one is not part of the form at all.
+     */
+    const history = turns.slice(-8).map((t) => ({ role: t.role, text: t.text }));
+
     try {
       const res = await customFetch<{ doc: unknown; rules?: number; summary?: string }>("/api/ai/add-blocks", {
         method: "POST",
-        body: JSON.stringify({ formId, prompt: text, count: 3 }),
+        body: JSON.stringify({ formId, prompt: text, count: 3, history }),
       });
 
       // The proposal is the whole document — the new questions, where they sit,

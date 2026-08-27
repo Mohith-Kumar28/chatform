@@ -168,19 +168,66 @@ export function buildRetryObjective(block: Block, attempt: number, hint?: string
   return base;
 }
 
-export function buildFlowGeneratorPrompt(prompt: string, questionCount: number): string {
+/**
+ * The generator's prompt.
+ *
+ * Two things here are load-bearing and were both missing.
+ *
+ * The type list: this used to gesture at types by example ("email for contact,
+ * single_select for choices") and never state the set. So the model invented
+ * plausible neighbours — `single_choice`, `multiple_choice`, `text` — and the
+ * normalizer dropped every block it could not recognise. A request that
+ * explicitly asked for an email question came back without one, and nothing
+ * anywhere said why. The set is now enumerated; the normalizer's alias table is
+ * the second line of defence, not the first.
+ *
+ * The research brief: without it the model has the URL as a string and nothing
+ * more, and writes the same generic questions it would for no URL at all.
+ */
+export function buildFlowGeneratorPrompt(
+  prompt: string,
+  questionCount: number,
+  research?: { brief: string; sources: string[] } | null,
+): string {
+  const context = research?.brief
+    ? `
+
+WHAT WE FOUND OUT ABOUT THEIR PRODUCT (from their own site and a web search):
+${research.brief}
+
+Use this. Ask about the platforms, plans and concepts this product actually has, in its own words — not generic equivalents. Never contradict it, and never ask a question that only makes sense for a product this is not.`
+    : "";
+
   return `Design a conversational form as a JSON document.
 
-Request: ${prompt}
+Request: ${prompt}${context}
 
 Requirements:
 - Exactly ${questionCount} answerable questions (plus one welcome block first)
-- Start with a "welcome" block; vary question types appropriately (email for contact, single_select for choices, rating for satisfaction, long_text for open feedback)
+- Start with a "welcome" block
+
+- "type" MUST be one of exactly these, spelled exactly like this:
+  welcome · statement · short_text · long_text · email · phone · url · number · date · yes_no
+  single_select (pick one) · multi_select (pick several) · dropdown (pick one from many)
+  rating (stars) · nps (0-10 recommend score) · opinion_scale · file_upload · legal_consent
+  Any other word — "text", "single_choice", "multiple_choice", "boolean" — is wrong. Pick the closest type from the list above instead.
+- Match the type to the answer: email for an email address, phone for a phone number, single_select when there is a fixed set of answers, long_text only when you genuinely want a paragraph.
 - refs: lowercase snake_case, unique, prefixed by topic (e.g. q_email, q_role, q_rating)
-- Every option needs a stable id like opt_<slug> (options array MUST be present on every block — use [] when the type has no options)
-- Every block MUST include: description (use "" if none) and scale (use 5 for rating, 10 otherwise)
+- "options": the choices as the respondent reads them — ["Android", "iPhone", "Chrome extension"]. Plain labels, no ids, no prefixes. Use [] for every type that is not a choice.
+- Every block MUST include: description (use "" if none), options (use [] when not a choice) and scale (5 for rating, 10 otherwise)
 - "endings": one entry per distinct outcome, each { "ref": "end_<slug>", "title": <warm title>, "body": "" }. Most forms need exactly one (ref "end_thanks"). Add more ONLY when the request describes different destinations for different answers — e.g. a sales hand-off versus a self-serve trial. Never invent outcomes the request did not ask for.
-- Branching: if the flow benefits from conditions (e.g. "only ask follow-up X if Y equals Z", or "skip to the end if NPS is low"), add a "branches" array: [{ "when": { "ref": "<question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains|is_empty|is_not_empty>", "value": <option id / number / boolean, or null for is_empty and is_not_empty> }, "then": "<target question ref or ending ref>" }]. For choice questions use the option id as value. Only add branches that genuinely make sense — linear forms should omit "branches".
+
+BRANCHING — this is the part that makes it a conversation rather than a form, so do not skip it.
+Read the request for "if", "when", "only for", "depending on", "otherwise", or any two groups of people who should be asked different things. Whenever you find one, add it to "branches":
+  [{ "whenRef": "<the ref of the question that decides it>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains|is_empty|is_not_empty>", "value": "<the option's LABEL, exactly as you wrote it in options — or a number, or "" for is_empty/is_not_empty>", "then": "<the ref of the question or ending to jump to>" }]
+Worked example — the request says "if they are on Android ask for their Play Store email, if iOS any email is fine":
+  q_platform is a single_select with options ["Android", "iPhone or iPad", "Chrome extension"]
+  branches: [
+    { "whenRef": "q_platform", "op": "eq", "value": "Android", "then": "q_play_store_email" },
+    { "whenRef": "q_platform", "op": "eq", "value": "iPhone or iPad", "then": "q_any_email" },
+    { "whenRef": "q_platform", "op": "eq", "value": "Chrome extension", "then": "q_any_email" }
+  ]
+Note that every answer gets its own branch, including the ones going to the shared question. Return "branches": [] only when the form is genuinely linear for everyone.
 
 Order blocks so that branching works by position. Questions run top to bottom, and after a question the respondent falls through to the very next block unless a branch says otherwise. So:
 - Put the follow-ups for a branch immediately after the question that triggers it, one arm after another, and put the questions everyone answers below all of them.
@@ -198,7 +245,25 @@ Order blocks so that branching works by position. Questions run top to bottom, a
  * it wanted to: it had no option id to compare against. Everything it needs to
  * reuse the flow is in the manifest below.
  */
-export function buildExtensionPrompt(doc: FormDoc, request: string): string {
+export interface BuilderTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
+export function buildExtensionPrompt(
+  doc: FormDoc,
+  request: string,
+  /**
+   * What has already been said in this builder's AI bar, oldest first.
+   *
+   * Without it every message was a cold start, and the bar looked broken in a
+   * very specific way: an author who said "even if it's iOS, we still need
+   * their email" got a question about iOS devices, because the model had never
+   * seen the sentence that "even" was referring to. The thread was on screen
+   * the whole time and only the client knew about it.
+   */
+  history: BuilderTurn[] = [],
+): string {
   const blocks = doc.blocks
     .map((b, i) => {
       const options = "options" in b && b.options?.length
@@ -220,6 +285,16 @@ export function buildExtensionPrompt(doc: FormDoc, request: string): string {
         .join("\n")
     : "  (none — the form runs straight through)";
 
+  // Only the recent turns, and only their text. The proposals themselves are
+  // already reflected in the form manifest above when they were applied, and
+  // repeating their payloads here would crowd out the form itself.
+  const conversation = history.length
+    ? `\nEARLIER IN THIS CONVERSATION (oldest first) — the request below continues it, so resolve "it", "that one", "also" and "instead" against these:\n${history
+        .slice(-8)
+        .map((t) => `  ${t.role === "user" ? "Builder" : "You"}: ${t.text.replace(/\s+/g, " ").slice(0, 400)}`)
+        .join("\n")}\n`
+    : "";
+
   return `You are editing an EXISTING conversational form, not writing a new one.
 
 FORM: "${doc.title}"
@@ -231,22 +306,26 @@ ENDINGS: ${doc.endings.map((e) => e.ref).join(", ")}
 
 EXISTING BRANCHING RULES:
 ${rules}
-
+${conversation}
 WHAT THE BUILDER ASKED FOR:
 ${request}
 
-Return only the NEW questions. Never restate or duplicate one that is already listed above.
+Return only the NEW questions. Never restate or duplicate one that is already listed above. If what they are asking for is already in the form, return no blocks rather than a near-duplicate.
+
+"type" MUST be one of exactly: short_text · long_text · email · phone · url · number · date · yes_no · single_select · multi_select · dropdown · rating · nps · opinion_scale · file_upload · legal_consent. Any other word is wrong — pick the closest from this list.
+
+"options" are the choices as the respondent reads them — ["Android", "iPhone"] — plain labels, no ids. Use [] when the type is not a choice.
 
 Placement — "insertAfter" is the ref of the block a new question goes directly after, and "" means the end of the form. Do not default to the end. A question belongs next to the ones it relates to, and a question that is only asked in some cases MUST sit immediately below the question that decides it, with the alternative arms following it one after another.
 
 Branching — read the request for words like "if", "when", "only for", "otherwise". When you find one:
-- Look for a question ALREADY in the list that answers it, and hang the condition off that. If the builder says "if they are on iOS ask X, if Android ask Y" and the form already asks which device they use, use that question's ref and its exact option ids. Do not add a second question asking the same thing.
+- Look for a question ALREADY in the list that answers it, and hang the condition off that. If the builder says "if they are on iOS ask X, if Android ask Y" and the form already asks which device they use, use that question's ref. Do not add a second question asking the same thing.
 - Give EVERY case its own branch, including the common one. A single branch to the block that comes next changes nothing, because that is where the respondent was going anyway.
 - Add a question only when nothing in the form can answer the condition.
 
-Rules for "branches": [{ "when": { "ref": "<existing or new question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains|is_empty|is_not_empty>", "value": <option id / number / boolean, or null for is_empty and is_not_empty> }, "then": "<question ref or ending ref>" }]. For choice questions the value MUST be one of that question's option ids exactly as listed. Return [] when the request needs no conditions.
+Rules for "branches": [{ "whenRef": "<existing or new question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains|is_empty|is_not_empty>", "value": "<for a choice question, the option's LABEL exactly as listed above; otherwise the literal value; "" for is_empty and is_not_empty>", "then": "<question ref or ending ref>" }]. Return [] when the request needs no conditions.
 
-Every block needs: ref (lowercase snake_case, unique, not already used), type, title, description ("" if none), required, options ([] when the type has no options, otherwise ids like opt_<slug>), scale (5 for rating, 10 otherwise), insertAfter.
+Every block needs: ref (lowercase snake_case, unique, not already used), type, title, description ("" if none), required, options ([] when not a choice), scale (5 for rating, 10 otherwise), insertAfter.
 
 "summary" is one plain sentence telling the builder what you changed, mentioning any condition you set up.`;
 }

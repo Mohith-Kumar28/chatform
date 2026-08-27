@@ -31,7 +31,22 @@ export const customFetch = async <T>(url: string, options?: RequestInit): Promis
     headers,
     credentials: "include",
   });
-  if (!res.ok) {
+  if (!res.ok) await throwApiError(res, url);
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+};
+
+/**
+ * Turn a failed response into an `ApiError`, opening the paywall when the
+ * failure was a plan denial.
+ *
+ * Split out of `customFetch` so the streaming client shares it. A stream that
+ * is refused is refused before the first event, with an ordinary JSON body —
+ * so the AI generator's own 402 has to reach the same paywall dialog as every
+ * other one, and it will not if the parsing lives inside the JSON fetcher.
+ */
+export async function throwApiError(res: Response, url: string): Promise<never> {
+  {
     const raw = await res.text();
     let message = `Request failed: ${res.status}`;
     let gate: GateError | null = null;
@@ -63,9 +78,7 @@ export const customFetch = async <T>(url: string, options?: RequestInit): Promis
     if (!gate) console.error(`[api] ${res.status} ${url}`, message);
     throw new ApiError(message, res.status, gate);
   }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
-};
+}
 
 export class ApiError extends Error {
   constructor(

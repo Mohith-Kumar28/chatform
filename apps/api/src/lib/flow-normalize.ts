@@ -223,7 +223,45 @@ export function buildFlowRules(
     }
   }
 
-  return rules;
+  return dedupeRules(rules);
+}
+
+/**
+ * Drop rules that cannot change where anyone goes.
+ *
+ * Derivation and the model's own branch list can arrive at the same jump from
+ * two directions — a generated waitlist form produced both `q_device is_empty →
+ * q_channels` and an unconditional `q_device → q_channels`, which route
+ * identically. Harmless at runtime and confusing everywhere else: the logic
+ * editor draws two edges between the same pair of nodes, and an author trying
+ * to change the flow has to work out which of them is doing anything.
+ */
+function dedupeRules(rules: LogicRuleInput[]): LogicRuleInput[] {
+  // Every rule this file produces is a goto, but `LogicRuleInput` is the whole
+  // union; read the two fields that matter through a narrow instead of casting.
+  const shape = (r: LogicRuleInput): { from: string; target: string; conditions: number } | null => {
+    if (r.action_kind !== "goto") return null;
+    const when = r.when as { conditions?: unknown[] } | undefined;
+    return { from: r.from ?? "", target: r.target, conditions: when?.conditions?.length ?? 0 };
+  };
+
+  const unconditional = new Set<string>();
+  for (const r of rules) {
+    const s = shape(r);
+    if (s && s.conditions === 0) unconditional.add(`${s.from}\u0000${s.target}`);
+  }
+
+  const seen = new Set<string>();
+  return rules.filter((r) => {
+    const s = shape(r);
+    if (!s) return true;
+    const key = `${s.from}\u0000${s.target}\u0000${JSON.stringify(r.when ?? null)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    // A conditional jump to the same place an unconditional one already goes.
+    if (s.conditions > 0 && unconditional.has(`${s.from}\u0000${s.target}`)) return false;
+    return true;
+  });
 }
 
 /** Two conditions sending answers to the same follow-up are still one arm. */

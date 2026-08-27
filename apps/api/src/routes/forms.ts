@@ -9,6 +9,7 @@ import { requireSession, requireOrg, requireFormAccess, type GuardVars } from ".
 import { requirePermission, requireGauge, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
 import { stripForPublish, checkDocLimits } from "../lib/doc-entitlements.js";
 import { limitReached } from "@repo/entitlements";
+import { requireWorkspace, formSlug } from "../lib/workspace.js";
 
 export const formsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
@@ -85,26 +86,6 @@ function defaultDoc(title: string): string {
   });
 }
 
-async function requireWorkspace(c: { env: Bindings; get: (k: string) => unknown }, workspaceId?: string): Promise<{ orgId: string; wsId: string } | null> {
-  const userId = c.get("userId") as string;
-  const orgId = c.get("orgId") as string | undefined;
-  if (!orgId) return null;
-  const org = { id: orgId };
-  let wsId = workspaceId;
-  if (!wsId) {
-    const ws = await c.env.DB.prepare(`SELECT id FROM workspaces WHERE organization_id = ? ORDER BY created_at LIMIT 1`).bind(org.id).first<{ id: string }>();
-    if (!ws) {
-      wsId = `ws_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
-      await c.env.DB.prepare(`INSERT INTO workspaces (id, organization_id, name, slug, created_by, created_at) VALUES (?, ?, 'Default', 'default', ?, ?)`)
-        .bind(wsId, org.id, userId, Date.now())
-        .run();
-    } else {
-      wsId = ws.id;
-    }
-  }
-  return { orgId: org.id, wsId };
-}
-
 // ─── routes ───
 
 formsRouter.get(
@@ -152,7 +133,7 @@ formsRouter.post(
       workingSchema = JSON.stringify(defaulted.success ? defaulted.data : JSON.parse(defaultDoc(body.title)));
     }
     const id = `frm_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
-    const slug = `${body.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 40) || "form"}-${crypto.randomUUID().slice(0, 6)}`;
+    const slug = formSlug(body.title);
     await c.env.DB.prepare(
       `INSERT INTO forms (id, organization_id, workspace_id, created_by, title, slug, status, working_schema, fingerprint_salt, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
