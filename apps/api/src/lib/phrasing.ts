@@ -36,3 +36,37 @@ export function escalateText(block: Block): string {
 export function closingText(endingTitle: string): string {
   return endingTitle;
 }
+
+/**
+ * Is this a question rather than an attempt at an answer?
+ *
+ * Only used on the deterministic path — when the agent is unavailable or its
+ * budget is spent — and only after validation has already failed. Getting it
+ * wrong in either direction is cheap: a missed question is answered with the
+ * old clarify line, and a false positive re-asks the question either way.
+ */
+export function looksLikeQuestion(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (t.endsWith("?")) return true;
+  return /^(why|what|whats|what's|how|who|when|where|which|can|could|would|will|should|do|does|did|is|are|am)\b/i.test(t);
+}
+
+/**
+ * What to say when the respondent asked something and there is no agent to
+ * answer it.
+ *
+ * The scripted path used to reply to "Why do you want my phone number?" with
+ * "Sorry — Please enter a valid phone number with country code." — which reads
+ * as a machine that did not listen, and is the exact opposite of the product's
+ * claim. It cannot answer an arbitrary question without a model, but it can
+ * stop pretending the question was a bad answer, and the form's author may have
+ * already written the answer to this one.
+ */
+export function asideText(block: Block): string {
+  const why = block.agentHints?.whyWeAsk?.trim();
+  if (why) return why;
+  return block.required
+    ? "Good question — I can't answer that one here, but this answer is needed to finish."
+    : "Good question — I can't answer that one here, and you're welcome to skip this if you'd rather.";
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, RefreshCw } from "lucide-react";
+import { ExternalLink, Maximize2, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -44,7 +44,14 @@ export function PreviewDialog({
       >
         <DialogTitle className="sr-only">Preview</DialogTitle>
 
-        <div className="flex items-center gap-2 px-4 py-3">
+        {/*
+          `pr-12` reserves the corner. The dialog's own close button is
+          absolutely positioned at `top-4 right-4`, outside this row's flow, so
+          without the reservation the right-aligned controls slide under it and
+          the last one collides with the ✕ — which is exactly what "Restart✕"
+          looked like on screen.
+        */}
+        <div className="flex items-center gap-2 py-3 pr-12 pl-4">
           <SegmentedControl
             size="sm"
             options={[
@@ -59,6 +66,18 @@ export function PreviewDialog({
             <Button variant="ghost" size="sm" shape="pill" onClick={() => setNonce((n) => n + 1)}>
               <RefreshCw className="size-3.5" />
               Restart
+            </Button>
+            {/*
+              Always available, and pointed at the draft rather than the live
+              form. "Open live" only ever appeared once a form was published,
+              which is the opposite of when you need a full window: you are
+              testing a draft, in a modal, next to the editor you are testing.
+            */}
+            <Button variant="ghost" size="sm" shape="pill" asChild>
+              <a href={`/preview/${formId}`} target="_blank" rel="noreferrer">
+                <Maximize2 className="size-3.5" />
+                New tab
+              </a>
             </Button>
             {slug && published && (
               <Button variant="ghost" size="sm" shape="pill" asChild>

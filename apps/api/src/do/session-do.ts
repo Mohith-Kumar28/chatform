@@ -18,7 +18,7 @@ import {
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { ServerEvent, SSEEnvelope } from "../lib/events.js";
-import { clarifyText, closingText, escalateText, greeting, questionText, transitionAck } from "../lib/phrasing.js";
+import { asideText, clarifyText, closingText, escalateText, greeting, looksLikeQuestion, questionText, transitionAck } from "../lib/phrasing.js";
 import {
   chatModel,
   interviewModel,
@@ -462,7 +462,36 @@ export class SessionDO extends DurableObject<Bindings> {
       const usage = await result.usage;
       const inTok = usage?.inputTokens ?? 0;
       const outTok = usage?.outputTokens ?? 0;
-      this.sessionTokensUsed += inTok + outTok;
+      /**
+       * Reasoning tokens are billed to the org but not to the conversation.
+       *
+       * `sessionTokenBudget` decides when the agent stops phrasing and the
+       * scripted fallback takes over, so what it counts decides how long a
+       * respondent gets a real interviewer. Charging it for thinking nobody
+       * reads spends that allowance three times faster than the words do —
+       * measured, ~590 input plus up to 1,600 output per turn against a free
+       * plan clamped to 6,000, which is how a conversation reached its seventh
+       * exchange and answered "why do you want my phone number?" with a canned
+       * "Please enter a valid phone number with country code."
+       *
+       * The same reasoning as `REASONING_HEADROOM_TOKENS`: a budget expressed
+       * in what the respondent sees should not be consumed by what they don't.
+       * `logAiUsage` and the org-level meter still receive the true totals.
+       */
+      const reasoningTok = usage?.outputTokenDetails?.reasoningTokens ?? 0;
+      const budget = this.doc.settings.agent.sessionTokenBudget;
+      const wasWithinBudget = this.sessionTokensUsed < budget;
+      this.sessionTokensUsed += inTok + Math.max(0, outTok - reasoningTok);
+      // Running out is not an error, but it changes the product mid-conversation
+      // — the interviewer becomes a form — so it should not be invisible.
+      if (wasWithinBudget && this.sessionTokensUsed >= budget) {
+        console.warn("agent_budget_spent", {
+          sessionId: this.meta.sessionId,
+          budget,
+          used: this.sessionTokensUsed,
+          turns: this.turnCount,
+        });
+      }
       await this.logAiUsage("interview_turn", inTok, outTok, modelId, Date.now() - started);
       if (text.trim()) await this.appendMessage("assistant", text);
 
@@ -752,6 +781,23 @@ export class SessionDO extends DurableObject<Bindings> {
 
     const extracted = await this.extractTypedAnswer(block, text);
     if (extracted !== null) return this.record(block, extracted);
+
+    /**
+     * They asked something, and nothing here can answer it.
+     *
+     * Reached only with the agent unavailable — no key, template mode, a
+     * degraded session, or a spent token budget. Treating the question as a
+     * failed answer was wrong twice over: it replied with a validation hint
+     * that ignored what was said, and it counted the question towards
+     * `escalateAfterInvalid`, so three questions in a row pushed the
+     * respondent into the "let's make this easier" widget as though they
+     * could not work the form.
+     */
+    if (looksLikeQuestion(text)) {
+      await this.emitMessage(asideText(block));
+      await this.emitQuestion();
+      return { accepted: true };
+    }
 
     return this.recordInvalid(
       block,
