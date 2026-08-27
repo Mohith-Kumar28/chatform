@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useReducedMotion } from "motion/react";
+import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DemoTurn } from "./chat-demo-scripts";
@@ -32,6 +32,13 @@ interface Rendered extends DemoTurn {
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/** The opening bot turn, rendered complete before any animation starts. */
+function seed(script: readonly DemoTurn[]): Rendered[] {
+  const first = script[0];
+  if (!first || first.role !== "bot") return [];
+  return [{ ...first, shown: first.text, streaming: false }];
+}
+
 export function ChatDemo({
   script,
   variant = "hero",
@@ -43,10 +50,19 @@ export function ChatDemo({
   label?: string;
   className?: string;
 }) {
-  const reduced = useReducedMotion();
+  // `useReducedMotion` is a browser-only reading, so branching the render on it
+  // directly made the server emit the seeded turn while the client emitted the
+  // whole script — a hydration mismatch that React resolves by throwing the
+  // tree away and rebuilding it. Gate it on hydration: the first client render
+  // matches the server, and the static transcript swaps in immediately after.
+  const reduced = usePrefersReducedMotion();
   const [runId, setRunId] = useState(0);
   const [active, setActive] = useState(false);
-  const [turns, setTurns] = useState<Rendered[]>([]);
+  // The first turn is seeded, not animated. Otherwise the hero renders an
+  // empty box for the ~1s of intersection callback plus typing dots, and the
+  // first thing a visitor sees is a hole where the product should be. It also
+  // means the greeting is in the server HTML.
+  const [turns, setTurns] = useState<Rendered[]>(() => seed(script));
   const [typing, setTyping] = useState(false);
 
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -87,11 +103,11 @@ export function ChatDemo({
     const cancelled_ = () => cancelled;
 
     const play = async () => {
-      setTurns([]);
+      setTurns(seed(script));
       setTyping(false);
-      await sleep(400);
+      await sleep(900);
 
-      for (const turn of script) {
+      for (const turn of script.slice(seed(script).length)) {
         if (cancelled_()) return;
 
         if (turn.role === "bot") {
@@ -170,7 +186,7 @@ export function ChatDemo({
         <div
           ref={scrollRef}
           aria-hidden="true"
-          className="flex h-[calc(100%-7.25rem)] flex-col gap-3 overflow-y-auto px-4 py-5"
+          className="flex h-[calc(100%-7.25rem)] flex-col justify-end gap-3 overflow-y-auto px-4 py-5"
         >
           {rendered.map((turn, i) =>
             turn.role === "note" ? (

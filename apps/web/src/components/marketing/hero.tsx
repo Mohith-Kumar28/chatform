@@ -28,7 +28,7 @@ export function Hero() {
       <div className="relative mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-16">
         <div>
           <Reveal>
-            <span className="border-primary/25 bg-primary-soft text-primary text-micro inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-medium">
+            <span className="border-primary/25 bg-primary-soft text-primary-soft-foreground text-micro inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-medium">
               <Sparkles className="size-3" strokeWidth={2} />
               Agentic forms · free forever plan
             </span>

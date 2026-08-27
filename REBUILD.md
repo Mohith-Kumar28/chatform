@@ -925,3 +925,73 @@ Verified after the fixes: lead qualification, support satisfaction, and event re
 `rtl` · `navigation.allowBack` · `theme.colorScheme` · `theme.avatarKey` · `theme.backgroundImageKey` · `theme.backgroundBrightness` · `duplicates.fieldRef` (only `ip_daily` is enforced) · `onComplete.notificationEmails` and `autoReplyEmail` (email is not built — Resend has a key and no sender). Integrate is webhooks-only; there is no Google Sheets, Slack, or Zapier preset. Analytics is computed live per request rather than from `analytics_rollup_daily`, which still only ever stores `views`. Templates are four hardcoded objects. No custom domain. `apps/web` lint carries 6 pre-existing React Compiler errors.
 
 Test totals: **53 form-schema · 75 api · 5 web.**
+
+---
+
+## Phase 16 — the marketing site
+
+`F9`'s last open item: *"Landing `/` — the only real server component with content, and it
+**never shows the product**."* It was 118 lines — a nav, a centred hero, six identical icon
+cards, a three-step strip and a one-line footer. No pricing, no comparison, no motion, no
+mobile menu, no dark-mode control, and `text-white` on two orange chips, which is invisible in
+the dark theme where `--primary-foreground` is dark ink.
+
+**The `(marketing)` route group exists now**, as DESIGN.md §1.3 always specified. `/` and
+`/pricing` share one shell — nav with a mobile `Sheet` and the theme toggle, and a footer with
+a real sitemap. `/pricing` previously rendered with no chrome at all.
+
+**The page shows the product by running it.** `ChatDemo` replays a scripted transcript through
+the product's own chat CSS — `.chat-surface`, `bubble-bot`/`bubble-user`, `.chat-prose`, the
+`cf-typing-dot` and `cf-caret` keyframes — so the hero is the same surface a respondent sees at
+`/f/[slug]`, and it moves with the runtime instead of rotting like a screenshot would. It is a
+recording, not a live session: no LLM spend per visitor, and a hero that cannot break when the
+API is down. Two scripts, both transcribed from the verified Phase 6 results — free-text
+extraction in the hero ("about a dozen" → `12`), and the knowledge-base interjection getting a
+band of its own, because it is the one thing on the comparison table that most of the list
+cannot do.
+
+The rest is rendered UI rather than icons: the question grid reads `BLOCK_LIBRARY`, so it can
+never drift from the builder; `FlowPreview` draws the branch shape in SVG rather than shipping
+xyflow's 202 KB chunk to a marketing page; `CodeTabs` quotes `openapi.json` and `embed.js`
+verbatim.
+
+**What the copy may not say.** A truth pass against the code first, then the copy. Absent
+throughout, as present-tense capability: email of any kind (`RESEND_API_KEY` exists and
+**nothing sends**), Slack/Sheets/Zapier (the `integrations` table has zero readers), in-form
+payment (the renderer says it isn't enabled — `payment` is dropped from the question grid
+entirely), custom domain, refill link, tracking pixels, AI summaries, multi-language, and
+"Continue with Google" for builders, which is respondent-side only. The old hero's "100 free
+responses/mo" contradicted the catalogue outright; Free is unlimited responses under a 5,000
+ceiling with 200 AI conversations.
+
+Two of those were mislabelled at the source rather than in the copy: `auto_reply_email` and
+`multi_language` were priced as shipped features. Both now carry `soon: true`, which is the flag
+`features.ts` already says the pricing page MUST honour — so the matrix renders them as **Coming
+soon**, and would have kept selling them otherwise.
+
+**The comparison table is researched, not asserted.** Seven vendors, verified against their own
+public pages in August 2026, and it concedes where it must: **Jotform's AI Agents genuinely do
+hold a conversation and answer from a trainable knowledge base**, from its free tier — a table
+implying otherwise would lose anyone who has used both. Typeform's chat product is **Formless**,
+sold separately from $59/mo, so the Typeform column names which product each answer refers to.
+Cells we could not confirm say "Not documented" rather than "No". `comparison-data.ts` carries
+the rules and the re-check date.
+
+### Bugs found while building it
+
+| Bug | Cause | Fix |
+|---|---|---|
+| Hydration mismatch on every reduced-motion visit — React discarded the tree and rebuilt it | `useReducedMotion()` is a browser-only reading used to *branch the render*. `FlowPreview` dropped `initial` under reduced motion, so the server wrote `pathLength`/`stroke-dasharray` onto four paths and the client wrote none. `Reveal` had the same shape | Same element and attributes in both passes; only the **transition** varies, and a transition never reaches the server HTML. New `usePrefersReducedMotion` (`useSyncExternalStore`, `false` server snapshot) replaces motion's hook, and `MarketingMotionConfig` turns motion's own half-degradation off so the decision is ours |
+| A conditional hook, introduced fixing the above | `useReducedMotion() === true && useHydrated()` short-circuits the second hook | Both called unconditionally |
+| The hero rendered an empty chat box for ~1s | The demo started from nothing and waited on the intersection callback plus typing dots | The first turn is seeded complete, so it is in the server HTML too. Messages also grow from the bottom now, as they do in the real chat |
+| Ten soft-fill pairings would have shipped with the wrong ink | Written before `--x-soft-foreground` landed | Repaired against the new token |
+
+Also: `public/` held nothing but the five untouched Next starter SVGs, so every share of this
+site previewed blank. There is a real mark now (`components/brand/logo.tsx`, `public/logo.svg`,
+`app/icon.svg`, a generated `favicon.ico`) and an OG card drawn by `next/og` at request time
+rather than stored, plus `sitemap.ts` and `robots.ts` keeping the app and `/f/*` out of the
+index.
+
+Test totals: **260 api · 32 web** (21 of the web tests are the token-contrast suite). Verified in
+Chrome over CDP: light and dark, 390/1440 px, reduced motion, and a clean console on `/` and
+`/pricing` in every combination.

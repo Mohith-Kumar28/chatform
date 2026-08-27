@@ -23,7 +23,7 @@ export function ResultsPreview() {
     <div className="border-border/70 bg-background overflow-hidden rounded-xl border">
       <div className="border-border/60 flex items-center justify-between border-b px-3 py-2">
         <p className="text-micro font-medium">Response #CF-4821</p>
-        <span className="bg-success-soft text-success text-micro rounded-full px-2 py-0.5 font-medium">
+        <span className="bg-success-soft text-success-soft-foreground text-micro rounded-full px-2 py-0.5 font-medium">
           Completed
         </span>
       </div>

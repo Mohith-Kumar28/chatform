@@ -55,7 +55,7 @@ export function BentoCard({
                     background: `var(--family-${tone}-soft)`,
                     color: `var(--family-${tone}-ink)`,
                   }
-                : { background: "var(--primary-soft)", color: "var(--primary)" }
+                : { background: "var(--primary-soft)", color: "var(--primary-soft-foreground)" }
             }
           >
             <Icon className="size-5" strokeWidth={1.75} />

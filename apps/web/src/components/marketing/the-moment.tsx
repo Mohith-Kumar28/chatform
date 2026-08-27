@@ -52,7 +52,7 @@ export function TheMoment() {
           <ul className="flex flex-col gap-6">
             {CALLOUTS.map((c, i) => (
               <Reveal as="li" key={c.title} delay={i * 0.06} className="flex gap-4">
-                <span className="bg-primary-soft text-primary mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl">
+                <span className="bg-primary-soft text-primary-soft-foreground mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl">
                   <c.icon className="size-4.5" strokeWidth={1.75} />
                 </span>
                 <div>

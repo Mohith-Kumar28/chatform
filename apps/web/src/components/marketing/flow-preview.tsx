@@ -1,6 +1,7 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 
 /**
  * A fragment of the flow canvas, drawn rather than screenshotted.
@@ -19,7 +20,7 @@ const EDGES = [
 ] as const;
 
 export function FlowPreview() {
-  const reduced = useReducedMotion();
+  const reduced = usePrefersReducedMotion();
 
   return (
     <svg
@@ -51,10 +52,14 @@ export function FlowPreview() {
             strokeWidth="1.75"
             strokeLinecap="round"
             markerEnd="url(#cf-flow-arrow)"
-            initial={reduced ? undefined : { pathLength: 0 }}
-            whileInView={reduced ? undefined : { pathLength: 1 }}
+            initial={{ pathLength: 0 }}
+            whileInView={{ pathLength: 1 }}
             viewport={{ once: true, margin: "-60px" }}
-            transition={{ duration: 0.45, delay: 0.15 + i * 0.12, ease: [0.2, 0, 0, 1] }}
+            transition={
+              reduced
+                ? { duration: 0, delay: 0 }
+                : { duration: 0.45, delay: 0.15 + i * 0.12, ease: [0.2, 0, 0, 1] }
+            }
           />
           {edge.label && (
             <text
@@ -130,7 +135,7 @@ export function FlowPreview() {
           y="230"
           textAnchor="middle"
           style={{ fontSize: 11, fontWeight: 700 }}
-          className="fill-primary"
+          className="fill-primary-soft-foreground"
         >
           ✓
         </text>
