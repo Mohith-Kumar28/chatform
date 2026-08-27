@@ -37,8 +37,8 @@ import { cn } from "@/lib/utils";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { LockedOverlay, LockChip, SkeletonRows, SkeletonChart, useUpgrade } from "@/components/billing/gate";
 import { FirstPartialToast } from "@/components/billing/first-partial-toast";
+import { API_ORIGIN } from "@/lib/api/mutator";
 
-const API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8787";
 
 interface ResultsClientProps {
   formId: string;

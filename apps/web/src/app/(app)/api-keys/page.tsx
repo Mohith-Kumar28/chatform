@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { customFetch } from "@/lib/api/mutator";
+import { customFetch, API_ORIGIN } from "@/lib/api/mutator";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -135,7 +135,7 @@ export default function ApiKeysPage() {
         </CardHeader>
         <CardContent>
           <pre className="bg-muted overflow-x-auto rounded-lg p-4 text-xs leading-relaxed">{`curl -X POST \\
-  http://localhost:8787/v1/forms/FORM_ID/chat/sessions \\
+  ${API_ORIGIN}/v1/forms/FORM_ID/chat/sessions \\
   -H "Authorization: Bearer sk_live_..." \\
   -d '{}'`}</pre>
         </CardContent>

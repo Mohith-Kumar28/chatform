@@ -7,8 +7,8 @@ import type { ThemeDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { API_ORIGIN } from "@/lib/api/mutator";
 
-const API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8787";
 
 /**
  * Optional brand logo and name.

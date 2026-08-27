@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { customFetch } from "@/lib/api/mutator";
+import { customFetch, API_ORIGIN } from "@/lib/api/mutator";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -134,7 +134,7 @@ export function IntegrateClient({ formId }: { formId: string }) {
           <CardDescription>Drop this into any page — renders a launcher bubble + chat panel.</CardDescription>
         </CardHeader>
         <CardContent>
-          <pre className="bg-muted overflow-x-auto rounded-lg p-4 text-xs">{`<script src="https://app.chatform.dev/embed.js" data-form="${formId}" data-api="http://localhost:8787"></script>`}</pre>
+          <pre className="bg-muted overflow-x-auto rounded-lg p-4 text-xs">{`<script src="https://app.chatform.dev/embed.js" data-form="${formId}" data-api="${API_ORIGIN}"></script>`}</pre>
         </CardContent>
       </Card>
     </div>

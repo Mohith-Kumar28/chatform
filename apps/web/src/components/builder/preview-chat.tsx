@@ -5,8 +5,8 @@ import { RefreshCw, TriangleAlert } from "lucide-react";
 import { FormDoc, toPublicConfig } from "@repo/form-schema";
 import { ChatClient } from "@/components/chat/chat-client";
 import { Button } from "@/components/ui/button";
+import { API_ORIGIN } from "@/lib/api/mutator";
 
-const API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8787";
 
 /**
  * Live preview — the real interview runtime against the working draft, so the

@@ -285,6 +285,26 @@ Each of these looks like an oversight and is not.
 
 ---
 
+## 8b. Two things that look like auth failures and are not
+
+**Cloudflare error 1010.** Dodo sits behind Cloudflare, and so does our own worker.
+A request whose User-Agent looks automated is answered with HTTP **403** and a
+`text/plain` body reading `error code: 1010`. It is indistinguishable from a rejected API
+key unless you read the body. Both `lib/dodo.ts` and `tooling/provision-dodo.py` now send
+an explicit User-Agent, and `lib/dodo.ts` logs `dodo_blocked_by_cloudflare` when it sees
+1010 so nobody spends an afternoon rotating a key that was fine.
+
+If you script against either host, send a User-Agent. `curl` does; `python-urllib` and
+several HTTP libraries do not.
+
+**Inconsistent list envelopes.** `/products` returns `{items: [...]}` with `page_number`
+pagination; `/webhooks` returns `{data: [...], done, iterator}`. Assuming one shape gets
+you an empty list for the other — which is how the provisioner created a *second* webhook
+endpoint on its second run, and therefore duplicate deliveries of every event. Its
+`list_all` handles both now.
+
+---
+
 ## 9. The deployed environment
 
 | | |
@@ -297,31 +317,61 @@ Each of these looks like an oversight and is not.
 | R2 | `chatform-uploads` |
 | Queues | `q-submissions` (+dlq) · `q-webhooks` (+dlq) · `q-exports` |
 | Cron | `*/5 * * * *` |
+| Dodo mode | **test** |
+| Dodo webhook endpoint | `ep_3IUCJQrmhTL5MssQsTxNu8jKR4z` |
+| Dodo product collection | `pdc_0NmHTirlIydWZHZ1OW3P8` |
+
+Test-mode product ids:
+
+| Plan | Monthly | Yearly |
+|---|---|---|
+| Pro | `pdt_0NmHTTaWTtrASRA1M25Y5` | `pdt_0NmHTTc5x2DkD86HlMs0B` |
+| Business | `pdt_0NmHTTdrTzJ7AbZaoXpXh` | `pdt_0NmHTTgFZ3u00c4cDafet` |
+| Extra seat | `pdt_0NmHTTiGzGCwEF2cSwDmR` | `pdt_0NmHTTjrDGluqztWXEZLn` |
 
 Secrets on the worker: `BETTER_AUTH_SECRET`, `SIGNING_SALT`, and whatever
 `--push-secrets` has uploaded. Check with
 `pnpm --filter @repo/api exec wrangler secret list`.
 
-`ENVIRONMENT`, `APP_ORIGIN` and `WEB_ORIGIN` are plain vars in `wrangler.jsonc`, not
-secrets. **`WEB_ORIGIN` currently points at `http://localhost:3000`** — change it the
-moment the web app is deployed, or customers finishing checkout are sent to a localhost URL
-that only works on the machine they happened to be sitting at.
+### Origins
+
+Plain vars in `wrangler.jsonc`, not secrets. Two of them, and they are not the same thing:
+
+| | |
+|---|---|
+| `APP_ORIGIN` | where **this API** answers. Better Auth's `baseURL`. |
+| `WEB_ORIGINS` | comma-separated list of **browser app** origins allowed to drive it. First entry is the default redirect target. |
+
+Currently `WEB_ORIGINS` is `http://localhost:3000,https://chatform-api.mohithkumar808.workers.dev`.
+**Add the real web domain to that list when the frontend is deployed** — nothing else
+changes, because `returnOrigin()` (see `lib/origins.ts`) picks whichever listed origin the
+request actually came from. So one deployed API serves local dev and production at the same
+time, and a purchase begun in either returns to the right place.
+
+An unlisted origin is never reflected: doing so would hand anyone who can reach the
+endpoint control of where checkout redirects.
+
+**Cookies adapt automatically.** When the app is on a different host from the API, Better
+Auth is configured with `SameSite=None; Secure` so the cross-site session cookie is
+actually stored — its default `Lax` silently produces a working sign-in followed by 401s on
+everything. When the API is plain-http localhost, `None` is impossible (it requires
+`Secure`), so that is switched off rather than breaking local dev. All of it is pinned by
+`tests/origins.test.ts`.
 
 ### The two-database trap
 
-The deployed worker has its own D1, separate from your local one. So a checkout started
-from the *local* API carries a local `organizationId`, and the webhook arrives at the
+The deployed worker has its own D1, separate from your local one. A checkout started
+against the *local* API carries a local `organizationId`, and the webhook arrives at the
 *deployed* worker, which cannot find that organization — the handler throws, the event is
 recorded `failed`, and nothing activates.
 
-Pick one and stay in it for a whole test:
+**The web app now points at the deployed API by default**, so the normal path is entirely
+production and this does not arise. It only bites if you deliberately switch:
 
-- **All production** — point the local web app at the deployed API with
-  `NEXT_PUBLIC_API_ORIGIN=https://chatform-api.mohithkumar808.workers.dev`. Note that
-  sign-in cookies are cross-site in that configuration and Better Auth is not yet
-  configured for it (`advanced.defaultCookieAttributes`), so expect to fix that first.
-- **All local** — run a tunnel (`cloudflared tunnel --url http://localhost:8787`) and
-  register *that* URL as a second webhook endpoint. Everything stays in the local D1.
+- **All production** (default) — nothing to do. `apps/web/.env.local` unset.
+- **All local** — set `NEXT_PUBLIC_API_ORIGIN=http://localhost:8787` in
+  `apps/web/.env.local`, then run a tunnel (`cloudflared tunnel --url http://localhost:8787`)
+  and register *that* URL as a second webhook endpoint so deliveries reach the local D1.
 
 ---
 

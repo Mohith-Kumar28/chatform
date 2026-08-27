@@ -7,6 +7,7 @@ import { ac, roles } from "./permissions.js";
 import { getEntitlements, countSeats } from "./entitlements.js";
 import { seatLimit } from "@repo/entitlements";
 import { APIError } from "better-auth/api";
+import { webOrigins, needsCrossSiteCookies, isSecureOrigin } from "./origins.js";
 
 export function createAuth(env: Bindings) {
   const db = createDb(env.DB);
@@ -14,13 +15,24 @@ export function createAuth(env: Bindings) {
     database: drizzleAdapter(db, { provider: "sqlite", schema, usePlural: true }),
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.APP_ORIGIN,
-    trustedOrigins: (request) => {
-      const origin = request?.headers.get("origin");
-      // The web app may sit on a different origin from the API once deployed, so it has to
-      // be trusted explicitly rather than only via the incoming Origin header.
-      const known = [env.APP_ORIGIN, env.WEB_ORIGIN].filter((v): v is string => Boolean(v));
-      return origin ? [origin, ...known] : known;
-    },
+    trustedOrigins: [env.APP_ORIGIN, ...webOrigins(env)],
+    /**
+     * Cookie flags for a browser app on a different origin from the API.
+     *
+     * A cross-site request only receives a session cookie if it is `SameSite=None`, and
+     * `None` is only accepted alongside `Secure`. Better Auth defaults to `Lax`, which is
+     * right for a same-origin app and silently breaks sign-in for a split deployment —
+     * the request succeeds, no cookie is stored, and every later call is a 401.
+     *
+     * Applied only when it is actually needed: a plain-http localhost API cannot set a
+     * `Secure` cookie at all, so forcing these there would break local dev instead.
+     */
+    advanced: needsCrossSiteCookies(env)
+      ? {
+          defaultCookieAttributes: { sameSite: "none", secure: true, httpOnly: true },
+          useSecureCookies: true,
+        }
+      : { useSecureCookies: isSecureOrigin(env) },
     emailAndPassword: {
       enabled: true,
       autoSignIn: true,

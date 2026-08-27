@@ -58,7 +58,7 @@ export const getGetHealthUrl = () => {
 
 
 
-  return `http://localhost:8787/health`
+  return `/health`
 }
 
 /**
@@ -81,7 +81,7 @@ export const getHealth = async ( options?: Parameters<typeof customFetch>[1]): P
 
 export const getGetHealthQueryKey = () => {
     return [
-    `http://localhost:8787/health`
+    `/health`
     ] as const;
     }
 

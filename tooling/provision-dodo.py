@@ -69,6 +69,11 @@ PRODUCTS = [
 
 COLLECTION_NAME = "chatform plans"
 
+# Dodo sits behind Cloudflare, whose bot protection rejects the default `Python-urllib/3.x`
+# User-Agent with a plain-text "error code: 1010" and HTTP 403 — which reads exactly like a
+# rejected API key and is not one. Any ordinary UA gets through.
+USER_AGENT = "chatform-provisioner/1.0"
+
 
 def say(msg: str = "") -> None:
     print(msg, flush=True)
@@ -115,6 +120,7 @@ class Dodo:
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(f"{self.base}{path}", data=data, method=method)
         req.add_header("authorization", f"Bearer {self._key}")
+        req.add_header("user-agent", USER_AGENT)
         if data is not None:
             req.add_header("content-type", "application/json")
         try:
@@ -131,19 +137,43 @@ class Dodo:
             die(f"could not reach {self.base}: {e.reason}")
 
     def list_all(self, path: str) -> list[dict]:
-        """Page through a list endpoint. Dodo returns {items, ...} with page_number."""
+        """
+        Page through a list endpoint.
+
+        Dodo is not consistent about either the envelope or the pagination across
+        endpoints: `/products` returns `{items: [...]}` with `page_number`, while
+        `/webhooks` returns `{data: [...], done, iterator}`. Assuming one shape silently
+        returns an empty list for the other — which is how this script created a *second*
+        webhook endpoint on its second run, because its idempotency check had nothing to
+        match against. Handle both.
+        """
         out: list[dict] = []
         page = 0
+        iterator: str | None = None
         while True:
             sep = "&" if "?" in path else "?"
-            status, body = self.call("GET", f"{path}{sep}page_size=100&page_number={page}")
+            query = f"{path}{sep}page_size=100"
+            if iterator:
+                query += f"&iterator={iterator}"
+            else:
+                query += f"&page_number={page}"
+
+            status, body = self.call("GET", query)
             if status != 200 or not isinstance(body, dict):
-                if page == 0:
-                    return []
-                break
-            items = body.get("items") or []
-            out.extend(items)
-            if len(items) < 100:
+                return out
+            batch = body.get("items")
+            if batch is None:
+                batch = body.get("data") or []
+            out.extend(batch)
+
+            # iterator-style: keep going until `done`
+            if "iterator" in body or "done" in body:
+                if body.get("done") or not body.get("iterator"):
+                    break
+                iterator = body["iterator"]
+                continue
+            # page-style: a short page is the last one
+            if len(batch) < 100:
                 break
             page += 1
         return out
@@ -242,8 +272,17 @@ def ensure_collection(dodo: Dodo, product_ids: dict[str, str]) -> str | None:
     """
     A Product Collection is what lets a customer switch tier inside the Dodo portal.
 
-    Non-fatal if it fails: everything else works, they just cannot self-serve an upgrade
-    from the portal (our own /billing page still can).
+    The four plan products go in one group, so the portal offers them as alternatives to
+    each other. The seat add-ons stay out: they are add-ons, not alternatives.
+
+    The collection also carries the plan-change defaults, and they are set here to match
+    what `lib/dodo.ts` asks for on our own change-plan calls — upgrades apply immediately,
+    downgrades wait for the period boundary. Leaving them unset means a portal-initiated
+    downgrade could revoke access the customer already paid for, which our own code is
+    careful never to do.
+
+    Non-fatal if it fails: everything else works, the customer just cannot self-serve a
+    tier change from the portal (our /billing page still can).
     """
     for c in dodo.list_all("/product-collections"):
         if (c.get("name") or "") == COLLECTION_NAME:
@@ -251,27 +290,38 @@ def ensure_collection(dodo: Dodo, product_ids: dict[str, str]) -> str | None:
             say(f"  = product collection → {cid}")
             return cid or None
 
+    plan_products = [
+        product_ids[k]
+        for k in ("pro:monthly", "pro:yearly", "business:monthly", "business:yearly")
+        if product_ids.get(k)
+    ]
+    if not plan_products:
+        say("  ! no plan products to put in a collection, skipping")
+        return None
+
     status, body = dodo.call(
         "POST",
         "/product-collections",
-        {"name": COLLECTION_NAME, "description": "Switch between chatform plans."},
+        {
+            "name": COLLECTION_NAME,
+            "description": "Switch between chatform plans.",
+            "groups": [
+                {
+                    "group_name": "Plans",
+                    "products": [{"product_id": pid} for pid in plan_products],
+                }
+            ],
+            "effective_at_on_upgrade": "immediately",
+            "effective_at_on_downgrade": "next_billing_date",
+            "on_payment_failure": "prevent_change",
+        },
     )
     if status not in (200, 201) or not isinstance(body, dict):
-        say(f"  ! product collection not created (HTTP {status}) — portal tier switching")
-        say("    will be unavailable; everything else still works")
+        say(f"  ! product collection not created (HTTP {status}): {str(body)[:300]}")
+        say("    portal tier switching will be unavailable; everything else still works")
         return None
     cid = body.get("id") or body.get("product_collection_id") or ""
-    say(f"  + product collection → {cid}")
-
-    plan_products = [
-        product_ids[k] for k in ("pro:monthly", "pro:yearly", "business:monthly", "business:yearly") if product_ids.get(k)
-    ]
-    if cid and plan_products:
-        s, b = dodo.call("POST", f"/product-collections/{cid}/items", {"product_ids": plan_products})
-        if s in (200, 201):
-            say(f"    + {len(plan_products)} products added to the collection")
-        else:
-            say(f"    ! could not add products to the collection (HTTP {s}) — add them in the dashboard")
+    say(f"  + product collection → {cid} ({len(plan_products)} plans)")
     return cid or None
 
 
@@ -369,8 +419,14 @@ def main() -> None:
 
     status, body = dodo.call("GET", "/products?page_size=1")
     if status in (401, 403):
+        hint = ""
+        if isinstance(body, str) and "1010" in body:
+            hint = (
+                "\n  The body says Cloudflare error 1010, which is bot protection rather than\n"
+                "  Dodo — the User-Agent was filtered. That should not happen from this script."
+            )
         die(
-            f"Dodo rejected the API key (HTTP {status}).\n"
+            f"Dodo rejected the API key (HTTP {status}).{hint}\n"
             f"  A {mode}-mode key only works against {base}. Check which mode the key was\n"
             "  copied from in Dashboard → Developer → API Keys."
         )

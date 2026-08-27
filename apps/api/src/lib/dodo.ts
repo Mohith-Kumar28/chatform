@@ -12,18 +12,17 @@
  */
 
 import type { Bindings } from "../env.js";
+import { returnOrigin } from "./origins.js";
 
 const TIMEOUT_MS = 15_000;
 
 /**
- * Where to send a customer back to after checkout or the portal.
- *
- * The browser app's origin, not the API's — see `WEB_ORIGIN` in `env.ts`. Sending a paying
- * customer to the API host lands them on a 404.
+ * Dodo sits behind Cloudflare, whose bot protection answers a request it does not like with
+ * a plain-text "error code: 1010" and HTTP 403 — indistinguishable from a rejected API key
+ * unless you read the body. Sending an explicit User-Agent avoids it. Found the hard way
+ * while provisioning: the default script UA was blocked on every call.
  */
-function webOrigin(env: Bindings): string {
-  return (env.WEB_ORIGIN || env.APP_ORIGIN).replace(/\/$/, "");
-}
+const USER_AGENT = "chatform/1.0 (+https://chatform.dev)";
 
 /**
  * Test mode unless `DODO_ENVIRONMENT` says otherwise. Defaulting to test rather than live
@@ -51,6 +50,7 @@ async function call<T>(env: Bindings, path: string, init: RequestInit = {}): Pro
     headers: {
       authorization: `Bearer ${env.DODO_API_KEY}`,
       "content-type": "application/json",
+      "user-agent": USER_AGENT,
       ...init.headers,
     },
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -60,6 +60,10 @@ async function call<T>(env: Bindings, path: string, init: RequestInit = {}): Pro
     // Never log the body verbatim at full length: Dodo echoes request fields, which can
     // include a customer's email and address.
     console.error("dodo_call_failed", path, res.status, text.slice(0, 300));
+    // A Cloudflare block is not an auth failure, and diagnosing it as one costs hours.
+    if (text.includes("error code: 1010")) {
+      console.error("dodo_blocked_by_cloudflare", "the User-Agent was filtered, not the key");
+    }
     throw new DodoError(`Dodo ${path} returned ${res.status}`, res.status, text);
   }
   return (text ? JSON.parse(text) : {}) as T;
@@ -68,6 +72,12 @@ async function call<T>(env: Bindings, path: string, init: RequestInit = {}): Pro
 // ───────────────────────────────── checkout ─────────────────────────────────
 
 export interface CheckoutArgs {
+  /**
+   * Where to send this customer back to. Resolved per-request from the caller's own origin
+   * (see `returnOrigin`) so a purchase begun in local dev returns to local dev and one
+   * begun in production returns to production.
+   */
+  returnTo: string;
   productId: string;
   orgId: string;
   planId: string;
@@ -106,8 +116,8 @@ export async function createCheckoutSession(env: Bindings, args: CheckoutArgs): 
         ? { customer_id: args.existingCustomerId }
         : { email: args.customerEmail, name: args.customerName },
       billing_currency: "USD",
-      return_url: `${webOrigin(env)}/billing?checkout=success`,
-      cancel_url: `${webOrigin(env)}/billing?checkout=cancelled`,
+      return_url: `${args.returnTo}/billing?checkout=success`,
+      cancel_url: `${args.returnTo}/billing?checkout=cancelled`,
       metadata: {
         organizationId: args.orgId,
         planId: args.planId,
@@ -130,8 +140,12 @@ export interface PortalSession {
 }
 
 /** Where cancellation, payment methods and invoices live. We link, we do not rebuild. */
-export async function createPortalSession(env: Bindings, customerId: string): Promise<PortalSession> {
-  const returnUrl = encodeURIComponent(`${webOrigin(env)}/billing`);
+export async function createPortalSession(
+  env: Bindings,
+  customerId: string,
+  returnTo: string,
+): Promise<PortalSession> {
+  const returnUrl = encodeURIComponent(`${returnTo}/billing`);
   return call<PortalSession>(env, `/customers/${encodeURIComponent(customerId)}/customer-portal/session?return_url=${returnUrl}`, {
     method: "POST",
   });

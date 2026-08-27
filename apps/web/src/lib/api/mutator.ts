@@ -1,9 +1,19 @@
 import { isGateError, type GateError } from "@repo/entitlements";
 import { openPaywall } from "@/stores/paywall-store";
 
-/** Orval mutator — every generated hook/fetcher routes through here. */
-export const API_ORIGIN =
-  process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8787";
+/**
+ * Orval mutator — every generated hook/fetcher routes through here.
+ *
+ * The API is a deployed Cloudflare Worker; the default points at it so a checkout of this
+ * repo talks to a real backend with no configuration. Override it for local API work:
+ *
+ *   NEXT_PUBLIC_API_ORIGIN=http://localhost:8787   (apps/web/.env.local)
+ *
+ * Trailing slash stripped because every caller concatenates a path beginning with "/".
+ */
+export const API_ORIGIN = (
+  process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://chatform-api.mohithkumar808.workers.dev"
+).replace(/\/$/, "");
 
 export const customFetch = async <T>(url: string, options?: RequestInit): Promise<T> => {
   const { body, ...rest } = options ?? {};
@@ -13,6 +23,8 @@ export const customFetch = async <T>(url: string, options?: RequestInit): Promis
   if (!headers.has("content-type") && serialized !== undefined) {
     headers.set("content-type", "application/json");
   }
+  // An absolute URL is honoured as-is; anything relative is resolved against API_ORIGIN.
+  // Generated code emits relative paths (see orval.config.ts) precisely so this works.
   const res = await fetch(url.startsWith("http") ? url : `${API_ORIGIN}${url}`, {
     ...rest,
     body: serialized,

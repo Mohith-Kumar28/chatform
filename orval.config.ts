@@ -12,7 +12,14 @@ export default defineConfig({
       target: "./apps/web/src/lib/api/generated.ts",
       client: "react-query",
       mode: "tags-split",
-      baseUrl: "http://localhost:8787",
+      /**
+       * Deliberately no `baseUrl`.
+       *
+       * With one set, orval bakes it into every generated URL — and the mutator passes an
+       * absolute URL straight through, so `NEXT_PUBLIC_API_ORIGIN` had no effect on a
+       * single generated hook and the whole app talked to localhost regardless of
+       * configuration. Relative paths let the mutator prepend the real origin.
+       */
       override: {
         query: {
           useSuspense: false,

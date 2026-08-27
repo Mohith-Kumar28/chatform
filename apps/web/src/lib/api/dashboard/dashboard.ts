@@ -94,7 +94,7 @@ export const getGetApiAuthOkUrl = () => {
 
 
 
-  return `http://localhost:8787/api/auth/ok`
+  return `/api/auth/ok`
 }
 
 /**
@@ -117,7 +117,7 @@ export const getApiAuthOk = async ( options?: Parameters<typeof customFetch>[1])
 
 export const getGetApiAuthOkQueryKey = () => {
     return [
-    `http://localhost:8787/api/auth/ok`
+    `/api/auth/ok`
     ] as const;
     }
 
@@ -182,7 +182,7 @@ export const getGetApiFormsUrl = () => {
 
 
 
-  return `http://localhost:8787/api/forms`
+  return `/api/forms`
 }
 
 /**
@@ -205,7 +205,7 @@ export const getApiForms = async ( options?: Parameters<typeof customFetch>[1]):
 
 export const getGetApiFormsQueryKey = () => {
     return [
-    `http://localhost:8787/api/forms`
+    `/api/forms`
     ] as const;
     }
 
@@ -277,7 +277,7 @@ export const getPostApiFormsUrl = () => {
 
 
 
-  return `http://localhost:8787/api/forms`
+  return `/api/forms`
 }
 
 /**
@@ -366,7 +366,7 @@ export const getDeleteApiFormsByIdUrl = (id: string,) => {
 
 
 
-  return `http://localhost:8787/api/forms/${id}`
+  return `/api/forms/${id}`
 }
 
 /**
@@ -456,7 +456,7 @@ export const getGetApiFormsByIdUrl = (id: string,) => {
 
 
 
-  return `http://localhost:8787/api/forms/${id}`
+  return `/api/forms/${id}`
 }
 
 /**
@@ -479,7 +479,7 @@ export const getApiFormsById = async (id: string, options?: Parameters<typeof cu
 
 export const getGetApiFormsByIdQueryKey = (id: string,) => {
     return [
-    `http://localhost:8787/api/forms/${id}`
+    `/api/forms/${id}`
     ] as const;
     }
 
@@ -544,7 +544,7 @@ export const getPutApiFormsByIdDocUrl = (id: string,) => {
 
 
 
-  return `http://localhost:8787/api/forms/${id}/doc`
+  return `/api/forms/${id}/doc`
 }
 
 /**
@@ -646,7 +646,7 @@ export const getPostApiFormsByIdPublishUrl = (id: string,) => {
 
 
 
-  return `http://localhost:8787/api/forms/${id}/publish`
+  return `/api/forms/${id}/publish`
 }
 
 /**
@@ -741,7 +741,7 @@ export const getPostApiAiGenerateFormUrl = () => {
 
 
 
-  return `http://localhost:8787/api/ai/generate-form`
+  return `/api/ai/generate-form`
 }
 
 /**
@@ -837,7 +837,7 @@ export const getPostApiAiAddBlocksUrl = () => {
 
 
 
-  return `http://localhost:8787/api/ai/add-blocks`
+  return `/api/ai/add-blocks`
 }
 
 /**
@@ -934,7 +934,7 @@ export const getGetApiFormsByIdSubmissionsUrl = (id: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `http://localhost:8787/api/forms/${id}/submissions?${stringifiedParams}` : `http://localhost:8787/api/forms/${id}/submissions`
+  return stringifiedParams.length > 0 ? `/api/forms/${id}/submissions?${stringifiedParams}` : `/api/forms/${id}/submissions`
 }
 
 /**
@@ -959,7 +959,7 @@ export const getApiFormsByIdSubmissions = async (id: string,
 export const getGetApiFormsByIdSubmissionsQueryKey = (id: string,
     params?: GetApiFormsByIdSubmissionsParams,) => {
     return [
-    `http://localhost:8787/api/forms/${id}/submissions`, ...(params ? [params] : [])
+    `/api/forms/${id}/submissions`, ...(params ? [params] : [])
     ] as const;
     }
 
@@ -1033,7 +1033,7 @@ export const getGetApiFormsByIdSubmissionsExportUrl = (id: string,) => {
 
 
 
-  return `http://localhost:8787/api/forms/${id}/submissions/export`
+  return `/api/forms/${id}/submissions/export`
 }
 
 /**
@@ -1056,7 +1056,7 @@ export const getApiFormsByIdSubmissionsExport = async (id: string, options?: Par
 
 export const getGetApiFormsByIdSubmissionsExportQueryKey = (id: string,) => {
     return [
-    `http://localhost:8787/api/forms/${id}/submissions/export`
+    `/api/forms/${id}/submissions/export`
     ] as const;
     }
 
@@ -1121,7 +1121,7 @@ export const getGetApiFormsByIdAnalyticsUrl = (id: string,) => {
 
 
 
-  return `http://localhost:8787/api/forms/${id}/analytics`
+  return `/api/forms/${id}/analytics`
 }
 
 /**
@@ -1144,7 +1144,7 @@ export const getApiFormsByIdAnalytics = async (id: string, options?: Parameters<
 
 export const getGetApiFormsByIdAnalyticsQueryKey = (id: string,) => {
     return [
-    `http://localhost:8787/api/forms/${id}/analytics`
+    `/api/forms/${id}/analytics`
     ] as const;
     }
 
@@ -1209,7 +1209,7 @@ export const getGetApiKeysUrl = () => {
 
 
 
-  return `http://localhost:8787/api/keys`
+  return `/api/keys`
 }
 
 /**
@@ -1232,7 +1232,7 @@ export const getApiKeys = async ( options?: Parameters<typeof customFetch>[1]): 
 
 export const getGetApiKeysQueryKey = () => {
     return [
-    `http://localhost:8787/api/keys`
+    `/api/keys`
     ] as const;
     }
 
@@ -1297,7 +1297,7 @@ export const getPostApiKeysUrl = () => {
 
 
 
-  return `http://localhost:8787/api/keys`
+  return `/api/keys`
 }
 
 /**
@@ -1386,7 +1386,7 @@ export const getDeleteApiKeysByIdUrl = (id: string,) => {
 
 
 
-  return `http://localhost:8787/api/keys/${id}`
+  return `/api/keys/${id}`
 }
 
 /**
@@ -1469,7 +1469,7 @@ export const getGetApiWebhooksUrl = () => {
 
 
 
-  return `http://localhost:8787/api/webhooks`
+  return `/api/webhooks`
 }
 
 /**
@@ -1492,7 +1492,7 @@ export const getApiWebhooks = async ( options?: Parameters<typeof customFetch>[1
 
 export const getGetApiWebhooksQueryKey = () => {
     return [
-    `http://localhost:8787/api/webhooks`
+    `/api/webhooks`
     ] as const;
     }
 
@@ -1557,7 +1557,7 @@ export const getPostApiWebhooksUrl = () => {
 
 
 
-  return `http://localhost:8787/api/webhooks`
+  return `/api/webhooks`
 }
 
 /**
@@ -1646,7 +1646,7 @@ export const getDeleteApiWebhooksByIdUrl = (id: string,) => {
 
 
 
-  return `http://localhost:8787/api/webhooks/${id}`
+  return `/api/webhooks/${id}`
 }
 
 /**
@@ -1729,7 +1729,7 @@ export const getGetApiWebhooksByIdDeliveriesUrl = (id: string,) => {
 
 
 
-  return `http://localhost:8787/api/webhooks/${id}/deliveries`
+  return `/api/webhooks/${id}/deliveries`
 }
 
 /**
@@ -1752,7 +1752,7 @@ export const getApiWebhooksByIdDeliveries = async (id: string, options?: Paramet
 
 export const getGetApiWebhooksByIdDeliveriesQueryKey = (id: string,) => {
     return [
-    `http://localhost:8787/api/webhooks/${id}/deliveries`
+    `/api/webhooks/${id}/deliveries`
     ] as const;
     }
 
@@ -1817,7 +1817,7 @@ export const getPostApiWebhooksByIdTestUrl = (id: string,) => {
 
 
 
-  return `http://localhost:8787/api/webhooks/${id}/test`
+  return `/api/webhooks/${id}/test`
 }
 
 /**
@@ -1907,7 +1907,7 @@ export const getPostApiFormsByIdPreviewSessionsUrl = (id: string,) => {
 
 
 
-  return `http://localhost:8787/api/forms/${id}/preview/sessions`
+  return `/api/forms/${id}/preview/sessions`
 }
 
 /**
@@ -1990,7 +1990,7 @@ export const getGetApiTemplatesUrl = () => {
 
 
 
-  return `http://localhost:8787/api/templates`
+  return `/api/templates`
 }
 
 /**
@@ -2013,7 +2013,7 @@ export const getApiTemplates = async ( options?: Parameters<typeof customFetch>[
 
 export const getGetApiTemplatesQueryKey = () => {
     return [
-    `http://localhost:8787/api/templates`
+    `/api/templates`
     ] as const;
     }
 
@@ -2078,7 +2078,7 @@ export const getPostApiTemplatesBySlugUseUrl = (slug: string,) => {
 
 
 
-  return `http://localhost:8787/api/templates/${slug}/use`
+  return `/api/templates/${slug}/use`
 }
 
 /**
@@ -2175,7 +2175,7 @@ export const getGetApiAuditLogsUrl = (params?: GetApiAuditLogsParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `http://localhost:8787/api/audit-logs?${stringifiedParams}` : `http://localhost:8787/api/audit-logs`
+  return stringifiedParams.length > 0 ? `/api/audit-logs?${stringifiedParams}` : `/api/audit-logs`
 }
 
 /**
@@ -2198,7 +2198,7 @@ export const getApiAuditLogs = async (params?: GetApiAuditLogsParams, options?: 
 
 export const getGetApiAuditLogsQueryKey = (params?: GetApiAuditLogsParams,) => {
     return [
-    `http://localhost:8787/api/audit-logs`, ...(params ? [params] : [])
+    `/api/audit-logs`, ...(params ? [params] : [])
     ] as const;
     }
 
@@ -2270,7 +2270,7 @@ export const getGetApiAuditLogsExportUrl = () => {
 
 
 
-  return `http://localhost:8787/api/audit-logs/export`
+  return `/api/audit-logs/export`
 }
 
 /**
@@ -2293,7 +2293,7 @@ export const getApiAuditLogsExport = async ( options?: Parameters<typeof customF
 
 export const getGetApiAuditLogsExportQueryKey = () => {
     return [
-    `http://localhost:8787/api/audit-logs/export`
+    `/api/audit-logs/export`
     ] as const;
     }
 

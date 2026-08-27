@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserPlus } from "lucide-react";
+import { API_ORIGIN } from "@/lib/api/mutator";
 
 interface MemberRow {
   id: string;
@@ -16,7 +17,6 @@ interface MemberRow {
   user?: { name?: string; email?: string };
 }
 
-const API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8787";
 
 export default function TeamPage() {
   const { data: orgs, isPending } = useListOrganizations();

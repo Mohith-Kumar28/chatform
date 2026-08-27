@@ -5,8 +5,8 @@ import { Download, FileText } from "lucide-react";
 import { toPublicBlock, type Block, type FormDoc } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { cn } from "@/lib/utils";
+import { API_ORIGIN } from "@/lib/api/mutator";
 
-const API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8787";
 
 /**
  * The selected question, rendered as the respondent will see it.

@@ -36,6 +36,7 @@ import {
   previewChangePlan,
   DodoError,
 } from "../lib/dodo.js";
+import { returnOrigin } from "../lib/origins.js";
 import {
   verifyWebhook,
   statusForFailure,
@@ -352,6 +353,9 @@ billingRouter.post(
 
     try {
       const session = await createCheckoutSession(c.env, {
+        // Resolved from this request's own origin, so a purchase started in local dev
+        // returns to local dev and one started in production returns to production.
+        returnTo: returnOrigin(c.env, c.req),
         productId,
         orgId,
         planId,
@@ -404,7 +408,7 @@ billingRouter.post(
       );
     }
     try {
-      const session = await createPortalSession(c.env, row.dodo_customer_id);
+      const session = await createPortalSession(c.env, row.dodo_customer_id, returnOrigin(c.env, c.req));
       return c.json({ url: session.link });
     } catch (err) {
       return dodoFailure(c, err);
@@ -586,8 +590,21 @@ async function handleWebhook(c: { req: { text(): Promise<string>; header(name: s
     return c.text(verdict.reason, statusForFailure(verdict.reason));
   }
 
-  // Dodo retries 8 times over roughly 28 hours. Without this insert, one payment becomes
-  // eight subscriptions.
+  /**
+   * Idempotency, and the retry path it must not eat.
+   *
+   * Dodo retries 8 times over roughly 28 hours, and every retry of one delivery carries the
+   * SAME `webhook-id`. Without the insert below, one payment becomes eight subscriptions.
+   *
+   * But treating every repeat as a duplicate is just as wrong, and worse because it is
+   * silent: a handler that failed returns 5xx precisely so Dodo will retry, and if the
+   * retry is then dismissed as a duplicate the event stays `failed` forever and the
+   * subscription never activates. So a repeat is only a duplicate when the first attempt
+   * actually *succeeded*; a repeat of something that failed is the retry doing its job.
+   *
+   * Found by probing the deployed worker rather than by reading: the first version of this
+   * swallowed every retry.
+   */
   const inserted = await c.env.DB.prepare(
     `INSERT INTO dodo_events (id, dodo_event_id, type, payload, status, created_at)
      VALUES (?, ?, ?, ?, 'received', ?)
@@ -595,8 +612,16 @@ async function handleWebhook(c: { req: { text(): Promise<string>; header(name: s
   )
     .bind(`de_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`, verdict.id, safeType(raw), raw, Date.now())
     .run();
+
   if ((inserted.meta?.changes ?? 0) === 0) {
-    return c.json({ received: true, duplicate: true });
+    const prior = await c.env.DB.prepare(`SELECT status FROM dodo_events WHERE dodo_event_id = ?`)
+      .bind(verdict.id)
+      .first<{ status: string }>();
+    if (prior?.status === "processed") {
+      return c.json({ received: true, duplicate: true });
+    }
+    // A retry of an attempt that did not succeed. Fall through and try again.
+    console.log("dodo_webhook_retry", verdict.id, `previous status: ${prior?.status ?? "unknown"}`);
   }
 
   let evt: DodoWebhookEvent;

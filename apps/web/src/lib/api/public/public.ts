@@ -76,7 +76,7 @@ export const getGetPFormsBySlugConfigUrl = (slug: string,) => {
 
 
 
-  return `http://localhost:8787/p/forms/${slug}/config`
+  return `/p/forms/${slug}/config`
 }
 
 /**
@@ -99,7 +99,7 @@ export const getPFormsBySlugConfig = async (slug: string, options?: Parameters<t
 
 export const getGetPFormsBySlugConfigQueryKey = (slug: string,) => {
     return [
-    `http://localhost:8787/p/forms/${slug}/config`
+    `/p/forms/${slug}/config`
     ] as const;
     }
 
@@ -176,7 +176,7 @@ export const getPostPFormsBySlugSessionsUrl = (slug: string,) => {
 
 
 
-  return `http://localhost:8787/p/forms/${slug}/sessions`
+  return `/p/forms/${slug}/sessions`
 }
 
 /**
@@ -278,7 +278,7 @@ export const getPostPSessionsByIdUploadsIntentUrl = (id: string,) => {
 
 
 
-  return `http://localhost:8787/p/sessions/${id}/uploads/intent`
+  return `/p/sessions/${id}/uploads/intent`
 }
 
 /**
@@ -381,7 +381,7 @@ export const getPostPSessionsByIdUploadsByFileIdConfirmUrl = (id: string,
 
 
 
-  return `http://localhost:8787/p/sessions/${id}/uploads/${fileId}/confirm`
+  return `/p/sessions/${id}/uploads/${fileId}/confirm`
 }
 
 /**

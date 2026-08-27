@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { API_ORIGIN } from "@/lib/api/mutator";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -42,7 +43,7 @@ export default function SignInPage() {
 
   const createDefaultOrg = async () => {
     // Better Auth organization plugin: create the user's first workspace org
-    await fetch(`${process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8787"}/api/auth/organization/create`, {
+    await fetch(`${API_ORIGIN}/api/auth/organization/create`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "include",

@@ -18,16 +18,17 @@ export interface Bindings {
    * the API actually answers — not where the browser app lives.
    */
   APP_ORIGIN: string;
-  /**
-   * Where the browser app lives, for anything a customer is redirected back to: the
-   * post-checkout return, the cancel URL, the billing portal's "back to" link.
+/**
+   * Comma-separated list of browser origins allowed to drive this API — the deployed web
+   * app and a local dev one at the same time, so both work against one deployed API with
+   * no redeploy between them. The first entry is the default redirect target.
    *
    * Separate from `APP_ORIGIN` because the two are only the same thing while the API and
-   * the web app share a host. They stopped being the same the moment the API was deployed
-   * to workers.dev with the app still on another origin, and a single variable serving both
-   * silently sends paying customers to a 404 on the API domain. Falls back to APP_ORIGIN
-   * when unset, so a single-origin deployment needs no extra configuration.
+   * the web app share a host. A single variable serving both sends paying customers to a
+   * 404 on the API domain. See `lib/origins.ts`.
    */
+  WEB_ORIGINS?: string;
+  /** @deprecated single-value predecessor of `WEB_ORIGINS`; still honoured as a fallback. */
   WEB_ORIGIN?: string;
 
   BETTER_AUTH_SECRET: string;

@@ -238,6 +238,40 @@ describe("the webhook endpoint", () => {
     expect(count?.n).toBe(1);
   });
 
+  it("re-attempts a retry of an attempt that failed, rather than eating it", async () => {
+    /**
+     * Dodo retries a failed delivery 8 times over ~28 hours, and every retry carries the
+     * SAME webhook-id. Dismissing those as duplicates leaves the event `failed` forever and
+     * the subscription never activates — a lost sale, silently.
+     *
+     * Only a repeat of a *successful* attempt is a duplicate.
+     */
+    const evt = subscriptionEvent("subscription.active", "org_does_not_exist");
+    const id = "evt_retry_after_fail";
+
+    const first = await deliver(evt, { id });
+    expect(first.status).toBe(500); // 5xx so Dodo will retry
+
+    // The org now exists, exactly as it would once whatever broke is fixed.
+    const second = await deliver(subscriptionEvent("subscription.active", org.orgId), { id });
+    expect(second.status).toBe(200);
+    expect(await second.json()).toEqual({ received: true });
+    expect((await getEntitlements(DB(), org.orgId)).planId).toBe("pro");
+
+    const row = await DB()
+      .DB.prepare(`SELECT status FROM dodo_events WHERE dodo_event_id = ?`)
+      .bind(id)
+      .first<{ status: string }>();
+    expect(row?.status).toBe("processed");
+  });
+
+  it("still treats a repeat of a SUCCESSFUL attempt as a duplicate", async () => {
+    const evt = subscriptionEvent("subscription.active", org.orgId);
+    const id = "evt_repeat_after_ok";
+    expect(await (await deliver(evt, { id })).json()).toEqual({ received: true });
+    expect(await (await deliver(evt, { id })).json()).toEqual({ received: true, duplicate: true });
+  });
+
   it("rejects a bad signature with 401 and records nothing", async () => {
     const res = await deliver(subscriptionEvent("subscription.active", org.orgId), { secret: "wrong-secret" });
     expect(res.status).toBe(401);

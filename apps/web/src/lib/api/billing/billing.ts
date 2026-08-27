@@ -69,7 +69,7 @@ export const getGetApiBillingPlansUrl = () => {
 
 
 
-  return `http://localhost:8787/api/billing/plans`
+  return `/api/billing/plans`
 }
 
 /**
@@ -92,7 +92,7 @@ export const getApiBillingPlans = async ( options?: Parameters<typeof customFetc
 
 export const getGetApiBillingPlansQueryKey = () => {
     return [
-    `http://localhost:8787/api/billing/plans`
+    `/api/billing/plans`
     ] as const;
     }
 
@@ -157,7 +157,7 @@ export const getGetApiBillingEntitlementsUrl = () => {
 
 
 
-  return `http://localhost:8787/api/billing/entitlements`
+  return `/api/billing/entitlements`
 }
 
 /**
@@ -180,7 +180,7 @@ export const getApiBillingEntitlements = async ( options?: Parameters<typeof cus
 
 export const getGetApiBillingEntitlementsQueryKey = () => {
     return [
-    `http://localhost:8787/api/billing/entitlements`
+    `/api/billing/entitlements`
     ] as const;
     }
 
@@ -245,7 +245,7 @@ export const getGetApiBillingUsageUrl = () => {
 
 
 
-  return `http://localhost:8787/api/billing/usage`
+  return `/api/billing/usage`
 }
 
 /**
@@ -268,7 +268,7 @@ export const getApiBillingUsage = async ( options?: Parameters<typeof customFetc
 
 export const getGetApiBillingUsageQueryKey = () => {
     return [
-    `http://localhost:8787/api/billing/usage`
+    `/api/billing/usage`
     ] as const;
     }
 
@@ -345,7 +345,7 @@ export const getPostApiBillingCheckoutUrl = () => {
 
 
 
-  return `http://localhost:8787/api/billing/checkout`
+  return `/api/billing/checkout`
 }
 
 /**
@@ -441,7 +441,7 @@ export const getPostApiBillingPortalUrl = () => {
 
 
 
-  return `http://localhost:8787/api/billing/portal`
+  return `/api/billing/portal`
 }
 
 /**
@@ -531,7 +531,7 @@ export const getPostApiBillingPreviewChangeUrl = () => {
 
 
 
-  return `http://localhost:8787/api/billing/preview-change`
+  return `/api/billing/preview-change`
 }
 
 /**
@@ -627,7 +627,7 @@ export const getPostApiBillingChangePlanUrl = () => {
 
 
 
-  return `http://localhost:8787/api/billing/change-plan`
+  return `/api/billing/change-plan`
 }
 
 /**
@@ -716,7 +716,7 @@ export const getGetApiBillingInvoicesUrl = () => {
 
 
 
-  return `http://localhost:8787/api/billing/invoices`
+  return `/api/billing/invoices`
 }
 
 /**
@@ -739,7 +739,7 @@ export const getApiBillingInvoices = async ( options?: Parameters<typeof customF
 
 export const getGetApiBillingInvoicesQueryKey = () => {
     return [
-    `http://localhost:8787/api/billing/invoices`
+    `/api/billing/invoices`
     ] as const;
     }
 
@@ -804,7 +804,7 @@ export const getGetApiBillingConfigCheckUrl = () => {
 
 
 
-  return `http://localhost:8787/api/billing/config-check`
+  return `/api/billing/config-check`
 }
 
 /**
@@ -827,7 +827,7 @@ export const getApiBillingConfigCheck = async ( options?: Parameters<typeof cust
 
 export const getGetApiBillingConfigCheckQueryKey = () => {
     return [
-    `http://localhost:8787/api/billing/config-check`
+    `/api/billing/config-check`
     ] as const;
     }
 

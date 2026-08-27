@@ -29,8 +29,8 @@ import { SendRow, TextInput } from "./composers/primitives";
 import { QuestionAffordance } from "./question-affordance";
 import { Confetti } from "./confetti";
 import { cn } from "@/lib/utils";
+import { API_ORIGIN } from "@/lib/api/mutator";
 
-const API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8787";
 
 export function ChatClient({
   config,

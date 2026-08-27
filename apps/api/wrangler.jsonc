@@ -90,11 +90,16 @@
   },
   "vars": {
     "ENVIRONMENT": "production",
-    // The API's own public origin — Better Auth uses this as its baseURL.
+    // This API's own public origin. Better Auth uses it as `baseURL`, so it must be where
+    // the API actually answers — never where the browser app lives.
     "APP_ORIGIN": "https://chatform-api.mohithkumar808.workers.dev",
-    // Where the browser app lives. Anything a customer is redirected back to — the
-    // post-checkout return, the cancel URL, the portal's back link — uses this, not
-    // APP_ORIGIN. Point it at the deployed web app once there is one.
-    "WEB_ORIGIN": "http://localhost:3000"
+    // Every browser origin allowed to drive this API, comma-separated. The first is the
+    // default redirect target after checkout.
+    //
+    // Both a local dev app and a deployed one are listed on purpose: one deployed API has
+    // to serve both without a redeploy between them, and `returnOrigin()` picks whichever
+    // origin the request actually came from. Add the real web domain here when the frontend
+    // is deployed — nothing else needs to change.
+    "WEB_ORIGINS": "http://localhost:3000,https://chatform-api.mohithkumar808.workers.dev"
   }
 }

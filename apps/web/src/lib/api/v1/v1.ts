@@ -66,7 +66,7 @@ export const getGetV1FormsUrl = () => {
 
 
 
-  return `http://localhost:8787/v1/forms`
+  return `/v1/forms`
 }
 
 /**
@@ -89,7 +89,7 @@ export const getV1Forms = async ( options?: Parameters<typeof customFetch>[1]): 
 
 export const getGetV1FormsQueryKey = () => {
     return [
-    `http://localhost:8787/v1/forms`
+    `/v1/forms`
     ] as const;
     }
 
@@ -161,7 +161,7 @@ export const getGetV1FormsByIdUrl = (id: string,) => {
 
 
 
-  return `http://localhost:8787/v1/forms/${id}`
+  return `/v1/forms/${id}`
 }
 
 /**
@@ -184,7 +184,7 @@ export const getV1FormsById = async (id: string, options?: Parameters<typeof cus
 
 export const getGetV1FormsByIdQueryKey = (id: string,) => {
     return [
-    `http://localhost:8787/v1/forms/${id}`
+    `/v1/forms/${id}`
     ] as const;
     }
 
@@ -256,7 +256,7 @@ export const getPostV1FormsByIdChatSessionsUrl = (id: string,) => {
 
 
 
-  return `http://localhost:8787/v1/forms/${id}/chat/sessions`
+  return `/v1/forms/${id}/chat/sessions`
 }
 
 /**
@@ -353,7 +353,7 @@ export const getPostV1ChatSessionsBySidMessagesUrl = (sid: string,) => {
 
 
 
-  return `http://localhost:8787/v1/chat/sessions/${sid}/messages`
+  return `/v1/chat/sessions/${sid}/messages`
 }
 
 /**
@@ -443,7 +443,7 @@ export const getGetV1ChatSessionsBySidUrl = (sid: string,) => {
 
 
 
-  return `http://localhost:8787/v1/chat/sessions/${sid}`
+  return `/v1/chat/sessions/${sid}`
 }
 
 /**
@@ -466,7 +466,7 @@ export const getV1ChatSessionsBySid = async (sid: string, options?: Parameters<t
 
 export const getGetV1ChatSessionsBySidQueryKey = (sid: string,) => {
     return [
-    `http://localhost:8787/v1/chat/sessions/${sid}`
+    `/v1/chat/sessions/${sid}`
     ] as const;
     }
 

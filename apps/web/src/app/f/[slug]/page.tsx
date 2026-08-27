@@ -4,8 +4,10 @@ import type { PublicFormConfig } from "@repo/form-schema";
 import { ChatClient } from "@/components/chat/chat-client";
 import { ViewPing } from "@/components/chat/view-ping";
 
-const API_ORIGIN = process.env.API_ORIGIN ?? "http://localhost:8787";
-const PUBLIC_API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8787";
+// Server-side fetch origin. `API_ORIGIN` may differ from the public one when the
+// worker is reachable internally; both default to the deployed API.
+const API_ORIGIN = process.env.API_ORIGIN ?? process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://chatform-api.mohithkumar808.workers.dev";
+const PUBLIC_API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://chatform-api.mohithkumar808.workers.dev";
 
 async function getConfig(slug: string): Promise<PublicFormConfig | null> {
   try {
