@@ -17,7 +17,7 @@ Put your Dodo API key into `apps/api/.dev.vars` (the file is gitignored) and run
 ```bash
 # test mode, against the deployed worker, secrets uploaded to it
 pnpm dodo:provision -- \
-  --webhook-url https://chatform-api.mohithkumar808.workers.dev \
+  --webhook-url https://api.chatform.in \
   --remote --push-secrets
 ```
 
@@ -309,8 +309,9 @@ endpoint on its second run, and therefore duplicate deliveries of every event. I
 
 | | |
 |---|---|
-| API | `https://chatform-api.mohithkumar808.workers.dev` |
-| Webhook endpoint | `…/api/billing/webhook` |
+| API | `https://api.chatform.in` (also on `chatform-api.mohithkumar808.workers.dev`) |
+| Web | `https://chatform.in` (also on `chatform-web.mohithkumar808.workers.dev`) |
+| Webhook endpoint | `https://api.chatform.in/api/billing/webhook` |
 | Cloudflare account | `53fa8c878293e48df606b938d1accce1` |
 | D1 | `chatform` · `fa46b30f-26d4-4076-a7c3-d609401c3e15` |
 | KV | `chatform-config` · `a72116dbd29c4e07b7d887272c1e999e` |
@@ -342,11 +343,18 @@ Plain vars in `wrangler.jsonc`, not secrets. Two of them, and they are not the s
 | `APP_ORIGIN` | where **this API** answers. Better Auth's `baseURL`. |
 | `WEB_ORIGINS` | comma-separated list of **browser app** origins allowed to drive it. First entry is the default redirect target. |
 
-Currently `WEB_ORIGINS` is `http://localhost:3000,https://chatform-api.mohithkumar808.workers.dev`.
-**Add the real web domain to that list when the frontend is deployed** — nothing else
-changes, because `returnOrigin()` (see `lib/origins.ts`) picks whichever listed origin the
-request actually came from. So one deployed API serves local dev and production at the same
-time, and a purchase begun in either returns to the right place.
+Currently `WEB_ORIGINS` is
+`https://chatform.in,http://localhost:3000,https://chatform-web.mohithkumar808.workers.dev`.
+
+All three are listed on purpose: `returnOrigin()` (see `lib/origins.ts`) picks whichever
+listed origin the request actually came from, so one deployed API serves local dev and
+production at the same time and a purchase begun in either returns to the right place. The
+first entry is the fallback when a request carries no recognisable origin, which is why the
+real domain leads.
+
+`localhost:3000` in a production list is a deliberate trade: it lets a local frontend work
+against the deployed API, at the cost of the production API accepting credentialed requests
+from anything on a developer's own port 3000. Drop it if that stops being worth it.
 
 An unlisted origin is never reflected: doing so would hand anyone who can reach the
 endpoint control of where checkout redirects.
