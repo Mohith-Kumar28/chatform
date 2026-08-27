@@ -29,7 +29,7 @@
     "plans:verify": "pnpm gen:plans && git diff --exit-code -- tooling/seed-plans.sql",
     "deploy:api": "pnpm --filter @repo/api run deploy",
     "clean": "turbo run clean && rm -rf node_modules",
-    "deploy:web": "pnpm --filter @repo/web run cf:deploy",
+    "deploy:web": "pnpm --filter @repo/web run cf:build && pnpm --filter @repo/web run cf:deploy",
     "deploy:all": "pnpm deploy:api && pnpm deploy:web",
     "secrets:push": "python3 tooling/push-secrets.py",
     "secrets:list": "pnpm --filter @repo/api exec wrangler secret list"
