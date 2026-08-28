@@ -97,6 +97,53 @@
   --family-advanced-soft: oklch(0.95 0.04 25);
   --family-advanced-ink: oklch(0.46 0.17 25);
 
+  /* ── family bands ────────────────────────────────────────────────────────
+     The landing page wears the block families as full-bleed grounds, not as
+     8px icon chips. That needed one more intensity step, and the temptation
+     was to hand-pick fourteen more oklch values — a second palette to keep in
+     sync with the first, and the first thing to rot.
+
+     These are mixed from the family hue over the page background instead, so
+     a band is a pastel on cream and a deep tint on charcoal from a single
+     declaration. `--band-mix` is what differs per theme, and `.dark` lands on
+     the same element as `:root`, so overriding it there re-derives all seven.
+
+     Three tiers, and the rule that keeps them readable:
+       `--family-X-band`   a ground. `--foreground` clears 7:1 on it, both themes.
+       `--family-X`        a mark. Rules, dots, arrows, fills under no small text.
+       `--family-X-ink`    type. Coloured text is only ever set in this one —
+                           the raw hue on cream is ~2.2:1 and fails even as
+                           display type, which is exactly the mistake this
+                           tier exists to make unavailable.
+     `-band-muted` is secondary text on a band: pulled toward the ink so it
+     keeps the band's hue rather than going grey on a coloured surface.       */
+  --band-mix: 17%;
+  --band-muted-mix: 45%;
+
+  /* Ink for type on a full-strength `--primary` ground.
+     Deliberately NOT `--primary-foreground`. That token is near-white in light
+     mode, which lands at 2.7:1 on the orange — under even the 3:1 large-text
+     floor, so a white headline on an orange band is unreadable rather than
+     bold. This warm near-black clears 5.8:1 on the light orange and 6.9:1 on
+     the lifted dark one, so one value is correct in both themes and `.dark`
+     does not restate it. */
+  --on-primary: oklch(0.225 0.012 55);
+
+  --family-content-band: color-mix(in oklch, var(--family-content) var(--band-mix), var(--background));
+  --family-content-band-muted: color-mix(in oklch, var(--family-content-ink) var(--band-muted-mix), var(--foreground));
+  --family-text-band: color-mix(in oklch, var(--family-text) var(--band-mix), var(--background));
+  --family-text-band-muted: color-mix(in oklch, var(--family-text-ink) var(--band-muted-mix), var(--foreground));
+  --family-contact-band: color-mix(in oklch, var(--family-contact) var(--band-mix), var(--background));
+  --family-contact-band-muted: color-mix(in oklch, var(--family-contact-ink) var(--band-muted-mix), var(--foreground));
+  --family-number-band: color-mix(in oklch, var(--family-number) var(--band-mix), var(--background));
+  --family-number-band-muted: color-mix(in oklch, var(--family-number-ink) var(--band-muted-mix), var(--foreground));
+  --family-choice-band: color-mix(in oklch, var(--family-choice) var(--band-mix), var(--background));
+  --family-choice-band-muted: color-mix(in oklch, var(--family-choice-ink) var(--band-muted-mix), var(--foreground));
+  --family-scale-band: color-mix(in oklch, var(--family-scale) var(--band-mix), var(--background));
+  --family-scale-band-muted: color-mix(in oklch, var(--family-scale-ink) var(--band-muted-mix), var(--foreground));
+  --family-advanced-band: color-mix(in oklch, var(--family-advanced) var(--band-mix), var(--background));
+  --family-advanced-band-muted: color-mix(in oklch, var(--family-advanced-ink) var(--band-muted-mix), var(--foreground));
+
   /* ── charts: orange / teal / violet / amber / rose / sky ── */
   --chart-1: oklch(0.705 0.19 43);
   --chart-2: oklch(0.68 0.115 195);
@@ -214,6 +261,13 @@
   --family-advanced: oklch(0.74 0.16 25);
   --family-advanced-soft: oklch(0.32 0.06 25);
   --family-advanced-ink: oklch(0.87 0.10 25);
+
+  /* A band has to work harder against charcoal than against cream: 17% of a
+     lifted hue over a 0.205 ground is almost invisible. Only the two mix
+     ratios are restated — all fourteen band tokens re-derive from them,
+     because `.dark` and `:root` are the same element and this wins there. */
+  --band-mix: 26%;
+  --band-muted-mix: 55%;
 
   --sidebar: var(--background);
   --panel: oklch(0.232 0.009 64);
@@ -518,8 +572,56 @@
   }
 }
 
+/* The question-type spectrum under the hero. The track holds the list twice,
+   so translating exactly -50% lands the copy where the original started and
+   the loop has no seam. The global reduced-motion block above collapses this
+   to its end state, which is a valid frame rather than a blank one — that is
+   the reason for duplicating rather than cloning-on-the-fly in JS. */
+@keyframes cf-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+/* The hero headline, one word at a time.
+   Blur is the part that does the work: opacity-and-transform is the house
+   style of every landing page and reads as a template. Long exponential
+   ease-out, so the words arrive fast and settle slowly.
+
+   CSS rather than the motion library, deliberately. This animates an `h1`, and
+   a JS-driven entrance writes `opacity: 0` into the server HTML — if hydration
+   is delayed, throws, or a browser extension breaks it, the headline is a
+   blank space forever. Here the static style IS the visible state and the
+   animation only perturbs it. `backwards` holds the hidden frame through the
+   stagger delay, and the global reduced-motion block collapses the whole
+   thing to its end state, which is the readable one. */
+@keyframes cf-word-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.34em, 0);
+    filter: blur(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+@utility word-rise {
+  display: inline-block;
+  animation: cf-word-rise 1s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
 @utility animate-message-in {
   animation: cf-message-in var(--duration-enter) var(--ease-out) both;
+}
+@utility marquee-track {
+  animation: cf-marquee var(--marquee-duration, 48s) linear infinite;
+  will-change: transform;
 }
 @utility animate-caret {
   animation: cf-caret 800ms steps(1, end) infinite;

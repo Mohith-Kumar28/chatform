@@ -69,7 +69,7 @@ export function defaultBlock(type: Block["type"], existingRefs: Set<string>): Bl
     case "signature":
       return BlockSchema.parse({ ...base, type, title: "Please sign here" });
     case "payment":
-      return BlockSchema.parse({ ...base, type, title: "Complete your payment", amountMode: "fixed", amount: 0, currency: "USD" });
+      return BlockSchema.parse({ ...base, type, title: "Complete your payment", method: "link", amountMode: "fixed", amount: 0, currency: "USD" });
     case "scheduling":
       return BlockSchema.parse({ ...base, type, title: "Book a time", provider: "external", url: "https://cal.com/your-handle" });
     case "legal_consent":

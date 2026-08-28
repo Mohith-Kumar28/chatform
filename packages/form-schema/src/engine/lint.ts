@@ -2,6 +2,7 @@ import type { FormDoc } from "../form-doc";
 import type { Block } from "../blocks";
 import { opsRequiringValue, type Condition, type ConditionGroup } from "../conditions";
 import type { LogicRule } from "../logic";
+import { isValidUpiId, UPI_CURRENCY } from "../payment-link";
 
 type GotoRule = Extract<LogicRule, { action_kind: "goto" }>;
 
@@ -176,6 +177,42 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
   const hasPayment = doc.blocks.some((b) => b.type === "payment");
   if (hasPayment && doc.settings.onComplete.notificationEmails.length === 0) {
     issues.push({ level: "warning", code: "payment_no_notification", message: "Payment form has no notification email configured" });
+  }
+
+  // A payment block with nowhere to pay is worse than no payment block: the
+  // respondent reaches it, finds a dead end, and abandons the whole form. The
+  // schema keeps these fields optional so a half-built block still saves, so
+  // the requirement is enforced here, at publish.
+  for (const b of doc.blocks) {
+    if (b.type !== "payment") continue;
+    if (b.method === "upi") {
+      if (!b.upiId?.trim()) {
+        issues.push({
+          level: "error",
+          code: "payment_no_upi_id",
+          message: `"${b.title || b.ref}" collects payment over UPI but has no UPI ID.`,
+        });
+      } else if (!isValidUpiId(b.upiId)) {
+        issues.push({
+          level: "error",
+          code: "payment_bad_upi_id",
+          message: `"${b.upiId}" is not a valid UPI ID. It should look like name@bank.`,
+        });
+      }
+      if (b.currency.toUpperCase() !== UPI_CURRENCY) {
+        issues.push({
+          level: "warning",
+          code: "payment_upi_currency",
+          message: `UPI only settles in ${UPI_CURRENCY}, but "${b.title || b.ref}" is set to ${b.currency}. The payer will be charged in ${UPI_CURRENCY}.`,
+        });
+      }
+    } else if (!b.url?.trim()) {
+      issues.push({
+        level: "error",
+        code: "payment_no_link",
+        message: `"${b.title || b.ref}" collects payment but has no payment link.`,
+      });
+    }
   }
 
   return issues;

@@ -24,11 +24,17 @@ import { cn } from "@/lib/utils";
  * guard, so every visitor who clicked it got bounced.
  */
 
+/**
+ * Four links, not five. `/#question-types` is gone because the section it
+ * pointed at is gone — the 26-tile grid moved to `/pricing#question-types`,
+ * and `/#compare` moved with it. A nav link to an anchor that no longer
+ * exists scrolls nowhere and says nothing, which is exactly the bug the
+ * removed `/templates` link had.
+ */
 const LINKS = [
-  { href: "/#product", label: "Product" },
-  { href: "/#question-types", label: "Question types" },
+  { href: "/#the-moment", label: "How it answers" },
+  { href: "/#product", label: "How it works" },
   { href: "/#developers", label: "Developers" },
-  { href: "/#compare", label: "Compare" },
   { href: "/pricing", label: "Pricing" },
 ] as const;
 

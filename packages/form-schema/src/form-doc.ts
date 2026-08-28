@@ -4,6 +4,7 @@ import { AnswerMap } from "./answers";
 import { Block, type BlockMedia } from "./blocks";
 import { Ending, HiddenField, LogicRule, Variable } from "./logic";
 import { SettingsDoc, ThemeDoc } from "./settings";
+import { buildUpiUri } from "./payment-link";
 
 export const SCHEMA_VERSION = 4;
 
@@ -64,8 +65,15 @@ export interface PublicBlock {
   minDate?: string;
   maxDate?: string;
   disablePast?: boolean;
-  /** scheduling: the external booking link. */
+  /** scheduling: the external booking link. payment (method "link"): the checkout page. */
   url?: string;
+  /** payment: how the respondent is asked to pay. */
+  paymentMethod?: "link" | "upi";
+  /** payment (method "upi"): the ready-to-scan `upi://pay` URI, built server-side. */
+  upiUri?: string;
+  /** payment (method "upi"): shown as text so the payer can copy it into their own app. */
+  upiId?: string;
+  payeeName?: string;
   /** signature: whether to also collect a typed name. */
   drawnNameRequired?: boolean;
   /** number: bounds, so the composer can constrain input. */
@@ -170,10 +178,25 @@ export function toPublicBlock(b: Block): PublicBlock {
     case "legal_consent":
       pub.consentText = b.consentText;
       break;
-    case "payment":
+    case "payment": {
       pub.currency = b.currency;
-      pub.amount = b.amount;
+      // A variable amount has nothing to resolve at publish time, so it is left
+      // undefined: the checkout page states the price, and a UPI URI without
+      // `am` lets the payer enter it. Better than publishing a wrong number.
+      pub.amount = b.amountMode === "fixed" ? b.amount : undefined;
+      pub.paymentMethod = b.method;
+      if (b.method === "upi") {
+        pub.upiId = b.upiId;
+        pub.payeeName = b.upiPayeeName;
+        pub.upiUri =
+          b.upiId
+            ? (buildUpiUri({ upiId: b.upiId, payeeName: b.upiPayeeName, amount: pub.amount }) ?? undefined)
+            : undefined;
+      } else {
+        pub.url = b.url;
+      }
       break;
+    }
     case "short_text":
     case "long_text":
       pub.placeholder = b.placeholder;

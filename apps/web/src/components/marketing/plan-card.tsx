@@ -1,66 +1,90 @@
 import Link from "next/link";
 import { Check } from "lucide-react";
-import type { Plan } from "@repo/entitlements";
-import { FEATURES, yearlyPerMonthCents, yearlySavingPercent } from "@repo/entitlements";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { QUESTION_TYPE_COUNT } from "./question-types";
 
 /**
- * Everything on this card is read from `packages/entitlements/src/plans.ts` —
- * price, tagline, feature list and limits. There is no second copy of the
- * pricing to drift out of sync, which is the whole reason that catalogue is
- * typed.
+ * One plan card, for both places that sell plans.
+ *
+ * It takes a plain shape rather than the entitlements `Plan` type, because the
+ * two callers legitimately read from different sources: the landing page reads
+ * `PLAN_LIST` from `@repo/entitlements` (the authoring path), and `/pricing`
+ * reads `/api/billing/plans` (the *seeded* catalogue, so what that page
+ * promises is what the gates actually enforce). Typing this against either one
+ * would have forced the other to hand-roll a second card, and two card styles
+ * for the same product is a drift waiting to happen — which is what was
+ * already shipping.
+ *
+ * The highlight lists went from five and six lines to three. A plan card is a
+ * decision surface, not a specification: six ticks of near-equal weight is a
+ * spec sheet that happens to have a button on it, and the reader ends up
+ * comparing eighteen lines across three columns to find the two that differ.
+ * Three lines each, chosen as the ones that change between tiers; the full
+ * matrix is on `/pricing` for anyone who wants it.
  */
 
-const dollars = (cents: number) => `$${Math.round(cents / 100)}`;
+export interface PlanCardPlan {
+  id: string;
+  name: string;
+  tagline: string;
+  priceMonthlyCents: number;
+  priceYearlyCents: number;
+  priceYearlyPerMonthCents: number;
+  yearlySavingPercent: number;
+}
 
-/** The three or four lines that sell each tier, over the raw feature keys. */
-const HIGHLIGHTS: Record<string, readonly string[]> = {
+/** The three lines that decide each tier. Not a summary of the tier. */
+export const PLAN_HIGHLIGHTS: Record<string, readonly string[]> = {
   free: [
-    "Unlimited responses, up to 5,000 a month",
+    "Unlimited responses",
     "200 AI conversations a month",
-    "All 26 question types, logic and endings",
-    "Link, QR and all four embed modes",
-    "Webhooks, transcripts and CSV export",
+    `All ${QUESTION_TYPE_COUNT} question types, logic and endings`,
   ],
   pro: [
     "2,000 AI conversations a month",
-    "Persona, goal and a 20k-character knowledge base",
-    "Partial responses and advanced analytics",
-    "Your logo, your fonts, no chatform badge",
-    "Headless API — 50,000 requests a month",
-    "3 seats",
+    "Persona, goal and a knowledge base",
+    "Your logo and fonts, no chatform badge",
   ],
   business: [
     "10,000 AI conversations a month",
-    "Google and SMS respondent verification",
-    "One response per verified identity",
+    "Verified respondents — Google or SMS",
     "Pick the model that runs the interview",
-    "Activity log",
-    "5 seats, then $10 each",
   ],
 };
+
+const dollars = (cents: number) => `$${Math.round(cents / 100)}`;
 
 export function PlanCard({
   plan,
   annual,
   featured,
+  ctaHref = "/signin",
+  ctaLabel,
+  /** Priced-but-unbuilt feature names, already lowercased by the caller. */
+  soonLabels,
+  /** Shown under the CTA when this environment has no checkout product. */
+  note,
 }: {
-  plan: Plan;
+  plan: PlanCardPlan;
   annual: boolean;
   featured?: boolean;
+  ctaHref?: string;
+  ctaLabel?: string;
+  soonLabels?: readonly string[];
+  note?: string;
 }) {
   const free = plan.priceMonthlyCents === 0;
-  const perMonth = annual ? yearlyPerMonthCents(plan) : plan.priceMonthlyCents;
-  const saving = yearlySavingPercent(plan);
+  const perMonth = annual ? plan.priceYearlyPerMonthCents : plan.priceMonthlyCents;
 
   return (
     <div
+      style={featured ? { background: "var(--primary-soft)" } : undefined}
       className={cn(
-        "relative flex flex-col rounded-2xl border p-6",
+        "relative flex flex-col rounded-2xl p-6",
         featured
-          ? "border-primary/50 bg-card shadow-lg ring-primary/15 ring-1"
-          : "border-border/70 bg-card shadow-xs",
+          ? "ring-primary/35 shadow-md ring-2"
+          : "bg-card border-border/70 shadow-xs border",
       )}
     >
       {featured && (
@@ -69,20 +93,22 @@ export function PlanCard({
         </span>
       )}
 
-      <h3 className="text-h2 font-display">{plan.name}</h3>
-      <p className="text-body text-muted-foreground mt-1.5 min-h-[2.75rem] leading-snug">
+      <h3 className="text-h1 font-display font-bold tracking-[-0.02em]">{plan.name}</h3>
+      <p className="text-caption text-muted-foreground mt-1 min-h-[2.5rem] leading-snug">
         {plan.tagline}
       </p>
 
-      <p className="mt-5 flex items-baseline gap-1.5">
-        <span className="text-display font-display tabular">{dollars(perMonth)}</span>
+      <p className="mt-4 flex items-baseline gap-1.5">
+        <span className="text-display-lg font-display tabular font-bold tracking-[-0.03em]">
+          {dollars(perMonth)}
+        </span>
         {!free && <span className="text-body text-muted-foreground">/month</span>}
       </p>
       <p className="text-caption text-muted-foreground mt-1 min-h-[1.25rem]">
         {free
           ? "Free forever. No card."
           : annual
-            ? `${dollars(plan.priceYearlyCents)} billed yearly — save ${saving}%`
+            ? `${dollars(plan.priceYearlyCents)} billed yearly — save ${plan.yearlySavingPercent}%`
             : `${dollars(plan.priceMonthlyCents * 12)} a year at this rate`}
       </p>
 
@@ -90,36 +116,38 @@ export function PlanCard({
         asChild
         shape="pill"
         variant={featured ? "default" : "outline"}
-        className="mt-6 w-full"
+        className="mt-5 w-full"
       >
-        <Link href="/signin">{free ? "Start free" : `Start with ${plan.name}`}</Link>
+        <Link href={ctaHref}>
+          {ctaLabel ?? (free ? "Start free" : `Start with ${plan.name}`)}
+        </Link>
       </Button>
 
+      {/* Never offer a button that 503s: if the environment has no checkout
+          product for this plan, say so rather than letting someone click into a
+          dead end. */}
+      {note && <p className="text-micro text-muted-foreground mt-2 text-center">{note}</p>}
+
       <ul className="mt-6 flex flex-col gap-2.5">
-        {(HIGHLIGHTS[plan.id] ?? []).map((line) => (
+        {(PLAN_HIGHLIGHTS[plan.id] ?? []).map((line) => (
           <li key={line} className="text-body flex items-start gap-2.5">
-            <Check className="text-primary mt-0.5 size-4 shrink-0" strokeWidth={2.25} />
+            <Check className="text-primary mt-0.5 size-4 shrink-0" strokeWidth={2.5} />
             <span>{line}</span>
           </li>
         ))}
       </ul>
 
       {plan.id !== "free" && (
-        <p className="text-micro text-muted-foreground mt-5">
+        <p className="text-micro text-muted-foreground mt-auto pt-5">
           Everything in {plan.id === "pro" ? "Free" : "Pro"}, plus the above.
         </p>
       )}
 
-      {/* Priced but unbuilt features are named as such on the card that sells
-          them, not only in the matrix further down. */}
-      {plan.features.some((f) => FEATURES[f].soon) && (
-        <p className="text-micro text-muted-foreground mt-2">
-          Coming soon on this plan:{" "}
-          {plan.features
-            .filter((f) => FEATURES[f].soon)
-            .map((f) => FEATURES[f].label.toLowerCase())
-            .join(", ")}
-          .
+      {/* Priced but unbuilt features are named on the card that sells them, not
+          only in the matrix further down. */}
+      {soonLabels && soonLabels.length > 0 && (
+        <p className="text-micro text-muted-foreground mt-1.5">
+          Coming soon: {soonLabels.join(", ")}.
         </p>
       )}
     </div>

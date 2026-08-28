@@ -166,7 +166,7 @@ export function ChatDemo({
       <div
         className={cn(
           "chat-surface border-border/70 shadow-lg relative overflow-hidden rounded-2xl border",
-          variant === "hero" ? "h-[26rem] sm:h-[30rem]" : "h-[24rem]",
+          variant === "hero" ? "h-[25rem] sm:h-[27rem]" : "h-[22rem]",
         )}
       >
         {/* Chrome: enough to read as a product surface, not enough to compete. */}

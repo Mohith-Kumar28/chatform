@@ -1,8 +1,3 @@
-"use client";
-
-import { motion } from "motion/react";
-import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
-
 /**
  * A fragment of the flow canvas, drawn rather than screenshotted.
  *
@@ -10,6 +5,16 @@ import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
  * far too much to load on a marketing page, and a PNG would go stale. This is
  * the same shape: a question, two conditional arms, and the endings they lead
  * to, using the block-family colours the canvas itself uses.
+ *
+ * The edges used to draw themselves in on scroll, via motion's `whileInView`
+ * and a `pathLength: 0` initial — which made the diagram's only connective
+ * tissue conditional on an IntersectionObserver delivering. When it does not,
+ * and a backgrounded tab is enough for that, the nodes render and the arrows
+ * between them do not: a flow diagram showing no flow.
+ *
+ * It was also a second entrance effect on a page cut down to one deliberate
+ * one, so there was nothing to weigh against dropping it. Static, and a server
+ * component now.
  */
 
 const EDGES = [
@@ -20,8 +25,6 @@ const EDGES = [
 ] as const;
 
 export function FlowPreview() {
-  const reduced = usePrefersReducedMotion();
-
   return (
     <svg
       viewBox="0 0 400 260"
@@ -45,21 +48,13 @@ export function FlowPreview() {
 
       {EDGES.map((edge, i) => (
         <g key={i}>
-          <motion.path
+          <path
             d={edge.d}
             fill="none"
             stroke="var(--border)"
             strokeWidth="1.75"
             strokeLinecap="round"
             markerEnd="url(#cf-flow-arrow)"
-            initial={{ pathLength: 0 }}
-            whileInView={{ pathLength: 1 }}
-            viewport={{ once: true, margin: "-60px" }}
-            transition={
-              reduced
-                ? { duration: 0, delay: 0 }
-                : { duration: 0.45, delay: 0.15 + i * 0.12, ease: [0.2, 0, 0, 1] }
-            }
           />
           {edge.label && (
             <text

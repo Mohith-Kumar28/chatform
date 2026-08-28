@@ -85,7 +85,7 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
   respondent_auth_google: { label: "Google verification", blurb: "Ask respondents to verify who they are." },
   respondent_auth_phone: { label: "Phone verification", blurb: "Verify respondents by SMS code." },
   one_response_per_identity: { label: "One response per identity", blurb: "Cap responses per verified person." },
-  collect_payments: { label: "Collect payments", blurb: "Take payment inside the conversation.", soon: true },
+  collect_payments: { label: "Collect payments", blurb: "Show your payment link or UPI QR mid-conversation." },
 
   partial_responses: {
     label: "Partial responses",

@@ -1,7 +1,6 @@
 import { Check, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FOOTNOTES, ROWS, VENDORS, type Cell } from "./comparison-data";
-import { Reveal } from "./reveal";
 
 /**
  * Deliberately not animated (DESIGN.md 4.5: never animate tables), and
@@ -11,7 +10,7 @@ import { Reveal } from "./reveal";
 export function ComparisonTable() {
   return (
     <div className="flex flex-col gap-6">
-      <Reveal>
+      <div>
         <div className="border-border/70 overflow-x-auto rounded-2xl border">
           <table className="w-full min-w-[52rem] border-collapse text-left">
             <caption className="sr-only">
@@ -62,7 +61,7 @@ export function ComparisonTable() {
             </tbody>
           </table>
         </div>
-      </Reveal>
+      </div>
 
       <ol className="text-micro text-muted-foreground flex list-decimal flex-col gap-1.5 pl-4">
         {FOOTNOTES.map((note) => (

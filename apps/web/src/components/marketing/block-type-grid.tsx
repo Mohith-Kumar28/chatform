@@ -1,32 +1,33 @@
-import { BLOCK_GROUPS, BLOCK_LIBRARY } from "@/components/builder/block-library";
-import { Reveal } from "./reveal";
+import { BLOCK_GROUPS } from "@/components/builder/block-library";
+import { QUESTION_TYPES } from "./question-types";
 
 /**
- * Every question type, rendered from the builder's own `BLOCK_LIBRARY`.
+ * Every question type, rendered from the builder's own registry via
+ * `question-types` — the same list the hero's spectrum strip runs on, and the
+ * same one the counts in the copy are derived from.
  *
  * Reading the real registry means this grid cannot drift from the product —
  * add a block type and it appears here, with its own family colour, on the
  * next build. Two entries carry an honest override rather than the builder's
- * copy: `payment` is dropped entirely (its respondent renderer says payment
- * collection isn't enabled), and `scheduling` says what it actually does.
+ * copy, because both hand off to something outside chatform and the marketing
+ * copy must not imply we process the payment or own the calendar.
  */
 
-const OMIT = new Set(["payment"]);
-
 const HONEST_COPY: Record<string, string> = {
-  scheduling: "Link out to Cal.com or Calendly, then confirm the booking.",
+  payment: "Show your payment link or a UPI QR, then record that they paid.",
+  scheduling: "Link out to Cal.com, Calendly or a meeting room, then confirm.",
 };
 
 export function BlockTypeGrid() {
   const groups = BLOCK_GROUPS.map((group) => ({
     group,
-    items: BLOCK_LIBRARY.filter((b) => b.group === group && !OMIT.has(b.type)),
+    items: QUESTION_TYPES.filter((b) => b.group === group),
   })).filter((g) => g.items.length > 0);
 
   return (
     <div className="flex flex-col gap-8">
-      {groups.map(({ group, items }, gi) => (
-        <Reveal key={group} delay={gi * 0.04}>
+      {groups.map(({ group, items }) => (
+        <div key={group}>
           <h3 className="text-micro text-muted-foreground mb-3 font-semibold tracking-[0.12em] uppercase">
             {group}
           </h3>
@@ -56,7 +57,7 @@ export function BlockTypeGrid() {
               </li>
             ))}
           </ul>
-        </Reveal>
+        </div>
       ))}
     </div>
   );

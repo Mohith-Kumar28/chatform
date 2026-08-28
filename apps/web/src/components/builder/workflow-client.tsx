@@ -1644,7 +1644,7 @@ function defaultBlock(type: BlockType): Block {
     case "file_upload":
       return BlockSchema.parse({ ...base, type, title: "Upload a file", accept: ["image/png", "image/jpeg", "application/pdf"], maxFiles: 1, maxSizeMB: 10 });
     case "payment":
-      return BlockSchema.parse({ ...base, type, title: "Complete payment", amountMode: "fixed", amount: 10, currency: "USD" });
+      return BlockSchema.parse({ ...base, type, title: "Complete payment", method: "link", amountMode: "fixed", amount: 10, currency: "USD" });
     case "legal_consent":
       return BlockSchema.parse({ ...base, type, title: "One last thing", consentText: "I agree to the terms." });
     default:

@@ -21,7 +21,7 @@ import {
   TrendingDown,
   Users,
   ShieldCheck,} from "lucide-react";
-import type { FormDoc } from "@repo/form-schema";
+import { formatAmount, type FormDoc } from "@repo/form-schema";
 import {
   useGetApiFormsById,
   useGetApiFormsByIdAnalytics,
@@ -636,6 +636,25 @@ function formatAnswer(value: unknown): string {
     const record = value as Record<string, unknown>;
     if ("filename" in record) return String(record.filename);
     if ("accepted" in record) return record.accepted ? "Accepted" : "Declined";
+    // Payment and booking answers are self-declared. Spelling that out here is
+    // the whole point of the column: a bare "paid" would read as confirmed.
+    if ("status" in record && ("reference" in record || "paymentId" in record)) {
+      const paid = record.status === "paid";
+      const amount =
+        typeof record.amount === "number"
+          ? formatAmount(record.amount, String(record.currency ?? "INR"))
+          : null;
+      return [
+        paid ? "Paid (unverified)" : "Payment pending",
+        amount,
+        record.reference ? `ref ${record.reference}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    }
+    if ("provider" in record && "url" in record) {
+      return record.confirmedAt ? "Booked (unverified)" : "Not booked";
+    }
     return Object.values(record).map(String).join(", ");
   }
   if (typeof value === "boolean") return value ? "Yes" : "No";

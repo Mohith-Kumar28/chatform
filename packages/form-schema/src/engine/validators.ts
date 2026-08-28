@@ -238,11 +238,30 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
 
     case "payment": {
       if (typeof raw !== "object" || raw === null) return fail("type", "Payment required.");
-      const p = raw as { status?: unknown; amount?: unknown; paymentId?: unknown };
-      if (p.status === "paid" || p.status === "pending") {
-        return ok({ status: p.status, paymentId: p.paymentId as string | undefined, amount: p.amount as number });
+      const p = raw as {
+        status?: unknown;
+        method?: unknown;
+        verified?: unknown;
+        reference?: unknown;
+        amount?: unknown;
+        paymentId?: unknown;
+      };
+      if (p.status !== "paid" && p.status !== "pending") {
+        return fail("payment_pending", "Payment has not been completed yet.");
       }
-      return fail("payment_pending", "Payment has not been completed yet.");
+      return ok({
+        status: p.status,
+        method: p.method === "upi" || p.method === "link" ? p.method : undefined,
+        // Hardcoded, not read from the payload: the respondent's browser is
+        // the only thing that ever sets this, so trusting it would let anyone
+        // mark their own payment confirmed. Nothing in this flow talks to a
+        // gateway, so nothing here can be verified.
+        verified: false,
+        reference: typeof p.reference === "string" ? p.reference.slice(0, 40) : undefined,
+        paymentId: typeof p.paymentId === "string" ? p.paymentId : undefined,
+        amount: typeof p.amount === "number" ? p.amount : undefined,
+        currency: block.currency,
+      });
     }
 
     case "scheduling": {

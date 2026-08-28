@@ -1,76 +1,76 @@
 import { BookOpen, CornerDownLeft, Zap } from "lucide-react";
+import { Band, BandTitle, BandLede } from "./band";
 import { ChatDemo } from "./chat-demo";
 import { MOMENT_SCRIPT } from "./chat-demo-scripts";
-import { Reveal } from "./reveal";
 
 /**
- * The differentiator, given a whole band to itself.
+ * The differentiator, given the loudest band on the page.
  *
- * This exchange is the acceptance test for the entire product thesis — the
+ * This exchange is the acceptance test for the whole product thesis — the
  * respondent interrupts with a question of their own, the agent answers it out
  * of the creator's knowledge base and returns to the question it was asking,
  * inside a single turn. A form can only ask.
+ *
+ * Which is why the copy here got cut hardest. The old version explained that
+ * three times: a two-sentence lede, three callouts of two-to-three sentences
+ * each, and then a closing paragraph that restated the heading in different
+ * words. The demo already proves it in four bubbles. Everything else is now
+ * one line per point — a caption on the evidence rather than a substitute for
+ * looking at it.
  */
+
 const CALLOUTS = [
   {
     icon: BookOpen,
-    title: "Reads your knowledge base",
-    body: "Up to 20 entries and 20,000 characters you write — pricing, policies, timelines. It quotes you, not the internet.",
+    title: "Quotes your knowledge base",
+    body: "Twenty entries you write. It quotes you, not the internet.",
   },
   {
     icon: CornerDownLeft,
     title: "Never loses its place",
-    body: "The state machine still owns the form. Answering a question off to the side cannot skip, reorder or lose a question.",
+    body: "The state machine still owns the form. Nothing gets skipped or reordered.",
   },
   {
     icon: Zap,
     title: "One turn, both jobs",
-    body: "It records what was an answer and replies to what was a question in the same breath — not two round trips and a repeated greeting.",
+    body: "Records the answer and replies to the question in the same breath.",
   },
 ] as const;
 
 export function TheMoment() {
   return (
-    <section id="the-moment" className="bg-muted/40 scroll-mt-20 px-6 py-20 sm:py-28">
-      <div className="mx-auto max-w-6xl">
-        <Reveal className="max-w-2xl">
-          <p className="text-primary text-micro mb-3 font-semibold tracking-[0.14em] uppercase">
-            The difference
-          </p>
-          <h2 className="text-display-lg text-balance">It answers their questions, too.</h2>
-          <p className="text-body-lg text-muted-foreground mt-4 text-balance">
-            People hesitate halfway through a form and there is nobody to ask. Here there is.
-            Watch what happens when the respondent stops answering and starts asking.
-          </p>
-        </Reveal>
-
-        <div className="mt-12 grid gap-8 lg:grid-cols-[1fr_0.85fr] lg:items-center lg:gap-14">
-          <Reveal>
-            <ChatDemo script={MOMENT_SCRIPT} variant="feature" label="Recording" />
-          </Reveal>
-
-          <ul className="flex flex-col gap-6">
-            {CALLOUTS.map((c, i) => (
-              <Reveal as="li" key={c.title} delay={i * 0.06} className="flex gap-4">
-                <span className="bg-primary-soft text-primary-soft-foreground mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl">
-                  <c.icon className="size-4.5" strokeWidth={1.75} />
-                </span>
-                <div>
-                  <h3 className="text-h3">{c.title}</h3>
-                  <p className="text-body text-muted-foreground mt-1 leading-relaxed">{c.body}</p>
-                </div>
-              </Reveal>
-            ))}
-          </ul>
-        </div>
-
-        <Reveal delay={0.1}>
-          <p className="text-body-lg text-muted-foreground mt-12 max-w-3xl text-balance">
-            A form can only ask. An interviewer can answer — from a knowledge base you write,
-            without ever losing its place in the conversation.
-          </p>
-        </Reveal>
+    <Band id="the-moment" tone="scale" size="tall">
+      <div className="max-w-2xl">
+        <BandTitle>It answers their questions, too.</BandTitle>
+        <BandLede tone="scale">
+          Watch the respondent stop answering and start asking.
+        </BandLede>
       </div>
-    </section>
+
+      <div className="mt-12 grid gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:gap-14">
+        <ChatDemo script={MOMENT_SCRIPT} variant="feature" label="Recording" />
+
+        <ul className="flex flex-col gap-7">
+          {CALLOUTS.map((c) => (
+            <li key={c.title} className="flex gap-4">
+              {/* Orange on violet: the mark's two hues, doing the same job here
+                  that they do in the logo. */}
+              <span className="bg-primary text-primary-foreground mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl">
+                <c.icon className="size-4.5" strokeWidth={2} />
+              </span>
+              <div>
+                <h3 className="text-h3">{c.title}</h3>
+                <p
+                  className="text-body mt-1 leading-relaxed"
+                  style={{ color: "var(--family-scale-band-muted)" }}
+                >
+                  {c.body}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Band>
   );
 }

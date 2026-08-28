@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import type { PublicBlock } from "@repo/form-schema";
+import { isMeetingRoom, schedulingLabel, type PublicBlock } from "@repo/form-schema";
 import { Chip } from "./composers/primitives";
 import { RatingComposer, ScaleComposer } from "./composers/rating";
 import { DateComposer } from "./composers/date";
 import { SignatureComposer } from "./composers/signature";
 import { FieldsComposer, MatrixComposer, RankingComposer } from "./composers/structured";
 import { FileUploadControl } from "./file-upload";
+import { PaymentAffordance } from "./payment-affordance";
 
 /**
  * The controls that belong to the current question, rendered **in the thread**
@@ -204,38 +205,44 @@ export function QuestionAffordance({
         />
       ) : null;
 
-    case "scheduling":
+    case "scheduling": {
+      const url = block.url ?? "";
+      // Whatever the builder pasted decides the copy: "I've booked" is wrong
+      // under a bare Zoom room, where there was never a slot to pick.
+      const room = url ? isMeetingRoom(url) : false;
       return (
         <Affordance>
           <a
-            href={block.url ?? "#"}
+            href={url || "#"}
             target="_blank"
             rel="noreferrer"
             className="flex h-10 items-center rounded-full bg-[var(--cf-accent)] px-5 text-sm font-medium text-[var(--cf-accent-text)]"
           >
-            Open the calendar
+            {schedulingLabel(url, block.buttonLabel)}
           </a>
           <Chip
+            disabled={disabled}
             onClick={() =>
               onStructured(
-                { provider: "external", url: block.url ?? "", confirmedAt: Date.now() },
-                "Booked",
+                { provider: "external", url, confirmedAt: Date.now() },
+                room ? "Joined" : "Booked",
               )
             }
           >
-            I&apos;ve booked
+            {room ? "I’ve got the link" : "I’ve booked"}
           </Chip>
         </Affordance>
       );
+    }
 
     case "payment":
       return (
-        <div className="rounded-2xl border border-dashed border-[var(--cf-chip-border)] px-4 py-4 text-center text-sm">
-          <p>Payment collection isn&apos;t enabled on this form yet.</p>
-          <button type="button" onClick={onSkip} className="mt-1.5 text-xs underline opacity-60">
-            Continue without paying
-          </button>
-        </div>
+        <PaymentAffordance
+          block={block}
+          disabled={disabled}
+          onStructured={onStructured}
+          onSkip={onSkip}
+        />
       );
 
     // short_text, long_text, email, phone, url, number — the composer is the

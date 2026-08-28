@@ -1,67 +1,83 @@
 import { KeyRound, Radio, ScrollText } from "lucide-react";
+import { Band, BandTitle, BandLede } from "./band";
 import { CodeTabs } from "./code-tabs";
-import { Reveal } from "./reveal";
+
+/**
+ * The dark band, and the only one on the page. After five bands of cream and
+ * pastel it lands as a change of register rather than another tint — which is
+ * what a developer section should feel like anyway.
+ *
+ * The three facts that used to sit in `MetricBand` as a hero-metric strip live
+ * here now. "330+ Cloudflare cities" is meaningless above the fold and load
+ * bearing next to a curl command, which is the whole argument against the
+ * big-number strip: those numbers were never headline material, they were
+ * captions looking for the right paragraph.
+ */
 
 const POINTS = [
   {
     icon: KeyRound,
     title: "Scoped API keys",
-    body: "sk_live_ keys, hashed at rest, shown once, revocable, with last-used tracking.",
+    body: "sk_live_ keys, hashed at rest, shown once, revocable, last-used tracked.",
   },
   {
     icon: Radio,
     title: "Streamed or synchronous",
-    body: "The hosted form streams over SSE. The headless API answers in one request, so your backend does not need an event loop.",
+    body: "SSE for the hosted form. One request and one reply for your backend.",
   },
   {
     icon: ScrollText,
     title: "An OpenAPI spec you can generate from",
-    body: "Published at /openapi.json with browsable docs. Our own web client is generated from it, so it cannot quietly go stale.",
+    body: "At /openapi.json. Our own web client is generated from it, so it cannot go stale.",
   },
 ] as const;
 
+const FACTS = ["4 ways to embed", "330+ Cloudflare cities", "2–5s typical agent turn"] as const;
+
 export function Developers() {
   return (
-    <section
-      id="developers"
-      className="bg-foreground text-background dark:bg-card dark:text-foreground scroll-mt-20 px-6 py-20 sm:py-28"
-    >
-      <div className="mx-auto max-w-6xl">
-        <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-center lg:gap-16">
-          <div>
-            <Reveal>
-              <p className="text-primary text-micro mb-3 font-semibold tracking-[0.14em] uppercase">
-                Developers
-              </p>
-              <h2 className="text-display-lg text-balance">Every form is an API.</h2>
-              <p className="text-body-lg mt-4 text-balance opacity-70">
-                Drive the whole conversation from your own backend, or drop it into a page with
-                one script tag. Both routes hit the same runtime — there is no cut-down version.
-              </p>
-            </Reveal>
+    <Band id="developers" tone="ink" size="tall">
+      <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-center lg:gap-16">
+        <div>
+          <BandTitle>Every form is an API.</BandTitle>
+          <BandLede tone="ink">
+            Drive the conversation from your own backend, or drop it in with one script
+            tag. Same runtime either way.
+          </BandLede>
 
-            <ul className="mt-8 flex flex-col gap-5">
-              {POINTS.map((p, i) => (
-                <Reveal as="li" key={p.title} delay={i * 0.06} className="flex gap-3.5">
-                  <span className="bg-primary/15 text-primary mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg">
-                    <p.icon className="size-4" strokeWidth={1.75} />
-                  </span>
-                  <div>
-                    <h3 className="text-h3">{p.title}</h3>
-                    <p className="text-body mt-1 leading-relaxed opacity-70">{p.body}</p>
-                  </div>
-                </Reveal>
-              ))}
-            </ul>
-          </div>
+          <ul className="mt-9 flex flex-col gap-5">
+            {POINTS.map((p) => (
+              <li key={p.title} className="flex gap-3.5">
+                <span
+                  className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg"
+                  style={{
+                    background: "var(--primary)",
+                    color: "var(--primary-foreground)",
+                  }}
+                >
+                  <p.icon className="size-4" strokeWidth={2} />
+                </span>
+                <div>
+                  <h3 className="text-h3">{p.title}</h3>
+                  <p className="text-body mt-1 leading-relaxed opacity-65">{p.body}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
 
-          <Reveal delay={0.1} className="min-w-0">
-            <div className="[&_pre]:text-foreground dark:[&_pre]:text-foreground">
-              <CodeTabs />
-            </div>
-          </Reveal>
+          <ul className="mt-9 flex flex-wrap items-center gap-x-5 gap-y-2">
+            {FACTS.map((fact) => (
+              <li key={fact} className="text-caption tabular opacity-55">
+                {fact}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="min-w-0 [&_pre]:text-foreground dark:[&_pre]:text-foreground">
+          <CodeTabs />
         </div>
       </div>
-    </section>
+    </Band>
   );
 }

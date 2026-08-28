@@ -1,6 +1,6 @@
 "use client";
 
-import type { Block } from "@repo/form-schema";
+import { isValidUpiId, UPI_CURRENCY, type Block } from "@repo/form-schema";
 import {
   CheckboxGroup,
   ListEditor,
@@ -402,6 +402,57 @@ export function TypeFields({
       return (
         <>
           <SelectField
+            label="How they pay"
+            value={block.method}
+            onChange={(v) =>
+              patch({
+                method: v,
+                // UPI settles in rupees only, so switching to it and leaving the
+                // currency at USD would show a price nobody can actually be charged.
+                ...(v === "upi" && block.currency !== UPI_CURRENCY ? { currency: UPI_CURRENCY } : {}),
+              } as Partial<Block>)
+            }
+            options={[
+              { value: "link", label: "Payment link" },
+              { value: "upi", label: "UPI ID (QR + link)" },
+            ]}
+          />
+
+          {block.method === "upi" ? (
+            <>
+              <TextField
+                label="UPI ID"
+                value={block.upiId ?? ""}
+                placeholder="acme@okhdfcbank"
+                onChange={(v) => patch({ upiId: v.trim() || undefined } as Partial<Block>, key("upi"))}
+              />
+              {block.upiId && !isValidUpiId(block.upiId) ? (
+                <p className="text-xs text-[var(--destructive)]">
+                  That doesn&apos;t look like a UPI ID. It should read like name@bank.
+                </p>
+              ) : null}
+              <TextField
+                label="Payee name"
+                value={block.upiPayeeName ?? ""}
+                placeholder="Shown in their UPI app"
+                onChange={(v) => patch({ upiPayeeName: v || undefined } as Partial<Block>, key("payee"))}
+              />
+            </>
+          ) : (
+            <>
+              <TextField
+                label="Payment link"
+                value={block.url ?? ""}
+                placeholder="https://rzp.io/l/…"
+                onChange={(v) => patch({ url: v.trim() || undefined } as Partial<Block>, key("url"))}
+              />
+              <p className="text-xs opacity-60">
+                Any checkout page you already have — Razorpay, Stripe, PayPal, Cashfree.
+              </p>
+            </>
+          )}
+
+          <SelectField
             label="Amount"
             value={block.amountMode}
             onChange={(v) => patch({ amountMode: v } as Partial<Block>)}
@@ -430,16 +481,27 @@ export function TypeFields({
             onChange={(v) => patch({ currency: v.toUpperCase().slice(0, 3) } as Partial<Block>, key("cur"))}
             maxLength={3}
           />
+          <p className="text-xs opacity-60">
+            Payment happens on your side, so we can&apos;t confirm it. Answers are recorded as
+            unverified for you to reconcile.
+          </p>
         </>
       );
 
     case "scheduling":
       return (
-        <TextField
-          label="Booking link"
-          value={block.url}
-          onChange={(v) => patch({ url: v } as Partial<Block>, key("url"))}
-        />
+        <>
+          <TextField
+            label="Booking link"
+            value={block.url}
+            placeholder="https://cal.com/your-handle"
+            onChange={(v) => patch({ url: v } as Partial<Block>, key("url"))}
+          />
+          <p className="text-xs opacity-60">
+            Cal.com, Calendly, Google Calendar, or a plain Meet, Zoom or Teams link — whatever you
+            already use.
+          </p>
+        </>
       );
 
     case "contact_info":

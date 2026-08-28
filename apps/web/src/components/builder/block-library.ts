@@ -71,8 +71,8 @@ export const BLOCK_LIBRARY: BlockMeta[] = [
 
   { type: "file_upload", label: "File upload", group: "Advanced", icon: FileUp, tone: "advanced", description: "Documents, images, audio." },
   { type: "signature", label: "Signature", group: "Advanced", icon: PenTool, tone: "advanced", description: "Draw or type a signature." },
-  { type: "payment", label: "Payment", group: "Advanced", icon: CreditCard, tone: "advanced", description: "Collect a payment inline." },
-  { type: "scheduling", label: "Scheduling", group: "Advanced", icon: CalendarClock, tone: "advanced", description: "Book a slot on your calendar." },
+  { type: "payment", label: "Payment", group: "Advanced", icon: CreditCard, tone: "advanced", description: "Send them to your payment link, or a UPI QR." },
+  { type: "scheduling", label: "Scheduling", group: "Advanced", icon: CalendarClock, tone: "advanced", description: "Hand off to your booking or meeting link." },
   { type: "legal_consent", label: "Consent", group: "Advanced", icon: ScrollText, tone: "advanced", description: "Terms acceptance with an audit trail." },
 ];
 

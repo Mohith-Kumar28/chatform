@@ -5,6 +5,7 @@ export * from "./logic";
 export * from "./respondent";
 export * from "./settings";
 export * from "./answers";
+export * from "./payment-link";
 export * from "./form-doc";
 export * from "./engine/index";
 export * from "./fixtures";

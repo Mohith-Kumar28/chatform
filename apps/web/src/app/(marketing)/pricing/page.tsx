@@ -1,17 +1,34 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import Link from "next/link";
-import { Check, Minus, Lock } from "lucide-react";
+import { Check, Lock, Minus } from "lucide-react";
 import { useGetApiBillingPlans, getGetApiBillingPlansQueryKey } from "@/lib/api/billing/billing";
-import { cn } from "@/lib/utils";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Band, BandTitle, BandLede } from "@/components/marketing/band";
+import { PlanCard } from "@/components/marketing/plan-card";
+import { BlockTypeGrid } from "@/components/marketing/block-type-grid";
+import { QUESTION_TYPE_COUNT_WORD } from "@/components/marketing/question-types";
+import { ComparisonTable } from "@/components/marketing/comparison-table";
+import { Faq } from "@/components/marketing/faq";
+import { CtaBand } from "@/components/marketing/cta-band";
 
 /**
- * The public pricing page.
+ * The public pricing page — and now the page that carries everything the
+ * landing page stopped carrying.
  *
- * Reads `/api/billing/plans`, which serves the **seeded** catalogue rather than the
- * in-process one — so what this page promises is what the gates actually enforce. A
- * hardcoded table here would drift from the database the first time a limit changed.
+ * The landing page had grown into a specification: a 26-tile question-type
+ * grid, a seven-vendor comparison matrix with footnotes, and an eight-item FAQ
+ * of paragraph answers, all above the fold of a decision nobody had made yet.
+ * Those three things are not persuasion, they are due diligence, and due
+ * diligence happens here — after somebody has decided they are interested and
+ * gone looking for the price. So they live on this page, in that order:
+ * price, then what you can ask, then how it compares, then the objections.
+ *
+ * The plan data still comes from `/api/billing/plans`, which serves the
+ * **seeded** catalogue rather than the in-process one — so what this page
+ * promises is what the gates actually enforce. A hardcoded table here would
+ * drift from the database the first time a limit changed. The cards are the
+ * shared `PlanCard`, fed from that payload.
  */
 
 interface PlanRow {
@@ -56,7 +73,13 @@ const GROUPS: { title: string; rows: ({ limit: string } | { feature: string })[]
   },
   {
     title: "Results",
-    rows: [{ feature: "partial_responses" }, { feature: "advanced_analytics" }, { feature: "conversation_analytics" }, { feature: "export_partials" }, { feature: "ai_insights" }],
+    rows: [
+      { feature: "partial_responses" },
+      { feature: "advanced_analytics" },
+      { feature: "conversation_analytics" },
+      { feature: "export_partials" },
+      { feature: "ai_insights" },
+    ],
   },
   {
     title: "Brand & share",
@@ -87,7 +110,14 @@ const GROUPS: { title: string; rows: ({ limit: string } | { feature: string })[]
   },
   {
     title: "Team & integrations",
-    rows: [{ limit: "seats" }, { limit: "webhooks_per_form" }, { feature: "api_access" }, { limit: "api_requests_per_month" }, { feature: "team_roles" }, { feature: "activity_log" }],
+    rows: [
+      { limit: "seats" },
+      { limit: "webhooks_per_form" },
+      { feature: "api_access" },
+      { limit: "api_requests_per_month" },
+      { feature: "team_roles" },
+      { feature: "activity_log" },
+    ],
   },
 ];
 
@@ -102,128 +132,146 @@ function formatLimit(value: number | null, unit: string): string {
 }
 
 export default function PricingPage() {
-  // Annual by default: it is the better deal for the customer and the better number for
-  // us, and it is what every comparable product does.
-  const [cycle, setCycle] = useState<"monthly" | "yearly">("yearly");
+  // Annual by default: it is the better deal for the customer and the better
+  // number for us, and it is what every comparable product does.
+  const [cycle, setCycle] = useState<"yearly" | "monthly">("yearly");
+  const annual = cycle === "yearly";
   const { data: raw } = useGetApiBillingPlans({
     query: { queryKey: getGetApiBillingPlansQueryKey(), staleTime: 5 * 60_000 },
   });
   const data = raw as Catalogue | undefined;
   const plans = data?.plans ?? [];
+  const saving = plans.find((p) => p.id === "pro")?.yearlySavingPercent;
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-14">
-      <header className="mx-auto max-w-2xl text-center">
-        <h1 className="font-display text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-          Collect for free. Pay when you want to look closer.
-        </h1>
-        <p className="text-muted-foreground mt-4 text-lg text-pretty">
-          Every plan includes unlimited forms and unlimited responses. Build it, publish it,
-          and collect real answers without paying anything.
-        </p>
-
-        <div className="bg-muted mx-auto mt-8 inline-flex rounded-lg p-0.5 text-sm">
-          {(["yearly", "monthly"] as const).map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setCycle(c)}
-              className={cn(
-                "rounded-[0.4rem] px-4 py-1.5 font-medium transition-colors",
-                cycle === c ? "bg-[var(--background)] shadow-sm" : "text-muted-foreground",
-              )}
-            >
-              {c === "yearly" ? "Yearly" : "Monthly"}
-              {c === "yearly" && plans[1] && (
-                <span className="ml-1.5 text-xs text-[var(--primary)]">save {plans[1].yearlySavingPercent}%</span>
-              )}
-            </button>
-          ))}
+    <>
+      <Band size="tall">
+        <div className="max-w-2xl">
+          <BandTitle as="h1">Collect for free. Pay to look closer.</BandTitle>
+          <BandLede>
+            Unlimited forms and unlimited responses on every plan, including the free one.
+          </BandLede>
         </div>
-      </header>
 
-      <div className="mt-12 grid gap-4 md:grid-cols-3">
-        {plans.map((plan) => {
-          const perMonth = cycle === "yearly" ? plan.priceYearlyPerMonthCents : plan.priceMonthlyCents;
-          const isTarget = plan.id === "pro";
-          return (
-            <div
-              key={plan.id}
-              className={cn(
-                "bg-card relative flex flex-col rounded-2xl p-6",
-                isTarget && "ring-2 ring-[var(--primary)]",
-              )}
-            >
-              {isTarget && (
-                <span className="absolute -top-2.5 left-6 rounded-full bg-[var(--primary)] px-2.5 py-0.5 text-[0.6875rem] font-medium text-[var(--primary-foreground)]">
-                  Most popular
+        <div className="mt-10 flex flex-col items-center gap-9">
+          <SegmentedControl
+            options={[
+              { value: "yearly", label: saving ? `Yearly · save ${saving}%` : "Yearly" },
+              { value: "monthly", label: "Monthly" },
+            ]}
+            value={cycle}
+            onChange={setCycle}
+            ariaLabel="Billing period"
+          />
+
+          <div className="grid w-full items-stretch gap-5 lg:grid-cols-3">
+            {plans.length === 0
+              ? // The catalogue is a client fetch, so the first paint has no plans.
+                // Three cards' worth of shimmer holds the grid instead of letting
+                // the page jump a screen-height when they land.
+                [0, 1, 2].map((i) => (
+                  <div key={i} className="shimmer h-[26rem] rounded-2xl" />
+                ))
+              : plans.map((plan) => (
+                  <PlanCard
+                    key={plan.id}
+                    annual={annual}
+                    featured={plan.id === "pro"}
+                    plan={plan}
+                    ctaHref={
+                      plan.id === "free" ? "/signin" : `/billing?plan=${plan.id}&cycle=${cycle}`
+                    }
+                    ctaLabel={plan.id === "free" ? "Start free" : `Choose ${plan.name}`}
+                    note={plan.checkoutReady ? undefined : "Contact us to set this up"}
+                    soonLabels={plan.features
+                      .filter((f) => data?.features[f]?.soon)
+                      .map((f) => data!.features[f]!.label.toLowerCase())}
+                  />
+                ))}
+          </div>
+
+          {plans[0] && plans[1] && (
+            <div className="text-caption text-muted-foreground mx-auto max-w-3xl space-y-2.5">
+              <p className="flex items-start gap-2">
+                <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                <span>
+                  <strong className="text-foreground font-semibold">
+                    &ldquo;Unlimited responses&rdquo;
+                  </strong>{" "}
+                  means no per-plan quota. There is a monthly ceiling for fair use —{" "}
+                  {formatLimit(plans[0].limits.responses_ceiling_per_month ?? null, "count")} on
+                  Free and{" "}
+                  {formatLimit(plans[1].limits.responses_ceiling_per_month ?? null, "count")} on
+                  paid plans. We would rather tell you the number than write
+                  &ldquo;subject to fair usage&rdquo;.
                 </span>
-              )}
-              <h2 className="font-display text-lg font-semibold tracking-tight">{plan.name}</h2>
-              <p className="text-muted-foreground mt-1 text-sm text-pretty">{plan.tagline}</p>
-
-              <div className="mt-5 flex items-baseline gap-1.5">
-                <span className="font-display text-4xl font-semibold tracking-tight tabular-nums">
-                  ${(perMonth / 100).toFixed(0)}
-                </span>
-                <span className="text-muted-foreground text-sm">{plan.id === "free" ? "forever" : "/mo"}</span>
-              </div>
-              {plan.id !== "free" && (
-                <p className="text-muted-foreground mt-1 text-xs">
-                  {cycle === "yearly"
-                    ? `$${(plan.priceYearlyCents / 100).toFixed(0)} billed yearly`
-                    : "billed monthly"}
-                </p>
-              )}
-
-              {plan.id === "free" ? (
-                <Link
-                  href="/signin"
-                  className="mt-6 inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] text-sm font-medium transition-colors hover:bg-[var(--muted)]"
-                >
-                  Start free
-                </Link>
-              ) : (
-                <Link
-                  href={`/billing?plan=${plan.id}&cycle=${cycle}`}
-                  className={cn(
-                    "mt-6 inline-flex h-10 items-center justify-center rounded-lg text-sm font-medium transition-opacity hover:opacity-90",
-                    isTarget
-                      ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
-                      : "border border-[var(--border)]",
-                  )}
-                >
-                  Choose {plan.name}
-                </Link>
-              )}
-              {/* Never offer a button that 503s: if the environment has no Dodo product for
-                  this plan, say so rather than letting someone click into a dead end. */}
-              {!plan.checkoutReady && (
-                <p className="text-muted-foreground mt-2 text-center text-xs">Contact us to set this up</p>
-              )}
-
-              {plan.id === "business" && plan.seatPriceCents > 0 && (
-                <p className="text-muted-foreground mt-3 text-xs">
-                  {plan.limits.seats} seats included, then ${(plan.seatPriceCents / 100).toFixed(0)}/mo each
-                </p>
-              )}
+              </p>
+              <p>
+                Every response is a real conversation with a language model, which costs us
+                money — so AI conversations are metered. Past the monthly count your forms
+                keep collecting, asking their questions directly instead of conversationally.
+                Nothing breaks and no response is lost.
+              </p>
+              <p>
+                Prices in USD. Tax is handled at checkout. Cancel any time from the billing
+                portal.
+              </p>
             </div>
-          );
-        })}
-      </div>
+          )}
+        </div>
+      </Band>
 
-      {/* The full comparison. Built from the API payload so it can never claim something
-          the gates do not honour. */}
+      {/* Moved here from the landing page, where 26 tiles cost a full screen to
+          say something the hero's spectrum strip now says in a fifth of it. */}
+      <Band id="question-types" tone="number">
+        <div className="max-w-2xl">
+          <BandTitle>{QUESTION_TYPE_COUNT_WORD} ways to ask.</BandTitle>
+          <BandLede tone="number">
+            Each renders its own control in the conversation — and still accepts a typed
+            answer.
+          </BandLede>
+        </div>
+        <div className="mt-10">
+          <BlockTypeGrid />
+        </div>
+      </Band>
+
+      <Band id="compare" tone="sand">
+        <div className="max-w-2xl">
+          <BandTitle>Most of these render a field and wait.</BandTitle>
+          <BandLede>
+            Including where someone else already does what we do.
+          </BandLede>
+        </div>
+        <div className="mt-10">
+          <ComparisonTable />
+        </div>
+      </Band>
+
+      {/* The full matrix, built from the API payload so it can never claim
+          something the gates do not honour. */}
       {data && (
-        <div className="mt-16">
-          <h2 className="font-display text-xl font-semibold tracking-tight">Everything, compared</h2>
-          <div className="mt-4 overflow-x-auto">
+        <Band id="everything">
+          <BandTitle className="max-w-2xl">Everything, compared.</BandTitle>
+          <div className="mt-10 overflow-x-auto [overflow-y:visible]">
             <table className="w-full min-w-[46rem] text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border)]">
-                  <th className="py-2.5 pr-4 text-left font-medium" />
+              {/* Forty rows of ticks and numbers, and the only thing that says
+                  which column is which is one row at the very top. Sticky, at
+                  the height of the marketing nav so the two do not overlap —
+                  DESIGN.md 4.4 asks for this on every table and this is the one
+                  that most needs it. */}
+              <thead className="bg-background sticky top-[3.375rem] z-[1]">
+                <tr className="border-border border-b">
+                  <th className="bg-background py-2.5 pr-4 text-left font-medium" />
                   {plans.map((p) => (
-                    <th key={p.id} className="w-32 px-3 py-2.5 text-center text-xs font-medium">
+                    <th
+                      key={p.id}
+                      className={
+                        p.id === "pro"
+                          ? "text-primary bg-background w-32 px-3 py-2.5 text-center text-xs font-semibold"
+                          : "bg-background w-32 px-3 py-2.5 text-center text-xs font-medium"
+                      }
+                    >
                       {p.name}
                     </th>
                   ))}
@@ -235,7 +283,7 @@ export default function PricingPage() {
                     <tr>
                       <th
                         colSpan={plans.length + 1}
-                        className="text-muted-foreground pt-6 pb-2 text-left text-[0.6875rem] font-semibold tracking-wider uppercase"
+                        className="text-muted-foreground pt-7 pb-2 text-left text-[0.6875rem] font-semibold tracking-wider uppercase"
                       >
                         {group.title}
                       </th>
@@ -245,10 +293,10 @@ export default function PricingPage() {
                         const meta = data.limits[row.limit];
                         if (!meta) return null;
                         return (
-                          <tr key={row.limit} className="border-b border-[var(--border)]/60">
+                          <tr key={row.limit} className="border-border/60 border-b">
                             <td className="py-2.5 pr-4">{meta.label}</td>
                             {plans.map((p) => (
-                              <td key={p.id} className="px-3 py-2.5 text-center tabular-nums">
+                              <td key={p.id} className="tabular px-3 py-2.5 text-center">
                                 {formatLimit(p.limits[row.limit] ?? null, meta.unit)}
                               </td>
                             ))}
@@ -258,21 +306,31 @@ export default function PricingPage() {
                       const meta = data.features[row.feature];
                       if (!meta) return null;
                       return (
-                        <tr key={row.feature} className="border-b border-[var(--border)]/60">
+                        <tr key={row.feature} className="border-border/60 border-b">
                           <td className="py-2.5 pr-4">
                             {meta.label}
-                            {/* Priced, not built. Marked in plain sight: listing an unbuilt
-                                feature as included in a paid plan is a misrepresentation. */}
+                            {/* Priced, not built. Marked in plain sight: listing an
+                                unbuilt feature as included in a paid plan is a
+                                misrepresentation. */}
                             {meta.soon && (
-                              <span className="text-muted-foreground ml-1.5 text-xs">coming soon</span>
+                              <span className="text-muted-foreground ml-1.5 text-xs">
+                                coming soon
+                              </span>
                             )}
                           </td>
                           {plans.map((p) => (
                             <td key={p.id} className="px-3 py-2.5 text-center">
                               {p.features.includes(row.feature) ? (
-                                <Check className="mx-auto size-4 text-[var(--primary)]" aria-label="Included" />
+                                <Check
+                                  className="text-primary mx-auto size-4"
+                                  strokeWidth={2.5}
+                                  aria-label="Included"
+                                />
                               ) : (
-                                <Minus className="text-muted-foreground/40 mx-auto size-4" aria-label="Not included" />
+                                <Minus
+                                  className="text-muted-foreground/40 mx-auto size-4"
+                                  aria-label="Not included"
+                                />
                               )}
                             </td>
                           ))}
@@ -284,27 +342,19 @@ export default function PricingPage() {
               </tbody>
             </table>
           </div>
-
-          <div className="text-muted-foreground mt-8 space-y-2 text-xs">
-            <p className="flex items-start gap-1.5">
-              <Lock className="mt-0.5 size-3 shrink-0" aria-hidden />
-              <span>
-                <strong>“Unlimited responses”</strong> means no per-plan quota. There is a monthly
-                ceiling for fair use — {formatLimit(plans[0]?.limits.responses_ceiling_per_month ?? null, "count")} on
-                Free and {formatLimit(plans[1]?.limits.responses_ceiling_per_month ?? null, "count")} on paid plans.
-                We would rather tell you the number than write “subject to fair usage”.
-              </span>
-            </p>
-            <p>
-              Every response is a real conversation with a language model, which costs us money —
-              so AI conversations are metered. Past the monthly count your forms keep collecting,
-              asking their questions directly instead of conversationally. Nothing breaks and no
-              response is lost.
-            </p>
-            <p>Prices in USD. Tax is handled at checkout. Cancel any time from the billing portal.</p>
-          </div>
-        </div>
+        </Band>
       )}
-    </div>
+
+      <Band id="faq" tone="content">
+        <BandTitle className="mx-auto max-w-2xl text-center">
+          The things people ask before they trust this.
+        </BandTitle>
+        <div className="mt-10">
+          <Faq />
+        </div>
+      </Band>
+
+      <CtaBand />
+    </>
   );
 }

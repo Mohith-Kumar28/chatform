@@ -230,15 +230,36 @@ export const Block = z.discriminatedUnion("type", [
     type: z.literal("signature"),
     drawnNameRequired: z.boolean().default(false),
   }),
+  /**
+   * Payment is collected *outside* Chatform: we show the respondent where to
+   * pay and record that they say they did. We are never in the flow of funds,
+   * so there is no gateway to verify against — see `verified` on the answer.
+   *
+   * `link` sends them to a checkout page the builder already owns (Razorpay,
+   * Stripe, PayPal, anything). `upi` takes a VPA and builds the `upi://` URI
+   * itself, which renders as both a QR to scan and a link to tap.
+   */
   z.object({
     ...BlockBase,
     type: z.literal("payment"),
+    method: z.enum(["link", "upi"]).default("link"),
     amountMode: z.enum(["fixed", "variable"]).default("fixed"),
     amount: z.number().min(0).optional(),
     amountVariable: z.string().optional(),
     currency: z.string().length(3).default("USD"),
+    /** `link`: the checkout page. Optional in the schema so a half-built block still saves; lint requires it to publish. */
+    url: z.string().url().max(500).optional(),
+    /** `upi`: the payee VPA, e.g. "acme@okhdfcbank". */
+    upiId: z.string().max(120).optional(),
+    /** `upi`: the name UPI apps show the payer. Falls back to the form's name. */
+    upiPayeeName: z.string().max(120).optional(),
     description: z.string().max(500).optional(),
   }),
+  /**
+   * Booking happens on whatever the builder already uses — Cal.com, Calendly,
+   * Google Calendar, a bare Meet or Zoom room. Any URL is accepted on purpose:
+   * the moment this enumerates providers, the one someone uses is missing.
+   */
   z.object({
     ...BlockBase,
     type: z.literal("scheduling"),
