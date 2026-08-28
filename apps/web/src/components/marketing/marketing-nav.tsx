@@ -13,6 +13,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { useSession } from "@/lib/auth/auth-client";
 import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +41,13 @@ const LINKS = [
 
 export function MarketingNav() {
   const [scrolled, setScrolled] = useState(false);
+  /**
+   * These pages are static, so the session is only knowable in the browser.
+   * Until the fetch settles the CTAs are a placeholder rather than the
+   * signed-out pair: drawing "Sign in" first and swapping it a moment later is
+   * what made a signed-in user think every refresh had logged them out.
+   */
+  const { data: session, isPending } = useSession();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -79,12 +87,22 @@ export function MarketingNav() {
 
         <div className="ml-auto flex items-center gap-1.5 lg:ml-0">
           <ThemeToggle />
-          <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-            <Link href="/signin">Sign in</Link>
-          </Button>
-          <Button asChild size="sm" shape="pill" className="hidden sm:inline-flex">
-            <Link href="/signin">Start free</Link>
-          </Button>
+          {isPending ? (
+            <div className="shimmer hidden h-8 w-28 rounded-full sm:block" aria-hidden />
+          ) : session ? (
+            <Button asChild size="sm" shape="pill" className="hidden sm:inline-flex">
+              <Link href="/dashboard">Dashboard</Link>
+            </Button>
+          ) : (
+            <>
+              <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
+                <Link href="/signin">Sign in</Link>
+              </Button>
+              <Button asChild size="sm" shape="pill" className="hidden sm:inline-flex">
+                <Link href="/signin">Start free</Link>
+              </Button>
+            </>
+          )}
 
           <Sheet>
             <SheetTrigger asChild>
@@ -113,16 +131,28 @@ export function MarketingNav() {
                 ))}
               </ul>
               <div className="mt-auto flex flex-col gap-2 p-4">
-                <SheetClose asChild>
-                  <Button asChild variant="outline" shape="pill">
-                    <Link href="/signin">Sign in</Link>
-                  </Button>
-                </SheetClose>
-                <SheetClose asChild>
-                  <Button asChild shape="pill">
-                    <Link href="/signin">Start free</Link>
-                  </Button>
-                </SheetClose>
+                {isPending ? (
+                  <div className="shimmer h-9 rounded-full" aria-hidden />
+                ) : session ? (
+                  <SheetClose asChild>
+                    <Button asChild shape="pill">
+                      <Link href="/dashboard">Dashboard</Link>
+                    </Button>
+                  </SheetClose>
+                ) : (
+                  <>
+                    <SheetClose asChild>
+                      <Button asChild variant="outline" shape="pill">
+                        <Link href="/signin">Sign in</Link>
+                      </Button>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <Button asChild shape="pill">
+                        <Link href="/signin">Start free</Link>
+                      </Button>
+                    </SheetClose>
+                  </>
+                )}
               </div>
             </SheetContent>
           </Sheet>

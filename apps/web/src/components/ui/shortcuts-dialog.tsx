@@ -1,7 +1,8 @@
 "use client";
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { Shortcut } from "./use-builder-shortcuts";
+import { Kbd } from "@/components/ui/kbd";
+import type { Shortcut } from "@/lib/shortcuts";
 
 /**
  * The shortcut sheet, generated from the bindings themselves.
@@ -9,18 +10,22 @@ import type { Shortcut } from "./use-builder-shortcuts";
  * Not a hand-written list: it renders the same registry the key handler reads,
  * so a binding cannot be added, changed or removed without this changing with
  * it. Every shortcut sheet I have seen that was maintained separately was
- * wrong within a month.
+ * wrong within a month. Groups come from the registry's own order too, so a new
+ * heading needs no edit here.
  */
 export function ShortcutsDialog({
   open,
   onOpenChange,
   shortcuts,
+  footnote,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   shortcuts: Shortcut[];
+  /** The one thing worth saying about what is deliberately *not* bound. */
+  footnote?: string;
 }) {
-  const groups = ["Move around", "Edit", "The form"] as const;
+  const groups = [...new Set(shortcuts.map((s) => s.group))];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -32,7 +37,7 @@ export function ShortcutsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="max-h-[60vh] space-y-4 overflow-y-auto">
           {groups.map((group) => {
             const items = shortcuts.filter((s) => s.group === group);
             if (items.length === 0) return null;
@@ -45,9 +50,7 @@ export function ShortcutsDialog({
                   {items.map((s) => (
                     <li key={s.keys + s.label} className="flex items-center justify-between gap-4 py-1">
                       <span className="text-sm">{s.label}</span>
-                      <kbd className="bg-muted text-muted-foreground shrink-0 rounded px-1.5 py-0.5 font-sans text-xs">
-                        {s.keys}
-                      </kbd>
+                      <Kbd>{s.keys}</Kbd>
                     </li>
                   ))}
                 </ul>
@@ -56,10 +59,7 @@ export function ShortcutsDialog({
           })}
         </div>
 
-        <p className="text-muted-foreground text-xs">
-          Deleting a question has no shortcut on purpose — it takes its wording, its options and
-          every rule that mentions it with it.
-        </p>
+        {footnote && <p className="text-muted-foreground text-xs">{footnote}</p>}
       </DialogContent>
     </Dialog>
   );

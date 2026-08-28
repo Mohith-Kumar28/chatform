@@ -25,7 +25,14 @@ APP_ORIGIN=https://api.chatform.in
 # Every browser origin allowed to drive this API, comma-separated. The first is the
 # fallback when a request carries no recognisable origin. localhost is listed on purpose so
 # a local frontend can work against the deployed API; drop it if that stops being worth it.
-WEB_ORIGINS=https://chatform.in,http://localhost:3000,https://chatform-web.mohithkumar808.workers.dev
+#
+# The workers.dev host of the web app used to be listed here and is deliberately gone. The
+# session cookie is set by api.chatform.in, so it is same-site with chatform.in and the
+# browser keeps it — but from *.workers.dev it is a third-party cookie, which Safari blocks
+# outright and Chrome is phasing out. Signing in there appeared to work and then every
+# refresh looked like a logout. An origin that cannot hold a session should not be allowed
+# to try; chatform.in is the only production host.
+WEB_ORIGINS=https://chatform.in,http://localhost:3000
 
 # ── Real secrets ──────────────────────────────────────────────────────────────
 BETTER_AUTH_SECRET=

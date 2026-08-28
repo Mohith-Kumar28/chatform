@@ -11,6 +11,15 @@ export interface LintIssue {
   code: string;
   message: string;
   path?: string;
+  /**
+   * The blocks or endings this issue is about.
+   *
+   * The messages already named them, but only inside prose — so the only way to
+   * show a problem where it lives was to parse an English sentence. The Flow
+   * canvas marks the nodes in here, which is the difference between "publishing
+   * is blocked, somewhere" and a red node you can click.
+   */
+  refs?: string[];
 }
 
 const REF_RE = /^[a-z][a-z0-9_]{1,40}$/;
@@ -28,7 +37,7 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
 
   const targetExists = (ref: string, kind: string, path: string) => {
     if (kind === "ending" ? !endingRefs.has(ref) : !blockRefs.has(ref)) {
-      issues.push({ level: "error", code: "dangling_target", message: `Logic target "${ref}" (${kind}) does not exist`, path });
+      issues.push({ level: "error", code: "dangling_target", message: `Logic target "${ref}" (${kind}) does not exist`, path, refs: [ref] });
     }
   };
 
@@ -168,6 +177,57 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
       message: `No path reaches these questions, so nobody will ever be asked them: ${unreachable
         .map((b) => b.ref)
         .join(", ")}. Move them above the branch, or add a branch that reaches them.`,
+      refs: unreachable.map((b) => b.ref),
+    });
+  }
+
+  /**
+   * Can every question still get someone to an ending?
+   *
+   * Reachability alone says nobody is stranded before a question; it says
+   * nothing about being stranded after one. A branch aimed back up the list is
+   * dropped elsewhere, but a question whose every route leads into a pocket
+   * with no ending in it leaves the respondent with no way to finish — the form
+   * simply stops. That is invisible in the builder and terminal for whoever is
+   * filling it in, so it is an error, not a warning.
+   *
+   * Walked backwards from the ends: a block terminates if it can jump to an
+   * ending, if it is last in the list (falling off the end finishes the form),
+   * or if anything it reaches terminates.
+   */
+  const endsSomewhere = new Set<string>();
+  for (const b of doc.blocks) {
+    const rules = gotoFrom.get(b.ref) ?? [];
+    if (rules.some((r) => (r.targetKind ?? "block") === "ending")) endsSomewhere.add(b.ref);
+  }
+  const last = doc.blocks[doc.blocks.length - 1];
+  // Falling off the end of the list completes the form, but only if some answer
+  // actually escapes the rules on that last question.
+  if (last && !rulesAreExhaustive(last, gotoFrom.get(last.ref) ?? [])) endsSomewhere.add(last.ref);
+  // Fixed point: cheap at these sizes, and it needs no cycle handling.
+  for (let pass = 0; pass < doc.blocks.length; pass++) {
+    let grew = false;
+    for (const b of doc.blocks) {
+      if (endsSomewhere.has(b.ref)) continue;
+      for (const t of adj.get(b.ref) ?? []) {
+        if (endsSomewhere.has(t)) {
+          endsSomewhere.add(b.ref);
+          grew = true;
+          break;
+        }
+      }
+    }
+    if (!grew) break;
+  }
+  const stranded = doc.blocks.filter((b) => visited.has(b.ref) && !endsSomewhere.has(b.ref));
+  if (stranded.length > 0) {
+    issues.push({
+      level: "error",
+      code: "no_route_to_ending",
+      message: `From these questions there is no route to an ending, so the conversation stops with no way to finish: ${stranded
+        .map((b) => b.ref)
+        .join(", ")}. Point the last one at an ending.`,
+      refs: stranded.map((b) => b.ref),
     });
   }
 

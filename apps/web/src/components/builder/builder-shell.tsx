@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ import {
   usePostApiFormsByIdPublish,
 } from "@/lib/api/dashboard/dashboard";
 import { AuthGuard } from "@/components/dashboard/auth-guard";
+import { CommandPalette } from "@/components/dashboard/command-palette";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useBuilderStore } from "@/stores/builder-store";
@@ -18,7 +19,7 @@ import { useAutosave } from "@/hooks/use-autosave";
 import { BuilderHeader } from "./builder-header";
 import { PreviewDialog } from "./preview-dialog";
 import { PublishStrippedDialog, type StrippedSetting } from "./publish-stripped-dialog";
-import { ShortcutsDialog } from "./shortcuts-dialog";
+import { ShortcutsDialog } from "@/components/ui/shortcuts-dialog";
 import { useBuilderShortcuts } from "./use-builder-shortcuts";
 
 /**
@@ -70,20 +71,47 @@ export function BuilderShell({
   }, [row, loadedId, hydrate]);
 
   /**
+   * Copying the live link, shared by the header button and ⇧⌘C.
+   *
+   * Null while there is nothing to copy, which is also what tells the registry
+   * not to bind the key on a draft.
+   */
+  const canCopyLink = Boolean(row?.slug && row.status === "published");
+  const copyLink = useCallback(() => {
+    const slug = row?.slug;
+    if (!slug) return;
+    void navigator.clipboard
+      .writeText(`${window.location.origin}/f/${slug}`)
+      .then(() => toast.success("Link copied"));
+  }, [row?.slug]);
+
+  /**
    * Every builder shortcut, in one place.
    *
    * This was a single handler for ⌘Z and ⇧⌘Z. The rest of the builder had no
    * keyboard at all: no way to step between questions, reorder one, duplicate
    * it, preview, publish, or find out that any of it existed. The registry also
-   * feeds the ? sheet, so the two cannot disagree.
+   * feeds the ? sheet and the tooltips, so none of the three can disagree.
+   *
+   * Memoised because the registry is rebuilt — and the window listener
+   * rebound — whenever this object changes identity.
    */
-  const { shortcuts, helpOpen, setHelpOpen } = useBuilderShortcuts({
-    onPreview: () => setPreviewOpen(true),
-    onPublish: () => {
-      if (!publishing) void onPublish().catch(() => {});
-    },
-    onSave: () => void flush(),
-  });
+  const shortcutActions = useMemo(
+    () => ({
+      onPreview: () => setPreviewOpen(true),
+      onPublish: () => {
+        if (!publishing) void onPublish().catch(() => {});
+      },
+      onSave: () => void flush(),
+      onCopyLink: canCopyLink ? copyLink : null,
+    }),
+    // `onPublish` is recreated each render and closes over nothing that the
+    // other dependencies do not already track.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [publishing, flush, canCopyLink, copyLink],
+  );
+
+  const { shortcuts, helpOpen, setHelpOpen } = useBuilderShortcuts(shortcutActions);
 
   async function onPublish() {
     setPublishing(true);
@@ -131,6 +159,8 @@ export function BuilderShell({
             onPublish={onPublish}
             publishing={publishing}
             onPreview={() => setPreviewOpen(true)}
+            onCopyLink={copyLink}
+            onShowShortcuts={() => setHelpOpen(true)}
           />
         )}
 
@@ -171,7 +201,21 @@ export function BuilderShell({
 
         <PublishStrippedDialog stripped={stripped} onClose={() => setStripped([])} />
 
-        <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} shortcuts={shortcuts} />
+        <ShortcutsDialog
+          open={helpOpen}
+          onOpenChange={setHelpOpen}
+          shortcuts={shortcuts}
+          footnote="Deleting a question has no shortcut on purpose — it takes its wording, its options and every rule that mentions it with it."
+        />
+
+        {/*
+          ⌘K was listed in the shortcut sheet from the day the sheet existed and
+          did nothing here: the palette was only ever mounted in the dashboard
+          shell, and the builder has its own. It also knows about this form, so
+          the palette can offer the sections and the actions of the form you are
+          actually looking at.
+        */}
+        <CommandPalette />
       </div>
     </AuthGuard>
   );

@@ -190,14 +190,6 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
    * screen of layout thrown away in front of the respondent.
    */
   const [resolving, setResolving] = useState(true);
-  /**
-   * Every question the server has asked, by ref.
-   *
-   * The transcript keeps the respondent's words but not what they were choosing
-   * between, so an answered choice question left no trace of its options. Kept
-   * so the thread can still show which one was picked once the chips are gone.
-   */
-  const [asked, setAsked] = useState<Record<string, PublicBlock>>({});
   /** True when a replay rebuilt a transcript we did not start in this tab. */
   const [resumed, setResumed] = useState(false);
   const [auth, setAuth] = useState<AuthState | null>(null);
@@ -295,7 +287,6 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
       es.addEventListener("question", (e) => {
         const data = JSON.parse((e as MessageEvent).data) as QuestionState;
         setQuestion(data);
-        setAsked((prev) => (prev[data.block.ref] ? prev : { ...prev, [data.block.ref]: data.block }));
         setThinking(false);
         setEscalatedRef(null);
         setValidationHint(null);
@@ -587,7 +578,6 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
     clearSubmitted(slug);
     setResolving(true);
     setSubmitted(null);
-    setAsked({});
     sessionRef.current = null;
     esRef.current?.close();
     esRef.current = null;
@@ -707,7 +697,6 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
     error,
     thinking,
     resolving,
-    asked,
     rateLimited,
     resumed,
     auth,

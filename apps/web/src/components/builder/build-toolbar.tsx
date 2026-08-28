@@ -1,14 +1,21 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import { Palette, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TooltipHint } from "@/components/ui/kbd";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { BUILD_VIEWS } from "./builder-tabs";
 import { useBuilderStore } from "@/stores/builder-store";
 import { DesignSheet } from "./design-sheet";
+import { KEY } from "./use-builder-shortcuts";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,7 +30,10 @@ import { cn } from "@/lib/utils";
 export function BuildToolbar() {
   const pathname = usePathname();
   const formId = useBuilderStore((s) => s.formId);
-  const [designOpen, setDesignOpen] = useState(false);
+  // Held in the store, not locally, so `D` can open it from the shell's
+  // keyboard layer — which has no way to reach state declared in here.
+  const designOpen = useBuilderStore((s) => s.designOpen);
+  const setDesignOpen = useBuilderStore((s) => s.setDesignOpen);
   const onFlow = pathname.endsWith("/workflow");
 
   // The flow canvas already carries a node library on the left and an
@@ -32,69 +42,92 @@ export function BuildToolbar() {
   const showSideActions = !onFlow;
 
   return (
-    <div className="flex items-center gap-2 px-4 pt-3">
-      <div className="flex flex-1 justify-start">
-        {showSideActions && (
-          <button
-            type="button"
-            onClick={() => setDesignOpen(true)}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
-              "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
-              designOpen
-                ? "bg-primary-soft text-primary"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
-            )}
-          >
-            <Palette className="size-3.5" strokeWidth={1.75} />
-            Design
-          </button>
-        )}
-      </div>
+    <TooltipProvider delayDuration={400}>
+      <div className="flex items-center gap-2 px-4 pt-3">
+        <div className="flex flex-1 justify-start">
+          {showSideActions && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setDesignOpen(true)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
+                    "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
+                    designOpen
+                      ? "bg-primary-soft text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                  )}
+                >
+                  <Palette className="size-3.5" strokeWidth={1.75} />
+                  Design
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <TooltipHint label="Design" hint="Colours, type and layout" keys={KEY.design} />
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
 
-      {/* Questions and Flow are two views of one thing. On the Design route
-          neither is active, so the pill simply isn't rendered. */}
-      <div className="bg-muted/60 inline-flex shrink-0 items-center rounded-full p-1">
-        {BUILD_VIEWS.map((view) => {
-          const href = `/forms/${formId}/${view.segment}`;
-          const active = pathname.endsWith(`/${view.segment}`);
-          return (
-            <Link
-              key={view.segment}
-              href={href}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "relative isolate inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium",
-                "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
-                active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {active && (
-                <motion.span
-                  layoutId="build-view-pill"
-                  className="bg-card shadow-xs absolute inset-0 -z-10 rounded-full"
-                  transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                />
-              )}
-              <view.icon className="size-3.5" strokeWidth={1.75} />
-              {view.label}
-            </Link>
-          );
-        })}
-      </div>
+        {/* Questions and Flow are two views of one thing. On the Design route
+            neither is active, so the pill simply isn't rendered. */}
+        <div className="bg-muted/60 inline-flex shrink-0 items-center rounded-full p-1">
+          {BUILD_VIEWS.map((view) => {
+            const href = `/forms/${formId}/${view.segment}`;
+            const active = pathname.endsWith(`/${view.segment}`);
+            return (
+              <Tooltip key={view.segment}>
+                <TooltipTrigger asChild>
+                  <Link
+                    href={href}
+                    /**
+                     * Fully prefetched, not just down to a loading boundary.
+                     * These two are one view with a switch on it as far as
+                     * anyone using them is concerned, and a switch that goes to
+                     * the server is a switch that feels broken.
+                     */
+                    prefetch
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "relative isolate inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium",
+                      "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
+                      active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {active && (
+                      <motion.span
+                        layoutId="build-view-pill"
+                        className="bg-card shadow-xs absolute inset-0 -z-10 rounded-full"
+                        transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                      />
+                    )}
+                    <view.icon className="size-3.5" strokeWidth={1.75} />
+                    {view.label}
+                  </Link>
+                </TooltipTrigger>
+                {/* One key toggles the pair, so it is named on both halves. */}
+                <TooltipContent side="bottom">
+                  <TooltipHint label={`Switch to ${view.label}`} keys={KEY.flow} />
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
 
-      <div className="flex flex-1 justify-end">
-        {showSideActions && (
-          <Button size="sm" shape="pill" variant="soft" asChild>
-            <Link href="/usage">
-              <Sparkles className="size-3.5" />
-              Upgrade
-            </Link>
-          </Button>
-        )}
-      </div>
+        <div className="flex flex-1 justify-end">
+          {showSideActions && (
+            <Button size="sm" shape="pill" variant="soft" asChild>
+              <Link href="/usage">
+                <Sparkles className="size-3.5" />
+                Upgrade
+              </Link>
+            </Button>
+          )}
+        </div>
 
-      <DesignSheet open={designOpen} onOpenChange={setDesignOpen} />
-    </div>
+        <DesignSheet open={designOpen} onOpenChange={setDesignOpen} />
+      </div>
+    </TooltipProvider>
   );
 }

@@ -53,6 +53,7 @@ export function TextField({
   placeholder,
   multiline,
   maxLength,
+  shortcutTarget,
 }: {
   label: string;
   hint?: string;
@@ -61,11 +62,17 @@ export function TextField({
   placeholder?: string;
   multiline?: boolean;
   maxLength?: number;
+  /**
+   * Names this field for `focusTarget`, so a key can put the caret here
+   * without a ref threaded down from the builder shell.
+   */
+  shortcutTarget?: string;
 }) {
   return (
     <Field label={label} hint={hint}>
       {multiline ? (
         <Textarea
+          data-shortcut-target={shortcutTarget}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
@@ -75,6 +82,7 @@ export function TextField({
         />
       ) : (
         <Input
+          data-shortcut-target={shortcutTarget}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}

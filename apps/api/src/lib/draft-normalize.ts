@@ -1,6 +1,8 @@
 import {
+  AddressField,
   Block as BlockSchema,
   BLOCK_TYPES,
+  ContactField,
   FormDoc,
   lintFormDoc,
   buildFlowRules,
@@ -19,6 +21,9 @@ import type { GenerationDraft, EditDraft } from "./ai.js";
  */
 
 const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
+
+const CONTACT_FIELDS = ContactField.options;
+const ADDRESS_FIELDS = AddressField.options;
 
 /**
  * Type names a model reaches for that are not ours.
@@ -87,9 +92,88 @@ const TYPE_ALIASES: Record<string, Block["type"]> = {
   file: "file_upload",
   consent: "legal_consent",
   terms: "legal_consent",
+  // money, booking and the rest — the four types the prompt used to forbid, so
+  // a model that reached for one anyway had its choice thrown away.
+  pay: "payment",
+  upi: "payment",
+  checkout: "payment",
+  price: "payment",
+  ticket: "payment",
+  booking: "scheduling",
+  book: "scheduling",
+  calendar: "scheduling",
+  appointment: "scheduling",
+  meeting: "scheduling",
+  rank: "ranking",
+  order: "ranking",
+  grid: "matrix",
+  likert_grid: "matrix",
+  sign: "signature",
+  contact: "contact_info",
+  location: "address",
+  postal_address: "address",
 };
 
 const KNOWN_TYPES = new Set<string>(BLOCK_TYPES);
+
+/**
+ * `"method=upi; upi=acme@okicici; amount=499"` → a lookup.
+ *
+ * Values keep their case (a VPA and a URL both need it); keys do not. Anything
+ * that is not a `key=value` pair is ignored rather than failing the block —
+ * a model that writes prose here should cost the author a setting, not a
+ * question.
+ */
+export function parseBlockConfig(raw: string | undefined): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const part of (raw ?? "").split(/[;\n]+/)) {
+    const at = part.indexOf("=");
+    if (at < 1) continue;
+    const key = part.slice(0, at).trim().toLowerCase();
+    const value = part.slice(at + 1).trim();
+    if (key && value) out.set(key, value);
+  }
+  return out;
+}
+
+const num = (v: string | undefined): number | undefined => {
+  if (v === undefined) return undefined;
+  // "₹499", "499 INR", "499.00" — models quote amounts the way people write them.
+  const n = Number(v.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) ? n : undefined;
+};
+
+/** A 3-letter code, or the currency implied by a symbol the model kept. */
+function currencyOf(config: Map<string, string>): string | undefined {
+  const raw = config.get("currency");
+  if (raw && /^[a-z]{3}$/i.test(raw.trim())) return raw.trim().toUpperCase();
+  const amount = config.get("amount") ?? "";
+  if (/₹|rs\.?|rupee/i.test(amount + " " + (raw ?? ""))) return "INR";
+  if (amount.includes("$")) return "USD";
+  if (amount.includes("€")) return "EUR";
+  if (amount.includes("£")) return "GBP";
+  return undefined;
+}
+
+/** `"Row A|Row B"` → labelled rows, which is all the matrix shapes need. */
+function labelled(raw: string | undefined): { id: string; label: string }[] {
+  return (raw ?? "")
+    .split("|")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .slice(0, 20)
+    .map((label) => ({ id: uid("mx"), label }));
+}
+
+/** Members of a fixed set, as the model may have listed them. */
+function pickFields<T extends string>(raw: string | undefined, allowed: readonly T[]): T[] {
+  const wanted = (raw ?? "")
+    .split(/[|,]/)
+    .map((f) => f.trim().toLowerCase())
+    .filter(Boolean);
+  const hits = allowed.filter((a) => wanted.includes(a));
+  return hits.length > 0 ? hits : [...allowed];
+}
 
 function resolveType(raw: string): Block["type"] {
   const key = (raw ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
@@ -145,6 +229,8 @@ export interface LooseBlock {
   /** Choice labels, as the respondent reads them. */
   options: string[];
   scale?: number;
+  /** Per-type setup as `key=value; key=value` — see `parseBlockConfig`. */
+  config?: string;
 }
 
 export interface NormalizedBlock {
@@ -161,6 +247,7 @@ export interface NormalizedBlock {
  */
 export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean): NormalizedBlock | null {
   const type = resolveType(draft.type);
+  const config = parseBlockConfig(draft.config);
   const base = {
     id: uid("blk"),
     ref,
@@ -198,16 +285,49 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
       case "email":
       case "phone":
       case "url":
-      case "date":
-      case "number":
-      case "yes_no":
       case "nps":
       case "signature":
         return done(BlockSchema.parse({ ...base, type }));
+      case "date":
+        return done(
+          BlockSchema.parse({ ...base, type, disablePast: config.get("disablepast") === "true" }),
+        );
+      case "number":
+        return done(
+          BlockSchema.parse({
+            ...base,
+            type,
+            min: num(config.get("min")),
+            max: num(config.get("max")),
+            integerOnly: config.get("integeronly") === "true",
+            currency: currencyOf(config),
+          }),
+        );
+      case "yes_no":
+        return done(
+          BlockSchema.parse({
+            ...base,
+            type,
+            yesLabel: config.get("yes") ?? "Yes",
+            noLabel: config.get("no") ?? "No",
+          }),
+        );
       case "contact_info":
-        return done(BlockSchema.parse({ ...base, type, fields: ["first_name", "last_name", "email", "phone"] }));
+        return done(
+          BlockSchema.parse({
+            ...base,
+            type,
+            fields: pickFields(config.get("fields"), CONTACT_FIELDS),
+          }),
+        );
       case "address":
-        return done(BlockSchema.parse({ ...base, type, fields: ["street", "city", "state", "postal", "country"] }));
+        return done(
+          BlockSchema.parse({
+            ...base,
+            type,
+            fields: pickFields(config.get("fields"), ADDRESS_FIELDS),
+          }),
+        );
       case "legal_consent":
         return done(BlockSchema.parse({ ...base, type, required: true, consentText: draft.description || draft.title }));
       case "file_upload":
@@ -246,10 +366,73 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
         return done(
           BlockSchema.parse({ ...base, type: "opinion_scale", steps: clampScale(draft.scale, 2, 11, 5), startAt: 1 }),
         );
-      default:
-        // ranking, matrix, payment, scheduling — real types with required
-        // configuration the draft has no way to express. Keep the question.
-        return done(BlockSchema.parse({ ...base, type: "short_text", minLength: 0, maxLength: 300 }));
+      /**
+       * Money, collected outside the form.
+       *
+       * The `url` and `upiId` the schema wants are optional there on purpose —
+       * a half-built payment block saves, and the linter refuses to publish it
+       * — so a request that names a price but no destination still produces a
+       * payment block with a visible gap, rather than a text question that
+       * silently collects nothing. That fallback is what turned "the ticket is
+       * 499 rupees, UPI mohith808@axl" into a short-text box titled "Payment
+       * Confirmation".
+       */
+      case "payment": {
+        const upi = config.get("upi") ?? config.get("upiid") ?? config.get("vpa");
+        const url = config.get("url") ?? config.get("link");
+        const method = config.get("method")?.toLowerCase() === "upi" || (upi && !url) ? "upi" : "link";
+        return done(
+          BlockSchema.parse({
+            ...base,
+            type,
+            method,
+            amountMode: "fixed",
+            amount: num(config.get("amount")),
+            currency: currencyOf(config) ?? (method === "upi" ? "INR" : "USD"),
+            ...(method === "upi"
+              ? { upiId: upi, upiPayeeName: config.get("payee") }
+              : { url: url && /^https?:\/\//.test(url) ? url : undefined }),
+          }),
+        );
+      }
+      /**
+       * Booking against a calendar the builder owns. The link is not optional
+       * in the schema and cannot be invented, so without one this is a question
+       * about a time — which is a `date`, and is usually what was meant anyway.
+       */
+      case "scheduling": {
+        const url = config.get("url") ?? config.get("link");
+        if (!url || !/^https?:\/\//.test(url)) {
+          return done(BlockSchema.parse({ ...base, type: "date", disablePast: true }));
+        }
+        return done(BlockSchema.parse({ ...base, type, provider: "external", url }));
+      }
+      case "ranking": {
+        // The things being ranked come through as options, like any other list.
+        if (options.length < 2) {
+          return done(BlockSchema.parse({ ...base, type: "short_text", minLength: 0, maxLength: 300 }));
+        }
+        return done(BlockSchema.parse({ ...base, type, items: options.slice(0, 12) }));
+      }
+      case "matrix": {
+        const rows = labelled(config.get("rows"));
+        // A grid needs both axes; one of them alone is a plain choice question.
+        if (rows.length < 1 || options.length < 2) {
+          if (options.length < 2) {
+            return done(BlockSchema.parse({ ...base, type: "short_text", minLength: 0, maxLength: 300 }));
+          }
+          return done(BlockSchema.parse({ ...base, type: "single_select", options, allowOther: false }));
+        }
+        return done(
+          BlockSchema.parse({
+            ...base,
+            type,
+            rows: rows.slice(0, 20),
+            columns: options.slice(0, 10),
+            multiplePerRow: config.get("multipleperrow") === "true",
+          }),
+        );
+      }
     }
   } catch {
     // A field the schema rejected outright (a title over 2000 chars, say).

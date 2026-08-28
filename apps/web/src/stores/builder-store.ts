@@ -33,6 +33,18 @@ export interface BuilderState {
   selectedRef: string | null;
   selectedEndingRef: string | null;
 
+  /**
+   * Where the block picker is about to insert, or null when it is closed.
+   *
+   * This was local state inside the list, which meant the only way to open the
+   * picker was to click something inside the list. The keyboard layer lives in
+   * the shell and the Design sheet lives in the toolbar, so both intents are
+   * held here — one store already shared by everything in the builder — rather
+   * than lifted through three components that have no other reason to know.
+   */
+  pickerIndex: number | null;
+  designOpen: boolean;
+
   saveState: SaveState;
   saveError: string | null;
   lastSavedAt: number | null;
@@ -61,6 +73,12 @@ export interface BuilderState {
   // ── selection ──
   select: (ref: string | null) => void;
   selectEnding: (ref: string | null) => void;
+
+  // ── panels the keyboard can reach ──
+  /** Open the picker at `index`; omit for the end of the list. */
+  openPicker: (index?: number) => void;
+  closePicker: () => void;
+  setDesignOpen: (open: boolean) => void;
 
   // ── block operations ──
   /**
@@ -110,6 +128,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   baseVersion: null,
   selectedRef: null,
   selectedEndingRef: null,
+  pickerIndex: null,
+  designOpen: false,
   saveState: "saved",
   saveError: null,
   lastSavedAt: null,
@@ -133,6 +153,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       // arrival — an empty right pane reads as broken.
       selectedRef: doc.blocks.find((b) => b.type !== "welcome")?.ref ?? doc.blocks[0]?.ref ?? null,
       selectedEndingRef: null,
+      pickerIndex: null,
+      designOpen: false,
     }),
 
   edit: (recipe, coalesceKey) =>
@@ -212,6 +234,11 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
 
   select: (ref) => set({ selectedRef: ref, selectedEndingRef: null }),
   selectEnding: (ref) => set({ selectedEndingRef: ref, selectedRef: null }),
+
+  openPicker: (index) =>
+    set((s) => ({ pickerIndex: index ?? s.doc?.blocks.length ?? 0, designOpen: false })),
+  closePicker: () => set({ pickerIndex: null }),
+  setDesignOpen: (open) => set({ designOpen: open }),
 
   addBlock: (block, atIndex, rule) => {
     get().edit((d) => {

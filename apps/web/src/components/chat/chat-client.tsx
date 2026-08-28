@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ArrowDown,
@@ -168,23 +168,13 @@ export function ChatClient({
               <Bubble
                 message={m}
                 // A user message can be edited when we know which question it
-                // answered and the form is still open.
-                onEdit={
-                  m.role === "user" && !m.optimistic && m.answeredRef && !chat.ending
-                    ? () => void chat.editAnswer(m.answeredRef!)
-                    : undefined
-                }
+                // answered and the form is still open. A boolean plus the
+                // stable `editAnswer`, rather than a fresh arrow per render —
+                // an inline closure here would give every bubble a new prop on
+                // every streamed token and defeat the memo entirely.
+                canEdit={!m.optimistic && !!m.answeredRef && !chat.ending}
+                onEdit={chat.editAnswer}
               />
-              {/*
-                What they were choosing between, kept after the choice is made.
-                The chips vanish once an answer is sent, and the transcript then
-                showed only the words "iOS (iPhone)" with no sign that it had
-                been one of three. This is the same row, settled: the pick
-                filled in, the rest quiet, and nothing clickable.
-              */}
-              {m.role === "user" && m.answeredRef && (
-                <SettledChoice block={chat.asked[m.answeredRef]} chosen={m.text} />
-              )}
             </div>
           ))}
 
@@ -193,18 +183,20 @@ export function ChatClient({
           {/* The current question's controls live here, under the agent's
               message — not in place of the composer. */}
           {/*
-              Gone the instant an answer is on its way. They used to stay live
-              through the round trip, so a respondent who tapped "iOS (iPhone)"
-              could tap again — or tap a second option — while the agent was
-              still replying, and the second tap was read as a correction:
-              "Sure — let's redo that one." The answer they picked is already on
-              screen as their own message; the offer to pick has done its job.
+              Disabled while an answer is in flight, not unmounted.
+              A respondent who tapped "iOS (iPhone)" must not be able to tap
+              again — the second tap was read as a correction, "Sure, let's redo
+              that one" — but taking the chips out of the tree to achieve that
+              made them flash: `thinking` flips on every send and on every
+              branch jump, so the row vanished and then faded back in through
+              `animate-message-in` each time. Disabling stops the second tap
+              and keeps the row still.
           */}
-          {!chat.ending && chat.question && !chat.thinking && (
+          {!chat.ending && chat.question && (
             <div className="animate-message-in pt-0.5 pl-1">
               <QuestionAffordance
                 block={chat.question.block}
-                disabled={chat.status === "error"}
+                disabled={chat.status === "error" || chat.thinking}
                 uploadBase={chat.getUploadBase()}
                 respondentToken={chat.getRespondentToken()}
                 onStructured={(value, display) =>
@@ -297,7 +289,16 @@ export function ChatClient({
               previous answer still in it — one frame of the wrong text, and a
               cascading render to remove it.
             */}
-            <Composer key={chat.question?.block?.ref ?? "composer"} chat={chat} config={config} />
+            {/*
+              No `key` here. It used to be the current question's ref, so React
+              would remount the composer to clear the draft — but the fallback
+              made the key `"composer"` whenever `question` was briefly null,
+              which remounts mid-conversation: the text someone had typed was
+              thrown away and `autoFocus` fired again, taking the caret and, on
+              a phone, bouncing the keyboard. The draft is cleared on a real
+              question change inside the component instead.
+            */}
+            <Composer chat={chat} config={config} />
           </div>
           {!config.brandingHidden && (
             <p className="pb-2 text-center text-[0.6875rem] opacity-40">
@@ -400,47 +401,26 @@ function ChatHeader({
 }
 
 /**
- * An answered choice question, drawn as it was answered.
+ * One turn in the thread.
  *
- * Renders nothing at all unless the question actually offered options and one
- * of them matches what they said — a typed answer, a skipped question or a
- * free-text reply has no chips to settle, and inventing some would be a lie
- * about what they were shown.
+ * Memoised, and that is not a micro-optimisation. Every streamed token calls
+ * `setMessages`, which re-rendered the whole thread — and every settled bubble
+ * re-parsed its own markdown through react-markdown on each one. Ten messages
+ * on screen meant ten markdown parses per token, which is what made typing feel
+ * like it was fighting the page. `setMessages` maps and only replaces the
+ * object for the message that changed, so identity comparison is enough to
+ * leave every other bubble alone.
  */
-function SettledChoice({ block, chosen }: { block?: PublicBlock; chosen: string }) {
-  const options = block?.options;
-  if (!options?.length) return null;
-  // Multi-select answers arrive as one joined string; match each part.
-  const picked = new Set(chosen.split(/,\s*/).map((p) => p.trim().toLowerCase()));
-  if (!options.some((o) => picked.has(o.label.trim().toLowerCase()))) return null;
-
-  return (
-    <ul className="mt-1.5 flex flex-wrap justify-end gap-1 pr-1">
-      {options.map((o) => {
-        const isChosen = picked.has(o.label.trim().toLowerCase());
-        return (
-          <li
-            key={o.id}
-            className={cn(
-              "rounded-full px-2.5 py-1 text-[0.6875rem] leading-none",
-              isChosen ? "font-medium" : "opacity-40",
-            )}
-            style={
-              isChosen
-                ? { background: "var(--cf-user-bubble)", color: "var(--cf-user-bubble-text)" }
-                : { background: "var(--cf-chip-bg)" }
-            }
-          >
-            {isChosen && <Check className="mr-1 inline size-2.5 align-[-1px]" strokeWidth={3} />}
-            {o.label}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function Bubble({ message, onEdit }: { message: ChatMessage; onEdit?: () => void }) {
+const Bubble = memo(function Bubble({
+  message,
+  canEdit,
+  onEdit,
+}: {
+  message: ChatMessage;
+  canEdit: boolean;
+  /** Stable across renders — see `editAnswer` in `useChat`. */
+  onEdit: (ref: string) => void;
+}) {
   // A note about the conversation, not a turn in it: quiet, unbubbled, and
   // left in place in the thread.
   if (message.role === "system") {
@@ -457,10 +437,10 @@ function Bubble({ message, onEdit }: { message: ChatMessage; onEdit?: () => void
     <div className={cn("group flex animate-message-in items-center gap-1.5", isUser ? "justify-end" : "justify-start")}>
       {/* Change-your-mind affordance, revealed on hover so it never competes
           with the conversation itself. */}
-      {isUser && onEdit && (
+      {isUser && canEdit && message.answeredRef && (
         <button
           type="button"
-          onClick={onEdit}
+          onClick={() => onEdit(message.answeredRef!)}
           aria-label="Change this answer"
           title="Change this answer"
           className="order-first shrink-0 rounded-full p-1.5 opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 focus-visible:opacity-100"
@@ -497,7 +477,7 @@ function Bubble({ message, onEdit }: { message: ChatMessage; onEdit?: () => void
       </div>
     </div>
   );
-}
+});
 
 /** Markdown from a model is untrusted input: no raw HTML, no images, no scripts. */
 const SAFE_ELEMENTS = [
@@ -810,10 +790,23 @@ function EndingCard({
  * replacement for the ability to speak.
  */
 function Composer({ chat, config }: { chat: ReturnType<typeof useChat>; config: PublicFormConfig }) {
-  // Reset on a new question comes from the `key` at the call site, not from an
-  // effect — remounting is how React clears state that belongs to one question.
   const [text, setText] = useState("");
   const block = chat.question?.block;
+
+  /**
+   * The draft belongs to one question, so it is cleared when the question
+   * changes — and only then.
+   *
+   * Compared during render rather than in an effect: an effect would paint the
+   * old text against the new question for a frame, which is the blink this is
+   * here to remove. A transient null question is ignored on purpose; that is
+   * the round trip between two questions, not a new one.
+   */
+  const [draftFor, setDraftFor] = useState(block?.ref);
+  if (block?.ref && block.ref !== draftFor) {
+    setDraftFor(block.ref);
+    if (text !== "") setText("");
+  }
 
   /**
    * Number keys pick an option — including from inside the text box.
@@ -829,11 +822,23 @@ function Composer({ chat, config }: { chat: ReturnType<typeof useChat>; config: 
    * for questions that have chips to choose from, which is why a `number`,
    * `rating` or `nps` answer is never affected: those blocks carry no options.
    */
+  /**
+   * `chatRef`, not `chat`, in the dependency list below.
+   *
+   * `useChat` returns a fresh object every render, and this effect depended on
+   * it — so the listener was torn down and rebound on every single streamed
+   * token. Reading through a ref keeps the subscription alive for as long as
+   * the question it belongs to.
+   */
+  const chatRef = useRef(chat);
+  useEffect(() => {
+    chatRef.current = chat;
+  });
+
   useEffect(() => {
     const options = block?.options;
     const ref = block?.ref;
     if (!options?.length || !ref || block?.type === "multi_select") return;
-    if (chat.thinking) return;
     function onKey(e: KeyboardEvent) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
@@ -843,13 +848,15 @@ function Composer({ chat, config }: { chat: ReturnType<typeof useChat>; config: 
       if (!Number.isInteger(n) || n < 1) return;
       const opt = options![n - 1];
       if (!opt) return;
+      // An answer is already on its way; a digit now would be a second one.
+      if (chatRef.current.thinking) return;
       // Claim the keystroke, or the digit lands in the box as well.
       e.preventDefault();
-      void chat.sendStructured(ref!, opt.id, opt.label);
+      void chatRef.current.sendStructured(ref!, opt.id, opt.label);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [block, chat]);
+  }, [block]);
 
   if (!block) {
     return (

@@ -1,6 +1,7 @@
 export * from "./ids";
 export * from "./conditions";
 export * from "./blocks";
+export * from "./catalog";
 export * from "./logic";
 export * from "./respondent";
 export * from "./settings";

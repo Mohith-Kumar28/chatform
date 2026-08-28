@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Command } from "cmdk";
 import {
@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { customFetch } from "@/lib/api/mutator";
+import { Kbd } from "@/components/ui/kbd";
+import { BUILDER_TABS } from "@/components/builder/builder-tabs";
 import { cn } from "@/lib/utils";
 
 interface FormRow {
@@ -25,14 +27,39 @@ interface FormRow {
 }
 
 /**
+ * Opening the palette from a button rather than from ⌘K.
+ *
+ * An event rather than lifted state because the palette is mounted once per
+ * shell and the things that want to open it — a header button here, a menu item
+ * there — are neither its parent nor its child.
+ */
+const OPEN_EVENT = "chatform:open-command-palette";
+
+export function openCommandPalette(): void {
+  window.dispatchEvent(new CustomEvent(OPEN_EVENT));
+}
+
+/** The form being built, when the palette is open inside the builder. */
+function useBuilderContext(): { formId: string } | null {
+  const pathname = usePathname();
+  const match = /^\/forms\/([^/]+)\//.exec(pathname);
+  return match?.[1] ? { formId: match[1] } : null;
+}
+
+/**
  * ⌘K palette. DESIGN.md promised one from the start and it was never built.
  * Forms are searchable by name so jumping to a specific form does not require
  * going back to the dashboard and scanning a grid.
+ *
+ * Mounted in both shells. Inside the builder it puts that form's own sections
+ * first — the palette is meant to answer "take me to the thing I am thinking
+ * about", and in the builder that is almost never another form.
  */
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const { setTheme } = useTheme();
+  const builder = useBuilderContext();
 
   const { data } = useQuery({
     queryKey: ["forms"],
@@ -50,8 +77,15 @@ export function CommandPalette() {
         setOpen((o) => !o);
       }
     }
+    function onOpen() {
+      setOpen(true);
+    }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener(OPEN_EVENT, onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(OPEN_EVENT, onOpen);
+    };
   }, []);
 
   function go(href: string) {
@@ -80,6 +114,23 @@ export function CommandPalette() {
           <Command.Empty className="text-muted-foreground py-8 text-center text-sm">
             Nothing matches that.
           </Command.Empty>
+
+          {builder && (
+            <Command.Group heading="This form" className={GROUP}>
+              {BUILDER_TABS.map((tab, i) => (
+                <Command.Item
+                  key={tab.segment}
+                  value={`${tab.label} ${tab.hint}`}
+                  onSelect={() => go(`/forms/${builder.formId}/${tab.segment}`)}
+                  className={ITEM}
+                >
+                  <tab.icon className="size-3.5 opacity-60" />
+                  <span className="min-w-0 flex-1 truncate">{tab.label}</span>
+                  <Kbd>{i + 1}</Kbd>
+                </Command.Item>
+              ))}
+            </Command.Group>
+          )}
 
           {forms.length > 0 && (
             <Command.Group heading="Forms" className={GROUP}>
@@ -111,7 +162,8 @@ export function CommandPalette() {
           <Command.Group heading="Actions" className={GROUP}>
             <Command.Item value="New form" onSelect={() => go("/dashboard?new=1")} className={ITEM}>
               <Plus className="size-3.5 opacity-60" />
-              New form
+              <span className="min-w-0 flex-1">New form</span>
+              <Kbd>N</Kbd>
             </Command.Item>
             <Command.Item
               value="Light theme"
@@ -137,6 +189,14 @@ export function CommandPalette() {
             </Command.Item>
           </Command.Group>
         </Command.List>
+
+        {/* The palette is where people end up when they are looking for a
+            faster way to do something — so it is where to mention there is
+            a whole list of them. */}
+        <div className="border-border text-muted-foreground flex items-center justify-end gap-1.5 border-t px-3 py-2 text-xs">
+          All shortcuts
+          <Kbd>?</Kbd>
+        </div>
       </Command>
     </div>
   );

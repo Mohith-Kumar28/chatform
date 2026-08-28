@@ -183,6 +183,21 @@ export const GenerationDraft = z.object({
          * generation because one unrelated field was out of range.
          */
         scale: z.number().int().min(0).max(20),
+        /**
+         * Per-type setup, as flat `key=value; key=value` text.
+         *
+         * One string rather than a field per option, because the schema budget
+         * described above is real and a `payment` block alone would need five.
+         * `BLOCK_CATALOG` documents the keys each type reads and the prompt
+         * renders them; `parseBlockConfig` reads them back. Empty for the many
+         * types that need none.
+         *
+         * This is what made `payment` and `scheduling` unreachable rather than
+         * merely undocumented: a draft with nowhere to put an amount or a UPI
+         * id could not express one, so the normalizer had no choice but to fall
+         * back to a text question.
+         */
+        config: z.string(),
       }),
     )
     .min(2)
@@ -261,6 +276,8 @@ export const EditDraft = z.object({
         /** Choice labels as written for the respondent; ids are derived. */
         options: z.array(z.string()),
         scale: z.number().int().min(0).max(20),
+        /** Per-type setup as `key=value; key=value`. See `GenerationDraft`. */
+        config: z.string(),
         /**
          * Ref of the block this one goes directly after — existing or newly
          * added. Empty string puts it at the end. Position is what makes a

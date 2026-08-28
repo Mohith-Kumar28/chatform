@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +21,14 @@ import {
 import { toast } from "sonner";
 import { customFetch } from "@/lib/api/mutator";
 import { Button } from "@/components/ui/button";
+import { TooltipHint } from "@/components/ui/kbd";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { NEW_FORM_EVENT } from "@/components/dashboard/use-app-shortcuts";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -106,6 +114,17 @@ export function DashboardContent() {
       });
   }, [allForms, query, sort]);
 
+  /**
+   * `N` opens the dialog. The key is registered in the shell, which owns the
+   * keyboard layer for every page here, but the dialog is state in this
+   * component — so the shell announces the intent and this answers it.
+   */
+  useEffect(() => {
+    const open = () => setCreateOpen(true);
+    window.addEventListener(NEW_FORM_EVENT, open);
+    return () => window.removeEventListener(NEW_FORM_EVENT, open);
+  }, []);
+
   const remove = useMutation({
     mutationFn: (id: string) => customFetch(`/api/forms/${id}`, { method: "DELETE" }),
     onSuccess: () => {
@@ -121,10 +140,19 @@ export function DashboardContent() {
         title="Forms"
         description="Conversations that collect what you need."
         actions={
-          <Button shape="pill" onClick={() => setCreateOpen(true)} data-tour="new-form">
-            <Plus className="size-4" />
-            New form
-          </Button>
+          <TooltipProvider delayDuration={400}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button shape="pill" onClick={() => setCreateOpen(true)} data-tour="new-form">
+                  <Plus className="size-4" />
+                  New form
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <TooltipHint label="New form" keys="N" />
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         }
       />
 

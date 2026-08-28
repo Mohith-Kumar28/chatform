@@ -9,7 +9,18 @@ import { useEffect, useRef } from "react";
  * whole thing removes itself after a couple of seconds. Skipped entirely under
  * `prefers-reduced-motion` — celebration is not worth making someone unwell.
  */
-export function Confetti({ colors }: { colors: string[] }) {
+export function Confetti({
+  colors,
+  className = "pointer-events-none fixed inset-0 z-50 h-full w-full",
+}: {
+  colors: string[];
+  /**
+   * Defaults to the viewport, which is what a completed form wants. The
+   * marketing replay passes an absolute box so the burst stays inside the demo
+   * surface instead of raining over the landing page.
+   */
+  className?: string;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -67,10 +78,6 @@ export function Confetti({ colors }: { colors: string[] }) {
   }, [colors]);
 
   return (
-    <canvas
-      ref={ref}
-      aria-hidden
-      className="pointer-events-none fixed inset-0 z-50 h-full w-full"
-    />
+    <canvas ref={ref} aria-hidden className={className} />
   );
 }

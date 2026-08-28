@@ -30,7 +30,7 @@ import { layoutGraph, placeNodes } from "./flow-layout";
 import { toast } from "sonner";
 import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
-import { Block as BlockSchema, conditionIsAlwaysTrue, rulesAreExhaustive } from "@repo/form-schema";
+import { Block as BlockSchema, conditionIsAlwaysTrue, lintFormDoc, rulesAreExhaustive } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -45,6 +45,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  AlertTriangle,
   LayoutGrid,
   Plus,
   ChevronLeft, ChevronRight, Flag,
@@ -181,8 +182,37 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
 
   const setRules = useCallback((rules: LogicRule[]) => onChange({ ...doc, logic: rules }), [doc, onChange]);
 
+  /**
+   * Where the flow is broken, per node.
+   *
+   * From `lintFormDoc`, which is the same pass that decides whether the form
+   * can be published — so the canvas cannot disagree with the publish button
+   * about whether the flow works. Only issues that name refs land on a node;
+   * the rest (a missing ending, a payment with no destination) are the kind of
+   * thing the publish dialog already says.
+   */
+  const flowProblems = useMemo(() => {
+    const out = new Map<string, { level: "error" | "warning"; messages: string[] }>();
+    for (const issue of lintFormDoc(doc)) {
+      if (!issue.refs?.length) continue;
+      if (issue.code !== "unreachable_blocks" && issue.code !== "no_route_to_ending" && issue.code !== "dangling_target") {
+        continue;
+      }
+      for (const ref of issue.refs) {
+        const existing = out.get(ref);
+        if (existing) {
+          existing.messages.push(issue.message);
+          if (issue.level === "error") existing.level = "error";
+        } else {
+          out.set(ref, { level: issue.level, messages: [issue.message] });
+        }
+      }
+    }
+    return out;
+  }, [doc]);
+
   // ── derive graph from doc ──────────────────────────────────────────────
-  const derived = useMemo(() => deriveGraph(doc, gotoRules), [doc, gotoRules]);
+  const derived = useMemo(() => deriveGraph(doc, gotoRules, flowProblems), [doc, gotoRules, flowProblems]);
 
   // sync local RF state when the doc changes (drag edits flow through onNodesChange,
   // so live drags are never clobbered by this sync). Render-phase adjustment pattern —
@@ -381,6 +411,31 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
     (conn: Connection) => {
       if (!conn.source || !conn.target || conn.source === conn.target) return;
       const targetKind = doc.endings.some((e) => e.ref === conn.target) ? "ending" : "block";
+
+      /**
+       * A wire that runs back up the list is refused here, out loud.
+       *
+       * `buildFlowRules` drops backwards branches because they loop — a
+       * respondent sent to an earlier question answers their way down to it
+       * again, forever. That was the right call and completely silent: you
+       * dragged a connection, it appeared to take, and then it was gone with
+       * nothing said. Saying so at the moment of the drag is the whole
+       * difference between a rule and a disappearance.
+       */
+      const sourceRef = conn.source.startsWith("branch_")
+        ? conn.source.slice("branch_".length)
+        : conn.source;
+      if (targetKind === "block") {
+        const from = doc.blocks.findIndex((b) => b.ref === sourceRef);
+        const to = doc.blocks.findIndex((b) => b.ref === conn.target);
+        if (from !== -1 && to !== -1 && to <= from) {
+          toast.error("That would loop", {
+            description:
+              "A route can only go forward. Move the question below this one, or point this at an ending.",
+          });
+          return;
+        }
+      }
 
       // Dragging from a branch row re-points that case.
       if (conn.source.startsWith("branch_")) {
@@ -649,6 +704,33 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
           pushed both panels down and left dead space above them. */}
       <div className="flex min-w-0 flex-1 flex-col">
         {toolbar}
+        {/*
+          A red node nobody scrolls to is a red node nobody sees. The canvas is
+          bigger than the viewport as soon as a form has a branch or two, so the
+          count lives here and clicking it moves the selection to the first
+          broken node — which is also what pans the canvas to it.
+        */}
+        {flowProblems.size > 0 && (
+          <div className="px-4 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                const first = [...flowProblems.keys()][0];
+                if (first) setSelectedNodeId(first);
+              }}
+              className="text-destructive flex w-full items-center gap-2 rounded-lg bg-[color-mix(in_oklch,var(--destructive)_12%,transparent)] px-3 py-2 text-left text-xs"
+            >
+              <AlertTriangle className="size-3.5 shrink-0" strokeWidth={2.5} />
+              <span className="min-w-0 flex-1">
+                {flowProblems.size === 1
+                  ? "1 step in this flow cannot be completed"
+                  : `${flowProblems.size} steps in this flow cannot be completed`}
+                . Publishing is blocked until it is fixed.
+              </span>
+              <span className="shrink-0 underline">Show me</span>
+            </button>
+          </div>
+        )}
         <div
           ref={wrapper}
           data-tour="wf-canvas"
@@ -829,6 +911,15 @@ export interface BranchCase {
   label: string;
   target: string;
   targetKind: "block" | "ending";
+  /**
+   * Nothing by this ref exists any more, so this answer has nowhere to go.
+   *
+   * The genuine "no connection" case, and the only one worth drawing in red.
+   * An answer whose destination was deleted is a route that ends nowhere, which
+   * is what n8n draws as an unconnected output — but unlike n8n, a form cannot
+   * simply drop the respondent, so it is an error rather than a shrug.
+   */
+  missing?: boolean;
 }
 
 export const OTHERWISE = "__otherwise";
@@ -843,7 +934,11 @@ export const OTHERWISE = "__otherwise";
  * question that splits the flow is one decision, so it is one node with a row
  * per case.
  */
-function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edges: Edge[] } {
+function deriveGraph(
+  doc: FormDoc,
+  gotoRules: GotoRule[],
+  problems: Map<string, { level: "error" | "warning"; messages: string[] }> = new Map(),
+): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
   const endingRefs = new Set(doc.endings.map((e) => e.ref));
@@ -866,11 +961,13 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
       continue;
     }
     const list = casesBySource.get(from) ?? [];
+    const exists = endingRefs.has(rule.target) || doc.blocks.some((b) => b.ref === rule.target);
     list.push({
       ruleId: rule.id,
       label: edgeLabel(fromBlock, cond),
       target: rule.target,
       targetKind: endingRefs.has(rule.target) ? "ending" : "block",
+      missing: !exists,
     });
     casesBySource.set(from, list);
   }
@@ -884,7 +981,7 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
       // The same number the Questions list puts on the row, so the two views
       // name a question the same way and you can carry a position in the list
       // over to a box on the canvas without re-reading its title.
-      data: { block: b, index: i + 1 },
+      data: { block: b, index: i + 1, problem: problems.get(b.ref) },
       deletable: !isFirst,
     });
 
@@ -899,26 +996,47 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
         b,
         gotoRules.filter((r) => r.from === b.ref && condOf(r)),
       );
+      /**
+       * Where an unmatched answer actually goes.
+       *
+       * Resolved to a real destination and named on the row, rather than drawn
+       * as a bare "anything else" with nothing after it. n8n can leave a
+       * fallback output unconnected because an unmatched item is simply
+       * dropped; a respondent cannot be dropped, so this path always has a
+       * destination — it is just one nobody typed. Naming it is the difference
+       * between a branch that looks abandoned and one that reads as finished.
+       */
+      const fallbackRef = exhaustive ? undefined : (always?.target ?? next?.ref ?? doc.endings[0]?.ref);
+      const fallback = fallbackRef
+        ? {
+            ref: fallbackRef,
+            title:
+              doc.blocks.find((x) => x.ref === fallbackRef)?.title ??
+              doc.endings.find((x) => x.ref === fallbackRef)?.title ??
+              fallbackRef,
+            /** Aimed by hand, so it is a decision rather than a consequence. */
+            explicit: Boolean(always?.target),
+          }
+        : null;
+
       nodes.push({
         id: branchId,
         type: "branch",
         position: doc.layout[branchId] ?? { x: 0, y: 0 },
         // A branch is drawn beside the question it hangs off, so it carries
         // that question's number rather than one of its own.
-        data: { sourceRef: b.ref, sourceTitle: b.title, index: i + 1, cases, exhaustive },
+        data: { sourceRef: b.ref, sourceTitle: b.title, index: i + 1, cases, exhaustive, fallback },
         deletable: true,
       });
       edges.push(wire(`into_${b.ref}`, b.ref, branchId));
       for (const c of cases) {
+        // A case whose destination is gone gets no wire, which is what makes
+        // the unconnected handle on the node the honest picture.
+        if (c.missing) continue;
         edges.push(wire(`case_${c.ruleId}`, branchId, c.target, c.label, c.ruleId));
       }
-      // Whatever no case matched still has to go somewhere, and that
-      // somewhere is the next question — or, past the last one, the ending.
-      // It is worth drawing because it is the half of the decision the rules
-      // never mention.
-      const fallback = exhaustive ? undefined : (always?.target ?? next?.ref ?? doc.endings[0]?.ref);
       if (fallback) {
-        edges.push(wire(`else_${b.ref}`, branchId, fallback, undefined, OTHERWISE));
+        edges.push(wire(`else_${b.ref}`, branchId, fallback.ref, undefined, OTHERWISE));
       }
       return;
     }
@@ -950,7 +1068,7 @@ function deriveGraph(doc: FormDoc, gotoRules: GotoRule[]): { nodes: Node[]; edge
       id: e.ref,
       type: "ending",
       position: doc.layout[e.ref] ?? { x: 0, y: 0 },
-      data: { title: e.title },
+      data: { title: e.title, problem: problems.get(e.ref) },
       deletable: doc.endings.length > 1,
     });
   });
@@ -993,8 +1111,11 @@ function StartNode({ data, selected }: NodeProps) {
   );
 }
 
+/** A node the flow cannot serve: unreachable, or with no way to finish. */
+type NodeProblem = { level: "error" | "warning"; messages: string[] };
+
 function QuestionNode({ data, selected }: NodeProps) {
-  const { block, index } = data as { block: Block; index: number };
+  const { block, index, problem } = data as { block: Block; index: number; problem?: NodeProblem };
   const meta = blockMeta(block.type);
   const accent = TONE_ACCENT[meta.tone];
   return (
@@ -1004,6 +1125,9 @@ function QuestionNode({ data, selected }: NodeProps) {
       className={cn(
         "w-56 rounded-xl bg-[var(--card)] px-3 py-2.5 transition-shadow",
         selected ? "shadow-md" : "shadow-xs",
+        // A broken node is outlined, not tinted: the fill is the block's family
+        // colour and carries meaning of its own.
+        problem && "ring-2 ring-[var(--destructive)]",
       )}
       style={{ boxShadow: selected ? `inset 3px 0 0 0 ${accent}, var(--shadow-md)` : undefined }}
     >
@@ -1016,24 +1140,62 @@ function QuestionNode({ data, selected }: NodeProps) {
         <span className="min-w-0 flex-1 truncate text-xs font-medium">{block.title}</span>
         {block.required && <span className="text-destructive text-xs">*</span>}
       </div>
-      <p className="text-muted-foreground mt-1 text-[10px] tracking-wide uppercase">{meta.label}</p>
+      {problem ? (
+        <ProblemNote problem={problem} />
+      ) : (
+        <p className="text-muted-foreground mt-1 text-[10px] tracking-wide uppercase">{meta.label}</p>
+      )}
       <Handle type="source" position={Position.Right} style={{ background: accent }} />
     </div>
   );
 }
 
+/**
+ * What is wrong, on the node it is wrong about.
+ *
+ * Replaces the block-type caption rather than sitting beside it. The type is
+ * legible from the icon and the colour, and a node this size cannot carry both
+ * without the warning becoming the smaller of the two — which is the wrong way
+ * round for the one thing that stops the form working.
+ */
+function ProblemNote({ problem }: { problem: NodeProblem }) {
+  return (
+    <p
+      className="text-destructive mt-1 flex items-start gap-1 text-[10px] leading-tight"
+      title={problem.messages.join("\n\n")}
+    >
+      <AlertTriangle className="mt-px size-3 shrink-0" strokeWidth={2.5} />
+      <span className="min-w-0">
+        {problem.messages.length > 1 ? `${problem.messages.length} flow problems` : shortProblem(problem.messages[0]!)}
+      </span>
+    </p>
+  );
+}
+
+/** The headline of a lint message; the full text is in the tooltip. */
+function shortProblem(message: string): string {
+  if (message.startsWith("No path reaches")) return "Nothing reaches this";
+  if (message.startsWith("From these questions")) return "No way to finish from here";
+  return "Broken connection";
+}
+
 function EndingNode({ data, selected }: NodeProps) {
-  const { title } = data as { title: string };
+  const { title, problem } = data as { title: string; problem?: NodeProblem };
   return (
     <div
-      className={`w-44 rounded-xl border-2 border-dashed px-3 py-2.5 shadow-sm ${selected ? "border-primary ring-2 ring-primary/30" : "border-primary/60"}`}
+      className={cn(
+        "w-44 rounded-xl border-2 border-dashed px-3 py-2.5 shadow-sm",
+        selected ? "border-primary ring-2 ring-primary/30" : "border-primary/60",
+        problem && "!border-[var(--destructive)] ring-2 ring-[var(--destructive)]",
+      )}
       style={{ background: "var(--accent)" }}
     >
       <Handle type="target" position={Position.Left} className="!bg-primary" />
       <div className="flex items-center gap-2">
-        <Flag className="text-primary size-3.5 shrink-0" />
+        <Flag className={cn("size-3.5 shrink-0", problem ? "text-destructive" : "text-primary")} />
         <span className="truncate text-xs font-semibold">{title}</span>
       </div>
+      {problem && <ProblemNote problem={problem} />}
     </div>
   );
 }
@@ -1047,24 +1209,37 @@ function EndingNode({ data, selected }: NodeProps) {
  * used to be invisible.
  */
 function BranchNode({ data, selected }: NodeProps) {
-  const { sourceTitle, index, cases, exhaustive } = data as {
+  const { sourceTitle, index, cases, fallback } = data as {
     sourceTitle: string;
     index: number;
     cases: BranchCase[];
     exhaustive: boolean;
+    fallback: { ref: string; title: string; explicit: boolean } | null;
   };
+  const broken = cases.some((c) => c.missing);
 
   return (
     <div
-      className={`w-56 rounded-xl border-2 bg-[var(--card)] pb-1 shadow-sm ${
-        selected ? "border-primary ring-primary/30 shadow-md ring-2" : "border-amber-500/60"
-      }`}
+      className={cn(
+        "w-56 rounded-xl border-2 bg-[var(--card)] pb-1 shadow-sm",
+        selected ? "border-primary ring-primary/30 shadow-md ring-2" : "border-amber-500/60",
+        broken && "!border-[var(--destructive)] ring-2 ring-[var(--destructive)]",
+      )}
     >
       <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
 
       <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">
-        <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-amber-500/15">
-          <GitBranch className="size-3 text-amber-600" />
+        <span
+          className={cn(
+            "flex size-5 shrink-0 items-center justify-center rounded-md",
+            broken ? "bg-[color-mix(in_oklch,var(--destructive)_18%,transparent)]" : "bg-amber-500/15",
+          )}
+        >
+          {broken ? (
+            <AlertTriangle className="text-destructive size-3" strokeWidth={2.5} />
+          ) : (
+            <GitBranch className="size-3 text-amber-600" />
+          )}
         </span>
         <span className="tabular text-[0.625rem] opacity-60">{index}</span>
         <span className="truncate text-[11px] font-semibold">{sourceTitle || "Branch"}</span>
@@ -1072,19 +1247,42 @@ function BranchNode({ data, selected }: NodeProps) {
 
       <div className="border-t border-dashed pt-0.5">
         {cases.map((c) => (
-          <BranchRow key={c.ruleId} label={c.label} handleId={c.ruleId} />
-        ))}
-        {/* When every answer is already spoken for there is no path left for
-            "otherwise" to take, so offering one is a wire to nowhere. */}
-        {/* Not a case you have to fill in: it is where an answer goes when
-            none of the cases match, which happens whether or not it is drawn.
-            It is shown so you can see it — and drag it somewhere else. */}
-        {!exhaustive && (
           <BranchRow
-            label="anything else"
+            key={c.ruleId}
+            label={c.label}
+            handleId={c.ruleId}
+            missing={c.missing}
+            title={
+              c.missing
+                ? `This answer points at "${c.target}", which no longer exists. Drag from the dot to give it a destination.`
+                : undefined
+            }
+          />
+        ))}
+        {/*
+          When every answer is already spoken for there is no path left for
+          "otherwise" to take, so offering one is a wire to nowhere.
+
+          Otherwise it is drawn, but never as a peer of the cases above it.
+          Nobody authored this row — it is derived, and it read as a branch
+          someone had written and then abandoned, which is why it kept getting
+          reported as a mistake. So: its own rule above it, marked `auto`, and
+          worded as a consequence rather than as an option label. It cannot be
+          removed, because it is the half of a conditional question that does
+          the skipping: delete it and every "only ask this sometimes" question
+          is asked of everyone.
+        */}
+        {fallback && (
+          <BranchRow
+            label="otherwise"
+            destination={fallback.title}
             handleId={OTHERWISE}
-            muted
-            title="Where an answer goes when none of the cases above match. This happens automatically — drag from the dot to send it somewhere else."
+            derived={!fallback.explicit}
+            title={
+              fallback.explicit
+                ? `Every other answer goes to "${fallback.title}", because you aimed it there.`
+                : `Every other answer carries on to "${fallback.title}", which is simply what comes next. Drag from the dot to send it somewhere else instead.`
+            }
           />
         )}
       </div>
@@ -1104,22 +1302,56 @@ function BranchNode({ data, selected }: NodeProps) {
 function BranchRow({
   label,
   handleId,
-  muted,
+  destination,
+  derived,
+  missing,
   title,
 }: {
   label: string;
   handleId: string;
-  muted?: boolean;
+  /** Where this route lands, named on the row when it is worth naming. */
+  destination?: string;
+  /** Not authored — the fall-through this branch implies. Drawn as such. */
+  derived?: boolean;
+  /** Its destination is gone: this really is an unconnected output. */
+  missing?: boolean;
   title?: string;
 }) {
   return (
-    <div className="relative flex h-[22px] items-center px-3" title={title}>
-      <span className={`truncate text-[10px] ${muted ? "text-muted-foreground italic" : "font-medium"}`}>{label}</span>
+    <div
+      className={cn("relative flex h-[22px] items-center gap-1.5 px-3", derived && "border-t border-dashed")}
+      title={title}
+    >
+      <span
+        className={cn(
+          "shrink-0 truncate text-[10px]",
+          missing && "text-destructive font-medium",
+          derived && "text-muted-foreground italic",
+          !missing && !derived && "font-medium",
+        )}
+      >
+        {label}
+      </span>
+      {/* The destination, so a finished route reads as finished. */}
+      {destination && !missing && (
+        <span className="text-muted-foreground/80 min-w-0 flex-1 truncate text-[9px]">→ {destination}</span>
+      )}
+      {derived && !missing && (
+        <span className="text-muted-foreground/70 shrink-0 rounded bg-[color-mix(in_oklch,currentColor_12%,transparent)] px-1 font-mono text-[8px] leading-[1.4] tracking-wide uppercase">
+          auto
+        </span>
+      )}
+      {/* The one state n8n would call an unconnected output — and here, unlike
+          n8n, the respondent cannot just be dropped, so it is an error. */}
+      {missing && (
+        <span className="text-destructive ml-auto shrink-0 text-[9px] font-medium">no connection</span>
+      )}
       <Handle
         type="source"
         id={handleId}
         position={Position.Right}
-        style={{ background: muted ? "var(--muted-foreground)" : "var(--primary)" }}
+        className={cn(missing && "!border-2 !border-[var(--destructive)] !bg-[var(--card)]")}
+        style={missing ? undefined : { background: derived ? "var(--muted-foreground)" : "var(--primary)" }}
       />
     </div>
   );

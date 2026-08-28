@@ -1,4 +1,4 @@
-import type { Block, FormDoc } from "@repo/form-schema";
+import { ADDABLE_BLOCK_TYPES, renderBlockCatalog, type Block, type FormDoc } from "@repo/form-schema";
 
 /**
  * The interview agent's prompts.
@@ -206,12 +206,10 @@ Requirements:
 - Exactly ${questionCount} answerable questions (plus one welcome block first)
 - Start with a "welcome" block
 
-- "type" MUST be one of exactly these, spelled exactly like this:
-  welcome · statement · short_text · long_text · email · phone · url · number · date · yes_no
-  single_select (pick one) · multi_select (pick several) · dropdown (pick one from many)
-  rating (stars) · nps (0-10 recommend score) · opinion_scale · file_upload · legal_consent
-  Any other word — "text", "single_choice", "multiple_choice", "boolean" — is wrong. Pick the closest type from the list above instead.
-- Match the type to the answer: email for an email address, phone for a phone number, single_select when there is a fixed set of answers, long_text only when you genuinely want a paragraph.
+- "type" MUST be one of exactly these, spelled exactly like this. Any other word — "text", "single_choice", "boolean" — is wrong; pick the closest from this list:
+${renderBlockCatalog()}
+- Match the type to the answer, and reach past the text types. A price, a fee, a ticket or a UPI id means "payment". A time or a date means "date". A file means "file_upload". An address means "address". Asking for those as short_text is the single most common mistake here — a question titled "Payment Confirmation" that takes typed text collects nothing and takes no money.
+- "config": the setup for types that need it, as "key=value; key=value" using exactly the keys listed above — e.g. "method=upi; upi=acme@okhdfcbank; amount=499; currency=INR". Put "" when the type needs none. Take the values from the request: if it names a price, an id or a link, they belong here rather than in the question's wording.
 - refs: lowercase snake_case, unique, prefixed by topic (e.g. q_email, q_role, q_rating)
 - "options": the choices as the respondent reads them — ["Android", "iPhone", "Chrome extension"]. Plain labels, no ids, no prefixes. Use [] for every type that is not a choice.
 - Every block MUST include: description (use "" if none), options (use [] when not a choice) and scale (5 for rating, 10 otherwise)
@@ -352,7 +350,14 @@ Rules for "branches": [{ "whenRef": "<question ref>", "op": "<eq|neq|gt|gte|lt|l
 
 Where a branch can point: a question BELOW the deciding one, or an ending. A branch pointing at a question above it would loop, and is dropped. So if the request needs a question asked only for some answers, that question has to sit below the one that decides it — say so by adding it with "insertAfter", or by rewiring around where it already is.
 
-If a new question is needed: "type" MUST be one of exactly short_text · long_text · email · phone · url · number · date · yes_no · single_select · multi_select · dropdown · rating · nps · opinion_scale · file_upload · legal_consent. "options" are plain labels as the respondent reads them — ["Android", "iPhone"] — and [] when the type is not a choice. "insertAfter" is the ref it goes directly after, "" for the end; a question only asked in some cases MUST sit immediately below the question that decides it.
+If a new question is needed, "type" MUST be one of exactly these:
+${renderBlockCatalog(ADDABLE_BLOCK_TYPES)}
+
+Pick the type that actually collects the thing. A price, a fee, a ticket or a UPI id is "payment", not a text question asking them to confirm they paid. A time or a date is "date". A booking link of the builder's own is "scheduling". Reaching for short_text because it is simpler produces a question that collects nothing.
+
+"config" carries the setup for the types that need it, as "key=value; key=value" with exactly the keys listed above — "method=upi; upi=acme@okhdfcbank; amount=499; currency=INR" — and "" for the types that need none. If the request gives you an amount, an id or a URL, it goes in "config", not into the title.
+
+"options" are plain labels as the respondent reads them — ["Android", "iPhone"] — and [] when the type is not a choice. "insertAfter" is the ref it goes directly after, "" for the end; a question only asked in some cases MUST sit immediately below the question that decides it.
 
 "summary" is one plain sentence telling the builder what you changed. Describe only what you actually returned — if you added nothing and only rewired, say that.`;
 }

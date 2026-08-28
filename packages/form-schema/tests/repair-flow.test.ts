@@ -219,3 +219,93 @@ describe("repairFlow", () => {
     expect(walk(twice, IOS)).toEqual(walk(once, IOS));
   });
 });
+
+/**
+ * Two "only ask this sometimes" inserts in a row.
+ *
+ * The complement of the first condition was aimed one block past the arm's
+ * first question instead of past the arm — so an RSVP that answered "no, I
+ * can't come" skipped the guest *count* and then landed on "please provide your
+ * guests' names". Wrong routing, live, for anyone who declined.
+ */
+describe("a conditional arm longer than one question", () => {
+  const uid = (p: string, n: number) => `${p}_${String(n).padStart(8, "0")}`;
+  const q = (n: number, ref: string, type = "long_text") => ({
+    id: uid("blk", n),
+    ref,
+    type,
+    title: `Q ${ref}`,
+  });
+
+  function rsvp() {
+    return FormDoc.parse({
+      schemaVersion: 1,
+      title: "Event RSVP",
+      blocks: [
+        q(1, "q_welcome", "welcome"),
+        q(2, "q_attending", "yes_no"),
+        q(3, "q_guests", "number"),
+        q(4, "q_names"),
+        q(5, "q_diet"),
+      ],
+      endings: [{ id: uid("end", 1), ref: "end_thanks", title: "Thanks" }],
+      logic: [
+        {
+          id: uid("rl", 1),
+          action_kind: "goto",
+          from: "q_attending",
+          when: {
+            op: "and",
+            conditions: [{ left: { kind: "ref", ref: "q_attending" }, op: "eq", value: true }],
+            groups: [],
+          },
+          target: "q_guests",
+          targetKind: "block",
+        },
+        {
+          id: uid("rl", 2),
+          action_kind: "goto",
+          from: "q_guests",
+          when: {
+            op: "and",
+            conditions: [{ left: { kind: "ref", ref: "q_guests" }, op: "gte", value: 1 }],
+            groups: [],
+          },
+          target: "q_names",
+          targetKind: "block",
+        },
+      ],
+      endingRules: [],
+      variables: [],
+      hiddenFields: [],
+      settings: {},
+      theme: {},
+    });
+  }
+
+  it("skips the whole arm, not just its first question", () => {
+    const repaired = repairFlow(rsvp());
+    const complement = repaired.logic.find(
+      (r) =>
+        r.action_kind === "goto" &&
+        r.from === "q_attending" &&
+        (r.when?.conditions ?? []).some((c) => c.op === "neq"),
+    );
+    // Past the guest count AND past the guest names, to the question everyone
+    // reaches. Previously this was "q_names".
+    expect(complement && "target" in complement ? complement.target : null).toBe("q_diet");
+  });
+
+  it("never routes someone who is not attending into the guest questions", () => {
+    const repaired = repairFlow(rsvp());
+    const intoArm = repaired.logic.filter(
+      (r) =>
+        r.action_kind === "goto" &&
+        r.from === "q_attending" &&
+        "target" in r &&
+        (r.target === "q_guests" || r.target === "q_names") &&
+        (r.when?.conditions ?? []).some((c) => c.op === "neq"),
+    );
+    expect(intoArm).toHaveLength(0);
+  });
+});

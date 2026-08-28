@@ -173,7 +173,8 @@ export function buildFlowRules(
       // (2) The branch targets the block that comes next anyway, so it changes
       // nothing. What the flow meant is "skip this when the condition fails".
       if (target === sourceIndex + 1) {
-        const dest = destinationAfter(target, blocks, endingRefs);
+        // Skip the whole arm, not just its first question — see `armExtent`.
+        const dest = destinationAfter(armExtent(target, branches, blocks), blocks, endingRefs);
         if (dest) {
           const w = arms[0]!.when;
           rules.push(gotoRule(source, { ...w, op: NEGATE[w.op] }, dest.ref, dest.kind));
@@ -292,6 +293,41 @@ function dedupeRules(
 function dedupeByTarget(arms: DraftBranch[]): DraftBranch[] {
   const seen = new Set<string>();
   return arms.filter((a) => (seen.has(a.then) ? false : (seen.add(a.then), true)));
+}
+
+/**
+ * How far the arm opened by a conditional question actually reaches.
+ *
+ * The complement of "only ask this when X" has to land past everything that
+ * arm contains, and the arm is frequently longer than one question. Two
+ * conditional inserts in a row build exactly that: "how many guests" only when
+ * attending, then "your guests' names" only when there is at least one guest.
+ * Reading the arm as a single block sent the complement of the *first*
+ * condition to the second question in the arm — so an RSVP that said "no, I
+ * can't come" was asked to list the guests it was not bringing. The routing
+ * was wrong, not merely drawn wrong, and it shipped to respondents.
+ *
+ * Extent is read from the author's own branch list rather than from the rules
+ * being derived here: a question belongs to the arm when something already in
+ * the arm is what decides it. Derived rules are half-written at this point and
+ * reading them back would make the answer depend on iteration order.
+ */
+function armExtent(start: number, branches: DraftBranch[], blocks: Block[]): number {
+  const members = new Set<string>();
+  const first = blocks[start];
+  if (!first) return start;
+  members.add(first.ref);
+
+  let end = start;
+  for (let k = start + 1; k < blocks.length; k++) {
+    const block = blocks[k];
+    if (!block) break;
+    const decidedFromInside = branches.some((b) => b.then === block.ref && members.has(b.when.ref));
+    if (!decidedFromInside) break;
+    members.add(block.ref);
+    end = k;
+  }
+  return end;
 }
 
 /** What follows position `i` — the next block, or the first ending. */

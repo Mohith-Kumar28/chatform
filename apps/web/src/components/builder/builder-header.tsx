@@ -9,6 +9,7 @@ import {
   CircleAlert,
   CloudOff,
   ExternalLink,
+  Keyboard,
   Link2,
   Loader2,
   Play,
@@ -31,7 +32,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { TooltipHint } from "@/components/ui/kbd";
 import { BUILDER_TABS, tabMatches } from "./builder-tabs";
+import { KEY } from "./use-builder-shortcuts";
 import { useBuilderStore, useCanRedo, useCanUndo } from "@/stores/builder-store";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +52,8 @@ export function BuilderHeader({
   onPublish,
   publishing,
   onPreview,
+  onCopyLink,
+  onShowShortcuts,
 }: {
   formId: string;
   title: string;
@@ -59,6 +64,9 @@ export function BuilderHeader({
   publishing: boolean;
   /** Opens the full conversation preview. */
   onPreview: () => void;
+  /** Copies the live link. Owned by the shell so ⇧⌘C runs the same code. */
+  onCopyLink: () => void;
+  onShowShortcuts: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -68,9 +76,6 @@ export function BuilderHeader({
   const redo = useBuilderStore((s) => s.redo);
   const canUndo = useCanUndo();
   const canRedo = useCanRedo();
-
-  const publicUrl =
-    slug && typeof window !== "undefined" ? `${window.location.origin}/f/${slug}` : "";
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -110,6 +115,9 @@ export function BuilderHeader({
                   <TooltipTrigger asChild>
                     <Link
                       href={href}
+                      // Six tabs over one form: prefetch them all, so the tab
+                      // strip behaves like a tab strip and not like six pages.
+                      prefetch
                       aria-current={active ? "page" : undefined}
                       className={cn(
                         "relative isolate flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
@@ -131,8 +139,7 @@ export function BuilderHeader({
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">
-                    <p className="font-medium">{tab.label}</p>
-                    <p className="text-muted-foreground text-micro">{tab.hint}</p>
+                    <TooltipHint label={tab.label} hint={tab.hint} keys={KEY.tab(tab.segment)} />
                   </TooltipContent>
                 </Tooltip>
               );
@@ -162,8 +169,14 @@ export function BuilderHeader({
               icon, so they read as actions and not decoration. */}
           <div className="flex flex-1 items-center justify-end gap-1.5">
             <div className="mr-0.5 hidden items-center rounded-full md:flex">
-              <IconAction label="Undo" shortcut="⌘Z" icon={Undo2} disabled={!canUndo} onClick={undo} />
-              <IconAction label="Redo" shortcut="⇧⌘Z" icon={Redo2} disabled={!canRedo} onClick={redo} />
+              <IconAction label="Undo" shortcut={KEY.undo()} icon={Undo2} disabled={!canUndo} onClick={undo} />
+              <IconAction label="Redo" shortcut={KEY.redo()} icon={Redo2} disabled={!canRedo} onClick={redo} />
+              <IconAction
+                label="Keyboard shortcuts"
+                shortcut={KEY.help}
+                icon={Keyboard}
+                onClick={onShowShortcuts}
+              />
             </div>
 
             <Tooltip>
@@ -177,7 +190,9 @@ export function BuilderHeader({
                   <Play className="size-3.5 fill-current" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Preview</TooltipContent>
+              <TooltipContent side="bottom">
+                <TooltipHint label="Preview" keys={KEY.preview()} />
+              </TooltipContent>
             </Tooltip>
 
             {slug && published && (
@@ -187,16 +202,15 @@ export function BuilderHeader({
                     <button
                       type="button"
                       aria-label="Copy public link"
-                      onClick={async () => {
-                        await navigator.clipboard.writeText(publicUrl);
-                        toast.success("Link copied");
-                      }}
+                      onClick={onCopyLink}
                       className="grid size-8 place-items-center rounded-lg bg-[var(--info-soft)] text-[var(--info)] transition-transform duration-[var(--duration-micro)] active:scale-95 motion-reduce:active:scale-100"
                     >
                       <Link2 className="size-3.5" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">Copy link</TooltipContent>
+                  <TooltipContent side="bottom">
+                    <TooltipHint label="Copy link" keys={KEY.copyLink()} />
+                  </TooltipContent>
                 </Tooltip>
 
                 <Tooltip>
@@ -217,22 +231,29 @@ export function BuilderHeader({
             )}
 
 
-            <Button
-              size="sm"
-              shape="pill"
-              onClick={async () => {
-                await onPublish();
-                toast.success(published ? "Changes published" : "Form published");
-              }}
-              disabled={publishing}
-            >
-              {publishing ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : published ? (
-                <Check className="size-3.5" />
-              ) : null}
-              {published ? "Publish changes" : "Publish"}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  shape="pill"
+                  onClick={async () => {
+                    await onPublish();
+                    toast.success(published ? "Changes published" : "Form published");
+                  }}
+                  disabled={publishing}
+                >
+                  {publishing ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : published ? (
+                    <Check className="size-3.5" />
+                  ) : null}
+                  {published ? "Publish changes" : "Publish"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <TooltipHint label={published ? "Publish changes" : "Publish"} keys={KEY.publish()} />
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
       </header>
@@ -268,8 +289,7 @@ function IconAction({
         </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
-        {label}
-        {shortcut && <span className="text-muted-foreground ml-2">{shortcut}</span>}
+        <TooltipHint label={label} keys={shortcut} />
       </TooltipContent>
     </Tooltip>
   );

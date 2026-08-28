@@ -9,6 +9,7 @@ import { SignatureComposer } from "./composers/signature";
 import { FieldsComposer, MatrixComposer, RankingComposer } from "./composers/structured";
 import { FileUploadControl } from "./file-upload";
 import { PaymentAffordance } from "./payment-affordance";
+import { cn } from "@/lib/utils";
 
 /**
  * The controls that belong to the current question, rendered **in the thread**
@@ -18,8 +19,40 @@ import { PaymentAffordance } from "./payment-affordance";
  * chat expects to be able to type. Now the text box is always there, the
  * choices sit below the message as an offer, and either route works: tap a
  * chip, or write "weekly I guess" and let the agent read it.
+ *
+ * Sealed off while an answer is in flight, with `inert` on the wrapper rather
+ * than a `disabled` prop threaded through nine
+ * composers. That matters because the row used to be unmounted while thinking,
+ * which hid the fact that most of these controls never honoured `disabled` at
+ * all — yes/no chips, both scales, the calendar and the structured composers
+ * all ignored it. Keeping the row mounted to stop it flashing would have made
+ * every one of those double-answerable. `inert` takes the whole subtree out of
+ * pointer, keyboard and accessibility reach in one place, so no composer has to
+ * remember.
  */
-export function QuestionAffordance({
+export function QuestionAffordance(props: {
+  block: PublicBlock;
+  disabled?: boolean;
+  uploadBase: string | null;
+  respondentToken: string | null;
+  onStructured: (value: unknown, display: string) => void;
+  onSkip: () => void;
+}) {
+  return (
+    <div
+      inert={props.disabled}
+      aria-busy={props.disabled}
+      className={cn(
+        "transition-opacity duration-[var(--duration-standard)] ease-[var(--ease-out)]",
+        props.disabled && "opacity-55",
+      )}
+    >
+      <AffordanceControls {...props} />
+    </div>
+  );
+}
+
+function AffordanceControls({
   block,
   disabled,
   uploadBase,

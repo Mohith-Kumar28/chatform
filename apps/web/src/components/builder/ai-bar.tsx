@@ -6,9 +6,11 @@ import { ArrowUp, Check, GitBranch, Loader2, Minus, Shuffle, Sparkles } from "lu
 import { toast } from "sonner";
 import { FormDoc as FormDocSchema, type Block, type FormDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import { useBuilderStore } from "@/stores/builder-store";
 import { customFetch } from "@/lib/api/mutator";
 import { blockMeta, TONE_CLASSES } from "./block-library";
+import { KEY } from "./use-builder-shortcuts";
 import { cn } from "@/lib/utils";
 
 interface Turn {
@@ -291,6 +293,8 @@ export function AiBar() {
           <Sparkles className="text-primary mb-2 size-4 shrink-0" />
           <textarea
             ref={inputRef}
+            // How `/` finds this from the shell's keyboard layer.
+            data-shortcut-target="ai-bar"
             value={prompt}
             rows={1}
             onFocus={() => setOpen(true)}
@@ -304,6 +308,11 @@ export function AiBar() {
             placeholder="Ask AI to make changes…"
             className="max-h-28 min-h-9 flex-1 resize-none bg-transparent py-2 text-sm outline-none placeholder:text-[color-mix(in_oklch,currentColor_45%,transparent)]"
           />
+          {/* The key that gets you here, shown only while the bar is closed —
+              once you are typing in it, it is noise. */}
+          {!open && !prompt && (
+            <Kbd className="mb-2 hidden shrink-0 sm:inline-grid">{KEY.askAi}</Kbd>
+          )}
           <Button
             type="submit"
             size="icon-sm"

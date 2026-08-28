@@ -30,6 +30,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { Block } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TooltipHint } from "@/components/ui/kbd";
 import {
   Tooltip,
   TooltipContent,
@@ -37,7 +38,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useBuilderStore } from "@/stores/builder-store";
-import { computeBranchLayout } from "./branch-layout";
+import { computeQuestionFlow, type QuestionFlow } from "./branch-layout";
 import {
   ConditionRow,
   choicesFor,
@@ -48,6 +49,7 @@ import {
 } from "./condition-row";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
 import { defaultBlock } from "./default-block";
+import { KEY } from "./use-builder-shortcuts";
 import { cn } from "@/lib/utils";
 
 /**
@@ -68,10 +70,19 @@ export function BlockList() {
   const addBlock = useBuilderStore((s) => s.addBlock);
   const duplicateBlock = useBuilderStore((s) => s.duplicateBlock);
   const removeBlock = useBuilderStore((s) => s.removeBlock);
+  /**
+   * The picker is store state now, not local state, because `N` opens it from
+   * the keyboard layer in the shell — which cannot reach a `useState` in here.
+   */
+  const pickerIndex = useBuilderStore((s) => s.pickerIndex);
+  const openPicker = useBuilderStore((s) => s.openPicker);
+  const closePicker = useBuilderStore((s) => s.closePicker);
 
-  const [picker, setPicker] = useState<{ index: number } | null>(null);
-  // Which questions are only asked under a condition, and under which one.
-  const layout = useMemo(() => (doc ? computeBranchLayout(doc) : new Map()), [doc]);
+  // Which questions split the flow, and which are not asked of everyone.
+  const flow = useMemo(
+    () => (doc ? computeQuestionFlow(doc) : new Map<string, QuestionFlow>()),
+    [doc],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -95,14 +106,21 @@ export function BlockList() {
           <span className="text-muted-foreground text-micro font-medium tracking-wide uppercase">
             {doc.blocks.length} question{doc.blocks.length === 1 ? "" : "s"}
           </span>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label="Add block at end"
-            onClick={() => setPicker({ index: doc.blocks.length })}
-          >
-            <Plus className="size-3.5" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Add a question"
+                onClick={() => openPicker()}
+              >
+                <Plus className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <TooltipHint label="Add a question" keys={KEY.addQuestion} />
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
@@ -112,43 +130,25 @@ export function BlockList() {
               strategy={verticalListSortingStrategy}
             >
               <ol className="space-y-0.5">
-                {doc.blocks.map((block, i) => {
-                  const branch = layout.get(block.ref);
-                  const prev = i > 0 ? layout.get(doc.blocks[i - 1]!.ref) : undefined;
-                  return (
-                    <li key={block.ref}>
-                      <InsertPoint onClick={() => setPicker({ index: i })} />
-                      {/* The condition is stated once above the first arm that
-                          answers it; a second arm of the same question repeats
-                          only its own answer, not the whole sentence. */}
-                      {branch?.condition && (
-                        <BranchLabel
-                          condition={branch.condition}
-                          sourceTitle={branch.sourceTitle}
-                          depth={branch.depth}
-                          repeat={prev?.sourceRef === branch.sourceRef}
-                        />
-                      )}
-                      <div style={{ paddingLeft: branch ? branch.depth * 14 : 0 }}>
-                        <SortableRow
-                          block={block}
-                          index={i}
-                          selected={selectedRef === block.ref}
-                          conditional={Boolean(branch?.condition)}
-                          branches={Boolean(branch?.branches)}
-                          onSelect={() => select(block.ref)}
-                          onDuplicate={() => duplicateBlock(block.ref)}
-                          onDelete={() => removeBlock(block.ref)}
-                        />
-                      </div>
-                    </li>
-                  );
-                })}
+                {doc.blocks.map((block, i) => (
+                  <li key={block.ref}>
+                    <InsertPoint onClick={() => openPicker(i)} />
+                    <SortableRow
+                      block={block}
+                      index={i}
+                      selected={selectedRef === block.ref}
+                      flow={flow.get(block.ref)}
+                      onSelect={() => select(block.ref)}
+                      onDuplicate={() => duplicateBlock(block.ref)}
+                      onDelete={() => removeBlock(block.ref)}
+                    />
+                  </li>
+                ))}
               </ol>
             </SortableContext>
           </DndContext>
 
-          <InsertPoint onClick={() => setPicker({ index: doc.blocks.length })} />
+          <InsertPoint onClick={() => openPicker()} />
 
           {/* Endings were only reachable from the workflow canvas before. */}
           <div className="mt-4">
@@ -181,22 +181,22 @@ export function BlockList() {
           </div>
         </div>
 
-        {picker && (
+        {pickerIndex !== null && (
           <BlockPicker
-            onClose={() => setPicker(null)}
-            decider={deciderFor(doc.blocks, picker.index)}
+            onClose={closePicker}
+            decider={deciderFor(doc.blocks, pickerIndex)}
             onPick={(type, condition) => {
               const refs = new Set(doc.blocks.map((b) => b.ref));
               const block = defaultBlock(type, refs);
-              const decider = condition ? deciderFor(doc.blocks, picker.index) : null;
+              const decider = condition ? deciderFor(doc.blocks, pickerIndex) : null;
               // Only the positive branch is written. `repairFlow`, which every
               // structural edit runs through, derives the complement that skips
               // the question when the condition fails — the half that actually
               // does the skipping, and the half people forget.
               const rule =
                 condition && decider ? conditionalRule(decider, condition, block.ref) : undefined;
-              addBlock(block, picker.index, rule);
-              setPicker(null);
+              addBlock(block, pickerIndex, rule);
+              closePicker();
             }}
           />
         )}
@@ -225,38 +225,11 @@ function InsertPoint({ onClick }: { onClick: () => void }) {
   );
 }
 
-/** "Only if — iPhone", sitting above the questions that answer to it. */
-function BranchLabel({
-  condition,
-  sourceTitle,
-  depth,
-  repeat,
-}: {
-  condition: string;
-  sourceTitle: string | null;
-  depth: number;
-  repeat: boolean;
-}) {
-  return (
-    <div
-      className="text-muted-foreground flex items-center gap-1.5 pt-1.5 pb-1 text-[0.625rem] leading-none"
-      style={{ paddingLeft: Math.max(0, depth - 1) * 14 + 4 }}
-    >
-      <CornerDownRight className="size-3 shrink-0 opacity-50" />
-      <span className="min-w-0 truncate">
-        {!repeat && sourceTitle && <span className="opacity-60">{sourceTitle} — </span>}
-        <span className="font-medium">{condition}</span>
-      </span>
-    </div>
-  );
-}
-
 function SortableRow({
   block,
   index,
   selected,
-  conditional,
-  branches,
+  flow,
   onSelect,
   onDuplicate,
   onDelete,
@@ -264,10 +237,8 @@ function SortableRow({
   block: Block;
   index: number;
   selected: boolean;
-  /** Only reached under a condition. */
-  conditional: boolean;
-  /** Splits the flow into arms. */
-  branches: boolean;
+  /** What this row can say about itself: see `computeQuestionFlow`. */
+  flow: QuestionFlow | undefined;
   onSelect: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -293,9 +264,6 @@ function SortableRow({
         "transition-[background-color,box-shadow] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
         TONE_CLASSES[meta.tone],
         selected ? "ring-0" : "opacity-[0.82] hover:opacity-100",
-        // An arm is set slightly back from the trunk so the column reads as a
-        // shape rather than a list.
-        conditional && "rounded-l-md",
         isDragging && "shadow-md z-10 opacity-100",
       )}
     >
@@ -314,13 +282,39 @@ function SortableRow({
           <meta.icon className="size-3.5" strokeWidth={2} />
           <span className="tabular text-[0.625rem] opacity-60">{index + 1}</span>
         </span>
-        {/* Two lines before the ellipsis: one line truncated after ~three
-            words made the list unreadable. */}
-        <span className={cn("line-clamp-2 min-w-0 flex-1 text-xs leading-snug", selected && "font-semibold")}>
-          {block.title || meta.label}
+        <span className="min-w-0 flex-1">
+          {/* Two lines before the ellipsis: one line truncated after ~three
+              words made the list unreadable. */}
+          <span className={cn("line-clamp-2 text-xs leading-snug", selected && "font-semibold")}>
+            {block.title || meta.label}
+          </span>
+          {/*
+            Said on the row it is true of, rather than by indenting the row
+            under a parent. A question can be reached from more than one branch,
+            so it has no parent to indent under — see `computeQuestionFlow`.
+
+            Drawn as a tinted monospace chip with a child-branch glyph, not as a
+            line of grey text: sitting directly under the wording, prose reads as
+            a description of the question. An expression in another typeface
+            cannot be mistaken for one.
+          */}
+          {flow?.conditional && (
+            <span
+              className={cn(
+                "mt-1 inline-flex max-w-full items-center gap-1 rounded px-1 py-0.5",
+                "font-mono text-[0.625rem] leading-none",
+                "bg-[color-mix(in_oklch,currentColor_14%,transparent)]",
+              )}
+            >
+              <CornerDownRight className="size-2.5 shrink-0 opacity-60" strokeWidth={2.5} />
+              <span className="truncate opacity-85">
+                {flow.condition ?? "sometimes asked"}
+              </span>
+            </span>
+          )}
         </span>
         {/* This question sends different answers different ways. */}
-        {branches && <GitBranch className="mt-0.5 size-3 shrink-0 opacity-45" aria-label="Branches" />}
+        {flow?.branches && <GitBranch className="mt-0.5 size-3 shrink-0 opacity-45" aria-label="Branches" />}
       </button>
 
       {/* Required marker, pinned top-right and always red — it is the one
@@ -357,7 +351,9 @@ function SortableRow({
                 <Copy className="size-3" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Duplicate</TooltipContent>
+            <TooltipContent side="right">
+              <TooltipHint label="Duplicate" keys={KEY.duplicate()} />
+            </TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -371,6 +367,7 @@ function SortableRow({
                 <Trash2 className="size-3" />
               </Button>
             </TooltipTrigger>
+            {/* No key: see the note at the foot of the shortcut sheet. */}
             <TooltipContent side="right">Delete</TooltipContent>
           </Tooltip>
         </div>

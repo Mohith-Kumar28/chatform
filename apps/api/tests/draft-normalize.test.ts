@@ -11,6 +11,7 @@ const block = (over: Partial<GenerationDraft["blocks"][number]>): GenerationDraf
   required: true,
   options: [],
   scale: 10,
+  config: "",
   ...over,
 });
 
@@ -238,5 +239,157 @@ describe("htmlToText", () => {
 
   it("decodes entities and collapses whitespace", () => {
     expect(htmlToText("<p>Save&nbsp;it &amp; find   it</p>")).toBe("Save it & find it ·");
+  });
+});
+
+
+/**
+ * The types the prompt used to forbid.
+ *
+ * Both prompts named 16 of the 26 block types and then told the model that
+ * anything else was wrong, and the draft had nowhere to carry an amount or a
+ * booking link — so `payment` and `scheduling` were unreachable in practice.
+ * Asked for a 499-rupee ticket over UPI, the builder produced a short-text
+ * question titled "Payment Confirmation": it collected nothing and took no
+ * money, and nothing anywhere said so.
+ */
+describe("block types that need setup", () => {
+  it("builds a UPI payment block from the amount and id in the request", () => {
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome" }),
+          block({
+            ref: "q_ticket",
+            type: "payment",
+            title: "Ticket",
+            config: "method=upi; upi=mohith808@axl; amount=499; currency=INR",
+          }),
+        ],
+      }),
+    );
+    const paid = doc.blocks.find((b) => b.ref === "q_ticket");
+    expect(paid?.type).toBe("payment");
+    if (paid?.type !== "payment") throw new Error("not a payment block");
+    expect(paid.method).toBe("upi");
+    expect(paid.upiId).toBe("mohith808@axl");
+    expect(paid.amount).toBe(499);
+    expect(paid.currency).toBe("INR");
+  });
+
+  it("reads an amount a model wrote the way a person would", () => {
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome" }),
+          block({ ref: "q_fee", type: "payment", config: "method=upi; upi=a@b; amount=₹1,250" }),
+        ],
+      }),
+    );
+    const paid = doc.blocks.find((b) => b.ref === "q_fee");
+    if (paid?.type !== "payment") throw new Error("not a payment block");
+    expect(paid.amount).toBe(1250);
+    expect(paid.currency).toBe("INR");
+  });
+
+  it("still makes a payment block when the destination is missing", () => {
+    // A payment block with nowhere to pay is caught by the linter before it can
+    // be published. A text question pretending to take money is not caught at
+    // all — which is the failure worth avoiding.
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [block({ ref: "welcome", type: "welcome" }), block({ ref: "q_pay", type: "payment", config: "" })],
+      }),
+    );
+    expect(doc.blocks.find((b) => b.ref === "q_pay")?.type).toBe("payment");
+  });
+
+  it("takes a booking link for scheduling", () => {
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome" }),
+          block({ ref: "q_slot", type: "scheduling", config: "url=https://cal.com/acme/30min" }),
+        ],
+      }),
+    );
+    const slot = doc.blocks.find((b) => b.ref === "q_slot");
+    if (slot?.type !== "scheduling") throw new Error("not a scheduling block");
+    expect(slot.url).toBe("https://cal.com/acme/30min");
+  });
+
+  it("asks for a time directly when there is no calendar to book against", () => {
+    // "What time will you reach the venue?" is a date question, not a booking.
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome" }),
+          block({ ref: "q_arrival", type: "scheduling", title: "What time will you arrive?", config: "" }),
+        ],
+      }),
+    );
+    expect(doc.blocks.find((b) => b.ref === "q_arrival")?.type).toBe("date");
+  });
+
+  it("builds a matrix from rows in config and columns in options", () => {
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome" }),
+          block({
+            ref: "q_grid",
+            type: "matrix",
+            options: ["Poor", "Fine", "Great"],
+            config: "rows=Food|Venue|Music",
+          }),
+        ],
+      }),
+    );
+    const grid = doc.blocks.find((b) => b.ref === "q_grid");
+    if (grid?.type !== "matrix") throw new Error("not a matrix block");
+    expect(grid.rows.map((r) => r.label)).toEqual(["Food", "Venue", "Music"]);
+    expect(grid.columns).toHaveLength(3);
+  });
+
+  it("ranks the options it was given", () => {
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome" }),
+          block({ ref: "q_rank", type: "ranking", options: ["Speed", "Price", "Support"] }),
+        ],
+      }),
+    );
+    const ranked = doc.blocks.find((b) => b.ref === "q_rank");
+    if (ranked?.type !== "ranking") throw new Error("not a ranking block");
+    expect(ranked.items).toHaveLength(3);
+  });
+
+  it("maps the words a model reaches for instead of the type name", () => {
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome" }),
+          block({ ref: "q_pay", type: "upi", config: "upi=a@b; amount=100" }),
+          block({ ref: "q_book", type: "booking", config: "url=https://cal.com/x" }),
+        ],
+      }),
+    );
+    expect(doc.blocks.find((b) => b.ref === "q_pay")?.type).toBe("payment");
+    expect(doc.blocks.find((b) => b.ref === "q_book")?.type).toBe("scheduling");
+  });
+
+  it("narrows an address to the parts that were asked for", () => {
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome" }),
+          block({ ref: "q_addr", type: "address", config: "fields=city|country" }),
+        ],
+      }),
+    );
+    const addr = doc.blocks.find((b) => b.ref === "q_addr");
+    if (addr?.type !== "address") throw new Error("not an address block");
+    expect(addr.fields).toEqual(["city", "country"]);
   });
 });

@@ -138,6 +138,8 @@ export function BlockInspector() {
 
         <TextField
           label="Question"
+          // Where ↵ lands when a question is selected in the list.
+          shortcutTarget="question-title"
           value={block.title}
           onChange={(v) => patch({ title: v }, key("title"))}
           multiline

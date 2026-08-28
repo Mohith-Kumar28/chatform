@@ -2,7 +2,9 @@
 
 import { useMemo } from "react";
 import { Download, FileText } from "lucide-react";
-import { toPublicBlock, type Block, type FormDoc } from "@repo/form-schema";
+import { schedulingLabel, toPublicBlock, type Block, type FormDoc } from "@repo/form-schema";
+import { DateComposer } from "@/components/chat/composers/date";
+import { PaymentAffordance } from "@/components/chat/payment-affordance";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { cn } from "@/lib/utils";
 import { API_ORIGIN } from "@/lib/api/mutator";
@@ -127,6 +129,22 @@ function MediaBlock({ block }: { block: Block }) {
       )}
       <Download className="size-3.5 shrink-0 opacity-60" />
     </a>
+  );
+}
+
+/**
+ * Shows a real control without letting anyone use it.
+ *
+ * `inert` rather than `pointer-events-none` alone: the latter stops the mouse
+ * and nothing else, so the calendar's month arrows stayed tabbable and the
+ * builder's own single-key shortcuts would fire against a focused control in
+ * a preview. `inert` takes the whole subtree out of focus and the a11y tree.
+ */
+function Inert({ children }: { children: React.ReactNode }) {
+  return (
+    <div inert className="[&_*]:cursor-default">
+      {children}
+    </div>
   );
 }
 
@@ -260,15 +278,54 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
         </div>
       );
 
+    /**
+     * The real calendar and the real payment control, not a drawing of them.
+     *
+     * These two were the only composers this file mocked rather than rendered,
+     * and both mocks were wrong in a way that mattered: `date` was a grid of
+     * grey rectangles that reads as a loading skeleton, and `payment` had no
+     * case at all, so a UPI block with an amount and a payee fell through to
+     * "Type your answer…" — the preview said the question collected typed text
+     * when it actually shows a QR code. The file promises "what shows here is
+     * what ships"; for these two it did not.
+     *
+     * Both components are pure and prop-driven, so they render here as-is
+     * inside `Inert`, which is what keeps this a preview of shape.
+     */
     case "date":
       return (
-        <div className="rounded-2xl border p-3" style={chipStyle}>
-          <div className="mb-2 h-4 w-24 rounded opacity-20" style={{ background: "currentColor" }} />
-          <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: 21 }, (_, i) => (
-              <div key={i} className="h-6 rounded opacity-10" style={{ background: "currentColor" }} />
-            ))}
-          </div>
+        <Inert>
+          <DateComposer
+            min={block.minDate}
+            max={block.maxDate}
+            disablePast={block.disablePast}
+            onPick={() => {}}
+          />
+        </Inert>
+      );
+
+    case "payment":
+      return (
+        <Inert>
+          <PaymentAffordance block={block} disabled onStructured={() => {}} onSkip={() => {}} />
+        </Inert>
+      );
+
+    // Booking sends them out to the builder's own link, so there is nothing to
+    // draw but the button that goes there — worth showing, because its wording
+    // changes with the link (a bare Meet room has no slot to pick).
+    case "scheduling":
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className="flex h-10 items-center rounded-full px-5 text-sm font-medium"
+            style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+          >
+            {schedulingLabel(block.url ?? "", block.buttonLabel)}
+          </span>
+          <span className={chip} style={chipStyle}>
+            {block.url ? "I've booked" : "Add a booking link in the panel"}
+          </span>
         </div>
       );
 
