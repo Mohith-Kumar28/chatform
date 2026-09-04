@@ -196,3 +196,132 @@ Test accounts (local D1): `grace@hopper.dev` / `supersecret123` (org "Acme Inc")
 - **Option-aware rule conditions FIXED**: rule value editor now renders a dropdown of real option IDs for select blocks (free-text values never matched option-ID answers — this was a real bug), Yes/No picker for yes_no, number input for scales, text otherwise.
 - **AI add-blocks endpoint** (/api/ai/add-blocks): prompt + existing doc → AI generates new blocks avoiding duplicates → normalized → appended → persisted. VERIFIED E2E (506 tokens, block appended). Builder AI bar ("Build with AI") uses it and refreshes the preview.
 - **Empty/loading states**: Usage, Team, Templates pages got loading skeletons + no-data/error empty states; dashboard already had them.
+
+## 18. DEVELOPER PLATFORM (2026-09-04) — deployed
+
+The non-GUI half. `/v1` was five endpoints, hand-rolled keys and cosmetic scopes;
+it is now a documented public API with its own docs site. All of this is live on
+`api.chatform.in` and `chatform.in`.
+
+### Keys — now Better Auth's
+
+§11 said "Better Auth 1.7.1 has NO apiKey plugin (research was wrong)". That was
+right about the **core** package and wrong as a conclusion: the plugin is
+published separately as `@better-auth/api-key`, like `@better-auth/passkey` and
+`@better-auth/stripe`. Adopted; `lib/apikeys.ts` is now verification and policy
+only.
+
+- Four configs: `sk_live` (stored as configId `default`), `sk_test`, `pk_live`,
+  `pk_test`. Org-owned (`references: "organization"`), which also fixed listing
+  keys by `user_id` — a teammate could not revoke a colleague's key.
+- **Gotchas that each cost a cycle.** Every config in an array must name a
+  `configId` and one must be `"default"`. `usePlural` appends an "s", so the
+  drizzle export is `apikeys` and a `modelName` override would resolve to
+  `apiKeyss`. `api_keys.user_id` was NOT NULL and the plugin never writes it →
+  migration 0005 is a table rebuild with `PRAGMA defer_foreign_keys` (D1 rejects
+  `PRAGMA foreign_keys`). `@better-auth/utils` and `better-call` are pinned as
+  direct deps of `apps/api`: the plugin's peer resolved differently from
+  better-auth's, giving two `@better-auth/core` instances whose types would not
+  unify and whose runtime 500'd every sign-up.
+- **Never set a global `secondaryStorage`.** Better Auth then stops writing
+  session rows to D1, and `resolveOrgId` reads `sessions.active_organization_id`
+  — every multi-org user would silently fall back to their oldest membership.
+- Hashes: old code stored SHA-256 hex, the plugin stores base64url of the same
+  bytes. `pnpm apikeys:backfill[:remote]` converts in bulk (SQLite has no
+  base64, so not in the migration), and `verifyKey` repairs a straggler on first
+  use. Production had zero keys, so this was a no-op there.
+- Scopes are enforced. `requirePermission` used to `return next()` for any key,
+  so every key had full org authority. Deny-by-default via `PERMISSION_TO_SCOPE`;
+  legacy keys grandfathered to their old three.
+- The plugin's own `/api/auth/api-key/*` endpoints are 404'd — through the Better
+  Auth catch-all they would mint keys with no feature gate, RBAC or audit row.
+
+### `/v1`
+
+`routes/v1.ts` composes `v1/{responses,chat,forms,meta}.ts`. Old paths
+(`/v1/forms/:id/chat/sessions`, `/v1/chat/sessions/*`) still answer.
+
+- **Response lifecycle**: open → answer → complete, one `submission_answers` row
+  per answer, **awaited** (the DO defers via `waitUntil`; a REST caller's next
+  read must not miss its own write). Single-shot is a flag running the same three
+  steps. Flow order enforced by default (`mode: "free"` for imports).
+- **`lib/submissions.ts`** owns every write to `submissions`/`submission_answers`.
+  The DO delegates to it. `tests/submissions-writer.test.ts` drives a real
+  conversation and an API write and asserts the rows match — that test is the
+  reason the two paths cannot drift.
+- **`handleUserTurnSync`** replaced the 50 ms sleep + transcript diff.
+  `handleUserTurn` was *already* synchronous; the fix was returning the events
+  rather than discarding them. One line in `emit()` collects them.
+- **`lib/open-session.ts`** extracted from `routes/public.ts`. `/v1` used to skip
+  the close date, response ceiling, `maxSubmissions`, password, captcha and
+  duplicates entirely. `trustedCaller` turns off only the password and captcha.
+  `public-gates.test.ts` passing untouched is the proof the extraction was faithful.
+- `chat_sessions.expires_at` is finally written (it never was).
+- Rate limits: edge burst (the `RATE_LIMIT` binding, previously zero call sites)
+  → per-key window (the plugin's own columns) → monthly quota. 429 vs 402 is a
+  documented distinction.
+- Test mode is real: `is_test` on submissions and sessions, excluded from
+  metering, webhooks and analytics, pruned after 30 days.
+
+### Webhooks
+
+`response.*` canonical, `submission.*` aliased so existing subscriptions keep
+firing. Two real bugs fixed: the retry sweep hardcoded `submission.completed` and
+dropped `submissionId` (a retried abandonment arrived as a completion with no
+payload), and `attempt` was always inserted as `1` while the schedule was chosen
+by comparing payload strings. Standard Webhooks signing added alongside the
+legacy header, reusing `lib/dodo-webhook.ts`'s `sign()`. New: `response.partial`,
+swept rather than streamed.
+
+### Docs — `chatform.in/docs`
+
+Fumadocs in `apps/web`, ~118 prerendered pages.
+
+- **The block reference is generated** (`pnpm gen:blocks`): config schema from the
+  `Block` union via `z.toJSONSchema({io:"input",cycles:"ref"})`, the projection by
+  *running* `toPublicBlock`, and every error message by *calling* `validateAnswer`.
+  Guarded by `ANSWER_CATALOG` in form-schema + `answer-catalog.test.ts` (106
+  assertions) — documentation cannot describe an engine we do not have.
+- API reference generated from the spec (`pnpm gen:api-docs`). The document must
+  be a **named** schema record; passing a path writes the generator's absolute
+  local path into every page.
+- `pnpm gen:openapi` boots the worker and writes `openapi.json`, replacing the
+  `wrangler dev` + curl ritual. `pnpm openapi:verify` in CI.
+- Gotchas: MDX table cells need `|` escaped (TypeScript unions break them);
+  `createOpenAPIPage` is client-side and needs a server wrapper to supply the
+  document; the provider is `fumadocs-ui/provider/next`; `.source/` must be
+  eslint-ignored.
+
+### SDKs and embed
+
+`packages/sdk-js` (`@chatform/js`) and `packages/sdk-react`. Workspace exports
+point at source, `publishConfig` swaps in `dist`. **The npm `@chatform` org is not
+claimed yet — that is the only blocker to publishing.**
+
+`embed.js` rewritten: four modes (two were missing), prefill, triggers, nonce
+passthrough, `window.Chatform`, 3.9 KB gzipped. The frame's half now exists
+(`embed-bridge.tsx`) — `?embed=1` was generated by every snippet and read by
+nothing, and `chatform:close` was listened for and never sent.
+`settings.embed.allowedOrigins` is enforced server-side against the `Origin`
+header, never the body's self-report.
+
+### Commands
+
+```bash
+pnpm gen:openapi      # spec from the running worker
+pnpm gen:docs         # block reference + API reference
+pnpm openapi:verify   # CI gate
+pnpm blocks:verify    # CI gate
+pnpm apikeys:backfill[:remote]
+```
+
+### Left undone
+
+- npm org unclaimed, so the SDKs are unpublished.
+- `question`/`answer`/`complete` embed events are emitted by `emitEmbedEvent()` in
+  `embed-bridge.tsx`, which the chat client does not call yet — `ready`, `resize`
+  and `close` work. One call site in `chat-client.tsx` finishes it.
+- Uploads are not yet dual-authed under `/v1`; the intent → PUT → confirm trio is
+  still respondent-token only.
+- `Q_EXPORTS` still has no producer — the export endpoints are designed but the
+  async path is not built.
