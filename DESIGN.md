@@ -151,7 +151,7 @@ The flagship screen. Fixed-height flex row under builder top bar; panes independ
 
 **Center pane (flex-1, bg dotted pattern like xyflow Background):**
 - Device toggle `ToggleGroup` (desktop/mobile widths 100%/390px frame with phone bezel styling) — tablet intentionally omitted v1.
-- **Live chat preview:** renders the *real* chat runtime (§3, package `@chatform/chat-runtime`) in `mode="preview"`: bot greets, respondent can actually type/click through; answers come from local state, nothing persists. "Test-run from here" link restarts preview at selected block with prefilled fake context. Reset button (↺). This guarantees builder preview ≡ production behavior — single source of truth.
+- **Live chat preview:** renders the *real* chat runtime (§3, package `@chatformhq/chat-runtime`) in `mode="preview"`: bot greets, respondent can actually type/click through; answers come from local state, nothing persists. "Test-run from here" link restarts preview at selected block with prefilled fake context. Reset button (↺). This guarantees builder preview ≡ production behavior — single source of truth.
 - Preview chrome minimal: rounded-xl container, shadow-inner, theme applied.
 
 **Right pane (360px):** settings for selected block. Sections as `Accordion` (Content open by default):
@@ -223,7 +223,7 @@ Two-column: left actions / right live QR+preview.
     data-form="team-check" data-type="sidewidget"
     data-position="right" defer></script>
   ```
-  + React/npm tab (`npm i @chatform/react`). Copy buttons per format.
+  + React/npm tab (`npm i @chatformhq/react`). Copy buttons per format.
 - **Custom domain:** input, DNS verification steps (`Alert` with CNAME record to copy), status badge flow: Pending → Verifying (spinner) → Verified ✓ (green) / Failed with troubleshooting expandable.
 
 ### 2.8 Integrate tab (`/forms/[id]/integrate`)
@@ -287,7 +287,7 @@ Full `Dialog` (max-w-2xl), 3 stages:
 
 ## 3. The respondent chat experience (core differentiator)
 
-One runtime (`@chatform/chat-runtime`) powers: builder preview, hosted `/f/[slug]`, embedded iframe widget, and transcript playback (read-only). Server is the turn engine: client sends answers, server decides next question, streams bot prose over SSE.
+One runtime (`@chatformhq/chat-runtime`) powers: builder preview, hosted `/f/[slug]`, embedded iframe widget, and transcript playback (read-only). Server is the turn engine: client sends answers, server decides next question, streams bot prose over SSE.
 
 ### 3.1 Stage anatomy (hosted `/f/[slug]`)
 
@@ -460,8 +460,8 @@ apps/
   web/        Next.js 16 (App Router) — marketing + app + hosted /f + /embed iframe app
   widget/     Vite build → iframe bundle (chat runtime shell) served from CDN
 packages/
-  chat-runtime/  framework-agnostic TS chat engine + React adapter (@chatform/chat-runtime)
-  api-client/    hc<AppType> typed client + React Query hooks (@chatform/api-client)
+  chat-runtime/  framework-agnostic TS chat engine + React adapter (@chatformhq/chat-runtime)
+  api-client/    hc<AppType> typed client + React Query hooks (@chatformhq/api-client)
   ui/            shared primitives extending shadcn (FormCard, StatCard…) — thin!
   config/        tsconfig, eslint, tailwind preset (tokens §4.1)
 ```
@@ -511,7 +511,7 @@ Rule: `ui` stays thin; screens compose raw shadcn directly. `chat-runtime` has z
 - `apps/widget` builds standalone bundle (iframe strategy — bulletproof CSS/JS isolation, no shadow-DOM portal pain): served at `https://cdn.chatform.io/w/{version}/index.html#/embed/{slug}?type=…`. Target ≤ 60KB gzip shell + runtime chunk loaded lazily post-open (launcher itself needs almost nothing).
 - Parent↔iframe bridge (`postMessage`, strict origin allowlist): `cf:open/close/toggle`, `cf:resize(height)` (inline mode), analytics events out, `prefill`/`hiddenFields` in via query or JS API.
 - **embed.js** (<3KB, no deps, ES5-safe): parses `data-*` attributes or `window.ChatformQueue` pre-config; injects launcher button + iframe lazily (on intent/hover to protect host LCP); exposes `window.Chatform = { open(), close(), toggle(), on(event, cb), setLocale(), refresh() }`; handles exit-intent/scroll triggers; CSP-friendly (no eval, nonce guidance in docs).
-- **Self-host paths:** (a) npm `@chatform/react` — React component wrapping chat-runtime for in-app embedding with props (`formSlug`, `theme`, callbacks) — for customers who want native feel; (b) vanilla `@chatform/js` SDK driving the headless REST/SSE for fully custom UIs; both documented in `/docs` alongside script-tag path.
+- **Self-host paths:** (a) npm `@chatformhq/react` — React component wrapping chat-runtime for in-app embedding with props (`formSlug`, `theme`, callbacks) — for customers who want native feel; (b) vanilla `@chatformhq/js` SDK driving the headless REST/SSE for fully custom UIs; both documented in `/docs` alongside script-tag path.
 
 ### 5.8 Cross-cutting
 
@@ -548,7 +548,7 @@ Submissions table (virtualized, filters, bulk ops), transcript viewer sheet, Sum
 ✅ AC: 10k responses scroll jank-free; transcript pixel-matches live chat styling; CSV matches filtered view row-for-row; drop-off bar maps 1:1 to block list.
 
 **Phase 5 — Developers: widget + API keys + integrations UI (wk 14–16)** *(needs: keys, webhook dispatch)*
-embed.js + iframe widget app (popup/sidewidget/inline/fullpage), postMessage bridge + resize, `@chatform/react` npm alpha, API keys page (create/reveal-once/scopes/last-used/revoke), Integrate tab (webhooks config + delivery log + test send, Sheets connect/map, Zapier/Make/Slack cards), custom domain UI w/ verify states.
+embed.js + iframe widget app (popup/sidewidget/inline/fullpage), postMessage bridge + resize, `@chatformhq/react` npm alpha, API keys page (create/reveal-once/scopes/last-used/revoke), Integrate tab (webhooks config + delivery log + test send, Sheets connect/map, Zapier/Make/Slack cards), custom domain UI w/ verify states.
 ✅ AC: script-tag embed works on a plain HTML page + WordPress sandbox; launcher→panel <300ms perceived (launcher instant, panel streams in); revoked key rejected within 60s; webhook delivery log shows test event <2s.
 
 **Phase 6 — AI Generate + polish (wk 17–19)**

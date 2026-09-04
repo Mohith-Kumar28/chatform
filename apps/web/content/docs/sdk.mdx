@@ -1,0 +1,155 @@
+---
+title: SDKs
+description: A typed client for JavaScript, and React bindings.
+---
+
+Two packages. Neither is required — the API is plain HTTP and the
+[reference](/docs/api) is complete — but they handle the parts that are easy to
+get subtly wrong: retries, idempotency, cursor paging, stream reconnection and
+webhook signature verification.
+
+```bash
+npm i @chatformhq/js          # the client
+npm i @chatformhq/react       # React bindings
+```
+
+<Callout>
+Both are ESM-only. That is deliberate for the parts that hold state: a session
+keeps its resume position in browser storage, and a package loaded twice — once
+as ESM, once as CommonJS — would mean two copies writing the same keys, which
+shows up as sessions randomly losing their place.
+</Callout>
+
+## The client
+
+```ts
+import { createClient } from "@chatformhq/js";
+
+const chatform = createClient({ apiKey: process.env.CHATFORM_SECRET_KEY! });
+```
+
+`chatform.forms`, `.responses`, `.sessions`, `.webhooks`, `.blocks`, and
+`chatform.me()`.
+
+```ts
+// a whole response in one call
+const response = await chatform.responses.create(formId, {
+  answers: { q_email: "maya@northwind.co" },
+  complete: true,
+});
+
+// or step by step
+const draft = await chatform.responses.create(formId);
+await chatform.responses.answer(draft.id, { ref: "q_email", value: "maya@northwind.co" });
+await chatform.responses.complete(draft.id);
+```
+
+Zero runtime dependencies — Web Crypto for signatures, `fetch` for transport —
+so it runs unchanged on Node, Workers, Deno and Bun.
+
+### Paging
+
+`iterate()` handles cursors so you do not have to:
+
+```ts
+for await (const response of chatform.responses.iterate(formId, { status: "completed" })) {
+  console.log(response.id);
+}
+```
+
+### Errors
+
+Every failure is a `ChatformError` with the `code` from the API, plus the
+distinctions worth branching on:
+
+```ts
+import { ChatformError } from "@chatformhq/js";
+
+try {
+  await chatform.responses.complete(id);
+} catch (err) {
+  if (err instanceof ChatformError) {
+    if (err.isValidationError) console.log(err.issues);   // which answers, and why
+    if (err.isRateLimited) await wait(err.retryAfter);     // slow down
+    if (err.isQuotaExhausted) alertBilling();              // retrying will not help
+    console.log(err.requestId);                            // quote this to support
+  }
+}
+```
+
+Writes carry an `Idempotency-Key` automatically, because the client retries and a
+timeout tells you nothing about whether the first attempt landed.
+
+## In a browser
+
+Its own entrypoint, which throws on a secret key rather than warning:
+
+```ts
+import { createBrowserClient } from "@chatformhq/js/browser";
+
+const chatform = createBrowserClient({ publishableKey: "pk_live_…" });
+```
+
+The safer pattern is usually to skip publishable keys entirely: open the session
+on your server and hand the page the session-scoped `respondentToken`. A leaked
+token is worth one half-finished response; a leaked secret key is worth your
+account.
+
+## Verifying webhooks
+
+```ts
+import { verifyWebhook } from "@chatformhq/js/webhooks";
+
+const event = await verifyWebhook({ body: rawBody, headers, secret });
+```
+
+Throws rather than returning `false` — a caller who forgets to check a boolean
+has written an unauthenticated endpoint, and that should not fail quietly. It
+rejects a stale timestamp before computing the HMAC, compares in constant time,
+and accepts several signatures so a secret can be rotated without downtime.
+
+Pass the **raw** body. Parsing and re-serialising changes the bytes, and the
+signature is over the bytes.
+
+## React
+
+```tsx
+import { ChatformEmbed } from "@chatformhq/react";
+
+<ChatformEmbed
+  slug="team-onboarding"
+  hidden={{ plan: "trial" }}
+  onComplete={(e) => track("form_completed", { id: e.responseId })}
+/>;
+```
+
+No key needed — the frame talks to the API itself.
+
+For your own interface:
+
+```tsx
+import { useChatformSession } from "@chatformhq/react";
+
+function Interview() {
+  const { messages, question, send, status } = useChatformSession({
+    formId: "frm_…",
+    publishableKey: "pk_live_…",
+  });
+
+  return (
+    <>
+      {messages.map((m) => <p key={m.id}>{m.content}</p>)}
+      {question && <YourInput block={question} onSubmit={send} />}
+    </>
+  );
+}
+```
+
+The engine decides what to ask, what is valid and where a branch goes. You own
+every pixel and none of the flow logic.
+
+## Or no SDK at all
+
+Everything here is a thin wrapper over documented HTTP. If you would rather not
+take a dependency, [the reference](/docs/api) has curl, JavaScript, Python and Go
+for every endpoint, and `/openapi.json` will generate a client in most languages.

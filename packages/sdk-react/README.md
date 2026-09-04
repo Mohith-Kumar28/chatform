@@ -1,15 +1,15 @@
-# @chatform/react
+# @chatformhq/react
 
 React bindings for [Chatform](https://chatform.in).
 
 ```bash
-npm install @chatform/react
+npm install @chatformhq/react
 ```
 
 ## Just put a form on the page
 
 ```tsx
-import { ChatformEmbed } from "@chatform/react";
+import { ChatformEmbed } from "@chatformhq/react";
 
 <ChatformEmbed slug="team-onboarding" hidden={{ plan: "trial" }} onComplete={(e) => track(e.responseId)} />;
 ```
@@ -19,7 +19,7 @@ No key needed. The frame talks to the API itself.
 ## Build your own interface
 
 ```tsx
-import { useChatformSession } from "@chatform/react";
+import { useChatformSession } from "@chatformhq/react";
 
 function Interview() {
   const { messages, question, send, status } = useChatformSession({

@@ -162,7 +162,7 @@ function samples(type: BlockType): string {
 
   return [
     "",
-    "<Tabs items={['curl', '@chatform/js', 'Python']}>",
+    "<Tabs items={['curl', '@chatformhq/js', 'Python']}>",
     "",
     "<Tab value=\"curl\">",
     "",
@@ -170,7 +170,7 @@ function samples(type: BlockType): string {
     "",
     "</Tab>",
     "",
-    "<Tab value=\"@chatform/js\">",
+    "<Tab value=\"@chatformhq/js\">",
     "",
     fence("ts", js),
     "",

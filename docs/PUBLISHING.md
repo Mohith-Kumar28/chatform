@@ -1,25 +1,26 @@
 # Publishing the SDKs
 
-`@chatform/js` and `@chatform/react` are built and tested but unpublished — the
-npm scope has not been claimed yet. Everything below is verified against the real
-registry and a real `pnpm pack`.
+`@chatformhq/js` and `@chatformhq/react` are built and tested but not yet
+published. Everything below is verified against the real registry and a real
+`pnpm pack`.
 
-## 1. Claim the scope
+## 1. The scope
 
-As of this writing the scope is completely free: no packages under `@chatform`,
-and even the unscoped `chatform` name is unregistered.
+**Done.** The `chatformhq` organization exists, so `@chatformhq` is ours.
+`chatform` itself was already taken by someone else.
 
-1. Sign in at [npmjs.com](https://www.npmjs.com).
-2. Avatar menu → **Add an Organization**.
-3. Name it **`chatform`**. That reserves `@chatform` as a package scope.
-4. Choose the **free** tier — it allows unlimited *public* packages, which is all
-   these are. (The paid tier is only for private ones.)
-5. Turn on 2FA if it is not already; npm requires it for publishing from a new
-   account, and you want it regardless for a package other people install.
+Two things about the npm UI that are more confusing than they need to be:
 
-A scope is not the same as a username. `@yourusername` exists automatically; an
-organization scope has to be created, and creating it is what stops someone else
-taking `@chatform`.
+- The **`developers` team is created automatically** with the organization, and
+  whoever created it is already an owner. The "Create a team" form on that tab is
+  for *additional* teams — splitting write access between people — and is not a
+  step toward publishing anything.
+- **Packages are not created on the website.** They come into existence when you
+  publish from the CLI, so an empty Packages tab before the first publish is
+  correct, not a missing step.
+
+Worth knowing: the unscoped name `chatform` is still unregistered. If the scope
+ever feels awkward, `npm i chatform` remains available as a second front door.
 
 ## 2. Log in locally
 
@@ -31,14 +32,14 @@ npm whoami         # should print your username
 ## 3. Publish
 
 ```bash
-pnpm --filter @chatform/js publish --access public
-pnpm --filter @chatform/react publish --access public
+pnpm --filter @chatformhq/js publish --access public
+pnpm --filter @chatformhq/react publish --access public
 ```
 
 `--access public` is required: scoped packages default to private, and publishing
 a private package on the free tier fails.
 
-Order matters — `@chatform/react` depends on `@chatform/js`, and pnpm rewrites
+Order matters — `@chatformhq/react` depends on `@chatformhq/js`, and pnpm rewrites
 the `workspace:*` to the real version on publish, so the version it names must
 already exist on the registry.
 
@@ -66,8 +67,8 @@ keeps resume state in browser storage, and a dual-loaded package would mean two
 copies writing the same keys — a bug that looks like random session loss.
 
 ```
-@chatform/js      ~30 kB packed, 17 files, zero runtime dependencies
-@chatform/react   ~8 kB packed, peer react >=18
+@chatformhq/js      ~30 kB packed, 17 files, zero runtime dependencies
+@chatformhq/react   ~8 kB packed, peer react >=18
 ```
 
 Zero dependencies in the JS client is a product claim, not an accident: Web
@@ -78,8 +79,8 @@ adapter. Keep it that way.
 
 ```bash
 cd "$(mktemp -d)" && npm init -y >/dev/null
-npm i @chatform/js
-node -e "import('@chatform/js').then(m => console.log(Object.keys(m)))"
+npm i @chatformhq/js
+node -e "import('@chatformhq/js').then(m => console.log(Object.keys(m)))"
 ```
 
 That import is the check that matters — it is exactly what the npm-published

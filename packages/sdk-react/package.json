@@ -1,5 +1,5 @@
 {
-  "name": "@chatform/react",
+  "name": "@chatformhq/react",
   "version": "0.1.0",
   "description": "React bindings for Chatform \u2014 hooks and an embed component.",
   "license": "MIT",
@@ -21,7 +21,7 @@
     "react": ">=18"
   },
   "dependencies": {
-    "@chatform/js": "workspace:*"
+    "@chatformhq/js": "workspace:*"
   },
   "devDependencies": {
     "@repo/config": "workspace:*",

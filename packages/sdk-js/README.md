@@ -1,13 +1,13 @@
-# @chatform/js
+# @chatformhq/js
 
 The official JavaScript client for [Chatform](https://chatform.in).
 
 ```bash
-npm install @chatform/js
+npm install @chatformhq/js
 ```
 
 ```ts
-import { createClient } from "@chatform/js";
+import { createClient } from "@chatformhq/js";
 
 const chatform = createClient({ apiKey: process.env.CHATFORM_SECRET_KEY! });
 
@@ -25,7 +25,7 @@ Secret keys must never reach a browser — the API refuses them outright. Use th
 separate entrypoint, which will not let you:
 
 ```ts
-import { createBrowserClient } from "@chatform/js/browser";
+import { createBrowserClient } from "@chatformhq/js/browser";
 
 const chatform = createBrowserClient({ publishableKey: "pk_live_…" });
 ```
@@ -36,7 +36,7 @@ session-scoped `respondentToken` it returns.
 ## Verifying webhooks
 
 ```ts
-import { verifyWebhook } from "@chatform/js/webhooks";
+import { verifyWebhook } from "@chatformhq/js/webhooks";
 
 const event = await verifyWebhook({ body: rawBody, headers, secret });
 ```

@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createBrowserClient, streamSession } from "@chatform/js/browser";
-import type { PublicBlock, PublicEnding, SessionEvent } from "@chatform/js/browser";
+import { createBrowserClient, streamSession } from "@chatformhq/js/browser";
+import type { PublicBlock, PublicEnding, SessionEvent } from "@chatformhq/js/browser";
 
 /**
  * A conversation, as React state.

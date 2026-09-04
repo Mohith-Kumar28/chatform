@@ -224,7 +224,7 @@ The booking the respondent made on your calendar provider.
 type Answer = { provider: string; url: string; slotIso?: string; confirmedAt?: number };
 ```
 
-<Tabs items={['curl', '@chatform/js', 'Python']}>
+<Tabs items={['curl', '@chatformhq/js', 'Python']}>
 
 <Tab value="curl">
 
@@ -237,7 +237,7 @@ curl -X POST https://api.chatform.in/v1/responses/{RESPONSE_ID}/answers \
 
 </Tab>
 
-<Tab value="@chatform/js">
+<Tab value="@chatformhq/js">
 
 ```ts
 await chatform.responses.answer(responseId, {

@@ -294,7 +294,7 @@ Fumadocs in `apps/web`, ~118 prerendered pages.
 
 ### SDKs and embed
 
-`packages/sdk-js` (`@chatform/js`) and `packages/sdk-react`. Workspace exports
+`packages/sdk-js` (`@chatformhq/js`) and `packages/sdk-react`. Workspace exports
 point at source, `publishConfig` swaps in `dist`. **The npm `@chatform` org is not
 claimed yet — that is the only blocker to publishing.**
 

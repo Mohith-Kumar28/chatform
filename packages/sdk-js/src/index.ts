@@ -20,7 +20,7 @@ export type { ClientConfig, RequestOptions, StreamOptions };
  *
  * Secret keys belong on a server. The API refuses one that arrives with an
  * `Origin` header, because such a request came from a page and the key is
- * already public — see `@chatform/js/browser` for the browser path.
+ * already public — see `@chatformhq/js/browser` for the browser path.
  */
 export function createClient(config: ClientConfig) {
   const http = new HttpClient(config);

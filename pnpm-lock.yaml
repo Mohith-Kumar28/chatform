@@ -342,7 +342,7 @@ importers:
 
   packages/sdk-react:
     dependencies:
-      '@chatform/js':
+      '@chatformhq/js':
         specifier: workspace:*
         version: link:../sdk-js
     devDependencies:
