@@ -3,6 +3,8 @@ import { Responses } from "./resources/responses.js";
 import { Forms, Blocks } from "./resources/forms.js";
 import { Sessions } from "./resources/sessions.js";
 import { WebhookEndpoints } from "./resources/webhooks.js";
+import { Exports } from "./resources/exports.js";
+import { Files } from "./resources/files.js";
 import { streamSession, type StreamOptions } from "./session/stream.js";
 import type { KeyIdentity } from "./types/index.js";
 
@@ -10,6 +12,10 @@ export { ChatformError } from "./internal/errors.js";
 export { streamSession, parseFrame } from "./session/stream.js";
 export * from "./types/index.js";
 export type { ClientConfig, RequestOptions, StreamOptions };
+/** Resource shapes, so a caller can name what a method returned. */
+export type { WebhookEndpoint } from "./resources/webhooks.js";
+export type { Export, ExportFilters } from "./resources/exports.js";
+export type { StoredFile, UploadIntent, UploadBody } from "./resources/files.js";
 
 /**
  * The Chatform client.
@@ -31,6 +37,8 @@ export function createClient(config: ClientConfig) {
     sessions: new Sessions(http),
     webhooks: new WebhookEndpoints(http),
     blocks: new Blocks(http),
+    exports: new Exports(http),
+    files: new Files(http),
 
     /** Who this key is, what it may do, and what is left of the plan. */
     me(options?: RequestOptions) {

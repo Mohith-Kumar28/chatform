@@ -17,6 +17,8 @@ import { metaRouter } from "./v1/meta.js";
 import { chatRouter } from "./v1/chat.js";
 import { formsV1Router } from "./v1/forms.js";
 import { webhooksV1Router } from "./v1/webhooks.js";
+import { exportsV1Router } from "./v1/exports.js";
+import { uploadsV1Router } from "./uploads.js";
 
 /**
  * Developer API v1 — API-key auth, headless chat contract.
@@ -125,6 +127,24 @@ v1Router.route("/", formsV1Router);
  * described an ability no key actually had.
  */
 v1Router.route("/", webhooksV1Router);
+
+/**
+ * Bulk export and the file bytes behind a `file_upload` answer.
+ *
+ * `response:export` and `file:read` were grantable scopes with no endpoint
+ * behind them until this.
+ */
+v1Router.route("/", exportsV1Router);
+
+/**
+ * Uploading a file headlessly.
+ *
+ * The same intent → PUT → confirm the chat uses, resolved against the key's
+ * organization rather than a respondent token. Without it a `file_upload`
+ * question could not be answered over the API at all, which made every form
+ * containing one impossible to complete programmatically.
+ */
+v1Router.route("/", uploadsV1Router);
 
 // ─── headless chat ───
 

@@ -4,6 +4,7 @@ import { SessionDO } from "./do/session-do.js";
 import { deliverWebhookEvent, retryFailedDeliveries, type WebhookEvent } from "./lib/webhooks.js";
 import { pruneOtpChallenges } from "./lib/respondent-auth.js";
 import { pruneGateLog } from "./lib/gate-log.js";
+import { runExport, pruneExpiredExports, type ExportMessage } from "./lib/exports.js";
 import {
   sweepExpiredResponses,
   sweepExpiredSessions,
@@ -29,6 +30,25 @@ export default {
           msg.ack();
         } catch (err) {
           console.error("webhook_delivery_failed", err);
+          msg.retry();
+        }
+      } else if (batch.queue === "q-exports") {
+        /**
+         * The producer half lives in `lib/exports.ts`. This consumer has been
+         * declared since the beginning and acked everything it was handed —
+         * which was nothing, because nothing ever sent.
+         *
+         * `runExport` claims its row with `WHERE status = 'queued'`, so an
+         * at-least-once redelivery is a no-op rather than a second run.
+         */
+        const { exportId } = msg.body as ExportMessage;
+        try {
+          await runExport(env, exportId);
+          msg.ack();
+        } catch (err) {
+          console.error("export_failed", exportId, err);
+          // The row is already marked failed with a reader-facing message;
+          // retrying is for a transient D1 or R2 error.
           msg.retry();
         }
       } else {
@@ -60,6 +80,9 @@ export default {
       await sweepPartialNotifications(env).catch((err) => console.error("partial_sweep_failed", err));
       await pruneIdempotencyKeys(env).catch((err) => console.error("idempotency_prune_failed", err));
       await pruneTestData(env).catch((err) => console.error("test_data_prune_failed", err));
+      // An export is a full copy of respondent data sitting in a bucket. It is
+      // kept for a day, not forever.
+      await pruneExpiredExports(env).catch((err) => console.error("export_prune_failed", err));
     }
   },
 } satisfies ExportedHandler<Bindings>;

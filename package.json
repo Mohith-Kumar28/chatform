@@ -14,7 +14,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm plans:verify",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm plans:verify && pnpm spec:coverage",
     "db:migrate": "pnpm --filter @repo/api d1:migrate:local",
     "db:migrate:remote": "pnpm --filter @repo/api d1:migrate:remote",
     "db:generate": "pnpm --filter @repo/db generate",
@@ -40,7 +40,8 @@
     "gen:blocks": "pnpm --filter @repo/tooling gen:blocks",
     "blocks:verify": "pnpm gen:blocks && git diff --exit-code -- apps/web/content/docs/blocks",
     "gen:api-docs": "pnpm --filter @repo/tooling gen:api-docs",
-    "gen:docs": "pnpm gen:blocks && pnpm gen:api-docs"
+    "gen:docs": "pnpm gen:blocks && pnpm gen:api-docs",
+    "spec:coverage": "pnpm --filter @repo/tooling spec:coverage"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",

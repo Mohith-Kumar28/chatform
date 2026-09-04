@@ -92,7 +92,7 @@ session, and no key of any kind can mint another key or change your plan.
 
 ## Rotation
 
-`POST /v1/../keys/{id}/rotate` in the dashboard mints a replacement and puts the
+`POST /api/keys/{id}/rotate` in the dashboard mints a replacement and puts the
 old key on a clock — 24 hours by default. A deploy is not atomic, and "revoke,
 then create" means downtime in between.
 

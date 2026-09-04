@@ -20,6 +20,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  GetV1ExportsById200,
+  GetV1ExportsParams,
+  GetV1FilesById200,
   GetV1FormsByIdResponsesParams,
   GetV1FormsParams,
   GetV1Webhooks200Item,
@@ -28,6 +31,8 @@ import type {
   PostV1FormsBody,
   PostV1FormsByIdChatSessions200,
   PostV1FormsByIdChatSessionsBody,
+  PostV1FormsByIdExports202,
+  PostV1FormsByIdExportsBody,
   PostV1FormsByIdResponsesBody,
   PostV1FormsByIdSessions200,
   PostV1FormsByIdSessionsBody,
@@ -36,8 +41,12 @@ import type {
   PostV1ResponsesByIdCompleteBody,
   PostV1SessionsBySidActionsBody,
   PostV1SessionsBySidMessagesBody,
+  PostV1SessionsBySidUploadsByFileIdConfirm200,
+  PostV1SessionsBySidUploadsIntent200,
+  PostV1SessionsBySidUploadsIntentBody,
   PostV1WebhooksBody,
-  PutV1FormsByIdDocBody
+  PutV1FormsByIdDocBody,
+  PutV1SessionsBySidUploadsByFileId200
 } from '../generated.schemas';
 
 import { customFetch } from '.././mutator';
@@ -2388,6 +2397,706 @@ export const usePostV1WebhooksByIdDeliveriesByDeliveryIdReplay = <TError = void,
         TContext
       > => {
       return useMutation(getPostV1WebhooksByIdDeliveriesByDeliveryIdReplayMutationOptions(options));
+    }
+    export type postV1FormsByIdExportsResponse202 = {
+  data: PostV1FormsByIdExports202
+  status: 202
+}
+
+export type postV1FormsByIdExportsResponse402 = {
+  data: void
+  status: 402
+}
+
+export type postV1FormsByIdExportsResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1FormsByIdExportsResponseSuccess = (postV1FormsByIdExportsResponse202) & {
+  headers: Headers;
+};
+export type postV1FormsByIdExportsResponseError = (postV1FormsByIdExportsResponse402 | postV1FormsByIdExportsResponse404) & {
+  headers: Headers;
+};
+
+export type postV1FormsByIdExportsResponse = (postV1FormsByIdExportsResponseSuccess | postV1FormsByIdExportsResponseError)
+
+export const getPostV1FormsByIdExportsUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/exports`
+}
+
+/**
+ * Returns immediately with a queued export. Poll `GET /v1/exports/{id}` until `status` is `ready`, then follow `download_url`.
+ * @summary Start an export of a form's responses
+ */
+export const postV1FormsByIdExports = async (id: string,
+    postV1FormsByIdExportsBody: PostV1FormsByIdExportsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1FormsByIdExportsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1FormsByIdExportsResponse>(getPostV1FormsByIdExportsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1FormsByIdExportsBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1FormsByIdExportsMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdExports>>, TError,PostV1FormsByIdExportsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdExports>>, TError,PostV1FormsByIdExportsMutationVariables, TContext> => {
+
+const mutationKey = ['postV1FormsByIdExports'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1FormsByIdExports>>, PostV1FormsByIdExportsMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postV1FormsByIdExports(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1FormsByIdExportsMutationResult = NonNullable<Awaited<ReturnType<typeof postV1FormsByIdExports>>>
+    export type PostV1FormsByIdExportsMutationBody = PostV1FormsByIdExportsBody
+    export type PostV1FormsByIdExportsMutationError = void
+    export type PostV1FormsByIdExportsMutationVariables = {id: string;data: PostV1FormsByIdExportsBody}
+
+    /**
+ * @summary Start an export of a form's responses
+ */
+export const usePostV1FormsByIdExports = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdExports>>, TError,PostV1FormsByIdExportsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1FormsByIdExports>>,
+        TError,
+        PostV1FormsByIdExportsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1FormsByIdExportsMutationOptions(options));
+    }
+    export type getV1ExportsByIdResponse200 = {
+  data: GetV1ExportsById200
+  status: 200
+}
+
+export type getV1ExportsByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getV1ExportsByIdResponseSuccess = (getV1ExportsByIdResponse200) & {
+  headers: Headers;
+};
+export type getV1ExportsByIdResponseError = (getV1ExportsByIdResponse404) & {
+  headers: Headers;
+};
+
+export type getV1ExportsByIdResponse = (getV1ExportsByIdResponseSuccess | getV1ExportsByIdResponseError)
+
+export const getGetV1ExportsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/v1/exports/${id}`
+}
+
+/**
+ * Poll until `status` is `ready`, then follow `download_url`. A `failed` export carries the reason in `error`. The link is re-minted on every read, so read again rather than storing one.
+ * @summary Check an export and get its download link
+ */
+export const getV1ExportsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1ExportsByIdResponse> => {
+
+  return customFetch<getV1ExportsByIdResponse>(getGetV1ExportsByIdUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1ExportsByIdQueryKey = (id: string,) => {
+    return [
+    `/v1/exports/${id}`
+    ] as const;
+    }
+
+
+export const getGetV1ExportsByIdQueryOptions = <TData = Awaited<ReturnType<typeof getV1ExportsById>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1ExportsById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1ExportsByIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1ExportsById>>> = ({ signal }) => getV1ExportsById(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1ExportsById>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1ExportsByIdQueryResult = NonNullable<Awaited<ReturnType<typeof getV1ExportsById>>>
+export type GetV1ExportsByIdQueryError = void
+
+
+/**
+ * @summary Check an export and get its download link
+ */
+
+export function useGetV1ExportsById<TData = Awaited<ReturnType<typeof getV1ExportsById>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1ExportsById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1ExportsByIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getV1ExportsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1ExportsResponseSuccess = (getV1ExportsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getV1ExportsResponse = (getV1ExportsResponseSuccess)
+
+export const getGetV1ExportsUrl = (params?: GetV1ExportsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/exports?${stringifiedParams}` : `/v1/exports`
+}
+
+/**
+ * Newest first, optionally narrowed to one form. Exports are deleted 24 hours after they are requested, so this is a short window rather than a history.
+ * @summary List recent exports
+ */
+export const getV1Exports = async (params?: GetV1ExportsParams, options?: Parameters<typeof customFetch>[1]): Promise<getV1ExportsResponse> => {
+
+  return customFetch<getV1ExportsResponse>(getGetV1ExportsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1ExportsQueryKey = (params?: GetV1ExportsParams,) => {
+    return [
+    `/v1/exports`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetV1ExportsQueryOptions = <TData = Awaited<ReturnType<typeof getV1Exports>>, TError = unknown>(params?: GetV1ExportsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1Exports>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1ExportsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1Exports>>> = ({ signal }) => getV1Exports(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1Exports>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1ExportsQueryResult = NonNullable<Awaited<ReturnType<typeof getV1Exports>>>
+export type GetV1ExportsQueryError = unknown
+
+
+/**
+ * @summary List recent exports
+ */
+
+export function useGetV1Exports<TData = Awaited<ReturnType<typeof getV1Exports>>, TError = unknown>(
+ params?: GetV1ExportsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1Exports>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1ExportsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getV1FilesByIdResponse200 = {
+  data: GetV1FilesById200
+  status: 200
+}
+
+export type getV1FilesByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getV1FilesByIdResponseSuccess = (getV1FilesByIdResponse200) & {
+  headers: Headers;
+};
+export type getV1FilesByIdResponseError = (getV1FilesByIdResponse404) & {
+  headers: Headers;
+};
+
+export type getV1FilesByIdResponse = (getV1FilesByIdResponseSuccess | getV1FilesByIdResponseError)
+
+export const getGetV1FilesByIdUrl = (id: string,) => {
+
+
+
+
+  return `/v1/files/${id}`
+}
+
+/**
+ * File-upload answers carry a `fileId`. This resolves one to its metadata and a signed URL that needs no API key — safe to hand to a browser, and expired within minutes.
+ * @summary A respondent's uploaded file, with a short-lived download link
+ */
+export const getV1FilesById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1FilesByIdResponse> => {
+
+  return customFetch<getV1FilesByIdResponse>(getGetV1FilesByIdUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1FilesByIdQueryKey = (id: string,) => {
+    return [
+    `/v1/files/${id}`
+    ] as const;
+    }
+
+
+export const getGetV1FilesByIdQueryOptions = <TData = Awaited<ReturnType<typeof getV1FilesById>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FilesById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1FilesByIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1FilesById>>> = ({ signal }) => getV1FilesById(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1FilesById>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1FilesByIdQueryResult = NonNullable<Awaited<ReturnType<typeof getV1FilesById>>>
+export type GetV1FilesByIdQueryError = void
+
+
+/**
+ * @summary A respondent's uploaded file, with a short-lived download link
+ */
+
+export function useGetV1FilesById<TData = Awaited<ReturnType<typeof getV1FilesById>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FilesById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1FilesByIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postV1SessionsBySidUploadsIntentResponse200 = {
+  data: PostV1SessionsBySidUploadsIntent200
+  status: 200
+}
+
+export type postV1SessionsBySidUploadsIntentResponse413 = {
+  data: void
+  status: 413
+}
+
+export type postV1SessionsBySidUploadsIntentResponse415 = {
+  data: void
+  status: 415
+}
+
+export type postV1SessionsBySidUploadsIntentResponseSuccess = (postV1SessionsBySidUploadsIntentResponse200) & {
+  headers: Headers;
+};
+export type postV1SessionsBySidUploadsIntentResponseError = (postV1SessionsBySidUploadsIntentResponse413 | postV1SessionsBySidUploadsIntentResponse415) & {
+  headers: Headers;
+};
+
+export type postV1SessionsBySidUploadsIntentResponse = (postV1SessionsBySidUploadsIntentResponseSuccess | postV1SessionsBySidUploadsIntentResponseError)
+
+export const getPostV1SessionsBySidUploadsIntentUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}/uploads/intent`
+}
+
+/**
+ * @summary Register an upload — returns a fileId to PUT against
+ */
+export const postV1SessionsBySidUploadsIntent = async (sid: string,
+    postV1SessionsBySidUploadsIntentBody: PostV1SessionsBySidUploadsIntentBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidUploadsIntentResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1SessionsBySidUploadsIntentResponse>(getPostV1SessionsBySidUploadsIntentUrl(sid),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1SessionsBySidUploadsIntentBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1SessionsBySidUploadsIntentMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidUploadsIntent>>, TError,PostV1SessionsBySidUploadsIntentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidUploadsIntent>>, TError,PostV1SessionsBySidUploadsIntentMutationVariables, TContext> => {
+
+const mutationKey = ['postV1SessionsBySidUploadsIntent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1SessionsBySidUploadsIntent>>, PostV1SessionsBySidUploadsIntentMutationVariables> = (props) => {
+          const {sid,data} = props ?? {};
+
+          return  postV1SessionsBySidUploadsIntent(sid,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1SessionsBySidUploadsIntentMutationResult = NonNullable<Awaited<ReturnType<typeof postV1SessionsBySidUploadsIntent>>>
+    export type PostV1SessionsBySidUploadsIntentMutationBody = PostV1SessionsBySidUploadsIntentBody
+    export type PostV1SessionsBySidUploadsIntentMutationError = void
+    export type PostV1SessionsBySidUploadsIntentMutationVariables = {sid: string;data: PostV1SessionsBySidUploadsIntentBody}
+
+    /**
+ * @summary Register an upload — returns a fileId to PUT against
+ */
+export const usePostV1SessionsBySidUploadsIntent = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidUploadsIntent>>, TError,PostV1SessionsBySidUploadsIntentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1SessionsBySidUploadsIntent>>,
+        TError,
+        PostV1SessionsBySidUploadsIntentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1SessionsBySidUploadsIntentMutationOptions(options));
+    }
+    export type putV1SessionsBySidUploadsByFileIdResponse200 = {
+  data: PutV1SessionsBySidUploadsByFileId200
+  status: 200
+}
+
+export type putV1SessionsBySidUploadsByFileIdResponse400 = {
+  data: void
+  status: 400
+}
+
+export type putV1SessionsBySidUploadsByFileIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type putV1SessionsBySidUploadsByFileIdResponse413 = {
+  data: void
+  status: 413
+}
+
+export type putV1SessionsBySidUploadsByFileIdResponseSuccess = (putV1SessionsBySidUploadsByFileIdResponse200) & {
+  headers: Headers;
+};
+export type putV1SessionsBySidUploadsByFileIdResponseError = (putV1SessionsBySidUploadsByFileIdResponse400 | putV1SessionsBySidUploadsByFileIdResponse404 | putV1SessionsBySidUploadsByFileIdResponse413) & {
+  headers: Headers;
+};
+
+export type putV1SessionsBySidUploadsByFileIdResponse = (putV1SessionsBySidUploadsByFileIdResponseSuccess | putV1SessionsBySidUploadsByFileIdResponseError)
+
+export const getPutV1SessionsBySidUploadsByFileIdUrl = (sid: string,
+    fileId: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}/uploads/${fileId}`
+}
+
+/**
+ * PUT the raw file body — not multipart, not base64 — to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.
+ * @summary Upload the bytes for a registered intent
+ */
+export const putV1SessionsBySidUploadsByFileId = async (sid: string,
+    fileId: string,
+    putV1SessionsBySidUploadsByFileIdBody: Blob, options?: Parameters<typeof customFetch>[1]): Promise<putV1SessionsBySidUploadsByFileIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<putV1SessionsBySidUploadsByFileIdResponse>(getPutV1SessionsBySidUploadsByFileIdUrl(sid,fileId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/octet-stream', ...getHeaders(options?.headers) },
+    body: putV1SessionsBySidUploadsByFileIdBody
+  }
+);}
+
+
+
+
+
+export const getPutV1SessionsBySidUploadsByFileIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putV1SessionsBySidUploadsByFileId>>, TError,PutV1SessionsBySidUploadsByFileIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof putV1SessionsBySidUploadsByFileId>>, TError,PutV1SessionsBySidUploadsByFileIdMutationVariables, TContext> => {
+
+const mutationKey = ['putV1SessionsBySidUploadsByFileId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putV1SessionsBySidUploadsByFileId>>, PutV1SessionsBySidUploadsByFileIdMutationVariables> = (props) => {
+          const {sid,fileId,data} = props ?? {};
+
+          return  putV1SessionsBySidUploadsByFileId(sid,fileId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutV1SessionsBySidUploadsByFileIdMutationResult = NonNullable<Awaited<ReturnType<typeof putV1SessionsBySidUploadsByFileId>>>
+    export type PutV1SessionsBySidUploadsByFileIdMutationBody = Blob
+    export type PutV1SessionsBySidUploadsByFileIdMutationError = void
+    export type PutV1SessionsBySidUploadsByFileIdMutationVariables = {sid: string;fileId: string;data: Blob}
+
+    /**
+ * @summary Upload the bytes for a registered intent
+ */
+export const usePutV1SessionsBySidUploadsByFileId = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putV1SessionsBySidUploadsByFileId>>, TError,PutV1SessionsBySidUploadsByFileIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof putV1SessionsBySidUploadsByFileId>>,
+        TError,
+        PutV1SessionsBySidUploadsByFileIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutV1SessionsBySidUploadsByFileIdMutationOptions(options));
+    }
+    export type postV1SessionsBySidUploadsByFileIdConfirmResponse200 = {
+  data: PostV1SessionsBySidUploadsByFileIdConfirm200
+  status: 200
+}
+
+export type postV1SessionsBySidUploadsByFileIdConfirmResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postV1SessionsBySidUploadsByFileIdConfirmResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1SessionsBySidUploadsByFileIdConfirmResponseSuccess = (postV1SessionsBySidUploadsByFileIdConfirmResponse200) & {
+  headers: Headers;
+};
+export type postV1SessionsBySidUploadsByFileIdConfirmResponseError = (postV1SessionsBySidUploadsByFileIdConfirmResponse400 | postV1SessionsBySidUploadsByFileIdConfirmResponse404) & {
+  headers: Headers;
+};
+
+export type postV1SessionsBySidUploadsByFileIdConfirmResponse = (postV1SessionsBySidUploadsByFileIdConfirmResponseSuccess | postV1SessionsBySidUploadsByFileIdConfirmResponseError)
+
+export const getPostV1SessionsBySidUploadsByFileIdConfirmUrl = (sid: string,
+    fileId: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}/uploads/${fileId}/confirm`
+}
+
+/**
+ * @summary Confirm an upload — flips pending → confirmed and notifies the session
+ */
+export const postV1SessionsBySidUploadsByFileIdConfirm = async (sid: string,
+    fileId: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidUploadsByFileIdConfirmResponse> => {
+
+  return customFetch<postV1SessionsBySidUploadsByFileIdConfirmResponse>(getPostV1SessionsBySidUploadsByFileIdConfirmUrl(sid,fileId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1SessionsBySidUploadsByFileIdConfirmMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidUploadsByFileIdConfirm>>, TError,PostV1SessionsBySidUploadsByFileIdConfirmMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidUploadsByFileIdConfirm>>, TError,PostV1SessionsBySidUploadsByFileIdConfirmMutationVariables, TContext> => {
+
+const mutationKey = ['postV1SessionsBySidUploadsByFileIdConfirm'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1SessionsBySidUploadsByFileIdConfirm>>, PostV1SessionsBySidUploadsByFileIdConfirmMutationVariables> = (props) => {
+          const {sid,fileId} = props ?? {};
+
+          return  postV1SessionsBySidUploadsByFileIdConfirm(sid,fileId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1SessionsBySidUploadsByFileIdConfirmMutationResult = NonNullable<Awaited<ReturnType<typeof postV1SessionsBySidUploadsByFileIdConfirm>>>
+
+    export type PostV1SessionsBySidUploadsByFileIdConfirmMutationError = void
+    export type PostV1SessionsBySidUploadsByFileIdConfirmMutationVariables = {sid: string;fileId: string}
+
+    /**
+ * @summary Confirm an upload — flips pending → confirmed and notifies the session
+ */
+export const usePostV1SessionsBySidUploadsByFileIdConfirm = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidUploadsByFileIdConfirm>>, TError,PostV1SessionsBySidUploadsByFileIdConfirmMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1SessionsBySidUploadsByFileIdConfirm>>,
+        TError,
+        PostV1SessionsBySidUploadsByFileIdConfirmMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1SessionsBySidUploadsByFileIdConfirmMutationOptions(options));
     }
     export type postV1FormsByIdSessionsResponse200 = {
   data: PostV1FormsByIdSessions200

@@ -1,8 +1,15 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
-import { requireSession, requireOrg, requireSessionOwner, type GuardVars } from "../lib/guards.js";
+import {
+  requireSession,
+  requireOrg,
+  requireSessionOwner,
+  assertChatSessionAccess,
+  type GuardVars,
+} from "../lib/guards.js";
+import { requireScope, type AuthzVars } from "../lib/authorize.js";
 import { getEntitlements, storageBytes } from "../lib/entitlements.js";
 import { limitReached } from "@repo/entitlements";
 
@@ -14,7 +21,53 @@ import { limitReached } from "@repo/entitlements";
 
 const MAX_FILE_MB = 25;
 
-export const uploadsRouter = new Hono<{ Bindings: Bindings }>();
+/**
+ * Who is allowed to upload into a session.
+ *
+ * `respondent` is a person answering the form, holding the session's own
+ * token. `api_key` is a developer driving that session headlessly — without
+ * this, a `file_upload` question was simply unanswerable over the API, which
+ * made those forms impossible to complete programmatically.
+ *
+ * The two are alternatives, never a fallback chain: a respondent request that
+ * fails its token check must not get a second chance at an organization check,
+ * or a leaked session id plus any valid key would be a way in.
+ */
+export type UploadMode = "respondent" | "api_key";
+
+type UploadCtx = Context<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>;
+
+/**
+ * The session path parameter, which differs by mount.
+ *
+ * `/v1`'s chat router already registers ownership middleware on
+ * `/sessions/:sid/*`, and that middleware reads `sid`. Mounting these routes
+ * beside it under a different parameter name would leave it reading an
+ * undefined value and 404-ing every upload, so the API-key variant speaks the
+ * same spelling.
+ */
+function paramOf(mode: UploadMode): "id" | "sid" {
+  return mode === "respondent" ? "id" : "sid";
+}
+
+async function resolveSession(c: UploadCtx, mode: UploadMode): Promise<string | null> {
+  if (mode === "respondent") return requireSessionOwner(c);
+  const orgId = c.get("orgId");
+  const sessionId = c.req.param(paramOf(mode));
+  if (!orgId || !sessionId) return null;
+  return (await assertChatSessionAccess(c.env, sessionId, orgId)) ? sessionId : null;
+}
+
+/**
+ * 401 for a respondent whose token is wrong, 404 for a key reaching into
+ * another tenant — the cross-tenant convention everywhere else in `/v1` is to
+ * never confirm that an id exists.
+ */
+function denied(c: UploadCtx, mode: UploadMode) {
+  return mode === "respondent"
+    ? c.json({ error: { code: "unauthorized", message: "Invalid session" } }, 401)
+    : c.json({ error: { code: "not_found", message: "Session not found" } }, 404);
+}
 
 const ALLOWED_MIME = new Set([
   "image/png", "image/jpeg", "image/gif", "image/webp",
@@ -25,8 +78,27 @@ const ALLOWED_MIME = new Set([
   "audio/mpeg", "audio/wav", "video/mp4", "video/webm",
 ]);
 
+/**
+ * One implementation, mounted twice.
+ *
+ * `/p` gets the respondent-token variant and `/v1` the API-key variant. They
+ * are the same three steps against the same rows because a file answered over
+ * the API has to be indistinguishable from one answered in the chat — the
+ * moment they are two implementations, one of them starts drifting.
+ */
+export function createUploadsRouter(mode: UploadMode) {
+  const uploadsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
+  const sid = `:${paramOf(mode)}`;
+
+  // Uploading is a write, and a publishable key legitimately holds `file:write`
+  // — that is the browser upload case. Reading files back is a separate scope
+  // and a separate route.
+  if (mode === "api_key") {
+    uploadsRouter.use(`/sessions/${sid}/uploads/*`, requireScope("file", "write"));
+  }
+
 uploadsRouter.post(
-  "/sessions/:id/uploads/intent",
+  `/sessions/${sid}/uploads/intent`,
   validator(
     "json",
     z.object({
@@ -37,7 +109,7 @@ uploadsRouter.post(
     }),
   ),
   describeRoute({
-    tags: ["public"],
+    tags: [mode === "respondent" ? "public" : "v1"],
     summary: "Register an upload — returns a fileId to PUT against",
     responses: {
       200: { description: "Intent created", content: { "application/json": { schema: resolver(z.object({ fileId: z.string(), uploadUrl: z.string() })) } } },
@@ -46,8 +118,8 @@ uploadsRouter.post(
     },
   }),
   async (c) => {
-    const sessionId = await requireSessionOwner(c);
-    if (!sessionId) return c.json({ error: { code: "unauthorized", message: "Invalid session" } }, 401);
+    const sessionId = await resolveSession(c, mode);
+    if (!sessionId) return denied(c, mode);
     const { ref, filename, mime, size } = c.req.valid("json");
 
     if (!ALLOWED_MIME.has(mime)) {
@@ -98,44 +170,64 @@ uploadsRouter.post(
       .bind(fileId, sess.organization_id, sess.form_id, sessionId, r2Key, filename, mime, size, Date.now())
       .run();
 
-    return c.json({ fileId, uploadUrl: `/p/sessions/${sessionId}/uploads/${fileId}` });
+    const prefix = mode === "respondent" ? "/p" : "/v1";
+    return c.json({ fileId, uploadUrl: `${prefix}/sessions/${sessionId}/uploads/${fileId}` });
   },
 );
 
-uploadsRouter.put("/sessions/:id/uploads/:fileId", async (c) => {
-  const sessionId = await requireSessionOwner(c);
-  if (!sessionId) return c.json({ error: { code: "unauthorized", message: "Invalid session" } }, 401);
-  const fileId = c.req.param("fileId");
+uploadsRouter.put(
+  `/sessions/${sid}/uploads/:fileId`,
+  describeRoute({
+    tags: [mode === "respondent" ? "public" : "v1"],
+    summary: "Upload the bytes for a registered intent",
+    description:
+      "PUT the raw file body — not multipart, not base64 — to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.",
+    requestBody: {
+      required: true,
+      content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } },
+    },
+    responses: {
+      200: { description: "Bytes stored", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } },
+      400: { description: "Declared and actual size differ" },
+      404: { description: "No such upload intent" },
+      413: { description: "Too large" },
+    },
+  }),
+  async (c) => {
+    const sessionId = await resolveSession(c, mode);
+    if (!sessionId) return denied(c, mode);
+    const fileId = c.req.param("fileId");
 
-  const file = await c.env.DB.prepare(`SELECT r2_key, size_bytes, status FROM files WHERE id = ? AND session_id = ?`)
-    .bind(fileId, sessionId)
-    .first<{ r2_key: string; size_bytes: number; status: string }>();
-  if (!file || file.status !== "pending") return c.json({ error: { code: "not_found", message: "Upload intent not found" } }, 404);
+    const file = await c.env.DB.prepare(`SELECT r2_key, size_bytes, status FROM files WHERE id = ? AND session_id = ?`)
+      .bind(fileId, sessionId)
+      .first<{ r2_key: string; size_bytes: number; status: string }>();
+    if (!file || file.status !== "pending") return c.json({ error: { code: "not_found", message: "Upload intent not found" } }, 404);
 
-  const body = await c.req.arrayBuffer();
-  if (body.byteLength > MAX_FILE_MB * 1024 * 1024) {
-    return c.json({ error: { code: "too_large", message: `Max ${MAX_FILE_MB}MB` } }, 413);
-  }
-  if (Math.abs(body.byteLength - file.size_bytes) > 1024) {
-    return c.json({ error: { code: "size_mismatch", message: "Uploaded size differs from declared" } }, 400);
-  }
+    const body = await c.req.arrayBuffer();
+    if (body.byteLength > MAX_FILE_MB * 1024 * 1024) {
+      return c.json({ error: { code: "too_large", message: `Max ${MAX_FILE_MB}MB` } }, 413);
+    }
+    if (Math.abs(body.byteLength - file.size_bytes) > 1024) {
+      return c.json({ error: { code: "size_mismatch", message: "Uploaded size differs from declared" } }, 400);
+    }
 
-  await c.env.R2.put(file.r2_key, body, {
-    httpMetadata: { contentType: c.req.header("content-type") ?? "application/octet-stream" },
-  });
-  return c.json({ ok: true });
-});
+    await c.env.R2.put(file.r2_key, body, {
+      httpMetadata: { contentType: c.req.header("content-type") ?? "application/octet-stream" },
+    });
+    return c.json({ ok: true });
+  },
+);
 
 uploadsRouter.post(
-  "/sessions/:id/uploads/:fileId/confirm",
+  `/sessions/${sid}/uploads/:fileId/confirm`,
   describeRoute({
-    tags: ["public"],
+    tags: [mode === "respondent" ? "public" : "v1"],
     summary: "Confirm an upload — flips pending → confirmed and notifies the session",
     responses: { 200: { description: "Confirmed", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } }, 400: { description: "Not uploaded" }, 404: { description: "Not found" } },
   }),
   async (c) => {
-    const sessionId = await requireSessionOwner(c);
-    if (!sessionId) return c.json({ error: { code: "unauthorized", message: "Invalid session" } }, 401);
+    const sessionId = await resolveSession(c, mode);
+    if (!sessionId) return denied(c, mode);
     const fileId = c.req.param("fileId");
 
     const file = await c.env.DB.prepare(`SELECT r2_key, filename, mime, size_bytes, status, session_id FROM files WHERE id = ? AND session_id = ?`)
@@ -166,6 +258,9 @@ uploadsRouter.post(
     return c.json({ ok: true, file: { fileId, filename: file.filename, mime: file.mime, size: obj.size, r2Key: file.r2_key } });
   },
 );
+
+  return uploadsRouter;
+}
 
 // ─── dashboard: list + download files for a form ───
 
@@ -256,6 +351,9 @@ filesAdminRouter.get("/files/:id/download", async (c) => {
   });
 });
 
+/** Builder-owned assets are public and session-less, so they mount on their own. */
+export const assetsRouter = new Hono<{ Bindings: Bindings }>();
+
 /**
  * Serve a builder-owned asset publicly.
  *
@@ -270,7 +368,7 @@ filesAdminRouter.get("/files/:id/download", async (c) => {
  * bytes come from strangers; these come from the tenant, are MIME-checked at
  * upload, and have to render in an `<img>` to be worth anything.
  */
-uploadsRouter.get("/assets/:id", async (c) => {
+assetsRouter.get("/assets/:id", async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT r2_key, mime FROM files WHERE id = ?1 AND uploaded_by = 'builder' AND status = 'confirmed'`,
   )
@@ -293,5 +391,10 @@ uploadsRouter.get("/assets/:id", async (c) => {
     },
   });
 });
+
+/** The respondent-facing router, mounted under `/p`. */
+export const uploadsRouter = createUploadsRouter("respondent");
+/** The same three steps for a headless caller, mounted under `/v1`. */
+export const uploadsV1Router = createUploadsRouter("api_key");
 
 export default uploadsRouter;

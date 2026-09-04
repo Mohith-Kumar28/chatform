@@ -5,7 +5,6 @@ export interface Bindings {
   KV_CONFIG: KVNamespace;
   R2: R2Bucket;
   SESSION_DO: DurableObjectNamespace;
-  Q_SUBMISSIONS: Queue;
   Q_WEBHOOKS: Queue;
   Q_EXPORTS: Queue;
   ANALYTICS: AnalyticsEngineDataset;

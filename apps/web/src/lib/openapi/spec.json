@@ -664,6 +664,79 @@
         ]
       }
     },
+    "/p/sessions/{id}/uploads/{fileId}": {
+      "put": {
+        "operationId": "putPSessionsByIdUploadsByFileId",
+        "tags": [
+          "public"
+        ],
+        "summary": "Upload the bytes for a registered intent",
+        "description": "PUT the raw file body — not multipart, not base64 — to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bytes stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Declared and actual size differ"
+          },
+          "404": {
+            "description": "No such upload intent"
+          },
+          "413": {
+            "description": "Too large"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "fileId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "respondentToken": []
+          }
+        ]
+      }
+    },
     "/p/sessions/{id}/uploads/{fileId}/confirm": {
       "post": {
         "operationId": "postPSessionsByIdUploadsByFileIdConfirm",
@@ -3430,6 +3503,767 @@
         ]
       }
     },
+    "/v1/forms/{id}/exports": {
+      "post": {
+        "operationId": "postV1FormsByIdExports",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "format": {
+                    "default": "csv",
+                    "type": "string",
+                    "enum": [
+                      "csv",
+                      "json"
+                    ]
+                  },
+                  "status": {
+                    "maxItems": 6,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "source": {
+                    "type": "string",
+                    "maxLength": 20
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "live",
+                      "test",
+                      "all"
+                    ]
+                  },
+                  "created_after": {
+                    "type": "number"
+                  },
+                  "created_before": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Start an export of a form's responses",
+        "description": "Returns immediately with a queued export. Poll `GET /v1/exports/{id}` until `status` is `ready`, then follow `download_url`.",
+        "responses": {
+          "202": {
+            "description": "Export queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "const": "export"
+                    },
+                    "form_id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "ready",
+                        "failed"
+                      ]
+                    },
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "csv",
+                        "json"
+                      ]
+                    },
+                    "row_count": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "bytes": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "error": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "created_at": {
+                      "type": "number"
+                    },
+                    "completed_at": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "expires_at": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "download_url": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "download_expires_at": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "object",
+                    "form_id",
+                    "status",
+                    "format",
+                    "row_count",
+                    "bytes",
+                    "error",
+                    "created_at",
+                    "completed_at",
+                    "expires_at",
+                    "download_url",
+                    "download_expires_at"
+                  ]
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Exporting unfinished responses needs a plan that includes them"
+          },
+          "404": {
+            "description": "Form not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/exports/{id}": {
+      "get": {
+        "operationId": "getV1ExportsById",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Check an export and get its download link",
+        "description": "Poll until `status` is `ready`, then follow `download_url`. A `failed` export carries the reason in `error`. The link is re-minted on every read, so read again rather than storing one.",
+        "responses": {
+          "200": {
+            "description": "The export",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "const": "export"
+                    },
+                    "form_id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "ready",
+                        "failed"
+                      ]
+                    },
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "csv",
+                        "json"
+                      ]
+                    },
+                    "row_count": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "bytes": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "error": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "created_at": {
+                      "type": "number"
+                    },
+                    "completed_at": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "expires_at": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "download_url": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "download_expires_at": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "object",
+                    "form_id",
+                    "status",
+                    "format",
+                    "row_count",
+                    "bytes",
+                    "error",
+                    "created_at",
+                    "completed_at",
+                    "expires_at",
+                    "download_url",
+                    "download_expires_at"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Export not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/exports": {
+      "get": {
+        "operationId": "getV1Exports",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "form_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 25,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "tags": [
+          "v1"
+        ],
+        "summary": "List recent exports",
+        "description": "Newest first, optionally narrowed to one form. Exports are deleted 24 hours after they are requested, so this is a short window rather than a history.",
+        "responses": {
+          "200": {
+            "description": "Exports, newest first"
+          }
+        },
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/files/{id}": {
+      "get": {
+        "operationId": "getV1FilesById",
+        "tags": [
+          "v1"
+        ],
+        "summary": "A respondent's uploaded file, with a short-lived download link",
+        "description": "File-upload answers carry a `fileId`. This resolves one to its metadata and a signed URL that needs no API key — safe to hand to a browser, and expired within minutes.",
+        "responses": {
+          "200": {
+            "description": "The file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "const": "file"
+                    },
+                    "form_id": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "response_id": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "filename": {
+                      "type": "string"
+                    },
+                    "mime": {
+                      "type": "string"
+                    },
+                    "size_bytes": {
+                      "type": "number"
+                    },
+                    "created_at": {
+                      "type": "number"
+                    },
+                    "download_url": {
+                      "type": "string"
+                    },
+                    "download_expires_at": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "object",
+                    "form_id",
+                    "response_id",
+                    "filename",
+                    "mime",
+                    "size_bytes",
+                    "created_at",
+                    "download_url",
+                    "download_expires_at"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "File not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/sessions/{sid}/uploads/intent": {
+      "post": {
+        "operationId": "postV1SessionsBySidUploadsIntent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ref": {
+                    "type": "string"
+                  },
+                  "filename": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "mime": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 120
+                  },
+                  "size": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 26214400
+                  }
+                },
+                "required": [
+                  "ref",
+                  "filename",
+                  "mime",
+                  "size"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Register an upload — returns a fileId to PUT against",
+        "responses": {
+          "200": {
+            "description": "Intent created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "fileId": {
+                      "type": "string"
+                    },
+                    "uploadUrl": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "fileId",
+                    "uploadUrl"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Too large"
+          },
+          "415": {
+            "description": "Unsupported type"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/sessions/{sid}/uploads/{fileId}": {
+      "put": {
+        "operationId": "putV1SessionsBySidUploadsByFileId",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Upload the bytes for a registered intent",
+        "description": "PUT the raw file body — not multipart, not base64 — to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bytes stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Declared and actual size differ"
+          },
+          "404": {
+            "description": "No such upload intent"
+          },
+          "413": {
+            "description": "Too large"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "fileId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/sessions/{sid}/uploads/{fileId}/confirm": {
+      "post": {
+        "operationId": "postV1SessionsBySidUploadsByFileIdConfirm",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Confirm an upload — flips pending → confirmed and notifies the session",
+        "responses": {
+          "200": {
+            "description": "Confirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not uploaded"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "fileId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
     "/v1/forms/{id}/sessions": {
       "post": {
         "operationId": "postV1FormsByIdSessions",
@@ -4234,6 +5068,42 @@
           },
           {
             "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/d/{kind}/{id}": {
+      "get": {
+        "operationId": "getDByKindById",
+        "tags": [
+          "public"
+        ],
+        "summary": "Follow a signed download link",
+        "description": "You never build this URL yourself — `GET /v1/exports/{id}` and `GET /v1/files/{id}` return it complete. It carries no API key, expires within minutes, and answers 404 for anything it cannot serve, including a link that has expired.",
+        "responses": {
+          "200": {
+            "description": "The bytes, as an attachment"
+          },
+          "404": {
+            "description": "Invalid, expired, or nothing to serve"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "kind",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
           }
         ]
       }

@@ -28,8 +28,8 @@ import { createClient } from "@chatformhq/js";
 const chatform = createClient({ apiKey: process.env.CHATFORM_SECRET_KEY! });
 ```
 
-`chatform.forms`, `.responses`, `.sessions`, `.webhooks`, `.blocks`, and
-`chatform.me()`.
+`chatform.forms`, `.responses`, `.sessions`, `.webhooks`, `.blocks`, `.exports`,
+`.files`, and `chatform.me()`.
 
 ```ts
 // a whole response in one call
@@ -56,6 +56,37 @@ for await (const response of chatform.responses.iterate(formId, { status: "compl
   console.log(response.id);
 }
 ```
+
+### Files and exports
+
+Both wrap something you would otherwise write yourself. `files.upload` hides the
+three-step upload protocol:
+
+```ts
+await chatform.files.upload(sessionId, {
+  ref: "q_cv",
+  filename: "resume.pdf",
+  mime: "application/pdf",
+  body: await readFile("resume.pdf"),
+});
+```
+
+and `exports.download` queues an export, waits for it, and follows the signed
+link:
+
+```ts
+const csv = await chatform.exports.download(formId, { format: "csv" });
+await writeFile("responses.csv", await csv.text());
+```
+
+Use `exports.create()` and `exports.get()` if you would rather not hold a
+connection open while it runs.
+
+<Callout>
+Signed download URLs are followed **without** your API key — the signature is
+the credential. They still go through whatever `fetch` you configured, so a
+proxy or a test double sees them.
+</Callout>
 
 ### Errors
 
@@ -89,6 +120,10 @@ import { createBrowserClient } from "@chatformhq/js/browser";
 
 const chatform = createBrowserClient({ publishableKey: "pk_live_…" });
 ```
+
+It exposes `sessions`, `blocks`, `stream()` and `files.upload` — and nothing
+that reads anyone's answers back, because a publishable key cannot do that
+anyway.
 
 The safer pattern is usually to skip publishable keys entirely: open the session
 on your server and hand the page the session-scoped `respondentToken`. A leaked

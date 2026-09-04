@@ -46,7 +46,16 @@ export class HttpClient {
   async request<T>(
     method: string,
     path: string,
-    args: { query?: Record<string, unknown>; body?: unknown; options?: RequestOptions } = {},
+    args: {
+      query?: Record<string, unknown>;
+      body?: unknown;
+      /**
+       * Bytes to send as-is, for a file upload. Mutually exclusive with `body`,
+       * which is always JSON-encoded.
+       */
+      raw?: { body: BodyInit; contentType: string };
+      options?: RequestOptions;
+    } = {},
   ): Promise<T> {
     const url = new URL(`${this.baseUrl}${path}`);
     for (const [key, value] of Object.entries(args.query ?? {})) {
@@ -60,6 +69,7 @@ export class HttpClient {
       ...args.options?.headers,
     };
     if (args.body !== undefined) headers["content-type"] = "application/json";
+    if (args.raw) headers["content-type"] = args.raw.contentType;
 
     /**
      * A write gets an idempotency key whether or not the caller thought about
@@ -70,12 +80,20 @@ export class HttpClient {
       headers["idempotency-key"] = args.options?.idempotencyKey ?? crypto.randomUUID();
     }
 
+    /**
+     * A stream can only be read once, so a retry would send an empty body and
+     * the size check would reject it. Buffers and blobs are re-readable and
+     * keep the normal retry behaviour.
+     */
+    const oneShot = args.raw?.body instanceof ReadableStream;
+    const attempts = oneShot ? 0 : this.maxRetries;
+
     let lastError: ChatformError | undefined;
-    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+    for (let attempt = 0; attempt <= attempts; attempt++) {
       const res = await this.fetchImpl(url, {
         method,
         headers,
-        body: args.body === undefined ? undefined : JSON.stringify(args.body),
+        body: args.raw ? args.raw.body : args.body === undefined ? undefined : JSON.stringify(args.body),
         signal: args.options?.signal,
       });
 
@@ -89,7 +107,7 @@ export class HttpClient {
       // 429 and 5xx are worth retrying. 4xx otherwise is the caller's to fix,
       // and a quota error will refuse for the rest of the month.
       const retryable = res.status === 429 || res.status >= 500;
-      if (!retryable || attempt === this.maxRetries) throw lastError;
+      if (!retryable || attempt === attempts) throw lastError;
 
       // Retry-After is authoritative when present. The jitter keeps a fleet of
       // workers from retrying in lockstep.
@@ -97,6 +115,18 @@ export class HttpClient {
       await new Promise((resolve) => setTimeout(resolve, wait));
     }
     throw lastError ?? new Error("Request failed");
+  }
+
+  /**
+   * Follow a signed URL, deliberately without the API key.
+   *
+   * Signed download links carry their own credential and are handed out
+   * complete, so sending an `sk_live_` alongside would put it somewhere it does
+   * not belong for no gain. It still goes through the configured `fetch`, which
+   * is what a caller's proxy, instrumentation or test double is attached to.
+   */
+  fetchSigned(url: string, options?: RequestOptions): Promise<Response> {
+    return this.fetchImpl(url, { signal: options?.signal, headers: options?.headers });
   }
 
   get<T>(path: string, query?: Record<string, unknown>, options?: RequestOptions) {
@@ -107,6 +137,10 @@ export class HttpClient {
   }
   put<T>(path: string, body?: unknown, options?: RequestOptions) {
     return this.request<T>("PUT", path, { body, options });
+  }
+  /** PUT raw bytes — the upload step, which is not JSON. */
+  putRaw<T>(path: string, body: BodyInit, contentType: string, options?: RequestOptions) {
+    return this.request<T>("PUT", path, { raw: { body, contentType }, options });
   }
   delete<T>(path: string, options?: RequestOptions) {
     return this.request<T>("DELETE", path, { options });

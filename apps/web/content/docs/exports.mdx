@@ -1,0 +1,116 @@
+---
+title: Exports
+description: Ask for every response as one file, and collect it when it is ready.
+---
+
+The [read API](/docs/responses#reading-responses-back) pages through responses
+25 or 100 at a time, which is the right shape for syncing and the wrong shape
+for "give me everything as a CSV". Exports are the second shape.
+
+They are asynchronous on purpose. A worker has a wall-clock budget and you have
+a timeout, so above a few thousand rows the only honest answer is a receipt and
+a link that appears shortly.
+
+## Request one
+
+```bash
+POST /v1/forms/{formId}/exports
+```
+
+```json
+{
+  "format": "csv",
+  "status": ["completed"],
+  "created_after": 1759276800000
+}
+```
+
+```json
+{
+  "id": "exp_4b1e9c07a2d5f83b6c14",
+  "object": "export",
+  "status": "queued",
+  "download_url": null
+}
+```
+
+`202`, immediately — nothing has been read yet. Needs `response:export`.
+
+| Field | Default | |
+| --- | --- | --- |
+| `format` | `csv` | `csv` or `json` |
+| `status` | `["completed"]` | any statuses, or `["all"]` |
+| `source` | all | `chat`, `api` or `embed` |
+| `mode` | `live` | `live`, `test` or `all` |
+| `created_after` / `created_before` | — | epoch milliseconds |
+
+Send an `Idempotency-Key` and a retried request returns the same export rather
+than queueing a second run of the same query.
+
+## Collect it
+
+```bash
+GET /v1/exports/{exportId}
+```
+
+```json
+{
+  "id": "exp_4b1e9c07a2d5f83b6c14",
+  "status": "ready",
+  "row_count": 4812,
+  "bytes": 918273,
+  "download_url": "https://api.chatform.in/d/export/exp_4b1e...?exp=1764...&sig=...",
+  "download_expires_at": 1764000600000,
+  "expires_at": 1764086400000
+}
+```
+
+Poll until `status` is `ready`. A few seconds is plenty for most forms; there is
+no webhook for this yet. A `failed` export carries the reason in `error`.
+
+`GET /v1/exports` lists recent ones, newest first, optionally filtered by
+`form_id`.
+
+<Callout>
+`download_url` carries no API key — the signature is the credential, and it
+expires in ten minutes. Read the export again to mint a fresh one rather than
+storing the URL. The reasoning is the same as for [files](/docs/files#about-that-url).
+</Callout>
+
+## What is in the file
+
+CSV gets one column per answerable question, named by the question with its ref
+in brackets — `Email? (q_email)` — so a column can be matched back to the
+document without the file being an export of our primary keys.
+
+```csv
+response_id,status,source,started_at,completed_at,"Email? (q_email)","Rate us (q_rating)"
+sbm_...,completed,chat,2026-09-01T10:14:22.000Z,2026-09-01T10:16:05.000Z,ada@example.com,5
+```
+
+Values are the labels a person would recognise, not internal ids: an option
+comes out as its text, a matrix as readable pairs. An unanswered cell is empty
+rather than `(skipped)` — a spreadsheet already has a way to say nothing is
+there.
+
+`format: "json"` gives JSON Lines instead — one response object per line, with
+`answers` keyed by ref and values in their canonical form. That is the one to
+use when something downstream is going to parse it.
+
+## Partial responses
+
+Exporting what you finished collecting is never behind the paywall. Asking for
+unfinished responses — `in_progress`, `abandoned`, or `all` — needs a plan that
+includes partial responses, and an over-limit request is refused with a `402`
+rather than quietly narrowed to completed. An export that silently contains
+something other than what you asked for is worse than one that says no.
+
+## Retention
+
+An export is a full copy of respondent data sitting in a bucket, so it is not
+kept indefinitely: the object and its record are deleted 24 hours after the
+request. Re-request rather than re-download later — the query is stored on the
+export record, so asking again means the same thing.
+
+The ceiling on a single export is 100,000 responses. Above that, filter by date
+range, or page the read API.

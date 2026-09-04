@@ -51,18 +51,10 @@
   ],
   "queues": {
     "producers": [
-      { "binding": "Q_SUBMISSIONS", "queue": "q-submissions" },
       { "binding": "Q_WEBHOOKS", "queue": "q-webhooks" },
       { "binding": "Q_EXPORTS", "queue": "q-exports" }
     ],
     "consumers": [
-      {
-        "queue": "q-submissions",
-        "max_batch_size": 25,
-        "max_batch_timeout": 5,
-        "max_retries": 5,
-        "dead_letter_queue": "q-submissions-dlq"
-      },
       {
         "queue": "q-webhooks",
         "max_batch_size": 10,

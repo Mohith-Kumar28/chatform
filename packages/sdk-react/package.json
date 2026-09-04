@@ -1,7 +1,7 @@
 {
   "name": "@chatformhq/react",
   "version": "0.1.0",
-  "description": "React bindings for Chatform \u2014 hooks and an embed component.",
+  "description": "React bindings for Chatform — hooks and an embed component.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -9,7 +9,8 @@
     "dist"
   ],
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
   },
   "scripts": {
     "build": "tsdown",
@@ -37,7 +38,8 @@
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
-      }
+      },
+      "./package.json": "./package.json"
     }
   }
 }

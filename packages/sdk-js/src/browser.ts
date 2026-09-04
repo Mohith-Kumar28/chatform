@@ -1,6 +1,7 @@
 import { HttpClient, type ClientConfig } from "./internal/http.js";
 import { Sessions } from "./resources/sessions.js";
 import { Blocks } from "./resources/forms.js";
+import { Files } from "./resources/files.js";
 import { streamSession, type StreamOptions } from "./session/stream.js";
 
 export { ChatformError } from "./internal/errors.js";
@@ -32,9 +33,18 @@ export function createBrowserClient(config: BrowserClientConfig) {
   }
 
   const http = new HttpClient({ ...config, apiKey: config.publishableKey });
+  const files = new Files(http);
   return {
     sessions: new Sessions(http),
     blocks: new Blocks(http),
+    /**
+     * Uploading only.
+     *
+     * A publishable key holds `file:write` and deliberately not `file:read`, so
+     * `get` and `download` would always be refused — and a method that can only
+     * fail is worse than one that is not there.
+     */
+    files: { upload: files.upload.bind(files) },
     stream(sessionId: string, options: Omit<StreamOptions, "apiKey" | "baseUrl"> = {}) {
       return streamSession(sessionId, {
         ...options,

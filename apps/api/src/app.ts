@@ -4,7 +4,8 @@ import { Scalar } from "@scalar/hono-api-reference";
 import type { Bindings } from "./env.js";
 import { healthRouter } from "./routes/health.js";
 import publicRouter from "./routes/public.js";
-import uploadsRouter, { filesAdminRouter } from "./routes/uploads.js";
+import uploadsRouter, { filesAdminRouter, assetsRouter } from "./routes/uploads.js";
+import { downloadRouter } from "./routes/download.js";
 import { viewsRouter } from "./routes/results.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { formsRouter } from "./routes/forms.js";
@@ -110,6 +111,7 @@ export function createApp() {
 
   app.route("/health", healthRouter);
   publicRouter.route("/", uploadsRouter);
+  publicRouter.route("/", assetsRouter);
   app.route("/p", viewsRouter);
   app.route("/p", publicRouter);
   app.route("/api", dashboardRouter);
@@ -117,6 +119,11 @@ export function createApp() {
   app.route("/api", aiRouter);
   app.route("/api", resultsRouter);
   app.route("/v1", v1Router);
+  /**
+   * Signed downloads sit outside every auth chain on purpose: the signature is
+   * the credential. See `lib/signed-url.ts`.
+   */
+  app.route("/d", downloadRouter);
   app.route("/api", keysRouter);
   app.route("/api", webhooksRouter);
   app.route("/api", billingRouter);

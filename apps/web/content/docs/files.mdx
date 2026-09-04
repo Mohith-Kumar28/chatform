@@ -1,0 +1,146 @@
+---
+title: Files
+description: Upload a file into a response, and read one back out.
+---
+
+A `file_upload` question is answered with a file, which means two things this
+API has to do well: accept bytes from a headless caller, and hand them back to
+you afterwards without turning your API key into a URL you paste into a browser.
+
+## Uploading
+
+Three steps, in this order. They are the same three steps the hosted chat uses —
+the same rows, the same limits, the same validation — reached with an API key
+instead of a respondent token.
+
+<Steps>
+
+<Step>
+
+### Register the intent
+
+```bash
+POST /v1/sessions/{sessionId}/uploads/intent
+```
+
+```json
+{
+  "ref": "q_cv",
+  "filename": "resume.pdf",
+  "mime": "application/pdf",
+  "size": 248193
+}
+```
+
+```json
+{
+  "fileId": "file_9f2c1a4b8e07d3f6",
+  "uploadUrl": "/v1/sessions/chs_.../uploads/file_9f2c1a4b8e07d3f6"
+}
+```
+
+The type and size are checked here, before any bytes move — including the form
+owner's per-file limit and their remaining storage. There is no way to un-upload
+something, so everything that can be refused is refused first.
+
+</Step>
+
+<Step>
+
+### PUT the bytes
+
+```bash
+curl -X PUT "https://api.chatform.in{uploadUrl}" \
+  -H "Authorization: Bearer $CHATFORM_API_KEY" \
+  -H "Content-Type: application/pdf" \
+  --data-binary @resume.pdf
+```
+
+The raw body — not multipart, not base64. The size must match what you declared
+within a kilobyte, which is what stops an intent for a 2KB text file from
+becoming a 25MB upload.
+
+</Step>
+
+<Step>
+
+### Confirm
+
+```bash
+POST /v1/sessions/{sessionId}/uploads/{fileId}/confirm
+```
+
+Until this call the file is `pending` and invisible to the form. Confirming
+verifies the object really landed, flips it to `confirmed`, and tells the
+session — which is what lets the conversation move to the next question.
+
+</Step>
+
+</Steps>
+
+Needs `file:write`. Publishable keys hold it by default, because uploading from
+a browser is exactly the case they exist for.
+
+<Callout type="warn">
+The two auth paths are alternatives, never a fallback. A respondent token will
+not work on `/v1`, and an API key will not work on `/p`. If a key could stand in
+for a missing respondent token, a leaked session id plus any key in your
+organization would be a way into someone else's upload.
+</Callout>
+
+## Reading a file back
+
+An answer to a `file_upload` question carries a `fileId`. Resolve it:
+
+```bash
+GET /v1/files/{fileId}
+```
+
+```json
+{
+  "id": "file_9f2c1a4b8e07d3f6",
+  "object": "file",
+  "form_id": "frm_...",
+  "response_id": "sbm_...",
+  "filename": "resume.pdf",
+  "mime": "application/pdf",
+  "size_bytes": 248193,
+  "download_url": "https://api.chatform.in/d/file/file_9f2c...?exp=1764...&sig=...",
+  "download_expires_at": 1764000600000
+}
+```
+
+Needs `file:read` — which publishable keys deliberately do not have. A key that
+ships in your page must not be able to read what other people uploaded.
+
+### About that URL
+
+`download_url` carries no API key. The signature is the credential: it names one
+file, it expires in ten minutes, and leaking it costs you that one file rather
+than your organization.
+
+That is why it is signed rather than authenticated in the usual way. Putting an
+`sk_live_` key in a URL would write it into access logs, proxy logs and
+`Referer` headers — so `/v1` never accepts a key in a query string, and this is
+the alternative. Mint a fresh URL by reading the file again; do not store one.
+
+Every failure answers `404`, including an expired link, so a stale URL cannot be
+used to learn that a file id exists.
+
+<Callout>
+Downloads always arrive as `application/octet-stream` with an `attachment`
+disposition, whatever was uploaded. These are bytes from strangers, and nothing
+we serve should render them.
+</Callout>
+
+## Limits
+
+| | |
+| --- | --- |
+| Max size per file | 25 MB |
+| Types | images, PDF, plain text, CSV, Word, Excel, MP3, WAV, MP4, WebM |
+| Per-file and storage limits | set by the form owner's plan |
+
+A file larger than the plan allows is `413`; an organization out of storage is
+`507`. Neither message mentions billing to the person filling in the form —
+that is the form owner's business to read in their dashboard.

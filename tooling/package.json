@@ -6,7 +6,8 @@
   "scripts": {
     "gen:plans": "tsx gen-seed-plans.ts",
     "gen:blocks": "tsx gen-block-docs.ts",
-    "gen:api-docs": "tsx gen-api-docs.ts"
+    "gen:api-docs": "tsx gen-api-docs.ts",
+    "spec:coverage": "tsx check-spec-coverage.ts"
   },
   "dependencies": {
     "@repo/entitlements": "workspace:*",

@@ -152,6 +152,10 @@ export type PostPSessionsByIdUploadsIntent200 = {
   uploadUrl: string;
 };
 
+export type PutPSessionsByIdUploadsByFileId200 = {
+  ok: boolean;
+};
+
 export type PostPSessionsByIdUploadsByFileIdConfirm200 = {
   ok: boolean;
 };
@@ -645,6 +649,156 @@ export type PostV1WebhooksBody = {
   events: string[];
   /** @maxLength 64 */
   formId?: string;
+};
+
+export type PostV1FormsByIdExportsBodyFormat = typeof PostV1FormsByIdExportsBodyFormat[keyof typeof PostV1FormsByIdExportsBodyFormat];
+
+
+export const PostV1FormsByIdExportsBodyFormat = {
+  csv: 'csv',
+  json: 'json',
+} as const;
+
+export type PostV1FormsByIdExportsBodyMode = typeof PostV1FormsByIdExportsBodyMode[keyof typeof PostV1FormsByIdExportsBodyMode];
+
+
+export const PostV1FormsByIdExportsBodyMode = {
+  live: 'live',
+  test: 'test',
+  all: 'all',
+} as const;
+
+export type PostV1FormsByIdExportsBody = {
+  format?: PostV1FormsByIdExportsBodyFormat;
+  /** @maxItems 6 */
+  status?: string[];
+  /** @maxLength 20 */
+  source?: string;
+  mode?: PostV1FormsByIdExportsBodyMode;
+  created_after?: number;
+  created_before?: number;
+};
+
+export type PostV1FormsByIdExports202Status = typeof PostV1FormsByIdExports202Status[keyof typeof PostV1FormsByIdExports202Status];
+
+
+export const PostV1FormsByIdExports202Status = {
+  queued: 'queued',
+  running: 'running',
+  ready: 'ready',
+  failed: 'failed',
+} as const;
+
+export type PostV1FormsByIdExports202Format = typeof PostV1FormsByIdExports202Format[keyof typeof PostV1FormsByIdExports202Format];
+
+
+export const PostV1FormsByIdExports202Format = {
+  csv: 'csv',
+  json: 'json',
+} as const;
+
+export type PostV1FormsByIdExports202 = {
+  id: string;
+  object: 'export';
+  form_id: string;
+  status: PostV1FormsByIdExports202Status;
+  format: PostV1FormsByIdExports202Format;
+  row_count: number | null;
+  bytes: number | null;
+  error: string | null;
+  created_at: number;
+  completed_at: number | null;
+  expires_at: number | null;
+  download_url: string | null;
+  download_expires_at: number | null;
+};
+
+export type GetV1ExportsById200Status = typeof GetV1ExportsById200Status[keyof typeof GetV1ExportsById200Status];
+
+
+export const GetV1ExportsById200Status = {
+  queued: 'queued',
+  running: 'running',
+  ready: 'ready',
+  failed: 'failed',
+} as const;
+
+export type GetV1ExportsById200Format = typeof GetV1ExportsById200Format[keyof typeof GetV1ExportsById200Format];
+
+
+export const GetV1ExportsById200Format = {
+  csv: 'csv',
+  json: 'json',
+} as const;
+
+export type GetV1ExportsById200 = {
+  id: string;
+  object: 'export';
+  form_id: string;
+  status: GetV1ExportsById200Status;
+  format: GetV1ExportsById200Format;
+  row_count: number | null;
+  bytes: number | null;
+  error: string | null;
+  created_at: number;
+  completed_at: number | null;
+  expires_at: number | null;
+  download_url: string | null;
+  download_expires_at: number | null;
+};
+
+export type GetV1ExportsParams = {
+form_id?: string;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+};
+
+export type GetV1FilesById200 = {
+  id: string;
+  object: 'file';
+  form_id: string | null;
+  response_id: string | null;
+  filename: string;
+  mime: string;
+  size_bytes: number;
+  created_at: number;
+  download_url: string;
+  download_expires_at: number;
+};
+
+export type PostV1SessionsBySidUploadsIntentBody = {
+  ref: string;
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
+  filename: string;
+  /**
+     * @minLength 3
+     * @maxLength 120
+     */
+  mime: string;
+  /**
+     * @minimum 1
+     * @maximum 26214400
+     */
+  size: number;
+};
+
+export type PostV1SessionsBySidUploadsIntent200 = {
+  fileId: string;
+  uploadUrl: string;
+};
+
+export type PutV1SessionsBySidUploadsByFileId200 = {
+  ok: boolean;
+};
+
+export type PostV1SessionsBySidUploadsByFileIdConfirm200 = {
+  ok: boolean;
 };
 
 export type PostV1FormsByIdSessionsBodyHiddenFields = {[key: string]: string};

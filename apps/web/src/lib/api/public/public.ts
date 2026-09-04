@@ -27,7 +27,8 @@ import type {
   PostPFormsBySlugSessionsBody,
   PostPSessionsByIdUploadsByFileIdConfirm200,
   PostPSessionsByIdUploadsIntent200,
-  PostPSessionsByIdUploadsIntentBody
+  PostPSessionsByIdUploadsIntentBody,
+  PutPSessionsByIdUploadsByFileId200
 } from '../generated.schemas';
 
 import { customFetch } from '.././mutator';
@@ -351,6 +352,116 @@ export const usePostPSessionsByIdUploadsIntent = <TError = void,
       > => {
       return useMutation(getPostPSessionsByIdUploadsIntentMutationOptions(options));
     }
+    export type putPSessionsByIdUploadsByFileIdResponse200 = {
+  data: PutPSessionsByIdUploadsByFileId200
+  status: 200
+}
+
+export type putPSessionsByIdUploadsByFileIdResponse400 = {
+  data: void
+  status: 400
+}
+
+export type putPSessionsByIdUploadsByFileIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type putPSessionsByIdUploadsByFileIdResponse413 = {
+  data: void
+  status: 413
+}
+
+export type putPSessionsByIdUploadsByFileIdResponseSuccess = (putPSessionsByIdUploadsByFileIdResponse200) & {
+  headers: Headers;
+};
+export type putPSessionsByIdUploadsByFileIdResponseError = (putPSessionsByIdUploadsByFileIdResponse400 | putPSessionsByIdUploadsByFileIdResponse404 | putPSessionsByIdUploadsByFileIdResponse413) & {
+  headers: Headers;
+};
+
+export type putPSessionsByIdUploadsByFileIdResponse = (putPSessionsByIdUploadsByFileIdResponseSuccess | putPSessionsByIdUploadsByFileIdResponseError)
+
+export const getPutPSessionsByIdUploadsByFileIdUrl = (id: string,
+    fileId: string,) => {
+
+
+
+
+  return `/p/sessions/${id}/uploads/${fileId}`
+}
+
+/**
+ * PUT the raw file body — not multipart, not base64 — to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.
+ * @summary Upload the bytes for a registered intent
+ */
+export const putPSessionsByIdUploadsByFileId = async (id: string,
+    fileId: string,
+    putPSessionsByIdUploadsByFileIdBody: Blob, options?: Parameters<typeof customFetch>[1]): Promise<putPSessionsByIdUploadsByFileIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<putPSessionsByIdUploadsByFileIdResponse>(getPutPSessionsByIdUploadsByFileIdUrl(id,fileId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/octet-stream', ...getHeaders(options?.headers) },
+    body: putPSessionsByIdUploadsByFileIdBody
+  }
+);}
+
+
+
+
+
+export const getPutPSessionsByIdUploadsByFileIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putPSessionsByIdUploadsByFileId>>, TError,PutPSessionsByIdUploadsByFileIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof putPSessionsByIdUploadsByFileId>>, TError,PutPSessionsByIdUploadsByFileIdMutationVariables, TContext> => {
+
+const mutationKey = ['putPSessionsByIdUploadsByFileId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putPSessionsByIdUploadsByFileId>>, PutPSessionsByIdUploadsByFileIdMutationVariables> = (props) => {
+          const {id,fileId,data} = props ?? {};
+
+          return  putPSessionsByIdUploadsByFileId(id,fileId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutPSessionsByIdUploadsByFileIdMutationResult = NonNullable<Awaited<ReturnType<typeof putPSessionsByIdUploadsByFileId>>>
+    export type PutPSessionsByIdUploadsByFileIdMutationBody = Blob
+    export type PutPSessionsByIdUploadsByFileIdMutationError = void
+    export type PutPSessionsByIdUploadsByFileIdMutationVariables = {id: string;fileId: string;data: Blob}
+
+    /**
+ * @summary Upload the bytes for a registered intent
+ */
+export const usePutPSessionsByIdUploadsByFileId = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putPSessionsByIdUploadsByFileId>>, TError,PutPSessionsByIdUploadsByFileIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof putPSessionsByIdUploadsByFileId>>,
+        TError,
+        PutPSessionsByIdUploadsByFileIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutPSessionsByIdUploadsByFileIdMutationOptions(options));
+    }
     export type postPSessionsByIdUploadsByFileIdConfirmResponse200 = {
   data: PostPSessionsByIdUploadsByFileIdConfirm200
   status: 200
@@ -448,3 +559,104 @@ export const usePostPSessionsByIdUploadsByFileIdConfirm = <TError = void,
       > => {
       return useMutation(getPostPSessionsByIdUploadsByFileIdConfirmMutationOptions(options));
     }
+    export type getDByKindByIdResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getDByKindByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getDByKindByIdResponseSuccess = (getDByKindByIdResponse200) & {
+  headers: Headers;
+};
+export type getDByKindByIdResponseError = (getDByKindByIdResponse404) & {
+  headers: Headers;
+};
+
+export type getDByKindByIdResponse = (getDByKindByIdResponseSuccess | getDByKindByIdResponseError)
+
+export const getGetDByKindByIdUrl = (kind: string,
+    id: string,) => {
+
+
+
+
+  return `/d/${kind}/${id}`
+}
+
+/**
+ * You never build this URL yourself — `GET /v1/exports/{id}` and `GET /v1/files/{id}` return it complete. It carries no API key, expires within minutes, and answers 404 for anything it cannot serve, including a link that has expired.
+ * @summary Follow a signed download link
+ */
+export const getDByKindById = async (kind: string,
+    id: string, options?: Parameters<typeof customFetch>[1]): Promise<getDByKindByIdResponse> => {
+
+  return customFetch<getDByKindByIdResponse>(getGetDByKindByIdUrl(kind,id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDByKindByIdQueryKey = (kind: string,
+    id: string,) => {
+    return [
+    `/d/${kind}/${id}`
+    ] as const;
+    }
+
+
+export const getGetDByKindByIdQueryOptions = <TData = Awaited<ReturnType<typeof getDByKindById>>, TError = void>(kind: string,
+    id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDByKindById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDByKindByIdQueryKey(kind,id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDByKindById>>> = ({ signal }) => getDByKindById(kind,id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: kind !== null && kind !== undefined && id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDByKindById>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDByKindByIdQueryResult = NonNullable<Awaited<ReturnType<typeof getDByKindById>>>
+export type GetDByKindByIdQueryError = void
+
+
+/**
+ * @summary Follow a signed download link
+ */
+
+export function useGetDByKindById<TData = Awaited<ReturnType<typeof getDByKindById>>, TError = void>(
+ kind: string,
+    id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDByKindById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDByKindByIdQueryOptions(kind,id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
