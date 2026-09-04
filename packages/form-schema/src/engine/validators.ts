@@ -1,10 +1,57 @@
 import type { Block } from "../blocks";
 import type { AnswerValue } from "../answers";
 
+/**
+ * Every reason an answer can be refused.
+ *
+ * A closed union rather than a loose string, because these codes are published:
+ * they are what an API caller branches on and what the block reference
+ * documents. Typing `fail()` with it turns a typo or a rename into a compile
+ * error instead of a silently undocumented code.
+ */
+export const VALIDATION_CODES = [
+  "required",
+  "type",
+  "too_short",
+  "too_long",
+  "pattern",
+  "invalid_email",
+  "freemail",
+  "invalid_phone",
+  "invalid_url",
+  "not_integer",
+  "too_small",
+  "too_large",
+  "invalid_date",
+  "invalid_time",
+  "time_out_of_range",
+  "past_date",
+  "too_early",
+  "too_late",
+  "invalid_option",
+  "too_few",
+  "too_many",
+  "out_of_range",
+  "incomplete_ranking",
+  "invalid_ranking",
+  "invalid_row",
+  "invalid_column",
+  "incomplete_matrix",
+  "too_many_files",
+  "file_too_large",
+  "name_required",
+  "payment_pending",
+  "incomplete",
+  "consent_required",
+  "unsupported",
+] as const;
+
+export type ValidationCode = (typeof VALIDATION_CODES)[number];
+
 export interface ValidationResult {
   ok: boolean;
   /** Machine-readable code for the agent to phrase a conversational retry. */
-  code?: string;
+  code?: ValidationCode;
   /** Short human hint (shown conversationally). */
   hint?: string;
   /** Normalized/canonicalized value to store. */
@@ -12,13 +59,14 @@ export interface ValidationResult {
 }
 
 const ok = (value?: AnswerValue): ValidationResult => ({ ok: true, value });
-const fail = (code: string, hint: string): ValidationResult => ({ ok: false, code, hint });
+const fail = (code: ValidationCode, hint: string): ValidationResult => ({ ok: false, code, hint });
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const FREEMAIL = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com", "proton.me", "aol.com", "live.com"];
 const URL_RE = /^https?:\/\/[^\s]+\.[^\s]+$/i;
 const E164_RE = /^\+[1-9]\d{6,14}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function isFileDescriptorArray(v: unknown): v is { fileId: string; filename: string; mime: string; size: number; r2Key: string }[] {
   return (
@@ -110,15 +158,29 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
     case "date": {
       if (typeof raw !== "string") return fail("type", "Please provide a date.");
       const v = raw.trim();
-      if (!DATE_RE.test(v) || Number.isNaN(Date.parse(v))) {
+      // `includeTime` turns the answer into an appointment: `YYYY-MM-DDTHH:mm`.
+      // The date half is validated against the same bounds either way, so a
+      // block that gains a time keeps every rule it already had.
+      const [datePart = "", timePart] = v.split("T");
+      if (!DATE_RE.test(datePart) || Number.isNaN(Date.parse(datePart))) {
         return fail("invalid_date", "Please provide a date in YYYY-MM-DD format.");
       }
-      if (block.disablePast && Date.parse(v) < Date.now() - 86400000) {
+      if (block.includeTime) {
+        if (!timePart || !TIME_RE.test(timePart)) {
+          return fail("invalid_time", "Please include a time as well, like 2026-01-31T14:30.");
+        }
+        if (timePart < block.timeMin || timePart > block.timeMax) {
+          return fail("time_out_of_range", `Please pick a time between ${block.timeMin} and ${block.timeMax}.`);
+        }
+      } else if (timePart) {
+        return fail("invalid_date", "Please provide a date in YYYY-MM-DD format.");
+      }
+      if (block.disablePast && Date.parse(datePart) < Date.now() - 86400000) {
         return fail("past_date", "Please pick a future date.");
       }
-      if (block.min && v < block.min) return fail("too_early", `Date must be on or after ${block.min}.`);
-      if (block.max && v > block.max) return fail("too_late", `Date must be on or before ${block.max}.`);
-      return ok(v);
+      if (block.min && datePart < block.min) return fail("too_early", `Date must be on or after ${block.min}.`);
+      if (block.max && datePart > block.max) return fail("too_late", `Date must be on or before ${block.max}.`);
+      return ok(block.includeTime ? `${datePart}T${timePart}` : datePart);
     }
 
     case "yes_no": {

@@ -154,6 +154,17 @@ export const Block = z.discriminatedUnion("type", [
     max: z.string().optional(),
     disablePast: z.boolean().default(false),
     dateFormat: z.enum(["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY"]).default("YYYY-MM-DD"),
+    /**
+     * Also collect a time of day — what turns "when shall we meet?" from a
+     * date into an appointment. Off by default, so an existing date block keeps
+     * storing a plain `YYYY-MM-DD`; on, the answer is `YYYY-MM-DDTHH:mm`.
+     */
+    includeTime: z.boolean().default(false),
+    /** Minutes between selectable times, when `includeTime` is on. */
+    timeStepMinutes: z.number().int().min(5).max(120).default(30),
+    /** Earliest and latest time offered, as `HH:mm`. */
+    timeMin: z.string().regex(/^\d{2}:\d{2}$/).default("09:00"),
+    timeMax: z.string().regex(/^\d{2}:\d{2}$/).default("18:00"),
   }),
   z.object({
     ...BlockBase,

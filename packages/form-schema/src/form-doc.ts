@@ -65,6 +65,11 @@ export interface PublicBlock {
   minDate?: string;
   maxDate?: string;
   disablePast?: boolean;
+  /** date: also ask for a time of day, turning the answer into an appointment. */
+  includeTime?: boolean;
+  timeStepMinutes?: number;
+  timeMin?: string;
+  timeMax?: string;
   /** scheduling: the external booking link. payment (method "link"): the checkout page. */
   url?: string;
   /** payment: how the respondent is asked to pay. */
@@ -130,6 +135,10 @@ export function toPublicBlock(b: Block): PublicBlock {
       pub.maxDate = b.max;
       pub.disablePast = b.disablePast;
       pub.dateFormat = b.dateFormat;
+      pub.includeTime = b.includeTime;
+      pub.timeStepMinutes = b.timeStepMinutes;
+      pub.timeMin = b.timeMin;
+      pub.timeMax = b.timeMax;
       break;
     case "scheduling":
       pub.url = b.url;
