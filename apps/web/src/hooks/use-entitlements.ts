@@ -49,6 +49,15 @@ export const ENTITLEMENTS_KEY = getGetApiBillingEntitlementsQueryKey();
 export interface Entitlements {
   data: EntitlementsPayload | undefined;
   isLoading: boolean;
+  /**
+   * Has the answer arrived?
+   *
+   * The third state, and the one that was missing. `can()` cannot express "we
+   * do not know yet" in a boolean, so every caller that only asked `can()` was
+   * silently told "yes" during load. Controls that must not be acted on before
+   * the answer lands read this.
+   */
+  ready: boolean;
   /** Does the plan include this feature? Optimistic while loading — see below. */
   can: (feature: FeatureKey) => boolean;
   /** Does the caller's role permit this? */
@@ -79,6 +88,7 @@ export function useEntitlements(): Entitlements {
   return {
     data,
     isLoading,
+    ready: data !== undefined,
     /**
      * Optimistic while loading: `true` until we know otherwise.
      *
@@ -86,6 +96,14 @@ export function useEntitlements(): Entitlements {
      * page load for a paying customer, which is a worse failure than briefly showing a
      * control that then locks. The server is the boundary either way; this only decides
      * what the first paint looks like.
+     *
+     * That reasoning holds for *reading* — deciding whether to blur a panel —
+     * and does not hold for a control someone can click. Optimism there meant a
+     * free user could flip a paid switch in the window before the answer
+     * arrived: the write is accepted and then ignored by the server clamp, so
+     * the toggle appears to work and silently does nothing. `LockedControl`
+     * uses `ready` to hold controls inert until the answer lands, rather than
+     * guessing. See the note there.
      */
     can: (feature) => (data ? data.features[feature] === true : true),
     allows: (resource, action) => (data ? (data.permissions[resource]?.includes(action) ?? false) : true),

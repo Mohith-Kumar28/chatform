@@ -115,7 +115,7 @@ export function IntegrateClient({ formId, slug }: { formId: string; slug: string
                     key={ev}
                     type="button"
                     onClick={() => setSelectedEvents((prev) => (on ? prev.filter((x) => x !== ev) : [...prev, ev]))}
-                    className={`rounded-full border px-3 py-1 text-xs ${on ? "bg-primary text-white" : "hover:border-primary"}`}
+                    className={`rounded-full border px-3 py-1 text-xs ${on ? "bg-primary text-primary-foreground" : "hover:border-primary"}`}
                   >
                     {ev}
                   </button>

@@ -99,23 +99,75 @@ describe("status token contrast", () => {
         expect(bg, `--${status} must be defined`).not.toBeNull();
         expect(fg, `--${status}-foreground must be defined`).not.toBeNull();
         /**
-         * A ratchet, not a standard — and deliberately so.
+         * Large-text AA for the status fills.
          *
-         * Writing this test surfaced something nobody had reported: white text
-         * on the light theme's chatform orange measures 2.78:1, under the 3:1
-         * large-text bar and well under the 4.5:1 body bar. That is every
-         * primary button in the light theme — Publish, Copy, Create form.
-         *
-         * Fixing it means darkening the brand orange, which is a decision about
-         * the brand rather than about this file, so it is left to whoever owns
-         * that. The floor here is set just under today's worst pair so the
-         * situation cannot quietly get worse while that decision is pending.
-         * Raise it to 3, then 4.5, as the palette allows.
+         * Apart from `primary` — asserted at full AA just below — none of these
+         * pairs is actually rendered: the destructive badge and button write
+         * `text-white` rather than `--destructive-foreground`, and the success
+         * and info inks are used as type on the page background, not on their
+         * own fill. So this is a floor on a contract nothing exercises yet,
+         * which is worth keeping (the day someone builds a solid success chip,
+         * it should not be unreadable) but is not worth failing the build over
+         * at body-text strength.
          */
-        expect(contrast(fg!, bg!)).toBeGreaterThanOrEqual(2.7);
+        expect(contrast(fg!, bg!)).toBeGreaterThanOrEqual(3);
       });
     }
   }
+
+  /**
+   * The one solid pair that is genuinely everywhere.
+   *
+   * `bg-primary text-primary-foreground` is the default badge and the default
+   * button — small text, so body-strength AA is the real bar. It used to be
+   * white on the chatform orange at 2.78:1, under even the 3:1 large-text
+   * floor, and this test carried a 2.7 ratchet and a note deferring the fix as
+   * a brand decision. That decision was taken: the light theme now writes the
+   * same warm near-black on orange that the dark theme always did. The brand
+   * colour itself is unchanged.
+   */
+  for (const [name, block] of Object.entries(themeBlocks())) {
+    // `primary-hover` too: a button spends real time under the cursor, and a
+    // hover state that drops below the bar is the same bug arriving half a
+    // second later.
+    for (const fill of ["primary", "primary-hover"] as const) {
+      it(`${fill} clears body-text AA with primary-foreground in ${name}`, () => {
+        const light = themeBlocks().light;
+        const bg = readToken(block, fill) ?? readToken(light, fill);
+        const fg = readToken(block, "primary-foreground") ?? readToken(light, "primary-foreground");
+        expect(bg, `--${fill} must be defined`).not.toBeNull();
+        expect(contrast(fg!, bg!)).toBeGreaterThanOrEqual(AA);
+      });
+    }
+  }
+
+  /**
+   * The literal that bypasses the token.
+   *
+   * `text-white` on `bg-primary` is the 2.78:1 pair written by hand, which is
+   * how it survived the token being fixed in two places already. It is always
+   * wrong on the light theme's orange, so it is worth catching by shape rather
+   * than by contrast maths.
+   */
+  it("no component writes literal white on the primary fill", () => {
+    const src = path.resolve(import.meta.dirname, "../src");
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        const full = path.join(dir, entry);
+        if (statSync(full).isDirectory()) walk(full);
+        else if (/\.(tsx?|css)$/.test(entry)) {
+          for (const [i, line] of readFileSync(full, "utf8").split("\n").entries()) {
+            if (line.includes("bg-primary") && /\btext-white\b/.test(line)) {
+              offenders.push(`${path.relative(src, full)}:${i + 1}`);
+            }
+          }
+        }
+      }
+    };
+    walk(src);
+    expect(offenders, "use text-primary-foreground, which is the readable ink").toEqual([]);
+  });
 
   it("no component pairs a soft fill with the saturated fill's ink", () => {
     // The actual bug, caught at its source: `bg-[var(--x-soft)]` next to

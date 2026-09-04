@@ -137,12 +137,33 @@ export default function BillingPage() {
   };
 
   if (ent.isLoading || !ent.data || !plan) {
+    /*
+      Shaped like the page it precedes, rather than three generic bars. The
+      header here is a title with a plan badge and a line of meta beneath it,
+      so the skeleton is too — otherwise the title jumps down and the badge
+      appears out of nowhere the moment the answer lands, which is the thing
+      that reads as a glitch.
+    */
     return (
-      <div className="mx-auto w-full max-w-4xl space-y-3 px-6 py-10">
-        <Skeleton className="h-9 w-40" />
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-28 w-full" />
-        ))}
+      <div className="mx-auto w-full max-w-4xl px-6 py-10">
+        <header className="mb-8 space-y-2.5">
+          <Skeleton className="h-9 w-56" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+        </header>
+        <div className="space-y-3">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="mt-10 mb-4 h-7 w-24" />
+        <div className="grid gap-3 md:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-64 w-full rounded-xl" />
+          ))}
+        </div>
       </div>
     );
   }

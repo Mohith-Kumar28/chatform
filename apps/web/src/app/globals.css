@@ -46,7 +46,13 @@
 
   /* ── brand ── */
   --primary: oklch(0.705 0.19 43); /* chatform orange */
-  --primary-foreground: oklch(0.995 0.005 85);
+  /* Ink on the orange. Near-black, not white.
+     White measured 2.78:1 here — under even the 3:1 large-text floor — so every
+     primary button and badge in the light theme was unreadable rather than
+     bold. This is the same value as `--on-primary` below, and the same choice
+     the dark theme has always made, so the two themes now agree instead of
+     disagreeing for no reason. Clears 5.8:1. */
+  --primary-foreground: oklch(0.225 0.012 55);
   --primary-hover: oklch(0.655 0.195 41);
   --primary-soft: oklch(0.952 0.038 60); /* tinted background for badges/wash */
   --primary-soft-foreground: oklch(0.42 0.13 43);
@@ -131,7 +137,13 @@
      floor, so a white headline on an orange band is unreadable rather than
      bold. This warm near-black clears 5.8:1 on the light orange and 6.9:1 on
      the lifted dark one, so one value is correct in both themes and `.dark`
-     does not restate it. */
+     does not restate it.
+
+     `--primary-foreground` now carries the same value, so the two are
+     interchangeable in the light theme. Both are kept: this one names the
+     intent ("ink for a full-strength primary ground") and is the one to reach
+     for on a hand-built band, where there is no `bg-primary` class to pair
+     with. */
   --on-primary: oklch(0.225 0.012 55);
 
   --family-content-band: color-mix(in oklch, var(--family-content) var(--band-mix), var(--background));
@@ -166,7 +178,8 @@
   --panel: var(--card);
   --sidebar-foreground: oklch(0.255 0.01 65);
   --sidebar-primary: oklch(0.705 0.19 43);
-  --sidebar-primary-foreground: oklch(0.995 0.005 85);
+  /* Same orange, same reasoning as `--primary-foreground` above. */
+  --sidebar-primary-foreground: oklch(0.225 0.012 55);
   --sidebar-accent: oklch(0.93 0.02 75);
   --sidebar-accent-foreground: oklch(0.3 0.02 60);
   --sidebar-border: oklch(0.905 0.011 80);

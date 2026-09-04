@@ -18,6 +18,18 @@ import { cn } from "@/lib/utils";
  */
 export function UsagePill() {
   const ent = useEntitlements();
+
+  /**
+   * A placeholder of roughly the pill's width, rather than nothing.
+   *
+   * Returning `null` here meant the header re-laid-out the moment entitlements
+   * landed — the search button and the theme toggle slid left, which reads as
+   * the page glitching rather than as data arriving. Everything to the left of
+   * this is fixed-width, so holding the space is enough to stop it.
+   */
+  if (!ent.ready) {
+    return <span aria-hidden className="bg-muted/60 hidden h-6 w-24 animate-pulse rounded-full md:inline-block" />;
+  }
   if (!ent.data) return null;
 
   const responseRatio = ent.ratio("responses", "responses_ceiling_per_month");

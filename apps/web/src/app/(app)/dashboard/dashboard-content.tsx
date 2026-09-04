@@ -266,8 +266,14 @@ export function DashboardContent() {
         title={`Delete “${pendingDelete?.title}”?`}
         description="Responses already collected stay in your account, but the form stops accepting new ones and disappears from this list."
         confirmLabel="Delete form"
-        onConfirm={async () => {
-          if (pendingDelete) await remove.mutateAsync(pendingDelete.id);
+        /*
+          `mutate`, not `mutateAsync`. Both report through the same `onError`
+          toast, but the async form also rejects — and nothing awaits it here,
+          so a refused delete surfaced correctly to the user and as an
+          unhandled rejection in the console at the same time.
+        */
+        onConfirm={() => {
+          if (pendingDelete) remove.mutate(pendingDelete.id);
         }}
       />
     </div>
@@ -529,7 +535,7 @@ function CreateFormDialog({
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Customer feedback"
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && canSubmit) void createBlank.mutateAsync();
+                    if (e.key === "Enter" && canSubmit) createBlank.mutate();
                   }}
                 />
               </div>
@@ -538,7 +544,7 @@ function CreateFormDialog({
             <Button
               shape="pill"
               disabled={!canSubmit || busy}
-              onClick={() => (mode === "ai" ? generate() : void createBlank.mutateAsync())}
+              onClick={() => (mode === "ai" ? generate() : createBlank.mutate())}
             >
               {createBlank.isPending && <Loader2 className="size-3.5 animate-spin" />}
               {createBlank.isPending ? "Creating…" : "Create form"}

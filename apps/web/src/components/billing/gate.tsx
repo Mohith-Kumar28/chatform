@@ -97,6 +97,24 @@ export function LockChip({
  * Keeps the control rendered and legible, kills its interactivity, and puts a chip beside
  * the label. Uses `inert` rather than only CSS so keyboard users cannot tab into something
  * that will refuse them.
+ *
+ * Three states, not two. The middle one is the point:
+ *
+ * - **unknown** — entitlements have not arrived. The control is rendered in
+ *   place, dimmed slightly and inert, with the chip's slot reserved but empty.
+ * - **allowed** — rendered plainly.
+ * - **locked** — inert, with the chip.
+ *
+ * This used to have only the last two, and treated unknown as allowed. That
+ * produced exactly the thing that looks like a bug: a switch renders live, you
+ * flip it, and a moment later a "Pro" chip appears over a control you have
+ * already used. Worse, the write went through — the server clamps the value
+ * when it serves the form, so the setting saved and then silently did nothing.
+ *
+ * Holding it inert is not a security measure; the server is the boundary and
+ * always was. It is a correctness one: a control must not accept a click whose
+ * outcome we cannot yet name. And because the layout is identical in all three
+ * states, nothing moves when the answer lands.
  */
 export function LockedControl({
   feature,
@@ -107,15 +125,29 @@ export function LockedControl({
   children: ReactNode;
   className?: string;
 }) {
-  const { can } = useEntitlements();
-  if (can(feature)) return <>{children}</>;
+  const { can, ready } = useEntitlements();
+  if (ready && can(feature)) return <>{children}</>;
+
+  const locked = ready;
   return (
-    <div className={cn("relative", className)}>
-      <div className="pointer-events-none opacity-55 select-none" {...({ inert: "" } as Record<string, string>)}>
+    <div className={cn("relative", className)} aria-busy={!ready || undefined}>
+      <div
+        className={cn(
+          "select-none",
+          // Dimmed further once we know it is locked, so the resolved state is
+          // distinguishable from the waiting one rather than identical to it.
+          locked ? "pointer-events-none opacity-55" : "pointer-events-none opacity-80",
+        )}
+        {...({ inert: "" } as Record<string, string>)}
+      >
         {children}
       </div>
-      <div className="absolute inset-0 z-10 flex cursor-pointer items-start justify-end p-1">
-        <LockChip feature={feature} />
+      {/*
+        The slot is always present and always the same size, so the chip does
+        not push anything around when it arrives. Only its contents change.
+      */}
+      <div className="absolute inset-0 z-10 flex items-start justify-end p-1">
+        {locked && <LockChip feature={feature} />}
       </div>
     </div>
   );

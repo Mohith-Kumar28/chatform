@@ -24,6 +24,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { LockedControl } from "@/components/billing/gate";
 import { KeyRound, Plus, Trash2, RefreshCw, ShieldAlert } from "lucide-react";
 import { useClientValue } from "@/hooks/use-client-value";
+import { ApiError } from "@/lib/api/mutator";
 
 /**
  * API keys.
@@ -105,7 +106,18 @@ export default function ApiKeysPage() {
   const [open, setOpen] = useState(false);
   const [created, setCreated] = useState<{ key: string; keyType: KeyType } | null>(null);
   const [revoking, setRevoking] = useState<KeyRow | null>(null);
+  const [rotating, setRotating] = useState<KeyRow | null>(null);
   const [rotated, setRotated] = useState<{ key: string; oldKeyExpiresAt: number | null } | null>(null);
+  /**
+   * Refusals, shown where they happened.
+   *
+   * A 402 opens the global paywall, but a 403 (your role cannot mint keys) and
+   * a 422 (that origin is not a URL) deliberately fall through to the caller —
+   * and nothing here was catching them, so those clicks did nothing at all and
+   * said nothing about why.
+   */
+  const [formError, setFormError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
 
   const [name, setName] = useState("Production key");
   const [keyType, setKeyType] = useState<KeyType>("sk_live");
@@ -142,20 +154,42 @@ export default function ApiKeysPage() {
     });
   }
 
+  function messageFor(err: unknown): string {
+    return err instanceof ApiError ? err.message : "Something went wrong. Please try again.";
+  }
+
   async function submit() {
+    setFormError(null);
     const parsedOrigins = origins
       .split(/[\n,]/)
       .map((o) => o.trim())
       .filter(Boolean);
-    const result = (await createKey.mutateAsync({
-      data: {
-        name,
-        keyType,
-        scopes: isPublishable(keyType) ? PUBLISHABLE_CEILING : scopes,
-        ...(parsedOrigins.length ? { origins: parsedOrigins } : {}),
-      } as never,
-    })) as unknown as { key: string };
-    setCreated({ key: result.key, keyType });
+    try {
+      const result = (await createKey.mutateAsync({
+        data: {
+          name,
+          keyType,
+          scopes: isPublishable(keyType) ? PUBLISHABLE_CEILING : scopes,
+          ...(parsedOrigins.length ? { origins: parsedOrigins } : {}),
+        } as never,
+      })) as unknown as { key: string };
+      setCreated({ key: result.key, keyType });
+    } catch (err) {
+      setFormError(messageFor(err));
+    }
+  }
+
+  async function rotate(row: KeyRow) {
+    setListError(null);
+    try {
+      const res = (await rotateKey.mutateAsync({
+        id: row.id,
+        data: { graceHours: 24 } as never,
+      })) as unknown as { key: string; oldKeyExpiresAt: number | null };
+      setRotated(res);
+    } catch (err) {
+      setListError(messageFor(err));
+    }
   }
 
   return (
@@ -176,6 +210,12 @@ export default function ApiKeysPage() {
           </LockedControl>
         }
       />
+
+      {listError && (
+        <p className="text-destructive mb-4 rounded-xl bg-[var(--destructive-soft)] px-4 py-3 text-sm" role="alert">
+          {listError}
+        </p>
+      )}
 
       {isLoading ? (
         <div className="space-y-3">
@@ -235,20 +275,27 @@ export default function ApiKeysPage() {
                 </div>
                 {k.enabled && (
                   <div className="flex items-center gap-1">
+                    {/*
+                      Rotation is confirmed like revocation is. It reads as the
+                      safe sibling of the two, but it starts a 24-hour clock on
+                      a key that is in production right now — a misclick here is
+                      a deploy deadline nobody agreed to.
+                    */}
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={async () => {
-                        const res = (await rotateKey.mutateAsync({
-                          id: k.id,
-                          data: { graceHours: 24 } as never,
-                        })) as unknown as { key: string; oldKeyExpiresAt: number | null };
-                        setRotated(res);
-                      }}
+                      disabled={rotateKey.isPending}
+                      onClick={() => setRotating(k)}
                     >
                       <RefreshCw className="size-3.5" /> Rotate
                     </Button>
-                    <Button variant="ghost" size="icon" className="size-8" onClick={() => setRevoking(k)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      aria-label={`Revoke ${k.name ?? "this key"}`}
+                      onClick={() => setRevoking(k)}
+                    >
                       <Trash2 className="size-3.5" />
                     </Button>
                   </div>
@@ -278,7 +325,10 @@ export default function ApiKeysPage() {
         open={open}
         onOpenChange={(o) => {
           setOpen(o);
-          if (!o) setCreated(null);
+          if (!o) {
+            setCreated(null);
+            setFormError(null);
+          }
         }}
       >
         <DialogContent className="max-w-lg">
@@ -379,6 +429,12 @@ export default function ApiKeysPage() {
                 )}
               </div>
 
+              {formError && (
+                <p className="text-destructive rounded-lg bg-[var(--destructive-soft)] px-3 py-2 text-sm" role="alert">
+                  {formError}
+                </p>
+              )}
+
               <Button
                 className="rounded-full"
                 onClick={submit}
@@ -410,6 +466,19 @@ export default function ApiKeysPage() {
           </Button>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={rotating !== null}
+        onOpenChange={(o) => !o && setRotating(null)}
+        title="Rotate this key?"
+        description={`A replacement is issued now and ${rotating?.name ?? "this key"} keeps working for 24 hours, then stops. Deploy the new one within that window — after it, anything still using the old key starts failing.`}
+        confirmLabel="Rotate"
+        onConfirm={() => {
+          const row = rotating;
+          setRotating(null);
+          if (row) void rotate(row);
+        }}
+      />
 
       <ConfirmDialog
         open={revoking !== null}
