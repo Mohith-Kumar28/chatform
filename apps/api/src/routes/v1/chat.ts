@@ -38,15 +38,28 @@ const assertSessionOwnership: MiddlewareHandler<{
   Variables: Partial<GuardVars>;
 }> = async (c, next) => {
   const orgId = c.get("orgId");
-  const sid = c.req.param("sid");
+  const sid = c.req.param("sid")!;
   if (!orgId || !sid || !(await assertChatSessionAccess(c.env, sid, orgId))) {
     return c.json({ error: { code: "not_found", message: "Session not found" } }, 404);
   }
   await next();
 };
 
-chatRouter.use("/sessions/:sid", assertSessionOwnership);
-chatRouter.use("/sessions/:sid/*", assertSessionOwnership);
+/**
+ * Both spellings of a session path.
+ *
+ * The original surface put `chat` in the path and integrations were written
+ * against it, so `/v1/chat/sessions/…` still answers. Registering each route
+ * twice — rather than mounting the whole router under `/chat`, which is what
+ * this used to do — keeps `/v1/chat/forms/…` from appearing in the published
+ * spec as though it were a real endpoint.
+ */
+const SESSION_BASES = ["/sessions/:sid", "/chat/sessions/:sid"] as const;
+
+for (const base of SESSION_BASES) {
+  chatRouter.use(base, assertSessionOwnership);
+  chatRouter.use(`${base}/*`, assertSessionOwnership);
+}
 
 const CreateSessionBody = z
   .object({
@@ -216,7 +229,7 @@ async function respondToTurn(
      * to resume.
      */
     return c.json(
-      { ...body, status: "processing", pollUrl: `/v1/sessions/${c.req.param("sid")}/events?since=${result.sinceSeq}` },
+      { ...body, status: "processing", pollUrl: `/v1/sessions/${c.req.param("sid") ?? ""}/events?since=${result.sinceSeq}` },
       202,
     );
   }
@@ -228,8 +241,9 @@ const deadlineFrom = (c: { req: { query(k: string): string | undefined } }) => {
   return Number.isFinite(raw) ? { deadlineMs: raw } : {};
 };
 
-chatRouter.post(
-  "/sessions/:sid/messages",
+const messagesRoute = (base: string) =>
+  chatRouter.post(
+  `${base}/messages`,
   requireScope("session", "write"),
   validator("json", MessageBody),
   describeRoute({
@@ -242,7 +256,7 @@ chatRouter.post(
     },
   }),
   async (c) => {
-    const sid = c.req.param("sid");
+    const sid = c.req.param("sid")!;
     const body = c.req.valid("json");
     return respondToTurn(c as never, () =>
       stub(c.env, sid).handleUserTurnSync(
@@ -253,8 +267,9 @@ chatRouter.post(
   },
 );
 
-chatRouter.post(
-  "/sessions/:sid/actions",
+const actionsRoute = (base: string) =>
+  chatRouter.post(
+  `${base}/actions`,
   requireScope("session", "write"),
   validator(
     "json",
@@ -279,14 +294,15 @@ chatRouter.post(
      * could never be completed over the API: the conversation parks on a review
      * step waiting for a submit nobody could send.
      */
-    const sid = c.req.param("sid");
+    const sid = c.req.param("sid")!;
     const body = c.req.valid("json");
     return respondToTurn(c as never, () => stub(c.env, sid).actionSync(body, deadlineFrom(c)));
   },
 );
 
-chatRouter.get(
-  "/sessions/:sid",
+const stateRoute = (base: string) =>
+  chatRouter.get(
+  base,
   requireScope("session", "read"),
   describeRoute({
     tags: ["v1"],
@@ -294,7 +310,7 @@ chatRouter.get(
     responses: { 200: { description: "State" }, 404: { description: "Not found" } },
   }),
   async (c) => {
-    const sid = c.req.param("sid");
+    const sid = c.req.param("sid")!;
     const status = await stub(c.env, sid).getStatus();
     if (!status) return c.json({ error: { code: "not_found", message: "Session not found" } }, 404);
     const row = await c.env.DB.prepare(`SELECT expires_at, is_test, source FROM chat_sessions WHERE id = ?`)
@@ -310,8 +326,9 @@ chatRouter.get(
   },
 );
 
-chatRouter.get(
-  "/sessions/:sid/events",
+const eventsRoute = (base: string) =>
+  chatRouter.get(
+  `${base}/events`,
   requireScope("session", "read"),
   describeRoute({
     tags: ["v1"],
@@ -319,7 +336,7 @@ chatRouter.get(
     responses: { 200: { description: "SSE stream, or a JSON page of events" } },
   }),
   async (c) => {
-    const sid = c.req.param("sid");
+    const sid = c.req.param("sid")!;
     const since = c.req.query("since");
 
     /**
@@ -360,8 +377,9 @@ chatRouter.get(
   },
 );
 
-chatRouter.post(
-  "/sessions/:sid/token/rotate",
+const rotateRoute = (base: string) =>
+  chatRouter.post(
+  `${base}/token/rotate`,
   requireScope("session", "write"),
   describeRoute({
     tags: ["v1"],
@@ -369,7 +387,7 @@ chatRouter.post(
     responses: { 200: { description: "The new token" }, 404: { description: "Not found" } },
   }),
   async (c) => {
-    const sid = c.req.param("sid");
+    const sid = c.req.param("sid")!;
     const token = crypto.randomUUID().replace(/-/g, "");
     const res = await c.env.DB.prepare(
       `UPDATE chat_sessions SET respondent_token_hash = ?, token_rotated_at = ?, last_activity_at = ? WHERE id = ?`,
@@ -390,10 +408,17 @@ chatRouter.post(
  * server: they collect a Google ID token or drive the OTP from their own UI and
  * pass it through.
  */
-mountRespondentAuth(chatRouter as unknown as AuthRouter, {
-  base: "/sessions/:sid",
-  stub: (env, sessionId) => stub(env, sessionId),
-  resolve: async (c) => c.req.param("sid") ?? null,
-});
+for (const base of SESSION_BASES) {
+  messagesRoute(base);
+  actionsRoute(base);
+  stateRoute(base);
+  eventsRoute(base);
+  rotateRoute(base);
+  mountRespondentAuth(chatRouter as unknown as AuthRouter, {
+    base,
+    stub: (env, sessionId) => stub(env, sessionId),
+    resolve: async (c) => c.req.param("sid") ?? null,
+  });
+}
 
 export { readFormDoc };

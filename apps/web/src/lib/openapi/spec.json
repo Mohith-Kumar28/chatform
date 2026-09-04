@@ -3121,6 +3121,315 @@
         ]
       }
     },
+    "/v1/forms/{id}/analytics": {
+      "get": {
+        "operationId": "getV1FormsByIdAnalytics",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Counts, per-question funnel and answer distributions",
+        "responses": {
+          "200": {
+            "description": "Analytics"
+          },
+          "402": {
+            "description": "The per-question detail needs a plan that includes it"
+          },
+          "404": {
+            "description": "Form not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/webhooks": {
+      "get": {
+        "operationId": "getV1Webhooks",
+        "tags": [
+          "v1"
+        ],
+        "summary": "List webhook endpoints",
+        "responses": {
+          "200": {
+            "description": "Endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "url": {
+                        "type": "string"
+                      },
+                      "events": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "formId": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "active": {
+                        "type": "boolean"
+                      },
+                      "consecutiveFailures": {
+                        "type": "number"
+                      },
+                      "createdAt": {
+                        "type": "number"
+                      },
+                      "secretPreview": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "url",
+                      "events",
+                      "formId",
+                      "active",
+                      "consecutiveFailures",
+                      "createdAt",
+                      "secretPreview"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postV1Webhooks",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "format": "uri"
+                  },
+                  "events": {
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "formId": {
+                    "type": "string",
+                    "maxLength": 64
+                  }
+                },
+                "required": [
+                  "url",
+                  "events"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Create a webhook endpoint — the signing secret is returned ONCE",
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "404": {
+            "description": "Form not found"
+          },
+          "422": {
+            "description": "Unknown event name"
+          }
+        },
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/webhooks/{id}": {
+      "delete": {
+        "operationId": "deleteV1WebhooksById",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Delete a webhook endpoint",
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/webhooks/{id}/deliveries": {
+      "get": {
+        "operationId": "getV1WebhooksByIdDeliveries",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Recent delivery attempts, for working out why an endpoint is quiet",
+        "responses": {
+          "200": {
+            "description": "Deliveries"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/webhooks/{id}/deliveries/{deliveryId}/replay": {
+      "post": {
+        "operationId": "postV1WebhooksByIdDeliveriesByDeliveryIdReplay",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Replay one delivery",
+        "responses": {
+          "200": {
+            "description": "Queued"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Nothing to replay"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "deliveryId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
     "/v1/forms/{id}/sessions": {
       "post": {
         "operationId": "postV1FormsByIdSessions",
@@ -3645,278 +3954,6 @@
             },
             "in": "path",
             "name": "sid",
-            "required": true
-          }
-        ],
-        "security": [
-          {
-            "secretKey": []
-          },
-          {
-            "publishableKey": []
-          },
-          {
-            "apiKeyHeader": []
-          }
-        ]
-      }
-    },
-    "/v1/chat/forms/{id}/sessions": {
-      "post": {
-        "operationId": "postV1ChatFormsByIdSessions",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "default": {},
-                "type": "object",
-                "properties": {
-                  "hiddenFields": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {
-                      "type": "string"
-                    }
-                  },
-                  "externalId": {
-                    "type": "string",
-                    "maxLength": 200
-                  },
-                  "expiresIn": {
-                    "type": "integer",
-                    "minimum": 300,
-                    "maximum": 2592000
-                  },
-                  "respondent": {
-                    "type": "object",
-                    "properties": {
-                      "ipHash": {
-                        "type": "string",
-                        "maxLength": 128
-                      },
-                      "country": {
-                        "type": "string",
-                        "maxLength": 8
-                      },
-                      "userAgent": {
-                        "type": "string",
-                        "maxLength": 300
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "v1"
-        ],
-        "summary": "Open a conversation on a published form",
-        "responses": {
-          "200": {
-            "description": "Session",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "sessionId": {
-                      "type": "string"
-                    },
-                    "respondentToken": {
-                      "type": "string"
-                    },
-                    "expiresAt": {
-                      "type": "number"
-                    },
-                    "streamUrl": {
-                      "type": "string"
-                    },
-                    "greeting": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "question": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "sessionId",
-                    "respondentToken",
-                    "expiresAt",
-                    "streamUrl",
-                    "greeting",
-                    "question"
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "The form is closed, capped, or over its response ceiling"
-          },
-          "404": {
-            "description": "Form not found"
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "security": [
-          {
-            "secretKey": []
-          },
-          {
-            "publishableKey": []
-          },
-          {
-            "apiKeyHeader": []
-          }
-        ]
-      }
-    },
-    "/v1/chat/forms/{id}/chat/sessions": {
-      "post": {
-        "operationId": "postV1ChatFormsByIdChatSessions",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "default": {},
-                "type": "object",
-                "properties": {
-                  "hiddenFields": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {
-                      "type": "string"
-                    }
-                  },
-                  "externalId": {
-                    "type": "string",
-                    "maxLength": 200
-                  },
-                  "expiresIn": {
-                    "type": "integer",
-                    "minimum": 300,
-                    "maximum": 2592000
-                  },
-                  "respondent": {
-                    "type": "object",
-                    "properties": {
-                      "ipHash": {
-                        "type": "string",
-                        "maxLength": 128
-                      },
-                      "country": {
-                        "type": "string",
-                        "maxLength": 8
-                      },
-                      "userAgent": {
-                        "type": "string",
-                        "maxLength": 300
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "v1"
-        ],
-        "summary": "Open a conversation on a published form",
-        "responses": {
-          "200": {
-            "description": "Session",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "sessionId": {
-                      "type": "string"
-                    },
-                    "respondentToken": {
-                      "type": "string"
-                    },
-                    "expiresAt": {
-                      "type": "number"
-                    },
-                    "streamUrl": {
-                      "type": "string"
-                    },
-                    "greeting": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "question": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "sessionId",
-                    "respondentToken",
-                    "expiresAt",
-                    "streamUrl",
-                    "greeting",
-                    "question"
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "The form is closed, capped, or over its response ceiling"
-          },
-          "404": {
-            "description": "Form not found"
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
             "required": true
           }
         ],

@@ -10,6 +10,7 @@ import { parseDoc, publishForm, saveWorkingDoc } from "../../lib/forms-service.j
 import { clampForRuntime, brandingHiddenFor } from "../../lib/doc-entitlements.js";
 import { decodeCursor, paginate } from "../../lib/cursor.js";
 import { getEntitlements } from "../../lib/entitlements.js";
+import { computeAnalytics } from "../../lib/analytics-service.js";
 
 /**
  * Forms, programmatically.
@@ -287,5 +288,65 @@ formsV1Router.delete(
     }
     // Soft, so the responses collected against it stay readable and exportable.
     return c.json({ ok: true, deleted: true });
+  },
+);
+
+formsV1Router.get(
+  "/forms/:id/analytics",
+  requireScope("analytics", "read"),
+  describeRoute({
+    tags: ["v1"],
+    summary: "Counts, per-question funnel and answer distributions",
+    responses: {
+      200: { description: "Analytics" },
+      402: { description: "The per-question detail needs a plan that includes it" },
+      404: { description: "Form not found" },
+    },
+  }),
+  async (c) => {
+    const orgId = c.get("orgId")!;
+    const id = c.req.param("id");
+    if (!keyOwnsForm(c, id)) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+
+    const owned = await c.env.DB.prepare(
+      `SELECT id FROM forms WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`,
+    )
+      .bind(id, orgId)
+      .first();
+    if (!owned) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+
+    /**
+     * `all` by default here, unlike the dashboard.
+     *
+     * Someone asking through the API wants every response they have; the
+     * dashboard defaults to `chat` so its long-standing numbers keep meaning
+     * what its users have always read them to mean.
+     */
+    const aggregate = await computeAnalytics(c.env, id, {
+      source: c.req.query("source") ?? "all",
+      includeTest: c.req.query("includeTest") === "1" || c.get("environment") === "test",
+    });
+
+    /**
+     * The same split the dashboard applies: the headline numbers are free, and
+     * the per-question detail that explains them is the paid part.
+     */
+    const ent = await entitlementsFor(c as never);
+    if (!ent.features.advanced_analytics) {
+      const { views, starts, completed, abandoned, avgDurationMs, completionRate } = aggregate;
+      return c.json({
+        views,
+        starts,
+        completed,
+        abandoned,
+        avgDurationMs,
+        completionRate,
+        perBlock: [],
+        distributions: [],
+        locked: ["perBlock", "distributions"],
+        requiredPlan: "pro",
+      });
+    }
+    return c.json(aggregate);
   },
 );

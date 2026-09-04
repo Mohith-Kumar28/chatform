@@ -624,6 +624,29 @@ export type PutV1FormsByIdDocBody = {
   doc: unknown;
 };
 
+export type GetV1Webhooks200Item = {
+  id: string;
+  url: string;
+  events: string[];
+  formId: string | null;
+  active: boolean;
+  consecutiveFailures: number;
+  createdAt: number;
+  secretPreview: string;
+};
+
+export type PostV1WebhooksBody = {
+  /** @maxLength 2000 */
+  url: string;
+  /**
+     * @minItems 1
+     * @maxItems 20
+     */
+  events: string[];
+  /** @maxLength 64 */
+  formId?: string;
+};
+
 export type PostV1FormsByIdSessionsBodyHiddenFields = {[key: string]: string};
 
 export type PostV1FormsByIdSessionsBodyRespondent = {
@@ -715,70 +738,6 @@ export const PostV1SessionsBySidActionsBodyAction = {
 export type PostV1SessionsBySidActionsBody = {
   action: PostV1SessionsBySidActionsBodyAction;
   ref?: string;
-};
-
-export type PostV1ChatFormsByIdSessionsBodyHiddenFields = {[key: string]: string};
-
-export type PostV1ChatFormsByIdSessionsBodyRespondent = {
-  /** @maxLength 128 */
-  ipHash?: string;
-  /** @maxLength 8 */
-  country?: string;
-  /** @maxLength 300 */
-  userAgent?: string;
-};
-
-export type PostV1ChatFormsByIdSessionsBody = {
-  hiddenFields?: PostV1ChatFormsByIdSessionsBodyHiddenFields;
-  /** @maxLength 200 */
-  externalId?: string;
-  /**
-     * @minimum 300
-     * @maximum 2592000
-     */
-  expiresIn?: number;
-  respondent?: PostV1ChatFormsByIdSessionsBodyRespondent;
-};
-
-export type PostV1ChatFormsByIdSessions200 = {
-  sessionId: string;
-  respondentToken: string;
-  expiresAt: number;
-  streamUrl: string;
-  greeting: string | null;
-  question: unknown | null;
-};
-
-export type PostV1ChatFormsByIdChatSessionsBodyHiddenFields = {[key: string]: string};
-
-export type PostV1ChatFormsByIdChatSessionsBodyRespondent = {
-  /** @maxLength 128 */
-  ipHash?: string;
-  /** @maxLength 8 */
-  country?: string;
-  /** @maxLength 300 */
-  userAgent?: string;
-};
-
-export type PostV1ChatFormsByIdChatSessionsBody = {
-  hiddenFields?: PostV1ChatFormsByIdChatSessionsBodyHiddenFields;
-  /** @maxLength 200 */
-  externalId?: string;
-  /**
-     * @minimum 300
-     * @maximum 2592000
-     */
-  expiresIn?: number;
-  respondent?: PostV1ChatFormsByIdChatSessionsBodyRespondent;
-};
-
-export type PostV1ChatFormsByIdChatSessions200 = {
-  sessionId: string;
-  respondentToken: string;
-  expiresAt: number;
-  streamUrl: string;
-  greeting: string | null;
-  question: unknown | null;
 };
 
 export type PostV1ChatSessionsBySidMessagesBody = {

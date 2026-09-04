@@ -1,5 +1,6 @@
 "use client";
 
+import { emitEmbedEvent } from "./embed-bridge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PublicBlock } from "@repo/form-schema";
 
@@ -349,6 +350,15 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
           ref: string;
           messageId?: string;
         };
+        /**
+         * The ref, never the value.
+         *
+         * A host page learns that a question was answered, not what was said —
+         * putting respondent answers into someone else's JavaScript by default
+         * is not a default anyone asked for. Webhooks and the responses API are
+         * where the data lives.
+         */
+        emitEmbedEvent({ type: "answer", ref });
         setMessages((prev) => {
           const idx = messageId
             ? prev.findIndex((m) => m.id === messageId)
@@ -381,6 +391,14 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
 
       on("question", (e) => {
         const data = JSON.parse((e as MessageEvent).data) as QuestionState;
+        // Tell the host page which question is on screen, if we are framed.
+        emitEmbedEvent({
+          type: "question",
+          ref: data.block?.ref,
+          blockType: data.block?.type,
+          answered: data.progress?.answered,
+          total: data.progress?.totalEstimate,
+        });
         setQuestion(data);
         setThinking(false);
         setEscalatedRef(null);
@@ -470,7 +488,19 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
         setThinking(false);
       });
 
-      on("complete", () => {
+      on("complete", (e) => {
+        const payload = (() => {
+          try {
+            return JSON.parse((e as MessageEvent).data) as { submissionId?: string; durationMs?: number };
+          } catch {
+            return {};
+          }
+        })();
+        emitEmbedEvent({
+          type: "complete",
+          responseId: payload.submissionId,
+          durationMs: payload.durationMs,
+        });
         setStatus("ended");
         // The active session is done, but remember that this device answered —
         // a return visit should say so rather than silently starting over.

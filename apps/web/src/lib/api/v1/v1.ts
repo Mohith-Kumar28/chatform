@@ -22,10 +22,7 @@ import type {
 import type {
   GetV1FormsByIdResponsesParams,
   GetV1FormsParams,
-  PostV1ChatFormsByIdChatSessions200,
-  PostV1ChatFormsByIdChatSessionsBody,
-  PostV1ChatFormsByIdSessions200,
-  PostV1ChatFormsByIdSessionsBody,
+  GetV1Webhooks200Item,
   PostV1ChatSessionsBySidActionsBody,
   PostV1ChatSessionsBySidMessagesBody,
   PostV1FormsBody,
@@ -39,6 +36,7 @@ import type {
   PostV1ResponsesByIdCompleteBody,
   PostV1SessionsBySidActionsBody,
   PostV1SessionsBySidMessagesBody,
+  PostV1WebhooksBody,
   PutV1FormsByIdDocBody
 } from '../generated.schemas';
 
@@ -1820,6 +1818,577 @@ export const usePostV1FormsByIdPublish = <TError = void,
       > => {
       return useMutation(getPostV1FormsByIdPublishMutationOptions(options));
     }
+    export type getV1FormsByIdAnalyticsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1FormsByIdAnalyticsResponse402 = {
+  data: void
+  status: 402
+}
+
+export type getV1FormsByIdAnalyticsResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getV1FormsByIdAnalyticsResponseSuccess = (getV1FormsByIdAnalyticsResponse200) & {
+  headers: Headers;
+};
+export type getV1FormsByIdAnalyticsResponseError = (getV1FormsByIdAnalyticsResponse402 | getV1FormsByIdAnalyticsResponse404) & {
+  headers: Headers;
+};
+
+export type getV1FormsByIdAnalyticsResponse = (getV1FormsByIdAnalyticsResponseSuccess | getV1FormsByIdAnalyticsResponseError)
+
+export const getGetV1FormsByIdAnalyticsUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/analytics`
+}
+
+/**
+ * @summary Counts, per-question funnel and answer distributions
+ */
+export const getV1FormsByIdAnalytics = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1FormsByIdAnalyticsResponse> => {
+
+  return customFetch<getV1FormsByIdAnalyticsResponse>(getGetV1FormsByIdAnalyticsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1FormsByIdAnalyticsQueryKey = (id: string,) => {
+    return [
+    `/v1/forms/${id}/analytics`
+    ] as const;
+    }
+
+
+export const getGetV1FormsByIdAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getV1FormsByIdAnalytics>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1FormsByIdAnalyticsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1FormsByIdAnalytics>>> = ({ signal }) => getV1FormsByIdAnalytics(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1FormsByIdAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getV1FormsByIdAnalytics>>>
+export type GetV1FormsByIdAnalyticsQueryError = void
+
+
+/**
+ * @summary Counts, per-question funnel and answer distributions
+ */
+
+export function useGetV1FormsByIdAnalytics<TData = Awaited<ReturnType<typeof getV1FormsByIdAnalytics>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1FormsByIdAnalyticsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getV1WebhooksResponse200 = {
+  data: GetV1Webhooks200Item[]
+  status: 200
+}
+
+export type getV1WebhooksResponseSuccess = (getV1WebhooksResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getV1WebhooksResponse = (getV1WebhooksResponseSuccess)
+
+export const getGetV1WebhooksUrl = () => {
+
+
+
+
+  return `/v1/webhooks`
+}
+
+/**
+ * @summary List webhook endpoints
+ */
+export const getV1Webhooks = async ( options?: Parameters<typeof customFetch>[1]): Promise<getV1WebhooksResponse> => {
+
+  return customFetch<getV1WebhooksResponse>(getGetV1WebhooksUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1WebhooksQueryKey = () => {
+    return [
+    `/v1/webhooks`
+    ] as const;
+    }
+
+
+export const getGetV1WebhooksQueryOptions = <TData = Awaited<ReturnType<typeof getV1Webhooks>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1Webhooks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1WebhooksQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1Webhooks>>> = ({ signal }) => getV1Webhooks({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1Webhooks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1WebhooksQueryResult = NonNullable<Awaited<ReturnType<typeof getV1Webhooks>>>
+export type GetV1WebhooksQueryError = unknown
+
+
+/**
+ * @summary List webhook endpoints
+ */
+
+export function useGetV1Webhooks<TData = Awaited<ReturnType<typeof getV1Webhooks>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1Webhooks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1WebhooksQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postV1WebhooksResponse201 = {
+  data: void
+  status: 201
+}
+
+export type postV1WebhooksResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1WebhooksResponse422 = {
+  data: void
+  status: 422
+}
+
+export type postV1WebhooksResponseSuccess = (postV1WebhooksResponse201) & {
+  headers: Headers;
+};
+export type postV1WebhooksResponseError = (postV1WebhooksResponse404 | postV1WebhooksResponse422) & {
+  headers: Headers;
+};
+
+export type postV1WebhooksResponse = (postV1WebhooksResponseSuccess | postV1WebhooksResponseError)
+
+export const getPostV1WebhooksUrl = () => {
+
+
+
+
+  return `/v1/webhooks`
+}
+
+/**
+ * @summary Create a webhook endpoint — the signing secret is returned ONCE
+ */
+export const postV1Webhooks = async (postV1WebhooksBody: PostV1WebhooksBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1WebhooksResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1WebhooksResponse>(getPostV1WebhooksUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1WebhooksBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1WebhooksMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1Webhooks>>, TError,PostV1WebhooksMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1Webhooks>>, TError,PostV1WebhooksMutationVariables, TContext> => {
+
+const mutationKey = ['postV1Webhooks'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1Webhooks>>, PostV1WebhooksMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postV1Webhooks(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1WebhooksMutationResult = NonNullable<Awaited<ReturnType<typeof postV1Webhooks>>>
+    export type PostV1WebhooksMutationBody = PostV1WebhooksBody
+    export type PostV1WebhooksMutationError = void
+    export type PostV1WebhooksMutationVariables = {data: PostV1WebhooksBody}
+
+    /**
+ * @summary Create a webhook endpoint — the signing secret is returned ONCE
+ */
+export const usePostV1Webhooks = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1Webhooks>>, TError,PostV1WebhooksMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1Webhooks>>,
+        TError,
+        PostV1WebhooksMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1WebhooksMutationOptions(options));
+    }
+    export type deleteV1WebhooksByIdResponse200 = {
+  data: void
+  status: 200
+}
+
+export type deleteV1WebhooksByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type deleteV1WebhooksByIdResponseSuccess = (deleteV1WebhooksByIdResponse200) & {
+  headers: Headers;
+};
+export type deleteV1WebhooksByIdResponseError = (deleteV1WebhooksByIdResponse404) & {
+  headers: Headers;
+};
+
+export type deleteV1WebhooksByIdResponse = (deleteV1WebhooksByIdResponseSuccess | deleteV1WebhooksByIdResponseError)
+
+export const getDeleteV1WebhooksByIdUrl = (id: string,) => {
+
+
+
+
+  return `/v1/webhooks/${id}`
+}
+
+/**
+ * @summary Delete a webhook endpoint
+ */
+export const deleteV1WebhooksById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteV1WebhooksByIdResponse> => {
+
+  return customFetch<deleteV1WebhooksByIdResponse>(getDeleteV1WebhooksByIdUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteV1WebhooksByIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteV1WebhooksById>>, TError,DeleteV1WebhooksByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteV1WebhooksById>>, TError,DeleteV1WebhooksByIdMutationVariables, TContext> => {
+
+const mutationKey = ['deleteV1WebhooksById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteV1WebhooksById>>, DeleteV1WebhooksByIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteV1WebhooksById(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteV1WebhooksByIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteV1WebhooksById>>>
+
+    export type DeleteV1WebhooksByIdMutationError = void
+    export type DeleteV1WebhooksByIdMutationVariables = {id: string}
+
+    /**
+ * @summary Delete a webhook endpoint
+ */
+export const useDeleteV1WebhooksById = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteV1WebhooksById>>, TError,DeleteV1WebhooksByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteV1WebhooksById>>,
+        TError,
+        DeleteV1WebhooksByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteV1WebhooksByIdMutationOptions(options));
+    }
+    export type getV1WebhooksByIdDeliveriesResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1WebhooksByIdDeliveriesResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getV1WebhooksByIdDeliveriesResponseSuccess = (getV1WebhooksByIdDeliveriesResponse200) & {
+  headers: Headers;
+};
+export type getV1WebhooksByIdDeliveriesResponseError = (getV1WebhooksByIdDeliveriesResponse404) & {
+  headers: Headers;
+};
+
+export type getV1WebhooksByIdDeliveriesResponse = (getV1WebhooksByIdDeliveriesResponseSuccess | getV1WebhooksByIdDeliveriesResponseError)
+
+export const getGetV1WebhooksByIdDeliveriesUrl = (id: string,) => {
+
+
+
+
+  return `/v1/webhooks/${id}/deliveries`
+}
+
+/**
+ * @summary Recent delivery attempts, for working out why an endpoint is quiet
+ */
+export const getV1WebhooksByIdDeliveries = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1WebhooksByIdDeliveriesResponse> => {
+
+  return customFetch<getV1WebhooksByIdDeliveriesResponse>(getGetV1WebhooksByIdDeliveriesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1WebhooksByIdDeliveriesQueryKey = (id: string,) => {
+    return [
+    `/v1/webhooks/${id}/deliveries`
+    ] as const;
+    }
+
+
+export const getGetV1WebhooksByIdDeliveriesQueryOptions = <TData = Awaited<ReturnType<typeof getV1WebhooksByIdDeliveries>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1WebhooksByIdDeliveries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1WebhooksByIdDeliveriesQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1WebhooksByIdDeliveries>>> = ({ signal }) => getV1WebhooksByIdDeliveries(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1WebhooksByIdDeliveries>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1WebhooksByIdDeliveriesQueryResult = NonNullable<Awaited<ReturnType<typeof getV1WebhooksByIdDeliveries>>>
+export type GetV1WebhooksByIdDeliveriesQueryError = void
+
+
+/**
+ * @summary Recent delivery attempts, for working out why an endpoint is quiet
+ */
+
+export function useGetV1WebhooksByIdDeliveries<TData = Awaited<ReturnType<typeof getV1WebhooksByIdDeliveries>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1WebhooksByIdDeliveries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1WebhooksByIdDeliveriesQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postV1WebhooksByIdDeliveriesByDeliveryIdReplayResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1WebhooksByIdDeliveriesByDeliveryIdReplayResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1WebhooksByIdDeliveriesByDeliveryIdReplayResponse422 = {
+  data: void
+  status: 422
+}
+
+export type postV1WebhooksByIdDeliveriesByDeliveryIdReplayResponseSuccess = (postV1WebhooksByIdDeliveriesByDeliveryIdReplayResponse200) & {
+  headers: Headers;
+};
+export type postV1WebhooksByIdDeliveriesByDeliveryIdReplayResponseError = (postV1WebhooksByIdDeliveriesByDeliveryIdReplayResponse404 | postV1WebhooksByIdDeliveriesByDeliveryIdReplayResponse422) & {
+  headers: Headers;
+};
+
+export type postV1WebhooksByIdDeliveriesByDeliveryIdReplayResponse = (postV1WebhooksByIdDeliveriesByDeliveryIdReplayResponseSuccess | postV1WebhooksByIdDeliveriesByDeliveryIdReplayResponseError)
+
+export const getPostV1WebhooksByIdDeliveriesByDeliveryIdReplayUrl = (id: string,
+    deliveryId: string,) => {
+
+
+
+
+  return `/v1/webhooks/${id}/deliveries/${deliveryId}/replay`
+}
+
+/**
+ * @summary Replay one delivery
+ */
+export const postV1WebhooksByIdDeliveriesByDeliveryIdReplay = async (id: string,
+    deliveryId: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1WebhooksByIdDeliveriesByDeliveryIdReplayResponse> => {
+
+  return customFetch<postV1WebhooksByIdDeliveriesByDeliveryIdReplayResponse>(getPostV1WebhooksByIdDeliveriesByDeliveryIdReplayUrl(id,deliveryId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1WebhooksByIdDeliveriesByDeliveryIdReplayMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1WebhooksByIdDeliveriesByDeliveryIdReplay>>, TError,PostV1WebhooksByIdDeliveriesByDeliveryIdReplayMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1WebhooksByIdDeliveriesByDeliveryIdReplay>>, TError,PostV1WebhooksByIdDeliveriesByDeliveryIdReplayMutationVariables, TContext> => {
+
+const mutationKey = ['postV1WebhooksByIdDeliveriesByDeliveryIdReplay'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1WebhooksByIdDeliveriesByDeliveryIdReplay>>, PostV1WebhooksByIdDeliveriesByDeliveryIdReplayMutationVariables> = (props) => {
+          const {id,deliveryId} = props ?? {};
+
+          return  postV1WebhooksByIdDeliveriesByDeliveryIdReplay(id,deliveryId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1WebhooksByIdDeliveriesByDeliveryIdReplayMutationResult = NonNullable<Awaited<ReturnType<typeof postV1WebhooksByIdDeliveriesByDeliveryIdReplay>>>
+
+    export type PostV1WebhooksByIdDeliveriesByDeliveryIdReplayMutationError = void
+    export type PostV1WebhooksByIdDeliveriesByDeliveryIdReplayMutationVariables = {id: string;deliveryId: string}
+
+    /**
+ * @summary Replay one delivery
+ */
+export const usePostV1WebhooksByIdDeliveriesByDeliveryIdReplay = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1WebhooksByIdDeliveriesByDeliveryIdReplay>>, TError,PostV1WebhooksByIdDeliveriesByDeliveryIdReplayMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1WebhooksByIdDeliveriesByDeliveryIdReplay>>,
+        TError,
+        PostV1WebhooksByIdDeliveriesByDeliveryIdReplayMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1WebhooksByIdDeliveriesByDeliveryIdReplayMutationOptions(options));
+    }
     export type postV1FormsByIdSessionsResponse200 = {
   data: PostV1FormsByIdSessions200
   status: 200
@@ -2500,210 +3069,6 @@ export const usePostV1SessionsBySidTokenRotate = <TError = void,
         TContext
       > => {
       return useMutation(getPostV1SessionsBySidTokenRotateMutationOptions(options));
-    }
-    export type postV1ChatFormsByIdSessionsResponse200 = {
-  data: PostV1ChatFormsByIdSessions200
-  status: 200
-}
-
-export type postV1ChatFormsByIdSessionsResponse403 = {
-  data: void
-  status: 403
-}
-
-export type postV1ChatFormsByIdSessionsResponse404 = {
-  data: void
-  status: 404
-}
-
-export type postV1ChatFormsByIdSessionsResponseSuccess = (postV1ChatFormsByIdSessionsResponse200) & {
-  headers: Headers;
-};
-export type postV1ChatFormsByIdSessionsResponseError = (postV1ChatFormsByIdSessionsResponse403 | postV1ChatFormsByIdSessionsResponse404) & {
-  headers: Headers;
-};
-
-export type postV1ChatFormsByIdSessionsResponse = (postV1ChatFormsByIdSessionsResponseSuccess | postV1ChatFormsByIdSessionsResponseError)
-
-export const getPostV1ChatFormsByIdSessionsUrl = (id: string,) => {
-
-
-
-
-  return `/v1/chat/forms/${id}/sessions`
-}
-
-/**
- * @summary Open a conversation on a published form
- */
-export const postV1ChatFormsByIdSessions = async (id: string,
-    postV1ChatFormsByIdSessionsBody: PostV1ChatFormsByIdSessionsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatFormsByIdSessionsResponse> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
-  };
-return customFetch<postV1ChatFormsByIdSessionsResponse>(getPostV1ChatFormsByIdSessionsUrl(id),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(postV1ChatFormsByIdSessionsBody)
-  }
-);}
-
-
-
-
-
-export const getPostV1ChatFormsByIdSessionsMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatFormsByIdSessions>>, TError,PostV1ChatFormsByIdSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postV1ChatFormsByIdSessions>>, TError,PostV1ChatFormsByIdSessionsMutationVariables, TContext> => {
-
-const mutationKey = ['postV1ChatFormsByIdSessions'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ChatFormsByIdSessions>>, PostV1ChatFormsByIdSessionsMutationVariables> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  postV1ChatFormsByIdSessions(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostV1ChatFormsByIdSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ChatFormsByIdSessions>>>
-    export type PostV1ChatFormsByIdSessionsMutationBody = PostV1ChatFormsByIdSessionsBody
-    export type PostV1ChatFormsByIdSessionsMutationError = void
-    export type PostV1ChatFormsByIdSessionsMutationVariables = {id: string;data: PostV1ChatFormsByIdSessionsBody}
-
-    /**
- * @summary Open a conversation on a published form
- */
-export const usePostV1ChatFormsByIdSessions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatFormsByIdSessions>>, TError,PostV1ChatFormsByIdSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof postV1ChatFormsByIdSessions>>,
-        TError,
-        PostV1ChatFormsByIdSessionsMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostV1ChatFormsByIdSessionsMutationOptions(options));
-    }
-    export type postV1ChatFormsByIdChatSessionsResponse200 = {
-  data: PostV1ChatFormsByIdChatSessions200
-  status: 200
-}
-
-export type postV1ChatFormsByIdChatSessionsResponse403 = {
-  data: void
-  status: 403
-}
-
-export type postV1ChatFormsByIdChatSessionsResponse404 = {
-  data: void
-  status: 404
-}
-
-export type postV1ChatFormsByIdChatSessionsResponseSuccess = (postV1ChatFormsByIdChatSessionsResponse200) & {
-  headers: Headers;
-};
-export type postV1ChatFormsByIdChatSessionsResponseError = (postV1ChatFormsByIdChatSessionsResponse403 | postV1ChatFormsByIdChatSessionsResponse404) & {
-  headers: Headers;
-};
-
-export type postV1ChatFormsByIdChatSessionsResponse = (postV1ChatFormsByIdChatSessionsResponseSuccess | postV1ChatFormsByIdChatSessionsResponseError)
-
-export const getPostV1ChatFormsByIdChatSessionsUrl = (id: string,) => {
-
-
-
-
-  return `/v1/chat/forms/${id}/chat/sessions`
-}
-
-/**
- * @summary Open a conversation on a published form
- */
-export const postV1ChatFormsByIdChatSessions = async (id: string,
-    postV1ChatFormsByIdChatSessionsBody: PostV1ChatFormsByIdChatSessionsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatFormsByIdChatSessionsResponse> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
-  };
-return customFetch<postV1ChatFormsByIdChatSessionsResponse>(getPostV1ChatFormsByIdChatSessionsUrl(id),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(postV1ChatFormsByIdChatSessionsBody)
-  }
-);}
-
-
-
-
-
-export const getPostV1ChatFormsByIdChatSessionsMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatFormsByIdChatSessions>>, TError,PostV1ChatFormsByIdChatSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postV1ChatFormsByIdChatSessions>>, TError,PostV1ChatFormsByIdChatSessionsMutationVariables, TContext> => {
-
-const mutationKey = ['postV1ChatFormsByIdChatSessions'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ChatFormsByIdChatSessions>>, PostV1ChatFormsByIdChatSessionsMutationVariables> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  postV1ChatFormsByIdChatSessions(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostV1ChatFormsByIdChatSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ChatFormsByIdChatSessions>>>
-    export type PostV1ChatFormsByIdChatSessionsMutationBody = PostV1ChatFormsByIdChatSessionsBody
-    export type PostV1ChatFormsByIdChatSessionsMutationError = void
-    export type PostV1ChatFormsByIdChatSessionsMutationVariables = {id: string;data: PostV1ChatFormsByIdChatSessionsBody}
-
-    /**
- * @summary Open a conversation on a published form
- */
-export const usePostV1ChatFormsByIdChatSessions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatFormsByIdChatSessions>>, TError,PostV1ChatFormsByIdChatSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof postV1ChatFormsByIdChatSessions>>,
-        TError,
-        PostV1ChatFormsByIdChatSessionsMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostV1ChatFormsByIdChatSessionsMutationOptions(options));
     }
     export type postV1ChatSessionsBySidMessagesResponse200 = {
   data: void

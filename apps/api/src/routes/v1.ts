@@ -16,6 +16,7 @@ import { responsesRouter } from "./v1/responses.js";
 import { metaRouter } from "./v1/meta.js";
 import { chatRouter } from "./v1/chat.js";
 import { formsV1Router } from "./v1/forms.js";
+import { webhooksV1Router } from "./v1/webhooks.js";
 
 /**
  * Developer API v1 — API-key auth, headless chat contract.
@@ -117,15 +118,22 @@ v1Router.route("/", metaRouter);
 /** Forms, programmatically: list, read, create, edit, publish, delete. */
 v1Router.route("/", formsV1Router);
 
+/**
+ * Webhook endpoints.
+ *
+ * The dashboard's own routes are session-guarded, so the `webhook:*` scopes
+ * described an ability no key actually had.
+ */
+v1Router.route("/", webhooksV1Router);
+
 // ─── headless chat ───
 
 /**
  * The conversational surface.
  *
- * Mounted twice: once at its own paths, and once under `/chat` so the original
- * `/v1/chat/sessions/...` routes keep answering. The first shape shipped with
- * `chat` in the path and integrations were written against it; renaming without
- * an alias would break them for a tidier URL.
+ * Mounted once. The legacy `/v1/chat/sessions/…` spellings are registered inside
+ * the router itself — mounting the whole thing under `/chat` as well also
+ * produced `/v1/chat/forms/…`, which was never a real path and appeared in the
+ * published reference as though it were.
  */
 v1Router.route("/", chatRouter);
-v1Router.route("/chat", chatRouter);

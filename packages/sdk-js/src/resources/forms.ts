@@ -56,8 +56,33 @@ export class Forms {
     return this.http.delete<{ ok: boolean; deleted: boolean }>(`/v1/forms/${formId}`, request);
   }
 
-  async analytics(formId: string, options: { source?: string } = {}, request?: RequestOptions) {
-    return this.http.get<Record<string, unknown>>(`/v1/forms/${formId}/analytics`, options, request);
+  /**
+   * Counts, the per-question funnel and answer distributions.
+   *
+   * Defaults to every source. The per-question detail is the paid half — on a
+   * plan without it the headline numbers still come back, with `locked` naming
+   * what did not.
+   */
+  analytics(
+    formId: string,
+    options: { source?: "chat" | "embed" | "api" | "all"; includeTest?: boolean } = {},
+    request?: RequestOptions,
+  ) {
+    return this.http.get<{
+      views: number;
+      starts: number;
+      completed: number;
+      abandoned: number;
+      avgDurationMs: number;
+      completionRate: number;
+      perBlock: { blockRef: string; title: string; answered: number; answerRate: number }[];
+      distributions: unknown[];
+      locked?: string[];
+    }>(
+      `/v1/forms/${formId}/analytics`,
+      { source: options.source, includeTest: options.includeTest ? "1" : undefined },
+      request,
+    );
   }
 }
 

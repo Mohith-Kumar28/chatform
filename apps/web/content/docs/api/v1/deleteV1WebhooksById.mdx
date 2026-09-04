@@ -1,10 +1,10 @@
 ---
-title: Open a conversation on a published form
+title: Delete a webhook endpoint
 full: true
 _openapi:
   preload:
     - chatform
-  method: POST
+  method: DELETE
   webhook: false
   toc: []
   structuredData:
@@ -21,7 +21,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="chatform" operations={[{"path":"/v1/chat/forms/{id}/chat/sessions","method":"post"}]} />
+      <Comp document="chatform" operations={[{"path":"/v1/webhooks/{id}","method":"delete"}]} />
     </>
   );
 }

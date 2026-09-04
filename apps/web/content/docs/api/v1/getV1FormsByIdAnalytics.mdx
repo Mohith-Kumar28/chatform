@@ -1,10 +1,10 @@
 ---
-title: Open a conversation on a published form
+title: Counts, per-question funnel and answer distributions
 full: true
 _openapi:
   preload:
     - chatform
-  method: POST
+  method: GET
   webhook: false
   toc: []
   structuredData:
@@ -21,7 +21,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="chatform" operations={[{"path":"/v1/chat/forms/{id}/sessions","method":"post"}]} />
+      <Comp document="chatform" operations={[{"path":"/v1/forms/{id}/analytics","method":"get"}]} />
     </>
   );
 }
