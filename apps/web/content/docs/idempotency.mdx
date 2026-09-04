@@ -1,0 +1,45 @@
+---
+title: Idempotency
+description: Retry a write safely, when you cannot tell whether the first one landed.
+---
+
+A timeout tells you nothing about whether the request succeeded. Send an
+`Idempotency-Key` and retrying is safe.
+
+```bash
+curl -X POST https://api.chatform.in/v1/forms/$FORM_ID/responses \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "idempotency-key: $(uuidgen)" \
+  -H "content-type: application/json" \
+  -d '{"answers": {"q_email": "maya@northwind.co"}, "complete": true}'
+```
+
+Use a fresh UUID per logical operation and reuse it across retries of that
+operation.
+
+## What happens
+
+- **First request**: processed normally, and its result is stored.
+- **Same key, same body**: the stored response is returned unchanged, with
+  `Idempotency-Replayed: true`. Nothing is created twice.
+- **Same key, different body**: **422** `idempotency_key_reuse`. Replaying the
+  first response would hide a bug in your code behind a plausible success.
+- **Same key while the first is still running**: **409**
+  `idempotency_in_progress` with `Retry-After`.
+- **The first request failed with a 5xx**: the key is released. A 5xx is not an
+  outcome, so a retry is a real retry.
+
+Keys are kept for 24 hours.
+
+## Where it applies
+
+`POST /v1/forms/{id}/responses`, `POST /v1/responses/{id}/complete`,
+`POST /v1/forms/{id}/sessions`, `POST /v1/forms`, `POST /v1/forms/{id}/publish`.
+
+Recording an answer is naturally idempotent — the same answer to the same
+question overwrites rather than duplicates — so it needs no key.
+
+## Webhooks, in the other direction
+
+Deliveries are at-least-once, so your endpoint needs the same property. Record
+`webhook-id` and skip ones you have already handled.

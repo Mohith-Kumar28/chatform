@@ -132,3 +132,70 @@ export function renderBlockCatalog(only?: readonly BlockType[]): string {
 
 /** Everything a model may add to a form that already has its welcome block. */
 export const ADDABLE_BLOCK_TYPES = BLOCK_TYPES.filter((t) => t !== "welcome");
+
+/** The seven families the builder groups blocks into, in the order it shows them. */
+export const BLOCK_GROUPS = [
+  "Content",
+  "Text",
+  "Contact",
+  "Numbers & dates",
+  "Choice",
+  "Scale",
+  "Advanced",
+] as const;
+export type BlockGroup = (typeof BLOCK_GROUPS)[number];
+
+/** The colour family a block is tinted with, matching the design tokens. */
+export type BlockTone = "content" | "text" | "contact" | "number" | "choice" | "scale" | "advanced";
+
+export interface BlockPresentation {
+  /** What a person calls this type. `nps`, for instance, is never shown as "nps". */
+  label: string;
+  group: BlockGroup;
+  tone: BlockTone;
+}
+
+/**
+ * How each block type is presented, wherever it is presented.
+ *
+ * The builder's own list carried this and so would the docs generator, which
+ * cannot import from the web app — so it would have become a third copy. This
+ * file's header records what happened the last time two hand-written block lists
+ * were allowed to drift: `payment` became unreachable. Icons and the builder's
+ * one-line descriptions stay in the web app, because they are the only parts a
+ * generator does not need.
+ */
+export const BLOCK_PRESENTATION: Record<BlockType, BlockPresentation> = {
+  welcome: { label: "Welcome", group: "Content", tone: "content" },
+  statement: { label: "Message", group: "Content", tone: "content" },
+
+  short_text: { label: "Short text", group: "Text", tone: "text" },
+  long_text: { label: "Long text", group: "Text", tone: "text" },
+
+  email: { label: "Email", group: "Contact", tone: "contact" },
+  phone: { label: "Phone", group: "Contact", tone: "contact" },
+  url: { label: "Website", group: "Contact", tone: "contact" },
+  contact_info: { label: "Contact info", group: "Contact", tone: "contact" },
+  address: { label: "Address", group: "Contact", tone: "contact" },
+
+  number: { label: "Number", group: "Numbers & dates", tone: "number" },
+  date: { label: "Date", group: "Numbers & dates", tone: "number" },
+
+  yes_no: { label: "Yes / No", group: "Choice", tone: "choice" },
+  single_select: { label: "Single select", group: "Choice", tone: "choice" },
+  multi_select: { label: "Multi select", group: "Choice", tone: "choice" },
+  dropdown: { label: "Dropdown", group: "Choice", tone: "choice" },
+  picture_choice: { label: "Picture choice", group: "Choice", tone: "choice" },
+  ranking: { label: "Ranking", group: "Choice", tone: "choice" },
+
+  rating: { label: "Rating", group: "Scale", tone: "scale" },
+  nps: { label: "NPS", group: "Scale", tone: "scale" },
+  opinion_scale: { label: "Opinion scale", group: "Scale", tone: "scale" },
+  matrix: { label: "Matrix", group: "Scale", tone: "scale" },
+
+  file_upload: { label: "File upload", group: "Advanced", tone: "advanced" },
+  signature: { label: "Signature", group: "Advanced", tone: "advanced" },
+  payment: { label: "Payment", group: "Advanced", tone: "advanced" },
+  scheduling: { label: "Scheduling", group: "Advanced", tone: "advanced" },
+  legal_consent: { label: "Consent", group: "Advanced", tone: "advanced" },
+};

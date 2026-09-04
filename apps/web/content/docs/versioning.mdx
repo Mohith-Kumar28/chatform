@@ -1,0 +1,52 @@
+---
+title: Versioning
+description: What can change under you, and what cannot.
+---
+
+The API is versioned in the path. Everything is under `/v1`, and `/v1` will keep
+meaning what it means today.
+
+## What we may change without warning
+
+- **New endpoints.**
+- **New fields in a response.** Ignore what you do not recognise; do not assert
+  on an exact object shape.
+- **New optional request fields.**
+- **New enum values** — new block types, new webhook events, new error codes.
+  Handle the unknown case rather than exhaustively matching.
+- **Error messages.** The `code` is the contract; the `message` is for people.
+
+## What we will not change
+
+- Removing or renaming a field.
+- Changing what a field means.
+- Making an optional request field required.
+- Changing a status code for the same condition.
+- Removing an endpoint.
+
+Any of those would be `/v2`, announced ahead of time, with the old version
+supported for a stated window.
+
+## Old names keep working
+
+Where something has been renamed, both names work. `/v1/forms/{id}/chat/sessions`
+still opens a session; webhooks subscribed to `submission.completed` still fire
+on `response.completed`. Integrations written against the first shape of this API
+do not need rewriting for a tidier URL.
+
+## Deprecations
+
+If we ever deprecate something, the response says so:
+
+```
+Deprecation: Wed, 01 Apr 2026 00:00:00 GMT
+Sunset: Wed, 01 Oct 2026 00:00:00 GMT
+Link: <https://chatform.in/docs/…>; rel="deprecation"
+```
+
+## Advice
+
+- Treat the response as data, not as a schema. Read the fields you need.
+- Branch on `error.code`, never on the message.
+- Store `request_id` in your logs. It is what makes a support conversation
+  short.

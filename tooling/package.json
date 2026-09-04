@@ -4,13 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "gen:plans": "tsx gen-seed-plans.ts"
+    "gen:plans": "tsx gen-seed-plans.ts",
+    "gen:blocks": "tsx gen-block-docs.ts",
+    "gen:api-docs": "tsx gen-api-docs.ts"
   },
   "dependencies": {
-    "@repo/entitlements": "workspace:*"
+    "@repo/entitlements": "workspace:*",
+    "@repo/form-schema": "workspace:*",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "fumadocs-openapi": "11.4.1"
   }
 }

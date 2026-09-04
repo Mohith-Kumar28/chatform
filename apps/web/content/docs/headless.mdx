@@ -1,0 +1,149 @@
+---
+title: Building your own interface
+description: Run the conversation yourself — in your own UI, your own product, or somewhere that is not a browser.
+---
+
+The response API is a good fit when you have the answers already. This one is for
+when you are asking the questions: your server drives a conversation and the
+engine decides what comes next, what is valid, and where a branch goes.
+
+## Open a session
+
+```bash
+curl -X POST https://api.chatform.in/v1/forms/$FORM_ID/sessions \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"hiddenFields": {"plan": "trial"}}'
+```
+
+```json
+{
+  "sessionId": "chs_…",
+  "respondentToken": "…",
+  "expiresAt": 1788592149473,
+  "streamUrl": "/v1/sessions/chs_…/events",
+  "greeting": "Hi! Let's get started.",
+  "question": { "ref": "q_email", "type": "email", "title": "What's your email?" }
+}
+```
+
+Everything the hosted form enforces applies here too: the close date, the
+response ceiling, the submission cap. Two things do not — the form password and
+the captcha — because an API key is stronger proof than a password typed into a
+box, and there is no browser to solve a captcha.
+
+## Give the browser the token, not the key
+
+`respondentToken` is scoped to that one session and expires. Hand it to your
+front end and keep the secret key on your server. That is the whole pattern:
+
+```js
+// server
+const { sessionId, respondentToken } = await openSession();
+// browser gets only these two
+```
+
+## Answer a question
+
+```bash
+curl -X POST https://api.chatform.in/v1/sessions/$SESSION_ID/messages \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"type": "structured", "ref": "q_email", "value": "maya@northwind.co"}'
+```
+
+Two shapes. `structured` is an answer to a specific question — what a form
+control produces. `text` is free text, which the agent interprets against
+whatever it just asked:
+
+```json
+{ "type": "text", "text": "we're about a dozen people" }
+```
+
+The reply is the whole turn:
+
+```json
+{
+  "accepted": true,
+  "assistantMessages": ["Got it. And what's your role?"],
+  "question": { "ref": "q_role", "…": "…" },
+  "validation": null,
+  "complete": false,
+  "awaitingSubmit": false,
+  "events": [{ "seq": 7, "type": "answer_recorded", "…": "…" }],
+  "answers": { "q_email": "maya@northwind.co" }
+}
+```
+
+`events` is the same stream a browser would have received, delivered over the
+same request — one contract, two transports.
+
+A rejected answer is not an error. You get `accepted: true` with a `validation`
+object and the same question again, which is exactly what the conversation does.
+
+### Slow turns
+
+An interview turn may involve a model call. Past a deadline you get **202** with
+`sinceSeq` and a `pollUrl`, meaning "still running, resume from here" — not a
+failure. Pass `?deadlineMs=` to choose your own, up to 25 seconds.
+
+## Actions
+
+```bash
+POST /v1/sessions/{id}/actions
+{ "action": "skip" }
+```
+
+`skip`, `stop`, `restart`, `edit` (with a `ref`), and `submit`.
+
+`submit` matters more than it looks: forms default to showing a review step
+before finishing, so without it such a form can never be completed. When
+`awaitingSubmit` is true, that is what the session is waiting for.
+
+## Streaming
+
+```bash
+curl -N https://api.chatform.in/v1/sessions/$SESSION_ID/events \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "accept: text/event-stream"
+```
+
+Server-sent events, with every event durably stored and replayed on reconnect.
+Each carries a `seq`; keep the highest you have seen and you can resume exactly.
+
+The event types are `session_ready`, `user_message`, `message_start`, `token`,
+`message_end`, `question`, `validation_error`, `upload_request`,
+`upload_received`, `answer_recorded`, `branch_jump`, `escalate_ui`, `review`,
+`auth_required`, `auth_verified`, `ending`, `complete`, `error`, `rate_limited`
+and `ping`.
+
+Without `accept: text/event-stream`, the same path takes `?since=` and returns a
+page of stored events instead — which is what you want after a dropped
+connection or a 202:
+
+```bash
+curl "https://api.chatform.in/v1/sessions/$SESSION_ID/events?since=12" \
+  -H "x-api-key: $CHATFORM_SECRET_KEY"
+```
+
+<Callout>
+While a turn is in flight the JSON pull waits for it to land — sessions process
+one turn at a time. That makes it a long poll, which is usually what you want.
+The stream is the genuinely concurrent reader.
+</Callout>
+
+## Rendering the questions
+
+`GET /v1/blocks` returns every question type with its configuration schema, the
+shape you receive, the shape you send and the errors it can produce. Build your
+renderer against that and new block types will not surprise you.
+
+[The block reference →](/docs/blocks)
+
+## Rotating a token
+
+```bash
+POST /v1/sessions/{id}/token/rotate
+```
+
+Issues a fresh respondent token and invalidates the old one immediately.

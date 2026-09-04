@@ -1,0 +1,72 @@
+---
+title: Chatform for developers
+description: Embed a form, drive one from your backend, or build your own interface on the same engine.
+---
+
+Chatform forms are conversations. A respondent is asked one question at a time,
+their answer is validated as they give it, and the next question depends on what
+they said. Everything the hosted experience does is available over HTTP.
+
+There are three ways in, and they are genuinely different jobs. Start with the
+one that matches yours.
+
+## Put a form on your site
+
+A script tag or an iframe. No backend, no keys, nothing to deploy.
+
+```html
+<script src="https://chatform.in/embed.js" data-form="your-form" data-mode="popup" defer></script>
+```
+
+[Embedding →](/docs/embed)
+
+## Drive it from your backend
+
+Create responses, record answers, read them back. This is the path for
+importing existing data, wiring a form into a workflow, or collecting answers
+from somewhere that is not a browser at all.
+
+```bash
+curl -X POST https://api.chatform.in/v1/forms/$FORM_ID/responses \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"answers": {"q_email": "maya@northwind.co"}, "complete": true}'
+```
+
+[The response lifecycle →](/docs/responses)
+
+## Build your own interface
+
+Open a conversation, stream it, and render it however you like — a chat, a
+classic form, a voice agent, a Slack bot. The engine decides what to ask next;
+you decide what it looks like.
+
+```bash
+curl -X POST https://api.chatform.in/v1/forms/$FORM_ID/sessions \
+  -H "x-api-key: $CHATFORM_SECRET_KEY"
+```
+
+[Building your own UI →](/docs/headless)
+
+---
+
+## Start here
+
+- [Quickstart](/docs/quickstart) — a key to a stored answer, in five minutes.
+- [Authentication](/docs/authentication) — key types, and which one belongs in a browser.
+- [Blocks](/docs/blocks) — all 26 question types, what each accepts and returns.
+- [API reference](/docs/api) — every endpoint, generated from the spec.
+
+## What this API is not
+
+Worth knowing before you build against it.
+
+- **Payments are not verified.** A payment block hands the respondent to your
+  own checkout or a UPI app and records that they said they paid. Nothing here
+  talks to a gateway, so `verified` is always `false`. Reconcile against your
+  processor.
+- **Scheduling is a hand-off.** A scheduling block records the booking link and,
+  if you pass it, the slot. It does not hold a calendar.
+- **Answers are re-validated server-side, always.** Whatever your interface
+  accepts, the engine applies the same rules the hosted experience does. That is
+  deliberate: it is what lets you build a UI without reimplementing validation.

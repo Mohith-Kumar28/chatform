@@ -1,0 +1,116 @@
+---
+title: Authentication
+description: Four kinds of key, and which one belongs where.
+---
+
+Every request to `/v1` carries a key, in either header:
+
+```bash
+curl https://api.chatform.in/v1/me -H "x-api-key: sk_live_…"
+curl https://api.chatform.in/v1/me -H "authorization: Bearer sk_live_…"
+```
+
+Never in a query string. Keys in URLs end up in access logs, proxy logs and
+`Referer` headers, so `/v1` does not accept one there at all.
+
+## The four kinds
+
+| Prefix | Where it belongs | What it can do |
+| --- | --- | --- |
+| `sk_live_` | Your server | Everything its scopes allow, against real data |
+| `sk_test_` | Your server | The same, but everything it writes is marked test data |
+| `pk_live_` | A browser | Open and drive sessions only, from origins you list |
+| `pk_test_` | A browser | The same, marked as test data |
+
+Keys belong to your organization, not to the person who created them — so a
+teammate can see and revoke a key after its author has left.
+
+## Secret keys never go in a browser
+
+If a request carries a secret key *and* an `Origin` header, it is refused with
+`secret_key_in_browser` and a message telling you to rotate it. That request came
+from a page, which means the key is already readable by everyone who loaded it.
+
+This is the single most common way an API key leaks, and a silent success here
+would be worse than an error.
+
+## Publishable keys, for the browser
+
+A `pk_` key is safe to ship in a page because it is pinned to origins and can do
+almost nothing: open a session, answer questions, upload a file. It cannot read
+responses, manage webhooks or touch a form.
+
+You must list its origins when you create it — a publishable key with no
+allowlist is refused, because without one it is just a secret key in public.
+
+```
+https://acme.example
+https://*.preview.acme.example
+```
+
+Wildcards match one label deep and are matched on the host, so
+`https://evil-example.com` never satisfies `https://*.example.com`.
+
+## The safer browser pattern
+
+You usually do not need a publishable key at all. Have your server open the
+session and hand the browser the **respondent token** it gets back:
+
+```js
+// your server
+const res = await fetch(`https://api.chatform.in/v1/forms/${formId}/sessions`, {
+  method: "POST",
+  headers: { "x-api-key": process.env.CHATFORM_SECRET_KEY },
+});
+const { sessionId, respondentToken } = await res.json();
+// hand only these two to the page
+```
+
+That token is scoped to one session and expires. A leaked one is worth a single
+half-finished response; a leaked secret key is worth your whole account.
+
+## Test mode
+
+A `sk_test_` key hits your real forms and writes real rows — but everything it
+creates is flagged as test data:
+
+- excluded from analytics, the drop-off funnel and your response counts
+- never billed, and never counted against your monthly quota
+- no webhooks fire
+- hidden in the dashboard unless you turn on "show test data"
+- deleted after thirty days
+
+So you can rehearse an integration against the form you actually ship, without a
+second copy of it and without polluting anything.
+
+## Scopes
+
+Keys carry scopes, and they are enforced. A key with `form:read` cannot start a
+session, and no key of any kind can mint another key or change your plan.
+
+[Scopes in detail →](/docs/scopes)
+
+## Rotation
+
+`POST /v1/../keys/{id}/rotate` in the dashboard mints a replacement and puts the
+old key on a clock — 24 hours by default. A deploy is not atomic, and "revoke,
+then create" means downtime in between.
+
+The old key keeps working through the window, then stops.
+
+## Errors
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| 401 | `unauthorized` | No key sent |
+| 401 | `invalid_api_key` | Not a key we know |
+| 401 | `api_key_disabled` | Revoked |
+| 401 | `api_key_expired` | Past its expiry |
+| 403 | `secret_key_in_browser` | A secret key arrived from a page |
+| 403 | `origin_not_allowed` | Publishable key, unlisted origin |
+| 403 | `insufficient_scope` | The key lacks the scope named in `error.required` |
+| 429 | `rate_limited` | Too fast — see [rate limits](/docs/rate-limits) |
+| 402 | — | Plan quota or a feature your plan does not include |
+
+401 responses are deliberately identical in wording. The code tells you what
+happened; the message never confirms whether a guessed key ever existed.

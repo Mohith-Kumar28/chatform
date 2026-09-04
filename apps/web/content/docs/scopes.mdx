@@ -1,0 +1,63 @@
+---
+title: Scopes
+description: What a key is allowed to do, and how to give it as little as possible.
+---
+
+A key carries scopes as `resource: [actions]`. They are checked on every request,
+and a missing one is a 403 naming exactly what was needed:
+
+```json
+{
+  "error": {
+    "code": "insufficient_scope",
+    "message": "This API key lacks the session:create scope",
+    "required": "session:create"
+  }
+}
+```
+
+## The vocabulary
+
+| Resource | Actions | What it covers |
+| --- | --- | --- |
+| `form` | `read`, `write`, `publish` | Reading forms, editing documents, publishing versions |
+| `response` | `read`, `read_partial`, `write`, `delete`, `export` | Creating and reading responses |
+| `session` | `create`, `write`, `read` | Conversations |
+| `webhook` | `read`, `write` | Delivery endpoints |
+| `file` | `read`, `write` | Uploads and downloads |
+| `analytics` | `read` | Aggregates |
+
+## Defaults
+
+A new secret key gets `form:read`, `response:read` and all of `session` — enough
+for most integrations, and nothing destructive. Ask for more explicitly.
+
+Publishable keys have a **ceiling**, not a default: `form:read`, `session:*` and
+`file:write`, and no amount of asking will widen it. That is what makes them safe
+to ship in a page.
+
+## What no key can do
+
+Some things are unreachable by any key, whatever its scopes say: minting keys,
+changing your plan, reading the audit log, managing team members. Those need a
+signed-in person with the right role.
+
+This is deny-by-default — a capability is unreachable until it is deliberately
+mapped — so a new dashboard feature is never accidentally exposed to every
+existing key.
+
+## Pinning a key to specific forms
+
+A key can be restricted to a list of forms. Anything outside that list returns
+404, not 403, so a restricted key cannot be used to discover which form ids
+exist.
+
+Useful when you are handing a key to a contractor, a client, or a single
+deployment that only has business with one form.
+
+## Least privilege in practice
+
+- A script that exports responses nightly: `response:read`, `response:export`.
+- A signup page: a publishable key, pinned to the signup form.
+- A form-authoring pipeline: `form:read`, `form:write`, `form:publish` — and
+  nothing that can read anyone's answers.

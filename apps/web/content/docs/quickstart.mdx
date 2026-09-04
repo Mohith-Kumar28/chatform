@@ -1,0 +1,92 @@
+---
+title: Quickstart
+description: From an API key to a stored answer in about five minutes.
+---
+
+You need a published form and a secret key. Create the key at
+[chatform.in/api-keys](https://chatform.in/api-keys) — it is shown once.
+
+<Callout type="warn">
+Secret keys start with `sk_live_` and belong on a server. Sending one from a
+browser exposes it to every visitor of that page, and the API refuses such
+requests outright rather than letting it happen quietly.
+</Callout>
+
+## 1. Check the key works
+
+```bash
+curl https://api.chatform.in/v1/me -H "x-api-key: $CHATFORM_SECRET_KEY"
+```
+
+That returns which organization the key belongs to, what it is allowed to do,
+and what is left of your plan. If this fails, nothing below will work.
+
+## 2. Find a form
+
+```bash
+curl https://api.chatform.in/v1/forms -H "x-api-key: $CHATFORM_SECRET_KEY"
+```
+
+Take an `id` from the response. You can also read the form's questions:
+
+```bash
+curl https://api.chatform.in/v1/forms/$FORM_ID -H "x-api-key: $CHATFORM_SECRET_KEY"
+```
+
+Each block has a `ref` — a stable name like `q_email`. That is how you address a
+question when answering it.
+
+## 3. Open a response
+
+```bash
+curl -X POST https://api.chatform.in/v1/forms/$FORM_ID/responses \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{}'
+```
+
+You get back a response `id` and, in `next`, the question the form is waiting on.
+
+## 4. Answer it
+
+```bash
+curl -X POST https://api.chatform.in/v1/responses/$RESPONSE_ID/answers \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"ref": "q_email", "value": "maya@northwind.co"}'
+```
+
+The reply carries the updated response, including the *next* question. Repeat
+until `next` is an ending rather than a block.
+
+## 5. Complete it
+
+```bash
+curl -X POST https://api.chatform.in/v1/responses/$RESPONSE_ID/complete \
+  -H "x-api-key: $CHATFORM_SECRET_KEY"
+```
+
+The response now shows up in your dashboard alongside every conversational one,
+and any webhooks you have configured fire.
+
+## In one call
+
+If you already have all the answers — importing a spreadsheet, say — send them
+together:
+
+```bash
+curl -X POST https://api.chatform.in/v1/forms/$FORM_ID/responses \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"answers": {"q_email": "maya@northwind.co", "q_role": "opt_founder1"}, "complete": true}'
+```
+
+This writes the same per-answer records the step-by-step path does, so your
+drop-off funnel and per-question summaries stay correct. It is a shortcut
+through the API, not around the data.
+
+## Next
+
+- [Authentication](/docs/authentication) — test keys, browser keys, rotation.
+- [The response lifecycle](/docs/responses) — partials, editing, abandonment.
+- [Blocks](/docs/blocks) — what each question type accepts.

@@ -36,7 +36,11 @@
     "apikeys:backfill": "node tooling/backfill-apikey-hashes.mjs",
     "apikeys:backfill:remote": "node tooling/backfill-apikey-hashes.mjs --remote",
     "gen:openapi": "pnpm --filter @repo/api gen:openapi",
-    "openapi:verify": "pnpm gen:openapi && git diff --exit-code -- openapi.json"
+    "openapi:verify": "pnpm gen:openapi && git diff --exit-code -- openapi.json",
+    "gen:blocks": "pnpm --filter @repo/tooling gen:blocks",
+    "blocks:verify": "pnpm gen:blocks && git diff --exit-code -- apps/web/content/docs/blocks",
+    "gen:api-docs": "pnpm --filter @repo/tooling gen:api-docs",
+    "gen:docs": "pnpm gen:blocks && pnpm gen:api-docs"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",

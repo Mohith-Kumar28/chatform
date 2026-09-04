@@ -1,0 +1,33 @@
+{
+  "title": "Blocks",
+  "pages": [
+    "index",
+    "common-fields",
+    "welcome",
+    "statement",
+    "short_text",
+    "long_text",
+    "email",
+    "phone",
+    "url",
+    "contact_info",
+    "address",
+    "number",
+    "date",
+    "yes_no",
+    "single_select",
+    "multi_select",
+    "dropdown",
+    "picture_choice",
+    "ranking",
+    "rating",
+    "nps",
+    "opinion_scale",
+    "matrix",
+    "file_upload",
+    "signature",
+    "payment",
+    "scheduling",
+    "legal_consent"
+  ]
+}

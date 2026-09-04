@@ -1,0 +1,157 @@
+---
+title: The response lifecycle
+description: Open a response, answer into it, complete it — and why partial answers are first-class.
+---
+
+A response is created the moment someone starts, not when they finish. Every
+answer is stored as it arrives. That is what makes a half-finished response
+visible in your dashboard, and it is why this API has a lifecycle rather than a
+single submit endpoint.
+
+<Callout>
+A single "post the whole form" endpoint would create finished records with no
+per-question history — so the drop-off funnel, the per-question summaries and
+every partial count would mean something different for API traffic than for
+conversations. The convenience path exists, but it runs through the same three
+steps internally.
+</Callout>
+
+## Open
+
+```bash
+POST /v1/forms/{formId}/responses
+```
+
+```json
+{
+  "hiddenFields": { "utm_source": "docs" },
+  "expiresIn": 86400
+}
+```
+
+Returns the response, with `next` pointing at the first question. This counts as
+a *start*, exactly as opening a conversation does.
+
+`expiresIn` is how long an unfinished response stays open before it is marked
+abandoned. Default is 24 hours; the range is five minutes to thirty days.
+
+## Answer
+
+```bash
+POST /v1/responses/{id}/answers
+```
+
+One at a time:
+
+```json
+{ "ref": "q_email", "value": "maya@northwind.co" }
+```
+
+Or several:
+
+```json
+{
+  "answers": [
+    { "ref": "q_email", "value": "maya@northwind.co" },
+    { "ref": "q_role", "value": "Founder" }
+  ]
+}
+```
+
+A batch is all-or-nothing. If one answer is rejected, none are written — a
+partial write would leave you unable to tell what landed.
+
+The reply carries the updated response including the next question, so a client
+never has to ask separately.
+
+### Answers are normalised
+
+What you send is not always what gets stored. `" Maya@Northwind.CO "` becomes
+`maya@northwind.co`; `"Founder"` becomes the option's id; `"98123 45678"` on a
+phone block with an Indian country hint becomes `+919812345678`. The block
+reference documents this per type.
+
+### Order is enforced
+
+By default you can only answer the question the form is waiting on, or re-answer
+one already behind it. Answering ahead returns
+`block_not_reachable`.
+
+That is deliberate: accepting a jump to question nine would record eight
+abandonments at questions nobody was ever asked. If you are importing data that
+was collected elsewhere, open the response with `"mode": "free"` and the check is
+relaxed — the answers are still validated, and the response records that its flow
+was not enforced.
+
+A question hidden by its own visibility rule is refused with
+`block_not_visible`, whatever the mode.
+
+## Complete
+
+```bash
+POST /v1/responses/{id}/complete
+```
+
+Refuses with `incomplete` if a required question that was actually *asked* is
+unanswered, and names them:
+
+```json
+{
+  "error": {
+    "code": "incomplete",
+    "message": "Required questions are unanswered",
+    "issues": [{ "ref": "q_role", "code": "required", "message": "\"Role?\" is required" }]
+  }
+}
+```
+
+Required questions inside a branch nobody took are not asked for — that is what
+makes conditional logic usable.
+
+The reply carries the resolved ending, including its redirect and call to action
+if the form has them.
+
+## Abandon
+
+```bash
+POST /v1/responses/{id}/abandon
+```
+
+There is deliberately no "complete anyway" flag. "I want the data but they did
+not finish" already has a name and a status, and letting completion mean two
+things would make your completion rate unreadable. Abandoned responses keep every
+answer that was given.
+
+## Reading responses back
+
+```bash
+GET /v1/forms/{formId}/responses?limit=50&include=answers
+```
+
+Cursor-paginated. Filters: `status`, `created_after`, `created_before`,
+`updated_since`, `ending_ref`, `source`, `q` (full-text over answers), and
+`mode` for test data.
+
+Omitting `status` means completed only. Asking for `in_progress` or `abandoned`
+needs a plan that includes partial responses; if yours does not, you get a 402
+rather than a quietly narrowed result set.
+
+[Pagination →](/docs/pagination)
+
+## Editing
+
+```bash
+DELETE /v1/responses/{id}/answers/{ref}
+```
+
+Retracts one answer and moves the flow back to it. Later answers are kept — one
+of them may still be valid, and re-asking everything is a worse experience than
+re-asking what actually changed.
+
+## Idempotency
+
+Creating and completing accept an `Idempotency-Key` header. A network timeout
+tells you nothing about whether the write landed, and this is what makes the
+retry safe.
+
+[Idempotency →](/docs/idempotency)

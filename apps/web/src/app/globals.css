@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Docs. Both are token-only: neither imports Tailwind, so this file stays the
+   single Tailwind entry and there is no second preflight. */
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
 @custom-variant dark (&:is(.dark *));
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -808,4 +813,55 @@
 @utility bubble-user {
   border-radius: var(--cf-radius);
   border-bottom-right-radius: min(var(--cf-radius), 0.25rem);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Fumadocs bridge
+
+   The documentation should look like the product, not like a docs framework
+   that happens to be next to it. Fumadocs namespaces every token `--color-fd-*`,
+   so nothing here overwrites an app token — this maps one system onto the other
+   and introduces no third palette.
+
+   No `.dark` block is needed: these point at app tokens that already flip, the
+   same trick `--band-mix` uses. Docs headings need no rule either, because the
+   base layer already sets the display face on h1–h3 globally.
+   ═════════════════════════════════════════════════════════════════════════ */
+@theme inline {
+  --color-fd-background: var(--background);
+  --color-fd-foreground: var(--foreground);
+  --color-fd-card: var(--card);
+  --color-fd-card-foreground: var(--card-foreground);
+  --color-fd-popover: var(--popover);
+  --color-fd-popover-foreground: var(--popover-foreground);
+  --color-fd-muted: var(--muted);
+  --color-fd-muted-foreground: var(--muted-foreground);
+  --color-fd-secondary: var(--secondary);
+  --color-fd-secondary-foreground: var(--secondary-foreground);
+  --color-fd-accent: var(--accent);
+  --color-fd-accent-foreground: var(--accent-foreground);
+  --color-fd-border: var(--border);
+  --color-fd-ring: var(--ring);
+  --color-fd-primary: var(--primary);
+  /* NOT --primary-foreground. Line 124 of this file records why: that token is
+     near-white and lands at 2.7:1 on the orange. --on-primary is the token that
+     exists for type on a full-strength primary ground, and is right in both
+     themes. */
+  --color-fd-primary-foreground: var(--on-primary);
+}
+
+:root {
+  /* Docs earn a wider container than the marketing pages, because they carry a
+     sidebar and a table of contents either side of the prose. */
+  --fd-layout-width: 84rem;
+  --fd-nav-height: 3.5rem;
+}
+
+/* Code in docs reads as code everywhere else in the product does. */
+#nd-page :is(pre, code) {
+  font-family: var(--font-mono);
+}
+#nd-page pre {
+  background: var(--muted);
 }

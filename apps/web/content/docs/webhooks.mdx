@@ -1,0 +1,146 @@
+---
+title: Webhooks
+description: Get told when something happens, instead of asking.
+---
+
+Point us at a URL and we will POST to it. Configure endpoints per form or across
+your whole organization.
+
+## Events
+
+| Event | When |
+| --- | --- |
+| `response.completed` | Someone finished |
+| `response.abandoned` | A response was given up on or timed out |
+| `response.partial` | A response has stalled part-way, with answers in it |
+| `session.started` | A conversation opened |
+| `form.published` | A new version went live |
+
+`response.partial` is the one people miss. Until it existed, a half-finished lead
+was invisible until it timed out — which is exactly as long as it was worth
+following up on. It fires once a response has stopped changing for a minute, and
+again only if more answers arrive.
+
+<Callout>
+Subscriptions written against the old `submission.completed` and
+`submission.abandoned` names keep working. Both names match the same event.
+</Callout>
+
+## The payload
+
+```json
+{
+  "event": "response.completed",
+  "formId": "frm_…",
+  "timestamp": 1788505749473,
+  "submission": { "id": "sbm_…", "status": "completed", "duration_ms": 48210 },
+  "answers": [
+    { "ref": "q_email", "type": "email", "value": "maya@northwind.co" }
+  ]
+}
+```
+
+## Verifying a delivery
+
+Every delivery is signed. Verify it — an unverified webhook endpoint is a public
+API that writes to your database.
+
+Headers follow the [Standard Webhooks](https://www.standardwebhooks.com) spec:
+
+```
+webhook-id: whd_…
+webhook-timestamp: 1788505749
+webhook-signature: v1,<base64 HMAC-SHA256>
+```
+
+The signed content is `{id}.{timestamp}.{body}`, so a replayed body with a fresh
+id fails.
+
+<Tabs items={['Node', 'Python', 'Workers']}>
+
+<Tab value="Node">
+
+```js
+import crypto from "node:crypto";
+
+function verify(rawBody, headers, secret) {
+  const id = headers["webhook-id"];
+  const timestamp = headers["webhook-timestamp"];
+  const signature = headers["webhook-signature"];
+
+  // Reject anything older than five minutes, before doing real work.
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(`${id}.${timestamp}.${rawBody}`)
+    .digest("base64");
+
+  return signature
+    .split(" ")
+    .some((part) =>
+      crypto.timingSafeEqual(Buffer.from(part.replace("v1,", "")), Buffer.from(expected)),
+    );
+}
+```
+
+</Tab>
+
+<Tab value="Python">
+
+```python
+import hmac, hashlib, base64, time
+
+def verify(raw_body: bytes, headers: dict, secret: str) -> bool:
+    wid, ts, sig = headers["webhook-id"], headers["webhook-timestamp"], headers["webhook-signature"]
+    if abs(time.time() - int(ts)) > 300:
+        return False
+    expected = base64.b64encode(
+        hmac.new(secret.encode(), f"{wid}.{ts}.".encode() + raw_body, hashlib.sha256).digest()
+    ).decode()
+    return any(hmac.compare_digest(p.removeprefix("v1,"), expected) for p in sig.split(" "))
+```
+
+</Tab>
+
+<Tab value="Workers">
+
+```ts
+async function verify(rawBody: string, headers: Headers, secret: string) {
+  const id = headers.get("webhook-id")!;
+  const ts = headers.get("webhook-timestamp")!;
+  if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false;
+
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+  );
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${id}.${ts}.${rawBody}`));
+  const expected = btoa(String.fromCharCode(...new Uint8Array(mac)));
+  return (headers.get("webhook-signature") ?? "").split(" ").includes(`v1,${expected}`);
+}
+```
+
+</Tab>
+
+</Tabs>
+
+Verify against the **raw** body. Parsing and re-serialising changes the bytes,
+and the signature is over the bytes.
+
+## Retries
+
+A delivery that fails is retried after 1 minute, 5 minutes, 30 minutes and 2
+hours, then marked dead. Any 2xx counts as success.
+
+Endpoints that fail twenty times in a row are switched off. That is a courtesy —
+an endpoint gone that long is not coming back on its own, and retrying every
+event forever turns a dead integration into an incident.
+
+## Handling them well
+
+- **Be idempotent.** Deliveries are at-least-once. `webhook-id` is unique per
+  delivery; recording the ones you have processed is the simplest way.
+- **Answer quickly.** We wait ten seconds. Acknowledge, then do the work.
+- **Do not infer order.** A retried event can arrive after a newer one. Use
+  `timestamp`, or re-read the response.

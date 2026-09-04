@@ -1,0 +1,88 @@
+---
+title: Rate limits and quotas
+description: Three limits, and how to tell them apart.
+---
+
+Three separate things can slow you down, and they want different responses.
+
+## 1. Burst
+
+A short-window ceiling that absorbs runaway loops and key-guessing. You will not
+meet it in normal use.
+
+## 2. Your key's limit
+
+Each key has a sustained rate, and it is on the key — you can raise or lower it
+per key in the dashboard, within your plan's ceiling.
+
+| Plan | Default |
+| --- | --- |
+| Pro | 120 requests/minute |
+| Business | 600 requests/minute |
+
+Publishable keys get more headroom, because one window per respondent on a busy
+page is legitimately bursty.
+
+Every response tells you where you stand:
+
+```
+RateLimit-Limit: 120
+RateLimit-Remaining: 108
+RateLimit-Reset: 42
+RateLimit-Policy: 120;w=60
+```
+
+Exceeding it is **429** with `Retry-After` in seconds:
+
+```json
+{ "error": { "code": "rate_limited", "message": "Too many requests for this API key", "scope": "key" } }
+```
+
+`scope` tells you which limit you hit — `burst` or `key`.
+
+## 3. Your monthly quota
+
+`api_requests` is metered per month against your plan. Running out is **402**,
+not 429, and it says when it resets:
+
+```json
+{
+  "error": {
+    "code": "limit_reached",
+    "limitKey": "api_requests_per_month",
+    "used": 50000,
+    "limit": 50000,
+    "resetsAt": 1790000000000
+  }
+}
+```
+
+Retrying a 429 makes sense. Retrying a 402 does not.
+
+Requests are counted on the way in, including ones that end in an error — an
+error loop costs us the same work a successful call does. Requests made with a
+test key are counted separately and never against your quota.
+
+## Backing off
+
+```js
+async function withRetry(request, attempts = 4) {
+  for (let i = 0; i < attempts; i++) {
+    const res = await request();
+    if (res.status !== 429) return res;
+    // Retry-After is authoritative. Jitter so a fleet does not retry in lockstep.
+    const wait = Number(res.headers.get("retry-after") ?? 2 ** i);
+    await new Promise((r) => setTimeout(r, wait * 1000 + Math.random() * 500));
+  }
+  throw new Error("rate limited");
+}
+```
+
+Watch `RateLimit-Remaining` and slow down before you hit zero — that costs
+nothing and is better than being told.
+
+## If you are being throttled a lot
+
+Usually it means polling. Use [webhooks](/docs/webhooks) instead of asking
+whether anything has arrived, and `updated_since` instead of re-reading pages you
+already have.

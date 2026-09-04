@@ -1,0 +1,78 @@
+---
+title: Errors
+description: One envelope, and what each status actually means.
+---
+
+Every error has the same shape:
+
+```json
+{
+  "error": {
+    "code": "invalid_answer",
+    "message": "One or more answers were rejected",
+    "issues": [
+      { "ref": "q_phone", "code": "invalid_phone", "message": "Please enter a valid phone number with country code." }
+    ],
+    "request_id": "req_9f2c…",
+    "doc_url": "https://chatform.in/docs/errors#invalid-answer"
+  }
+}
+```
+
+`request_id` is on every response, error or not, as the `X-Request-Id` header.
+Quote it and we can find the request. If you send your own, we keep it.
+
+## Statuses
+
+| Status | Meaning | What to do |
+| --- | --- | --- |
+| 400 | Malformed — bad JSON, a bad cursor | Fix the request |
+| 401 | No key, or not a valid one | Check the key |
+| 402 | A plan limit or a feature you do not have | Upgrade; retrying will not help |
+| 403 | The key is valid but not allowed to do this | Check scopes and origins |
+| 404 | Not found — or not yours | Cross-tenant access looks identical to not found, deliberately |
+| 409 | State conflict — already completed, already responded | Re-read before retrying |
+| 413 | Too large | |
+| 422 | Understood, but wrong — a rejected answer, an invalid document | Read `issues` |
+| 429 | Too fast | Back off; see `Retry-After` |
+| 507 | Storage is full | |
+
+The 402/429 distinction matters: **429 means slow down**, and **402 means the
+month is spent** and retrying is futile.
+
+## Answer validation
+
+A 422 from an answer endpoint carries one issue per rejected answer, each with
+the block's `ref` and a code. The codes are per block type and are documented on
+each type's page — [rating](/docs/blocks/rating) can return `out_of_range`,
+[email](/docs/blocks/email) can return `freemail`, and so on.
+
+The full set:
+
+`required` · `type` · `too_short` · `too_long` · `pattern` · `invalid_email` ·
+`freemail` · `invalid_phone` · `invalid_url` · `not_integer` · `too_small` ·
+`too_large` · `invalid_date` · `invalid_time` · `time_out_of_range` ·
+`past_date` · `too_early` · `too_late` · `invalid_option` · `too_few` ·
+`too_many` · `out_of_range` · `incomplete_ranking` · `invalid_ranking` ·
+`invalid_row` · `invalid_column` · `incomplete_matrix` · `too_many_files` ·
+`file_too_large` · `name_required` · `payment_pending` · `incomplete` ·
+`consent_required` · `unsupported`
+
+The messages are the same ones a respondent would have seen, so you can show
+them as-is.
+
+## Flow errors
+
+| Code | Meaning |
+| --- | --- |
+| `block_not_reachable` | The form has not asked this question yet |
+| `block_not_visible` | A visibility rule hides it for these answers |
+| `unknown_block` | No question with that `ref` |
+| `incomplete` | Required questions are unanswered; `issues` names them |
+| `response_not_open` | Already completed or abandoned |
+
+## Key errors
+
+See [authentication](/docs/authentication#errors). 401 responses are worded
+identically on purpose — the code tells you what happened, and the message never
+confirms whether a guessed key ever existed.

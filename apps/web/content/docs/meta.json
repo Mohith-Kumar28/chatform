@@ -1,0 +1,23 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "---Getting started---",
+    "quickstart",
+    "authentication",
+    "scopes",
+    "---Building---",
+    "embed",
+    "responses",
+    "headless",
+    "blocks",
+    "webhooks",
+    "---Reference---",
+    "api",
+    "errors",
+    "rate-limits",
+    "idempotency",
+    "pagination",
+    "versioning"
+  ]
+}

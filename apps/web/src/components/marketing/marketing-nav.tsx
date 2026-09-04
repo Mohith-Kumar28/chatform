@@ -1,5 +1,6 @@
 "use client";
 
+import { MARKETING_LINKS } from "./nav-links";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Menu } from "lucide-react";
@@ -32,12 +33,8 @@ import { cn } from "@/lib/utils";
  * exists scrolls nowhere and says nothing, which is exactly the bug the
  * removed `/templates` link had.
  */
-const LINKS = [
-  { href: "/#the-moment", label: "How it answers" },
-  { href: "/#product", label: "How it works" },
-  { href: "/#developers", label: "Developers" },
-  { href: "/pricing", label: "Pricing" },
-] as const;
+// Shared with the docs shell so both navigate the same way.
+const LINKS = MARKETING_LINKS;
 
 export function MarketingNav() {
   const [scrolled, setScrolled] = useState(false);

@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import { createMDX } from "fumadocs-mdx/next";
 
 const monorepoRoot = path.resolve(import.meta.dirname, "../..");
 
@@ -26,4 +27,8 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+/**
+ * MDX is compiled at build time, so nothing in the docs pipeline runs in the
+ * worker — no compiler in the bundle, and no filesystem reads at request time.
+ */
+export default createMDX()(nextConfig);

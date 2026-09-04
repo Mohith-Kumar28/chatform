@@ -1,0 +1,69 @@
+---
+title: Pagination
+description: Cursors, and why they are not page numbers.
+---
+
+List endpoints return a page and a cursor:
+
+```json
+{
+  "data": [ /* … */ ],
+  "has_more": true,
+  "next_cursor": "eyJvcmRlciI6ImNyZWF0ZWQi…"
+}
+```
+
+Ask for the next page by handing it back:
+
+```bash
+curl "https://api.chatform.in/v1/forms/$FORM_ID/responses?limit=50&cursor=$NEXT" \
+  -H "x-api-key: $CHATFORM_SECRET_KEY"
+```
+
+Stop when `has_more` is false. `limit` defaults to 25 and caps at 100.
+
+## Why not offsets
+
+Responses arrive while you are reading them. With `?page=2`, a new response
+pushes everything down by one — so you see a row twice and miss another, and
+nothing tells you it happened.
+
+A cursor is anchored to a row rather than a position, so a page boundary means
+the same thing however much has changed. It is signed, so a modified one is
+rejected rather than quietly returning the wrong window.
+
+## Ordering
+
+`order=created` (default) or `order=updated`. A cursor belongs to the ordering it
+was issued for; using one with the other is a 400.
+
+`order=updated` with `updated_since` is how you poll for changes without
+re-reading everything:
+
+```bash
+curl "https://api.chatform.in/v1/forms/$FORM_ID/responses?order=updated&updated_since=$LAST_SEEN" \
+  -H "x-api-key: $CHATFORM_SECRET_KEY"
+```
+
+Though if you are polling for new responses, [a webhook](/docs/webhooks) is
+better than both.
+
+## Iterating
+
+```js
+async function* allResponses(formId) {
+  let cursor;
+  do {
+    const url = new URL(`https://api.chatform.in/v1/forms/${formId}/responses`);
+    url.searchParams.set("limit", "100");
+    if (cursor) url.searchParams.set("cursor", cursor);
+
+    const page = await fetch(url, {
+      headers: { "x-api-key": process.env.CHATFORM_SECRET_KEY },
+    }).then((r) => r.json());
+
+    yield* page.data;
+    cursor = page.next_cursor;
+  } while (cursor);
+}
+```

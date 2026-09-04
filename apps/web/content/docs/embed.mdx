@@ -1,0 +1,118 @@
+---
+title: Embedding
+description: A script tag or an iframe. No backend, no keys.
+---
+
+The fastest way to put a form somewhere is not to use the API at all.
+
+## Popup or side tab
+
+```html
+<script
+  src="https://chatform.in/embed.js"
+  data-form="your-form-slug"
+  data-mode="popup"
+  defer
+></script>
+```
+
+`data-mode` takes `popup`, `side-tab`, `inline` or `fullpage`.
+
+The loader injects the iframe lazily — on intent, not on load — so it does not
+compete with your own page for the first paint.
+
+## Inline
+
+```html
+<iframe
+  src="https://chatform.in/f/your-form-slug?embed=1"
+  width="100%"
+  height="640"
+  style="border:0"
+></iframe>
+```
+
+`?embed=1` renders the form without the standalone page's chrome.
+
+## Prefilling
+
+Anything you already know, pass in — the respondent is not asked for it twice.
+
+```html
+<script
+  src="https://chatform.in/embed.js"
+  data-form="your-form-slug"
+  data-hidden-plan="trial"
+  data-hidden-utm_source="pricing-page"
+  defer
+></script>
+```
+
+Or as query parameters on an iframe: `?plan=trial&utm_source=pricing-page`. Only
+the hidden fields the form declares are accepted; anything else is ignored.
+
+## Reacting to it
+
+The frame posts messages to your page:
+
+```js
+window.addEventListener("message", (event) => {
+  if (event.origin !== "https://chatform.in") return;
+  const message = event.data;
+  if (message?.source !== "chatform") return;
+
+  switch (message.type) {
+    case "ready":    break;
+    case "resize":   /* message.height */ break;
+    case "question": /* message.ref */ break;
+    case "answer":   /* message.ref — the value is deliberately not included */ break;
+    case "complete": analytics.track("form_completed", { id: message.responseId }); break;
+    case "close":    break;
+  }
+});
+```
+
+<Callout>
+`answer` carries the question's `ref` and type, never the value. Putting a
+respondent's answers into the embedding page's JavaScript by default is not a
+default anyone asked for — use [webhooks](/docs/webhooks) or the responses API if
+you need the data.
+</Callout>
+
+Always check `event.origin`. Any page can post a message to yours.
+
+## Controlling it
+
+```js
+window.Chatform.open();
+window.Chatform.close();
+window.Chatform.toggle();
+window.Chatform.prefill({ plan: "pro" });
+window.Chatform.on("complete", (e) => console.log(e.responseId));
+```
+
+Calls made before the script loads are queued and replayed, so you do not have to
+wait for it.
+
+## Restricting where a form can be framed
+
+A form can list the origins allowed to embed it. The allowlist is enforced when a
+session is opened — a page that is not on it cannot start one, whatever it does
+in the browser — and it also produces a `frame-ancestors` policy so the browser
+refuses the frame in the first place.
+
+Leave it empty and the form embeds anywhere, which is usually what a public form
+wants.
+
+## Content Security Policy
+
+If your site sets a CSP, the embed needs:
+
+```
+frame-src https://chatform.in;
+script-src https://chatform.in;
+```
+
+The loader adds no inline script and evaluates nothing. If your policy uses
+nonces, put yours on the script tag as `data-nonce` and it will be copied onto
+the styles it injects.
