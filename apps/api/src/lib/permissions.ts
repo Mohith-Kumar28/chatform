@@ -35,6 +35,15 @@ export const statement = {
   analytics: ["read", "read_advanced"],
   webhook: ["create", "read", "update", "delete"],
   apikey: ["create", "read", "revoke"],
+  /**
+   * The api-key plugin's own resource name, and it must be spelled exactly this
+   * way: `checkOrgApiKeyPermission` asks the organization access controller for
+   * `{ apiKey: [action] }`. Our pre-existing `apikey` statement above is a
+   * different string, so without this every org-owned key operation would fail
+   * for anyone but the organization's creator — who passes regardless, which is
+   * precisely why it would look fine in development.
+   */
+  apiKey: ["create", "read", "update", "delete"],
   workspace: ["create", "update", "delete"],
   branding: ["manage"],
   domain: ["manage"],
@@ -54,6 +63,7 @@ const ALL = {
   analytics: ["read", "read_advanced"],
   webhook: ["create", "read", "update", "delete"],
   apikey: ["create", "read", "revoke"],
+  apiKey: ["create", "read", "update", "delete"],
   workspace: ["create", "update", "delete"],
   branding: ["manage"],
   domain: ["manage"],

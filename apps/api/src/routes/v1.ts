@@ -6,7 +6,7 @@ import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
 import { requireApiKey, assertChatSessionAccess, type GuardVars } from "../lib/guards.js";
 import { mountRespondentAuth, type AuthRouter } from "./respondent-auth.js";
-import { entitlementsFor, type AuthzVars } from "../lib/authorize.js";
+import { entitlementsFor, requireScope, type AuthzVars } from "../lib/authorize.js";
 import { meter } from "../lib/entitlements.js";
 import { featureLocked, limitReached } from "@repo/entitlements";
 import type { SessionDO } from "../do/session-do.js";
@@ -77,19 +77,27 @@ v1Router.use("/chat/sessions/:sid/*", assertSessionOwnership);
 
 v1Router.get(
   "/forms",
+  requireScope("form", "read"),
   describeRoute({
     tags: ["v1"],
     summary: "List published forms (API key)",
     responses: { 200: { description: "Forms", content: { "application/json": { schema: resolver(z.array(z.object({ id: z.string(), title: z.string(), slug: z.string() }))) } } } },
   }),
   async (c) => {
-    const userId = c.get("userId");
+    /**
+     * Scoped by organization, not by user.
+     *
+     * This used to join `members` on the key's `user_id`, which an org-owned key
+     * does not have — the list would have come back empty rather than wrong,
+     * which is the kind of regression nobody reports and everybody works around.
+     */
+    const orgId = c.get("orgId");
     const rows = await c.env.DB.prepare(
-      `SELECT f.id, f.title, f.slug FROM forms f
-       JOIN members m ON m.organization_id = f.organization_id AND m.user_id = ?
-       WHERE f.status = 'published' AND f.deleted_at IS NULL ORDER BY f.updated_at DESC LIMIT 100`,
+      `SELECT id, title, slug FROM forms
+        WHERE organization_id = ? AND status = 'published' AND deleted_at IS NULL
+        ORDER BY updated_at DESC LIMIT 100`,
     )
-      .bind(userId)
+      .bind(orgId ?? "")
       .all<{ id: string; title: string; slug: string }>();
     return c.json(rows.results ?? []);
   },
@@ -97,6 +105,7 @@ v1Router.get(
 
 v1Router.get(
   "/forms/:id",
+  requireScope("form", "read"),
   describeRoute({
     tags: ["v1"],
     summary: "Get a published form's public config",
@@ -128,6 +137,7 @@ const ChatSessionResponse = z.object({
 
 v1Router.post(
   "/forms/:id/chat/sessions",
+  requireScope("session", "create"),
   validator("json", z.object({ externalId: z.string().optional(), hiddenFields: z.record(z.string(), z.string()).optional() }).optional()),
   describeRoute({
     tags: ["v1"],
@@ -192,6 +202,7 @@ v1Router.post(
 
 v1Router.post(
   "/chat/sessions/:sid/messages",
+  requireScope("session", "write"),
   validator(
     "json",
     z.discriminatedUnion("type", [
@@ -254,6 +265,7 @@ v1Router.post(
 
 v1Router.get(
   "/chat/sessions/:sid",
+  requireScope("session", "read"),
   describeRoute({ tags: ["v1"], summary: "Get session state (status, answers, progress)", responses: { 200: { description: "Session state", content: { "application/json": { schema: resolver(z.any()) } } } } }),
   async (c) => {
     const sid = c.req.param("sid");

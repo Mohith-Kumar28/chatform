@@ -106,15 +106,39 @@ export const invitations = sqliteTable(
 
 // ─────────────────────── Better Auth API keys ───────────────────────
 
-export const apiKeys = sqliteTable(
+/**
+ * API keys, owned by the `@better-auth/api-key` plugin.
+ *
+ * Exported as `apikeys`, not `apiKeys`, and that is load-bearing. The drizzle
+ * adapter runs with `usePlural: true`, which appends an "s" to whatever model
+ * name it resolves — so the plugin's model `apikey` finds `apikeys` with no
+ * override at all, while a `modelName: "apiKeys"` override would resolve to
+ * `apiKeyss` and throw at the first query.
+ *
+ * `user_id` is nullable because these keys belong to an organization: the
+ * plugin writes `reference_id` and never a user. `created_by` keeps the thing
+ * `user_id` actually meant — who minted it — and survives that person leaving.
+ */
+export const apikeys = sqliteTable(
   "api_keys",
   {
     id: text("id").primaryKey(),
+    /**
+     * Which of the four key configurations minted this: sk_live (stored as the
+     * literal `'default'`, because that config is the plugin's default one),
+     * sk_test, pk_live, pk_test. Derive the display type from `prefix`, which is
+     * stored in plaintext — not from this.
+     */
+    configId: text("config_id").notNull().default("default"),
+    /** The owning organization id. Canonical for the plugin. */
+    referenceId: text("reference_id").notNull(),
     name: text("name"),
     start: text("start"),
     prefix: text("prefix"),
     key: text("key").notNull().unique(),
-    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    /** Who minted the key. An org key outlives its creator's membership. */
+    createdBy: text("created_by"),
     refillInterval: integer("refill_interval"),
     refillAmount: integer("refill_amount"),
     lastRefillAt: ts("last_refill_at"),
@@ -122,6 +146,8 @@ export const apiKeys = sqliteTable(
     rateLimitEnabled: bool("rate_limit_enabled").default(true),
     rateLimitMax: integer("rate_limit_max"),
     rateLimitTimeWindow: integer("rate_limit_time_window"),
+    /** Requests inside the current window. Written by the plugin on every verify. */
+    requestCount: integer("request_count").notNull().default(0),
     remaining: integer("remaining"),
     lastRequest: ts("last_request"),
     expiresAt: ts("expires_at"),
@@ -129,14 +155,26 @@ export const apiKeys = sqliteTable(
     metadata: text("metadata"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
     updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
-    // chatform extensions
+    /**
+     * Mirror of `reference_id`, written by our own key routes.
+     *
+     * Kept because it is what carries `ON DELETE CASCADE` when an organization
+     * is deleted, and what every org-scoped query and tenancy test already
+     * reads. Single writer, so the two cannot drift.
+     */
     organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
     workspaceId: text("workspace_id"),
+    /** @deprecated legacy scope array, superseded by `permissions`. Read-only. */
     scopes: text("scopes"),
     environment: text("environment").notNull().default("live"),
     lastUsedAt: ts("last_used_at"),
   },
-  (t) => [index("idx_apikeys_user").on(t.userId), index("idx_apikeys_org").on(t.organizationId)],
+  (t) => [
+    index("idx_apikeys_user").on(t.userId),
+    index("idx_apikeys_org").on(t.organizationId),
+    index("idx_apikeys_ref").on(t.referenceId),
+    index("idx_apikeys_config").on(t.configId),
+  ],
 );
 
 // ─────────────────────────── Product core ───────────────────────────

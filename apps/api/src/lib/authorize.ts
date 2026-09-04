@@ -12,6 +12,7 @@
  * the web render every paywall without knowing which route produced it.
  */
 
+import { PERMISSION_TO_SCOPE, scopeAllows, LEGACY_SCOPES, type ScopeResource } from "./scopes.js";
 import type { Context, MiddlewareHandler } from "hono";
 import {
   featureLocked,
@@ -110,13 +111,74 @@ export async function roleFor(c: Ctx): Promise<string> {
 // ─────────────────────────────── RBAC ───────────────────────────────
 
 /**
+ * Refuse a key that lacks the scope for this permission.
+ *
+ * Deny by default: a permission absent from `PERMISSION_TO_SCOPE` — minting keys,
+ * changing a plan, reading the audit trail — is one an API key can never exercise,
+ * whatever its scopes say.
+ */
+function scopeDenial<R extends Resource>(c: Ctx, resource: R, action: ActionOf<R>): Response | null {
+  const mapped = PERMISSION_TO_SCOPE[`${resource}.${action}`];
+  const scopes = c.get("scopes") ?? LEGACY_SCOPES;
+  if (mapped && scopeAllows(scopes, mapped[0], mapped[1])) return null;
+  const required = mapped ? `${mapped[0]}:${mapped[1]}` : `${String(resource)}:${String(action)}`;
+  c.header("www-authenticate", `Bearer error="insufficient_scope", scope="${required}"`);
+  return c.json(
+    {
+      error: {
+        code: "insufficient_scope",
+        message: `This API key lacks the ${required} scope`,
+        required,
+      },
+    },
+    403,
+  );
+}
+
+/**
+ * Require a scope directly, for routes with no RBAC equivalent.
+ *
+ * `requirePermission` maps a role permission onto a scope; this is the plain
+ * form, used on `/v1` where the actor is always a key. A session-authenticated
+ * request has no scopes and passes through — RBAC has already judged it.
+ */
+export function requireScope(resource: ScopeResource, action: string): Handler {
+  return async (c, next) => {
+    const scopes = c.get("scopes");
+    if (!scopes) return next();
+    if (!scopeAllows(scopes, resource, action)) {
+      c.header("www-authenticate", `Bearer error="insufficient_scope", scope="${resource}:${action}"`);
+      return c.json(
+        {
+          error: {
+            code: "insufficient_scope",
+            message: `This API key lacks the ${resource}:${action} scope`,
+            required: `${resource}:${action}`,
+          },
+        },
+        403,
+      );
+    }
+    await next();
+  };
+}
+
+/**
  * A role gate. 403, never 402, and never an `upgradeUrl` — see `forbidden` in the shared
- * envelope. A caller with an API key rather than a session bypasses this: keys are minted
- * with explicit scopes and are checked by `requireApiKey` instead.
+ * envelope.
+ *
+ * A request carrying an API key is judged by the key's scopes rather than by a
+ * role. It used to be judged by nothing at all: this returned `next()` for any
+ * key on the theory that `requireApiKey` checked scopes, which it never did — so
+ * every key held full organization authority on every route it could reach.
  */
 export function requirePermission<R extends Resource>(resource: R, action: ActionOf<R>): Handler {
   return async (c, next) => {
-    if (c.get("keyId")) return next(); // API keys carry their own scopes
+    if (c.get("keyId")) {
+      const denial = scopeDenial(c, resource, action);
+      if (denial) return denial;
+      return next();
+    }
     const role = await roleFor(c);
     if (!roleAllows(role, resource, action)) {
       const ent = await entitlementsFor(c);
@@ -132,7 +194,7 @@ export async function assertPermission<R extends Resource>(
   resource: R,
   action: ActionOf<R>,
 ): Promise<Response | null> {
-  if (c.get("keyId")) return null;
+  if (c.get("keyId")) return scopeDenial(c, resource, action);
   const role = await roleFor(c);
   if (roleAllows(role, resource, action)) return null;
   const ent = await entitlementsFor(c);

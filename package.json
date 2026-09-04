@@ -32,7 +32,9 @@
     "deploy:web": "pnpm --filter @repo/web run cf:build && pnpm --filter @repo/web run cf:deploy",
     "deploy:all": "pnpm deploy:api && pnpm deploy:web",
     "secrets:push": "python3 tooling/push-secrets.py",
-    "secrets:list": "pnpm --filter @repo/api exec wrangler secret list"
+    "secrets:list": "pnpm --filter @repo/api exec wrangler secret list",
+    "apikeys:backfill": "node tooling/backfill-apikey-hashes.mjs",
+    "apikeys:backfill:remote": "node tooling/backfill-apikey-hashes.mjs --remote"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
@@ -42,5 +44,10 @@
   },
   "dependencies": {
     "orval": "^8.26.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@better-auth/utils": "0.4.2"
+    }
   }
 }

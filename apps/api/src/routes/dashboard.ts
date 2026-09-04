@@ -3,6 +3,9 @@ import { describeRoute, resolver } from "hono-openapi";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
 import { createAuth, googleAuthConfigured } from "../lib/auth.js";
+// Memoized per-env, unlike `createAuth`, which rebuilds the whole instance —
+// five plugins now — on every single /api/auth/* request.
+import { getAuth } from "../lib/guards.js";
 
 export const dashboardRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -35,7 +38,25 @@ dashboardRouter.get(
   (c) => c.json({ emailPassword: true, google: googleAuthConfigured(c.env) }),
 );
 
-dashboardRouter.on(["POST", "GET"], "/auth/*", (c) => createAuth(c.env).handler(c.req.raw));
+/**
+ * The api-key plugin's own endpoints are not part of the public surface.
+ *
+ * Registering the plugin mounts `/api/auth/api-key/{create,update,delete,list,get}`
+ * under this catch-all, where none of our gates run — no `api_access` feature
+ * check, no RBAC, no audit row, none of the metadata conventions the rest of the
+ * system relies on. A session cookie would be enough to mint an unrestricted
+ * key. `/api/keys` is the only door; this shuts the other one.
+ *
+ * Registered before the catch-all, because Hono matches in registration order.
+ */
+dashboardRouter.all("/auth/api-key", (c) =>
+  c.json({ error: { code: "not_found", message: "Route not found" } }, 404),
+);
+dashboardRouter.all("/auth/api-key/*", (c) =>
+  c.json({ error: { code: "not_found", message: "Route not found" } }, 404),
+);
+
+dashboardRouter.on(["POST", "GET"], "/auth/*", (c) => getAuth(c.env).handler(c.req.raw));
 
 dashboardRouter.get(
   "/auth/ok",

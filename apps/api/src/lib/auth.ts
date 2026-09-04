@@ -1,9 +1,20 @@
+/**
+ * Empty type-imports, deliberately.
+ *
+ * `createAuth`'s inferred type reaches into `@better-auth/core`, and under
+ * pnpm's nested layout with `declaration: true` TypeScript cannot name a
+ * package it has no reference to (TS2742). These two lines give it one. They
+ * emit nothing.
+ */
+import type {} from "@better-auth/core";
+import type {} from "@better-auth/core/db/adapter";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
 import { createDb, schema } from "@repo/db";
 import type { Bindings } from "../env.js";
 import { ac, roles } from "./permissions.js";
+import { apiKeyPlugin } from "./apikey-config.js";
 import { getEntitlements, countSeats } from "./entitlements.js";
 import { seatLimit } from "@repo/entitlements";
 import { APIError } from "better-auth/api";
@@ -129,6 +140,7 @@ export function createAuth(env: Bindings) {
     // the same statements. Without them the plugin falls back to owner/admin/member and
     // `editor`/`viewer` would resolve to no permissions at all.
     plugins: [
+      apiKeyPlugin(),
       organization({
         ac,
         roles,
