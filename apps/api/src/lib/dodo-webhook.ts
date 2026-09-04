@@ -34,10 +34,35 @@ export interface WebhookHeaders {
   signature: string | undefined;
 }
 
+/**
+ * The bytes to sign with.
+ *
+ * A Standard Webhooks symmetric secret is `whsec_` followed by BASE64 — the key is the
+ * decoded bytes, not the characters you can read. Signing with the literal string is the
+ * bug that made every real Dodo delivery a 401 while the whole test suite passed: the
+ * tests only ever signed with this same function, so both sides were wrong together and
+ * agreed. `signingKey` is why `tests/billing.test.ts` now pins the published spec vector.
+ *
+ * The prefix is optional per spec, and a secret that is not valid base64 is taken at face
+ * value rather than rejected — some senders use a raw string.
+ */
+function signingKey(secret: string): Uint8Array {
+  const body = secret.startsWith("whsec_") ? secret.slice("whsec_".length) : secret;
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(body) || body.length % 4 !== 0) return new TextEncoder().encode(secret);
+  try {
+    const bin = atob(body);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  } catch {
+    return new TextEncoder().encode(secret);
+  }
+}
+
 /** Compute the base64 HMAC the spec expects for one signing secret. */
 export async function sign(secret: string, id: string, timestamp: string, body: string): Promise<string> {
   const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [
+  const key = await crypto.subtle.importKey("raw", signingKey(secret), { name: "HMAC", hash: "SHA-256" }, false, [
     "sign",
   ]);
   const mac = await crypto.subtle.sign("HMAC", key, enc.encode(`${id}.${timestamp}.${body}`));

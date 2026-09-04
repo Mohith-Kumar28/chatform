@@ -124,6 +124,42 @@ describe("Standard Webhooks verification", () => {
     expect(r).toEqual({ ok: true, id });
   });
 
+  /**
+   * The one test in this file that is not self-referential.
+   *
+   * Every other case signs with our own `sign()` and verifies with our own `verifyWebhook()`,
+   * so a shared misunderstanding passes them all — which is exactly what happened: we used
+   * the literal `whsec_…` string as the HMAC key where the spec uses the base64-decoded
+   * bytes after the prefix. Dodo rejected all 16 deliveries with a 401 while CI was green.
+   *
+   * These constants are the published Standard Webhooks example, not values we produced.
+   * If this vector passes, a real sender's signature verifies.
+   */
+  it("matches the published Standard Webhooks vector (whsec_ secrets are base64)", async () => {
+    const vector = {
+      secret: "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw",
+      id: "msg_p5jXN8AQM9LWM0D4loKWxJek",
+      timestamp: "1614265330",
+      payload: '{"test": 2432232314}',
+      signature: "g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=",
+    };
+    expect(await sign(vector.secret, vector.id, vector.timestamp, vector.payload)).toBe(vector.signature);
+
+    // And the whole verification path accepts it, with the clock pinned inside tolerance.
+    const r = await verifyWebhook(
+      vector.secret,
+      { id: vector.id, timestamp: vector.timestamp, signature: `v1,${vector.signature}` },
+      vector.payload,
+      Number(vector.timestamp) * 1000,
+    );
+    expect(r).toEqual({ ok: true, id: vector.id });
+  });
+
+  it("treats a non-base64 secret as raw bytes rather than failing", async () => {
+    const sig = `v1,${await sign("plain-secret", id, ts, raw)}`;
+    expect((await verifyWebhook("plain-secret", { id, timestamp: ts, signature: sig }, raw)).ok).toBe(true);
+  });
+
   it("signs id.timestamp.body, not timestamp.body", async () => {
     // The old implementation signed `${ts}.${raw}` and therefore rejected every genuine
     // delivery. This asserts the spec's three-part payload directly.
