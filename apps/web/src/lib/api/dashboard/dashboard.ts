@@ -36,6 +36,8 @@ import type {
   GetApiKeys200Item,
   GetApiTemplates200Item,
   GetApiWebhooks200Item,
+  PostApiAiAddBlocks200,
+  PostApiAiAddBlocksBody,
   PostApiAiEditForm200,
   PostApiAiEditFormBody,
   PostApiAiGenerateForm200,
@@ -50,6 +52,8 @@ import type {
   PostApiFormsByIdPublish422,
   PostApiKeys200,
   PostApiKeysBody,
+  PostApiKeysByIdRotate200,
+  PostApiKeysByIdRotateBody,
   PostApiWebhooks200,
   PostApiWebhooksBody,
   PostApiWebhooksByIdTest200,
@@ -1107,6 +1111,115 @@ export const usePostApiAiEditForm = <TError = void,
       > => {
       return useMutation(getPostApiAiEditFormMutationOptions(options));
     }
+    export type postApiAiAddBlocksResponse200 = {
+  data: PostApiAiAddBlocks200
+  status: 200
+}
+
+export type postApiAiAddBlocksResponse422 = {
+  data: void
+  status: 422
+}
+
+export type postApiAiAddBlocksResponse502 = {
+  data: void
+  status: 502
+}
+
+export type postApiAiAddBlocksResponse503 = {
+  data: void
+  status: 503
+}
+
+export type postApiAiAddBlocksResponseSuccess = (postApiAiAddBlocksResponse200) & {
+  headers: Headers;
+};
+export type postApiAiAddBlocksResponseError = (postApiAiAddBlocksResponse422 | postApiAiAddBlocksResponse502 | postApiAiAddBlocksResponse503) & {
+  headers: Headers;
+};
+
+export type postApiAiAddBlocksResponse = (postApiAiAddBlocksResponseSuccess | postApiAiAddBlocksResponseError)
+
+export const getPostApiAiAddBlocksUrl = () => {
+
+
+
+
+  return `/api/ai/add-blocks`
+}
+
+/**
+ * Returns the proposed document without saving it. An edit may add no questions at all — most requests about a working form change the routing.
+ * @deprecated
+ * @summary Deprecated alias of /ai/edit-form, for bundles loaded before the rename
+ */
+export const postApiAiAddBlocks = async (postApiAiAddBlocksBody: PostApiAiAddBlocksBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAiAddBlocksResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiAiAddBlocksResponse>(getPostApiAiAddBlocksUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiAiAddBlocksBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiAiAddBlocksMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiAddBlocks>>, TError,PostApiAiAddBlocksMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAiAddBlocks>>, TError,PostApiAiAddBlocksMutationVariables, TContext> => {
+
+const mutationKey = ['postApiAiAddBlocks'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAiAddBlocks>>, PostApiAiAddBlocksMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiAiAddBlocks(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiAiAddBlocksMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAiAddBlocks>>>
+    export type PostApiAiAddBlocksMutationBody = PostApiAiAddBlocksBody
+    export type PostApiAiAddBlocksMutationError = void
+    export type PostApiAiAddBlocksMutationVariables = {data: PostApiAiAddBlocksBody}
+
+    /**
+ * @deprecated
+ * @summary Deprecated alias of /ai/edit-form, for bundles loaded before the rename
+ */
+export const usePostApiAiAddBlocks = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiAddBlocks>>, TError,PostApiAiAddBlocksMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiAiAddBlocks>>,
+        TError,
+        PostApiAiAddBlocksMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiAiAddBlocksMutationOptions(options));
+    }
     export type getApiFormsByIdSubmissionsResponse200 = {
   data: GetApiFormsByIdSubmissions200Item[]
   status: 200
@@ -1411,7 +1524,7 @@ export const getGetApiKeysUrl = () => {
 }
 
 /**
- * @summary List my API keys (metadata only)
+ * @summary List the organization's API keys (metadata only)
  */
 export const getApiKeys = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiKeysResponse> => {
 
@@ -1458,7 +1571,7 @@ export type GetApiKeysQueryError = unknown
 
 
 /**
- * @summary List my API keys (metadata only)
+ * @summary List the organization's API keys (metadata only)
  */
 
 export function useGetApiKeys<TData = Awaited<ReturnType<typeof getApiKeys>>, TError = unknown>(
@@ -1483,12 +1596,19 @@ export type postApiKeysResponse200 = {
   status: 200
 }
 
+export type postApiKeysResponse422 = {
+  data: void
+  status: 422
+}
+
 export type postApiKeysResponseSuccess = (postApiKeysResponse200) & {
   headers: Headers;
 };
-;
+export type postApiKeysResponseError = (postApiKeysResponse422) & {
+  headers: Headers;
+};
 
-export type postApiKeysResponse = (postApiKeysResponseSuccess)
+export type postApiKeysResponse = (postApiKeysResponseSuccess | postApiKeysResponseError)
 
 export const getPostApiKeysUrl = () => {
 
@@ -1499,7 +1619,7 @@ export const getPostApiKeysUrl = () => {
 }
 
 /**
- * @summary Create an API key — raw key shown ONCE
+ * @summary Create an API key — the raw key is shown ONCE
  */
 export const postApiKeys = async (postApiKeysBody: PostApiKeysBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiKeysResponse> => {
 
@@ -1522,7 +1642,7 @@ return customFetch<postApiKeysResponse>(getPostApiKeysUrl(),
 
 
 
-export const getPostApiKeysMutationOptions = <TError = unknown,
+export const getPostApiKeysMutationOptions = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiKeys>>, TError,PostApiKeysMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiKeys>>, TError,PostApiKeysMutationVariables, TContext> => {
 
@@ -1551,13 +1671,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiKeysMutationResult = NonNullable<Awaited<ReturnType<typeof postApiKeys>>>
     export type PostApiKeysMutationBody = PostApiKeysBody
-    export type PostApiKeysMutationError = unknown
+    export type PostApiKeysMutationError = void
     export type PostApiKeysMutationVariables = {data: PostApiKeysBody}
 
     /**
- * @summary Create an API key — raw key shown ONCE
+ * @summary Create an API key — the raw key is shown ONCE
  */
-export const usePostApiKeys = <TError = unknown,
+export const usePostApiKeys = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiKeys>>, TError,PostApiKeysMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof postApiKeys>>,
@@ -1566,6 +1686,103 @@ export const usePostApiKeys = <TError = unknown,
         TContext
       > => {
       return useMutation(getPostApiKeysMutationOptions(options));
+    }
+    export type postApiKeysByIdRotateResponse200 = {
+  data: PostApiKeysByIdRotate200
+  status: 200
+}
+
+export type postApiKeysByIdRotateResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiKeysByIdRotateResponseSuccess = (postApiKeysByIdRotateResponse200) & {
+  headers: Headers;
+};
+export type postApiKeysByIdRotateResponseError = (postApiKeysByIdRotateResponse404) & {
+  headers: Headers;
+};
+
+export type postApiKeysByIdRotateResponse = (postApiKeysByIdRotateResponseSuccess | postApiKeysByIdRotateResponseError)
+
+export const getPostApiKeysByIdRotateUrl = (id: string,) => {
+
+
+
+
+  return `/api/keys/${id}/rotate`
+}
+
+/**
+ * @summary Rotate an API key, keeping the old one alive for a grace period
+ */
+export const postApiKeysByIdRotate = async (id: string,
+    postApiKeysByIdRotateBody: PostApiKeysByIdRotateBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiKeysByIdRotateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiKeysByIdRotateResponse>(getPostApiKeysByIdRotateUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiKeysByIdRotateBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiKeysByIdRotateMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiKeysByIdRotate>>, TError,PostApiKeysByIdRotateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiKeysByIdRotate>>, TError,PostApiKeysByIdRotateMutationVariables, TContext> => {
+
+const mutationKey = ['postApiKeysByIdRotate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiKeysByIdRotate>>, PostApiKeysByIdRotateMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postApiKeysByIdRotate(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiKeysByIdRotateMutationResult = NonNullable<Awaited<ReturnType<typeof postApiKeysByIdRotate>>>
+    export type PostApiKeysByIdRotateMutationBody = PostApiKeysByIdRotateBody
+    export type PostApiKeysByIdRotateMutationError = void
+    export type PostApiKeysByIdRotateMutationVariables = {id: string;data: PostApiKeysByIdRotateBody}
+
+    /**
+ * @summary Rotate an API key, keeping the old one alive for a grace period
+ */
+export const usePostApiKeysByIdRotate = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiKeysByIdRotate>>, TError,PostApiKeysByIdRotateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiKeysByIdRotate>>,
+        TError,
+        PostApiKeysByIdRotateMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiKeysByIdRotateMutationOptions(options));
     }
     export type deleteApiKeysByIdResponse200 = {
   data: DeleteApiKeysById200
@@ -1650,7 +1867,95 @@ export const useDeleteApiKeysById = <TError = unknown,
       > => {
       return useMutation(getDeleteApiKeysByIdMutationOptions(options));
     }
-    export type getApiWebhooksResponse200 = {
+    export type getApiKeysScopesResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getApiKeysScopesResponseSuccess = (getApiKeysScopesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiKeysScopesResponse = (getApiKeysScopesResponseSuccess)
+
+export const getGetApiKeysScopesUrl = () => {
+
+
+
+
+  return `/api/keys/scopes`
+}
+
+/**
+ * @summary Available API key scopes and key types
+ */
+export const getApiKeysScopes = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiKeysScopesResponse> => {
+
+  return customFetch<getApiKeysScopesResponse>(getGetApiKeysScopesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiKeysScopesQueryKey = () => {
+    return [
+    `/api/keys/scopes`
+    ] as const;
+    }
+
+
+export const getGetApiKeysScopesQueryOptions = <TData = Awaited<ReturnType<typeof getApiKeysScopes>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiKeysScopes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiKeysScopesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiKeysScopes>>> = ({ signal }) => getApiKeysScopes({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiKeysScopes>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiKeysScopesQueryResult = NonNullable<Awaited<ReturnType<typeof getApiKeysScopes>>>
+export type GetApiKeysScopesQueryError = unknown
+
+
+/**
+ * @summary Available API key scopes and key types
+ */
+
+export function useGetApiKeysScopes<TData = Awaited<ReturnType<typeof getApiKeysScopes>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiKeysScopes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiKeysScopesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiWebhooksResponse200 = {
   data: GetApiWebhooks200Item[]
   status: 200
 }

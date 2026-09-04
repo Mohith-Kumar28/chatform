@@ -11,7 +11,8 @@
     "d1:migrate:local": "wrangler d1 migrations apply chatform --local",
     "d1:migrate:remote": "wrangler d1 migrations apply chatform --remote",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "gen:openapi": "tsx scripts/gen-openapi.ts"
   },
   "dependencies": {
     "@better-auth/api-key": "^1.7.2",
@@ -37,6 +38,7 @@
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^4.20250810.0",
     "@repo/config": "workspace:*",
+    "tsx": "^4.23.12",
     "typescript": "^5.7.0",
     "vitest": "^4.1.11",
     "wrangler": "^4.0.0"

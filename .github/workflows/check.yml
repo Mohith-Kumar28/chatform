@@ -25,6 +25,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # typecheck + lint + test + plans:verify. Drift gates (openapi:verify,
-      # blocks:verify) join `check` as they land, so one job stays the whole story.
+      # typecheck + lint + test + plans:verify
       - run: pnpm check
+
+      # The spec is generated from the running worker, and orval reads the
+      # committed copy — so a stale spec silently means a stale web client.
+      # Kept out of `check` because it boots a worker, which a contributor
+      # without wrangler set up cannot do.
+      - run: pnpm openapi:verify

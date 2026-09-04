@@ -22,9 +22,23 @@ import type {
 import type {
   GetV1Forms200Item,
   GetV1FormsById404,
+  GetV1FormsByIdResponsesParams,
+  PostV1ChatFormsByIdChatSessions200,
+  PostV1ChatFormsByIdChatSessionsBody,
+  PostV1ChatFormsByIdSessions200,
+  PostV1ChatFormsByIdSessionsBody,
+  PostV1ChatSessionsBySidActionsBody,
   PostV1ChatSessionsBySidMessagesBody,
   PostV1FormsByIdChatSessions200,
-  PostV1FormsByIdChatSessionsBody
+  PostV1FormsByIdChatSessionsBody,
+  PostV1FormsByIdResponsesBody,
+  PostV1FormsByIdSessions200,
+  PostV1FormsByIdSessionsBody,
+  PostV1ResponsesByIdAbandonBody,
+  PostV1ResponsesByIdAnswersBody,
+  PostV1ResponsesByIdCompleteBody,
+  PostV1SessionsBySidActionsBody,
+  PostV1SessionsBySidMessagesBody
 } from '../generated.schemas';
 
 import { customFetch } from '.././mutator';
@@ -48,6 +62,1177 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export type postV1FormsByIdResponsesResponse201 = {
+  data: void
+  status: 201
+}
+
+export type postV1FormsByIdResponsesResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1FormsByIdResponsesResponse422 = {
+  data: void
+  status: 422
+}
+
+export type postV1FormsByIdResponsesResponseSuccess = (postV1FormsByIdResponsesResponse201) & {
+  headers: Headers;
+};
+export type postV1FormsByIdResponsesResponseError = (postV1FormsByIdResponsesResponse404 | postV1FormsByIdResponsesResponse422) & {
+  headers: Headers;
+};
+
+export type postV1FormsByIdResponsesResponse = (postV1FormsByIdResponsesResponseSuccess | postV1FormsByIdResponsesResponseError)
+
+export const getPostV1FormsByIdResponsesUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/responses`
+}
+
+/**
+ * @summary Open a response (optionally with answers, optionally completing it)
+ */
+export const postV1FormsByIdResponses = async (id: string,
+    postV1FormsByIdResponsesBody: PostV1FormsByIdResponsesBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1FormsByIdResponsesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1FormsByIdResponsesResponse>(getPostV1FormsByIdResponsesUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1FormsByIdResponsesBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1FormsByIdResponsesMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdResponses>>, TError,PostV1FormsByIdResponsesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdResponses>>, TError,PostV1FormsByIdResponsesMutationVariables, TContext> => {
+
+const mutationKey = ['postV1FormsByIdResponses'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1FormsByIdResponses>>, PostV1FormsByIdResponsesMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postV1FormsByIdResponses(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1FormsByIdResponsesMutationResult = NonNullable<Awaited<ReturnType<typeof postV1FormsByIdResponses>>>
+    export type PostV1FormsByIdResponsesMutationBody = PostV1FormsByIdResponsesBody
+    export type PostV1FormsByIdResponsesMutationError = void
+    export type PostV1FormsByIdResponsesMutationVariables = {id: string;data: PostV1FormsByIdResponsesBody}
+
+    /**
+ * @summary Open a response (optionally with answers, optionally completing it)
+ */
+export const usePostV1FormsByIdResponses = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdResponses>>, TError,PostV1FormsByIdResponsesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1FormsByIdResponses>>,
+        TError,
+        PostV1FormsByIdResponsesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1FormsByIdResponsesMutationOptions(options));
+    }
+    export type getV1FormsByIdResponsesResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1FormsByIdResponsesResponse400 = {
+  data: void
+  status: 400
+}
+
+export type getV1FormsByIdResponsesResponse402 = {
+  data: void
+  status: 402
+}
+
+export type getV1FormsByIdResponsesResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getV1FormsByIdResponsesResponseSuccess = (getV1FormsByIdResponsesResponse200) & {
+  headers: Headers;
+};
+export type getV1FormsByIdResponsesResponseError = (getV1FormsByIdResponsesResponse400 | getV1FormsByIdResponsesResponse402 | getV1FormsByIdResponsesResponse404) & {
+  headers: Headers;
+};
+
+export type getV1FormsByIdResponsesResponse = (getV1FormsByIdResponsesResponseSuccess | getV1FormsByIdResponsesResponseError)
+
+export const getGetV1FormsByIdResponsesUrl = (id: string,
+    params?: GetV1FormsByIdResponsesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/forms/${id}/responses?${stringifiedParams}` : `/v1/forms/${id}/responses`
+}
+
+/**
+ * @summary List a form's responses, newest first
+ */
+export const getV1FormsByIdResponses = async (id: string,
+    params?: GetV1FormsByIdResponsesParams, options?: Parameters<typeof customFetch>[1]): Promise<getV1FormsByIdResponsesResponse> => {
+
+  return customFetch<getV1FormsByIdResponsesResponse>(getGetV1FormsByIdResponsesUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1FormsByIdResponsesQueryKey = (id: string,
+    params?: GetV1FormsByIdResponsesParams,) => {
+    return [
+    `/v1/forms/${id}/responses`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetV1FormsByIdResponsesQueryOptions = <TData = Awaited<ReturnType<typeof getV1FormsByIdResponses>>, TError = void>(id: string,
+    params?: GetV1FormsByIdResponsesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdResponses>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1FormsByIdResponsesQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1FormsByIdResponses>>> = ({ signal }) => getV1FormsByIdResponses(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdResponses>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1FormsByIdResponsesQueryResult = NonNullable<Awaited<ReturnType<typeof getV1FormsByIdResponses>>>
+export type GetV1FormsByIdResponsesQueryError = void
+
+
+/**
+ * @summary List a form's responses, newest first
+ */
+
+export function useGetV1FormsByIdResponses<TData = Awaited<ReturnType<typeof getV1FormsByIdResponses>>, TError = void>(
+ id: string,
+    params?: GetV1FormsByIdResponsesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdResponses>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1FormsByIdResponsesQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postV1ResponsesByIdAnswersResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1ResponsesByIdAnswersResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1ResponsesByIdAnswersResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postV1ResponsesByIdAnswersResponse422 = {
+  data: void
+  status: 422
+}
+
+export type postV1ResponsesByIdAnswersResponseSuccess = (postV1ResponsesByIdAnswersResponse200) & {
+  headers: Headers;
+};
+export type postV1ResponsesByIdAnswersResponseError = (postV1ResponsesByIdAnswersResponse404 | postV1ResponsesByIdAnswersResponse409 | postV1ResponsesByIdAnswersResponse422) & {
+  headers: Headers;
+};
+
+export type postV1ResponsesByIdAnswersResponse = (postV1ResponsesByIdAnswersResponseSuccess | postV1ResponsesByIdAnswersResponseError)
+
+export const getPostV1ResponsesByIdAnswersUrl = (id: string,) => {
+
+
+
+
+  return `/v1/responses/${id}/answers`
+}
+
+/**
+ * @summary Record one or more answers on an open response
+ */
+export const postV1ResponsesByIdAnswers = async (id: string,
+    postV1ResponsesByIdAnswersBody: PostV1ResponsesByIdAnswersBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1ResponsesByIdAnswersResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1ResponsesByIdAnswersResponse>(getPostV1ResponsesByIdAnswersUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1ResponsesByIdAnswersBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1ResponsesByIdAnswersMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ResponsesByIdAnswers>>, TError,PostV1ResponsesByIdAnswersMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1ResponsesByIdAnswers>>, TError,PostV1ResponsesByIdAnswersMutationVariables, TContext> => {
+
+const mutationKey = ['postV1ResponsesByIdAnswers'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ResponsesByIdAnswers>>, PostV1ResponsesByIdAnswersMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postV1ResponsesByIdAnswers(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ResponsesByIdAnswersMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ResponsesByIdAnswers>>>
+    export type PostV1ResponsesByIdAnswersMutationBody = PostV1ResponsesByIdAnswersBody
+    export type PostV1ResponsesByIdAnswersMutationError = void
+    export type PostV1ResponsesByIdAnswersMutationVariables = {id: string;data: PostV1ResponsesByIdAnswersBody}
+
+    /**
+ * @summary Record one or more answers on an open response
+ */
+export const usePostV1ResponsesByIdAnswers = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ResponsesByIdAnswers>>, TError,PostV1ResponsesByIdAnswersMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1ResponsesByIdAnswers>>,
+        TError,
+        PostV1ResponsesByIdAnswersMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ResponsesByIdAnswersMutationOptions(options));
+    }
+    export type deleteV1ResponsesByIdAnswersByRefResponse200 = {
+  data: void
+  status: 200
+}
+
+export type deleteV1ResponsesByIdAnswersByRefResponse404 = {
+  data: void
+  status: 404
+}
+
+export type deleteV1ResponsesByIdAnswersByRefResponseSuccess = (deleteV1ResponsesByIdAnswersByRefResponse200) & {
+  headers: Headers;
+};
+export type deleteV1ResponsesByIdAnswersByRefResponseError = (deleteV1ResponsesByIdAnswersByRefResponse404) & {
+  headers: Headers;
+};
+
+export type deleteV1ResponsesByIdAnswersByRefResponse = (deleteV1ResponsesByIdAnswersByRefResponseSuccess | deleteV1ResponsesByIdAnswersByRefResponseError)
+
+export const getDeleteV1ResponsesByIdAnswersByRefUrl = (id: string,
+    ref: string,) => {
+
+
+
+
+  return `/v1/responses/${id}/answers/${ref}`
+}
+
+/**
+ * @summary Retract one answer, moving the flow back to it
+ */
+export const deleteV1ResponsesByIdAnswersByRef = async (id: string,
+    ref: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteV1ResponsesByIdAnswersByRefResponse> => {
+
+  return customFetch<deleteV1ResponsesByIdAnswersByRefResponse>(getDeleteV1ResponsesByIdAnswersByRefUrl(id,ref),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteV1ResponsesByIdAnswersByRefMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteV1ResponsesByIdAnswersByRef>>, TError,DeleteV1ResponsesByIdAnswersByRefMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteV1ResponsesByIdAnswersByRef>>, TError,DeleteV1ResponsesByIdAnswersByRefMutationVariables, TContext> => {
+
+const mutationKey = ['deleteV1ResponsesByIdAnswersByRef'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteV1ResponsesByIdAnswersByRef>>, DeleteV1ResponsesByIdAnswersByRefMutationVariables> = (props) => {
+          const {id,ref} = props ?? {};
+
+          return  deleteV1ResponsesByIdAnswersByRef(id,ref,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteV1ResponsesByIdAnswersByRefMutationResult = NonNullable<Awaited<ReturnType<typeof deleteV1ResponsesByIdAnswersByRef>>>
+
+    export type DeleteV1ResponsesByIdAnswersByRefMutationError = void
+    export type DeleteV1ResponsesByIdAnswersByRefMutationVariables = {id: string;ref: string}
+
+    /**
+ * @summary Retract one answer, moving the flow back to it
+ */
+export const useDeleteV1ResponsesByIdAnswersByRef = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteV1ResponsesByIdAnswersByRef>>, TError,DeleteV1ResponsesByIdAnswersByRefMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteV1ResponsesByIdAnswersByRef>>,
+        TError,
+        DeleteV1ResponsesByIdAnswersByRefMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteV1ResponsesByIdAnswersByRefMutationOptions(options));
+    }
+    export type postV1ResponsesByIdCompleteResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1ResponsesByIdCompleteResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1ResponsesByIdCompleteResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postV1ResponsesByIdCompleteResponse422 = {
+  data: void
+  status: 422
+}
+
+export type postV1ResponsesByIdCompleteResponseSuccess = (postV1ResponsesByIdCompleteResponse200) & {
+  headers: Headers;
+};
+export type postV1ResponsesByIdCompleteResponseError = (postV1ResponsesByIdCompleteResponse404 | postV1ResponsesByIdCompleteResponse409 | postV1ResponsesByIdCompleteResponse422) & {
+  headers: Headers;
+};
+
+export type postV1ResponsesByIdCompleteResponse = (postV1ResponsesByIdCompleteResponseSuccess | postV1ResponsesByIdCompleteResponseError)
+
+export const getPostV1ResponsesByIdCompleteUrl = (id: string,) => {
+
+
+
+
+  return `/v1/responses/${id}/complete`
+}
+
+/**
+ * @summary Complete a response
+ */
+export const postV1ResponsesByIdComplete = async (id: string,
+    postV1ResponsesByIdCompleteBody: PostV1ResponsesByIdCompleteBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1ResponsesByIdCompleteResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1ResponsesByIdCompleteResponse>(getPostV1ResponsesByIdCompleteUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1ResponsesByIdCompleteBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1ResponsesByIdCompleteMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ResponsesByIdComplete>>, TError,PostV1ResponsesByIdCompleteMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1ResponsesByIdComplete>>, TError,PostV1ResponsesByIdCompleteMutationVariables, TContext> => {
+
+const mutationKey = ['postV1ResponsesByIdComplete'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ResponsesByIdComplete>>, PostV1ResponsesByIdCompleteMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postV1ResponsesByIdComplete(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ResponsesByIdCompleteMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ResponsesByIdComplete>>>
+    export type PostV1ResponsesByIdCompleteMutationBody = PostV1ResponsesByIdCompleteBody
+    export type PostV1ResponsesByIdCompleteMutationError = void
+    export type PostV1ResponsesByIdCompleteMutationVariables = {id: string;data: PostV1ResponsesByIdCompleteBody}
+
+    /**
+ * @summary Complete a response
+ */
+export const usePostV1ResponsesByIdComplete = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ResponsesByIdComplete>>, TError,PostV1ResponsesByIdCompleteMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1ResponsesByIdComplete>>,
+        TError,
+        PostV1ResponsesByIdCompleteMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ResponsesByIdCompleteMutationOptions(options));
+    }
+    export type postV1ResponsesByIdAbandonResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1ResponsesByIdAbandonResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1ResponsesByIdAbandonResponseSuccess = (postV1ResponsesByIdAbandonResponse200) & {
+  headers: Headers;
+};
+export type postV1ResponsesByIdAbandonResponseError = (postV1ResponsesByIdAbandonResponse404) & {
+  headers: Headers;
+};
+
+export type postV1ResponsesByIdAbandonResponse = (postV1ResponsesByIdAbandonResponseSuccess | postV1ResponsesByIdAbandonResponseError)
+
+export const getPostV1ResponsesByIdAbandonUrl = (id: string,) => {
+
+
+
+
+  return `/v1/responses/${id}/abandon`
+}
+
+/**
+ * @summary Abandon an unfinished response
+ */
+export const postV1ResponsesByIdAbandon = async (id: string,
+    postV1ResponsesByIdAbandonBody: PostV1ResponsesByIdAbandonBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1ResponsesByIdAbandonResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1ResponsesByIdAbandonResponse>(getPostV1ResponsesByIdAbandonUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1ResponsesByIdAbandonBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1ResponsesByIdAbandonMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ResponsesByIdAbandon>>, TError,PostV1ResponsesByIdAbandonMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1ResponsesByIdAbandon>>, TError,PostV1ResponsesByIdAbandonMutationVariables, TContext> => {
+
+const mutationKey = ['postV1ResponsesByIdAbandon'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ResponsesByIdAbandon>>, PostV1ResponsesByIdAbandonMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postV1ResponsesByIdAbandon(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ResponsesByIdAbandonMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ResponsesByIdAbandon>>>
+    export type PostV1ResponsesByIdAbandonMutationBody = PostV1ResponsesByIdAbandonBody
+    export type PostV1ResponsesByIdAbandonMutationError = void
+    export type PostV1ResponsesByIdAbandonMutationVariables = {id: string;data: PostV1ResponsesByIdAbandonBody}
+
+    /**
+ * @summary Abandon an unfinished response
+ */
+export const usePostV1ResponsesByIdAbandon = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ResponsesByIdAbandon>>, TError,PostV1ResponsesByIdAbandonMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1ResponsesByIdAbandon>>,
+        TError,
+        PostV1ResponsesByIdAbandonMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ResponsesByIdAbandonMutationOptions(options));
+    }
+    export type getV1ResponsesByIdResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1ResponsesByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getV1ResponsesByIdResponseSuccess = (getV1ResponsesByIdResponse200) & {
+  headers: Headers;
+};
+export type getV1ResponsesByIdResponseError = (getV1ResponsesByIdResponse404) & {
+  headers: Headers;
+};
+
+export type getV1ResponsesByIdResponse = (getV1ResponsesByIdResponseSuccess | getV1ResponsesByIdResponseError)
+
+export const getGetV1ResponsesByIdUrl = (id: string,) => {
+
+
+
+
+  return `/v1/responses/${id}`
+}
+
+/**
+ * @summary Read one response
+ */
+export const getV1ResponsesById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1ResponsesByIdResponse> => {
+
+  return customFetch<getV1ResponsesByIdResponse>(getGetV1ResponsesByIdUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1ResponsesByIdQueryKey = (id: string,) => {
+    return [
+    `/v1/responses/${id}`
+    ] as const;
+    }
+
+
+export const getGetV1ResponsesByIdQueryOptions = <TData = Awaited<ReturnType<typeof getV1ResponsesById>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1ResponsesById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1ResponsesByIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1ResponsesById>>> = ({ signal }) => getV1ResponsesById(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1ResponsesById>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1ResponsesByIdQueryResult = NonNullable<Awaited<ReturnType<typeof getV1ResponsesById>>>
+export type GetV1ResponsesByIdQueryError = void
+
+
+/**
+ * @summary Read one response
+ */
+
+export function useGetV1ResponsesById<TData = Awaited<ReturnType<typeof getV1ResponsesById>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1ResponsesById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1ResponsesByIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getV1ResponsesByIdNextResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1ResponsesByIdNextResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getV1ResponsesByIdNextResponseSuccess = (getV1ResponsesByIdNextResponse200) & {
+  headers: Headers;
+};
+export type getV1ResponsesByIdNextResponseError = (getV1ResponsesByIdNextResponse404) & {
+  headers: Headers;
+};
+
+export type getV1ResponsesByIdNextResponse = (getV1ResponsesByIdNextResponseSuccess | getV1ResponsesByIdNextResponseError)
+
+export const getGetV1ResponsesByIdNextUrl = (id: string,) => {
+
+
+
+
+  return `/v1/responses/${id}/next`
+}
+
+/**
+ * @summary Where the flow is waiting on this response
+ */
+export const getV1ResponsesByIdNext = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1ResponsesByIdNextResponse> => {
+
+  return customFetch<getV1ResponsesByIdNextResponse>(getGetV1ResponsesByIdNextUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1ResponsesByIdNextQueryKey = (id: string,) => {
+    return [
+    `/v1/responses/${id}/next`
+    ] as const;
+    }
+
+
+export const getGetV1ResponsesByIdNextQueryOptions = <TData = Awaited<ReturnType<typeof getV1ResponsesByIdNext>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1ResponsesByIdNext>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1ResponsesByIdNextQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1ResponsesByIdNext>>> = ({ signal }) => getV1ResponsesByIdNext(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1ResponsesByIdNext>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1ResponsesByIdNextQueryResult = NonNullable<Awaited<ReturnType<typeof getV1ResponsesByIdNext>>>
+export type GetV1ResponsesByIdNextQueryError = void
+
+
+/**
+ * @summary Where the flow is waiting on this response
+ */
+
+export function useGetV1ResponsesByIdNext<TData = Awaited<ReturnType<typeof getV1ResponsesByIdNext>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1ResponsesByIdNext>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1ResponsesByIdNextQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getV1BlocksResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1BlocksResponseSuccess = (getV1BlocksResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getV1BlocksResponse = (getV1BlocksResponseSuccess)
+
+export const getGetV1BlocksUrl = () => {
+
+
+
+
+  return `/v1/blocks`
+}
+
+/**
+ * @summary Every block type: config schema, what you receive, what you send
+ */
+export const getV1Blocks = async ( options?: Parameters<typeof customFetch>[1]): Promise<getV1BlocksResponse> => {
+
+  return customFetch<getV1BlocksResponse>(getGetV1BlocksUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1BlocksQueryKey = () => {
+    return [
+    `/v1/blocks`
+    ] as const;
+    }
+
+
+export const getGetV1BlocksQueryOptions = <TData = Awaited<ReturnType<typeof getV1Blocks>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1Blocks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1BlocksQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1Blocks>>> = ({ signal }) => getV1Blocks({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1Blocks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1BlocksQueryResult = NonNullable<Awaited<ReturnType<typeof getV1Blocks>>>
+export type GetV1BlocksQueryError = unknown
+
+
+/**
+ * @summary Every block type: config schema, what you receive, what you send
+ */
+
+export function useGetV1Blocks<TData = Awaited<ReturnType<typeof getV1Blocks>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1Blocks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1BlocksQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getV1BlocksByTypeResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1BlocksByTypeResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getV1BlocksByTypeResponseSuccess = (getV1BlocksByTypeResponse200) & {
+  headers: Headers;
+};
+export type getV1BlocksByTypeResponseError = (getV1BlocksByTypeResponse404) & {
+  headers: Headers;
+};
+
+export type getV1BlocksByTypeResponse = (getV1BlocksByTypeResponseSuccess | getV1BlocksByTypeResponseError)
+
+export const getGetV1BlocksByTypeUrl = (type: string,) => {
+
+
+
+
+  return `/v1/blocks/${type}`
+}
+
+/**
+ * @summary One block type
+ */
+export const getV1BlocksByType = async (type: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1BlocksByTypeResponse> => {
+
+  return customFetch<getV1BlocksByTypeResponse>(getGetV1BlocksByTypeUrl(type),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1BlocksByTypeQueryKey = (type: string,) => {
+    return [
+    `/v1/blocks/${type}`
+    ] as const;
+    }
+
+
+export const getGetV1BlocksByTypeQueryOptions = <TData = Awaited<ReturnType<typeof getV1BlocksByType>>, TError = void>(type: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1BlocksByType>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1BlocksByTypeQueryKey(type);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1BlocksByType>>> = ({ signal }) => getV1BlocksByType(type, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: type !== null && type !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1BlocksByType>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1BlocksByTypeQueryResult = NonNullable<Awaited<ReturnType<typeof getV1BlocksByType>>>
+export type GetV1BlocksByTypeQueryError = void
+
+
+/**
+ * @summary One block type
+ */
+
+export function useGetV1BlocksByType<TData = Awaited<ReturnType<typeof getV1BlocksByType>>, TError = void>(
+ type: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1BlocksByType>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1BlocksByTypeQueryOptions(type,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getV1EventsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1EventsResponseSuccess = (getV1EventsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getV1EventsResponse = (getV1EventsResponseSuccess)
+
+export const getGetV1EventsUrl = () => {
+
+
+
+
+  return `/v1/events`
+}
+
+/**
+ * @summary The webhook event catalog
+ */
+export const getV1Events = async ( options?: Parameters<typeof customFetch>[1]): Promise<getV1EventsResponse> => {
+
+  return customFetch<getV1EventsResponse>(getGetV1EventsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1EventsQueryKey = () => {
+    return [
+    `/v1/events`
+    ] as const;
+    }
+
+
+export const getGetV1EventsQueryOptions = <TData = Awaited<ReturnType<typeof getV1Events>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1Events>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1EventsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1Events>>> = ({ signal }) => getV1Events({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1Events>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1EventsQueryResult = NonNullable<Awaited<ReturnType<typeof getV1Events>>>
+export type GetV1EventsQueryError = unknown
+
+
+/**
+ * @summary The webhook event catalog
+ */
+
+export function useGetV1Events<TData = Awaited<ReturnType<typeof getV1Events>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1Events>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1EventsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getV1MeResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1MeResponseSuccess = (getV1MeResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getV1MeResponse = (getV1MeResponseSuccess)
+
+export const getGetV1MeUrl = () => {
+
+
+
+
+  return `/v1/me`
+}
+
+/**
+ * @summary Who this key is, what it may do, and what is left of the plan
+ */
+export const getV1Me = async ( options?: Parameters<typeof customFetch>[1]): Promise<getV1MeResponse> => {
+
+  return customFetch<getV1MeResponse>(getGetV1MeUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1MeQueryKey = () => {
+    return [
+    `/v1/me`
+    ] as const;
+    }
+
+
+export const getGetV1MeQueryOptions = <TData = Awaited<ReturnType<typeof getV1Me>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1Me>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1MeQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1Me>>> = ({ signal }) => getV1Me({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1Me>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1MeQueryResult = NonNullable<Awaited<ReturnType<typeof getV1Me>>>
+export type GetV1MeQueryError = unknown
+
+
+/**
+ * @summary Who this key is, what it may do, and what is left of the plan
+ */
+
+export function useGetV1Me<TData = Awaited<ReturnType<typeof getV1Me>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1Me>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1MeQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
 
 export type getV1FormsResponse200 = {
   data: GetV1Forms200Item[]
@@ -232,9 +1417,116 @@ export function useGetV1FormsById<TData = Awaited<ReturnType<typeof getV1FormsBy
 
 
 
-export type postV1FormsByIdChatSessionsResponse200 = {
+export type postV1FormsByIdSessionsResponse200 = {
+  data: PostV1FormsByIdSessions200
+  status: 200
+}
+
+export type postV1FormsByIdSessionsResponse403 = {
+  data: void
+  status: 403
+}
+
+export type postV1FormsByIdSessionsResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1FormsByIdSessionsResponseSuccess = (postV1FormsByIdSessionsResponse200) & {
+  headers: Headers;
+};
+export type postV1FormsByIdSessionsResponseError = (postV1FormsByIdSessionsResponse403 | postV1FormsByIdSessionsResponse404) & {
+  headers: Headers;
+};
+
+export type postV1FormsByIdSessionsResponse = (postV1FormsByIdSessionsResponseSuccess | postV1FormsByIdSessionsResponseError)
+
+export const getPostV1FormsByIdSessionsUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/sessions`
+}
+
+/**
+ * @summary Open a conversation on a published form
+ */
+export const postV1FormsByIdSessions = async (id: string,
+    postV1FormsByIdSessionsBody: PostV1FormsByIdSessionsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1FormsByIdSessionsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1FormsByIdSessionsResponse>(getPostV1FormsByIdSessionsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1FormsByIdSessionsBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1FormsByIdSessionsMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdSessions>>, TError,PostV1FormsByIdSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdSessions>>, TError,PostV1FormsByIdSessionsMutationVariables, TContext> => {
+
+const mutationKey = ['postV1FormsByIdSessions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1FormsByIdSessions>>, PostV1FormsByIdSessionsMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postV1FormsByIdSessions(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1FormsByIdSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof postV1FormsByIdSessions>>>
+    export type PostV1FormsByIdSessionsMutationBody = PostV1FormsByIdSessionsBody
+    export type PostV1FormsByIdSessionsMutationError = void
+    export type PostV1FormsByIdSessionsMutationVariables = {id: string;data: PostV1FormsByIdSessionsBody}
+
+    /**
+ * @summary Open a conversation on a published form
+ */
+export const usePostV1FormsByIdSessions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdSessions>>, TError,PostV1FormsByIdSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1FormsByIdSessions>>,
+        TError,
+        PostV1FormsByIdSessionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1FormsByIdSessionsMutationOptions(options));
+    }
+    export type postV1FormsByIdChatSessionsResponse200 = {
   data: PostV1FormsByIdChatSessions200
   status: 200
+}
+
+export type postV1FormsByIdChatSessionsResponse403 = {
+  data: void
+  status: 403
 }
 
 export type postV1FormsByIdChatSessionsResponse404 = {
@@ -245,7 +1537,7 @@ export type postV1FormsByIdChatSessionsResponse404 = {
 export type postV1FormsByIdChatSessionsResponseSuccess = (postV1FormsByIdChatSessionsResponse200) & {
   headers: Headers;
 };
-export type postV1FormsByIdChatSessionsResponseError = (postV1FormsByIdChatSessionsResponse404) & {
+export type postV1FormsByIdChatSessionsResponseError = (postV1FormsByIdChatSessionsResponse403 | postV1FormsByIdChatSessionsResponse404) & {
   headers: Headers;
 };
 
@@ -260,7 +1552,7 @@ export const getPostV1FormsByIdChatSessionsUrl = (id: string,) => {
 }
 
 /**
- * @summary Start a chat session (headless)
+ * @summary Open a conversation on a published form
  */
 export const postV1FormsByIdChatSessions = async (id: string,
     postV1FormsByIdChatSessionsBody: PostV1FormsByIdChatSessionsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1FormsByIdChatSessionsResponse> => {
@@ -317,7 +1609,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostV1FormsByIdChatSessionsMutationVariables = {id: string;data: PostV1FormsByIdChatSessionsBody}
 
     /**
- * @summary Start a chat session (headless)
+ * @summary Open a conversation on a published form
  */
 export const usePostV1FormsByIdChatSessions = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdChatSessions>>, TError,PostV1FormsByIdChatSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -329,9 +1621,695 @@ export const usePostV1FormsByIdChatSessions = <TError = void,
       > => {
       return useMutation(getPostV1FormsByIdChatSessionsMutationOptions(options));
     }
+    export type postV1SessionsBySidMessagesResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1SessionsBySidMessagesResponse202 = {
+  data: void
+  status: 202
+}
+
+export type postV1SessionsBySidMessagesResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postV1SessionsBySidMessagesResponseSuccess = (postV1SessionsBySidMessagesResponse200 | postV1SessionsBySidMessagesResponse202) & {
+  headers: Headers;
+};
+export type postV1SessionsBySidMessagesResponseError = (postV1SessionsBySidMessagesResponse400) & {
+  headers: Headers;
+};
+
+export type postV1SessionsBySidMessagesResponse = (postV1SessionsBySidMessagesResponseSuccess | postV1SessionsBySidMessagesResponseError)
+
+export const getPostV1SessionsBySidMessagesUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}/messages`
+}
+
+/**
+ * @summary Send a message or a structured answer, and get the turn's result
+ */
+export const postV1SessionsBySidMessages = async (sid: string,
+    postV1SessionsBySidMessagesBody: PostV1SessionsBySidMessagesBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidMessagesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1SessionsBySidMessagesResponse>(getPostV1SessionsBySidMessagesUrl(sid),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1SessionsBySidMessagesBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1SessionsBySidMessagesMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidMessages>>, TError,PostV1SessionsBySidMessagesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidMessages>>, TError,PostV1SessionsBySidMessagesMutationVariables, TContext> => {
+
+const mutationKey = ['postV1SessionsBySidMessages'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1SessionsBySidMessages>>, PostV1SessionsBySidMessagesMutationVariables> = (props) => {
+          const {sid,data} = props ?? {};
+
+          return  postV1SessionsBySidMessages(sid,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1SessionsBySidMessagesMutationResult = NonNullable<Awaited<ReturnType<typeof postV1SessionsBySidMessages>>>
+    export type PostV1SessionsBySidMessagesMutationBody = PostV1SessionsBySidMessagesBody
+    export type PostV1SessionsBySidMessagesMutationError = void
+    export type PostV1SessionsBySidMessagesMutationVariables = {sid: string;data: PostV1SessionsBySidMessagesBody}
+
+    /**
+ * @summary Send a message or a structured answer, and get the turn's result
+ */
+export const usePostV1SessionsBySidMessages = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidMessages>>, TError,PostV1SessionsBySidMessagesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1SessionsBySidMessages>>,
+        TError,
+        PostV1SessionsBySidMessagesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1SessionsBySidMessagesMutationOptions(options));
+    }
+    export type postV1SessionsBySidActionsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1SessionsBySidActionsResponse202 = {
+  data: void
+  status: 202
+}
+
+export type postV1SessionsBySidActionsResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postV1SessionsBySidActionsResponseSuccess = (postV1SessionsBySidActionsResponse200 | postV1SessionsBySidActionsResponse202) & {
+  headers: Headers;
+};
+export type postV1SessionsBySidActionsResponseError = (postV1SessionsBySidActionsResponse400) & {
+  headers: Headers;
+};
+
+export type postV1SessionsBySidActionsResponse = (postV1SessionsBySidActionsResponseSuccess | postV1SessionsBySidActionsResponseError)
+
+export const getPostV1SessionsBySidActionsUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}/actions`
+}
+
+/**
+ * @summary Skip, edit, restart, stop, or submit
+ */
+export const postV1SessionsBySidActions = async (sid: string,
+    postV1SessionsBySidActionsBody: PostV1SessionsBySidActionsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidActionsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1SessionsBySidActionsResponse>(getPostV1SessionsBySidActionsUrl(sid),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1SessionsBySidActionsBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1SessionsBySidActionsMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidActions>>, TError,PostV1SessionsBySidActionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidActions>>, TError,PostV1SessionsBySidActionsMutationVariables, TContext> => {
+
+const mutationKey = ['postV1SessionsBySidActions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1SessionsBySidActions>>, PostV1SessionsBySidActionsMutationVariables> = (props) => {
+          const {sid,data} = props ?? {};
+
+          return  postV1SessionsBySidActions(sid,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1SessionsBySidActionsMutationResult = NonNullable<Awaited<ReturnType<typeof postV1SessionsBySidActions>>>
+    export type PostV1SessionsBySidActionsMutationBody = PostV1SessionsBySidActionsBody
+    export type PostV1SessionsBySidActionsMutationError = void
+    export type PostV1SessionsBySidActionsMutationVariables = {sid: string;data: PostV1SessionsBySidActionsBody}
+
+    /**
+ * @summary Skip, edit, restart, stop, or submit
+ */
+export const usePostV1SessionsBySidActions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidActions>>, TError,PostV1SessionsBySidActionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1SessionsBySidActions>>,
+        TError,
+        PostV1SessionsBySidActionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1SessionsBySidActionsMutationOptions(options));
+    }
+    export type getV1SessionsBySidResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1SessionsBySidResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getV1SessionsBySidResponseSuccess = (getV1SessionsBySidResponse200) & {
+  headers: Headers;
+};
+export type getV1SessionsBySidResponseError = (getV1SessionsBySidResponse404) & {
+  headers: Headers;
+};
+
+export type getV1SessionsBySidResponse = (getV1SessionsBySidResponseSuccess | getV1SessionsBySidResponseError)
+
+export const getGetV1SessionsBySidUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}`
+}
+
+/**
+ * @summary Session state
+ */
+export const getV1SessionsBySid = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1SessionsBySidResponse> => {
+
+  return customFetch<getV1SessionsBySidResponse>(getGetV1SessionsBySidUrl(sid),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1SessionsBySidQueryKey = (sid: string,) => {
+    return [
+    `/v1/sessions/${sid}`
+    ] as const;
+    }
+
+
+export const getGetV1SessionsBySidQueryOptions = <TData = Awaited<ReturnType<typeof getV1SessionsBySid>>, TError = void>(sid: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1SessionsBySid>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1SessionsBySidQueryKey(sid);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1SessionsBySid>>> = ({ signal }) => getV1SessionsBySid(sid, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: sid !== null && sid !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1SessionsBySid>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1SessionsBySidQueryResult = NonNullable<Awaited<ReturnType<typeof getV1SessionsBySid>>>
+export type GetV1SessionsBySidQueryError = void
+
+
+/**
+ * @summary Session state
+ */
+
+export function useGetV1SessionsBySid<TData = Awaited<ReturnType<typeof getV1SessionsBySid>>, TError = void>(
+ sid: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1SessionsBySid>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1SessionsBySidQueryOptions(sid,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getV1SessionsBySidEventsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1SessionsBySidEventsResponseSuccess = (getV1SessionsBySidEventsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getV1SessionsBySidEventsResponse = (getV1SessionsBySidEventsResponseSuccess)
+
+export const getGetV1SessionsBySidEventsUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}/events`
+}
+
+/**
+ * @summary The session's events — streamed, or pulled since a sequence number
+ */
+export const getV1SessionsBySidEvents = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1SessionsBySidEventsResponse> => {
+
+  return customFetch<getV1SessionsBySidEventsResponse>(getGetV1SessionsBySidEventsUrl(sid),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1SessionsBySidEventsQueryKey = (sid: string,) => {
+    return [
+    `/v1/sessions/${sid}/events`
+    ] as const;
+    }
+
+
+export const getGetV1SessionsBySidEventsQueryOptions = <TData = Awaited<ReturnType<typeof getV1SessionsBySidEvents>>, TError = unknown>(sid: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1SessionsBySidEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1SessionsBySidEventsQueryKey(sid);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1SessionsBySidEvents>>> = ({ signal }) => getV1SessionsBySidEvents(sid, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: sid !== null && sid !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1SessionsBySidEvents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1SessionsBySidEventsQueryResult = NonNullable<Awaited<ReturnType<typeof getV1SessionsBySidEvents>>>
+export type GetV1SessionsBySidEventsQueryError = unknown
+
+
+/**
+ * @summary The session's events — streamed, or pulled since a sequence number
+ */
+
+export function useGetV1SessionsBySidEvents<TData = Awaited<ReturnType<typeof getV1SessionsBySidEvents>>, TError = unknown>(
+ sid: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1SessionsBySidEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1SessionsBySidEventsQueryOptions(sid,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postV1SessionsBySidTokenRotateResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1SessionsBySidTokenRotateResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1SessionsBySidTokenRotateResponseSuccess = (postV1SessionsBySidTokenRotateResponse200) & {
+  headers: Headers;
+};
+export type postV1SessionsBySidTokenRotateResponseError = (postV1SessionsBySidTokenRotateResponse404) & {
+  headers: Headers;
+};
+
+export type postV1SessionsBySidTokenRotateResponse = (postV1SessionsBySidTokenRotateResponseSuccess | postV1SessionsBySidTokenRotateResponseError)
+
+export const getPostV1SessionsBySidTokenRotateUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}/token/rotate`
+}
+
+/**
+ * @summary Issue a fresh respondent token, invalidating the old one
+ */
+export const postV1SessionsBySidTokenRotate = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidTokenRotateResponse> => {
+
+  return customFetch<postV1SessionsBySidTokenRotateResponse>(getPostV1SessionsBySidTokenRotateUrl(sid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1SessionsBySidTokenRotateMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidTokenRotate>>, TError,PostV1SessionsBySidTokenRotateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidTokenRotate>>, TError,PostV1SessionsBySidTokenRotateMutationVariables, TContext> => {
+
+const mutationKey = ['postV1SessionsBySidTokenRotate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1SessionsBySidTokenRotate>>, PostV1SessionsBySidTokenRotateMutationVariables> = (props) => {
+          const {sid} = props ?? {};
+
+          return  postV1SessionsBySidTokenRotate(sid,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1SessionsBySidTokenRotateMutationResult = NonNullable<Awaited<ReturnType<typeof postV1SessionsBySidTokenRotate>>>
+
+    export type PostV1SessionsBySidTokenRotateMutationError = void
+    export type PostV1SessionsBySidTokenRotateMutationVariables = {sid: string}
+
+    /**
+ * @summary Issue a fresh respondent token, invalidating the old one
+ */
+export const usePostV1SessionsBySidTokenRotate = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidTokenRotate>>, TError,PostV1SessionsBySidTokenRotateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1SessionsBySidTokenRotate>>,
+        TError,
+        PostV1SessionsBySidTokenRotateMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1SessionsBySidTokenRotateMutationOptions(options));
+    }
+    export type postV1ChatFormsByIdSessionsResponse200 = {
+  data: PostV1ChatFormsByIdSessions200
+  status: 200
+}
+
+export type postV1ChatFormsByIdSessionsResponse403 = {
+  data: void
+  status: 403
+}
+
+export type postV1ChatFormsByIdSessionsResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1ChatFormsByIdSessionsResponseSuccess = (postV1ChatFormsByIdSessionsResponse200) & {
+  headers: Headers;
+};
+export type postV1ChatFormsByIdSessionsResponseError = (postV1ChatFormsByIdSessionsResponse403 | postV1ChatFormsByIdSessionsResponse404) & {
+  headers: Headers;
+};
+
+export type postV1ChatFormsByIdSessionsResponse = (postV1ChatFormsByIdSessionsResponseSuccess | postV1ChatFormsByIdSessionsResponseError)
+
+export const getPostV1ChatFormsByIdSessionsUrl = (id: string,) => {
+
+
+
+
+  return `/v1/chat/forms/${id}/sessions`
+}
+
+/**
+ * @summary Open a conversation on a published form
+ */
+export const postV1ChatFormsByIdSessions = async (id: string,
+    postV1ChatFormsByIdSessionsBody: PostV1ChatFormsByIdSessionsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatFormsByIdSessionsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1ChatFormsByIdSessionsResponse>(getPostV1ChatFormsByIdSessionsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1ChatFormsByIdSessionsBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1ChatFormsByIdSessionsMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatFormsByIdSessions>>, TError,PostV1ChatFormsByIdSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1ChatFormsByIdSessions>>, TError,PostV1ChatFormsByIdSessionsMutationVariables, TContext> => {
+
+const mutationKey = ['postV1ChatFormsByIdSessions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ChatFormsByIdSessions>>, PostV1ChatFormsByIdSessionsMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postV1ChatFormsByIdSessions(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ChatFormsByIdSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ChatFormsByIdSessions>>>
+    export type PostV1ChatFormsByIdSessionsMutationBody = PostV1ChatFormsByIdSessionsBody
+    export type PostV1ChatFormsByIdSessionsMutationError = void
+    export type PostV1ChatFormsByIdSessionsMutationVariables = {id: string;data: PostV1ChatFormsByIdSessionsBody}
+
+    /**
+ * @summary Open a conversation on a published form
+ */
+export const usePostV1ChatFormsByIdSessions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatFormsByIdSessions>>, TError,PostV1ChatFormsByIdSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1ChatFormsByIdSessions>>,
+        TError,
+        PostV1ChatFormsByIdSessionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ChatFormsByIdSessionsMutationOptions(options));
+    }
+    export type postV1ChatFormsByIdChatSessionsResponse200 = {
+  data: PostV1ChatFormsByIdChatSessions200
+  status: 200
+}
+
+export type postV1ChatFormsByIdChatSessionsResponse403 = {
+  data: void
+  status: 403
+}
+
+export type postV1ChatFormsByIdChatSessionsResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1ChatFormsByIdChatSessionsResponseSuccess = (postV1ChatFormsByIdChatSessionsResponse200) & {
+  headers: Headers;
+};
+export type postV1ChatFormsByIdChatSessionsResponseError = (postV1ChatFormsByIdChatSessionsResponse403 | postV1ChatFormsByIdChatSessionsResponse404) & {
+  headers: Headers;
+};
+
+export type postV1ChatFormsByIdChatSessionsResponse = (postV1ChatFormsByIdChatSessionsResponseSuccess | postV1ChatFormsByIdChatSessionsResponseError)
+
+export const getPostV1ChatFormsByIdChatSessionsUrl = (id: string,) => {
+
+
+
+
+  return `/v1/chat/forms/${id}/chat/sessions`
+}
+
+/**
+ * @summary Open a conversation on a published form
+ */
+export const postV1ChatFormsByIdChatSessions = async (id: string,
+    postV1ChatFormsByIdChatSessionsBody: PostV1ChatFormsByIdChatSessionsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatFormsByIdChatSessionsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1ChatFormsByIdChatSessionsResponse>(getPostV1ChatFormsByIdChatSessionsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1ChatFormsByIdChatSessionsBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1ChatFormsByIdChatSessionsMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatFormsByIdChatSessions>>, TError,PostV1ChatFormsByIdChatSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1ChatFormsByIdChatSessions>>, TError,PostV1ChatFormsByIdChatSessionsMutationVariables, TContext> => {
+
+const mutationKey = ['postV1ChatFormsByIdChatSessions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ChatFormsByIdChatSessions>>, PostV1ChatFormsByIdChatSessionsMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postV1ChatFormsByIdChatSessions(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ChatFormsByIdChatSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ChatFormsByIdChatSessions>>>
+    export type PostV1ChatFormsByIdChatSessionsMutationBody = PostV1ChatFormsByIdChatSessionsBody
+    export type PostV1ChatFormsByIdChatSessionsMutationError = void
+    export type PostV1ChatFormsByIdChatSessionsMutationVariables = {id: string;data: PostV1ChatFormsByIdChatSessionsBody}
+
+    /**
+ * @summary Open a conversation on a published form
+ */
+export const usePostV1ChatFormsByIdChatSessions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatFormsByIdChatSessions>>, TError,PostV1ChatFormsByIdChatSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1ChatFormsByIdChatSessions>>,
+        TError,
+        PostV1ChatFormsByIdChatSessionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ChatFormsByIdChatSessionsMutationOptions(options));
+    }
     export type postV1ChatSessionsBySidMessagesResponse200 = {
   data: void
   status: 200
+}
+
+export type postV1ChatSessionsBySidMessagesResponse202 = {
+  data: void
+  status: 202
 }
 
 export type postV1ChatSessionsBySidMessagesResponse400 = {
@@ -339,7 +2317,7 @@ export type postV1ChatSessionsBySidMessagesResponse400 = {
   status: 400
 }
 
-export type postV1ChatSessionsBySidMessagesResponseSuccess = (postV1ChatSessionsBySidMessagesResponse200) & {
+export type postV1ChatSessionsBySidMessagesResponseSuccess = (postV1ChatSessionsBySidMessagesResponse200 | postV1ChatSessionsBySidMessagesResponse202) & {
   headers: Headers;
 };
 export type postV1ChatSessionsBySidMessagesResponseError = (postV1ChatSessionsBySidMessagesResponse400) & {
@@ -357,7 +2335,7 @@ export const getPostV1ChatSessionsBySidMessagesUrl = (sid: string,) => {
 }
 
 /**
- * @summary Send a message / structured answer — synchronous response with next question
+ * @summary Send a message or a structured answer, and get the turn's result
  */
 export const postV1ChatSessionsBySidMessages = async (sid: string,
     postV1ChatSessionsBySidMessagesBody: PostV1ChatSessionsBySidMessagesBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatSessionsBySidMessagesResponse> => {
@@ -414,7 +2392,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostV1ChatSessionsBySidMessagesMutationVariables = {sid: string;data: PostV1ChatSessionsBySidMessagesBody}
 
     /**
- * @summary Send a message / structured answer — synchronous response with next question
+ * @summary Send a message or a structured answer, and get the turn's result
  */
 export const usePostV1ChatSessionsBySidMessages = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidMessages>>, TError,PostV1ChatSessionsBySidMessagesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -426,17 +2404,126 @@ export const usePostV1ChatSessionsBySidMessages = <TError = void,
       > => {
       return useMutation(getPostV1ChatSessionsBySidMessagesMutationOptions(options));
     }
-    export type getV1ChatSessionsBySidResponse200 = {
-  data: unknown
+    export type postV1ChatSessionsBySidActionsResponse200 = {
+  data: void
   status: 200
+}
+
+export type postV1ChatSessionsBySidActionsResponse202 = {
+  data: void
+  status: 202
+}
+
+export type postV1ChatSessionsBySidActionsResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postV1ChatSessionsBySidActionsResponseSuccess = (postV1ChatSessionsBySidActionsResponse200 | postV1ChatSessionsBySidActionsResponse202) & {
+  headers: Headers;
+};
+export type postV1ChatSessionsBySidActionsResponseError = (postV1ChatSessionsBySidActionsResponse400) & {
+  headers: Headers;
+};
+
+export type postV1ChatSessionsBySidActionsResponse = (postV1ChatSessionsBySidActionsResponseSuccess | postV1ChatSessionsBySidActionsResponseError)
+
+export const getPostV1ChatSessionsBySidActionsUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/chat/sessions/${sid}/actions`
+}
+
+/**
+ * @summary Skip, edit, restart, stop, or submit
+ */
+export const postV1ChatSessionsBySidActions = async (sid: string,
+    postV1ChatSessionsBySidActionsBody: PostV1ChatSessionsBySidActionsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatSessionsBySidActionsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1ChatSessionsBySidActionsResponse>(getPostV1ChatSessionsBySidActionsUrl(sid),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1ChatSessionsBySidActionsBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1ChatSessionsBySidActionsMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidActions>>, TError,PostV1ChatSessionsBySidActionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidActions>>, TError,PostV1ChatSessionsBySidActionsMutationVariables, TContext> => {
+
+const mutationKey = ['postV1ChatSessionsBySidActions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ChatSessionsBySidActions>>, PostV1ChatSessionsBySidActionsMutationVariables> = (props) => {
+          const {sid,data} = props ?? {};
+
+          return  postV1ChatSessionsBySidActions(sid,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ChatSessionsBySidActionsMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ChatSessionsBySidActions>>>
+    export type PostV1ChatSessionsBySidActionsMutationBody = PostV1ChatSessionsBySidActionsBody
+    export type PostV1ChatSessionsBySidActionsMutationError = void
+    export type PostV1ChatSessionsBySidActionsMutationVariables = {sid: string;data: PostV1ChatSessionsBySidActionsBody}
+
+    /**
+ * @summary Skip, edit, restart, stop, or submit
+ */
+export const usePostV1ChatSessionsBySidActions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidActions>>, TError,PostV1ChatSessionsBySidActionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1ChatSessionsBySidActions>>,
+        TError,
+        PostV1ChatSessionsBySidActionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ChatSessionsBySidActionsMutationOptions(options));
+    }
+    export type getV1ChatSessionsBySidResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1ChatSessionsBySidResponse404 = {
+  data: void
+  status: 404
 }
 
 export type getV1ChatSessionsBySidResponseSuccess = (getV1ChatSessionsBySidResponse200) & {
   headers: Headers;
 };
-;
+export type getV1ChatSessionsBySidResponseError = (getV1ChatSessionsBySidResponse404) & {
+  headers: Headers;
+};
 
-export type getV1ChatSessionsBySidResponse = (getV1ChatSessionsBySidResponseSuccess)
+export type getV1ChatSessionsBySidResponse = (getV1ChatSessionsBySidResponseSuccess | getV1ChatSessionsBySidResponseError)
 
 export const getGetV1ChatSessionsBySidUrl = (sid: string,) => {
 
@@ -447,7 +2534,7 @@ export const getGetV1ChatSessionsBySidUrl = (sid: string,) => {
 }
 
 /**
- * @summary Get session state (status, answers, progress)
+ * @summary Session state
  */
 export const getV1ChatSessionsBySid = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1ChatSessionsBySidResponse> => {
 
@@ -471,7 +2558,7 @@ export const getGetV1ChatSessionsBySidQueryKey = (sid: string,) => {
     }
 
 
-export const getGetV1ChatSessionsBySidQueryOptions = <TData = Awaited<ReturnType<typeof getV1ChatSessionsBySid>>, TError = unknown>(sid: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1ChatSessionsBySid>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetV1ChatSessionsBySidQueryOptions = <TData = Awaited<ReturnType<typeof getV1ChatSessionsBySid>>, TError = void>(sid: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1ChatSessionsBySid>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -490,14 +2577,14 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetV1ChatSessionsBySidQueryResult = NonNullable<Awaited<ReturnType<typeof getV1ChatSessionsBySid>>>
-export type GetV1ChatSessionsBySidQueryError = unknown
+export type GetV1ChatSessionsBySidQueryError = void
 
 
 /**
- * @summary Get session state (status, answers, progress)
+ * @summary Session state
  */
 
-export function useGetV1ChatSessionsBySid<TData = Awaited<ReturnType<typeof getV1ChatSessionsBySid>>, TError = unknown>(
+export function useGetV1ChatSessionsBySid<TData = Awaited<ReturnType<typeof getV1ChatSessionsBySid>>, TError = void>(
  sid: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1ChatSessionsBySid>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
@@ -514,3 +2601,181 @@ export function useGetV1ChatSessionsBySid<TData = Awaited<ReturnType<typeof getV
 
 
 
+export type getV1ChatSessionsBySidEventsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1ChatSessionsBySidEventsResponseSuccess = (getV1ChatSessionsBySidEventsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getV1ChatSessionsBySidEventsResponse = (getV1ChatSessionsBySidEventsResponseSuccess)
+
+export const getGetV1ChatSessionsBySidEventsUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/chat/sessions/${sid}/events`
+}
+
+/**
+ * @summary The session's events — streamed, or pulled since a sequence number
+ */
+export const getV1ChatSessionsBySidEvents = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1ChatSessionsBySidEventsResponse> => {
+
+  return customFetch<getV1ChatSessionsBySidEventsResponse>(getGetV1ChatSessionsBySidEventsUrl(sid),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1ChatSessionsBySidEventsQueryKey = (sid: string,) => {
+    return [
+    `/v1/chat/sessions/${sid}/events`
+    ] as const;
+    }
+
+
+export const getGetV1ChatSessionsBySidEventsQueryOptions = <TData = Awaited<ReturnType<typeof getV1ChatSessionsBySidEvents>>, TError = unknown>(sid: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1ChatSessionsBySidEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1ChatSessionsBySidEventsQueryKey(sid);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1ChatSessionsBySidEvents>>> = ({ signal }) => getV1ChatSessionsBySidEvents(sid, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: sid !== null && sid !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1ChatSessionsBySidEvents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1ChatSessionsBySidEventsQueryResult = NonNullable<Awaited<ReturnType<typeof getV1ChatSessionsBySidEvents>>>
+export type GetV1ChatSessionsBySidEventsQueryError = unknown
+
+
+/**
+ * @summary The session's events — streamed, or pulled since a sequence number
+ */
+
+export function useGetV1ChatSessionsBySidEvents<TData = Awaited<ReturnType<typeof getV1ChatSessionsBySidEvents>>, TError = unknown>(
+ sid: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1ChatSessionsBySidEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1ChatSessionsBySidEventsQueryOptions(sid,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postV1ChatSessionsBySidTokenRotateResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1ChatSessionsBySidTokenRotateResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1ChatSessionsBySidTokenRotateResponseSuccess = (postV1ChatSessionsBySidTokenRotateResponse200) & {
+  headers: Headers;
+};
+export type postV1ChatSessionsBySidTokenRotateResponseError = (postV1ChatSessionsBySidTokenRotateResponse404) & {
+  headers: Headers;
+};
+
+export type postV1ChatSessionsBySidTokenRotateResponse = (postV1ChatSessionsBySidTokenRotateResponseSuccess | postV1ChatSessionsBySidTokenRotateResponseError)
+
+export const getPostV1ChatSessionsBySidTokenRotateUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/chat/sessions/${sid}/token/rotate`
+}
+
+/**
+ * @summary Issue a fresh respondent token, invalidating the old one
+ */
+export const postV1ChatSessionsBySidTokenRotate = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatSessionsBySidTokenRotateResponse> => {
+
+  return customFetch<postV1ChatSessionsBySidTokenRotateResponse>(getPostV1ChatSessionsBySidTokenRotateUrl(sid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1ChatSessionsBySidTokenRotateMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidTokenRotate>>, TError,PostV1ChatSessionsBySidTokenRotateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidTokenRotate>>, TError,PostV1ChatSessionsBySidTokenRotateMutationVariables, TContext> => {
+
+const mutationKey = ['postV1ChatSessionsBySidTokenRotate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ChatSessionsBySidTokenRotate>>, PostV1ChatSessionsBySidTokenRotateMutationVariables> = (props) => {
+          const {sid} = props ?? {};
+
+          return  postV1ChatSessionsBySidTokenRotate(sid,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ChatSessionsBySidTokenRotateMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ChatSessionsBySidTokenRotate>>>
+
+    export type PostV1ChatSessionsBySidTokenRotateMutationError = void
+    export type PostV1ChatSessionsBySidTokenRotateMutationVariables = {sid: string}
+
+    /**
+ * @summary Issue a fresh respondent token, invalidating the old one
+ */
+export const usePostV1ChatSessionsBySidTokenRotate = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidTokenRotate>>, TError,PostV1ChatSessionsBySidTokenRotateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1ChatSessionsBySidTokenRotate>>,
+        TError,
+        PostV1ChatSessionsBySidTokenRotateMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ChatSessionsBySidTokenRotateMutationOptions(options));
+    }

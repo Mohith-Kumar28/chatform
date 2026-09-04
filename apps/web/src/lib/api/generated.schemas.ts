@@ -48,9 +48,20 @@ export type GetHealth200 = {
   ts: number;
 };
 
+export type GetPFormsBySlugConfig404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
 export type GetPFormsBySlugConfig404Error = {
   code: string;
   message: string;
+  issues?: GetPFormsBySlugConfig404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
 };
 
 export type GetPFormsBySlugConfig404 = {
@@ -77,18 +88,40 @@ export type PostPFormsBySlugSessions200 = {
   respondentToken: string;
 };
 
+export type PostPFormsBySlugSessions403ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
 export type PostPFormsBySlugSessions403Error = {
   code: string;
   message: string;
+  issues?: PostPFormsBySlugSessions403ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
 };
 
 export type PostPFormsBySlugSessions403 = {
   error: PostPFormsBySlugSessions403Error;
 };
 
+export type PostPFormsBySlugSessions404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
 export type PostPFormsBySlugSessions404Error = {
   code: string;
   message: string;
+  issues?: PostPFormsBySlugSessions404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
 };
 
 export type PostPFormsBySlugSessions404 = {
@@ -162,9 +195,20 @@ export type PostApiForms200 = {
   activeVersion: number | null;
 };
 
+export type PostApiForms403ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
 export type PostApiForms403Error = {
   code: string;
   message: string;
+  issues?: PostApiForms403ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
 };
 
 export type PostApiForms403 = {
@@ -186,9 +230,20 @@ export type GetApiFormsById200 = {
   activeVersion: number | null;
 };
 
+export type GetApiFormsById404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
 export type GetApiFormsById404Error = {
   code: string;
   message: string;
+  issues?: GetApiFormsById404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
 };
 
 export type GetApiFormsById404 = {
@@ -219,18 +274,40 @@ export type PostApiFormsByIdPublish200 = {
   stripped: PostApiFormsByIdPublish200StrippedItem[];
 };
 
+export type PostApiFormsByIdPublish402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
 export type PostApiFormsByIdPublish402Error = {
   code: string;
   message: string;
+  issues?: PostApiFormsByIdPublish402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
 };
 
 export type PostApiFormsByIdPublish402 = {
   error: PostApiFormsByIdPublish402Error;
 };
 
+export type PostApiFormsByIdPublish422ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
 export type PostApiFormsByIdPublish422Error = {
   code: string;
   message: string;
+  issues?: PostApiFormsByIdPublish422ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
 };
 
 export type PostApiFormsByIdPublish422 = {
@@ -292,9 +369,54 @@ export type PostApiAiEditFormBody = {
   prompt: string;
   /** @maxItems 20 */
   history?: PostApiAiEditFormBodyHistoryItem[];
+  /**
+     * @minimum 1
+     * @maximum 10
+     */
+  count?: number;
 };
 
 export type PostApiAiEditForm200 = {
+  doc: unknown;
+  added: number;
+  removed: number;
+  rules: number;
+  rewired: number;
+  summary: string;
+  tokens: number;
+};
+
+export type PostApiAiAddBlocksBodyHistoryItemRole = typeof PostApiAiAddBlocksBodyHistoryItemRole[keyof typeof PostApiAiAddBlocksBodyHistoryItemRole];
+
+
+export const PostApiAiAddBlocksBodyHistoryItemRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export type PostApiAiAddBlocksBodyHistoryItem = {
+  role: PostApiAiAddBlocksBodyHistoryItemRole;
+  /** @maxLength 2000 */
+  text: string;
+};
+
+export type PostApiAiAddBlocksBody = {
+  formId: string;
+  /**
+     * @minLength 3
+     * @maxLength 1000
+     */
+  prompt: string;
+  /** @maxItems 20 */
+  history?: PostApiAiAddBlocksBodyHistoryItem[];
+  /**
+     * @minimum 1
+     * @maximum 10
+     */
+  count?: number;
+};
+
+export type PostApiAiAddBlocks200 = {
   doc: unknown;
   added: number;
   removed: number;
@@ -373,32 +495,283 @@ export type GetApiFormsByIdAnalytics200 = {
   lockedContext: GetApiFormsByIdAnalytics200LockedContext;
 };
 
+export type PostV1FormsByIdResponsesBodyAnswers = {[key: string]: unknown};
+
+export type PostV1FormsByIdResponsesBodyHiddenFields = {[key: string]: string};
+
+export type PostV1FormsByIdResponsesBodyMode = typeof PostV1FormsByIdResponsesBodyMode[keyof typeof PostV1FormsByIdResponsesBodyMode];
+
+
+export const PostV1FormsByIdResponsesBodyMode = {
+  flow: 'flow',
+  free: 'free',
+} as const;
+
+export type PostV1FormsByIdResponsesBodyRespondent = {
+  /** @maxLength 128 */
+  ipHash?: string;
+  /** @maxLength 8 */
+  country?: string;
+  /** @maxLength 300 */
+  userAgent?: string;
+};
+
+export type PostV1FormsByIdResponsesBody = {
+  answers?: PostV1FormsByIdResponsesBodyAnswers;
+  hiddenFields?: PostV1FormsByIdResponsesBodyHiddenFields;
+  complete?: boolean;
+  mode?: PostV1FormsByIdResponsesBodyMode;
+  /**
+     * @minimum 300
+     * @maximum 2592000
+     */
+  expiresIn?: number;
+  respondent?: PostV1FormsByIdResponsesBodyRespondent;
+};
+
+export type GetV1FormsByIdResponsesParams = {
+status?: string;
+source?: string;
+mode?: GetV1FormsByIdResponsesMode;
+created_after?: number;
+created_before?: number;
+updated_since?: number;
+ending_ref?: string;
+/**
+ * @maxLength 200
+ */
+q?: string;
+order?: GetV1FormsByIdResponsesOrder;
+include?: string;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+cursor?: string;
+};
+
+export type GetV1FormsByIdResponsesMode = typeof GetV1FormsByIdResponsesMode[keyof typeof GetV1FormsByIdResponsesMode];
+
+
+export const GetV1FormsByIdResponsesMode = {
+  live: 'live',
+  test: 'test',
+  all: 'all',
+} as const;
+
+export type GetV1FormsByIdResponsesOrder = typeof GetV1FormsByIdResponsesOrder[keyof typeof GetV1FormsByIdResponsesOrder];
+
+
+export const GetV1FormsByIdResponsesOrder = {
+  created: 'created',
+  updated: 'updated',
+} as const;
+
+export type PostV1ResponsesByIdAnswersBody = {
+  /**
+     * @minItems 1
+     * @maxItems 200
+     */
+  answers: {
+  ref: string;
+  value: unknown;
+}[];
+} | {
+  ref: string;
+  value: unknown;
+};
+
+export type PostV1ResponsesByIdCompleteBody = {
+  endingRef?: string;
+};
+
+export type PostV1ResponsesByIdAbandonBody = {
+  /** @maxLength 100 */
+  reason?: string;
+};
+
 export type GetV1Forms200Item = {
   id: string;
   title: string;
   slug: string;
 };
 
+export type GetV1FormsById404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
 export type GetV1FormsById404Error = {
   code: string;
   message: string;
+  issues?: GetV1FormsById404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
 };
 
 export type GetV1FormsById404 = {
   error: GetV1FormsById404Error;
 };
 
+export type PostV1FormsByIdSessionsBodyHiddenFields = {[key: string]: string};
+
+export type PostV1FormsByIdSessionsBodyRespondent = {
+  /** @maxLength 128 */
+  ipHash?: string;
+  /** @maxLength 8 */
+  country?: string;
+  /** @maxLength 300 */
+  userAgent?: string;
+};
+
+export type PostV1FormsByIdSessionsBody = {
+  hiddenFields?: PostV1FormsByIdSessionsBodyHiddenFields;
+  /** @maxLength 200 */
+  externalId?: string;
+  /**
+     * @minimum 300
+     * @maximum 2592000
+     */
+  expiresIn?: number;
+  respondent?: PostV1FormsByIdSessionsBodyRespondent;
+};
+
+export type PostV1FormsByIdSessions200 = {
+  sessionId: string;
+  respondentToken: string;
+  expiresAt: number;
+  streamUrl: string;
+  greeting: string | null;
+  question: unknown | null;
+};
+
 export type PostV1FormsByIdChatSessionsBodyHiddenFields = {[key: string]: string};
 
+export type PostV1FormsByIdChatSessionsBodyRespondent = {
+  /** @maxLength 128 */
+  ipHash?: string;
+  /** @maxLength 8 */
+  country?: string;
+  /** @maxLength 300 */
+  userAgent?: string;
+};
+
 export type PostV1FormsByIdChatSessionsBody = {
-  externalId?: string;
   hiddenFields?: PostV1FormsByIdChatSessionsBodyHiddenFields;
+  /** @maxLength 200 */
+  externalId?: string;
+  /**
+     * @minimum 300
+     * @maximum 2592000
+     */
+  expiresIn?: number;
+  respondent?: PostV1FormsByIdChatSessionsBodyRespondent;
 };
 
 export type PostV1FormsByIdChatSessions200 = {
   sessionId: string;
+  respondentToken: string;
+  expiresAt: number;
+  streamUrl: string;
   greeting: string | null;
-  firstQuestion: unknown | null;
+  question: unknown | null;
+};
+
+export type PostV1SessionsBySidMessagesBody = {
+  type: 'text';
+  /**
+     * @minLength 1
+     * @maxLength 5000
+     */
+  text: string;
+} | {
+  type: 'structured';
+  ref: string;
+  value: unknown;
+};
+
+export type PostV1SessionsBySidActionsBodyAction = typeof PostV1SessionsBySidActionsBodyAction[keyof typeof PostV1SessionsBySidActionsBodyAction];
+
+
+export const PostV1SessionsBySidActionsBodyAction = {
+  skip: 'skip',
+  stop: 'stop',
+  restart: 'restart',
+  edit: 'edit',
+  submit: 'submit',
+} as const;
+
+export type PostV1SessionsBySidActionsBody = {
+  action: PostV1SessionsBySidActionsBodyAction;
+  ref?: string;
+};
+
+export type PostV1ChatFormsByIdSessionsBodyHiddenFields = {[key: string]: string};
+
+export type PostV1ChatFormsByIdSessionsBodyRespondent = {
+  /** @maxLength 128 */
+  ipHash?: string;
+  /** @maxLength 8 */
+  country?: string;
+  /** @maxLength 300 */
+  userAgent?: string;
+};
+
+export type PostV1ChatFormsByIdSessionsBody = {
+  hiddenFields?: PostV1ChatFormsByIdSessionsBodyHiddenFields;
+  /** @maxLength 200 */
+  externalId?: string;
+  /**
+     * @minimum 300
+     * @maximum 2592000
+     */
+  expiresIn?: number;
+  respondent?: PostV1ChatFormsByIdSessionsBodyRespondent;
+};
+
+export type PostV1ChatFormsByIdSessions200 = {
+  sessionId: string;
+  respondentToken: string;
+  expiresAt: number;
+  streamUrl: string;
+  greeting: string | null;
+  question: unknown | null;
+};
+
+export type PostV1ChatFormsByIdChatSessionsBodyHiddenFields = {[key: string]: string};
+
+export type PostV1ChatFormsByIdChatSessionsBodyRespondent = {
+  /** @maxLength 128 */
+  ipHash?: string;
+  /** @maxLength 8 */
+  country?: string;
+  /** @maxLength 300 */
+  userAgent?: string;
+};
+
+export type PostV1ChatFormsByIdChatSessionsBody = {
+  hiddenFields?: PostV1ChatFormsByIdChatSessionsBodyHiddenFields;
+  /** @maxLength 200 */
+  externalId?: string;
+  /**
+     * @minimum 300
+     * @maximum 2592000
+     */
+  expiresIn?: number;
+  respondent?: PostV1ChatFormsByIdChatSessionsBodyRespondent;
+};
+
+export type PostV1ChatFormsByIdChatSessions200 = {
+  sessionId: string;
+  respondentToken: string;
+  expiresAt: number;
+  streamUrl: string;
+  greeting: string | null;
+  question: unknown | null;
 };
 
 export type PostV1ChatSessionsBySidMessagesBody = {
@@ -414,31 +787,191 @@ export type PostV1ChatSessionsBySidMessagesBody = {
   value: unknown;
 };
 
+export type PostV1ChatSessionsBySidActionsBodyAction = typeof PostV1ChatSessionsBySidActionsBodyAction[keyof typeof PostV1ChatSessionsBySidActionsBodyAction];
+
+
+export const PostV1ChatSessionsBySidActionsBodyAction = {
+  skip: 'skip',
+  stop: 'stop',
+  restart: 'restart',
+  edit: 'edit',
+  submit: 'submit',
+} as const;
+
+export type PostV1ChatSessionsBySidActionsBody = {
+  action: PostV1ChatSessionsBySidActionsBodyAction;
+  ref?: string;
+};
+
+export type GetApiKeys200ItemKeyType = typeof GetApiKeys200ItemKeyType[keyof typeof GetApiKeys200ItemKeyType];
+
+
+export const GetApiKeys200ItemKeyType = {
+  sk_live: 'sk_live',
+  sk_test: 'sk_test',
+  pk_live: 'pk_live',
+  pk_test: 'pk_test',
+} as const;
+
+export type GetApiKeys200ItemEnvironment = typeof GetApiKeys200ItemEnvironment[keyof typeof GetApiKeys200ItemEnvironment];
+
+
+export const GetApiKeys200ItemEnvironment = {
+  live: 'live',
+  test: 'test',
+} as const;
+
+export type GetApiKeys200ItemScopes = {[key: string]: string[]};
+
 export type GetApiKeys200Item = {
   id: string;
   name: string | null;
+  keyType: GetApiKeys200ItemKeyType;
+  environment: GetApiKeys200ItemEnvironment;
   start: string | null;
   enabled: boolean;
+  scopes: GetApiKeys200ItemScopes;
+  origins: string[];
+  formIds: string[];
+  rateLimitMax: number | null;
+  rateLimitTimeWindow: number | null;
+  requestCount: number;
   lastUsedAt: number | null;
+  expiresAt: number | null;
+  createdBy: string | null;
   createdAt: number;
 };
+
+export type PostApiKeysBodyKeyType = typeof PostApiKeysBodyKeyType[keyof typeof PostApiKeysBodyKeyType];
+
+
+export const PostApiKeysBodyKeyType = {
+  sk_live: 'sk_live',
+  sk_test: 'sk_test',
+  pk_live: 'pk_live',
+  pk_test: 'pk_test',
+} as const;
+
+export type PostApiKeysBodyScopes = {[key: string]: string[]};
 
 export type PostApiKeysBody = {
   /**
      * @minLength 1
-     * @maxLength 100
+     * @maxLength 64
      */
   name?: string;
+  keyType?: PostApiKeysBodyKeyType;
+  scopes?: PostApiKeysBodyScopes;
+  /**
+     * @maxItems 20
+     * @items.maxLength 200
+     */
+  origins?: string[];
+  /**
+     * @maxItems 50
+     * @items.maxLength 64
+     */
+  formIds?: string[];
+  /**
+     * @minimum 1
+     * @maximum 365
+     */
+  expiresInDays?: number;
+  /**
+     * @minimum 1
+     * @maximum 10000
+     */
+  rateLimitMax?: number;
 };
+
+export type PostApiKeys200KeyType = typeof PostApiKeys200KeyType[keyof typeof PostApiKeys200KeyType];
+
+
+export const PostApiKeys200KeyType = {
+  sk_live: 'sk_live',
+  sk_test: 'sk_test',
+  pk_live: 'pk_live',
+  pk_test: 'pk_test',
+} as const;
+
+export type PostApiKeys200Environment = typeof PostApiKeys200Environment[keyof typeof PostApiKeys200Environment];
+
+
+export const PostApiKeys200Environment = {
+  live: 'live',
+  test: 'test',
+} as const;
+
+export type PostApiKeys200Scopes = {[key: string]: string[]};
 
 export type PostApiKeys200 = {
   id: string;
   name: string | null;
+  keyType: PostApiKeys200KeyType;
+  environment: PostApiKeys200Environment;
   start: string | null;
   enabled: boolean;
+  scopes: PostApiKeys200Scopes;
+  origins: string[];
+  formIds: string[];
+  rateLimitMax: number | null;
+  rateLimitTimeWindow: number | null;
+  requestCount: number;
   lastUsedAt: number | null;
+  expiresAt: number | null;
+  createdBy: string | null;
   createdAt: number;
   key: string;
+};
+
+export type PostApiKeysByIdRotateBody = {
+  /**
+     * @minimum 0
+     * @maximum 168
+     */
+  graceHours?: number;
+};
+
+export type PostApiKeysByIdRotate200KeyType = typeof PostApiKeysByIdRotate200KeyType[keyof typeof PostApiKeysByIdRotate200KeyType];
+
+
+export const PostApiKeysByIdRotate200KeyType = {
+  sk_live: 'sk_live',
+  sk_test: 'sk_test',
+  pk_live: 'pk_live',
+  pk_test: 'pk_test',
+} as const;
+
+export type PostApiKeysByIdRotate200Environment = typeof PostApiKeysByIdRotate200Environment[keyof typeof PostApiKeysByIdRotate200Environment];
+
+
+export const PostApiKeysByIdRotate200Environment = {
+  live: 'live',
+  test: 'test',
+} as const;
+
+export type PostApiKeysByIdRotate200Scopes = {[key: string]: string[]};
+
+export type PostApiKeysByIdRotate200 = {
+  id: string;
+  name: string | null;
+  keyType: PostApiKeysByIdRotate200KeyType;
+  environment: PostApiKeysByIdRotate200Environment;
+  start: string | null;
+  enabled: boolean;
+  scopes: PostApiKeysByIdRotate200Scopes;
+  origins: string[];
+  formIds: string[];
+  rateLimitMax: number | null;
+  rateLimitTimeWindow: number | null;
+  requestCount: number;
+  lastUsedAt: number | null;
+  expiresAt: number | null;
+  createdBy: string | null;
+  createdAt: number;
+  key: string;
+  replacedKeyId: string;
+  oldKeyExpiresAt: number | null;
 };
 
 export type DeleteApiKeysById200 = {

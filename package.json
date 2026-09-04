@@ -34,7 +34,9 @@
     "secrets:push": "python3 tooling/push-secrets.py",
     "secrets:list": "pnpm --filter @repo/api exec wrangler secret list",
     "apikeys:backfill": "node tooling/backfill-apikey-hashes.mjs",
-    "apikeys:backfill:remote": "node tooling/backfill-apikey-hashes.mjs --remote"
+    "apikeys:backfill:remote": "node tooling/backfill-apikey-hashes.mjs --remote",
+    "gen:openapi": "pnpm --filter @repo/api gen:openapi",
+    "openapi:verify": "pnpm gen:openapi && git diff --exit-code -- openapi.json"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",

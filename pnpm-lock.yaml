@@ -94,6 +94,9 @@ importers:
       '@repo/config':
         specifier: workspace:*
         version: link:../../packages/config
+      tsx:
+        specifier: ^4.23.12
+        version: 4.23.12
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
