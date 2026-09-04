@@ -2841,39 +2841,96 @@
     "/v1/forms": {
       "get": {
         "operationId": "getV1Forms",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "default": "published",
+              "type": "string",
+              "enum": [
+                "draft",
+                "published",
+                "archived",
+                "all"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 25,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "tags": [
           "v1"
         ],
-        "summary": "List published forms (API key)",
+        "summary": "List forms",
         "responses": {
           "200": {
-            "description": "Forms",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "title": {
-                        "type": "string"
-                      },
-                      "slug": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "title",
-                      "slug"
-                    ]
-                  }
-                }
+            "description": "A page of forms"
+          },
+          "400": {
+            "description": "Malformed cursor"
+          }
+        },
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postV1Forms",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "doc": {}
+                },
+                "required": [
+                  "title"
+                ]
               }
             }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Create a form",
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "422": {
+            "description": "The document is invalid"
           }
         },
         "security": [
@@ -2895,71 +2952,150 @@
         "tags": [
           "v1"
         ],
-        "summary": "Get a published form's public config",
+        "summary": "Read a form — its public config, or the document behind it",
         "responses": {
           "200": {
-            "description": "Form config"
+            "description": "Form"
           },
           "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "issues": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "ref": {
-                                "type": "string"
-                              },
-                              "path": {
-                                "type": "string"
-                              },
-                              "code": {
-                                "type": "string"
-                              },
-                              "message": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "code",
-                              "message"
-                            ]
-                          }
-                        },
-                        "request_id": {
-                          "type": "string"
-                        },
-                        "doc_url": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "additionalProperties": {}
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ]
-                }
+            "description": "Not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteV1FormsById",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Delete a form (soft — responses are kept)",
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/forms/{id}/doc": {
+      "put": {
+        "operationId": "putV1FormsByIdDoc",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "doc": {}
+                },
+                "required": [
+                  "doc"
+                ]
               }
             }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Replace the working document, returning lint issues",
+        "responses": {
+          "200": {
+            "description": "Saved, with issues"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Invalid"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/forms/{id}/publish": {
+      "post": {
+        "operationId": "postV1FormsByIdPublish",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Publish the working document as a new immutable version",
+        "responses": {
+          "200": {
+            "description": "Published"
+          },
+          "402": {
+            "description": "A plan limit refuses the publish"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Lint errors"
           }
         },
         "parameters": [

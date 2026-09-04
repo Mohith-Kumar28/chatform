@@ -591,30 +591,37 @@ export type PostV1ResponsesByIdAbandonBody = {
   reason?: string;
 };
 
-export type GetV1Forms200Item = {
-  id: string;
+export type GetV1FormsParams = {
+status?: GetV1FormsStatus;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+cursor?: string;
+};
+
+export type GetV1FormsStatus = typeof GetV1FormsStatus[keyof typeof GetV1FormsStatus];
+
+
+export const GetV1FormsStatus = {
+  draft: 'draft',
+  published: 'published',
+  archived: 'archived',
+  all: 'all',
+} as const;
+
+export type PostV1FormsBody = {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
   title: string;
-  slug: string;
+  doc?: unknown;
 };
 
-export type GetV1FormsById404ErrorIssuesItem = {
-  ref?: string;
-  path?: string;
-  code: string;
-  message: string;
-};
-
-export type GetV1FormsById404Error = {
-  code: string;
-  message: string;
-  issues?: GetV1FormsById404ErrorIssuesItem[];
-  request_id?: string;
-  doc_url?: string;
-  [key: string]: unknown;
-};
-
-export type GetV1FormsById404 = {
-  error: GetV1FormsById404Error;
+export type PutV1FormsByIdDocBody = {
+  doc: unknown;
 };
 
 export type PostV1FormsByIdSessionsBodyHiddenFields = {[key: string]: string};

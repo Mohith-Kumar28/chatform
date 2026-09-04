@@ -15,6 +15,7 @@ import type { SessionDO } from "../do/session-do.js";
 import { responsesRouter } from "./v1/responses.js";
 import { metaRouter } from "./v1/meta.js";
 import { chatRouter } from "./v1/chat.js";
+import { formsV1Router } from "./v1/forms.js";
 
 /**
  * Developer API v1 — API-key auth, headless chat contract.
@@ -113,59 +114,8 @@ v1Router.route("/", responsesRouter);
  */
 v1Router.route("/", metaRouter);
 
-// ─── forms (read) ───
-
-v1Router.get(
-  "/forms",
-  requireScope("form", "read"),
-  describeRoute({
-    tags: ["v1"],
-    summary: "List published forms (API key)",
-    responses: { 200: { description: "Forms", content: { "application/json": { schema: resolver(z.array(z.object({ id: z.string(), title: z.string(), slug: z.string() }))) } } } },
-  }),
-  async (c) => {
-    /**
-     * Scoped by organization, not by user.
-     *
-     * This used to join `members` on the key's `user_id`, which an org-owned key
-     * does not have — the list would have come back empty rather than wrong,
-     * which is the kind of regression nobody reports and everybody works around.
-     */
-    const orgId = c.get("orgId");
-    const rows = await c.env.DB.prepare(
-      `SELECT id, title, slug FROM forms
-        WHERE organization_id = ? AND status = 'published' AND deleted_at IS NULL
-        ORDER BY updated_at DESC LIMIT 100`,
-    )
-      .bind(orgId ?? "")
-      .all<{ id: string; title: string; slug: string }>();
-    return c.json(rows.results ?? []);
-  },
-);
-
-v1Router.get(
-  "/forms/:id",
-  requireScope("form", "read"),
-  describeRoute({
-    tags: ["v1"],
-    summary: "Get a published form's public config",
-    responses: { 200: { description: "Form config" }, 404: { description: "Not found", content: { "application/json": { schema: resolver(ErrorEnvelope) } } } },
-  }),
-  async (c) => {
-    const id = c.req.param("id");
-    const orgId = c.get("orgId");
-    const row = await c.env.DB.prepare(
-      `SELECT fv.schema_json, f.slug FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
-       WHERE f.id = ? AND f.organization_id = ? AND f.status = 'published' AND f.deleted_at IS NULL`,
-    )
-      .bind(id, orgId ?? "")
-      .first<{ schema_json: string; slug: string }>();
-    if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
-    const { toPublicConfig } = await import("@repo/form-schema");
-    const doc = readFormDoc(JSON.parse(row.schema_json));
-    return c.json(toPublicConfig(doc, { slug: row.slug, brandingHidden: doc.settings?.branding?.hidePoweredBy === true }));
-  },
-);
+/** Forms, programmatically: list, read, create, edit, publish, delete. */
+v1Router.route("/", formsV1Router);
 
 // ─── headless chat ───
 
