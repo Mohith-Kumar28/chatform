@@ -27,6 +27,7 @@ import {
   type ResponseOwner,
 } from "../../lib/submissions.js";
 import { meter } from "../../lib/entitlements.js";
+import { decodeCursor, paginate } from "../../lib/cursor.js";
 import { entitlementsFor } from "../../lib/authorize.js";
 
 /**
@@ -649,3 +650,154 @@ responsesRouter.get(
 );
 
 export const ResponseObject = z.object({ id: z.string(), object: z.literal("response") });
+
+// ───────────────────────────── reading ─────────────────────────────
+
+const ListQuery = z.object({
+  status: z.string().optional(),
+  source: z.string().optional(),
+  mode: z.enum(["live", "test", "all"]).optional(),
+  created_after: z.coerce.number().optional(),
+  created_before: z.coerce.number().optional(),
+  updated_since: z.coerce.number().optional(),
+  ending_ref: z.string().optional(),
+  q: z.string().max(200).optional(),
+  order: z.enum(["created", "updated"]).default("created"),
+  include: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  cursor: z.string().optional(),
+});
+
+responsesRouter.get(
+  "/forms/:id/responses",
+  requireScope("response", "read"),
+  validator("query", ListQuery),
+  describeRoute({
+    tags: ["v1"],
+    summary: "List a form's responses, newest first",
+    responses: {
+      200: { description: "A page of responses" },
+      400: { description: "Malformed cursor" },
+      402: { description: "Reading partial responses needs a plan that includes them" },
+      404: { description: "Form not found" },
+    },
+  }),
+  async (c) => {
+    const orgId = c.get("orgId")!;
+    const q = c.req.valid("query");
+    const form = await loadPublishedForm(c.env, c.req.param("id"), orgId);
+    if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+
+    /**
+     * Omitting `status` means completed only, and it is documented that way.
+     *
+     * The dashboard silently narrows an over-limit query to completed; the API
+     * deliberately does not — returning a different result set than the one
+     * asked for is worse than refusing. So an explicit request for partials that
+     * the plan does not cover is a 402, in the same envelope the web's paywall
+     * interceptor already understands.
+     */
+    const requested = (q.status ?? "completed").split(",").map((s) => s.trim()).filter(Boolean);
+    const wantsPartials = requested.some((s) => s === "in_progress" || s === "abandoned" || s === "all");
+    if (wantsPartials) {
+      const ent = await entitlementsFor(c as never);
+      if (!ent.features.partial_responses) {
+        const { featureLocked } = await import("@repo/entitlements");
+        return c.json(featureLocked("partial_responses", ent.planId, { surface: "v1" }), 402);
+      }
+    }
+
+    const where: string[] = [`form_id = ?`, `organization_id = ?`];
+    const binds: unknown[] = [form.formId, orgId];
+    if (!requested.includes("all")) {
+      where.push(`status IN (${requested.map(() => "?").join(",")})`);
+      binds.push(...requested);
+    }
+    if (q.source) {
+      where.push(`source = ?`);
+      binds.push(q.source);
+    }
+    // Live only unless asked: test responses are real rows that must not show up
+    // in anybody's numbers by default.
+    if (q.mode !== "all") {
+      where.push(`is_test = ?`);
+      binds.push(q.mode === "test" ? 1 : 0);
+    }
+    if (q.created_after !== undefined) {
+      where.push(`started_at > ?`);
+      binds.push(q.created_after);
+    }
+    if (q.created_before !== undefined) {
+      where.push(`started_at < ?`);
+      binds.push(q.created_before);
+    }
+    if (q.updated_since !== undefined) {
+      where.push(`updated_at >= ?`);
+      binds.push(q.updated_since);
+    }
+    if (q.ending_ref) {
+      where.push(`json_extract(meta, '$.endingRef') = ?`);
+      binds.push(q.ending_ref);
+    }
+    if (q.q) {
+      where.push(`search_text LIKE ?`);
+      binds.push(`%${q.q.toLowerCase()}%`);
+    }
+
+    const sortColumn = q.order === "updated" ? "updated_at" : "started_at";
+    if (q.cursor) {
+      const cursor = decodeCursor(c.env, q.cursor);
+      if (!cursor || cursor.order !== q.order) {
+        return c.json({ error: { code: "invalid_cursor", message: "That cursor is not valid for this query" } }, 400);
+      }
+      // Keyset, with the id as a stable tiebreaker for rows sharing a timestamp.
+      where.push(`(${sortColumn} < ? OR (${sortColumn} = ? AND id < ?))`);
+      binds.push(cursor.sort, cursor.sort, cursor.id);
+    }
+
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM submissions WHERE ${where.join(" AND ")}
+        ORDER BY ${sortColumn} DESC, id DESC LIMIT ?`,
+    )
+      .bind(...binds, q.limit + 1)
+      .all<ResponseRow>();
+
+    const page = paginate(c.env, rows.results ?? [], q.limit, q.order, (r) =>
+      q.order === "updated" ? (r.updated_at ?? r.started_at) : r.started_at,
+    );
+
+    const include = new Set((q.include ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+    /**
+     * One query for the whole page, never one per row.
+     *
+     * The dashboard's equivalent handler runs two queries per submission, so a
+     * 50-row page is 101 round trips. This is the same data in one.
+     */
+    let answersByResponse = new Map<string, AnswerMap>();
+    if (include.has("answers") && page.data.length > 0) {
+      const ids = page.data.map((r) => r.id);
+      const answerRows = await c.env.DB.prepare(
+        `SELECT submission_id, block_ref, value_json FROM submission_answers
+          WHERE submission_id IN (${ids.map(() => "?").join(",")})`,
+      )
+        .bind(...ids)
+        .all<{ submission_id: string; block_ref: string; value_json: string }>();
+      answersByResponse = new Map(ids.map((id) => [id, {} as AnswerMap]));
+      for (const row of answerRows.results ?? []) {
+        try {
+          answersByResponse.get(row.submission_id)![row.block_ref] = JSON.parse(row.value_json);
+        } catch {
+          // one unparseable value must not lose the whole page
+        }
+      }
+    }
+
+    return c.json({
+      data: page.data.map((row) =>
+        projectResponse(row, form.doc, answersByResponse.get(row.id) ?? {}, include),
+      ),
+      has_more: page.has_more,
+      next_cursor: page.next_cursor,
+    });
+  },
+);

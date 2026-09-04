@@ -13,6 +13,7 @@ import { meter } from "../lib/entitlements.js";
 import { featureLocked, limitReached } from "@repo/entitlements";
 import type { SessionDO } from "../do/session-do.js";
 import { responsesRouter } from "./v1/responses.js";
+import { metaRouter } from "./v1/meta.js";
 
 /**
  * Developer API v1 — API-key auth, headless chat contract.
@@ -102,6 +103,14 @@ v1Router.use("/chat/sessions/:sid/*", assertSessionOwnership);
  * rather than re-declaring any of it.
  */
 v1Router.route("/", responsesRouter);
+
+/**
+ * Self-description: the block catalog, the event catalog, and who this key is.
+ *
+ * No scope required — these describe the API rather than touch anyone's data,
+ * and a key that cannot read its own capabilities is a key nobody can debug.
+ */
+v1Router.route("/", metaRouter);
 
 // ─── forms (read) ───
 
