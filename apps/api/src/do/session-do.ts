@@ -16,6 +16,8 @@ import {
   extractionGuidance,
   resolveEnding,
   displayAnswer as summarizeAnswer,
+  type PublicBlock,
+  type PublicEnding,
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { ServerEvent, SSEEnvelope } from "../lib/events.js";
@@ -78,6 +80,29 @@ interface DoSessionMeta {
   endingRef?: string | null;
 }
 
+/**
+ * The result of a turn driven over HTTP rather than over the stream.
+ *
+ * Carries the events the turn produced, so a headless caller sees exactly what a
+ * streaming client would have — one event contract, two transports.
+ */
+export interface SyncTurnResult {
+  accepted: boolean;
+  error?: string;
+  /** The turn outran its deadline; it is still running, and `events` is partial. */
+  timedOut: boolean;
+  /** Resume point: poll `eventsSince(sinceSeq)` for anything that arrived later. */
+  sinceSeq: number;
+  events: SSEEnvelope[];
+  assistantMessages: string[];
+  question: PublicBlock | null;
+  ending: PublicEnding | null;
+  validation: { ref: string; code: string; message: string } | null;
+  complete: boolean;
+  awaitingSubmit: boolean;
+  status: Awaited<ReturnType<SessionDO["getStatus"]>>;
+}
+
 /** The single `"session"` storage blob. Everything here survives eviction. */
 interface StoredSession {
   meta: DoSessionMeta;
@@ -118,6 +143,8 @@ export class SessionDO extends DurableObject<Bindings> {
   private lastAnswerDisplay: string | null = null;
   private writers = new Set<WritableStreamDefaultWriter<Uint8Array>>();
   private eventBuffer: SSEEnvelope[] = [];
+  /** Non-null while a synchronous turn is collecting the events it produces. */
+  private turnJournal: SSEEnvelope[] | null = null;
   private seq = 0;
   private turnCount = 0;
   private collectedCount = 0;
@@ -159,6 +186,10 @@ export class SessionDO extends DurableObject<Bindings> {
     ipHash: string | null;
     country: string | null;
     userAgent: string | null;
+    /** Which surface opened this. Defaults to a conversation. */
+    source?: "chat" | "embed" | "api";
+    /** Opened with a test-mode key: real rows, excluded from every count. */
+    isTest?: boolean;
   }): Promise<{ ok: true } | { ok: false; code: string }> {
     if (this.loaded) return { ok: true };
 
@@ -181,6 +212,8 @@ export class SessionDO extends DurableObject<Bindings> {
       ipHash: params.ipHash,
       country: params.country,
       userAgent: params.userAgent,
+      source: params.source ?? "chat",
+      isTest: params.isTest === true,
     };
     // Shares the `degraded` flag with the reliability floor (three guard rejections drop a
     // session to template mode permanently) — the two reasons to stop using the LLM want
@@ -386,6 +419,10 @@ export class SessionDO extends DurableObject<Bindings> {
 
   private async emit(type: ServerEvent["type"], data: unknown): Promise<void> {
     const evt: SSEEnvelope = { v: 1, seq: ++this.seq, ts: Date.now(), type, data };
+    // The one line that makes a turn returnable over HTTP as well as streamable:
+    // when a *Sync RPC is collecting, every event it would have streamed is also
+    // handed back to the caller. One event contract, two transports.
+    if (this.turnJournal) this.turnJournal.push(evt);
     this.eventBuffer.push(evt);
     if (this.eventBuffer.length > MAX_REPLAY * 2) this.eventBuffer.splice(0, MAX_REPLAY);
     // persist for replay after eviction (key sorts by seq)
@@ -1003,6 +1040,9 @@ export class SessionDO extends DurableObject<Bindings> {
     this.meta.currentRef = null;
     this.meta.status = "completed";
     this.meta.completedAt = Date.now();
+    // Recorded before `pendingEndingRef` is cleared: without it a headless
+    // caller can see that a conversation finished but never learn where.
+    this.meta.endingRef = ending.ref;
     this.pendingEndingRef = null;
     await this.emitMessage(closingText(ending.title));
     // Project rather than emitting the stored ending: the raw object carries
@@ -1025,6 +1065,165 @@ export class SessionDO extends DurableObject<Bindings> {
         title: b.title,
         display: summarizeAnswer(b, this.state.answers[b.ref]),
       }));
+  }
+
+  /**
+   * One turn, with its events returned rather than only streamed.
+   *
+   * `handleUserTurn` already awaits the whole turn — `record()` awaits
+   * `advanceTo()`, which awaits the model call and the next `question` event —
+   * so the 50ms sleep the old `/v1` route used guarded nothing, and its
+   * transcript diff existed only because the result was thrown away. Nothing
+   * about the turn changes here; what changes is that the caller gets to see
+   * what happened.
+   *
+   * The deadline exists because an interview turn is a model call, and a rare
+   * slow one must not become a slow POST. Past it the turn keeps running inside
+   * the object — its events are already durable under `evt:` keys — and the
+   * caller resumes from `sinceSeq`.
+   */
+  async handleUserTurnSync(
+    input: { type: "text"; text: string } | { type: "structured"; ref: string; value: unknown },
+    opts: { deadlineMs?: number } = {},
+  ): Promise<SyncTurnResult> {
+    return this.runSync(() => this.handleUserTurn(input), opts);
+  }
+
+  /** The same, for skip / stop / restart / edit / submit. */
+  async actionSync(
+    input: { action: "skip" | "stop" | "restart" | "edit" | "submit"; ref?: string },
+    opts: { deadlineMs?: number } = {},
+  ): Promise<SyncTurnResult> {
+    return this.runSync(() => this.action(input), opts);
+  }
+
+  private async runSync(
+    run: () => Promise<{ accepted: boolean; error?: string }>,
+    opts: { deadlineMs?: number },
+  ): Promise<SyncTurnResult> {
+    if (!(await this.ensureLoaded())) {
+      return {
+        accepted: false,
+        error: "session_not_found",
+        timedOut: false,
+        sinceSeq: 0,
+        events: [],
+        assistantMessages: [],
+        question: null,
+        ending: null,
+        validation: null,
+        complete: false,
+        awaitingSubmit: false,
+        status: null,
+      };
+    }
+
+    const sinceSeq = this.seq;
+    const journal: SSEEnvelope[] = [];
+    this.turnJournal = journal;
+    const turn = run().finally(() => {
+      this.turnJournal = null;
+    });
+
+    const deadline = Math.min(Math.max(opts.deadlineMs ?? 20_000, 1_000), 25_000);
+    let outcome: { accepted: boolean; error?: string } | null = null;
+    // `number | undefined` in the Workers runtime, so it is cleared defensively
+    // rather than typed as a Node timer handle.
+    let timer: number | undefined;
+    await Promise.race([
+      turn.then((r) => {
+        outcome = r;
+      }),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, deadline) as unknown as number;
+      }),
+    ]);
+    if (timer !== undefined) clearTimeout(timer);
+
+    if (!outcome) {
+      // Not a failure and not a rejection: the answer is still being processed.
+      // Keep the turn alive past this response so its effects still land.
+      this.ctx.waitUntil(turn.catch((err) => console.error("turn_failed_after_deadline", err)));
+      return { ...(await this.projectTurn(journal)), accepted: true, timedOut: true, sinceSeq, events: [...journal] };
+    }
+    const settled = outcome as { accepted: boolean; error?: string };
+    return {
+      ...(await this.projectTurn(journal)),
+      accepted: settled.accepted,
+      error: settled.error,
+      timedOut: false,
+      sinceSeq,
+      events: journal,
+    };
+  }
+
+  /**
+   * Where the session is now, derived once and shared by every sync RPC, so the
+   * headless contract cannot disagree with itself between endpoints.
+   */
+  private async projectTurn(journal: SSEEnvelope[]): Promise<Omit<SyncTurnResult, "accepted" | "error" | "timedOut" | "sinceSeq" | "events">> {
+    const block = this.meta?.currentRef
+      ? (this.doc?.blocks.find((b) => b.ref === this.meta!.currentRef) ?? null)
+      : null;
+    const endingRef = this.pendingEndingRef ?? this.meta?.endingRef ?? null;
+    const ending = endingRef ? (this.doc?.endings.find((e) => e.ref === endingRef) ?? null) : null;
+
+    /**
+     * Rebuild each assistant message from the token deltas that composed it.
+     *
+     * Both modes stream: the model streams real deltas, and template mode chunks
+     * its phrasing into word groups so the two look the same to a client. So the
+     * tokens are the message, and joining them here is how a caller with no
+     * stream gets the same text a streaming client saw.
+     */
+    const pending = new Map<string, string>();
+    const assistantMessages: string[] = [];
+    let validation: { ref: string; code: string; message: string } | null = null;
+    for (const evt of journal) {
+      if (evt.type === "message_start") {
+        pending.set((evt.data as { messageId: string }).messageId, "");
+      }
+      if (evt.type === "token") {
+        const { messageId, delta } = evt.data as { messageId: string; delta: string };
+        pending.set(messageId, (pending.get(messageId) ?? "") + delta);
+      }
+      if (evt.type === "message_end") {
+        const id = (evt.data as { messageId: string }).messageId;
+        const text = pending.get(id);
+        if (text) assistantMessages.push(text);
+        pending.delete(id);
+      }
+      if (evt.type === "validation_error") {
+        validation = evt.data as { ref: string; code: string; message: string };
+      }
+    }
+
+    return {
+      status: await this.getStatus(),
+      question: block ? toPublicBlock(block) : null,
+      // The projection, not the raw ending: the stored object carries internal
+      // ids and skips the form-level redirect default.
+      ending: ending && this.doc ? toPublicEnding(ending, this.doc.settings.onComplete) : null,
+      validation,
+      assistantMessages,
+      complete: this.meta?.status === "completed",
+      awaitingSubmit: this.pendingEndingRef !== null,
+    };
+  }
+
+  /**
+   * Durable event replay, for a caller resuming after a deadline or a dropped
+   * connection. Reads from storage rather than the in-memory buffer, which dies
+   * with the isolate.
+   */
+  async eventsSince(seq: number, limit = 200): Promise<{ events: SSEEnvelope[]; latestSeq: number }> {
+    await this.ensureLoaded();
+    const stored = await this.ctx.storage.list<SSEEnvelope>({
+      prefix: "evt:",
+      start: `evt:${String(seq + 1).padStart(8, "0")}`,
+      limit,
+    });
+    return { events: [...stored.values()], latestSeq: this.seq };
   }
 
   private async emitQuestion(): Promise<void> {

@@ -8,6 +8,7 @@ import type { Bindings } from "../env.js";
 import { timingSafeEqual, isHashedPassword, verifyPassword } from "../lib/crypto.js";
 import { SessionDO } from "../do/session-do.js";
 import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
+import { openSession, type FormRow } from "../lib/open-session.js";
 import { mountRespondentAuth } from "./respondent-auth.js";
 import { getEntitlements, meter, checkQuota } from "../lib/entitlements.js";
 import { brandingHiddenFor, clampForRuntime } from "../lib/doc-entitlements.js";
@@ -135,176 +136,71 @@ sessionsRouter.post(
   }),
   validator("json", createSessionSchema),
   async (c) => {
-  const { slug } = c.req.param();
-  const body = c.req.valid("json");
+    const { slug } = c.req.param();
+    const body = c.req.valid("json");
 
-  // load active published form version
-  const formRow = await c.env.DB.prepare(
-    `SELECT f.id, f.slug, f.status, f.close_at, f.organization_id, fv.id AS version_id, fv.schema_json
-     FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
-     WHERE f.slug = ? AND f.deleted_at IS NULL LIMIT 1`,
-  )
-    .bind(slug)
-    .first<{ id: string; slug: string; status: string; close_at: number | null; organization_id: string; version_id: string; schema_json: string }>();
-
-  if (!formRow || formRow.status !== "published") {
-    return c.json({ error: { code: "form_not_found", message: "Form not found or not published" } }, 404);
-  }
-  // Every gate below reads the published document.
-  //
-  // They used to read `form_versions.settings_json`, a column that no write
-  // path has ever populated — the settings live inside the doc. So the parsed
-  // settings were always `{}` and every one of these checks passed
-  // unconditionally: the password gate let anyone in, the captcha never ran,
-  // and the close date did nothing.
-  const doc = readFormDoc(JSON.parse(formRow.schema_json));
-  const settings = doc.settings;
-
-  if (isClosed(doc, formRow.close_at)) {
-    return c.json({ error: { code: "form_closed", message: "This form is closed" } }, 403);
-  }
-
-  /**
-   * The monthly response ceiling that sits behind "unlimited responses".
-   *
-   * A respondent must never see a billing error — that is the owner's problem, not
-   * theirs — so an exhausted ceiling presents as the form being closed, in the owner's
-   * own words. `responses_per_month` is `meter`-only on every plan, so this fires only at
-   * 5,000 (Free) or 50,000 (paid).
-   */
-  const ent = await getEntitlements(c.env, formRow.organization_id);
-  if (await ceilingReached(c.env, formRow.organization_id, ent)) {
-    return c.json({ error: { code: "form_closed", message: settings.closeRules.closedMessageMd } }, 403);
-  }
-
-  const cap = settings.closeRules.maxSubmissions;
-  if (cap) {
-    const count = await c.env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM submissions WHERE form_id = ?1 AND status = 'completed'`,
+    const formRow = await c.env.DB.prepare(
+      `SELECT f.id, f.slug, f.status, f.close_at, f.organization_id, fv.id AS version_id, fv.schema_json
+       FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
+       WHERE f.slug = ? AND f.deleted_at IS NULL LIMIT 1`,
     )
-      .bind(formRow.id)
-      .first<{ n: number }>();
-    if ((count?.n ?? 0) >= cap) {
-      return c.json({ error: { code: "form_closed", message: "This form is closed" } }, 403);
-    }
-  }
+      .bind(slug)
+      .first<FormRow & { status: string }>();
 
-  if (settings.password.enabled) {
-    const supplied = body.password ?? "";
-    const stored = settings.password.value;
-    const ok = isHashedPassword(stored) ? await verifyPassword(supplied, stored) : timingSafeEqual(supplied, stored);
-    if (!ok) {
-      return c.json({ error: { code: "password_required", message: "This form requires a password" } }, 401);
+    if (!formRow || formRow.status !== "published") {
+      return c.json({ error: { code: "form_not_found", message: "Form not found or not published" } }, 404);
     }
-  }
-  // A missing token used to skip verification entirely, so any client could
-  // bypass the captcha by simply not sending one. Enabled means required.
-  if (settings.captcha.enabled && c.env.TURNSTILE_SECRET_KEY) {
-    if (!body.turnstileToken) {
-      return c.json({ error: { code: "captcha_required", message: "Captcha verification required" } }, 403);
-    }
-    const verify = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ secret: c.env.TURNSTILE_SECRET_KEY, response: body.turnstileToken }),
+
+    /**
+     * Every gate now lives in `openSession`, shared with the headless API.
+     *
+     * They used to live inline here, which is exactly why `/v1` had none of
+     * them: a closed, capped, password-protected form would still open sessions
+     * over the API, unmetered.
+     */
+    const opened = await openSession({
+      env: c.env,
+      form: formRow,
+      // An embedded form is still a browser respondent; the origin, when the
+      // widget sends one, is what distinguishes it.
+      source: body.embed?.origin ? "embed" : "chat",
+      hiddenFields: body.hiddenFields ?? {},
+      ip: c.req.header("cf-connecting-ip") ?? "",
+      country: c.req.header("cf-ipcountry") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      password: body.password,
+      turnstileToken: body.turnstileToken,
     });
-    const vr = (await verify.json()) as { success: boolean };
-    if (!vr.success) {
-      return c.json({ error: { code: "captcha_failed", message: "Captcha verification failed" } }, 403);
+    if (!opened.ok) return c.json(opened.body, opened.status);
+
+    const result = await stub(c.env, opened.sessionId).init({
+      sessionId: opened.sessionId,
+      formId: formRow.id,
+      formVersionId: formRow.version_id,
+      organizationId: formRow.organization_id,
+      slug: formRow.slug,
+      brandingHidden: opened.brandingHidden,
+      aiDegraded: opened.aiDegraded,
+      docJson: opened.runtimeDoc,
+      respondentToken: opened.respondentToken,
+      hiddenFields: body.hiddenFields ?? {},
+      ipHash: opened.ipHash,
+      country: c.req.header("cf-ipcountry") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      source: body.embed?.origin ? "embed" : "chat",
+    });
+
+    if (!result.ok) {
+      return c.json({ error: { code: result.code, message: "Could not start session" } }, 400);
     }
-  }
 
-  const sessionId = `chs_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
-  const respondentToken = crypto.randomUUID().replace(/-/g, "");
-  const ip = c.req.header("cf-connecting-ip") ?? "";
-  const country = c.req.header("cf-ipcountry") ?? null;
-  const ipHash = sha256Hex(ip);
-
-  // "One response per person, per day" — offered in the builder since the
-  // settings panel was written, and enforced nowhere until now.
-  //
-  // Scoped to a day rather than forever because an IP identifies a network,
-  // not a person: an office or a campus shares one, and a permanent block
-  // would lock out everyone behind the first respondent. For a guarantee that
-  // actually holds, `requireAuth.onePerIdentity` keys on a verified identity.
-  if (settings.duplicates.strategy === "ip_daily" && ip) {
-    const since = Date.now() - 24 * 60 * 60 * 1000;
-    const prior = await c.env.DB.prepare(
-      `SELECT 1 FROM chat_sessions WHERE form_id = ?1 AND ip_hash = ?2 AND created_at > ?3 LIMIT 1`,
-    )
-      .bind(formRow.id, ipHash, since)
-      .first();
-    if (prior) {
-      return c.json(
-        { error: { code: "already_responded", message: "It looks like you have already answered this form today." } },
-        409,
-      );
-    }
-  }
-
-  // persist session row (D1) — DO is source of truth during session, D1 is the index
-  await c.env.DB.prepare(
-    `INSERT INTO chat_sessions (id, form_id, form_version_id, organization_id, respondent_token_hash, status, hidden_fields, ip_hash, country, created_at, last_activity_at)
-     SELECT ?, f.id, fv.id, f.organization_id, ?, 'active', ?, ?, ?, ?, ?
-     FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id WHERE f.id = ?`,
-  )
-    .bind(
-      sessionId,
-      hashToken(respondentToken),
-      JSON.stringify(body.hiddenFields ?? {}),
-      ipHash,
-      country,
-      Date.now(),
-      Date.now(),
-      formRow.id,
-    )
-    .run();
-
-  /**
-   * Should this interview be a conversation, or scripted questions?
-   *
-   * The AI cap is `degrade`-mode: past it the form keeps working, it just stops being a
-   * conversation. That is what makes "unlimited responses" honest on a plan where every
-   * response costs real tokens — the respondent never sees a failure, and the owner sees a
-   * banner. `meter` reserves atomically, so two simultaneous sessions cannot both take the
-   * last conversation.
-   *
-   * `responses` is metered here rather than at completion because an abandoned session
-   * still cost us the interview.
-   */
-  const aiBudget = await meter(c.env, formRow.organization_id, "ai_conversations", 1, ent);
-  await meter(c.env, formRow.organization_id, "responses", 1, ent);
-
-  // Plan-capped turn and token budgets are applied at read time, so a form authored on Pro
-  // keeps running after a downgrade rather than refusing to load.
-  const runtimeDoc = clampForRuntime(doc, ent);
-
-  const result = await stub(c.env, sessionId).init({
-    sessionId,
-    formId: formRow.id,
-    formVersionId: formRow.version_id,
-    organizationId: formRow.organization_id,
-    slug: formRow.slug,
-    brandingHidden: brandingHiddenFor(doc, ent),
-    aiDegraded: aiBudget.degraded,
-    docJson: runtimeDoc,
-    respondentToken,
-    hiddenFields: body.hiddenFields ?? {},
-    ipHash,
-    country,
-    userAgent: c.req.header("user-agent") ?? null,
-  });
-
-  if (!result.ok) {
-    return c.json({ error: { code: result.code, message: "Could not start session" } }, 400);
-  }
-
-  return c.json({
-    sessionId,
-    sseUrl: `/p/sessions/${sessionId}/events`,
-    respondentToken,
-  });
-});
+    return c.json({
+      sessionId: opened.sessionId,
+      sseUrl: `/p/sessions/${opened.sessionId}/events`,
+      respondentToken: opened.respondentToken,
+    });
+  },
+);
 
 async function requireRespondent(c: RespondentCtx): Promise<string | null> {
   const sessionId = c.req.param("id");
