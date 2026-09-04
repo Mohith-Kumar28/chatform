@@ -1,7 +1,7 @@
 {
   "name": "@chatformhq/react",
-  "version": "0.1.0",
-  "description": "React bindings for Chatform — hooks and an embed component.",
+  "version": "0.1.1",
+  "description": "React bindings for Chatform \u2014 hooks and an embed component.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,

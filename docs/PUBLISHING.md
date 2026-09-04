@@ -1,7 +1,7 @@
 # Publishing the SDKs
 
-`@chatformhq/js` and `@chatformhq/react` are built and tested but not yet
-published. Everything below is verified against the real registry and a real
+`@chatformhq/js` and `@chatformhq/react` are **published** — currently at
+`0.1.1`. Everything below is verified against the real registry and a real
 `pnpm pack`.
 
 ## 1. The scope
@@ -29,6 +29,11 @@ npm login          # writes the token pnpm also reads
 npm whoami         # should print your username
 ```
 
+npm now requires a **granular access token with "bypass 2FA" enabled** for
+publishing, and it requires it even with 2FA switched off on the account —
+`npm login` alone gets a 403. Create one at npmjs.com under Access Tokens and
+put it in `~/.npmrc` yourself; nothing here needs to see it.
+
 ## 3. Publish
 
 ```bash
@@ -41,7 +46,14 @@ a private package on the free tier fails.
 
 Order matters — `@chatformhq/react` depends on `@chatformhq/js`, and pnpm rewrites
 the `workspace:*` to the real version on publish, so the version it names must
-already exist on the registry.
+already exist on the registry. Allow for propagation: `@chatformhq/js` has taken
+around a minute to become installable after each publish, and publishing the
+React package before then fails to resolve its own dependency.
+
+```bash
+# wait for it rather than guessing
+until npm view @chatformhq/js@<version> version >/dev/null 2>&1; do sleep 5; done
+```
 
 ## Publish with pnpm, not npm
 
@@ -67,9 +79,13 @@ keeps resume state in browser storage, and a dual-loaded package would mean two
 copies writing the same keys — a bug that looks like random session loss.
 
 ```
-@chatformhq/js      ~30 kB packed, 17 files, zero runtime dependencies
+@chatformhq/js      ~40 kB packed, 17 files, zero runtime dependencies
 @chatformhq/react   ~8 kB packed, peer react >=18
 ```
+
+Both export `./package.json`. Some bundlers and tooling read it, and an
+`exports` map that omits it makes `require("@chatformhq/js/package.json")` throw
+`ERR_PACKAGE_PATH_NOT_EXPORTED`.
 
 Zero dependencies in the JS client is a product claim, not an accident: Web
 Crypto for webhook verification, `fetch` for transport, and an injectable storage
@@ -88,5 +104,7 @@ version would have failed.
 
 ## Versioning
 
-Both are at `0.1.0`. Bump with `pnpm --filter <pkg> version <patch|minor>` before
-publishing; there is no changesets setup, so versions are manual for now.
+Both are at `0.1.1`, and the two are kept in lockstep. There is no changesets
+setup and no `version` script, so edit `version` in both `package.json` files by
+hand before publishing. A published version can never be reused, so a mistake
+costs a patch bump rather than a fix.
