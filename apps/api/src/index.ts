@@ -4,6 +4,13 @@ import { SessionDO } from "./do/session-do.js";
 import { deliverWebhookEvent, retryFailedDeliveries, type WebhookEvent } from "./lib/webhooks.js";
 import { pruneOtpChallenges } from "./lib/respondent-auth.js";
 import { pruneGateLog } from "./lib/gate-log.js";
+import {
+  sweepExpiredResponses,
+  sweepExpiredSessions,
+  sweepPartialNotifications,
+  pruneTestData,
+  pruneIdempotencyKeys,
+} from "./lib/sweeps.js";
 
 export { SessionDO };
 
@@ -39,6 +46,20 @@ export default {
       // Unconverted gate denials are only interesting while they are recent; a converted
       // row is kept forever because it is the attribution for a sale.
       await pruneGateLog(env).catch((err) => console.error("gate_log_prune_failed", err));
+
+      /**
+       * The API path's housekeeping.
+       *
+       * A conversation is abandoned by its session object's idle alarm; a
+       * programmatic response has no object watching it, so its deadline is a
+       * column and this is what enforces it. The partial sweep is also where
+       * `response.partial` comes from — the cron interval is the throttle.
+       */
+      await sweepExpiredResponses(env).catch((err) => console.error("response_sweep_failed", err));
+      await sweepExpiredSessions(env).catch((err) => console.error("session_sweep_failed", err));
+      await sweepPartialNotifications(env).catch((err) => console.error("partial_sweep_failed", err));
+      await pruneIdempotencyKeys(env).catch((err) => console.error("idempotency_prune_failed", err));
+      await pruneTestData(env).catch((err) => console.error("test_data_prune_failed", err));
     }
   },
 } satisfies ExportedHandler<Bindings>;
