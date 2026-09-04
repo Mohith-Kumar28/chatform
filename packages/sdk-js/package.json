@@ -1,0 +1,52 @@
+{
+  "name": "@chatform/js",
+  "version": "0.1.0",
+  "description": "The official JavaScript client for the Chatform API.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./browser": "./src/browser.ts",
+    "./webhooks": "./src/webhooks.ts"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build"
+  },
+  "keywords": [
+    "chatform",
+    "forms",
+    "api",
+    "conversational"
+  ],
+  "devDependencies": {
+    "@repo/config": "workspace:*",
+    "@types/node": "^22.0.0",
+    "tsdown": "^0.15.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./browser": {
+        "types": "./dist/browser.d.ts",
+        "import": "./dist/browser.js"
+      },
+      "./webhooks": {
+        "types": "./dist/webhooks.d.ts",
+        "import": "./dist/webhooks.js"
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "@chatform/react",
+  "version": "0.1.0",
+  "description": "React bindings for Chatform \u2014 hooks and an embed component.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "prepublishOnly": "pnpm build"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "dependencies": {
+    "@chatform/js": "workspace:*"
+  },
+  "devDependencies": {
+    "@repo/config": "workspace:*",
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "tsdown": "^0.15.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  }
+}
