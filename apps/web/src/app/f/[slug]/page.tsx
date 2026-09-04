@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { PublicFormConfig } from "@repo/form-schema";
 import { ChatClient } from "@/components/chat/chat-client";
 import { ViewPing } from "@/components/chat/view-ping";
+import { EmbedBridge } from "@/components/chat/embed-bridge";
 
 // Server-side fetch origin. `API_ORIGIN` may differ from the public one when the
 // worker is reachable internally; both default to the deployed API.
@@ -62,10 +63,29 @@ export default async function PublicFormPage({ params, searchParams }: PageProps
     if (typeof value === "string") hiddenFields[name] = value;
   }
 
+  /**
+   * Embedded mode.
+   *
+   * `?embed=1` has been appended by every snippet since embedding shipped and
+   * read by nothing, so a framed form rendered with the same page chrome as a
+   * standalone one. `parentOrigin` is the page that framed us, and it is only
+   * ever used as a postMessage target after being checked against the form's
+   * allowlist.
+   */
+  const embedded = query.embed === "1";
+  const parentOrigin = typeof query.parentOrigin === "string" ? query.parentOrigin : null;
+
   return (
-    <>
+    <div className={embedded ? "cf-embedded" : undefined}>
+      {/* A view is a view whether it is framed or not. */}
       <ViewPing slug={slug} apiOrigin={PUBLIC_API_ORIGIN} />
+      {embedded ? (
+        <EmbedBridge
+          parentOrigin={parentOrigin}
+          allowedOrigins={config.embed?.allowedOrigins ?? []}
+        />
+      ) : null}
       <ChatClient config={config} hiddenFields={hiddenFields} />
-    </>
+    </div>
   );
 }

@@ -1,5 +1,0 @@
-{
-  "title": "API reference",
-  "description": "Every endpoint, generated from the OpenAPI spec.",
-  "pages": ["index", "v1", "public", "dashboard", "billing", "health"]
-}

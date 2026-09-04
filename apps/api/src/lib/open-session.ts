@@ -63,6 +63,38 @@ export interface OpenSessionInput {
   /** Opened with a test-mode key: real rows, excluded from every count. */
   isTest?: boolean;
   apiKeyId?: string | null;
+  /**
+   * The page that framed the form, when there is one.
+   *
+   * Checked against the form's embed allowlist here rather than in the browser,
+   * because a page can claim to be anything — this is the `Origin` header the
+   * browser sets, which it cannot.
+   */
+  embedOrigin?: string | null;
+}
+
+/** Exact origins, or one leading wildcard label. Matched on the host, never as a substring. */
+function embedOriginAllowed(origin: string, allowed: string[]): boolean {
+  if (allowed.length === 0) return true;
+  let host: string;
+  let scheme: string;
+  try {
+    const url = new URL(origin);
+    host = url.host;
+    scheme = url.protocol;
+  } catch {
+    return false;
+  }
+  return allowed.some((entry) => {
+    const trimmed = entry.trim();
+    if (!trimmed) return false;
+    if (trimmed === origin) return true;
+    const star = trimmed.indexOf("://*.");
+    if (star === -1) return false;
+    const entryScheme = `${trimmed.slice(0, star)}:`;
+    const suffix = trimmed.slice(star + 4);
+    return scheme === entryScheme && (host.endsWith(suffix) || host === suffix.slice(1));
+  });
 }
 
 export type OpenSessionResult =
@@ -115,6 +147,29 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
 
   if (isClosed(doc, form.close_at)) {
     return { ok: false, status: 403, body: { error: { code: "form_closed", message: "This form is closed" } } };
+  }
+
+  /**
+   * The embed allowlist, enforced where it cannot be bypassed.
+   *
+   * The body used to carry `embed.origin` and nothing read it, so the setting
+   * existed and did nothing. This is checked before anything is created, so a
+   * disallowed page cannot open a session however it frames the form.
+   */
+  const allowedOrigins = settings.embed?.allowedOrigins ?? [];
+  if (allowedOrigins.length > 0 && input.source === "embed") {
+    if (!input.embedOrigin || !embedOriginAllowed(input.embedOrigin, allowedOrigins)) {
+      return {
+        ok: false,
+        status: 403,
+        body: {
+          error: {
+            code: "origin_not_allowed",
+            message: "This form cannot be embedded on that site.",
+          },
+        },
+      };
+    }
   }
 
   const ent = await getEntitlements(env, form.organization_id);

@@ -9,27 +9,51 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Trash2, Webhook, Send } from "lucide-react";
+import { embedSnippet } from "@/lib/embed-snippet";
 
-const EVENTS = ["submission.completed", "submission.abandoned", "session.started", "form.published"] as const;
+/**
+ * The canonical names, with the newest events included.
+ *
+ * `response.partial` is the one worth offering: until it existed, a
+ * half-finished response was invisible until it timed out, which is exactly as
+ * long as it was worth following up on.
+ */
+const EVENTS = [
+  "response.completed",
+  "response.abandoned",
+  "response.partial",
+  "session.started",
+  "form.published",
+] as const;
 
 interface WebhookRow {
   id: string;
   url: string;
   events: string[];
-  secret: string;
+  /**
+   * The first few characters, for telling two endpoints apart. The full secret
+   * is returned once, at creation, and never again — so reading `secret` here
+   * threw on every webhook that already existed.
+   */
+  secretPreview?: string;
   active: boolean;
 }
 
-export function IntegrateClient({ formId }: { formId: string }) {
+export function IntegrateClient({ formId, slug }: { formId: string; slug: string }) {
   const queryClient = useQueryClient();
   const { data: rawHooks } = useQuery({
-    queryKey: ["webhooks"],
-    queryFn: () => customFetch<WebhookRow[]>("/api/webhooks"),
+    // Keyed by form: every webhook created here carries this form's id, so
+    // listing every endpoint in the organization showed people other forms'
+    // integrations on this one's page.
+    queryKey: ["webhooks", formId],
+    queryFn: () => customFetch<(WebhookRow & { formId?: string | null })[]>("/api/webhooks"),
   });
-  const hooks = (Array.isArray(rawHooks) ? rawHooks : []) as unknown as WebhookRow[];
+  const hooks = (Array.isArray(rawHooks) ? rawHooks : []).filter(
+    (h) => !h.formId || h.formId === formId,
+  ) as unknown as WebhookRow[];
 
   const [url, setUrl] = useState("");
-  const [selectedEvents, setSelectedEvents] = useState<string[]>(["submission.completed"]);
+  const [selectedEvents, setSelectedEvents] = useState<string[]>(["response.completed"]);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
 
   const create = useMutation({
@@ -37,7 +61,7 @@ export function IntegrateClient({ formId }: { formId: string }) {
       customFetch("/api/webhooks", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => {
       setUrl("");
-      void queryClient.invalidateQueries({ queryKey: ["webhooks"] });
+      void queryClient.invalidateQueries({ queryKey: ["webhooks", formId] });
     },
   });
   const remove = useMutation({
@@ -117,7 +141,7 @@ export function IntegrateClient({ formId }: { formId: string }) {
                   </Button>
                 </div>
                 <div className="mt-1.5 flex items-center gap-2">
-                  <code className="text-muted-foreground text-xs">{h.secret.slice(0, 14)}…</code>
+                  <code className="text-muted-foreground text-xs">{h.secretPreview ?? "whsec_…"}</code>
                   {testResult[h.id] && <Badge variant={testResult[h.id].includes("✓") ? "default" : "destructive"}>{testResult[h.id]}</Badge>}
                 </div>
               </div>
@@ -133,7 +157,17 @@ export function IntegrateClient({ formId }: { formId: string }) {
           <CardDescription>Drop this into any page — renders a launcher bubble + chat panel.</CardDescription>
         </CardHeader>
         <CardContent>
-          <pre className="bg-muted overflow-x-auto rounded-lg p-4 text-xs">{`<script src="https://app.chatform.dev/embed.js" data-form="${formId}" data-api="${API_ORIGIN}"></script>`}</pre>
+          {/* One generator, shared with the Share view. The hardcoded snippet
+              that used to live here pointed at a hostname that has not existed
+              since the domain changed, so anyone who copied it got a form that
+              never loaded. */}
+          <pre className="bg-muted overflow-x-auto rounded-lg p-4 text-xs">
+            {embedSnippet({
+              slug,
+              mode: "popup",
+              origin: typeof window === "undefined" ? "https://chatform.in" : window.location.origin,
+            })}
+          </pre>
         </CardContent>
       </Card>
     </div>

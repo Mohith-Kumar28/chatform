@@ -113,6 +113,24 @@ export const SettingsDoc = z.object({
     .default({ hidePoweredBy: false }),
 
   /**
+   * Where this form may be embedded.
+   *
+   * Empty means anywhere, which is what a public form usually wants — a
+   * marketing page, a partner's site, a customer's intranet. Listing origins
+   * turns that off, and the check that matters happens server-side when a
+   * session is opened: a browser is not a trust boundary, so the CSP the
+   * allowlist also produces is defence in depth rather than the defence.
+   *
+   * Entries are exact origins, or one leading wildcard label for preview
+   * deployments: `https://*.preview.acme.example`.
+   */
+  embed: z
+    .object({
+      allowedOrigins: z.array(z.string().max(200)).max(20).default([]),
+    })
+    .default({ allowedOrigins: [] }),
+
+  /**
    * The agent layer — what makes this a conversation rather than a form.
    *
    * Blocks remain the source of truth for WHAT must be collected (so results

@@ -272,6 +272,13 @@ export interface PublicFormConfig {
     message: string;
   } | null;
   captchaEnabled: boolean;
+  /**
+   * Where this form may be framed. Empty means anywhere.
+   *
+   * Projected so the frame knows which parent it may talk to; the check that
+   * decides whether a session opens at all happens server-side.
+   */
+  embed: { allowedOrigins: string[] };
   closed?: boolean;
   closedMessage?: string;
   /**
@@ -331,6 +338,7 @@ export function toPublicConfig(
       ? { methods: doc.settings.requireAuth.methods, message: doc.settings.requireAuth.message }
       : null,
     captchaEnabled: doc.settings.captcha.enabled,
+    embed: { allowedOrigins: doc.settings.embed?.allowedOrigins ?? [] },
     closed: opts.closed,
     closedMessage: opts.closedMessage,
   };

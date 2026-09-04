@@ -21,6 +21,39 @@ const nextConfig: NextConfig = {
      */
     staleTimes: { dynamic: 180, static: 300 },
   },
+  async headers() {
+    return [
+      {
+        /**
+         * Everything except the hosted form.
+         *
+         * SAMEORIGIN rather than DENY: the builder frames /preview/[id] from
+         * this same origin, and DENY would break the live preview that makes
+         * "preview equals production" true.
+         *
+         * /f/ is excluded because it is the one route that is *meant* to be
+         * framed. Its per-form allowlist is enforced where it cannot be
+         * bypassed — when a session is opened, against the Origin header the
+         * browser sets.
+         */
+        source: "/:path((?!f/).*)",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
+      {
+        // The embed loader is fetched cross-origin by definition.
+        source: "/embed.js",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Cache-Control", value: "public, max-age=300, must-revalidate" },
+        ],
+      },
+    ];
+  },
   env: {
     API_ORIGIN: process.env.API_ORIGIN ?? "http://localhost:8787",
     NEXT_PUBLIC_API_ORIGIN: process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8787",

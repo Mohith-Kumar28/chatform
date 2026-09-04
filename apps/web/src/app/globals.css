@@ -865,3 +865,19 @@
 #nd-page pre {
   background: var(--muted);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Embedded mode
+
+   A framed form is already inside someone else's layout, so it must not bring
+   its own page margins, max-width or scroll container with it. `?embed=1` has
+   been on every generated snippet since embedding shipped and read by nothing —
+   this is what it now means.
+   ═════════════════════════════════════════════════════════════════════════ */
+.cf-embedded {
+  min-height: 100dvh;
+}
+
+.cf-embedded [data-standalone-only] {
+  display: none;
+}

@@ -170,6 +170,15 @@ sessionsRouter.post(
       userAgent: c.req.header("user-agent") ?? null,
       password: body.password,
       turnstileToken: body.turnstileToken,
+      /**
+       * The browser's own Origin header, and nothing else.
+       *
+       * The body also carries an `embed.origin`, which the page writes about
+       * itself — useful as a hint that this is an embed at all, worthless as
+       * proof of where it is. Falling back to it would let any page claim to be
+       * an allowed one.
+       */
+      embedOrigin: c.req.header("origin") ?? null,
     });
     if (!opened.ok) return c.json(opened.body, opened.status);
 
