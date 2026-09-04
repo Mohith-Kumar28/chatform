@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { readFormDoc, type FormDoc } from "@repo/form-schema";
+import { displayAnswer, readFormDoc, type Block, type FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 import { requirePermission, assertPermission, assertFeature, hasFeature, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
@@ -236,7 +236,7 @@ resultsRouter.get(
     const form = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`).bind(id).first<{ working_schema: string }>();
     if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     const doc = readFormDoc(JSON.parse(form.working_schema));
-    const answerable = doc.blocks.filter((b: { type: string }) => !["welcome", "statement"].includes(b.type));
+    const answerable = doc.blocks.filter((b) => !["welcome", "statement"].includes(b.type));
 
     /**
      * Exporting what you finished collecting is free — taking your own data with you must
@@ -260,7 +260,9 @@ resultsRouter.get(
       .bind(id, includePartials ? 1 : 0)
       .all<{ id: string; status: string; started_at: number; completed_at: number | null }>();
 
-    const header = ["submission_id", "status", "started_at", ...answerable.map((b: { ref: string }) => b.ref)];
+    // The question, not its ref. `b_short` means nothing to whoever opens this;
+    // the ref follows in brackets so a column can still be matched to the doc.
+    const header = ["submission_id", "status", "started_at", ...answerable.map((b) => `${b.title} (${b.ref})`)];
     const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
     const rows: string[] = [header.map(esc).join(",")];
 
@@ -273,12 +275,17 @@ resultsRouter.get(
         s.id,
         s.status,
         new Date(s.started_at).toISOString(),
-        ...answerable.map((b: { ref: string }) => {
+        // Labels, not ids. A CSV full of `opt_founder001` and
+        // `{"row_ui000001":"col_bad00001"}` is not an export of anyone's data —
+        // it is an export of our primary keys, and the person opening it has
+        // no way to decode them.
+        ...answerable.map((b) => {
           const v = map.get(b.ref);
+          // An unanswered cell is empty, not "(skipped)" — a spreadsheet
+          // already has a way to say nothing is there.
           if (!v) return "";
           try {
-            const parsed = JSON.parse(v);
-            return typeof parsed === "string" ? parsed : JSON.stringify(parsed);
+            return displayAnswer(b as Block, JSON.parse(v));
           } catch {
             return v;
           }
@@ -318,7 +325,7 @@ resultsRouter.get(
 
     const form = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`).bind(id).first<{ working_schema: string }>();
     const doc = form ? JSON.parse(form.working_schema) : { blocks: [] };
-    const answerable = doc.blocks.filter((b: { type: string }) => !["welcome", "statement"].includes(b.type));
+    const answerable = (doc.blocks as Block[]).filter((b) => !["welcome", "statement"].includes(b.type));
 
     const perBlock: { blockRef: string; blockType: string; title: string; answered: number; answerRate: number }[] = [];
     for (const b of answerable) {
@@ -360,13 +367,34 @@ resultsRouter.get(
           numericSummary = { avg: Math.round(agg.avg * 10) / 10, min: agg.min ?? 0, max: agg.max ?? 0 };
         }
       } else {
+        /**
+         * The Summary chart's bars are labelled with the option, not its id.
+         *
+         * A "Which best describes you?" chart read `opt_founder001` /
+         * `opt_dev0000001` down the axis — the one view whose entire job is to
+         * tell you at a glance what people picked.
+         *
+         * Multi-answer blocks are counted per option rather than per distinct
+         * combination, or a multi-select's chart is a list of every set anyone
+         * happened to choose, each with a count of one.
+         */
+        const tally = new Map<string, number>();
         for (const row of rows.results ?? []) {
+          let parsed: unknown = row.value_json;
           try {
-            const v = JSON.parse(row.value_json);
-            options.push({ label: typeof v === "string" ? v : JSON.stringify(v), count: row.n });
+            parsed = JSON.parse(row.value_json);
           } catch {
-            options.push({ label: row.value_json, count: row.n });
+            /* keep the raw text */
           }
+          const parts = Array.isArray(parsed) ? parsed : [parsed];
+          const perValue = Array.isArray(parsed) ? parts : [parsed];
+          for (const part of perValue) {
+            const label = displayAnswer(b as Block, part);
+            tally.set(label, (tally.get(label) ?? 0) + row.n);
+          }
+        }
+        for (const [label, count] of [...tally.entries()].sort((a, z) => z[1] - a[1]).slice(0, 12)) {
+          options.push({ label, count });
         }
       }
       distributions.push({

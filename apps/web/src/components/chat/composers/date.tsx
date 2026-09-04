@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import {
   addMonths,
   endOfMonth,
@@ -28,15 +28,33 @@ export function DateComposer({
   min,
   max,
   disablePast,
+  includeTime = false,
+  timeStepMinutes = 30,
+  timeMin = "09:00",
+  timeMax = "18:00",
   onPick,
 }: {
   min?: string;
   max?: string;
   disablePast?: boolean;
+  /** Ask for a time as well — the difference between a date and an appointment. */
+  includeTime?: boolean;
+  timeStepMinutes?: number;
+  timeMin?: string;
+  timeMax?: string;
   onPick: (iso: string, display: string) => void;
 }) {
   const today = startOfDay(new Date());
   const [cursor, setCursor] = useState(() => startOfMonth(today));
+  /**
+   * The day chosen so far, when a time is still owed.
+   *
+   * Without `includeTime` the calendar answers on the first tap, exactly as it
+   * always has. With it, the tap picks the day and the pad switches to the
+   * times available on that day — one decision at a time, which is how every
+   * booking flow people already know works.
+   */
+  const [chosenDay, setChosenDay] = useState<Date | null>(null);
 
   const lowerBound = useMemo(() => {
     const fromMin = min ? startOfDay(new Date(min)) : null;
@@ -63,7 +81,82 @@ export function DateComposer({
 
   function choose(day: Date) {
     if (disabled(day)) return;
+    if (includeTime) {
+      setChosenDay(day);
+      return;
+    }
     onPick(format(day, "yyyy-MM-dd"), format(day, "EEE d MMM yyyy"));
+  }
+
+  /** Every slot between the block's opening and closing time, on the step. */
+  const slots = useMemo(() => {
+    if (!includeTime) return [];
+    const toMin = (hhmm: string) => {
+      const [h = "0", m = "0"] = hhmm.split(":");
+      return Number(h) * 60 + Number(m);
+    };
+    const start = toMin(timeMin);
+    const end = toMin(timeMax);
+    const step = Math.max(5, timeStepMinutes);
+    const out: string[] = [];
+    for (let t = start; t <= end && out.length < 96; t += step) {
+      out.push(`${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`);
+    }
+    return out;
+  }, [includeTime, timeMin, timeMax, timeStepMinutes]);
+
+  /** A slot already gone by is not a slot — only ever hidden for *today*. */
+  function slotPassed(day: Date, hhmm: string): boolean {
+    if (!isToday(day)) return false;
+    const now = new Date();
+    const [h = "0", m = "0"] = hhmm.split(":");
+    return Number(h) * 60 + Number(m) <= now.getHours() * 60 + now.getMinutes();
+  }
+
+  if (includeTime && chosenDay) {
+    const open = slots.filter((t) => !slotPassed(chosenDay, t));
+    return (
+      <div className="w-full max-w-[19rem] rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] p-3">
+        <div className="mb-2 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setChosenDay(null)}
+            className="flex items-center gap-1 rounded-full px-1.5 py-1 text-xs opacity-70 transition-opacity hover:opacity-100"
+          >
+            <ChevronLeft className="size-3.5" />
+            {format(chosenDay, "EEE d MMM")}
+          </button>
+          <span className="flex items-center gap-1 text-xs opacity-50">
+            <Clock className="size-3" />
+            Pick a time
+          </span>
+        </div>
+
+        {open.length === 0 ? (
+          <p className="px-1 py-4 text-center text-xs opacity-60">
+            No times left on that day — pick another one.
+          </p>
+        ) : (
+          <div className="grid max-h-56 grid-cols-3 gap-1.5 overflow-y-auto">
+            {open.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() =>
+                  onPick(
+                    `${format(chosenDay, "yyyy-MM-dd")}T${t}`,
+                    `${format(chosenDay, "EEE d MMM yyyy")} at ${formatSlot(t)}`,
+                  )
+                }
+                className="rounded-lg border border-[var(--cf-chip-border)] px-2 py-2 text-xs transition-colors hover:border-transparent hover:bg-[var(--cf-accent)] hover:text-[var(--cf-accent-text)]"
+              >
+                {formatSlot(t)}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -141,4 +234,13 @@ export function DateComposer({
       ) : null}
     </div>
   );
+}
+
+/** 24h in, human out — "14:30" reads as "2:30 pm" to most respondents. */
+function formatSlot(hhmm: string): string {
+  const [h = "0", m = "00"] = hhmm.split(":");
+  const hour = Number(h);
+  const suffix = hour < 12 ? "am" : "pm";
+  const twelve = hour % 12 === 0 ? 12 : hour % 12;
+  return `${twelve}:${m} ${suffix}`;
 }

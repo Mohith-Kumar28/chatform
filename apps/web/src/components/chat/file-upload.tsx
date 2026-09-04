@@ -2,15 +2,30 @@
 
 import { useRef, useState } from "react";
 import { Check, FileUp, Loader2, TriangleAlert, X } from "lucide-react";
+import { uploadToSession, type UploadedFile } from "./upload-transport";
 import { cn } from "@/lib/utils";
+
+interface Item {
+  key: string;
+  name: string;
+  size: number;
+  state: "uploading" | "done" | "error";
+  error?: string;
+  file?: UploadedFile;
+}
 
 /**
  * Upload control.
  *
- * The previous version looked like a drop zone but had no drag handlers, showed
- * no progress, and its "Send file" button called an empty `onSubmit` — the
- * answer only landed because the confirm endpoint records it server-side, so a
- * failed confirm looked identical to a success.
+ * The answer is sent **once**, from here, with every confirmed file in it.
+ *
+ * It used to be the server that recorded the answer, on each `confirm` — which
+ * meant the first of two files answered the question and moved the
+ * conversation on, and the second landed against whatever block came next. Two
+ * files selected together produced one saved, one lost, and a validation error
+ * for a question the respondent had not been asked yet. Collecting the
+ * descriptors here and sending them together is the only shape that matches a
+ * `maxFiles` greater than one.
  */
 export function FileUploadControl({
   accept,
@@ -20,6 +35,7 @@ export function FileUploadControl({
   uploadBase,
   respondentToken,
   disabled,
+  onSubmit,
 }: {
   accept: string[];
   maxFiles: number;
@@ -28,89 +44,65 @@ export function FileUploadControl({
   uploadBase: string;
   respondentToken: string;
   disabled?: boolean;
+  onSubmit: (files: UploadedFile[], display: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  const [items, setItems] = useState<
-    { name: string; size: number; state: "uploading" | "done" | "error"; error?: string }[]
-  >([]);
+  const [items, setItems] = useState<Item[]>([]);
+  /** Ids are generated here so a row can be updated without an index. */
+  const nextKey = useRef(0);
 
   async function upload(files: File[]) {
-    const room = maxFiles - items.filter((i) => i.state !== "error").length;
+    // Read the live count from the updater rather than the render's snapshot:
+    // `items.length` inside a loop is the value from before any of this batch
+    // was added, which is what made two files overwrite the same row.
+    let room = maxFiles;
+    setItems((s) => {
+      room = maxFiles - s.filter((i) => i.state !== "error").length;
+      return s;
+    });
+
     for (const file of files.slice(0, Math.max(0, room))) {
+      const key = `f${nextKey.current++}`;
+      const push = (item: Item) => setItems((s) => [...s, item]);
+      const patch = (changes: Partial<Item>) =>
+        setItems((s) => s.map((it) => (it.key === key ? { ...it, ...changes } : it)));
+
       // Say what is wrong AND what to do about it. "Over 10MB" told the
       // respondent they had failed without telling them how to succeed.
       if (file.size > maxSizeMB * 1024 * 1024) {
-        setItems((s) => [
-          ...s,
-          {
-            name: file.name,
-            size: file.size,
-            state: "error",
-            error: `This one is ${formatSize(file.size)} — the limit is ${maxSizeMB}MB. Try a smaller version, or a screenshot instead.`,
-          },
-        ]);
+        push({
+          key,
+          name: file.name,
+          size: file.size,
+          state: "error",
+          error: `This one is ${formatSize(file.size)} — the limit is ${maxSizeMB}MB. Try a smaller version, or a screenshot instead.`,
+        });
         continue;
       }
       if (accept.length > 0 && file.type && !accept.includes(file.type)) {
-        setItems((s) => [
-          ...s,
-          {
-            name: file.name,
-            size: file.size,
-            state: "error",
-            error: `${describeType(file.type)} files aren't accepted here. Try ${describeAccept(accept)}.`,
-          },
-        ]);
+        push({
+          key,
+          name: file.name,
+          size: file.size,
+          state: "error",
+          error: `${describeType(file.type)} files aren't accepted here. Try ${describeAccept(accept)}.`,
+        });
         continue;
       }
-      const index = items.length;
-      setItems((s) => [...s, { name: file.name, size: file.size, state: "uploading" }]);
 
-      const fail = (error: string) =>
-        setItems((s) => s.map((it, i) => (i === index ? { ...it, state: "error", error } : it)));
-
+      push({ key, name: file.name, size: file.size, state: "uploading" });
       try {
-        const intent = await fetch(`${uploadBase}/intent`, {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-respondent-token": respondentToken },
-          body: JSON.stringify({ ref: blockRef, filename: file.name, mime: file.type, size: file.size }),
-        });
-        if (!intent.ok) {
-          const body = (await intent.json().catch(() => null)) as { error?: { message?: string } } | null;
-          fail(body?.error?.message ?? "Upload rejected");
-          continue;
-        }
-        const { fileId } = (await intent.json()) as { fileId: string };
-
-        const put = await fetch(`${uploadBase}/${fileId}`, {
-          method: "PUT",
-          headers: { "x-respondent-token": respondentToken, "content-type": file.type },
-          body: file,
-        });
-        if (!put.ok) {
-          fail("Upload failed");
-          continue;
-        }
-
-        // Confirm is what actually records the answer — surface its failure
-        // rather than showing a success state regardless.
-        const confirm = await fetch(`${uploadBase}/${fileId}/confirm`, {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-respondent-token": respondentToken },
-          body: JSON.stringify({ ref: blockRef }),
-        });
-        if (!confirm.ok) {
-          fail("Couldn't confirm the upload");
-          continue;
-        }
-        setItems((s) => s.map((it, i) => (i === index ? { ...it, state: "done" } : it)));
-      } catch {
-        fail("Upload failed");
+        const stored = await uploadToSession({ file, blockRef, uploadBase, respondentToken });
+        patch({ state: "done", file: stored });
+      } catch (err) {
+        patch({ state: "error", error: err instanceof Error ? err.message : "Upload failed" });
       }
     }
   }
 
+  const done = items.filter((i) => i.state === "done");
+  const busy = items.some((i) => i.state === "uploading");
   const full = items.filter((i) => i.state !== "error").length >= maxFiles;
 
   return (
@@ -161,9 +153,9 @@ export function FileUploadControl({
 
       {items.length > 0 && (
         <ul className="space-y-1">
-          {items.map((item, i) => (
+          {items.map((item) => (
             <li
-              key={`${item.name}-${i}`}
+              key={item.key}
               className={cn(
                 "rounded-xl border px-3 py-2 text-xs",
                 item.state === "error"
@@ -181,11 +173,11 @@ export function FileUploadControl({
                 )}
                 <span className="min-w-0 flex-1 truncate">{item.name}</span>
                 <span className="shrink-0 opacity-50">{formatSize(item.size)}</span>
-                {item.state === "error" && (
+                {item.state !== "uploading" && (
                   <button
                     type="button"
-                    aria-label="Dismiss"
-                    onClick={() => setItems((s) => s.filter((_, j) => j !== i))}
+                    aria-label={item.state === "error" ? "Dismiss" : `Remove ${item.name}`}
+                    onClick={() => setItems((s) => s.filter((it) => it.key !== item.key))}
                     className="shrink-0 opacity-50 transition-opacity hover:opacity-100"
                   >
                     <X className="size-3.5" />
@@ -198,6 +190,25 @@ export function FileUploadControl({
             </li>
           ))}
         </ul>
+      )}
+
+      {done.length > 0 && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onSubmit(done.map((i) => i.file!), done.map((i) => i.name).join(", "))}
+          className={cn(
+            "h-11 w-full rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)]",
+            "transition-transform duration-[var(--duration-micro)] active:scale-[0.98]",
+            "motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40",
+          )}
+        >
+          {busy
+            ? "Uploading…"
+            : done.length === 1
+              ? "Send this file"
+              : `Send these ${done.length} files`}
+        </button>
       )}
     </div>
   );

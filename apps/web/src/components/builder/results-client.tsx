@@ -21,7 +21,7 @@ import {
   TrendingDown,
   Users,
   ShieldCheck,} from "lucide-react";
-import { formatAmount, type FormDoc } from "@repo/form-schema";
+import { displayAnswer, type Block, type FormDoc } from "@repo/form-schema";
 import {
   useGetApiFormsById,
   useGetApiFormsByIdAnalytics,
@@ -344,7 +344,7 @@ function SubmissionRow({
         )}
         {columns.map((b) => (
           <td key={b.ref} className="max-w-[14rem] truncate px-3 py-2.5">
-            {formatAnswer(byRef.get(b.ref))}
+            {displayCell(b, byRef.get(b.ref))}
           </td>
         ))}
       </tr>
@@ -389,7 +389,7 @@ function SubmissionRow({
                   {columns.map((b) => (
                     <div key={b.ref}>
                       <dt className="text-muted-foreground text-xs">{b.title}</dt>
-                      <dd className="text-sm">{formatAnswer(byRef.get(b.ref)) || "—"}</dd>
+                      <dd className="text-sm">{displayCell(b, byRef.get(b.ref)) || "—"}</dd>
                     </div>
                   ))}
                 </dl>
@@ -629,34 +629,17 @@ function Metric({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function formatAnswer(value: unknown): string {
-  if (value === undefined || value === null) return "";
-  if (Array.isArray(value)) return value.map((v) => formatAnswer(v)).join(", ");
-  if (typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    if ("filename" in record) return String(record.filename);
-    if ("accepted" in record) return record.accepted ? "Accepted" : "Declined";
-    // Payment and booking answers are self-declared. Spelling that out here is
-    // the whole point of the column: a bare "paid" would read as confirmed.
-    if ("status" in record && ("reference" in record || "paymentId" in record)) {
-      const paid = record.status === "paid";
-      const amount =
-        typeof record.amount === "number"
-          ? formatAmount(record.amount, String(record.currency ?? "INR"))
-          : null;
-      return [
-        paid ? "Paid (unverified)" : "Payment pending",
-        amount,
-        record.reference ? `ref ${record.reference}` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ");
-    }
-    if ("provider" in record && "url" in record) {
-      return record.confirmedAt ? "Booked (unverified)" : "Not booked";
-    }
-    return Object.values(record).map(String).join(", ");
-  }
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  return String(value);
+/**
+ * One answer in the table, resolved against its block.
+ *
+ * The old local formatter never saw the block, so it could only print what was
+ * stored: `opt_founder001` for a select, `itm_speed0001, itm_price0001` for a
+ * ranking, and `{"row_ui000001":"col_bad00001"}` for a matrix. `displayAnswer`
+ * has the block and the option lists, and is the same function the respondent's
+ * own review card uses — so what the builder reads in this table is exactly
+ * what the person answering was shown.
+ */
+function displayCell(block: { ref: string; type: string }, value: unknown): string {
+  if (value === undefined || value === null || value === "") return "";
+  return displayAnswer(block as Block, value);
 }

@@ -104,7 +104,10 @@ export function ScaleComposer({
 }) {
   const values = Array.from({ length: max - min + 1 }, (_, i) => min + i);
   return (
-    <div className="space-y-2">
+    // `w-fit`: the anchor labels are justified against the scale, so the row
+    // has to be the width of the scale. Stretched to the column, "Extremely
+    // likely" floated off on its own, hundreds of pixels from the 10.
+    <div className="w-fit max-w-full space-y-2">
       <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Scale">
         {values.map((n) => (
           <button
@@ -125,7 +128,7 @@ export function ScaleComposer({
         ))}
       </div>
       {(labelLow || labelHigh) && (
-        <div className="flex justify-between text-xs opacity-60">
+        <div className="flex justify-between gap-4 text-xs opacity-60">
           <span>{labelLow}</span>
           <span>{labelHigh}</span>
         </div>

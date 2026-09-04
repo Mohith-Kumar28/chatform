@@ -37,26 +37,44 @@ export function ChatClient({
   hiddenFields,
   existingSession,
   previewMode,
+  onRestart,
 }: {
   config: PublicFormConfig;
   hiddenFields?: Record<string, string>;
   existingSession?: { sessionId: string; token: string; eventsUrl: string } | null;
   previewMode?: boolean;
+  /** Preview only: mint a fresh session, since a draft has no public slug. */
+  onRestart?: () => void;
 }) {
   const chat = useChat({
     slug: config.slug,
     apiOrigin: API_ORIGIN,
     hiddenFields,
     existingSession,
+    onRestart,
   });
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
+  /** Read from the resize observer, which must not be rebuilt on every scroll. */
+  const pinnedRef = useRef(true);
+  useEffect(() => {
+    pinnedRef.current = pinned;
+  }, [pinned]);
 
-  // Auto-scroll. There was none at all before, so any conversation longer than
-  // the viewport required manual scrolling after every single turn. We stop
-  // following as soon as the respondent scrolls up, and offer a way back.
+  /**
+   * Auto-scroll. We stop following as soon as the respondent scrolls up, and
+   * offer a way back.
+   *
+   * `chat.resolving` is in the dependency list because the first committed
+   * render is the boot screen, which returns before the thread exists — so this
+   * ran once against a null ref and, with no dependencies, never ran again. The
+   * scroll listener was never attached at all: "Jump to latest" could not
+   * appear, and `pinned` was stuck true no matter where the respondent had
+   * scrolled to.
+   */
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -66,7 +84,7 @@ export function ChatClient({
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [chat.resolving, chat.submitted]);
 
   useEffect(() => {
     if (!pinned) return;
@@ -76,6 +94,32 @@ export function ChatClient({
     // the anchor behind the sticky composer.
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [chat.messages, chat.thinking, chat.question, chat.ending, chat.auth, chat.review, pinned]);
+
+  /**
+   * Follow the thread when it grows *without* a new message.
+   *
+   * Several controls get taller as they are used — a ranking list fills up, a
+   * multi-select reveals its Continue button, a calendar opens its times — and
+   * none of that is a state this effect list can see. The button that finishes
+   * the question would slide under the sticky composer and stay there, and the
+   * respondent had to know to scroll to find it. A resize observer is the only
+   * thing that catches all of them.
+   */
+  useEffect(() => {
+    const el = scrollRef.current;
+    const content = contentRef.current;
+    if (!el || !content || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (!pinnedRef.current) return;
+      // Instant, not smooth. A control growing under the cursor is the same
+      // content reflowing rather than a new turn arriving, and a smooth scroll
+      // that is restarted by the next resize tick lands short — which left the
+      // button that finishes the question a few pixels under the composer.
+      el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, [chat.resolving, chat.submitted]);
 
   // Honour the ending's redirect, which was parsed and then ignored.
   useEffect(() => {
@@ -157,7 +201,7 @@ export function ChatClient({
       />
 
       <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-2xl space-y-3 px-4 py-6">
+        <div ref={contentRef} className="mx-auto w-full max-w-2xl space-y-3 px-4 pt-6 pb-10">
           {/* Screen readers announce new agent messages without stealing focus. */}
           <div className="sr-only" aria-live="polite" aria-atomic="false">
             {chat.messages.filter((m) => m.role === "assistant" && !m.streaming).at(-1)?.text}
@@ -192,11 +236,14 @@ export function ChatClient({
               `animate-message-in` each time. Disabling stops the second tap
               and keeps the row still.
           */}
-          {!chat.ending && chat.question && (
-            <div className="animate-message-in pt-0.5 pl-1">
+          {/* Not while a sign-in gate is up: the server refuses every turn until
+              it is cleared, so chips there are a control that cannot work — and
+              their number keys would fire under the card. */}
+          {!chat.ending && !chat.auth && chat.question && !chat.thinking && (
+            <div key={chat.question.block.ref} className="animate-message-in pt-0.5 pl-1">
               <QuestionAffordance
                 block={chat.question.block}
-                disabled={chat.status === "error" || chat.thinking}
+                disabled={chat.status === "error"}
                 uploadBase={chat.getUploadBase()}
                 respondentToken={chat.getRespondentToken()}
                 onStructured={(value, display) =>
@@ -466,12 +513,27 @@ const Bubble = memo(function Bubble({
       >
         {isUser ? (
           <p className="whitespace-pre-wrap">{message.text}</p>
+        ) : message.streaming ? (
+          /*
+            Half-written markdown is not markdown.
+ 
+            Parsing on every token meant the bubble rendered a literal `**`
+            that then vanished into bold, a `|` that reflowed into a table row,
+            and a heading that jumped a font size — a visible twitch per token,
+            on top of re-parsing the whole message dozens of times a second.
+            Plain text while it streams, parsed once when it lands, is both
+            steadier and far cheaper. The caret sits inside the same block so
+            it trails the last word instead of dropping to a line of its own.
+          */
+          <p className="whitespace-pre-wrap">
+            {message.text}
+            <span className="animate-caret ml-0.5 inline-block align-baseline">▍</span>
+          </p>
         ) : (
           <div className="chat-prose">
             <Markdown remarkPlugins={[remarkGfm]} allowedElements={SAFE_ELEMENTS} unwrapDisallowed>
               {message.text}
             </Markdown>
-            {message.streaming && <span className="animate-caret ml-0.5 inline-block">▍</span>}
           </div>
         )}
       </div>
@@ -808,55 +870,14 @@ function Composer({ chat, config }: { chat: ReturnType<typeof useChat>; config: 
     if (text !== "") setText("");
   }
 
-  /**
-   * Number keys pick an option — including from inside the text box.
-   *
-   * The chips advertise "1", "2", "3", and the handler used to bail the moment
-   * the event came from an INPUT. But the composer takes focus automatically on
-   * every question, so the advertised shortcut typed a digit into the box
-   * instead of choosing anything: press 1 for Android and you get a message
-   * that says "1".
-   *
-   * Hijacking a keystroke inside a text field is only safe when the field is
-   * empty — someone typing "1 or 2 a week" must keep their digits — and only
-   * for questions that have chips to choose from, which is why a `number`,
-   * `rating` or `nps` answer is never affected: those blocks carry no options.
-   */
-  /**
-   * `chatRef`, not `chat`, in the dependency list below.
-   *
-   * `useChat` returns a fresh object every render, and this effect depended on
-   * it — so the listener was torn down and rebound on every single streamed
-   * token. Reading through a ref keeps the subscription alive for as long as
-   * the question it belongs to.
-   */
-  const chatRef = useRef(chat);
-  useEffect(() => {
-    chatRef.current = chat;
-  });
-
-  useEffect(() => {
-    const options = block?.options;
-    const ref = block?.ref;
-    if (!options?.length || !ref || block?.type === "multi_select") return;
-    function onKey(e: KeyboardEvent) {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target as HTMLElement | null;
-      const inField = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
-      if (inField && (target as HTMLInputElement).value !== "") return;
-      const n = Number(e.key);
-      if (!Number.isInteger(n) || n < 1) return;
-      const opt = options![n - 1];
-      if (!opt) return;
-      // An answer is already on its way; a digit now would be a second one.
-      if (chatRef.current.thinking) return;
-      // Claim the keystroke, or the digit lands in the box as well.
-      e.preventDefault();
-      void chatRef.current.sendStructured(ref!, opt.id, opt.label);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [block]);
+  /*
+    Number keys used to be handled here, from a list built off `block.options`.
+    That list did not match what the chips actually advertise — a `yes_no`
+    block has no options, so its "1"/"2" hints did nothing but type a digit
+    into this box — and it could not reach a multi-select's selection state at
+    all. `QuestionAffordance` owns both the hints and the keys now, from one
+    list, so what is shown and what responds cannot drift apart again.
+  */
 
   if (!block) {
     return (

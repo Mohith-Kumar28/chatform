@@ -166,6 +166,41 @@ export function TypeFields({
               onChange={(v) => patch({ max: v || undefined } as Partial<Block>, key("dmax"))}
             />
           </div>
+
+          {/* A date plus a time is an appointment, which is what most people
+              reach for a date question to arrange. Off by default so an
+              existing block keeps storing a plain day. */}
+          <SwitchField
+            label="Also ask for a time"
+            checked={block.includeTime}
+            onChange={(v) => patch({ includeTime: v } as Partial<Block>)}
+          />
+          {block.includeTime && (
+            <div className="grid grid-cols-3 gap-3">
+              <TextField
+                label="From"
+                hint="HH:mm"
+                value={block.timeMin}
+                onChange={(v) => patch({ timeMin: v } as Partial<Block>, key("tmin"))}
+              />
+              <TextField
+                label="To"
+                hint="HH:mm"
+                value={block.timeMax}
+                onChange={(v) => patch({ timeMax: v } as Partial<Block>, key("tmax"))}
+              />
+              <SelectField
+                label="Every"
+                value={String(block.timeStepMinutes)}
+                onChange={(v) => patch({ timeStepMinutes: Number(v) } as Partial<Block>)}
+                options={[
+                  { value: "15", label: "15 min" },
+                  { value: "30", label: "30 min" },
+                  { value: "60", label: "1 hour" },
+                ]}
+              />
+            </div>
+          )}
         </>
       );
 

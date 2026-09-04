@@ -81,6 +81,13 @@ interface UseChatOptions {
   hiddenFields?: Record<string, string>;
   /** Existing session (preview mode) — skips session creation. */
   existingSession?: { sessionId: string; token: string; eventsUrl: string } | null;
+  /**
+   * Mint a fresh preview session. Only meaningful alongside `existingSession`:
+   * a preview cannot create its own session — the draft it runs against is not
+   * published, so there is no public slug to post to — and without this
+   * "Start over" reconnected to the session it was trying to leave.
+   */
+  onRestart?: () => void;
 }
 
 const MAX_RECONNECT_ATTEMPTS = 8;
@@ -167,7 +174,7 @@ function backoffMs(attempt: number): number {
   return base * (0.7 + Math.random() * 0.6);
 }
 
-export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseChatOptions) {
+export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRestart }: UseChatOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState<QuestionState | null>(null);
   const [ending, setEnding] = useState<EndingState | null>(null);
@@ -195,24 +202,51 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
   const [auth, setAuth] = useState<AuthState | null>(null);
   const [identity, setIdentity] = useState<VerifiedIdentity | null>(null);
 
+  /** A preview runs against a draft and must leave no trace on the device. */
+  const ephemeral = Boolean(existingSession);
+
   const sessionRef = useRef<{ sessionId: string; token: string } | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const pendingRef = useRef<Promise<void> | null>(null);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /**
+   * The id of the echo this device is still waiting on a server twin for.
+   *
+   * It used to be enough to look for "any message still marked optimistic",
+   * but an echo only settles when the server accepts the answer — and a
+   * *rejected* answer never produces a `user_message`, so its echo stayed
+   * optimistic forever and the next send inherited its text. That is how
+   * picking "Email, Slack" after a refused "Email, Slack, SMS, WhatsApp"
+   * printed the refused answer as the accepted one, and how a typed message
+   * could vanish into an older bubble entirely. One id, cleared the moment it
+   * is claimed or abandoned, cannot do that.
+   */
+  const pendingEchoRef = useRef<string | null>(null);
+
   const pushMessage = useCallback((msg: ChatMessage) => {
+    // Claimed here, not inside the updater. React runs updaters twice in
+    // development, and a ref cleared on the first run made the second run —
+    // the one whose result is kept — append instead of replace, so every
+    // answer showed up twice: once pale, once solid.
+    // `!msg.optimistic`: the echo must not claim itself. Arming the ref before
+    // pushing the local bubble meant `pushMessage` consumed it on the way in,
+    // leaving nothing for the server's twin to replace — two bubbles per
+    // answer, one pale and one solid.
+    const echoId = msg.role === "user" && !msg.optimistic ? pendingEchoRef.current : null;
+    if (echoId) pendingEchoRef.current = null;
+
     setMessages((prev) => {
       if (prev.some((m) => m.id === msg.id)) return prev;
-      // A server-confirmed user message replaces its optimistic echo rather
-      // than appearing twice.
+      // A server-confirmed user message replaces its own optimistic echo
+      // rather than appearing twice.
       //
       // Matching on text equality was wrong for structured answers: tapping
       // the fourth star echoes "4/5" locally while the server confirms "4", so
-      // nothing matched and both bubbles stayed on screen. There is only ever
-      // one send in flight, so the pending echo is the one to replace — and it
-      // keeps its own label, which says more than the raw value does.
-      if (msg.role === "user") {
-        const echoIndex = prev.findIndex((m) => m.optimistic);
+      // nothing matched and both bubbles stayed on screen. The echo keeps its
+      // own label, which says more than the raw value does.
+      if (echoId) {
+        const echoIndex = prev.findIndex((m) => m.id === echoId);
         if (echoIndex !== -1) {
           const next = [...prev];
           next[echoIndex] = { ...msg, text: prev[echoIndex]!.text || msg.text };
@@ -223,21 +257,68 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
     });
   }, []);
 
+  /** Let go of an echo the server will never confirm, so nothing inherits it. */
+  const settleEcho = useCallback(() => {
+    const id = pendingEchoRef.current;
+    if (!id) return;
+    pendingEchoRef.current = null;
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, optimistic: false } : m)));
+  }, []);
+
   const appendToken = useCallback((messageId: string, delta: string) => {
     setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, text: m.text + delta } : m)));
   }, []);
 
   const reconnectRef = useRef<((sessionId: string, token: string, attempt: number) => void) | null>(null);
 
+  /**
+   * The highest event sequence this device has already applied.
+   *
+   * Every SSE frame carries `id: <seq>`, which the browser hands back as
+   * `lastEventId`. The server replays the whole transcript to any new
+   * connection, so without this a reconnect re-ran every event: tokens
+   * double-appended, which is why the thread used to be wiped (`setMessages([])`)
+   * on connect — and wiping it meant the entire conversation blanked for the
+   * length of a network round trip and then rebuilt itself in front of the
+   * respondent. That blank-and-rebuild is the flicker. Ratcheting on seq makes
+   * replay a no-op instead, so a reconnect is invisible.
+   */
+  const lastSeqRef = useRef(0);
+  /** Which session the current thread was built from. */
+  const streamSessionRef = useRef<string | null>(null);
+
   const connectStream = useCallback(
     (sessionId: string, token: string, attempt: number) => {
       esRef.current?.close();
-      // Replay rebuilds the full transcript from durable DO storage, so local
-      // state is always cleared — otherwise re-streamed tokens double-append.
-      setMessages([]);
+      // Only a *different* conversation starts from an empty thread. Replay of
+      // the same one is deduped by seq below.
+      if (streamSessionRef.current !== sessionId) {
+        streamSessionRef.current = sessionId;
+        lastSeqRef.current = 0;
+        pendingEchoRef.current = null;
+        setMessages([]);
+      }
 
       const es = new EventSource(`${apiOrigin}/p/sessions/${sessionId}/events?t=${token}`);
       esRef.current = es;
+
+      /**
+       * Wrap a listener so an event that has already been applied is dropped.
+       *
+       * SSE is ordered, so a monotonic high-water mark is enough. `session_ready`
+       * and `ping` are per-connection and carry seq 0 — they are never skipped.
+       */
+      const on = (type: string, handler: (e: MessageEvent) => void) => {
+        es.addEventListener(type, (raw) => {
+          const e = raw as MessageEvent;
+          const seq = Number(e.lastEventId);
+          if (Number.isFinite(seq) && seq > 0) {
+            if (seq <= lastSeqRef.current) return;
+            lastSeqRef.current = seq;
+          }
+          handler(e);
+        });
+      };
 
       es.addEventListener("session_ready", () => {
         setStatus("ready");
@@ -245,7 +326,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
         setResolving(false);
       });
 
-      es.addEventListener("user_message", (e) => {
+      on("user_message", (e) => {
         const { messageId, text, blockRef } = JSON.parse((e as MessageEvent).data) as {
           messageId: string;
           text: string;
@@ -254,51 +335,71 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
         pushMessage({ id: messageId, role: "user", text, answeredRef: blockRef });
       });
 
-      // The server confirms which question an answer landed against; attach it
-      // to the most recent user message so it can be edited.
-      es.addEventListener("answer_recorded", (e) => {
-        const { ref } = JSON.parse((e as MessageEvent).data) as { ref: string };
+      /**
+       * The server confirms which question an answer landed against, so the
+       * bubble can offer "change this answer".
+       *
+       * It names the message explicitly. Guessing — "the last user message
+       * without a ref" — walked backwards past the answer it meant whenever an
+       * earlier turn had failed validation, and pinned the pencil to the wrong
+       * bubble.
+       */
+      on("answer_recorded", (e) => {
+        const { ref, messageId } = JSON.parse((e as MessageEvent).data) as {
+          ref: string;
+          messageId?: string;
+        };
         setMessages((prev) => {
-          const idx = [...prev].reverse().findIndex((m) => m.role === "user" && !m.answeredRef);
+          const idx = messageId
+            ? prev.findIndex((m) => m.id === messageId)
+            : (() => {
+                const r = [...prev].reverse().findIndex((m) => m.role === "user" && !m.answeredRef);
+                return r === -1 ? -1 : prev.length - 1 - r;
+              })();
           if (idx === -1) return prev;
-          const realIdx = prev.length - 1 - idx;
           const next = [...prev];
-          next[realIdx] = { ...next[realIdx]!, answeredRef: ref };
+          next[idx] = { ...next[idx]!, answeredRef: ref };
           return next;
         });
       });
 
-      es.addEventListener("message_start", (e) => {
+      on("message_start", (e) => {
         const { messageId } = JSON.parse((e as MessageEvent).data) as { messageId: string };
         setThinking(false);
         pushMessage({ id: messageId, role: "assistant", text: "", streaming: true });
       });
 
-      es.addEventListener("token", (e) => {
+      on("token", (e) => {
         const { messageId, delta } = JSON.parse((e as MessageEvent).data) as { messageId: string; delta: string };
         appendToken(messageId, delta);
       });
 
-      es.addEventListener("message_end", (e) => {
+      on("message_end", (e) => {
         const { messageId } = JSON.parse((e as MessageEvent).data) as { messageId: string };
         setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, streaming: false } : m)));
       });
 
-      es.addEventListener("question", (e) => {
+      on("question", (e) => {
         const data = JSON.parse((e as MessageEvent).data) as QuestionState;
         setQuestion(data);
         setThinking(false);
         setEscalatedRef(null);
         setValidationHint(null);
+        // A new question means the last one is behind us; a "slow down" notice
+        // that outlived it is just noise.
+        setRateLimited(null);
       });
 
-      es.addEventListener("validation_error", (e) => {
+      on("validation_error", (e) => {
         const { message } = JSON.parse((e as MessageEvent).data) as { message: string };
         setValidationHint(message);
         setThinking(false);
+        // A refused answer never gets a server twin. Settle its echo here or it
+        // stays pale forever and the next answer inherits its text.
+        settleEcho();
       });
 
-      es.addEventListener("upload_request", (e) => {
+      on("upload_request", (e) => {
         const data = JSON.parse((e as MessageEvent).data) as Partial<UploadSpec> & { ref: string };
         setUploadSpec({
           ref: data.ref,
@@ -308,31 +409,31 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
         });
       });
 
-      es.addEventListener("upload_received", () => setUploadSpec(null));
+      on("upload_received", () => setUploadSpec(null));
 
-      es.addEventListener("escalate_ui", (e) => {
+      on("escalate_ui", (e) => {
         const { ref } = JSON.parse((e as MessageEvent).data) as { ref: string };
         setEscalatedRef(ref);
         setThinking(false);
       });
 
-      es.addEventListener("branch_jump", () => setThinking(true));
+      on("branch_jump", () => setThinking(true));
 
       // Declared in lib/events.ts and previously never emitted by the server
       // and never listened for here.
-      es.addEventListener("error_event", (e) => {
+      on("error_event", (e) => {
         const { message } = JSON.parse((e as MessageEvent).data) as { message?: string };
         setError(message ?? "Something went wrong");
         setThinking(false);
       });
 
-      es.addEventListener("rate_limited", (e) => {
+      on("rate_limited", (e) => {
         const { message } = JSON.parse((e as MessageEvent).data) as { message?: string };
         setRateLimited(message ?? "You're going a bit fast — give it a moment.");
         setThinking(false);
       });
 
-      es.addEventListener("auth_required", (e) => {
+      on("auth_required", (e) => {
         const data = JSON.parse((e as MessageEvent).data) as AuthState;
         // Replay re-delivers this on every reconnect. Keep whatever step the
         // card had reached — re-mounting it at "enter your number" would throw
@@ -343,7 +444,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
         setThinking(false);
       });
 
-      es.addEventListener("auth_verified", (e) => {
+      on("auth_verified", (e) => {
         const who = JSON.parse((e as MessageEvent).data) as VerifiedIdentity;
         setIdentity(who);
         setAuth(null);
@@ -355,13 +456,13 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
         );
       });
 
-      es.addEventListener("review", (e) => {
+      on("review", (e) => {
         setReview(JSON.parse((e as MessageEvent).data) as ReviewState);
         setQuestion(null);
         setThinking(false);
       });
 
-      es.addEventListener("ending", (e) => {
+      on("ending", (e) => {
         const { ending } = JSON.parse((e as MessageEvent).data) as { ending: EndingState };
         setEnding(ending);
         setQuestion(null);
@@ -369,13 +470,20 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
         setThinking(false);
       });
 
-      es.addEventListener("complete", () => {
+      on("complete", () => {
         setStatus("ended");
         // The active session is done, but remember that this device answered —
         // a return visit should say so rather than silently starting over.
+        //
+        // Except in a preview, which is a rehearsal: its slug is derived from
+        // the draft's title, so recording it here both collided with the real
+        // published form on this device and made the builder's second preview
+        // open on "You've already answered this".
         const finished = sessionRef.current;
-        clearSaved(slug);
-        if (finished) markSubmitted(slug, finished);
+        if (!ephemeral) {
+          clearSaved(slug);
+          if (finished) markSubmitted(slug, finished);
+        }
         es.close();
       });
 
@@ -394,7 +502,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
         }
       };
     },
-    [apiOrigin, appendToken, pushMessage, slug],
+    [apiOrigin, appendToken, ephemeral, pushMessage, settleEcho, slug],
   );
 
   useEffect(() => {
@@ -513,25 +621,30 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
         if (res.status === 429) {
           setRateLimited("You're going a bit fast — give it a moment.");
           setThinking(false);
+          settleEcho();
         } else if (!res.ok) {
           // Any other refusal. `thinking` gates the question's controls now, so
           // leaving it true on a 4xx would hide the chips with nothing coming
           // back.
           setThinking(false);
+          settleEcho();
         }
       } catch {
         setThinking(false);
         setError("That didn't send. Check your connection and try again.");
+        settleEcho();
       }
     },
-    [apiOrigin],
+    [apiOrigin, settleEcho],
   );
 
   const send = useCallback(
     async (text: string) => {
       // Echo locally so the bubble appears the instant they hit send; the
-      // server's `user_message` event replaces it on arrival.
-      pushMessage({ id: `local_${crypto.randomUUID()}`, role: "user", text, optimistic: true });
+      // server's `user_message` event replaces this exact id on arrival.
+      const id = `local_${crypto.randomUUID()}`;
+      pendingEchoRef.current = id;
+      pushMessage({ id, role: "user", text, optimistic: true });
       setThinking(true);
       setValidationHint(null);
       await post("messages", { type: "text", text });
@@ -544,7 +657,9 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
       // `display` used to be discarded (`void display`), so tapping a chip
       // showed nothing until the server echoed it back.
       if (display) {
-        pushMessage({ id: `local_${crypto.randomUUID()}`, role: "user", text: display, optimistic: true });
+        const id = `local_${crypto.randomUUID()}`;
+        pendingEchoRef.current = id;
+        pushMessage({ id, role: "user", text: display, optimistic: true });
       }
       setThinking(true);
       setValidationHint(null);
@@ -574,6 +689,31 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
 
   /** Abandon this attempt and begin a fresh one. */
   const startOver = useCallback(async () => {
+    if (ephemeral) {
+      // A preview cannot create its own session; its owner does. Everything
+      // local is cleared here and the new session arrives as a prop.
+      esRef.current?.close();
+      esRef.current = null;
+      streamSessionRef.current = null;
+      lastSeqRef.current = 0;
+      pendingEchoRef.current = null;
+      setMessages([]);
+      setQuestion(null);
+      setEnding(null);
+      setReview(null);
+      setAuth(null);
+      setIdentity(null);
+      setError(null);
+      setRateLimited(null);
+      setValidationHint(null);
+      setUploadSpec(null);
+      setEscalatedRef(null);
+      setThinking(false);
+      setResolving(true);
+      setStatus("connecting");
+      onRestart?.();
+      return;
+    }
     clearSaved(slug);
     clearSubmitted(slug);
     setResolving(true);
@@ -581,7 +721,15 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
     sessionRef.current = null;
     esRef.current?.close();
     esRef.current = null;
+    streamSessionRef.current = null;
+    lastSeqRef.current = 0;
+    pendingEchoRef.current = null;
     setMessages([]);
+    setRateLimited(null);
+    setValidationHint(null);
+    setUploadSpec(null);
+    setEscalatedRef(null);
+    setThinking(false);
     setQuestion(null);
     setEnding(null);
     setReview(null);
@@ -591,7 +739,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession }: UseC
     setError(null);
     setStatus("connecting");
     await start();
-  }, [slug, start]);
+  }, [ephemeral, onRestart, slug, start]);
 
   /**
    * Sign-in calls, which differ from every other client → server call here:

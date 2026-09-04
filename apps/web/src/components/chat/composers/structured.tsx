@@ -26,13 +26,17 @@ const CONTACT_LABELS: Record<string, { label: string; type: string; inputMode?: 
 
 export function FieldsComposer({
   fields,
+  required,
   onSubmit,
 }: {
   fields: readonly string[];
+  /** A required record needs every field, which is what the server enforces. */
+  required?: boolean;
   onSubmit: (value: Record<string, string>, display: string) => void;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const filled = fields.filter((f) => values[f]?.trim());
+  const missing = required ? fields.filter((f) => !values[f]?.trim()) : [];
 
   return (
     <div className="space-y-2">
@@ -53,9 +57,14 @@ export function FieldsComposer({
           );
         })}
       </div>
+      {missing.length > 0 && filled.length > 0 && (
+        <p className="px-1 text-xs opacity-55">
+          Still needed: {missing.map((f) => (CONTACT_LABELS[f]?.label ?? f).toLowerCase()).join(", ")}.
+        </p>
+      )}
       <button
         type="button"
-        disabled={filled.length === 0}
+        disabled={filled.length === 0 || missing.length > 0}
         onClick={() => {
           const clean = Object.fromEntries(
             Object.entries(values).filter(([, v]) => v.trim()).map(([k, v]) => [k, v.trim()]),

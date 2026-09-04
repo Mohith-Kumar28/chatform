@@ -116,7 +116,15 @@ export function PreviewChat({
         )}
         {session && (
           <div className="min-h-0 flex-1">
-            <ChatClient config={config} existingSession={session} previewMode />
+            <ChatClient
+              config={config}
+              existingSession={session}
+              previewMode
+              // "Start over" inside the conversation needs a new session, and
+              // only this component can ask for one — the draft it runs against
+              // is not published, so there is no public slug to post to.
+              onRestart={() => setNonce((n) => n + 1)}
+            />
           </div>
         )}
       </div>
