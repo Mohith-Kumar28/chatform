@@ -97,16 +97,20 @@
     {
       "name": "RATE_LIMIT",
       "namespace_id": "1001",
+      // 10/s. A server integration writing a batch of responses legitimately
+      // bursts well past two per second — the sustained per-key window on the
+      // key row is where a customer-visible limit belongs, not here.
       "simple": {
-        "limit": 20,
+        "limit": 100,
         "period": 10
       }
     },
     {
       "name": "RATE_LIMIT_PK",
       "namespace_id": "1002",
+      // Browser traffic is one window per respondent on a page that may be busy.
       "simple": {
-        "limit": 200,
+        "limit": 600,
         "period": 10
       }
     }

@@ -12,6 +12,7 @@ import { entitlementsFor, requireScope, type AuthzVars } from "../lib/authorize.
 import { meter } from "../lib/entitlements.js";
 import { featureLocked, limitReached } from "@repo/entitlements";
 import type { SessionDO } from "../do/session-do.js";
+import { responsesRouter } from "./v1/responses.js";
 
 /**
  * Developer API v1 — API-key auth, headless chat contract.
@@ -92,6 +93,15 @@ const assertSessionOwnership: MiddlewareHandler<{ Bindings: Bindings; Variables:
 
 v1Router.use("/chat/sessions/:sid", assertSessionOwnership);
 v1Router.use("/chat/sessions/:sid/*", assertSessionOwnership);
+
+/**
+ * The response lifecycle: open, answer into, complete.
+ *
+ * Mounted on the same router so it inherits the whole middleware chain —
+ * telemetry, burst limiting, verification, the feature gate and the meter —
+ * rather than re-declaring any of it.
+ */
+v1Router.route("/", responsesRouter);
 
 // ─── forms (read) ───
 

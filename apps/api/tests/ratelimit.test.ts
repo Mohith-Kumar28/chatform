@@ -102,7 +102,9 @@ describe("edge burst layer", () => {
     async () => {
       const key = await seedKey(t, "rlburst", { rateLimitMax: 10_000 });
       let sawBurst = false;
-      for (let i = 0; i < 40; i++) {
+      // The binding allows 100 per 10s; the per-key window is set high enough
+      // that anything we see here came from the edge layer, not from it.
+      for (let i = 0; i < 140; i++) {
         const res = await fetchApi("/v1/forms", { headers: { "x-api-key": key.raw } });
         if (res.status === 429) {
           const body = (await res.json()) as { error: { scope: string } };
@@ -112,5 +114,6 @@ describe("edge burst layer", () => {
       }
       expect(sawBurst).toBe(true);
     },
+    30_000,
   );
 });

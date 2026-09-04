@@ -29,7 +29,7 @@ async function bucketFor(presented: string): Promise<string> {
 
 function tooMany(c: Parameters<MiddlewareHandler>[0], seconds: number, scope: "burst" | "ip") {
   c.header("retry-after", String(seconds));
-  c.header("ratelimit-policy", `20;w=10`);
+  c.header("ratelimit-policy", scope === "burst" ? "100;w=10" : "");
   return c.json(
     { error: { code: "rate_limited", message: "Too many requests", scope } },
     429,
