@@ -22,7 +22,7 @@ export const ErrorEnvelope = z.object({
 });
 
 /** Mounts GET /openapi.json generating the spec from described routes. */
-export function mountOpenApiSpec(app: Hono<{ Bindings: Bindings }>) {
+export function mountOpenApiSpec(app: Hono<{ Bindings: Bindings; Variables: Record<string, unknown> }>) {
   app.get(
     "/openapi.json",
     openAPIRouteHandler(app, {

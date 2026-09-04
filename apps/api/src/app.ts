@@ -18,9 +18,18 @@ import { previewRouter } from "./routes/preview.js";
 import { templatesRouter } from "./routes/templates.js";
 import { auditRouter } from "./routes/audit.js";
 import { mountOpenApiSpec } from "./lib/openapi.js";
+import { requestId, type RequestIdVars } from "./lib/request-id.js";
+import { attachErrorContext } from "./lib/api-error.js";
 
 export function createApp() {
-  const app = new Hono<{ Bindings: Bindings }>();
+  const app = new Hono<{ Bindings: Bindings; Variables: Partial<RequestIdVars> }>();
+
+  /**
+   * First, and on every path. Registered before the routers so a 404 from
+   * `notFound` and a 500 from `onError` carry a correlation id too — those are
+   * the responses a support conversation actually starts from.
+   */
+  app.use("*", requestId);
 
   app.use(
     "/p/*",
@@ -44,9 +53,46 @@ export function createApp() {
     }),
   );
 
+  /**
+   * `/v1` is the only surface a third-party server calls, so it is the only one
+   * that needs CORS at all — and it needs it because publishable (`pk_`) keys
+   * are used from a browser.
+   *
+   * The origin is reflected rather than allowlisted here, and that is
+   * deliberate: a preflight carries no key, so this layer cannot know which
+   * origins a given key permits. CORS is not the security boundary — the
+   * per-key origin allowlist checked in `requireApiKey` is, and it refuses the
+   * real request. Credentials stay off: a key is a bearer token, and cookies
+   * have no business on this surface.
+   */
+  app.use(
+    "/v1/*",
+    cors({
+      origin: (origin) => origin ?? "*",
+      allowHeaders: ["content-type", "authorization", "x-api-key", "idempotency-key", "x-request-id"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      exposeHeaders: [
+        "retry-after",
+        "x-request-id",
+        "ratelimit-limit",
+        "ratelimit-remaining",
+        "ratelimit-reset",
+        "ratelimit-policy",
+        "idempotency-replayed",
+      ],
+      maxAge: 86400,
+    }),
+  );
+
+  /** Every `/v1` error body leaves with a request id and a link to its docs. */
+  app.use("/v1/*", async (c, next) => {
+    await next();
+    await attachErrorContext(c);
+  });
+
   app.notFound((c) => c.json({ error: { code: "not_found", message: "Route not found" } }, 404));
   app.onError((err, c) => {
-    console.error("unhandled_error", err);
+    console.error("unhandled_error", { requestId: c.get("requestId"), path: c.req.path }, err);
     return c.json({ error: { code: "internal_error", message: "Internal server error" } }, 500);
   });
 

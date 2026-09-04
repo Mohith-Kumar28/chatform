@@ -29,6 +29,13 @@
       "when": 1787803098149,
       "tag": "0003_watery_vanisher",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788501517523,
+      "tag": "0004_soft_sunspot",
+      "breakpoints": true
     }
   ]
 }

@@ -224,12 +224,48 @@ export const submissions = sqliteTable(
     respondentEmail: text("respondent_email"),
     respondentPhone: text("respondent_phone"),
     respondentName: text("respondent_name"),
+    /**
+     * Which surface produced this response: the hosted/embedded chat, or the
+     * developer API.
+     *
+     * The dashboard's funnel defaults to `chat` because that is what its numbers
+     * have always meant — one bulk import through the API would otherwise move a
+     * completion rate the customer reads as a product metric.
+     */
+    source: text("source").notNull().default("chat"),
+    /**
+     * Written by an API key minted with a `*_test_` prefix. Test rows are real
+     * rows — same tables, same validation — but they are excluded from metering,
+     * webhooks and analytics, and swept after a week. A test mode that only
+     * changed a label would be a promise the product does not keep.
+     */
+    isTest: bool("is_test").notNull().default(false),
+    /**
+     * Last touch, answer or status change alike.
+     *
+     * Without it there is no `updated_since` filter, no cursor that can order by
+     * recency, and no way to tell a partial that has settled from one being
+     * written to right now — which is what the partial webhook throttles on.
+     */
+    updatedAt: ts("updated_at"),
+    /**
+     * When an unfinished API response should be abandoned. Null on the chat
+     * path, where the session Durable Object's idle alarm owns that decision.
+     */
+    expiresAt: ts("expires_at"),
+    /** Attribution, and what makes a leaked key's traffic identifiable. */
+    apiKeyId: text("api_key_id"),
+    /** Last time a `response.partial` webhook went out for this row. */
+    partialNotifiedAt: ts("partial_notified_at"),
     startedAt: ts("started_at").notNull().$defaultFn(() => new Date()),
     completedAt: ts("completed_at"),
     durationMs: integer("duration_ms"),
   },
   (t) => [
     index("idx_submissions_form_status").on(t.formId, t.status, t.startedAt),
+    index("idx_submissions_form_updated").on(t.formId, t.updatedAt),
+    index("idx_submissions_form_source").on(t.formId, t.source, t.startedAt),
+    index("idx_submissions_expiry").on(t.status, t.expiresAt),
     index("idx_submissions_org_started").on(t.organizationId, t.startedAt),
     index("idx_submissions_form_fp").on(t.formId, t.fingerprint),
     // Backs `requireAuth.onePerIdentity`: one lookup, not a table scan.
@@ -306,6 +342,12 @@ export const chatSessions = sqliteTable(
     meta: text("meta"),
     /** JSON `RespondentIdentity`, set once the sign-in gate is satisfied. */
     respondentIdentity: text("respondent_identity"),
+    /** `chat` | `embed` | `api` — mirrors `submissions.source`. */
+    source: text("source").notNull().default("chat"),
+    /** Set when the session was opened with a `*_test_` API key. */
+    isTest: bool("is_test").notNull().default(false),
+    /** Last respondent-token rotation, for the audit trail. */
+    tokenRotatedAt: ts("token_rotated_at"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
     lastActivityAt: ts("last_activity_at").notNull().$defaultFn(() => new Date()),
     expiresAt: ts("expires_at"),
@@ -314,6 +356,7 @@ export const chatSessions = sqliteTable(
     index("idx_chat_sessions_form_activity").on(t.formId, t.lastActivityAt),
     index("idx_chat_sessions_status").on(t.status),
     index("idx_chat_sessions_org_created").on(t.organizationId, t.createdAt),
+    index("idx_chat_sessions_expiry").on(t.status, t.expiresAt),
   ],
 );
 
@@ -378,6 +421,15 @@ export const webhookDeliveries = sqliteTable(
     webhookId: text("webhook_id").notNull().references(() => webhooks.id, { onDelete: "cascade" }),
     eventType: text("event_type").notNull(),
     payload: text("payload").notNull(),
+    /**
+     * The original queue message, verbatim.
+     *
+     * The retry sweep used to rebuild a message from the delivery row and got it
+     * wrong — it hardcoded `submission.completed` and dropped the submission id,
+     * so a retried abandonment was redelivered as a completion with no payload.
+     * Storing the message means a retry re-sends what was actually sent.
+     */
+    messageJson: text("message_json"),
     attempt: integer("attempt").notNull().default(0),
     status: text("status").notNull().default("pending"),
     responseStatus: integer("response_status"),
@@ -645,10 +697,59 @@ export const idempotencyKeys = sqliteTable(
     id: text("id").primaryKey(),
     organizationId: text("organization_id").notNull(),
     endpoint: text("endpoint").notNull(),
+    /**
+     * The caller's `Idempotency-Key` header, not a hash of anything.
+     *
+     * The column name predates the feature and is left alone: renaming a column
+     * in D1 means a table rebuild, which is not worth it for a name. `bodyHash`
+     * below is the actual digest, and comparing it is what turns "same key,
+     * different request" into an error instead of a wrong replay.
+     */
     requestHash: text("request_hash").notNull(),
+    bodyHash: text("body_hash"),
     responseStatus: integer("response_status"),
     responseBody: text("response_body"),
+    expiresAt: ts("expires_at"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
   },
-  (t) => [uniqueIndex("uq_idem_endpoint_key_org").on(t.endpoint, t.requestHash, t.organizationId)],
+  (t) => [
+    uniqueIndex("uq_idem_endpoint_key_org").on(t.endpoint, t.requestHash, t.organizationId),
+    index("idx_idem_expires").on(t.expiresAt),
+  ],
+);
+
+/**
+ * Asynchronous response exports.
+ *
+ * The synchronous CSV route is fine for a dashboard click on a few hundred rows
+ * and wrong for an API caller with a hundred thousand: a Worker has a wall-clock
+ * budget and the caller has a timeout. `Q_EXPORTS` has been declared with a
+ * consumer since the beginning and has never had a producer — this is it.
+ */
+export const exports = sqliteTable(
+  "exports",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    formId: text("form_id").notNull().references(() => forms.id, { onDelete: "cascade" }),
+    /** Who asked. A user id for a dashboard export, an api key id for a programmatic one. */
+    requestedBy: text("requested_by"),
+    actorType: text("actor_type").notNull().default("user"),
+    format: text("format").notNull().default("csv"),
+    /** The query this export froze, so a re-run means the same thing. */
+    filtersJson: text("filters_json"),
+    status: text("status").notNull().default("queued"),
+    r2Key: text("r2_key"),
+    rowCount: integer("row_count"),
+    bytes: integer("bytes"),
+    error: text("error"),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+    completedAt: ts("completed_at"),
+    /** Exports hold respondent data, so they are not kept indefinitely. */
+    expiresAt: ts("expires_at"),
+  },
+  (t) => [
+    index("idx_exports_org_created").on(t.organizationId, t.createdAt),
+    index("idx_exports_expiry").on(t.status, t.expiresAt),
+  ],
 );

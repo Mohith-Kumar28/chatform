@@ -15,6 +15,7 @@ import {
   extractionSchema,
   extractionGuidance,
   resolveEnding,
+  displayAnswer as summarizeAnswer,
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { ServerEvent, SSEEnvelope } from "../lib/events.js";
@@ -34,6 +35,13 @@ import {
 } from "../lib/agent-prompts.js";
 import { buildAgentTools, type ToolOutcome } from "./agent-tools.js";
 import { meter } from "../lib/entitlements.js";
+import {
+  openResponse,
+  recordAnswerRow,
+  deleteAnswerRow,
+  finalizeResponse,
+  type ResponseOwner,
+} from "../lib/submissions.js";
 import type { RespondentIdentity, RespondentAuthMethod } from "@repo/form-schema";
 import { streamText, stepCountIs } from "ai";
 
@@ -56,6 +64,18 @@ interface DoSessionMeta {
   completedAt?: number | null;
   /** Set once the sign-in gate is satisfied. Null while it still blocks. */
   identity?: RespondentIdentity | null;
+  /**
+   * Which surface opened this session.
+   *
+   * Optional, and defaulted to `"chat"` when read: sessions persisted before
+   * this field existed read back without it, and a DO storage migration for a
+   * value that is `"chat"` in every historical case would be ceremony.
+   */
+  source?: "chat" | "embed" | "api";
+  /** Opened with a `*_test_` API key: real rows, excluded from every count. */
+  isTest?: boolean;
+  /** Which ending the conversation reached, once it has. */
+  endingRef?: string | null;
 }
 
 /** The single `"session"` storage blob. Everything here survives eviction. */
@@ -115,6 +135,8 @@ export class SessionDO extends DurableObject<Bindings> {
   /** Ending awaiting an explicit submit, when `requireSubmit` is on. */
   private pendingEndingRef: string | null = null;
   private pendingUserTextPersisted = false;
+  /** The transcript row an in-flight answer belongs to, so `answer_recorded` can name it. */
+  private pendingUserMessageId: string | null = null;
 
   // ────────────────────────── lifecycle ──────────────────────────
 
@@ -610,9 +632,7 @@ export class SessionDO extends DurableObject<Bindings> {
     const submissionId = await this.ctx.storage.get<string>("submission_id");
     if (!submissionId) return;
     try {
-      await this.env.DB.prepare(`DELETE FROM submission_answers WHERE submission_id = ? AND block_ref = ?`)
-        .bind(submissionId, ref)
-        .run();
+      await deleteAnswerRow(this.owner(), submissionId, ref);
     } catch (err) {
       console.error("unproject_failed", err);
     }
@@ -694,9 +714,11 @@ export class SessionDO extends DurableObject<Bindings> {
       const msgId = await this.appendMessage("user", input.text);
       await this.emit("user_message", { messageId: msgId, text: input.text });
       this.pendingUserTextPersisted = true;
+      this.pendingUserMessageId = msgId;
       return this.handleFreeText(input.text);
     }
     this.pendingUserTextPersisted = false;
+    this.pendingUserMessageId = null;
     return this.handleStructured(input.ref, input.value);
   }
 
@@ -846,6 +868,22 @@ export class SessionDO extends DurableObject<Bindings> {
   private async record(block: Block, raw: unknown): Promise<{ accepted: boolean; error?: string }> {
     const result = validateAnswer(block, raw);
     if (!result.ok) {
+      /**
+       * A refused answer is still something the respondent said.
+       *
+       * Only accepted answers used to be echoed, so a rejected chip selection
+       * produced no `user_message` at all — leaving the client's local echo
+       * with nothing to settle against. It stayed pending forever, and the
+       * next answer replaced it and inherited its text, so the transcript
+       * showed the refused answer as though it had been accepted. Echoing the
+       * attempt keeps the thread honest and gives that echo its twin.
+       */
+      if (!this.pendingUserTextPersisted) {
+        const attempt = summarizeAnswer(block, raw);
+        const echoId = await this.appendMessage("user", attempt, block.ref);
+        await this.emit("user_message", { messageId: echoId, text: attempt, blockRef: block.ref });
+      }
+      this.pendingUserTextPersisted = false;
       return this.recordInvalid(block, result.code ?? "invalid", result.hint ?? "That answer doesn't look right.");
     }
     if (result.value !== undefined) {
@@ -855,16 +893,21 @@ export class SessionDO extends DurableObject<Bindings> {
     this.invalidCounts.delete(block.ref);
     const echo = summarizeAnswer(block, result.value);
     this.lastAnswerDisplay = echo;
+    let answerMessageId = this.pendingUserMessageId;
     if (!this.pendingUserTextPersisted) {
-      const echoId = await this.appendMessage("user", echo);
-      await this.emit("user_message", { messageId: echoId, text: echo });
+      answerMessageId = await this.appendMessage("user", echo, block.ref);
+      await this.emit("user_message", { messageId: answerMessageId, text: echo, blockRef: block.ref });
     }
     this.pendingUserTextPersisted = false;
+    this.pendingUserMessageId = null;
 
     // apply logic + persist
     const next = resolveNext(this.doc!, block.ref, this.state);
     await this.persistMeta();
-    await this.emit("answer_recorded", { ref: block.ref, pct: this.progressPct() });
+    // Name the message this answer belongs to. The client used to guess "the
+    // last user message with no ref", which walked past the right one whenever
+    // an earlier turn had been refused.
+    await this.emit("answer_recorded", { ref: block.ref, pct: this.progressPct(), messageId: answerMessageId });
 
     // projection write (async, non-blocking for the stream)
     this.ctx.waitUntil(this.projectAnswer(block, result.value));
@@ -1109,14 +1152,28 @@ export class SessionDO extends DurableObject<Bindings> {
     await this.persistMeta();
   }
 
-  /** Called by the uploads confirm route — emits upload_received and records the answer. */
+  /**
+   * Called by the uploads confirm route once a file body is safely in R2.
+   *
+   * It used to record the answer itself, with `[file]` — the single file that
+   * had just landed. That was wrong in two ways on a block that accepts more
+   * than one: the first confirm answered the question and advanced the
+   * conversation, so the second file arrived while the *next* block was
+   * current and was either recorded against it or rejected against it. Anyone
+   * who selected two files at once got one saved, one lost, and a validation
+   * error for a question they had not been asked yet.
+   *
+   * So this now only acknowledges the file. The client collects the
+   * descriptors it gets back from confirm and sends one structured answer when
+   * the respondent is done, which is also what makes a signature — an upload
+   * that carries a typed name alongside it — expressible at all.
+   */
   async notifyUpload(fileId: string, file: { fileId: string; filename: string; mime: string; size: number; r2Key: string }): Promise<void> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta || !this.doc || this.meta.status !== "active") return;
     const block = await this.currentBlock();
     if (!block) return;
     await this.emit("upload_received", { ref: block.ref, fileId, filename: file.filename });
-    await this.record(block, [file]);
   }
 
   async getStatus(): Promise<{
@@ -1182,30 +1239,38 @@ export class SessionDO extends DurableObject<Bindings> {
     return [...entries.values()].sort((a, b) => a.createdAt - b.createdAt);
   }
 
+  /**
+   * The response row this session writes to, shared with the developer API.
+   *
+   * The DO keeps its `submission_id` storage key as the memo — an id that
+   * survives isolate eviction is the whole reason this is idempotent — and the
+   * insert itself lives in `lib/submissions.ts` so the two surfaces cannot
+   * drift apart.
+   */
+  private owner(): ResponseOwner {
+    if (!this.meta) throw new Error("no meta");
+    return {
+      env: this.env,
+      formId: this.meta.formId,
+      formVersionId: this.meta.formVersionId,
+      organizationId: this.meta.organizationId,
+      sessionId: this.meta.sessionId,
+      source: this.meta.source ?? "chat",
+      isTest: this.meta.isTest === true,
+    };
+  }
+
   private async ensureSubmissionRow(): Promise<string> {
     if (!this.meta) throw new Error("no meta");
     const existing = await this.ctx.storage.get<string>("submission_id");
     if (existing) return existing;
-    const id = `sbm_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
-    await this.env.DB.prepare(
-      `INSERT INTO submissions (id, form_id, form_version_id, organization_id, session_id, status, hidden_fields, meta, started_at)
-       VALUES (?, ?, ?, ?, ?, 'in_progress', ?, ?, ?)`,
-    )
-      .bind(
-        id,
-        this.meta.formId,
-        this.meta.formVersionId,
-        this.meta.organizationId,
-        this.meta.sessionId,
-        JSON.stringify(this.meta.hiddenFields),
-        JSON.stringify({
-          userAgent: this.meta.userAgent,
-          country: this.meta.country,
-          variables: this.state.variables,
-        }),
-        this.meta.startedAt,
-      )
-      .run();
+    const id = await openResponse(this.owner(), {
+      hiddenFields: this.meta.hiddenFields,
+      variables: this.state.variables,
+      userAgent: this.meta.userAgent,
+      country: this.meta.country,
+      startedAt: this.meta.startedAt,
+    });
     await this.ctx.storage.put("submission_id", id);
     return id;
   }
@@ -1215,23 +1280,7 @@ export class SessionDO extends DurableObject<Bindings> {
       if (!this.meta) return;
       if (this.meta.formVersionId === "preview") return; // preview sessions never project to D1
       const submissionId = await this.ensureSubmissionRow();
-      const numeric = typeof value === "number" ? value : null;
-      await this.env.DB.prepare(
-        `INSERT INTO submission_answers (id, submission_id, form_id, block_ref, block_type, value_json, value_number, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (submission_id, block_ref) DO UPDATE SET value_json = excluded.value_json, value_number = excluded.value_number, updated_at = excluded.updated_at`,
-      )
-        .bind(
-          `ans_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`,
-          submissionId,
-          this.meta.formId,
-          block.ref,
-          block.type,
-          JSON.stringify(value),
-          numeric,
-          Date.now(),
-        )
-      .run();
+      await recordAnswerRow(this.owner(), { responseId: submissionId, block, value });
     } catch (err) {
       console.error("project_answer_failed", err);
     }
@@ -1244,46 +1293,32 @@ export class SessionDO extends DurableObject<Bindings> {
       return `sbm_preview`;
     }
     const submissionId = await this.ensureSubmissionRow();
-    const durationMs = Date.now() - this.meta.startedAt;
 
-    // build search text from string answers
-    const searchText = Object.entries(this.state.answers)
-      .map(([k, v]) => `${k} ${typeof v === "string" ? v : JSON.stringify(v)}`)
-      .join(" ")
-      .toLowerCase()
-      .slice(0, 5000);
-
-    // The verified respondent is copied onto the submission rather than left to
-    // be joined from the session, because sessions get pruned and a submission
-    // has to stay attributable for as long as it is kept.
-    const id = this.meta.identity ?? null;
-
-    await this.env.DB.batch([
-      this.env.DB.prepare(
-        `UPDATE submissions
-            SET status = ?1, completed_at = ?2, duration_ms = ?3, search_text = ?4,
-                meta = json_set(coalesce(meta,'{}'), '$.endingRef', ?5, '$.abandonReason', ?6),
-                respondent_provider = ?7, respondent_subject = ?8,
-                respondent_email = ?9, respondent_phone = ?10, respondent_name = ?11
-          WHERE id = ?12`,
-      ).bind(
-        status,
-        status === "completed" ? Date.now() : null,
-        durationMs,
-        searchText,
-        endingRef,
-        reason ?? null,
-        id?.provider ?? null,
-        id?.subject ?? null,
-        id?.email ?? null,
-        id?.phone ?? null,
-        id?.name ?? null,
-        submissionId,
-      ),
-      this.env.DB.prepare(
-        `UPDATE chat_sessions SET status = ?, current_block_ref = NULL, collected_count = ?, turn_count = ?, submission_id = ?, state_snapshot_json = NULL, respondent_identity = ?, last_activity_at = ? WHERE id = ?`,
-      ).bind(this.meta.status, this.collectedCount, this.turnCount, submissionId, id ? JSON.stringify(id) : null, Date.now(), this.meta.sessionId),
-    ]);
+    /**
+     * The row update, the webhook fanout and the analytics point are the shared
+     * writer's job, so an API-driven response produces byte-identical rows.
+     * `changed` is false when something already finalized this response — the
+     * idle alarm firing after a completion, say — and everything below is then
+     * correctly skipped rather than delivered twice.
+     */
+    const { changed } = await finalizeResponse(this.owner(), {
+      responseId: submissionId,
+      status,
+      endingRef,
+      abandonReason: reason,
+      answers: this.state.answers,
+      variables: this.state.variables,
+      identity: this.meta.identity ?? null,
+      startedAt: this.meta.startedAt,
+      collectedCount: this.collectedCount,
+      country: this.meta.country,
+      chatSession: {
+        sessionId: this.meta.sessionId,
+        status: this.meta.status,
+        turnCount: this.turnCount,
+      },
+    });
+    if (!changed) return submissionId;
 
     // project transcript to D1 for the results dashboard
     try {
@@ -1310,36 +1345,20 @@ export class SessionDO extends DurableObject<Bindings> {
      * make the AI cap trivially avoidable. What lands here is the token total, which is
      * only knowable once the conversation is over.
      *
-     * This block used to be a hand-rolled `usage_counters` upsert, the only real metering
-     * in the codebase and the only caller that did not go through the shared helper — so
-     * it was guaranteed to drift from every limit decision made elsewhere.
+     * Skipped for test-mode sessions: rehearsing an integration must not spend a
+     * customer's budget.
      */
     try {
-      if (this.sessionTokensUsed > 0) {
+      if (this.sessionTokensUsed > 0 && this.meta.isTest !== true) {
         await meter(this.env, this.meta.organizationId, "ai_tokens", this.sessionTokensUsed);
       }
     } catch (err) {
       console.error("usage_increment_failed", err);
     }
 
-    // enqueue webhook fanout
-    await this.env.Q_WEBHOOKS.send({
-      event: status === "completed" ? "submission.completed" : "submission.abandoned",
-      organizationId: this.meta.organizationId,
-      formId: this.meta.formId,
-      submissionId,
-      sessionId: this.meta.sessionId,
-    });
-
-    // analytics event
-    this.env.ANALYTICS.writeDataPoint({
-      indexes: [this.meta.formId],
-      blobs: [this.meta.sessionId, endingRef ?? reason ?? "", this.meta.country ?? ""],
-      doubles: [durationMs, this.collectedCount],
-    });
-
     return submissionId;
   }
+
 }
 
 function nextInSequence(doc: FormDoc, ref: string): string | null {
@@ -1348,26 +1367,3 @@ function nextInSequence(doc: FormDoc, ref: string): string | null {
   return doc.blocks[idx + 1]!.ref;
 }
 
-function summarizeAnswer(block: Block, value: unknown): string {
-  if (value === undefined || value === null) return "(skipped)";
-  const options = "options" in block ? block.options : undefined;
-  const labelFor = (v: unknown): string => {
-    if (options) {
-      const opt = options.find((o) => o.id === v);
-      if (opt) return opt.label;
-    }
-    return String(v);
-  };
-  if (typeof value === "string") return labelFor(value);
-  if (typeof value === "boolean") {
-    if (block.type === "yes_no") return value ? (block.yesLabel ?? "Yes") : (block.noLabel ?? "No");
-    return String(value);
-  }
-  if (typeof value === "number") return String(value);
-  if (Array.isArray(value)) {
-    return value
-      .map((v) => (typeof v === "object" && v !== null && "filename" in v ? (v as { filename: string }).filename : labelFor(v)))
-      .join(", ");
-  }
-  return JSON.stringify(value);
-}

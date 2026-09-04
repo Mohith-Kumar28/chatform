@@ -8,8 +8,41 @@ import type { Bindings } from "../env.js";
 const RETRY_SCHEDULE_MS = [60_000, 300_000, 1_800_000, 7_200_000]; // 1m, 5m, 30m, 2h → dead
 const MAX_ATTEMPTS = RETRY_SCHEDULE_MS.length + 1;
 
+/**
+ * `response.*` is the canonical namespace; `submission.*` is kept as an alias.
+ *
+ * The resource is called a response everywhere else in the product — the tab,
+ * the plan features (`responses_per_month`, `partial_responses`), the API — so
+ * a new `response.partial` event sitting next to `submission.completed` would
+ * be the one place still using the other word. Rather than break every existing
+ * subscription, one emitted event matches either name: a hook subscribed to
+ * `submission.completed` keeps firing forever, and a new integration never has
+ * to learn the old word.
+ */
+export const EVENT_ALIASES: Record<string, readonly string[]> = {
+  "response.completed": ["response.completed", "submission.completed"],
+  "response.abandoned": ["response.abandoned", "submission.abandoned"],
+  "response.partial": ["response.partial"],
+  "response.answer_recorded": ["response.answer_recorded"],
+  "session.started": ["session.started"],
+  "form.published": ["form.published"],
+};
+
+/** Every name a subscription may be written as, for one emitted event. */
+export function eventNames(event: string): readonly string[] {
+  return EVENT_ALIASES[event] ?? [event];
+}
+
+export type WebhookEventName =
+  | "response.completed"
+  | "response.abandoned"
+  | "response.partial"
+  | "response.answer_recorded"
+  | "session.started"
+  | "form.published";
+
 export interface WebhookEvent {
-  event: "submission.completed" | "submission.abandoned" | "session.started" | "form.published";
+  event: WebhookEventName | "submission.completed" | "submission.abandoned";
   organizationId: string;
   formId: string;
   submissionId?: string;
@@ -56,7 +89,8 @@ export async function deliverWebhookEvent(env: Bindings, evt: WebhookEvent): Pro
 
   for (const hook of hooks.results ?? []) {
     const events = JSON.parse(hook.events) as string[];
-    if (!events.includes(evt.event)) continue;
+    const names = eventNames(evt.event);
+    if (!events.some((e) => names.includes(e))) continue;
 
     const body = JSON.stringify(payload);
     const timestamp = Math.floor(Date.now() / 1000);
