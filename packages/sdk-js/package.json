@@ -17,7 +17,7 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "prepublishOnly": "pnpm build"
+    "prepublishOnly": "node ../../tooling/guard-publish.mjs && pnpm build"
   },
   "keywords": [
     "chatform",

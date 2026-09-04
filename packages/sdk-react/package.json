@@ -15,7 +15,7 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "prepublishOnly": "pnpm build"
+    "prepublishOnly": "node ../../tooling/guard-publish.mjs && pnpm build"
   },
   "peerDependencies": {
     "react": ">=18"
