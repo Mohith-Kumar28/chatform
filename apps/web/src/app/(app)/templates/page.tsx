@@ -1,12 +1,17 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { customFetch } from "@/lib/api/mutator";
+import { toast } from "sonner";
+import {
+  useGetApiTemplates,
+  usePostApiTemplatesBySlugUse,
+} from "@/lib/api/dashboard/dashboard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface TemplateRow {
@@ -19,16 +24,29 @@ interface TemplateRow {
 export default function TemplatesPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { data: raw, isLoading } = useQuery({
-    queryKey: ["templates"],
-    queryFn: () => customFetch<TemplateRow[]>("/api/templates"),
-  });
+  // Generated hooks, per the repo rule that no frontend data fetching is
+  // hand-written. Both routes have been in the spec all along; this page was
+  // reaching past them to `customFetch` and re-declaring its own row type.
+  const { data: raw, isLoading } = useGetApiTemplates();
   const templates = (Array.isArray(raw) ? raw : []) as unknown as TemplateRow[];
-  const use = useMutation({
-    mutationFn: (slug: string) => customFetch<{ id: string }>(`/api/templates/${slug}/use`, { method: "POST" }),
-    onSuccess: (created) => {
-      void queryClient.invalidateQueries({ queryKey: ["forms"] });
-      router.push(`/forms/${created.id}`);
+
+  /** Which card is working, so the whole grid does not go dead at once. */
+  const [pending, setPending] = useState<string | null>(null);
+
+  const use = usePostApiTemplatesBySlugUse({
+    mutation: {
+      onSuccess: (created) => {
+        void queryClient.invalidateQueries({ queryKey: ["forms"] });
+        router.push(`/forms/${(created as unknown as { id: string }).id}`);
+      },
+      /**
+       * Said out loud. A refused "Use template" — a form-count limit, a role
+       * that cannot create — used to do nothing at all and explain nothing.
+       * (A plan denial still opens the global paywall; this is for the rest.)
+       */
+      onError: (err) =>
+        toast.error("Couldn't start from this template", { description: (err as Error).message }),
+      onSettled: () => setPending(null),
     },
   });
 
@@ -69,9 +87,20 @@ export default function TemplatesPage() {
                       size="sm"
                       className="w-full rounded-full"
                       disabled={use.isPending}
-                      onClick={() => use.mutate(t.slug)}
+                      onClick={() => {
+                        setPending(t.slug);
+                        use.mutate({ slug: t.slug });
+                      }}
                     >
-                      Use template <ArrowRight className="size-3.5" />
+                      {pending === t.slug ? (
+                        <>
+                          <Loader2 className="size-3.5 animate-spin" /> Creating…
+                        </>
+                      ) : (
+                        <>
+                          Use template <ArrowRight className="size-3.5" />
+                        </>
+                      )}
                     </Button>
                   </CardContent>
                 </Card>
