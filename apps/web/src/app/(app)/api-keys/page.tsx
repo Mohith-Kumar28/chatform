@@ -1,145 +1,427 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { customFetch, API_ORIGIN } from "@/lib/api/mutator";
+import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useGetApiKeys,
+  usePostApiKeys,
+  useDeleteApiKeysById,
+  usePostApiKeysByIdRotate,
+  useGetApiKeysScopes,
+  getGetApiKeysQueryKey,
+} from "@/lib/api/dashboard/dashboard";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Key, Plus, Trash2, Copy, Check } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { CopyButton } from "@/components/ui/copy-button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { LockedControl } from "@/components/billing/gate";
+import { KeyRound, Plus, Trash2, RefreshCw, ShieldAlert } from "lucide-react";
+import { useClientValue } from "@/hooks/use-client-value";
+
+/**
+ * API keys.
+ *
+ * The backend grew four key types, real scopes, per-key rate limits, origin
+ * allowlists and rotation; this page could create one thing, called it "a key",
+ * and listed keys by their creator so a teammate could not revoke a colleague's.
+ * Everything here is driven by the generated hooks — the old page hand-wrote its
+ * own row type over raw fetches, which is how it drifted from the API in the
+ * first place.
+ */
+
+type KeyType = "sk_live" | "sk_test" | "pk_live" | "pk_test";
 
 interface KeyRow {
   id: string;
   name: string | null;
+  keyType: KeyType;
+  environment: "live" | "test";
   start: string | null;
   enabled: boolean;
+  scopes: Record<string, string[]>;
+  origins: string[];
+  formIds: string[];
+  rateLimitMax: number | null;
+  requestCount: number;
   lastUsedAt: number | null;
+  expiresAt: number | null;
   createdAt: number;
+}
+
+const KEY_TYPES: { value: KeyType; label: string; blurb: string }[] = [
+  { value: "sk_live", label: "Secret · live", blurb: "Your server, real data. Never send one from a browser." },
+  { value: "sk_test", label: "Secret · test", blurb: "Your server. Everything it writes is test data." },
+  { value: "pk_live", label: "Publishable · live", blurb: "Safe in a page, pinned to the origins you list." },
+  { value: "pk_test", label: "Publishable · test", blurb: "Safe in a page. Writes test data." },
+];
+
+/** What a publishable key may ever hold, whatever is asked for. */
+const PUBLISHABLE_CEILING: Record<string, string[]> = {
+  form: ["read"],
+  session: ["create", "write", "read"],
+  file: ["write"],
+};
+
+function isPublishable(type: KeyType) {
+  return type.startsWith("pk_");
+}
+
+/**
+ * Both of these take `now` rather than reading the clock.
+ *
+ * `Date.now()` in a render body is impure — and here it would also disagree
+ * between the server render and the first client one. The clock is read once,
+ * through `useClientValue`, which is the repo's shape for a browser-only value.
+ */
+function relative(ts: number | null, now: number): string {
+  if (!ts) return "never";
+  const days = Math.floor((now - ts) / 86_400_000);
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days}d ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+function hoursUntil(ts: number, now: number): number {
+  return Math.max(1, Math.round((ts - now) / 3_600_000));
 }
 
 export default function ApiKeysPage() {
   const queryClient = useQueryClient();
-  const { data: rawKeys } = useQuery({
-    queryKey: ["keys"],
-    queryFn: () => customFetch<KeyRow[]>("/api/keys"),
-  });
+  // Read once per mount, so the server and first client renders agree.
+  const now = useClientValue(() => Date.now(), 0);
+  const { data: rawKeys, isLoading } = useGetApiKeys();
   const keys = (Array.isArray(rawKeys) ? rawKeys : []) as unknown as KeyRow[];
-  const [createOpen, setCreateOpen] = useState(false);
-  const [name, setName] = useState("Production key");
-  const [createdRaw, setCreatedRaw] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const { data: rawVocab } = useGetApiKeysScopes();
+  const vocab = (rawVocab ?? {}) as { scopes?: Record<string, string[]> };
 
-  const createKey = useMutation({
-    mutationFn: (body: { name: string }) => customFetch<{ key: string }>("/api/keys", { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: (data) => {
-      setCreatedRaw(data.key);
-      void queryClient.invalidateQueries({ queryKey: ["keys"] });
-    },
+  const [open, setOpen] = useState(false);
+  const [created, setCreated] = useState<{ key: string; keyType: KeyType } | null>(null);
+  const [revoking, setRevoking] = useState<KeyRow | null>(null);
+  const [rotated, setRotated] = useState<{ key: string; oldKeyExpiresAt: number | null } | null>(null);
+
+  const [name, setName] = useState("Production key");
+  const [keyType, setKeyType] = useState<KeyType>("sk_live");
+  const [origins, setOrigins] = useState("");
+  const [scopes, setScopes] = useState<Record<string, string[]>>({
+    form: ["read"],
+    response: ["read"],
+    session: ["create", "write", "read"],
   });
-  const revokeKey = useMutation({
-    mutationFn: (id: string) => customFetch(`/api/keys/${id}`, { method: "DELETE" }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["keys"] }),
-  });
+
+  const invalidate = () => void queryClient.invalidateQueries({ queryKey: getGetApiKeysQueryKey() });
+  const createKey = usePostApiKeys({ mutation: { onSuccess: invalidate } });
+  const revokeKey = useDeleteApiKeysById({ mutation: { onSuccess: invalidate } });
+  const rotateKey = usePostApiKeysByIdRotate({ mutation: { onSuccess: invalidate } });
+
+  /**
+   * The vocabulary comes from the API rather than a copy of it here — a scope
+   * added server-side should appear without a frontend release.
+   */
+  const allScopes = useMemo(
+    () => vocab.scopes ?? { form: ["read"], response: ["read"], session: ["create", "write", "read"] },
+    [vocab.scopes],
+  );
+
+  const availableScopes = isPublishable(keyType) ? PUBLISHABLE_CEILING : allScopes;
+
+  function toggleScope(resource: string, action: string) {
+    setScopes((prev) => {
+      const current = prev[resource] ?? [];
+      const next = current.includes(action) ? current.filter((a) => a !== action) : [...current, action];
+      const out = { ...prev, [resource]: next };
+      if (next.length === 0) delete out[resource];
+      return out;
+    });
+  }
+
+  async function submit() {
+    const parsedOrigins = origins
+      .split(/[\n,]/)
+      .map((o) => o.trim())
+      .filter(Boolean);
+    const result = (await createKey.mutateAsync({
+      data: {
+        name,
+        keyType,
+        scopes: isPublishable(keyType) ? PUBLISHABLE_CEILING : scopes,
+        ...(parsedOrigins.length ? { origins: parsedOrigins } : {}),
+      } as never,
+    })) as unknown as { key: string };
+    setCreated({ key: result.key, keyType });
+  }
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10">
-      <header className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight">API keys</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Drive chatform headlessly from your own products.</p>
+      <PageHeader
+        title="API keys"
+        description="Drive chatform from your own products — a server integration, a custom interface, or a page that embeds a form."
+        actions={
+          /**
+           * Gated in the UI as well as the API. The server refuses on a plan
+           * without api_access, but discovering that after filling in a form is
+           * a worse way to find out.
+           */
+          <LockedControl feature="api_access">
+            <Button className="rounded-full" onClick={() => setOpen(true)}>
+              <Plus className="size-4" /> Create key
+            </Button>
+          </LockedControl>
+        }
+      />
+
+      {isLoading ? (
+        <div className="space-y-3">
+          {[0, 1].map((i) => (
+            <div key={i} className="bg-muted h-20 animate-pulse rounded-xl" />
+          ))}
         </div>
-        <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) setCreatedRaw(null); }}>
-          <DialogTrigger asChild>
-            <Button className="rounded-full"><Plus className="size-4" /> Create key</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="font-display">Create API key</DialogTitle>
-            </DialogHeader>
-            {createdRaw ? (
-              <div className="space-y-3">
-                <p className="text-sm font-medium">Copy your key now — it won&apos;t be shown again.</p>
-                <div className="flex items-center gap-2 rounded-lg border bg-muted p-3">
-                  <code className="min-w-0 flex-1 truncate font-mono text-xs">{createdRaw}</code>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 shrink-0"
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(createdRaw);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 1500);
-                    }}
-                  >
-                    {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                  </Button>
+      ) : keys.length === 0 ? (
+        <EmptyState
+          icon={KeyRound}
+          title="No API keys yet"
+          description="A key lets your own code create responses, read them back, or run a conversation from your product."
+          action={
+            <LockedControl feature="api_access">
+              <Button className="rounded-full" onClick={() => setOpen(true)}>
+                <Plus className="size-4" /> Create your first key
+              </Button>
+            </LockedControl>
+          }
+          hint="Read the quickstart at chatform.in/docs/quickstart"
+        />
+      ) : (
+        <div className="space-y-3">
+          {keys.map((k) => (
+            <Card key={k.id} className={k.enabled ? undefined : "opacity-60"}>
+              <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-2 py-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{k.name ?? "Untitled key"}</span>
+                    <Badge variant={isPublishable(k.keyType) ? "secondary" : "default"}>
+                      {isPublishable(k.keyType) ? "Publishable" : "Secret"}
+                    </Badge>
+                    {k.environment === "test" && <Badge variant="outline">Test</Badge>}
+                    {!k.enabled && <Badge variant="destructive">Revoked</Badge>}
+                    {k.expiresAt && now > 0 && k.expiresAt > now && (
+                      <Badge variant="outline">expires in {hoursUntil(k.expiresAt, now)}h</Badge>
+                    )}
+                  </div>
+                  <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <code className="font-mono">{k.start ?? "—"}…</code>
+                    <span>last used {relative(k.lastUsedAt, now)}</span>
+                    {k.rateLimitMax && <span>{k.rateLimitMax}/min</span>}
+                    {k.origins.length > 0 && <span>{k.origins.length} origin(s)</span>}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {Object.entries(k.scopes ?? {}).flatMap(([resource, actions]) =>
+                      actions.map((a) => (
+                        <span
+                          key={`${resource}:${a}`}
+                          className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[11px]"
+                        >
+                          {resource}:{a}
+                        </span>
+                      )),
+                    )}
+                  </div>
                 </div>
-                <Button className="w-full rounded-full" onClick={() => { setCreateOpen(false); setCreatedRaw(null); }}>
-                  Done
-                </Button>
+                {k.enabled && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={async () => {
+                        const res = (await rotateKey.mutateAsync({
+                          id: k.id,
+                          data: { graceHours: 24 } as never,
+                        })) as unknown as { key: string; oldKeyExpiresAt: number | null };
+                        setRotated(res);
+                      }}
+                    >
+                      <RefreshCw className="size-3.5" /> Rotate
+                    </Button>
+                    <Button variant="ghost" size="icon" className="size-8" onClick={() => setRevoking(k)}>
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Card className="mt-8">
+        <CardContent className="py-5">
+          <h2 className="font-display mb-1 text-base font-medium">Rate limits</h2>
+          <p className="text-muted-foreground text-sm">
+            Secret keys are limited per key, per minute; publishable keys get more headroom because one page can
+            hold many respondents at once. Every response carries <code>RateLimit-Remaining</code>, so you can slow
+            down before you are told to.
+          </p>
+          <p className="text-muted-foreground mt-2 text-sm">
+            A 429 means slow down. A 402 means your monthly quota is spent and retrying will not help.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* ── create ─────────────────────────────────────────────────────── */}
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setCreated(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          {created ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="font-display">Copy your key now</DialogTitle>
+                <DialogDescription>
+                  This is the only time it is shown. We store a hash, so we cannot show it again.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="bg-muted flex items-center gap-2 rounded-lg p-3">
+                <code className="min-w-0 flex-1 break-all font-mono text-xs">{created.key}</code>
+                <CopyButton value={created.key} toastMessage="Key copied" variant="outline" size="sm" />
               </div>
-            ) : (
-              <form
-                className="space-y-4"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  await createKey.mutateAsync({ name });
-                }}
-              >
+              {!isPublishable(created.keyType) && (
+                <p className="text-muted-foreground flex items-start gap-2 text-xs">
+                  <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
+                  Keep this on a server. A request carrying a secret key from a browser is refused, because by then
+                  the key is readable by everyone who loaded the page.
+                </p>
+              )}
+              <Button className="rounded-full" onClick={() => setOpen(false)}>
+                Done
+              </Button>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle className="font-display">Create API key</DialogTitle>
+                <DialogDescription>{KEY_TYPES.find((t) => t.value === keyType)?.blurb}</DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="key-name">Key name</Label>
+                  <Label htmlFor="key-name">Name</Label>
                   <Input id="key-name" value={name} onChange={(e) => setName(e.target.value)} />
                 </div>
-                <Button type="submit" disabled={createKey.isPending} className="w-full rounded-full">
-                  {createKey.isPending ? "Creating…" : "Create key"}
-                </Button>
-              </form>
-            )}
-          </DialogContent>
-        </Dialog>
-      </header>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-display flex items-center gap-2 text-base"><Key className="size-4" /> Your keys</CardTitle>
-          <CardDescription>Send as <code className="rounded bg-muted px-1">Authorization: Bearer sk_live_…</code></CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {keys.length === 0 && <p className="text-muted-foreground text-sm">No keys yet.</p>}
-          {keys.map((k) => (
-            <div key={k.id} className="flex items-center gap-3 rounded-lg border px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">{k.name}</p>
-                <code className="text-muted-foreground text-xs">{k.start}…</code>
+                <div className="space-y-1.5">
+                  <Label>Type</Label>
+                  <SegmentedControl
+                    options={KEY_TYPES.map((t) => ({ value: t.value, label: t.label }))}
+                    value={keyType}
+                    onChange={setKeyType}
+                    size="sm"
+                    ariaLabel="Key type"
+                  />
+                </div>
+
+                {isPublishable(keyType) ? (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="key-origins">Allowed origins</Label>
+                    <textarea
+                      id="key-origins"
+                      value={origins}
+                      onChange={(e) => setOrigins(e.target.value)}
+                      rows={3}
+                      placeholder={"https://acme.example\nhttps://*.preview.acme.example"}
+                      className="border-input bg-background w-full rounded-lg border px-3 py-2 font-mono text-xs"
+                    />
+                    <p className="text-muted-foreground text-xs">
+                      Required. A publishable key with no allowlist is not publishable, it is just public — so the
+                      API refuses to create one.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <Label>Scopes</Label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {Object.entries(availableScopes).map(([resource, actions]) =>
+                        (actions as string[]).map((action) => {
+                          const checked = (scopes[resource] ?? []).includes(action);
+                          return (
+                            <label
+                              key={`${resource}:${action}`}
+                              className="hover:bg-muted flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleScope(resource, action)}
+                                className="accent-primary"
+                              />
+                              <code className="font-mono">
+                                {resource}:{action}
+                              </code>
+                            </label>
+                          );
+                        }),
+                      )}
+                    </div>
+                    <p className="text-muted-foreground text-xs">
+                      Give a key the least it needs. No key can mint another key or change your plan, whatever is
+                      selected here.
+                    </p>
+                  </div>
+                )}
               </div>
-              <Badge variant={k.enabled ? "default" : "secondary"}>{k.enabled ? "active" : "revoked"}</Badge>
-              <span className="text-muted-foreground text-xs">
-                {k.lastUsedAt ? `used ${new Date(k.lastUsedAt).toLocaleDateString()}` : "never used"}
-              </span>
-              {k.enabled && (
-                <Button variant="ghost" size="icon" className="size-8" onClick={() => revokeKey.mutate(k.id)}>
-                  <Trash2 className="size-3.5" />
-                </Button>
-              )}
-            </div>
-          ))}
-        </CardContent>
-      </Card>
 
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="font-display text-base">Quick start</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <pre className="bg-muted overflow-x-auto rounded-lg p-4 text-xs leading-relaxed">{`curl -X POST \\
-  ${API_ORIGIN}/v1/forms/FORM_ID/chat/sessions \\
-  -H "Authorization: Bearer sk_live_..." \\
-  -d '{}'`}</pre>
-        </CardContent>
-      </Card>
+              <Button
+                className="rounded-full"
+                onClick={submit}
+                disabled={createKey.isPending || (isPublishable(keyType) && origins.trim() === "")}
+              >
+                {createKey.isPending ? "Creating…" : "Create key"}
+              </Button>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── rotation result ────────────────────────────────────────────── */}
+      <Dialog open={rotated !== null} onOpenChange={(o) => !o && setRotated(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-display">Rotated</DialogTitle>
+            <DialogDescription>
+              The old key keeps working for 24 hours. Deploy this one, then revoke the old one — a deploy is not
+              atomic, and revoking first would mean downtime in between.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-muted flex items-center gap-2 rounded-lg p-3">
+            <code className="min-w-0 flex-1 break-all font-mono text-xs">{rotated?.key}</code>
+            <CopyButton value={rotated?.key ?? ""} toastMessage="Key copied" variant="outline" size="sm" />
+          </div>
+          <Button className="rounded-full" onClick={() => setRotated(null)}>
+            Done
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={revoking !== null}
+        onOpenChange={(o) => !o && setRevoking(null)}
+        title="Revoke this key?"
+        description={`Anything using ${revoking?.name ?? "this key"} stops working immediately. This cannot be undone — create a new key instead if you are rotating.`}
+        confirmLabel="Revoke"
+        onConfirm={() => {
+          if (revoking) revokeKey.mutate({ id: revoking.id });
+          setRevoking(null);
+        }}
+      />
     </div>
   );
 }

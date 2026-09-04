@@ -315,13 +315,37 @@ pnpm blocks:verify    # CI gate
 pnpm apikeys:backfill[:remote]
 ```
 
+### Follow-up pass (same day)
+
+Three things shipped that did not work, all found by auditing what the SDK and
+the published spec promised against what actually existed:
+
+- **`client.webhooks.*` answered 401 on every call.** It pointed at
+  `/api/webhooks`, which is session-guarded — so the `webhook:read`/`webhook:write`
+  scopes named an ability no key had. Webhook CRUD, deliveries and replay now
+  exist under `/v1` behind those scopes.
+- **`client.forms.analytics()` called a route that did not exist.** Building it
+  meant extracting `lib/analytics-service.ts`, which surfaced an older bug: the
+  aggregate enumerated questions from `forms.working_schema` — the **draft** —
+  while counting answers from published versions, so an unpublished question
+  showed a 0% answer rate. It also ran a query per question; that is one grouped
+  query now.
+- **`/v1/chat/forms/{id}/sessions` was published as if it were real.** Mounting
+  the chat router at both `/` and `/chat` generated it. Each session route is
+  registered at both spellings instead, so the legacy paths still answer and the
+  nonsense ones are gone.
+
+Also done: the three embed events (`question`, `answer`, `complete`) now fire from
+`use-chat.ts`, and `/api-keys` was rebuilt on the generated hooks — key types,
+scopes, origin allowlists, rotation with its grace window, revoke behind a
+confirm, and the paywall shown before the form rather than after a 402.
+
 ### Left undone
 
-- npm org unclaimed, so the SDKs are unpublished.
-- `question`/`answer`/`complete` embed events are emitted by `emitEmbedEvent()` in
-  `embed-bridge.tsx`, which the chat client does not call yet — `ready`, `resize`
-  and `close` work. One call site in `chat-client.tsx` finishes it.
-- Uploads are not yet dual-authed under `/v1`; the intent → PUT → confirm trio is
-  still respondent-token only.
-- `Q_EXPORTS` still has no producer — the export endpoints are designed but the
-  async path is not built.
+- **npm org `@chatform` is unclaimed**, so both SDKs are unpublished. This is the
+  only blocker to publishing them.
+- Uploads are not dual-authed under `/v1`; the intent → PUT → confirm trio is
+  still respondent-token only, so a headless caller cannot answer a file question.
+- `Q_EXPORTS` still has no producer. `response:export` is in the scope vocabulary
+  with no endpoint behind it — a scope that can be granted and grants nothing.
+- `Q_SUBMISSIONS` has no producer either. Pre-existing.
