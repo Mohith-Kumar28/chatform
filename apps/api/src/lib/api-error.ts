@@ -106,6 +106,11 @@ export async function attachErrorContext(c: AnyContext): Promise<void> {
   }
   const err = (body as { error?: Record<string, unknown> } | null)?.error;
   if (!err || typeof err !== "object") return;
+  /**
+   * Also surfaced as a header, so the telemetry middleware can label the request
+   * without cloning and awaiting every error body just to read one field.
+   */
+  if (typeof err.code === "string") c.res.headers.set("x-error-code", err.code);
   if (err.request_id) return;
 
   err.request_id = c.get("requestId") ?? "";
@@ -113,5 +118,6 @@ export async function attachErrorContext(c: AnyContext): Promise<void> {
 
   const headers = new Headers(c.res.headers);
   headers.delete("content-length");
+  if (typeof err.code === "string") headers.set("x-error-code", err.code);
   c.res = new Response(JSON.stringify(body), { status: c.res.status, headers });
 }

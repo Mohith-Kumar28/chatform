@@ -81,14 +81,32 @@
     {
       "binding": "ANALYTICS",
       "dataset": "chatform_events"
+    },
+    // Separate from ANALYTICS on purpose: chatform_events already carries the
+    // gate log's blob shape, and two shapes in one dataset make the SQL API
+    // unusable.
+    {
+      "binding": "ANALYTICS_API",
+      "dataset": "chatform_api_requests"
     }
   ],
+  // Burst protection only. The `simple` config is per-binding and per-colo, so
+  // per-plan limits come from a second binding rather than from logic: the plan
+  // is not known until after the verification this layer exists to avoid.
   "ratelimits": [
     {
       "name": "RATE_LIMIT",
       "namespace_id": "1001",
       "simple": {
-        "limit": 100,
+        "limit": 20,
+        "period": 10
+      }
+    },
+    {
+      "name": "RATE_LIMIT_PK",
+      "namespace_id": "1002",
+      "simple": {
+        "limit": 200,
         "period": 10
       }
     }

@@ -5,6 +5,8 @@ import { readFormDoc, type FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
 import { requireApiKey, assertChatSessionAccess, type GuardVars } from "../lib/guards.js";
+import { burstLimit } from "../lib/ratelimit.js";
+import { apiRequestLog } from "../lib/api-log.js";
 import { mountRespondentAuth, type AuthRouter } from "./respondent-auth.js";
 import { entitlementsFor, requireScope, type AuthzVars } from "../lib/authorize.js";
 import { meter } from "../lib/entitlements.js";
@@ -19,6 +21,17 @@ import type { SessionDO } from "../do/session-do.js";
 
 export const v1Router = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
+/**
+ * The middleware chain, in the order it must run.
+ *
+ * 1. telemetry, outermost, so a 401 or a 429 is observable too
+ * 2. burst limiting, before any database work
+ * 3. key verification (per-key window, origin policy, RateLimit-* headers)
+ * 4. the paid-feature gate and the monthly meter
+ * 5. per-route scope checks, declared next to each route
+ */
+v1Router.use("*", apiRequestLog);
+v1Router.use("*", burstLimit);
 v1Router.use("*", requireApiKey);
 
 /**
@@ -34,7 +47,14 @@ v1Router.use("*", requireApiKey);
  */
 v1Router.use("*", async (c, next) => {
   const orgId = c.get("orgId");
-  if (!orgId) return next();
+  /**
+   * Unreachable now that keys are organization-owned, and a 401 rather than a
+   * pass-through because it used to be one: `return next()` here meant a key
+   * with no resolvable org skipped both the feature gate and the meter.
+   */
+  if (!orgId) {
+    return c.json({ error: { code: "unauthorized", message: "Key has no organization" } }, 401);
+  }
   const ent = await entitlementsFor(c as never);
   if (!ent.features.api_access) {
     return c.json(featureLocked("api_access", ent.planId, { surface: "v1" }), 402);

@@ -9,7 +9,17 @@ export interface Bindings {
   Q_WEBHOOKS: Queue;
   Q_EXPORTS: Queue;
   ANALYTICS: AnalyticsEngineDataset;
-  RATE_LIMIT: RateLimit;
+  /** Per-request API telemetry. Optional: Miniflare does not always provide it. */
+  ANALYTICS_API?: AnalyticsEngineDataset;
+  /**
+   * Burst limiters, keyed by the presented key's digest and by IP.
+   *
+   * Optional because the `ratelimits` binding is not implemented by every local
+   * runtime — a hard dependency here would fail the whole test suite rather than
+   * degrade.
+   */
+  RATE_LIMIT?: RateLimit;
+  RATE_LIMIT_PK?: RateLimit;
   WORKERS_AI?: Ai;
 
   ENVIRONMENT: string;
