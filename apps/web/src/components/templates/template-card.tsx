@@ -43,7 +43,7 @@ export function TemplateCard({
   return (
     <div
       className={cn(
-        "group bg-card border-border relative flex flex-col rounded-2xl border text-left",
+        "group bg-card border-border relative flex h-full w-full flex-col rounded-2xl border text-left",
         "shadow-xs transition-[box-shadow,transform,border-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
         // Cards lift, buttons don't (DESIGN.md §4.4).
         "hover:border-border hover:shadow-md hover:-translate-y-0.5 motion-reduce:hover:translate-y-0",

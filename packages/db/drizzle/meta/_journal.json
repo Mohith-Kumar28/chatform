@@ -43,6 +43,13 @@
       "when": 1788502193593,
       "tag": "0005_clean_william_stryker",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1788582129694,
+      "tag": "0006_rainy_celestials",
+      "breakpoints": true
     }
   ]
 }

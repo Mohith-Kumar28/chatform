@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "gen:plans": "tsx gen-seed-plans.ts",
+    "gen:templates": "tsx gen-seed-templates.ts",
     "gen:blocks": "tsx gen-block-docs.ts",
     "gen:api-docs": "tsx gen-api-docs.ts",
-    "spec:coverage": "tsx check-spec-coverage.ts"
+    "spec:coverage": "tsx check-spec-coverage.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@repo/entitlements": "workspace:*",
@@ -15,8 +17,9 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "fumadocs-openapi": "11.4.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "fumadocs-openapi": "11.4.1"
+    "vitest": "^3.2.7"
   }
 }

@@ -1,113 +1,191 @@
 "use client";
 
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import {
-  useGetApiTemplates,
-  usePostApiTemplatesBySlugUse,
-} from "@/lib/api/dashboard/dashboard";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { usePostApiTemplatesBySlugUse } from "@/lib/api/dashboard/dashboard";
+import { apiData } from "@/lib/api/payload";
+import { invalidateForms } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Loader2 } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { EmptyState } from "@/components/ui/empty-state";
+import { FilterChips } from "@/components/ui/filter-chips";
+import { PageHeader } from "@/components/ui/page-header";
+import { TemplateCard, TemplateCardSkeleton } from "@/components/templates/template-card";
+import { TemplatePreview } from "@/components/templates/template-preview";
+import {
+  filterTemplates,
+  POPULAR_COUNT,
+  templateCategories,
+  useTemplates,
+  type TemplateSummary,
+} from "@/lib/templates";
 
-interface TemplateRow {
-  slug: string;
-  title: string;
-  category: string;
-  description: string;
-}
-
+/**
+ * The template gallery.
+ *
+ * It used to be four cards grouped under two uppercase headings, with a
+ * "Use template" button as the only thing you could do — no search, no way to
+ * see what a template asked before creating a form from it, and nothing to
+ * browse once you had read all four titles.
+ *
+ * With a real catalogue behind it the screen has a job: help someone find the
+ * one that fits, and let them look before they commit.
+ */
 export default function TemplatesPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  // Generated hooks, per the repo rule that no frontend data fetching is
-  // hand-written. Both routes have been in the spec all along; this page was
-  // reaching past them to `customFetch` and re-declaring its own row type.
-  const { data: raw, isLoading } = useGetApiTemplates();
-  const templates = (Array.isArray(raw) ? raw : []) as unknown as TemplateRow[];
 
-  /** Which card is working, so the whole grid does not go dead at once. */
-  const [pending, setPending] = useState<string | null>(null);
+  const { templates, isLoading } = useTemplates();
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("all");
+  const [preview, setPreview] = useState<TemplateSummary | null>(null);
+  const [pendingSlug, setPendingSlug] = useState<string | null>(null);
 
-  const use = usePostApiTemplatesBySlugUse({
+  const categories = useMemo(() => templateCategories(templates), [templates]);
+  const shown = useMemo(
+    () => filterTemplates(templates, search, category),
+    [templates, search, category],
+  );
+
+  const use = usePostApiTemplatesBySlugUse<Error>({
     mutation: {
-      onSuccess: (created) => {
-        void queryClient.invalidateQueries({ queryKey: ["forms"] });
-        router.push(`/forms/${(created as unknown as { id: string }).id}`);
+      onSuccess: async (created) => {
+        await invalidateForms(queryClient);
+        // `/build`, like every other create path. This landed on `/forms/{id}`
+        // and left people on a route the builder redirects away from.
+        router.push(`/forms/${apiData<{ id: string }>(created).id}/build`);
       },
       /**
        * Said out loud. A refused "Use template" — a form-count limit, a role
        * that cannot create — used to do nothing at all and explain nothing.
        * (A plan denial still opens the global paywall; this is for the rest.)
        */
-      onError: (err) =>
-        toast.error("Couldn't start from this template", { description: (err as Error).message }),
-      onSettled: () => setPending(null),
+      onError: (err) => {
+        toast.error("Couldn't start from this template", { description: err.message });
+        setPendingSlug(null);
+      },
     },
   });
 
-  const categories = Array.from(new Set(templates.map((t) => t.category)));
+  const startFrom = (slug: string) => {
+    setPendingSlug(slug);
+    use.mutate({ slug });
+  };
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-10">
-      <header className="mb-8">
-        <h1 className="font-display text-3xl font-semibold tracking-tight">Templates</h1>
-        <p className="text-muted-foreground mt-1 text-sm">Start from a proven structure — every template is fully editable.</p>
-      </header>
+    <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
+      <PageHeader
+        title="Templates"
+        description={
+          templates.length > 0
+            ? `${templates.length} ready-made conversations across ${categories.length} categories. Every one is fully editable.`
+            : "Start from a proven structure — every template is fully editable."
+        }
+        actions={
+          <Button variant="outline" shape="pill" onClick={() => router.push("/dashboard?new=1")}>
+            <Sparkles className="size-4" />
+            Describe your own
+          </Button>
+        }
+      />
 
-      {isLoading && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-48 w-full" />)}
+      <div className="mt-6 space-y-3">
+        <div className="relative max-w-md">
+          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, topic or tag…"
+            aria-label="Search templates"
+            className="h-10 rounded-full pl-9"
+          />
         </div>
-      )}
-      {!isLoading && templates.length === 0 && (
-        <Card>
-          <CardContent className="text-muted-foreground py-10 text-center text-sm">No templates available yet.</CardContent>
-        </Card>
-      )}
-      {categories.map((cat) => (
-        <section key={cat} className="mb-8">
-          <h2 className="text-muted-foreground mb-3 text-xs font-medium uppercase">{cat}</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {templates
-              .filter((t) => t.category === cat)
-              .map((t) => (
-                <Card key={t.slug} className="flex flex-col transition-shadow hover:shadow-md">
-                  <CardHeader>
-                    <CardTitle className="font-display text-lg">{t.title}</CardTitle>
-                    <CardDescription className="line-clamp-2">{t.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="mt-auto">
-                    <Badge variant="secondary" className="mb-3">{t.category}</Badge>
-                    <Button
-                      size="sm"
-                      className="w-full rounded-full"
-                      disabled={use.isPending}
-                      onClick={() => {
-                        setPending(t.slug);
-                        use.mutate({ slug: t.slug });
-                      }}
-                    >
-                      {pending === t.slug ? (
-                        <>
-                          <Loader2 className="size-3.5 animate-spin" /> Creating…
-                        </>
-                      ) : (
-                        <>
-                          Use template <ArrowRight className="size-3.5" />
-                        </>
-                      )}
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
+
+        {categories.length > 1 && (
+          <FilterChips
+            ariaLabel="Category"
+            value={category}
+            onChange={setCategory}
+            options={[
+              { value: "all", label: "All", count: templates.length },
+              { value: "popular", label: "Popular", count: Math.min(POPULAR_COUNT, templates.length) },
+              ...categories.map((c) => ({
+                value: c,
+                label: c,
+                count: templates.filter((t) => t.category === c).length,
+              })),
+            ]}
+          />
+        )}
+      </div>
+
+      <div className="mt-6">
+        {isLoading ? (
+          <div className={GRID}>
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <TemplateCardSkeleton key={i} />
+            ))}
           </div>
-        </section>
-      ))}
+        ) : templates.length === 0 ? (
+          <EmptyState
+            icon={Search}
+            title="No templates available yet"
+            description="Seed the catalogue with pnpm seed:templates, or describe the form you need and let the AI draft it."
+            action={
+              <Button shape="pill" onClick={() => router.push("/dashboard?new=1")}>
+                <Sparkles className="size-4" />
+                Describe your own
+              </Button>
+            }
+          />
+        ) : shown.length === 0 ? (
+          <EmptyState
+            compact
+            icon={Search}
+            title={`Nothing matches “${search}”`}
+            description="Try a different word, or describe what you need and the AI will draft it."
+            action={
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearch("");
+                  setCategory("all");
+                }}
+              >
+                Clear filters
+              </Button>
+            }
+          />
+        ) : (
+          <ul className={GRID}>
+            {shown.map((t) => (
+              <li key={t.slug} className="flex">
+                <TemplateCard
+                  template={t}
+                  pending={pendingSlug === t.slug}
+                  disabled={use.isPending && pendingSlug !== t.slug}
+                  onUse={() => startFrom(t.slug)}
+                  onPreview={() => setPreview(t)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <TemplatePreview
+        template={preview}
+        open={preview !== null}
+        onOpenChange={(open) => !open && setPreview(null)}
+        onUse={startFrom}
+        pending={pendingSlug === preview?.slug}
+      />
     </div>
   );
 }
+
+const GRID = "grid gap-4 sm:grid-cols-2 lg:grid-cols-3";

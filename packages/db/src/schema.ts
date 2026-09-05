@@ -497,12 +497,42 @@ export const integrations = sqliteTable(
   (t) => [index("idx_integrations_org").on(t.organizationId)],
 );
 
+/**
+ * The template catalogue.
+ *
+ * This table was declared with the first migration and then never read or
+ * written — the four templates the product shipped with lived in a `SEEDS`
+ * array inside the route that served them. Templates are content, and content
+ * belongs in the database, so the route reads from here now and the array is
+ * gone.
+ *
+ * The presentation columns (`blurb` through `block_count`) exist because a
+ * gallery needs more than a title to be worth browsing: a longer description
+ * for the preview panel, an icon and an accent so thirty cards are not thirty
+ * grey rectangles, and the size of the form so someone can tell a three-
+ * question survey from a twelve-question intake before opening it.
+ *
+ * `block_count` and `est_minutes` are denormalised from `schema_json` on
+ * purpose — the list endpoint would otherwise parse every document to render
+ * a grid. The generator computes both, so they cannot be set by hand and
+ * cannot drift from the document they describe.
+ */
 export const formTemplates = sqliteTable("form_templates", {
   id: text("id").primaryKey(),
   slug: text("slug").notNull().unique(),
   title: text("title").notNull(),
   category: text("category").notNull(),
   description: text("description"),
+  /** Two or three sentences, for the preview panel. */
+  blurb: text("blurb"),
+  /** JSON array of strings. */
+  tags: text("tags"),
+  /** A key into the frontend icon registry. */
+  icon: text("icon"),
+  /** A `--family-*` accent key. */
+  accent: text("accent"),
+  estMinutes: integer("est_minutes"),
+  blockCount: integer("block_count"),
   schemaJson: text("schema_json").notNull(),
   thumbnailR2Key: text("thumbnail_r2_key"),
   official: bool("official").notNull().default(false),

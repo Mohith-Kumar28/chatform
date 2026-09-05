@@ -35,6 +35,8 @@ import type {
   GetApiFormsByIdSubmissionsParams,
   GetApiKeys200Item,
   GetApiTemplates200Item,
+  GetApiTemplatesBySlug200,
+  GetApiTemplatesBySlug404,
   GetApiWebhooks200Item,
   PostApiAiAddBlocks200,
   PostApiAiAddBlocksBody,
@@ -54,6 +56,8 @@ import type {
   PostApiKeysBody,
   PostApiKeysByIdRotate200,
   PostApiKeysByIdRotateBody,
+  PostApiTemplatesBySlugUse403,
+  PostApiTemplatesBySlugUse404,
   PostApiWebhooks200,
   PostApiWebhooksBody,
   PostApiWebhooksByIdTest200,
@@ -2564,17 +2568,124 @@ export function useGetApiTemplates<TData = Awaited<ReturnType<typeof getApiTempl
 
 
 
+export type getApiTemplatesBySlugResponse200 = {
+  data: GetApiTemplatesBySlug200
+  status: 200
+}
+
+export type getApiTemplatesBySlugResponse404 = {
+  data: GetApiTemplatesBySlug404
+  status: 404
+}
+
+export type getApiTemplatesBySlugResponseSuccess = (getApiTemplatesBySlugResponse200) & {
+  headers: Headers;
+};
+export type getApiTemplatesBySlugResponseError = (getApiTemplatesBySlugResponse404) & {
+  headers: Headers;
+};
+
+export type getApiTemplatesBySlugResponse = (getApiTemplatesBySlugResponseSuccess | getApiTemplatesBySlugResponseError)
+
+export const getGetApiTemplatesBySlugUrl = (slug: string,) => {
+
+
+
+
+  return `/api/templates/${slug}`
+}
+
+/**
+ * @summary Get one template, including its document
+ */
+export const getApiTemplatesBySlug = async (slug: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiTemplatesBySlugResponse> => {
+
+  return customFetch<getApiTemplatesBySlugResponse>(getGetApiTemplatesBySlugUrl(slug),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiTemplatesBySlugQueryKey = (slug: string,) => {
+    return [
+    `/api/templates/${slug}`
+    ] as const;
+    }
+
+
+export const getGetApiTemplatesBySlugQueryOptions = <TData = Awaited<ReturnType<typeof getApiTemplatesBySlug>>, TError = GetApiTemplatesBySlug404>(slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiTemplatesBySlug>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTemplatesBySlugQueryKey(slug);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTemplatesBySlug>>> = ({ signal }) => getApiTemplatesBySlug(slug, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: slug !== null && slug !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTemplatesBySlug>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiTemplatesBySlugQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTemplatesBySlug>>>
+export type GetApiTemplatesBySlugQueryError = GetApiTemplatesBySlug404
+
+
+/**
+ * @summary Get one template, including its document
+ */
+
+export function useGetApiTemplatesBySlug<TData = Awaited<ReturnType<typeof getApiTemplatesBySlug>>, TError = GetApiTemplatesBySlug404>(
+ slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiTemplatesBySlug>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiTemplatesBySlugQueryOptions(slug,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type postApiTemplatesBySlugUseResponse200 = {
   data: void
   status: 200
 }
 
+export type postApiTemplatesBySlugUseResponse403 = {
+  data: PostApiTemplatesBySlugUse403
+  status: 403
+}
+
+export type postApiTemplatesBySlugUseResponse404 = {
+  data: PostApiTemplatesBySlugUse404
+  status: 404
+}
+
 export type postApiTemplatesBySlugUseResponseSuccess = (postApiTemplatesBySlugUseResponse200) & {
   headers: Headers;
 };
-;
+export type postApiTemplatesBySlugUseResponseError = (postApiTemplatesBySlugUseResponse403 | postApiTemplatesBySlugUseResponse404) & {
+  headers: Headers;
+};
 
-export type postApiTemplatesBySlugUseResponse = (postApiTemplatesBySlugUseResponseSuccess)
+export type postApiTemplatesBySlugUseResponse = (postApiTemplatesBySlugUseResponseSuccess | postApiTemplatesBySlugUseResponseError)
 
 export const getPostApiTemplatesBySlugUseUrl = (slug: string,) => {
 
@@ -2602,7 +2713,7 @@ export const postApiTemplatesBySlugUse = async (slug: string, options?: Paramete
 
 
 
-export const getPostApiTemplatesBySlugUseMutationOptions = <TError = unknown,
+export const getPostApiTemplatesBySlugUseMutationOptions = <TError = PostApiTemplatesBySlugUse403 | PostApiTemplatesBySlugUse404,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTemplatesBySlugUse>>, TError,PostApiTemplatesBySlugUseMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiTemplatesBySlugUse>>, TError,PostApiTemplatesBySlugUseMutationVariables, TContext> => {
 
@@ -2631,13 +2742,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiTemplatesBySlugUseMutationResult = NonNullable<Awaited<ReturnType<typeof postApiTemplatesBySlugUse>>>
 
-    export type PostApiTemplatesBySlugUseMutationError = unknown
+    export type PostApiTemplatesBySlugUseMutationError = PostApiTemplatesBySlugUse403 | PostApiTemplatesBySlugUse404
     export type PostApiTemplatesBySlugUseMutationVariables = {slug: string}
 
     /**
  * @summary Create a form from a template
  */
-export const usePostApiTemplatesBySlugUse = <TError = unknown,
+export const usePostApiTemplatesBySlugUse = <TError = PostApiTemplatesBySlugUse403 | PostApiTemplatesBySlugUse404,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTemplatesBySlugUse>>, TError,PostApiTemplatesBySlugUseMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof postApiTemplatesBySlugUse>>,

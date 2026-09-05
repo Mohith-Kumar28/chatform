@@ -1,0 +1,143 @@
+import { defineTemplate, type TemplateSeed } from "./define.js";
+
+export const EDUCATION: TemplateSeed[] = [
+  defineTemplate({
+    slug: "course-enrollment",
+    title: "Course enrolment",
+    category: "Education",
+    icon: "GraduationCap",
+    description: "Enrol students and place them at the right level.",
+    blurb:
+      "Enrolment and placement in one pass. Asking about prior experience and what they want out of the course lets you stream a cohort before the first session rather than after it.",
+    tags: ["course", "enrolment", "students"],
+    greeting: "Welcome! Let's get you enrolled.",
+    questions: [
+      { ref: "name", type: "short_text", title: "Your full name?", required: true },
+      { ref: "email", type: "email", title: "Email?", required: true },
+      {
+        ref: "course",
+        type: "dropdown",
+        title: "Which course?",
+        required: true,
+        options: [
+          { label: "Foundations" },
+          { label: "Intermediate" },
+          { label: "Advanced" },
+          { label: "Not sure — help me choose" },
+        ],
+      },
+      {
+        ref: "experience",
+        type: "opinion_scale",
+        title: "How much experience do you already have?",
+        required: true,
+        steps: 5,
+        labelLow: "None at all",
+        labelHigh: "A lot",
+      },
+      { ref: "goal", type: "long_text", title: "What do you want to be able to do by the end?", required: true, maxLength: 800 },
+      {
+        ref: "schedule",
+        type: "multi_select",
+        title: "When can you study?",
+        required: true,
+        maxSelections: 4,
+        options: [{ label: "Weekday mornings" }, { label: "Weekday evenings" }, { label: "Weekends" }, { label: "Any time" }],
+      },
+      { ref: "accessibility", type: "long_text", title: "Anything we should know to support you?", required: false, maxLength: 600 },
+    ],
+    ending: { title: "You're enrolled 🎓", body: "Your welcome pack is on its way." },
+  }),
+
+  defineTemplate({
+    slug: "student-feedback",
+    title: "Student feedback",
+    category: "Education",
+    icon: "BookOpen",
+    description: "End-of-course feedback that separates teaching from material.",
+    blurb:
+      "A course can have excellent material and a rushed delivery, or the reverse. Rating them apart — and asking about pace separately again — is what makes the answers actionable rather than flattering.",
+    tags: ["teaching", "feedback", "course"],
+    greeting: "You made it to the end! How was it?",
+    questions: [
+      { ref: "overall", type: "rating", title: "Overall, how would you rate the course?", required: true, scale: 5, shape: "star" },
+      {
+        ref: "aspects",
+        type: "matrix",
+        title: "How would you rate each part?",
+        required: true,
+        rows: ["Course material", "Teaching", "Exercises", "Pace", "Support"],
+        columns: ["Poor", "Fair", "Good", "Excellent"],
+      },
+      {
+        ref: "pace",
+        type: "single_select",
+        title: "How was the pace?",
+        required: true,
+        options: [{ label: "Too slow" }, { label: "About right" }, { label: "Too fast" }],
+      },
+      { ref: "most_useful", type: "long_text", title: "What was most useful?", required: false, maxLength: 800 },
+      { ref: "least_useful", type: "long_text", title: "What would you cut or change?", required: false, maxLength: 800 },
+      { ref: "recommend", type: "nps", title: "How likely are you to recommend this course?", required: true },
+    ],
+    ending: { title: "Thank you 📚", body: "Every cohort improves because of answers like these." },
+  }),
+
+  defineTemplate({
+    slug: "quiz",
+    title: "Knowledge quiz",
+    category: "Education",
+    icon: "ListChecks",
+    description: "A scored quiz you can swap the questions out of.",
+    blurb:
+      "Three worked example questions with scores already attached to the options, so the scoring wiring is done and you only replace the wording. Use it for onboarding checks, course tests or lead-scoring quizzes.",
+    tags: ["quiz", "scoring", "assessment"],
+    greeting: "Five questions. No pressure — you'll get your score at the end.",
+    questions: [
+      { ref: "name", type: "short_text", title: "What should we call you?", required: true },
+      {
+        ref: "q1",
+        type: "single_select",
+        title: "Which of these is a primary colour?",
+        required: true,
+        options: [
+          { label: "Green", score: 0 },
+          { label: "Blue", score: 1 },
+          { label: "Orange", score: 0 },
+          { label: "Purple", score: 0 },
+        ],
+      },
+      {
+        ref: "q2",
+        type: "multi_select",
+        title: "Which of these are mammals? Pick all that apply.",
+        required: true,
+        maxSelections: 4,
+        options: [
+          { label: "Dolphin", score: 1 },
+          { label: "Shark", score: 0 },
+          { label: "Bat", score: 1 },
+          { label: "Penguin", score: 0 },
+        ],
+      },
+      {
+        ref: "q3",
+        type: "yes_no",
+        title: "Is the Pacific the largest ocean on Earth?",
+        required: true,
+        yesLabel: "Yes",
+        noLabel: "No",
+      },
+      {
+        ref: "confidence",
+        type: "opinion_scale",
+        title: "How confident are you in your answers?",
+        required: false,
+        steps: 5,
+        labelLow: "Guessing",
+        labelHigh: "Certain",
+      },
+    ],
+    ending: { title: "Nicely done ✅", body: "Swap in your own questions — the scores are already wired up." },
+  }),
+];

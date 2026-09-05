@@ -1276,6 +1276,88 @@ export type GetApiTemplates200Item = {
   title: string;
   category: string;
   description: string;
+  blurb: string;
+  tags: string[];
+  icon: string;
+  accent: string;
+  blockCount: number;
+  estMinutes: number;
+  usageCount: number;
+};
+
+export type GetApiTemplatesBySlug200 = {
+  slug: string;
+  title: string;
+  category: string;
+  description: string;
+  blurb: string;
+  tags: string[];
+  icon: string;
+  accent: string;
+  blockCount: number;
+  estMinutes: number;
+  usageCount: number;
+  doc: unknown;
+};
+
+export type GetApiTemplatesBySlug404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type GetApiTemplatesBySlug404Error = {
+  code: string;
+  message: string;
+  issues?: GetApiTemplatesBySlug404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type GetApiTemplatesBySlug404 = {
+  error: GetApiTemplatesBySlug404Error;
+};
+
+export type PostApiTemplatesBySlugUse403ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiTemplatesBySlugUse403Error = {
+  code: string;
+  message: string;
+  issues?: PostApiTemplatesBySlugUse403ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiTemplatesBySlugUse403 = {
+  error: PostApiTemplatesBySlugUse403Error;
+};
+
+export type PostApiTemplatesBySlugUse404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiTemplatesBySlugUse404Error = {
+  code: string;
+  message: string;
+  issues?: PostApiTemplatesBySlugUse404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiTemplatesBySlugUse404 = {
+  error: PostApiTemplatesBySlugUse404Error;
 };
 
 export type GetApiAuditLogsParams = {
