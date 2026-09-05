@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
 import { XIcon } from "lucide-react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
@@ -39,7 +40,11 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        // The z-index scale in globals.css exists precisely so these layers
+        // have a declared order. This was a bare `z-50` while the command
+        // palette sits at `--z-modal` (60) — so the palette rendered *over*
+        // an open dialog rather than under it.
+        "fixed inset-0 z-[var(--z-overlay)] bg-black/50 backdrop-blur-[2px] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className
       )}
       {...props}
@@ -47,30 +52,77 @@ function DialogOverlay({
   )
 }
 
+/**
+ * Sizes, because callers were reaching past the component to set their own.
+ *
+ * `DialogContent` used to bake in one width (`sm:max-w-lg`), so anything
+ * wider — DESIGN.md §2.2's create screen, §2.10's generate modal — had to
+ * pass a `className` that raced the component's own class. Now the width is
+ * a prop, and `lg` is the default so every existing call site is unchanged.
+ *
+ * `layout="panel"` drops the padding and switches to a column, for dialogs
+ * that pin their own header and footer around a scrolling `DialogBody`.
+ */
+const dialogContentVariants = cva(
+  [
+    "fixed top-[50%] left-[50%] z-[var(--z-modal)] w-full max-w-[calc(100%-2rem)]",
+    "translate-x-[-50%] translate-y-[-50%] border bg-background shadow-lg outline-none",
+    // Modals are rounded-2xl (DESIGN.md §4.3) — cards are xl, modals are one
+    // step softer.
+    "rounded-2xl",
+    "duration-[var(--duration-enter)] ease-[var(--ease-out)]",
+    "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+    "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+  ],
+  {
+    variants: {
+      size: {
+        sm: "sm:max-w-sm",
+        md: "sm:max-w-md",
+        lg: "sm:max-w-lg",
+        xl: "sm:max-w-xl",
+        "2xl": "sm:max-w-2xl",
+        "3xl": "sm:max-w-3xl",
+        "4xl": "sm:max-w-4xl",
+        full: "sm:max-w-[min(72rem,calc(100vw-4rem))]",
+      },
+      layout: {
+        default: "grid gap-4 p-6",
+        panel: "flex max-h-[min(46rem,calc(100dvh-4rem))] flex-col overflow-hidden p-0",
+      },
+    },
+    defaultVariants: {
+      size: "lg",
+      layout: "default",
+    },
+  }
+)
+
 function DialogContent({
   className,
   children,
+  size,
+  layout,
   showCloseButton = true,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & {
-  showCloseButton?: boolean
-}) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> &
+  VariantProps<typeof dialogContentVariants> & {
+    showCloseButton?: boolean
+  }) {
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
-        className={cn(
-          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
-          className
-        )}
+        data-size={size ?? "lg"}
+        className={cn(dialogContentVariants({ size, layout }), className)}
         {...props}
       >
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="absolute top-4 right-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="absolute top-4 right-4 z-10 grid size-7 place-items-center rounded-full text-muted-foreground transition-colors duration-[var(--duration-micro)] hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             <XIcon />
             <span className="sr-only">Close</span>
@@ -86,6 +138,21 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="dialog-header"
       className={cn("flex flex-col gap-2 text-center sm:text-left", className)}
+      {...props}
+    />
+  )
+}
+
+/**
+ * The scrolling middle of a `layout="panel"` dialog. `min-h-0` is what lets
+ * it actually shrink inside the flex column — without it the body grows and
+ * the pinned footer is pushed off the bottom of the viewport.
+ */
+function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-body"
+      className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain", className)}
       {...props}
     />
   )
@@ -146,6 +213,7 @@ function DialogDescription({
 
 export {
   Dialog,
+  DialogBody,
   DialogClose,
   DialogContent,
   DialogDescription,
@@ -155,4 +223,5 @@ export {
   DialogPortal,
   DialogTitle,
   DialogTrigger,
+  dialogContentVariants,
 }

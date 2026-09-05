@@ -3,13 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpDown,
   Copy,
   ExternalLink,
   LayoutGrid,
-  Loader2,
   MessageSquarePlus,
   MoreHorizontal,
   Plus,
@@ -19,7 +18,13 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { customFetch } from "@/lib/api/mutator";
+import {
+  getGetApiFormsQueryKey,
+  useDeleteApiFormsById,
+  useGetApiForms,
+} from "@/lib/api/dashboard/dashboard";
+import { apiData } from "@/lib/api/payload";
+import { invalidateForms } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { TooltipHint } from "@/components/ui/kbd";
 import {
@@ -31,19 +36,10 @@ import {
 import { NEW_FORM_EVENT } from "@/components/dashboard/use-app-shortcuts";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,7 +56,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { AiCapBanner } from "@/components/billing/ai-cap-banner";
-import { FormGenerationProgress, useFormGeneration } from "@/components/forms/form-generation";
+import { CreateFormDialog } from "@/components/forms/create-form-dialog";
 
 interface FormRow {
   id: string;
@@ -78,14 +74,13 @@ export function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["forms"],
-    queryFn: () => customFetch<unknown>("/api/forms"),
+  const { data, isLoading } = useGetApiForms({
+    query: { queryKey: getGetApiFormsQueryKey() },
   });
   // Memoised so it is not a fresh array on every render — the sort below
   // depends on it, and an unstable dependency re-sorts the whole grid whenever
   // anything else in this component changes.
-  const allForms = useMemo(() => (Array.isArray(data) ? data : []) as FormRow[], [data]);
+  const allForms = useMemo(() => apiData<FormRow[]>(data) ?? [], [data]);
 
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("newest");
@@ -125,13 +120,14 @@ export function DashboardContent() {
     return () => window.removeEventListener(NEW_FORM_EVENT, open);
   }, []);
 
-  const remove = useMutation({
-    mutationFn: (id: string) => customFetch(`/api/forms/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["forms"] });
-      toast.success("Form deleted");
+  const remove = useDeleteApiFormsById<Error>({
+    mutation: {
+      onSuccess: () => {
+        void invalidateForms(queryClient);
+        toast.success("Form deleted");
+      },
+      onError: (e) => toast.error("Couldn't delete", { description: e.message }),
     },
-    onError: (e) => toast.error("Couldn't delete", { description: (e as Error).message }),
   });
 
   return (
@@ -273,7 +269,7 @@ export function DashboardContent() {
           unhandled rejection in the console at the same time.
         */
         onConfirm={() => {
-          if (pendingDelete) remove.mutate(pendingDelete.id);
+          if (pendingDelete) remove.mutate({ id: pendingDelete.id });
         }}
       />
     </div>
@@ -403,155 +399,4 @@ function relativeTime(ts: number): string {
   const days = Math.round(hours / 24);
   if (days < 30) return `${days}d ago`;
   return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function CreateFormDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const [mode, setMode] = useState<"ai" | "blank">("ai");
-  const [title, setTitle] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const generation = useFormGeneration();
-
-  /**
-   * Describing a form is now one request, not three.
-   *
-   * It used to generate, then create the form, then save the document — three
-   * round trips the author waited through in silence, the first of which held
-   * the connection open long enough to risk Cloudflare's 100-second edge
-   * timeout on its own. The streaming route does all three server-side and
-   * narrates them, so `done` means the form exists and there is nothing left
-   * to do but open it.
-   */
-  const generate = () => {
-    void generation.start({ prompt: prompt.trim(), questionCount: 6 }, (result) => {
-      void queryClient.invalidateQueries({ queryKey: ["forms"] });
-      setPrompt("");
-      // A beat on the finished checklist, so the last step is seen landing
-      // rather than replaced mid-animation by a route change.
-      window.setTimeout(() => {
-        onOpenChange(false);
-        generation.reset();
-        router.push(`/forms/${result.formId}/build`);
-      }, 450);
-    });
-  };
-
-  const createBlank = useMutation({
-    mutationFn: () =>
-      customFetch<{ id: string }>("/api/forms", {
-        method: "POST",
-        body: JSON.stringify({ title: title.trim() || "Untitled form" }),
-      }),
-    onSuccess: (created) => {
-      void queryClient.invalidateQueries({ queryKey: ["forms"] });
-      onOpenChange(false);
-      setTitle("");
-      // Land in the builder, not back on the grid.
-      router.push(`/forms/${created.id}/build`);
-    },
-    onError: (e) =>
-      toast.error("Couldn't create the form", { description: (e as Error).message }),
-  });
-
-  const busy = generation.running || createBlank.isPending;
-  const canSubmit = mode === "blank" ? title.trim().length > 0 : prompt.trim().length > 5;
-
-  // Closing mid-generation cancels it. The form is only written at the very
-  // end, so nothing half-made is left behind.
-  const handleOpenChange = (next: boolean) => {
-    if (!next) {
-      generation.cancel();
-      generation.reset();
-    }
-    onOpenChange(next);
-  };
-
-  const drafting = generation.running || generation.error !== null;
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{drafting ? "Building your form" : "New form"}</DialogTitle>
-          <DialogDescription>
-            {drafting
-              ? "Reading what you gave me and drafting the conversation."
-              : "Describe what you want to find out and the AI drafts the conversation."}
-          </DialogDescription>
-        </DialogHeader>
-
-        {drafting ? (
-          <FormGenerationProgress
-            stages={generation.stages}
-            questions={generation.questions}
-            pages={generation.pages}
-            notice={generation.notice}
-            error={generation.error}
-            onCancel={() => {
-              generation.cancel();
-              generation.reset();
-            }}
-            onRetry={generate}
-          />
-        ) : (
-          <>
-            <SegmentedControl
-              options={[
-                { value: "ai", label: "Describe it", icon: Sparkles },
-                { value: "blank", label: "Start blank", icon: Plus },
-              ]}
-              value={mode}
-              onChange={setMode}
-            />
-
-            {mode === "ai" ? (
-              <div className="space-y-1.5">
-                <Label htmlFor="ai-prompt">What should it find out?</Label>
-                <Textarea
-                  id="ai-prompt"
-                  rows={4}
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="A waitlist form for our launch at example.com — collect email, company size, and what problem they're hoping we solve."
-                />
-                <p className="text-muted-foreground text-xs">
-                  Paste your site&apos;s URL and it will read the page first, so the questions know
-                  your product.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                <Label htmlFor="form-title">Form name</Label>
-                <Input
-                  id="form-title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Customer feedback"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && canSubmit) createBlank.mutate();
-                  }}
-                />
-              </div>
-            )}
-
-            <Button
-              shape="pill"
-              disabled={!canSubmit || busy}
-              onClick={() => (mode === "ai" ? generate() : createBlank.mutate())}
-            >
-              {createBlank.isPending && <Loader2 className="size-3.5 animate-spin" />}
-              {createBlank.isPending ? "Creating…" : "Create form"}
-            </Button>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
 }

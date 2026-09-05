@@ -43,7 +43,7 @@ export function startTour(surface: "dashboard" | "builder", onFinish?: () => voi
 
   const dashboardSteps = [
     { element: "[data-tour='nav']", popover: { title: "Welcome to chatform 👋", description: "This bar is home base: Forms, Templates, API keys, Usage and your Team live here." } },
-    { element: "[data-tour='new-form']", popover: { title: "Create forms", description: "Click New form to start blank or describe what you need and let AI build the whole form — questions, options and branching included." } },
+    { element: "[data-tour='new-form']", popover: { title: "Create forms", description: "One screen, three ways in: describe what you need and let AI draft the whole form, start from a template, or open a blank page." } },
     { element: "[data-tour='form-grid']", popover: { title: "Your forms", description: "Every form is a conversational interview. Edit, preview, or check results right from these cards." } },
     { element: "[data-tour='help-tour']", popover: { title: "Take the tour anytime", description: "Stuck? Click the ? button to replay this tour. Enjoy building!" } },
   ];
