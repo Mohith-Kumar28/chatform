@@ -22,6 +22,17 @@ export function Confetti({
   className?: string;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  /**
+   * The palette is read at burst time rather than depended on.
+   *
+   * `colors` is a fresh array literal on every render of the ending card, so an
+   * effect that listed it as a dependency re-ran on every render — and the
+   * ending card re-renders constantly, because the transcript tracks whether it
+   * is scrolled to the bottom. Scrolling the completion screen therefore set the
+   * confetti off again, and again, and again. One burst per mount is the whole
+   * intent, so the palette is captured once and the effect depends on nothing.
+   */
+  const colorsRef = useRef(colors);
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -29,6 +40,7 @@ export function Confetti({
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
 
+    const palette = colorsRef.current;
     const dpr = window.devicePixelRatio || 1;
     const w = (canvas.width = canvas.offsetWidth * dpr);
     const h = (canvas.height = canvas.offsetHeight * dpr);
@@ -43,7 +55,7 @@ export function Confetti({
       size: 5 + Math.random() * 6,
       rot: Math.random() * Math.PI,
       vr: (Math.random() - 0.5) * 0.25,
-      color: colors[Math.floor(Math.random() * colors.length)]!,
+      color: palette[Math.floor(Math.random() * palette.length)]!,
     }));
 
     let raf = 0;
@@ -75,7 +87,7 @@ export function Confetti({
     }
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [colors]);
+  }, []);
 
   return (
     <canvas ref={ref} aria-hidden className={className} />

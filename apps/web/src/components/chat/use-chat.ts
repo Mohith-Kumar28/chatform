@@ -94,6 +94,20 @@ interface UseChatOptions {
 const MAX_RECONNECT_ATTEMPTS = 8;
 
 /**
+ * How long the stream may say nothing before we assume it is dead.
+ *
+ * The server pings every 15s, so silence past three of them is not a quiet
+ * conversation — it is a connection that went away without an error. That
+ * happens routinely: a sleeping phone, a network hand-off, a proxy that drops
+ * an idle stream. `EventSource` does not always fire `onerror` for it, so the
+ * page sat on the typing dots with the answer already recorded server-side and
+ * the reply already sent to a socket nobody was reading. Reconnecting replays
+ * everything missed (the seq ratchet makes that free), which is exactly what a
+ * manual page refresh used to do by hand.
+ */
+const STALL_MS = 45000;
+
+/**
  * Where a respondent's place in a form is remembered.
  *
  * Partial answers already persist server-side — every accepted answer is
@@ -210,6 +224,9 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
   const esRef = useRef<EventSource | null>(null);
   const pendingRef = useRef<Promise<void> | null>(null);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** When the current stream last said anything at all, pings included. */
+  const lastEventAtRef = useRef(0);
+  const stallTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /**
    * The id of the echo this device is still waiting on a server twin for.
@@ -291,6 +308,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
   const connectStream = useCallback(
     (sessionId: string, token: string, attempt: number) => {
       esRef.current?.close();
+      if (stallTimer.current) clearInterval(stallTimer.current);
       // Only a *different* conversation starts from an empty thread. Replay of
       // the same one is deduped by seq below.
       if (streamSessionRef.current !== sessionId) {
@@ -302,6 +320,23 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
 
       const es = new EventSource(`${apiOrigin}/p/sessions/${sessionId}/events?t=${token}`);
       esRef.current = es;
+      lastEventAtRef.current = Date.now();
+
+      const alive = () => {
+        lastEventAtRef.current = Date.now();
+      };
+      // Not routed through `on`: a ping carries no seq and means only "still
+      // here", which is precisely what the watchdog below needs to hear.
+      es.addEventListener("ping", alive);
+
+      stallTimer.current = setInterval(() => {
+        if (Date.now() - lastEventAtRef.current < STALL_MS) return;
+        if (stallTimer.current) clearInterval(stallTimer.current);
+        es.close();
+        setStatus("reconnecting");
+        // attempt 0: this is a fresh problem, not a continuation of a backoff.
+        reconnectRef.current?.(sessionId, token, 0);
+      }, 10000);
 
       /**
        * Wrap a listener so an event that has already been applied is dropped.
@@ -312,6 +347,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
       const on = (type: string, handler: (e: MessageEvent) => void) => {
         es.addEventListener(type, (raw) => {
           const e = raw as MessageEvent;
+          alive();
           const seq = Number(e.lastEventId);
           if (Number.isFinite(seq) && seq > 0) {
             if (seq <= lastSeqRef.current) return;
@@ -322,6 +358,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
       };
 
       es.addEventListener("session_ready", () => {
+        alive();
         setStatus("ready");
         setError(null);
         setResolving(false);
@@ -519,6 +556,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
 
       es.onerror = () => {
         es.close();
+        if (stallTimer.current) clearInterval(stallTimer.current);
         if (attempt < MAX_RECONNECT_ATTEMPTS) {
           // Say we are reconnecting rather than silently blanking the UI.
           setStatus("reconnecting");
@@ -860,6 +898,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
     return () => {
       clearTimeout(t);
       if (retryTimer.current) clearTimeout(retryTimer.current);
+      if (stallTimer.current) clearInterval(stallTimer.current);
       esRef.current?.close();
       esRef.current = null;
     };

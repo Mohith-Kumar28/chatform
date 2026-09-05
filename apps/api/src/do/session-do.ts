@@ -128,6 +128,21 @@ function acceptsAnyString(block: Block): boolean {
 
 const IDLE_ALARM_MS = 30 * 60 * 1000;
 const MAX_REPLAY = 200;
+/**
+ * How long a single SSE frame may take to reach one connection before that
+ * connection is treated as gone.
+ *
+ * A frame is a few hundred bytes; a live connection takes it immediately. A
+ * connection that does not — a phone that slept, a laptop that closed, a
+ * network that dropped without a FIN — leaves `write()` pending against a full
+ * transform-stream queue forever, and `emit` used to await exactly that. One
+ * abandoned tab could therefore stall the whole turn for everyone still
+ * watching: the respondent had answered, the server had the answer, and the
+ * typing dots stayed up until the page was reloaded. Nothing is lost by cutting
+ * a slow reader loose — every event is durable, and the client reconnects and
+ * replays from where it stopped.
+ */
+const WRITE_STALL_MS = 5000;
 
 /**
  * SessionDO — one instance per chat session. Owns the interview FSM,
@@ -318,7 +333,22 @@ export class SessionDO extends DurableObject<Bindings> {
     this.meta = stored.meta;
     this.doc = parsed.data;
     this.state = { answers: stored.answers, variables: stored.variables, hidden: this.meta.hiddenFields };
-    this.seq = stored.seq;
+    /**
+     * The high-water mark of what was actually emitted, not of what was last
+     * persisted alongside the rest of the session.
+     *
+     * `emit` bumps `seq` and writes `evt:<seq>`, but only `persistMeta` saves
+     * the counter — so an eviction after an emit and before the next persist
+     * rewound it. The next events then reused sequence numbers the client had
+     * already seen, and the client's replay ratchet (which exists so a
+     * reconnect is not applied twice) silently dropped every one of them: the
+     * reply was sent, the browser threw it away, the typing dots never
+     * stopped. Reading the last durable event back is the only number that
+     * cannot go backwards.
+     */
+    const tail = await this.ctx.storage.list<SSEEnvelope>({ prefix: "evt:", reverse: true, limit: 1 });
+    const lastEmitted = [...tail.values()][0]?.seq ?? 0;
+    this.seq = Math.max(stored.seq, lastEmitted);
     this.turnCount = stored.turnCount;
     this.collectedCount = stored.collectedCount;
     // These two used to live only in memory. A DO eviction therefore reset the
@@ -428,15 +458,35 @@ export class SessionDO extends DurableObject<Bindings> {
     // persist for replay after eviction (key sorts by seq)
     await this.ctx.storage.put(`evt:${String(evt.seq).padStart(8, "0")}`, evt);
     const payload = this.encoder.encode(this.serialize(evt));
-    const dead: WritableStreamDefaultWriter<Uint8Array>[] = [];
-    for (const w of this.writers) {
-      try {
-        await w.write(payload);
-      } catch {
-        dead.push(w);
-      }
+    // In parallel, and never unbounded: see WRITE_STALL_MS. A connection that
+    // fails or stalls is dropped and aborted, which ends its response so the
+    // browser reconnects and replays instead of watching a dead stream.
+    const results = await Promise.all(
+      [...this.writers].map(async (w) => ({ w, ok: await this.writeFrame(w, payload) })),
+    );
+    for (const { w, ok } of results) {
+      if (ok) continue;
+      this.writers.delete(w);
+      void w.abort().catch(() => {});
     }
-    for (const w of dead) this.writers.delete(w);
+  }
+
+  /** One frame to one connection, with a deadline. False means "this one is gone". */
+  private async writeFrame(w: WritableStreamDefaultWriter<Uint8Array>, payload: Uint8Array): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        w.write(payload),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("sse_write_stalled")), WRITE_STALL_MS);
+        }),
+      ]);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   /** True when the LLM layer should phrase this turn. */
