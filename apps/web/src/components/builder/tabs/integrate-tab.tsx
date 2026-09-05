@@ -6,12 +6,11 @@ import { useGetApiFormsById } from "@/lib/api/dashboard/dashboard";
 import { useClientValue } from "@/hooks/use-client-value";
 
 /**
- * The builder's Integrate tab.
+ * The builder's Integrate tab — the embed, and where the answers go.
  *
- * The same workspace the `/integrations` page renders, on the form you already
- * have open. It used to be a webhook form plus a hardcoded snippet pointing at
- * a hostname that stopped existing when the domain changed — so the one thing
- * people copied from this tab produced a form that never loaded.
+ * It used to be a webhook form plus a hardcoded snippet pointing at a hostname
+ * that stopped existing when the domain changed, so the one thing people
+ * copied from this tab produced a form that never loaded.
  */
 export function IntegrateTab() {
   const formId = useBuilderStore((s) => s.formId);

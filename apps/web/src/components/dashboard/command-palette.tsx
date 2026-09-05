@@ -6,7 +6,6 @@ import {
   FileStack,
   Gauge,
   KeyRound,
-  Plug,
   LayoutGrid,
   Moon,
   Plus,
@@ -177,7 +176,6 @@ export function CommandPalette() {
             {[
               { label: "Forms", href: "/dashboard", icon: LayoutGrid },
               { label: "Templates", href: "/templates", icon: FileStack },
-              { label: "Integrations", href: "/integrations", icon: Plug },
               { label: "API keys", href: "/api-keys", icon: KeyRound },
               { label: "Usage", href: "/usage", icon: Gauge },
               { label: "Team", href: "/team", icon: Users },

@@ -26,15 +26,16 @@ import { WebhooksPanel } from "./webhooks-panel";
 import { cn } from "@/lib/utils";
 
 /**
- * Everything that connects a form to something else, on one screen.
+ * Everything that connects one form to something else.
  *
- * It was in three places before and complete in none of them: the Share tab had
- * one embed mode, the Integrate tab had a webhook form and a hardcoded snippet
- * pointing at a dead hostname, and there was no org-level home for any of it.
+ * It was split across two tabs and complete in neither: Share had a single
+ * embed mode, and Integrate had a webhook form plus a hardcoded snippet
+ * pointing at a hostname that stopped existing when the domain changed.
  *
- * The shape follows DESIGN.md §2.8 — a grid of destinations, each opening a
- * sheet — with one deviation. The embed is not a card: it is the thing most
- * people came for, so it is the page.
+ * Integrations belong to a form, so this lives in the builder, where the form
+ * is already open. The shape follows DESIGN.md §2.8 — a grid of destinations,
+ * each opening a sheet — with one deviation: the embed is not a card, because
+ * it is what most people opened this tab for.
  */
 
 type PanelKey = "spreadsheet" | "webhooks";
@@ -237,14 +238,5 @@ function DestinationCard({
     <button type="button" onClick={onClick} disabled={disabled} className={className}>
       {body}
     </button>
-  );
-}
-
-/** A "pick a form first" stand-in, so the org-level page is never a blank grid. */
-export function IntegrationsPlaceholder({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-muted/30 grid place-items-center rounded-2xl px-8 py-20 text-center">
-      {children}
-    </div>
   );
 }
