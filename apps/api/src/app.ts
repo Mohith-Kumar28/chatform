@@ -14,6 +14,7 @@ import { resultsRouter } from "./routes/results.js";
 import { v1Router } from "./routes/v1.js";
 import { keysRouter } from "./routes/keys.js";
 import { webhooksRouter } from "./routes/webhook-admin.js";
+import { integrationsRouter, feedRouter } from "./routes/integrations.js";
 import { billingRouter, billingPublicRouter } from "./routes/billing.js";
 import { previewRouter } from "./routes/preview.js";
 import { templatesRouter } from "./routes/templates.js";
@@ -112,6 +113,7 @@ export function createApp() {
   app.route("/health", healthRouter);
   publicRouter.route("/", uploadsRouter);
   publicRouter.route("/", assetsRouter);
+  app.route("/p", feedRouter);
   app.route("/p", viewsRouter);
   app.route("/p", publicRouter);
   app.route("/api", dashboardRouter);
@@ -126,6 +128,7 @@ export function createApp() {
   app.route("/d", downloadRouter);
   app.route("/api", keysRouter);
   app.route("/api", webhooksRouter);
+  app.route("/api", integrationsRouter);
   app.route("/api", billingRouter);
   app.route("/api", previewRouter);
   app.route("/api", templatesRouter);

@@ -24,8 +24,8 @@ export const BUILDER_TABS = [
   { segment: "build", label: "Build", icon: Blocks, hint: "Questions and flow", alsoMatches: ["workflow"] },
   { segment: "agent", label: "Agent", icon: Bot, hint: "Persona, goal and knowledge", alsoMatches: [] },
   { segment: "results", label: "Results", icon: BarChart3, hint: "Responses and analytics", alsoMatches: [] },
-  { segment: "share", label: "Share", icon: Share2, hint: "Link, embed and QR", alsoMatches: [] },
-  { segment: "integrate", label: "Integrate", icon: Webhook, hint: "Webhooks and destinations", alsoMatches: [] },
+  { segment: "share", label: "Share", icon: Share2, hint: "Link, QR and email", alsoMatches: [] },
+  { segment: "integrate", label: "Integrate", icon: Webhook, hint: "Embed, webhooks and spreadsheets", alsoMatches: [] },
   { segment: "settings", label: "Settings", icon: SettingsIcon, hint: "Access, email and metadata", alsoMatches: [] },
 ] as const;
 

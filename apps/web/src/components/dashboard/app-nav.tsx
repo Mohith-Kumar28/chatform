@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
-import { FileStack, Gauge, KeyRound, LayoutGrid, Users } from "lucide-react";
+import { FileStack, Gauge, LayoutGrid, Plug, Users } from "lucide-react";
 import { TooltipHint } from "@/components/ui/kbd";
 import {
   Tooltip,
@@ -23,7 +23,10 @@ import { cn } from "@/lib/utils";
 export const APP_NAV = [
   { href: "/dashboard", label: "Forms", icon: LayoutGrid },
   { href: "/templates", label: "Templates", icon: FileStack },
-  { href: "/api-keys", label: "API keys", icon: KeyRound },
+  // API keys moved to the account menu: minting one is something a developer
+  // does once, and it was holding a slot beside Forms and Templates that the
+  // thing people actually come back for — putting a form on a site — did not have.
+  { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/billing", label: "Plan", icon: Gauge },
   { href: "/team", label: "Team", icon: Users },
 ] as const;

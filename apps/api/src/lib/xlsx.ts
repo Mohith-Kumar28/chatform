@@ -173,9 +173,13 @@ function crc32(bytes: Uint8Array): number {
 async function deflate(bytes: Uint8Array): Promise<Uint8Array | null> {
   if (typeof CompressionStream === "undefined") return null;
   try {
-    const stream = new Blob([bytes as BlobPart])
-      .stream()
-      .pipeThrough(new CompressionStream("deflate-raw"));
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    });
+    const stream = source.pipeThrough(new CompressionStream("deflate-raw"));
     return new Uint8Array(await new Response(stream).arrayBuffer());
   } catch {
     // A stored entry is still a valid ZIP, just a larger one.

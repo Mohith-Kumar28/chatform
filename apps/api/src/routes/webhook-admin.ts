@@ -3,12 +3,25 @@ import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
-import { hmac } from "../lib/webhooks.js";
+import { hmac, EVENT_ALIASES } from "../lib/webhooks.js";
 import { requirePermission, type AuthzVars } from "../lib/authorize.js";
 import { getEntitlements, countWebhooks } from "../lib/entitlements.js";
 import { limitReached } from "@repo/entitlements";
 
 export const webhooksRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
+
+/**
+ * Every name a subscription may be written as, derived from the dispatcher's own
+ * alias table rather than typed out again here.
+ *
+ * The two lists had already drifted: the dashboard offers `response.completed`
+ * and `response.partial` — the canonical namespace — while this validator
+ * accepted only the legacy `submission.*` pair, so *every* webhook added from
+ * the Integrate tab was refused with a 422 the UI did not show. Deriving the
+ * enum means the endpoint accepts exactly what the dispatcher can deliver, and
+ * a new event is subscribable the moment it is emitted.
+ */
+const SUBSCRIBABLE_EVENTS = [...new Set(Object.values(EVENT_ALIASES).flat())] as [string, ...string[]];
 
 webhooksRouter.use("/webhooks/*", requireSession);
 webhooksRouter.use("/webhooks", requireSession);
@@ -64,7 +77,7 @@ webhooksRouter.post(
     "json",
     z.object({
       url: z.string().url().refine((u) => u.startsWith("https://") || u.startsWith("http://localhost")),
-      events: z.array(z.enum(["submission.completed", "submission.abandoned", "session.started", "form.published"])).min(1),
+      events: z.array(z.enum(SUBSCRIBABLE_EVENTS)).min(1),
       formId: z.string().nullable().optional(),
     }),
   ),

@@ -1114,8 +1114,12 @@ export type PostApiWebhooksBodyEventsItem = typeof PostApiWebhooksBodyEventsItem
 
 
 export const PostApiWebhooksBodyEventsItem = {
+  responsecompleted: 'response.completed',
   submissioncompleted: 'submission.completed',
+  responseabandoned: 'response.abandoned',
   submissionabandoned: 'submission.abandoned',
+  responsepartial: 'response.partial',
+  responseanswer_recorded: 'response.answer_recorded',
   sessionstarted: 'session.started',
   formpublished: 'form.published',
 } as const;
@@ -1145,6 +1149,29 @@ export type DeleteApiWebhooksById200 = {
 export type PostApiWebhooksByIdTest200 = {
   ok: boolean;
   signature: string;
+};
+
+export type GetApiFormsByIdIntegrations200Item = {
+  id: string;
+  provider: string;
+  status: string;
+  createdAt: number;
+  feedUrl?: string;
+  includePartials?: boolean;
+};
+
+export type PostApiFormsByIdIntegrationsSpreadsheetBody = {
+  includePartials?: boolean;
+  rotate?: boolean;
+};
+
+export type PostApiFormsByIdIntegrationsSpreadsheet200 = {
+  id: string;
+  provider: string;
+  status: string;
+  createdAt: number;
+  feedUrl?: string;
+  includePartials?: boolean;
 };
 
 export type GetApiBillingEntitlements200Features = {[key: string]: boolean};

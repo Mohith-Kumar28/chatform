@@ -1,0 +1,80 @@
+---
+title: Google Sheets & Excel
+description: A file when you want a snapshot, a URL when you want a sheet that stays right.
+---
+
+"Put the responses in a spreadsheet" is two different requests, and answering
+only the first is why exported data is always a week old.
+
+## A file
+
+From **Integrations → Google Sheets & Excel**, or directly:
+
+```bash
+GET /api/forms/{formId}/submissions/export        # CSV
+GET /api/forms/{formId}/submissions/export.xlsx   # Excel workbook
+```
+
+Add `?includePartials=true` to include unfinished responses. Both go through the
+browser session, so the download link works from the dashboard with no key.
+
+The workbook is a real `.xlsx`, not a renamed CSV: typed cells, a frozen bold
+header, filters, and columns sized to their contents. It also keeps the leading
+zeros on things that look like numbers and are not — `007`, `0044 7700 900123` —
+which is the single most common way an exported phone column is destroyed.
+
+## A sheet that stays right
+
+Create a feed URL in **Integrations → Google Sheets & Excel → Create feed URL**,
+then in Google Sheets put this in cell A1:
+
+```
+=IMPORTDATA("https://api.chatform.in/p/feed/cff_…​.csv")
+```
+
+Sheets re-reads it about hourly. New responses appear on their own; nobody has
+to remember to export anything.
+
+In Excel: **Data → From Web**, paste the same URL, and set the refresh interval
+in the query properties.
+
+### What the feed is
+
+A stable CSV of this form's responses, with the same columns as the export —
+one per question, titled with the question rather than its `ref`.
+
+Cells that a spreadsheet would execute rather than display (`=`, `+`, `@`, and a
+leading `-` that is not a number) are prefixed with an apostrophe. Respondents
+type these rows, and a spreadsheet treats a leading `=` as a program.
+
+### The URL is the credential
+
+A spreadsheet cannot send a cookie or an `Authorization` header — it fetches a
+URL on a schedule and nothing else. So the token in the path is the whole
+credential, the same trade the [signed download links](/docs/exports) make:
+
+- 192 bits of CSPRNG output, looked up by hash, never guessable.
+- Anyone holding the link can read the responses. Treat it like a password.
+- **Rotate** issues a new URL and kills the old one; **Revoke** kills it with no
+  replacement. Both are immediate, and both leave any sheet using the old URL
+  showing an error in the cell rather than stale data.
+
+The feed serves the 5,000 most recent responses. Past that, use the
+[exports API](/docs/exports), which is built for the whole history.
+
+<Callout>
+Unfinished responses in the feed need the same plan as unfinished responses in
+the CSV. What you finished collecting is yours on every plan.
+</Callout>
+
+## Why there is no "Connect Google account"
+
+Appending rows through the Sheets API needs an OAuth consent screen, refresh
+tokens held on your behalf, a sync worker and a reconciliation story for every
+row someone edits by hand — and it would still only serve people who use Google
+Sheets.
+
+`=IMPORTDATA(url)` is one cell, works the same in Excel, keeps no credential of
+yours on our side, and you can revoke it without going near an account settings
+page. If you need rows pushed into something the moment they arrive, that is
+what [webhooks](/docs/webhooks) are for.

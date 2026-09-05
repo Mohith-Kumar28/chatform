@@ -13,10 +13,10 @@ export function ShareTab() {
   // window.location is not available during SSR; "" is what the server renders.
   const origin = useClientValue(() => window.location.origin, "");
 
-  if (!row) return null;
+  if (!formId || !row) return null;
   return (
     <div className="mx-auto w-full max-w-3xl p-6">
-      <ShareClient slug={row.slug} appOrigin={origin} status={row.status} />
+      <ShareClient formId={formId} slug={row.slug} appOrigin={origin} status={row.status} />
     </div>
   );
 }

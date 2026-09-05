@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, QrCode, TriangleAlert } from "lucide-react";
+import Link from "next/link";
+import { Blocks, Mail, QrCode, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
@@ -12,27 +13,29 @@ import { cn } from "@/lib/utils";
 import { CustomDomainField } from "@/components/billing/custom-domain-field";
 
 type Mode = "link" | "website" | "email";
-type EmbedStyle = "inline" | "popup" | "side-tab" | "fullpage";
 
 /**
- * Share. The previous version fetched its QR from api.qrserver.com — a
- * third-party request carrying the form URL, unstyled and unthemed — and left
- * a stray `<QrCode>` icon rendered on its own below the card.
+ * Share: the ways to hand someone a link.
  *
- * The QR is now generated locally and downloadable, and the embed modes have
- * real snippets instead of one hardcoded iframe.
+ * The QR used to come from api.qrserver.com — a third-party request carrying
+ * the form URL, unstyled and unthemed — and is generated locally now.
+ *
+ * Embedding used to be here too, as a second snippet generator that disagreed
+ * with the one in Integrate. Snippets belong to one module and one screen; this
+ * tab points at it rather than keeping a lesser copy.
  */
 export function ShareClient({
+  formId,
   slug,
   appOrigin,
   status,
 }: {
+  formId: string;
   slug: string;
   appOrigin: string;
   status?: string;
 }) {
   const [mode, setMode] = useState<Mode>("link");
-  const [embedStyle, setEmbedStyle] = useState<EmbedStyle>("inline");
   const [showQr, setShowQr] = useState(false);
 
   const liveUrl = `${appOrigin}/f/${slug}`;
@@ -114,23 +117,16 @@ export function ShareClient({
 
         {mode === "website" && (
           <div className="space-y-4">
-            <SegmentedControl
-              size="sm"
-              className="flex"
-              options={[
-                { value: "inline", label: "Inline" },
-                { value: "popup", label: "Popup" },
-                { value: "side-tab", label: "Side tab" },
-                { value: "fullpage", label: "Full page" },
-              ]}
-              value={embedStyle}
-              onChange={setEmbedStyle}
-              ariaLabel="Embed style"
-            />
-            <Snippet
-              label={EMBED_DESCRIPTIONS[embedStyle]}
-              code={embedSnippet(embedStyle, liveUrl, slug)}
-            />
+            <p className="text-muted-foreground text-caption">
+              The snippet, the corner it sits in, its colour and when it opens all live in
+              Integrate — with a preview, so you can see it before you paste it.
+            </p>
+            <Button shape="pill" asChild>
+              <Link href={`/forms/${formId}/integrate`}>
+                <Blocks className="size-3.5" />
+                Open the embed studio
+              </Link>
+            </Button>
           </div>
         )}
 
@@ -145,38 +141,6 @@ export function ShareClient({
       </div>
     </div>
   );
-}
-
-const EMBED_DESCRIPTIONS: Record<EmbedStyle, string> = {
-  inline: "Renders the conversation directly in the page.",
-  popup: "A launcher bubble that opens the conversation in a panel.",
-  "side-tab": "A tab pinned to the edge of the page.",
-  fullpage: "Takes over the whole viewport — good for a dedicated landing page.",
-};
-
-function embedSnippet(style: EmbedStyle, url: string, slug: string): string {
-  if (style === "inline") {
-    return `<iframe
-  src="${url}?embed=1"
-  title="${slug}"
-  width="100%"
-  height="640"
-  style="border:none;border-radius:16px"
-></iframe>`;
-  }
-  if (style === "fullpage") {
-    return `<iframe
-  src="${url}?embed=1"
-  title="${slug}"
-  style="border:none;position:fixed;inset:0;width:100%;height:100%"
-></iframe>`;
-  }
-  return `<script
-  src="${new URL(url).origin}/embed.js"
-  data-form="${slug}"
-  data-mode="${style}"
-  defer
-></script>`;
 }
 
 function emailSnippet(url: string): string {

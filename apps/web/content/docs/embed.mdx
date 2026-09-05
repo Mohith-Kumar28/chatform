@@ -21,6 +21,42 @@ The fastest way to put a form somewhere is not to use the API at all.
 The loader injects the iframe lazily — on intent, not on load — so it does not
 compete with your own page for the first paint.
 
+## Where it sits, and what it looks like
+
+```html
+<script
+  src="https://chatform.in/embed.js"
+  data-form="your-form-slug"
+  data-position="bottom-left"
+  data-offset="32"
+  data-color="#0ea5e9"
+  data-label="Talk to us"
+  data-width="420"
+  data-height="640"
+  defer
+></script>
+```
+
+| Attribute | Takes | Default |
+| --- | --- | --- |
+| `data-position` | `bottom-right`, `bottom-left`, `top-right`, `top-left` | `bottom-right` |
+| `data-offset` | px between the launcher and the edges | `20` |
+| `data-width` | panel width in px | `400` (`440` for a side tab) |
+| `data-height` | panel height in px; inline takes `auto` | `600` |
+| `data-color` | launcher colour | `#f97316` |
+| `data-label` | launcher text; `""` for an icon-only bubble | `Questions?` |
+| `data-icon` | `chat` or `none` | `chat` |
+| `data-theme` | `light`, `dark`, `auto` | `auto` |
+| `data-open-on` | `click`, `load`, `exit-intent`, `scroll:<pct>` | `click` |
+
+Below 520px wide the panel goes full screen whatever you set, because a 400px
+panel inset from the corner of a phone is a form nobody can fill in.
+
+<Callout>
+Two forms can sit on one page in two different corners — each script tag gets
+its own placement rules, and `window.Chatform.get("<slug>")` reaches each one.
+</Callout>
+
 ## Inline
 
 ```html

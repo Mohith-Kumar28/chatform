@@ -31,6 +31,7 @@ import type {
   GetApiFormsById200,
   GetApiFormsById404,
   GetApiFormsByIdAnalytics200,
+  GetApiFormsByIdIntegrations200Item,
   GetApiFormsByIdSubmissions200Item,
   GetApiFormsByIdSubmissionsParams,
   GetApiKeys200Item,
@@ -48,6 +49,8 @@ import type {
   PostApiForms200,
   PostApiForms403,
   PostApiFormsBody,
+  PostApiFormsByIdIntegrationsSpreadsheet200,
+  PostApiFormsByIdIntegrationsSpreadsheetBody,
   PostApiFormsByIdPreviewSessions200,
   PostApiFormsByIdPublish200,
   PostApiFormsByIdPublish402,
@@ -1419,6 +1422,101 @@ export function useGetApiFormsByIdSubmissionsExport<TData = Awaited<ReturnType<t
 
 
 
+export type getApiFormsByIdSubmissionsExportXlsxResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getApiFormsByIdSubmissionsExportXlsxResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiFormsByIdSubmissionsExportXlsxResponseSuccess = (getApiFormsByIdSubmissionsExportXlsxResponse200) & {
+  headers: Headers;
+};
+export type getApiFormsByIdSubmissionsExportXlsxResponseError = (getApiFormsByIdSubmissionsExportXlsxResponse404) & {
+  headers: Headers;
+};
+
+export type getApiFormsByIdSubmissionsExportXlsxResponse = (getApiFormsByIdSubmissionsExportXlsxResponseSuccess | getApiFormsByIdSubmissionsExportXlsxResponseError)
+
+export const getGetApiFormsByIdSubmissionsExportXlsxUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/submissions/export.xlsx`
+}
+
+/**
+ * @summary Export submissions as an Excel workbook
+ */
+export const getApiFormsByIdSubmissionsExportXlsx = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdSubmissionsExportXlsxResponse> => {
+
+  return customFetch<getApiFormsByIdSubmissionsExportXlsxResponse>(getGetApiFormsByIdSubmissionsExportXlsxUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiFormsByIdSubmissionsExportXlsxQueryKey = (id: string,) => {
+    return [
+    `/api/forms/${id}/submissions/export.xlsx`
+    ] as const;
+    }
+
+
+export const getGetApiFormsByIdSubmissionsExportXlsxQueryOptions = <TData = Awaited<ReturnType<typeof getApiFormsByIdSubmissionsExportXlsx>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdSubmissionsExportXlsx>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsByIdSubmissionsExportXlsxQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFormsByIdSubmissionsExportXlsx>>> = ({ signal }) => getApiFormsByIdSubmissionsExportXlsx(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdSubmissionsExportXlsx>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiFormsByIdSubmissionsExportXlsxQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFormsByIdSubmissionsExportXlsx>>>
+export type GetApiFormsByIdSubmissionsExportXlsxQueryError = void
+
+
+/**
+ * @summary Export submissions as an Excel workbook
+ */
+
+export function useGetApiFormsByIdSubmissionsExportXlsx<TData = Awaited<ReturnType<typeof getApiFormsByIdSubmissionsExportXlsx>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdSubmissionsExportXlsx>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiFormsByIdSubmissionsExportXlsxQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type getApiFormsByIdAnalyticsResponse200 = {
   data: GetApiFormsByIdAnalytics200
   status: 200
@@ -2389,6 +2487,267 @@ export const usePostApiWebhooksByIdTest = <TError = unknown,
         TContext
       > => {
       return useMutation(getPostApiWebhooksByIdTestMutationOptions(options));
+    }
+    export type getApiFormsByIdIntegrationsResponse200 = {
+  data: GetApiFormsByIdIntegrations200Item[]
+  status: 200
+}
+
+export type getApiFormsByIdIntegrationsResponseSuccess = (getApiFormsByIdIntegrationsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiFormsByIdIntegrationsResponse = (getApiFormsByIdIntegrationsResponseSuccess)
+
+export const getGetApiFormsByIdIntegrationsUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/integrations`
+}
+
+/**
+ * @summary List a form's non-webhook integrations
+ */
+export const getApiFormsByIdIntegrations = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdIntegrationsResponse> => {
+
+  return customFetch<getApiFormsByIdIntegrationsResponse>(getGetApiFormsByIdIntegrationsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiFormsByIdIntegrationsQueryKey = (id: string,) => {
+    return [
+    `/api/forms/${id}/integrations`
+    ] as const;
+    }
+
+
+export const getGetApiFormsByIdIntegrationsQueryOptions = <TData = Awaited<ReturnType<typeof getApiFormsByIdIntegrations>>, TError = unknown>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdIntegrations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsByIdIntegrationsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFormsByIdIntegrations>>> = ({ signal }) => getApiFormsByIdIntegrations(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdIntegrations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiFormsByIdIntegrationsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFormsByIdIntegrations>>>
+export type GetApiFormsByIdIntegrationsQueryError = unknown
+
+
+/**
+ * @summary List a form's non-webhook integrations
+ */
+
+export function useGetApiFormsByIdIntegrations<TData = Awaited<ReturnType<typeof getApiFormsByIdIntegrations>>, TError = unknown>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdIntegrations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiFormsByIdIntegrationsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postApiFormsByIdIntegrationsSpreadsheetResponse200 = {
+  data: PostApiFormsByIdIntegrationsSpreadsheet200
+  status: 200
+}
+
+export type postApiFormsByIdIntegrationsSpreadsheetResponseSuccess = (postApiFormsByIdIntegrationsSpreadsheetResponse200) & {
+  headers: Headers;
+};
+;
+
+export type postApiFormsByIdIntegrationsSpreadsheetResponse = (postApiFormsByIdIntegrationsSpreadsheetResponseSuccess)
+
+export const getPostApiFormsByIdIntegrationsSpreadsheetUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/integrations/spreadsheet`
+}
+
+/**
+ * @summary Create, update or rotate the spreadsheet feed
+ */
+export const postApiFormsByIdIntegrationsSpreadsheet = async (id: string,
+    postApiFormsByIdIntegrationsSpreadsheetBody: PostApiFormsByIdIntegrationsSpreadsheetBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiFormsByIdIntegrationsSpreadsheetResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiFormsByIdIntegrationsSpreadsheetResponse>(getPostApiFormsByIdIntegrationsSpreadsheetUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiFormsByIdIntegrationsSpreadsheetBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiFormsByIdIntegrationsSpreadsheetMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsSpreadsheet>>, TError,PostApiFormsByIdIntegrationsSpreadsheetMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsSpreadsheet>>, TError,PostApiFormsByIdIntegrationsSpreadsheetMutationVariables, TContext> => {
+
+const mutationKey = ['postApiFormsByIdIntegrationsSpreadsheet'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsSpreadsheet>>, PostApiFormsByIdIntegrationsSpreadsheetMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postApiFormsByIdIntegrationsSpreadsheet(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFormsByIdIntegrationsSpreadsheetMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsSpreadsheet>>>
+    export type PostApiFormsByIdIntegrationsSpreadsheetMutationBody = PostApiFormsByIdIntegrationsSpreadsheetBody
+    export type PostApiFormsByIdIntegrationsSpreadsheetMutationError = unknown
+    export type PostApiFormsByIdIntegrationsSpreadsheetMutationVariables = {id: string;data: PostApiFormsByIdIntegrationsSpreadsheetBody}
+
+    /**
+ * @summary Create, update or rotate the spreadsheet feed
+ */
+export const usePostApiFormsByIdIntegrationsSpreadsheet = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsSpreadsheet>>, TError,PostApiFormsByIdIntegrationsSpreadsheetMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFormsByIdIntegrationsSpreadsheet>>,
+        TError,
+        PostApiFormsByIdIntegrationsSpreadsheetMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFormsByIdIntegrationsSpreadsheetMutationOptions(options));
+    }
+    export type deleteApiFormsByIdIntegrationsSpreadsheetResponse200 = {
+  data: void
+  status: 200
+}
+
+export type deleteApiFormsByIdIntegrationsSpreadsheetResponseSuccess = (deleteApiFormsByIdIntegrationsSpreadsheetResponse200) & {
+  headers: Headers;
+};
+;
+
+export type deleteApiFormsByIdIntegrationsSpreadsheetResponse = (deleteApiFormsByIdIntegrationsSpreadsheetResponseSuccess)
+
+export const getDeleteApiFormsByIdIntegrationsSpreadsheetUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/integrations/spreadsheet`
+}
+
+/**
+ * @summary Revoke the spreadsheet feed
+ */
+export const deleteApiFormsByIdIntegrationsSpreadsheet = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteApiFormsByIdIntegrationsSpreadsheetResponse> => {
+
+  return customFetch<deleteApiFormsByIdIntegrationsSpreadsheetResponse>(getDeleteApiFormsByIdIntegrationsSpreadsheetUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiFormsByIdIntegrationsSpreadsheetMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFormsByIdIntegrationsSpreadsheet>>, TError,DeleteApiFormsByIdIntegrationsSpreadsheetMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiFormsByIdIntegrationsSpreadsheet>>, TError,DeleteApiFormsByIdIntegrationsSpreadsheetMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiFormsByIdIntegrationsSpreadsheet'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiFormsByIdIntegrationsSpreadsheet>>, DeleteApiFormsByIdIntegrationsSpreadsheetMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiFormsByIdIntegrationsSpreadsheet(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiFormsByIdIntegrationsSpreadsheetMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiFormsByIdIntegrationsSpreadsheet>>>
+
+    export type DeleteApiFormsByIdIntegrationsSpreadsheetMutationError = unknown
+    export type DeleteApiFormsByIdIntegrationsSpreadsheetMutationVariables = {id: string}
+
+    /**
+ * @summary Revoke the spreadsheet feed
+ */
+export const useDeleteApiFormsByIdIntegrationsSpreadsheet = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFormsByIdIntegrationsSpreadsheet>>, TError,DeleteApiFormsByIdIntegrationsSpreadsheetMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiFormsByIdIntegrationsSpreadsheet>>,
+        TError,
+        DeleteApiFormsByIdIntegrationsSpreadsheetMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiFormsByIdIntegrationsSpreadsheetMutationOptions(options));
     }
     export type postApiFormsByIdPreviewSessionsResponse200 = {
   data: PostApiFormsByIdPreviewSessions200

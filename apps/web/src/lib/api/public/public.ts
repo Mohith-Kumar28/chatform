@@ -53,6 +53,102 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
+export type getPFeedByTokenResponse200 = {
+  data: string
+  status: 200
+}
+
+export type getPFeedByTokenResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getPFeedByTokenResponseSuccess = (getPFeedByTokenResponse200) & {
+  headers: Headers;
+};
+export type getPFeedByTokenResponseError = (getPFeedByTokenResponse404) & {
+  headers: Headers;
+};
+
+export type getPFeedByTokenResponse = (getPFeedByTokenResponseSuccess | getPFeedByTokenResponseError)
+
+export const getGetPFeedByTokenUrl = (token: string,) => {
+
+
+
+
+  return `/p/feed/${token}`
+}
+
+/**
+ * Built for you by the dashboard — paste it into Google Sheets as `=IMPORTDATA("…")` or into Excel via Data → From Web. The URL is the credential; rotate it if it leaks.
+ * @summary A form's responses as CSV, for a spreadsheet to pull
+ */
+export const getPFeedByToken = async (token: string, options?: Parameters<typeof customFetch>[1]): Promise<getPFeedByTokenResponse> => {
+
+  return customFetch<getPFeedByTokenResponse>(getGetPFeedByTokenUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPFeedByTokenQueryKey = (token: string,) => {
+    return [
+    `/p/feed/${token}`
+    ] as const;
+    }
+
+
+export const getGetPFeedByTokenQueryOptions = <TData = Awaited<ReturnType<typeof getPFeedByToken>>, TError = void>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPFeedByToken>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPFeedByTokenQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPFeedByToken>>> = ({ signal }) => getPFeedByToken(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPFeedByToken>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPFeedByTokenQueryResult = NonNullable<Awaited<ReturnType<typeof getPFeedByToken>>>
+export type GetPFeedByTokenQueryError = void
+
+
+/**
+ * @summary A form's responses as CSV, for a spreadsheet to pull
+ */
+
+export function useGetPFeedByToken<TData = Awaited<ReturnType<typeof getPFeedByToken>>, TError = void>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPFeedByToken>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPFeedByTokenQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type getPFormsBySlugConfigResponse200 = {
   data: void
   status: 200

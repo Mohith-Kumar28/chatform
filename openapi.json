@@ -274,6 +274,46 @@
         }
       }
     },
+    "/p/feed/{token}": {
+      "get": {
+        "operationId": "getPFeedByToken",
+        "tags": [
+          "public"
+        ],
+        "summary": "A form's responses as CSV, for a spreadsheet to pull",
+        "description": "Built for you by the dashboard — paste it into Google Sheets as `=IMPORTDATA(\"…\")` or into Excel via Data → From Web. The URL is the credential; rotate it if it leaks.",
+        "responses": {
+          "200": {
+            "description": "CSV",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Invalid or revoked"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "token",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "respondentToken": []
+          }
+        ]
+      }
+    },
     "/p/forms/{slug}/config": {
       "get": {
         "operationId": "getPFormsBySlugConfig",
@@ -2055,6 +2095,38 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Form not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/forms/{id}/submissions/export.xlsx": {
+      "get": {
+        "operationId": "getApiFormsByIdSubmissionsExportXlsx",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Export submissions as an Excel workbook",
+        "responses": {
+          "200": {
+            "description": "XLSX file"
           },
           "404": {
             "description": "Form not found"
@@ -5898,8 +5970,12 @@
                     "items": {
                       "type": "string",
                       "enum": [
+                        "response.completed",
                         "submission.completed",
+                        "response.abandoned",
                         "submission.abandoned",
+                        "response.partial",
+                        "response.answer_recorded",
                         "session.started",
                         "form.published"
                       ]
@@ -6102,6 +6178,178 @@
                 }
               }
             }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/forms/{id}/integrations": {
+      "get": {
+        "operationId": "getApiFormsByIdIntegrations",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "List a form's non-webhook integrations",
+        "responses": {
+          "200": {
+            "description": "Integrations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "provider": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "createdAt": {
+                        "type": "number"
+                      },
+                      "feedUrl": {
+                        "type": "string"
+                      },
+                      "includePartials": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "provider",
+                      "status",
+                      "createdAt"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/forms/{id}/integrations/spreadsheet": {
+      "post": {
+        "operationId": "postApiFormsByIdIntegrationsSpreadsheet",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "includePartials": {
+                    "type": "boolean"
+                  },
+                  "rotate": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Create, update or rotate the spreadsheet feed",
+        "responses": {
+          "200": {
+            "description": "The feed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "feedUrl": {
+                      "type": "string"
+                    },
+                    "includePartials": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "provider",
+                    "status",
+                    "createdAt"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteApiFormsByIdIntegrationsSpreadsheet",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Revoke the spreadsheet feed",
+        "responses": {
+          "200": {
+            "description": "Revoked"
           }
         },
         "parameters": [

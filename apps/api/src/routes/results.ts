@@ -1,10 +1,12 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { displayAnswer, readFormDoc, type Block, type FormDoc } from "@repo/form-schema";
+import { displayAnswer, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 import { requirePermission, assertPermission, assertFeature, hasFeature, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
+import { buildResponseTable, toCsv } from "../lib/response-table.js";
+import { buildXlsx } from "../lib/xlsx.js";
 
 export const resultsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
@@ -217,7 +219,59 @@ resultsRouter.get(
   },
 );
 
-/** CSV export — streams all submissions with one column per block. */
+/**
+ * The exports.
+ *
+ * CSV and XLSX are the same table in two containers, so they are one handler
+ * over `buildResponseTable` rather than two transcriptions of the same column
+ * logic. The CSV path also stopped issuing one query per submission on the way
+ * out — see `lib/response-table.ts`.
+ */
+type ExportCtx = Context<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>;
+
+async function exportSubmissions(c: ExportCtx, format: "csv" | "xlsx") {
+  const id = c.get("form")!.id;
+  const roleDenied = await assertPermission(c, "submission", "export");
+  if (roleDenied) return roleDenied;
+
+  /**
+   * Exporting what you finished collecting is free — taking your own data with you must
+   * never be the thing behind the paywall. What is gated is the same slice gated
+   * everywhere else: the unfinished responses.
+   *
+   * `includePartials=false` is not a silent narrowing; the button in the UI says
+   * "Export 47 responses" and shows the locked partial count beside it.
+   */
+  const includePartials = new URL(c.req.url).searchParams.get("includePartials") === "true";
+  if (includePartials) {
+    const denied = await assertFeature(c, "export_partials", { surface: "results.export" });
+    if (denied) return denied;
+  }
+
+  const table = await buildResponseTable(c.env, id, { includePartials });
+  if (!table) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+
+  if (format === "xlsx") {
+    const bytes = await buildXlsx(table.header, table.rows);
+    return new Response(bytes as unknown as BodyInit, {
+      headers: {
+        "content-type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "content-disposition": `attachment; filename="responses-${id}.xlsx"`,
+        "cache-control": "private, no-store",
+      },
+    });
+  }
+
+  return new Response(toCsv(table), {
+    headers: {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="submissions-${id}.csv"`,
+      "cache-control": "private, no-store",
+    },
+  });
+}
+
 resultsRouter.get(
   "/forms/:id/submissions/export",
   describeRoute({
@@ -228,78 +282,28 @@ resultsRouter.get(
       404: { description: "Form not found" },
     },
   }),
-  async (c) => {
-    const id = c.get("form")!.id;
-    const roleDenied = await assertPermission(c, "submission", "export");
-    if (roleDenied) return roleDenied;
+  (c) => exportSubmissions(c, "csv"),
+);
 
-    const form = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`).bind(id).first<{ working_schema: string }>();
-    if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
-    const doc = readFormDoc(JSON.parse(form.working_schema));
-    const answerable = doc.blocks.filter((b) => !["welcome", "statement"].includes(b.type));
-
-    /**
-     * Exporting what you finished collecting is free — taking your own data with you must
-     * never be the thing behind the paywall. What is gated is the same slice gated
-     * everywhere else: the unfinished responses.
-     *
-     * `includePartials=false` is not a silent narrowing; the button in the UI says
-     * "Export 47 responses" and shows the locked partial count beside it.
-     */
-    const includePartials = new URL(c.req.url).searchParams.get("includePartials") === "true";
-    if (includePartials) {
-      const denied = await assertFeature(c, "export_partials", { surface: "results.export" });
-      if (denied) return denied;
-    }
-
-    const subs = await c.env.DB.prepare(
-      `SELECT s.id, s.status, s.started_at, s.completed_at FROM submissions s
-        WHERE s.form_id = ?1 AND s.status != 'spam' AND (?2 = 1 OR s.status = 'completed')
-        ORDER BY s.started_at DESC LIMIT 10000`,
-    )
-      .bind(id, includePartials ? 1 : 0)
-      .all<{ id: string; status: string; started_at: number; completed_at: number | null }>();
-
-    // The question, not its ref. `b_short` means nothing to whoever opens this;
-    // the ref follows in brackets so a column can still be matched to the doc.
-    const header = ["submission_id", "status", "started_at", ...answerable.map((b) => `${b.title} (${b.ref})`)];
-    const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
-    const rows: string[] = [header.map(esc).join(",")];
-
-    for (const s of subs.results ?? []) {
-      const answers = await c.env.DB.prepare(`SELECT block_ref, value_json FROM submission_answers WHERE submission_id = ?`)
-        .bind(s.id)
-        .all<{ block_ref: string; value_json: string }>();
-      const map = new Map((answers.results ?? []).map((a) => [a.block_ref, a.value_json]));
-      rows.push([
-        s.id,
-        s.status,
-        new Date(s.started_at).toISOString(),
-        // Labels, not ids. A CSV full of `opt_founder001` and
-        // `{"row_ui000001":"col_bad00001"}` is not an export of anyone's data —
-        // it is an export of our primary keys, and the person opening it has
-        // no way to decode them.
-        ...answerable.map((b) => {
-          const v = map.get(b.ref);
-          // An unanswered cell is empty, not "(skipped)" — a spreadsheet
-          // already has a way to say nothing is there.
-          if (!v) return "";
-          try {
-            return displayAnswer(b as Block, JSON.parse(v));
-          } catch {
-            return v;
-          }
-        }),
-      ].map(esc).join(","));
-    }
-
-    return new Response(rows.join("\n"), {
-      headers: {
-        "content-type": "text/csv; charset=utf-8",
-        "content-disposition": `attachment; filename="submissions-${id}.csv"`,
-      },
-    });
-  },
+/**
+ * The same responses as a real workbook.
+ *
+ * Asked for by name, and not the same thing as a CSV: typed cells, a frozen
+ * bold header, filters, and columns wide enough to read. A CSV renamed `.xls`
+ * is what a spreadsheet import usually degenerates into, and it is why phone
+ * numbers arrive with their leading zeros gone.
+ */
+resultsRouter.get(
+  "/forms/:id/submissions/export.xlsx",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Export submissions as an Excel workbook",
+    responses: {
+      200: { description: "XLSX file" },
+      404: { description: "Form not found" },
+    },
+  }),
+  (c) => exportSubmissions(c, "xlsx"),
 );
 
 /** Analytics summary: counts + per-block answer rates from D1. */

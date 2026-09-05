@@ -78,17 +78,25 @@ export async function buildResponseTable(
   const kept = truncated ? all.slice(0, limit) : all;
 
   /**
-   * One read for every answer on the form, joined rather than looked up per
-   * submission. The `submission_id` ordering is incidental — the rows are
-   * bucketed by id below, so the query is free to return them in any order.
+   * One read for every answer in the window — not for every answer on the form.
+   *
+   * The subquery repeats the `LIMIT` above rather than joining on `form_id`,
+   * because the two are very different reads on a form with a long history: the
+   * feed serves the newest 5,000 responses, and a plain join would drag every
+   * answer ever recorded into a Worker's memory to build them.
+   *
+   * Ordering is incidental — the rows are bucketed by id below.
    */
   const answers = await env.DB.prepare(
     `SELECT a.submission_id, a.block_ref, a.value_json
        FROM submission_answers a
-       JOIN submissions s ON s.id = a.submission_id
-      WHERE s.form_id = ?1 AND s.status != 'spam' AND (?2 = 1 OR s.status = 'completed')`,
+      WHERE a.submission_id IN (
+              SELECT id FROM submissions
+               WHERE form_id = ?1 AND status != 'spam' AND (?2 = 1 OR status = 'completed')
+               ORDER BY started_at DESC LIMIT ?3
+            )`,
   )
-    .bind(formId, includePartials ? 1 : 0)
+    .bind(formId, includePartials ? 1 : 0, limit)
     .all<{ submission_id: string; block_ref: string; value_json: string }>();
 
   const bySubmission = new Map<string, Map<string, string>>();
