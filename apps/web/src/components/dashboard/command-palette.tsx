@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { Command } from "cmdk";
 import {
   FileStack,
   Gauge,
@@ -15,16 +13,22 @@ import {
   Users,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { customFetch } from "@/lib/api/mutator";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
 import { BUILDER_TABS } from "@/components/builder/builder-tabs";
+import { getGetApiFormsQueryKey, useGetApiForms } from "@/lib/api/dashboard/dashboard";
+import { apiData } from "@/lib/api/payload";
+import { templateAccent } from "@/lib/category-accent";
+import { useTemplates } from "@/lib/templates";
+import { relativeTime, type FormRow } from "@/components/forms/form-card";
 import { cn } from "@/lib/utils";
-
-interface FormRow {
-  id: string;
-  title: string;
-  status: string;
-}
 
 /**
  * Opening the palette from a button rather than from ⌘K.
@@ -61,14 +65,13 @@ export function CommandPalette() {
   const { setTheme } = useTheme();
   const builder = useBuilderContext();
 
-  const { data } = useQuery({
-    queryKey: ["forms"],
-    queryFn: () => customFetch<unknown>("/api/forms"),
-    // Only fetch once the palette has been opened at least once.
-    enabled: open,
-    staleTime: 60_000,
+  // Both lists are lazy: nothing is fetched until the palette has been opened
+  // once, and neither changes often enough to refetch on every open.
+  const { data } = useGetApiForms({
+    query: { queryKey: getGetApiFormsQueryKey(), enabled: open, staleTime: 60_000 },
   });
-  const forms = (Array.isArray(data) ? data : []) as FormRow[];
+  const forms = apiData<FormRow[]>(data) ?? [];
+  const { templates } = useTemplates(open);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -103,48 +106,73 @@ export function CommandPalette() {
       <Command
         label="Command palette"
         onClick={(e) => e.stopPropagation()}
-        className="bg-card border-border shadow-lg w-full max-w-lg overflow-hidden rounded-xl border"
+        className="border-border shadow-lg w-full max-w-lg overflow-hidden border"
       >
-        <Command.Input
-          autoFocus
-          placeholder="Search forms or jump to a page…"
-          className="border-border placeholder:text-muted-foreground w-full border-b bg-transparent px-4 py-3 text-sm outline-none"
-        />
-        <Command.List className="max-h-80 overflow-y-auto p-2">
-          <Command.Empty className="text-muted-foreground py-8 text-center text-sm">
-            Nothing matches that.
-          </Command.Empty>
+        <CommandInput autoFocus placeholder="Search forms and templates, or jump to a page…" />
+        <CommandList>
+          <CommandEmpty>Nothing matches that.</CommandEmpty>
 
           {builder && (
-            <Command.Group heading="This form" className={GROUP}>
+            <CommandGroup heading="This form">
               {BUILDER_TABS.map((tab, i) => (
-                <Command.Item
+                <CommandItem
                   key={tab.segment}
                   value={`${tab.label} ${tab.hint}`}
                   onSelect={() => go(`/forms/${builder.formId}/${tab.segment}`)}
-                  className={ITEM}
                 >
                   <tab.icon className="size-3.5 opacity-60" />
                   <span className="min-w-0 flex-1 truncate">{tab.label}</span>
                   <Kbd>{i + 1}</Kbd>
-                </Command.Item>
+                </CommandItem>
               ))}
-            </Command.Group>
+            </CommandGroup>
           )}
 
           {forms.length > 0 && (
-            <Command.Group heading="Forms" className={GROUP}>
+            <CommandGroup heading="Forms">
               {forms.map((f) => (
-                <Command.Item key={f.id} value={f.title} onSelect={() => go(`/forms/${f.id}/build`)} className={ITEM}>
-                  <LayoutGrid className="size-3.5 opacity-60" />
+                <CommandItem key={f.id} value={f.title} onSelect={() => go(`/forms/${f.id}/build`)}>
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "size-1.5 shrink-0 rounded-full",
+                      f.status === "published" ? "bg-[var(--success)]" : "bg-muted-foreground/40",
+                    )}
+                  />
                   <span className="min-w-0 flex-1 truncate">{f.title}</span>
-                  <span className="text-muted-foreground shrink-0 text-xs">{f.status}</span>
-                </Command.Item>
+                  {/* Recency rather than the raw status string, which read as
+                      a stray "draft" hanging off the end of every row. */}
+                  <span className="text-muted-foreground shrink-0 text-xs">
+                    {relativeTime(f.updatedAt)}
+                  </span>
+                </CommandItem>
               ))}
-            </Command.Group>
+            </CommandGroup>
           )}
 
-          <Command.Group heading="Go to" className={GROUP}>
+          {templates.length > 0 && (
+            <CommandGroup heading="Templates">
+              {/* Searching "nps" should offer the NPS template, not just any
+                  form that happens to be named after it. */}
+              {templates.map((t) => {
+                const accent = templateAccent(t.category, t.accent, t.icon);
+                const Icon = accent.icon;
+                return (
+                  <CommandItem
+                    key={t.slug}
+                    value={`${t.title} ${t.category} ${(t.tags ?? []).join(" ")}`}
+                    onSelect={() => go(`/templates?t=${t.slug}`)}
+                  >
+                    <Icon className="size-3.5 opacity-60" />
+                    <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                    <span className="text-muted-foreground shrink-0 text-xs">{t.category}</span>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          )}
+
+          <CommandGroup heading="Go to">
             {[
               { label: "Forms", href: "/dashboard", icon: LayoutGrid },
               { label: "Templates", href: "/templates", icon: FileStack },
@@ -152,43 +180,41 @@ export function CommandPalette() {
               { label: "Usage", href: "/usage", icon: Gauge },
               { label: "Team", href: "/team", icon: Users },
             ].map((item) => (
-              <Command.Item key={item.href} value={item.label} onSelect={() => go(item.href)} className={ITEM}>
+              <CommandItem key={item.href} value={item.label} onSelect={() => go(item.href)}>
                 <item.icon className="size-3.5 opacity-60" />
                 {item.label}
-              </Command.Item>
+              </CommandItem>
             ))}
-          </Command.Group>
+          </CommandGroup>
 
-          <Command.Group heading="Actions" className={GROUP}>
-            <Command.Item value="New form" onSelect={() => go("/dashboard?new=1")} className={ITEM}>
+          <CommandGroup heading="Actions">
+            <CommandItem value="New form" onSelect={() => go("/dashboard?new=1")}>
               <Plus className="size-3.5 opacity-60" />
               <span className="min-w-0 flex-1">New form</span>
               <Kbd>N</Kbd>
-            </Command.Item>
-            <Command.Item
+            </CommandItem>
+            <CommandItem
               value="Light theme"
               onSelect={() => {
                 setTheme("light");
                 setOpen(false);
               }}
-              className={ITEM}
             >
               <Sun className="size-3.5 opacity-60" />
               Light theme
-            </Command.Item>
-            <Command.Item
+            </CommandItem>
+            <CommandItem
               value="Dark theme"
               onSelect={() => {
                 setTheme("dark");
                 setOpen(false);
               }}
-              className={ITEM}
             >
               <Moon className="size-3.5 opacity-60" />
               Dark theme
-            </Command.Item>
-          </Command.Group>
-        </Command.List>
+            </CommandItem>
+          </CommandGroup>
+        </CommandList>
 
         {/* The palette is where people end up when they are looking for a
             faster way to do something — so it is where to mention there is
@@ -201,10 +227,3 @@ export function CommandPalette() {
     </div>
   );
 }
-
-const GROUP =
-  "[&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium";
-const ITEM = cn(
-  "flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm outline-none",
-  "data-[selected=true]:bg-muted",
-);

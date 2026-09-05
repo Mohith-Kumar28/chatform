@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { FileStack, Gauge, KeyRound, LayoutGrid, Users } from "lucide-react";
 import { TooltipHint } from "@/components/ui/kbd";
 import {
@@ -30,6 +30,9 @@ export const APP_NAV = [
 
 export function AppNav({ className }: { className?: string }) {
   const pathname = usePathname();
+  // The highlight still moves; it just stops sliding (DESIGN.md §4.5 — under
+  // reduced motion, transforms collapse rather than the effect disappearing).
+  const reduced = useReducedMotion();
   return (
     <TooltipProvider delayDuration={400}>
       <nav className={cn("flex items-center gap-0.5", className)} aria-label="Main">
@@ -51,11 +54,13 @@ export function AppNav({ className }: { className?: string }) {
                     <motion.span
                       layoutId="app-nav-pill"
                       className="bg-primary-soft absolute inset-0 -z-10 rounded-full"
-                      transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                      transition={
+                        reduced ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 40 }
+                      }
                     />
                   )}
                   <item.icon className="size-3.5" strokeWidth={1.75} />
-                  <span className="hidden sm:inline">{item.label}</span>
+                  <span>{item.label}</span>
                 </Link>
               </TooltipTrigger>
               <TooltipContent side="bottom">

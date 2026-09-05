@@ -57,9 +57,11 @@ function toTemplate(row: unknown): TemplateSummary | null {
  * The templates list, normalised. Cached for a good while — the catalogue is
  * official content that changes on deploys, not on the hour.
  */
-export function useTemplates() {
+export function useTemplates(enabled = true) {
   const query = useGetApiTemplates({
-    query: { queryKey: getGetApiTemplatesQueryKey(), staleTime: 5 * 60_000 },
+    // `enabled` so the command palette, which is mounted on every page in both
+    // shells, does not fetch the catalogue until someone opens it.
+    query: { queryKey: getGetApiTemplatesQueryKey(), staleTime: 5 * 60_000, enabled },
   });
   const templates = useMemo(() => {
     const raw = query.data as unknown;
