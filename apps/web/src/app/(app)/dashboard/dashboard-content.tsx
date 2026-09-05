@@ -1,21 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpDown,
-  Copy,
-  ExternalLink,
   LayoutGrid,
   MessageSquarePlus,
-  MoreHorizontal,
   Plus,
   Rows3,
   Search,
   Sparkles,
-  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -34,19 +29,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { NEW_FORM_EVENT } from "@/components/dashboard/use-app-shortcuts";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterChips } from "@/components/ui/filter-chips";
 import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -57,17 +45,10 @@ import {
 import { cn } from "@/lib/utils";
 import { AiCapBanner } from "@/components/billing/ai-cap-banner";
 import { CreateFormDialog } from "@/components/forms/create-form-dialog";
-
-interface FormRow {
-  id: string;
-  title: string;
-  slug: string;
-  status: string;
-  responses: number;
-  updatedAt: number;
-}
+import { FormCard, type FormRow } from "@/components/forms/form-card";
 
 type Sort = "newest" | "oldest" | "responses" | "alpha";
+type StatusFilter = "all" | "live" | "draft";
 
 export function DashboardContent() {
   const queryClient = useQueryClient();
@@ -84,15 +65,36 @@ export function DashboardContent() {
 
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("newest");
+  const [status, setStatus] = useState<StatusFilter>("all");
   const [layout, setLayout] = useState<"grid" | "list">("grid");
   // ?new=1 lets the command palette open the create dialog.
   const [createOpen, setCreateOpen] = useState(searchParams.get("new") === "1");
   const [pendingDelete, setPendingDelete] = useState<FormRow | null>(null);
 
+  const liveCount = useMemo(
+    () => allForms.filter((f) => f.status === "published").length,
+    [allForms],
+  );
+  const totalResponses = useMemo(
+    () => allForms.reduce((sum, f) => sum + f.responses, 0),
+    [allForms],
+  );
+
   const forms = useMemo(() => {
     const q = query.trim().toLowerCase();
     return allForms
-      .filter((f) => !q || f.title.toLowerCase().includes(q) || f.slug.includes(q))
+      .filter((f) => {
+        if (status === "live" && f.status !== "published") return false;
+        if (status === "draft" && f.status === "published") return false;
+        if (!q) return true;
+        // Search the questions too: someone looking for "the NPS one" is
+        // searching for a question they remember, not a title they chose.
+        return (
+          f.title.toLowerCase().includes(q) ||
+          f.slug.includes(q) ||
+          (f.preview ?? []).some((line) => line.toLowerCase().includes(q))
+        );
+      })
       .sort((a, b) => {
         switch (sort) {
           case "responses":
@@ -107,7 +109,7 @@ export function DashboardContent() {
             return b.updatedAt - a.updatedAt;
         }
       });
-  }, [allForms, query, sort]);
+  }, [allForms, query, sort, status]);
 
   /**
    * `N` opens the dialog. The key is registered in the shell, which owns the
@@ -134,7 +136,11 @@ export function DashboardContent() {
     <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
       <PageHeader
         title="Forms"
-        description="Conversations that collect what you need."
+        description={
+          allForms.length > 0
+            ? `${allForms.length} form${allForms.length === 1 ? "" : "s"} · ${liveCount} live · ${totalResponses.toLocaleString()} response${totalResponses === 1 ? "" : "s"}`
+            : "Conversations that collect what you need."
+        }
         actions={
           <TooltipProvider delayDuration={400}>
             <Tooltip>
@@ -167,13 +173,23 @@ export function DashboardContent() {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search forms…"
+              placeholder="Search forms and questions…"
               className="h-9 rounded-full pl-8"
             />
           </div>
 
-          {/* Both of these were declared as state and never rendered, so the
-              imported Search and ArrowUpDown icons sat unused. */}
+          <FilterChips
+            ariaLabel="Status"
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: "all", label: "All", count: allForms.length },
+              { value: "live", label: "Live", count: liveCount },
+              { value: "draft", label: "Drafts", count: allForms.length - liveCount },
+            ]}
+            className="pb-0"
+          />
+
           <Select value={sort} onValueChange={(v) => setSort(v as Sort)}>
             <SelectTrigger className="h-9 w-auto gap-1.5 rounded-full">
               <ArrowUpDown className="size-3.5 opacity-60" />
@@ -205,43 +221,50 @@ export function DashboardContent() {
         {isLoading ? (
           <div className={cn(layout === "grid" ? GRID : "space-y-2")}>
             {[0, 1, 2].map((i) => (
-              <div key={i} className="shimmer h-44 rounded-xl" />
+              <div key={i} className="shimmer h-64 rounded-2xl" />
             ))}
           </div>
         ) : allForms.length === 0 ? (
           <EmptyState
             icon={MessageSquarePlus}
             title="No forms yet"
-            description="Create your first conversational form. Describe it in a sentence and the AI will draft it for you."
+            description="Describe what you want to find out and the AI drafts the conversation — or start from one of the templates."
             action={
-              <Button shape="pill" onClick={() => setCreateOpen(true)}>
-                <Sparkles className="size-4" />
-                Create your first form
-              </Button>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button shape="pill" onClick={() => setCreateOpen(true)}>
+                  <Sparkles className="size-4" />
+                  Create your first form
+                </Button>
+                <Button shape="pill" variant="outline" onClick={() => router.push("/templates")}>
+                  Browse templates
+                </Button>
+              </div>
             }
-            hint="Or start from a template."
           />
         ) : forms.length === 0 ? (
           <EmptyState
             compact
             icon={Search}
-            title={`Nothing matches “${query}”`}
-            description="Try a different search."
+            title={query ? `Nothing matches “${query}”` : "Nothing with that status"}
+            description={query ? "Try a different search." : "Switch back to All to see the rest."}
             action={
-              <Button variant="ghost" size="sm" onClick={() => setQuery("")}>
-                Clear search
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setQuery("");
+                  setStatus("all");
+                }}
+              >
+                Clear filters
               </Button>
             }
           />
         ) : (
-          <ul className={cn(layout === "grid" ? GRID : "space-y-2")} data-tour="form-list">
+          <ul className={cn(layout === "grid" ? GRID : "space-y-2")} data-tour="form-grid">
             {forms.map((form) => (
               <li key={form.id}>
-                <FormCard
-                  form={form}
-                  layout={layout}
-                  onDelete={() => setPendingDelete(form)}
-                />
+                <FormCard form={form} layout={layout} onDelete={() => setPendingDelete(form)} />
               </li>
             ))}
           </ul>
@@ -276,127 +299,9 @@ export function DashboardContent() {
   );
 }
 
-const GRID = "grid gap-4 sm:grid-cols-2 lg:grid-cols-3";
-
-function FormCard({
-  form,
-  layout,
-  onDelete,
-}: {
-  form: FormRow;
-  layout: "grid" | "list";
-  onDelete: () => void;
-}) {
-  const published = form.status === "published";
-  const publicUrl = typeof window !== "undefined" ? `${window.location.origin}/f/${form.slug}` : "";
-
-  const meta = (
-    <>
-      <Badge variant={published ? "secondary" : "outline"} className={cn(published && "text-[var(--success)]")}>
-        {published ? "Live" : "Draft"}
-      </Badge>
-      <span className="text-muted-foreground tabular text-xs">
-        {form.responses} response{form.responses === 1 ? "" : "s"}
-      </span>
-      <span className="text-muted-foreground text-xs">{relativeTime(form.updatedAt)}</span>
-    </>
-  );
-
-  const actions = (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Actions for ${form.title}`}
-          onClick={(e) => e.preventDefault()}
-        >
-          <MoreHorizontal className="size-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem asChild>
-          <Link href={`/forms/${form.id}/results`}>Results</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href={`/forms/${form.id}/share`}>Share</Link>
-        </DropdownMenuItem>
-        {published && (
-          <>
-            <DropdownMenuItem
-              onSelect={async () => {
-                await navigator.clipboard.writeText(publicUrl);
-                toast.success("Link copied");
-              }}
-            >
-              <Copy className="size-3.5" />
-              Copy link
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <a href={`/f/${form.slug}`} target="_blank" rel="noreferrer">
-                <ExternalLink className="size-3.5" />
-                Open live form
-              </a>
-            </DropdownMenuItem>
-          </>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-          <Trash2 className="size-3.5" />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-
-  if (layout === "list") {
-    return (
-      <div className="bg-card hover:bg-muted/40 flex items-center gap-3 rounded-xl px-4 py-3 transition-colors">
-        <Link href={`/forms/${form.id}/build`} className="min-w-0 flex-1">
-          <p className="truncate font-medium">{form.title}</p>
-          <div className="mt-0.5 flex items-center gap-2">{meta}</div>
-        </Link>
-        {actions}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={cn(
-        "bg-card group relative overflow-hidden rounded-2xl",
-        "shadow-xs hover:shadow-md transition-[box-shadow,border-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
-        ""
-      )}
-    >
-      {/* The whole card is the target — it used to be a plain div with a tiny
-          hover-revealed icon as the only way in. */}
-      <Link href={`/forms/${form.id}/build`} className="block">
-        <div className="from-primary-soft to-accent/40 relative h-24 bg-gradient-to-br">
-          <div className="absolute inset-0 grid place-items-center">
-            <span className="font-display text-primary/40 text-2xl">{form.title.charAt(0).toUpperCase()}</span>
-          </div>
-        </div>
-        <div className="space-y-2 p-4">
-          <p className="truncate font-medium">{form.title}</p>
-          <div className="flex flex-wrap items-center gap-2">{meta}</div>
-        </div>
-      </Link>
-      <div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-        {actions}
-      </div>
-    </div>
-  );
-}
-
-function relativeTime(ts: number): string {
-  const diff = Date.now() - ts;
-  const mins = Math.round(diff / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
+/**
+ * Two up, three at the very widest. The old grid reached three columns at
+ * `lg`, which left every card too narrow to carry a description — so it
+ * didn't have one.
+ */
+const GRID = "grid gap-4 md:grid-cols-2 xl:grid-cols-3";

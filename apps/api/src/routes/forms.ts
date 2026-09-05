@@ -45,6 +45,49 @@ const FormFull = FormSummary.extend({
   activeVersion: z.number().nullable(),
 });
 
+/**
+ * The list carries two things the summary never did: how many questions the
+ * form asks, and the opening lines it asks them with.
+ *
+ * The dashboard card had a title, a status and a response count to work with,
+ * so it drew a large translucent first letter and called that the artwork.
+ * Both of these come out of the document the form already has — no new column,
+ * no migration, and nothing that can drift from the form itself.
+ */
+const FormListItem = FormSummary.extend({
+  questionCount: z.number(),
+  preview: z.array(z.string()),
+});
+
+/**
+ * The opening of the conversation, for the card's thumbnail: the greeting if
+ * there is one, then the first question or two.
+ *
+ * A malformed or legacy document returns empty rather than throwing — a card
+ * that cannot draw its preview is a worse card, not a failed request.
+ */
+function summariseDoc(raw: string | null): { questionCount: number; preview: string[] } {
+  if (!raw) return { questionCount: 0, preview: [] };
+  try {
+    const doc = JSON.parse(raw) as { blocks?: { type?: string; title?: string }[] };
+    const blocks = Array.isArray(doc.blocks) ? doc.blocks : [];
+    // A greeting and a statement are said, not asked. Counting them as
+    // questions would put this number one or two above the builder's.
+    const isPrelude = (t?: string) => t === "welcome" || t === "statement";
+    const questions = blocks.filter((b) => !isPrelude(b.type));
+    const preview: string[] = [];
+    const greeting = blocks.find((b) => isPrelude(b.type))?.title;
+    if (greeting) preview.push(greeting);
+    for (const q of questions) {
+      if (preview.length >= 3) break;
+      if (q.title) preview.push(q.title);
+    }
+    return { questionCount: questions.length, preview };
+  } catch {
+    return { questionCount: 0, preview: [] };
+  }
+}
+
 const CreateFormBody = z.object({
   title: z.string().min(1).max(200),
   workspaceId: z.string().optional(),
@@ -90,19 +133,31 @@ function defaultDoc(title: string): string {
 
 formsRouter.get(
   "/forms",
-  describeRoute({ tags: ["dashboard"], summary: "List forms in the active workspace", responses: { 200: { description: "Forms", content: { "application/json": { schema: resolver(z.array(FormSummary)) } } } } }),
+  describeRoute({ tags: ["dashboard"], summary: "List forms in the active workspace", responses: { 200: { description: "Forms", content: { "application/json": { schema: resolver(z.array(FormListItem)) } } } } }),
   async (c) => {
     const ws = await requireWorkspace(c);
     if (!ws) return c.json([]);
+    // `working_schema` joins the select so the card can describe the form.
+    // It is the one wide column here; a workspace holds tens of forms, not
+    // thousands, and the alternative is a denormalised summary column that
+    // can disagree with the document it summarises.
     const rows = await c.env.DB.prepare(
-      `SELECT f.id, f.title, f.slug, f.status, f.updated_at,
+      `SELECT f.id, f.title, f.slug, f.status, f.updated_at, f.working_schema,
               (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id AND s.status = 'completed') AS responses
        FROM forms f WHERE f.workspace_id = ? AND f.deleted_at IS NULL ORDER BY f.updated_at DESC`,
     )
       .bind(ws.wsId)
-      .all<{ id: string; title: string; slug: string; status: string; updated_at: number; responses: number }>();
+      .all<{ id: string; title: string; slug: string; status: string; updated_at: number; responses: number; working_schema: string | null }>();
     return c.json(
-      (rows.results ?? []).map((r) => ({ id: r.id, title: r.title, slug: r.slug, status: r.status, responses: r.responses, updatedAt: r.updated_at })),
+      (rows.results ?? []).map((r) => ({
+        id: r.id,
+        title: r.title,
+        slug: r.slug,
+        status: r.status,
+        responses: r.responses,
+        updatedAt: r.updated_at,
+        ...summariseDoc(r.working_schema),
+      })),
     );
   },
 );

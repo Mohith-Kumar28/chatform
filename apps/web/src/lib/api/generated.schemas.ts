@@ -176,6 +176,8 @@ export type GetApiForms200Item = {
   status: string;
   responses: number;
   updatedAt: number;
+  questionCount: number;
+  preview: string[];
 };
 
 export type PostApiFormsBody = {

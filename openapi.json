@@ -901,6 +901,15 @@
                       },
                       "updatedAt": {
                         "type": "number"
+                      },
+                      "questionCount": {
+                        "type": "number"
+                      },
+                      "preview": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       }
                     },
                     "required": [
@@ -909,7 +918,9 @@
                       "slug",
                       "status",
                       "responses",
-                      "updatedAt"
+                      "updatedAt",
+                      "questionCount",
+                      "preview"
                     ]
                   }
                 }
