@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Plus, Search, Settings2, Sparkles } from "lucide-react";
+import { ArrowRight, Plus, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,13 +19,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { FormGenerationProgress, useFormGeneration } from "@/components/forms/form-generation";
 import { TemplateCard, TemplateCardSkeleton } from "@/components/templates/template-card";
 import { usePostApiForms, usePostApiTemplatesBySlugUse } from "@/lib/api/dashboard/dashboard";
@@ -37,47 +30,17 @@ import { cn } from "@/lib/utils";
 /**
  * Every way into a new form, on one screen.
  *
- * This used to be a `max-w-lg` dialog with a two-option toggle — describe it,
- * or start blank — and templates were a separate page you had to already know
- * about. Choosing between two things is not a decision worth a toggle, and
- * hiding the third option behind navigation meant the templates were, in
- * practice, unused.
+ * Three ways in, ranked by how most forms actually get made: describe it,
+ * start from a template, start from nothing. All visible at once — a tab
+ * would put the gallery back behind a click, which is the problem.
  *
- * So all three are visible at once and ranked by how most forms actually get
- * made: describe it, start from something, start from nothing. No tabs — a
- * tab would put the gallery back behind a click, which is the problem.
+ * The describe box carries no chrome of its own. It had a heading, a hint
+ * line, five example pills and a row of tone/length/language selects, which
+ * is more instruction than the one sentence it is asking for — and the pills
+ * duplicated the template gallery sitting directly beneath them. A box and a
+ * button is the whole control now; length and tone are the model's call, and
+ * anyone who wants a different one can say so in the sentence.
  */
-
-const EXAMPLES = [
-  {
-    label: "Customer feedback",
-    prompt:
-      "A customer satisfaction survey for our checkout flow — how easy it was, what got in the way, and whether they'd buy again.",
-  },
-  {
-    label: "Lead qualification",
-    prompt:
-      "A lead form for our B2B SaaS — collect name, work email, company size and budget, and ask what problem they're trying to solve.",
-  },
-  {
-    label: "Event RSVP",
-    prompt:
-      "An RSVP for our launch party on the 14th — who's coming, plus-ones, dietary requirements and whether they need parking.",
-  },
-  {
-    label: "Job application",
-    prompt:
-      "An application form for a senior frontend role — experience, portfolio link, notice period, and why they want to join us.",
-  },
-  {
-    label: "Bug report",
-    prompt:
-      "A bug report form for our support team — what broke, steps to reproduce, browser and OS, severity, and a screenshot upload.",
-  },
-];
-
-const TONES = ["Friendly", "Professional", "Playful", "Direct"] as const;
-const LANGUAGES = ["English", "Spanish", "French", "German", "Portuguese", "Hindi", "Japanese"] as const;
 
 /** The endpoint caps the prompt at 2000 characters; so does this. */
 const PROMPT_MAX = 2000;
@@ -94,10 +57,6 @@ export function CreateFormDialog({
   const generation = useFormGeneration();
 
   const [prompt, setPrompt] = useState("");
-  const [questionCount, setQuestionCount] = useState("6");
-  const [tone, setTone] = useState<string>(TONES[0]);
-  const [language, setLanguage] = useState<string>(LANGUAGES[0]);
-  const [optionsOpen, setOptionsOpen] = useState(false);
 
   const [blankOpen, setBlankOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -145,27 +104,9 @@ export function CreateFormDialog({
   const busy = generation.running || createBlank.isPending || useTemplate.isPending;
   const canGenerate = prompt.trim().length > 5 && !busy;
 
-  /**
-   * Tone and language are folded into the prompt rather than sent as fields.
-   *
-   * The endpoint's body is `{ prompt, questionCount }` and nothing else — so
-   * a tone select wired to a parameter that does not exist would be a control
-   * that visibly does nothing. Appended as a sentence they reach the model
-   * the same way the rest of the description does, which is the only place
-   * they were ever going to be read.
-   */
-  const composePrompt = () => {
-    const extras: string[] = [];
-    if (tone !== TONES[0]) extras.push(`Use a ${tone.toLowerCase()} tone.`);
-    if (language !== LANGUAGES[0]) extras.push(`Write the questions in ${language}.`);
-    const body = prompt.trim();
-    if (extras.length === 0) return body.slice(0, PROMPT_MAX);
-    return `${body}\n\n${extras.join(" ")}`.slice(0, PROMPT_MAX);
-  };
-
   const generate = () => {
     void generation.start(
-      { prompt: composePrompt(), questionCount: Number(questionCount) },
+      { prompt: prompt.trim().slice(0, PROMPT_MAX) },
       (result) => {
         void invalidateForms(queryClient);
         setPrompt("");
@@ -197,7 +138,6 @@ export function CreateFormDialog({
       setTitle("");
       setSearch("");
       setCategory("all");
-      setOptionsOpen(false);
     }
     onOpenChange(next);
   };
@@ -209,10 +149,12 @@ export function CreateFormDialog({
           <DialogTitle className="font-display text-xl">
             {drafting ? "Building your form" : "Create a form"}
           </DialogTitle>
-          <DialogDescription>
+          {/* Idle, the screen explains itself — a box, a blank row, a
+              gallery. The description stays for screen readers only. */}
+          <DialogDescription className={cn(!drafting && "sr-only")}>
             {drafting
               ? "Reading what you gave me and drafting the conversation."
-              : "Describe it, start from a template, or start with a blank page."}
+              : "Describe the form you need, start from a template, or start blank."}
           </DialogDescription>
         </DialogHeader>
 
@@ -231,27 +173,13 @@ export function CreateFormDialog({
               onRetry={generate}
             />
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4">
               <AiPanel
                 prompt={prompt}
                 setPrompt={setPrompt}
-                questionCount={questionCount}
-                setQuestionCount={setQuestionCount}
-                tone={tone}
-                setTone={setTone}
-                language={language}
-                setLanguage={setLanguage}
-                optionsOpen={optionsOpen}
-                setOptionsOpen={setOptionsOpen}
                 canGenerate={canGenerate}
                 onGenerate={generate}
               />
-
-              <div className="flex items-center gap-3">
-                <span className="bg-border h-px flex-1" />
-                <span className="text-muted-foreground text-xs">or start from</span>
-                <span className="bg-border h-px flex-1" />
-              </div>
 
               <BlankRow
                 open={blankOpen}
@@ -349,31 +277,15 @@ export function CreateFormDialog({
   );
 }
 
-/** The prompt box, its examples, and the options that shape the draft. */
+/** The prompt box. A box and a button — nothing else. */
 function AiPanel({
   prompt,
   setPrompt,
-  questionCount,
-  setQuestionCount,
-  tone,
-  setTone,
-  language,
-  setLanguage,
-  optionsOpen,
-  setOptionsOpen,
   canGenerate,
   onGenerate,
 }: {
   prompt: string;
   setPrompt: (v: string) => void;
-  questionCount: string;
-  setQuestionCount: (v: string) => void;
-  tone: string;
-  setTone: (v: string) => void;
-  language: string;
-  setLanguage: (v: string) => void;
-  optionsOpen: boolean;
-  setOptionsOpen: (v: boolean) => void;
   canGenerate: boolean;
   onGenerate: () => void;
 }) {
@@ -385,126 +297,45 @@ function AiPanel({
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 176)}px`;
   }, [prompt]);
 
   return (
-    <section className="border-primary/15 bg-primary-soft/50 rounded-2xl border p-4">
-      <div className="flex items-center gap-2">
-        <span className="bg-primary/10 text-primary grid size-7 place-items-center rounded-lg">
-          <Sparkles className="size-4" strokeWidth={1.75} />
-        </span>
-        <h3 className="font-display text-sm font-semibold">Describe the form you need</h3>
-      </div>
-
+    <section
+      className={cn(
+        "border-primary/20 bg-primary-soft/40 rounded-2xl border p-2",
+        "focus-within:border-primary/45 transition-colors duration-[var(--duration-standard)]",
+      )}
+    >
+      {/* Borderless inside its own container: two nested boxes around one
+          sentence is a box too many. The placeholder is dimmed past the
+          usual muted step so it cannot be mistaken for typed text. */}
       <Textarea
         ref={ref}
         id="ai-prompt"
-        rows={3}
+        rows={2}
         value={prompt}
         maxLength={PROMPT_MAX}
         onChange={(e) => setPrompt(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canGenerate) onGenerate();
         }}
-        placeholder="A waitlist form for our launch at example.com — collect email, company size, and what problem they're hoping we solve."
-        className="bg-card mt-3 resize-none text-sm"
+        aria-label="Describe the form you need"
+        placeholder="Describe your form — or paste your site's URL"
+        className={cn(
+          "min-h-0 resize-none border-0 bg-transparent px-3 py-2 text-sm shadow-none",
+          "placeholder:text-muted-foreground/55 focus-visible:border-0 focus-visible:ring-0",
+          "dark:bg-transparent",
+        )}
       />
 
-      <p className="text-muted-foreground mt-2 text-xs">
-        Include your site&apos;s URL and it reads the page first, so the questions know your product.
-      </p>
-
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {EXAMPLES.map((ex) => (
-          <button
-            key={ex.label}
-            type="button"
-            // Fills the box rather than submitting: an example is a starting
-            // point to edit, not a form someone actually asked for.
-            onClick={() => {
-              setPrompt(ex.prompt);
-              ref.current?.focus();
-            }}
-            className="border-border/70 bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground rounded-full border px-2.5 py-1 text-xs transition-colors duration-[var(--duration-micro)]"
-          >
-            {ex.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setOptionsOpen(!optionsOpen)}
-          aria-expanded={optionsOpen}
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
-        >
-          <Settings2 className="size-3.5" strokeWidth={1.75} />
-          {optionsOpen ? "Hide options" : `${questionCount} questions · ${tone} · ${language}`}
-        </button>
-
-        <Button
-          shape="pill"
-          disabled={!canGenerate}
-          onClick={onGenerate}
-          className="ml-auto"
-        >
+      <div className="flex justify-end">
+        <Button shape="pill" size="sm" disabled={!canGenerate} onClick={onGenerate}>
           <Sparkles className="size-4" />
-          Generate form
+          Generate
         </Button>
       </div>
-
-      {optionsOpen && (
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          <LabelledSelect label="Questions" value={questionCount} onChange={setQuestionCount}>
-            {["4", "6", "8", "10", "12", "15"].map((n) => (
-              <SelectItem key={n} value={n}>
-                {n} questions
-              </SelectItem>
-            ))}
-          </LabelledSelect>
-          <LabelledSelect label="Tone" value={tone} onChange={setTone}>
-            {TONES.map((t) => (
-              <SelectItem key={t} value={t}>
-                {t}
-              </SelectItem>
-            ))}
-          </LabelledSelect>
-          <LabelledSelect label="Language" value={language} onChange={setLanguage}>
-            {LANGUAGES.map((l) => (
-              <SelectItem key={l} value={l}>
-                {l}
-              </SelectItem>
-            ))}
-          </LabelledSelect>
-        </div>
-      )}
     </section>
-  );
-}
-
-function LabelledSelect({
-  label,
-  value,
-  onChange,
-  children,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="space-y-1">
-      <span className="text-muted-foreground text-xs">{label}</span>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="bg-card h-8 w-full text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>{children}</SelectContent>
-      </Select>
-    </label>
   );
 }
 
@@ -535,38 +366,31 @@ function BlankRow({
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          "border-border bg-card group flex w-full items-center gap-3 rounded-2xl border p-4 text-left",
+          "border-border bg-card group flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left",
           "shadow-xs transition-[box-shadow,transform,border-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
           "hover:-translate-y-0.5 hover:shadow-md motion-reduce:hover:translate-y-0",
           "focus-visible:ring-ring/40 focus-visible:ring-2 focus-visible:outline-none",
         )}
       >
-        <span className="bg-muted text-foreground grid size-10 shrink-0 place-items-center rounded-xl">
-          <Plus className="size-5" strokeWidth={1.75} />
+        <span className="bg-muted text-foreground grid size-8 shrink-0 place-items-center rounded-lg">
+          <Plus className="size-4" strokeWidth={1.75} />
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="font-display block text-sm font-semibold">Blank form</span>
-          <span className="text-muted-foreground block text-xs">
-            A greeting and one question — build the rest yourself.
-          </span>
-        </span>
+        <span className="font-display min-w-0 flex-1 text-sm font-semibold">Blank form</span>
         <ArrowRight className="text-muted-foreground group-hover:text-foreground size-4 shrink-0 transition-colors" />
       </button>
     );
   }
 
   return (
-    <div className="border-border bg-card rounded-2xl border p-4">
-      <label htmlFor="form-title" className="text-sm font-medium">
-        Name your form
-      </label>
-      <div className="mt-2 flex flex-wrap gap-2">
+    <div className="border-border bg-card rounded-2xl border p-3">
+      <div className="flex flex-wrap gap-2">
         <Input
           ref={ref}
           id="form-title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Customer feedback"
+          aria-label="Form name"
+          placeholder="Name your form"
           className="min-w-0 flex-1"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !pending) onCreate();
@@ -580,9 +404,6 @@ function BlankRow({
           Cancel
         </Button>
       </div>
-      <p className="text-muted-foreground mt-2 text-xs">
-        Leave it blank and it will be called “Untitled form”.
-      </p>
     </div>
   );
 }

@@ -204,6 +204,10 @@
   --z-dropdown: 40;
   --z-overlay: 50;
   --z-modal: 60;
+  /* Popovers, selects and menus sit *above* a modal: they are opened from
+     inside one as often as from the page, and at the old bare `z-50` they
+     painted behind the dialog that owned them. */
+  --z-popover: 70;
   --z-toast: 80;
 }
 

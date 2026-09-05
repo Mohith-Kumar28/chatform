@@ -491,10 +491,24 @@ export const integrations = sqliteTable(
     configJson: text("config_json").notNull(),
     status: text("status").notNull().default("connected"),
     lastError: text("last_error"),
+    /**
+     * SHA-256 of the integration's own token, when it has one.
+     *
+     * The spreadsheet feed is addressed by an unguessable URL and by nothing
+     * else — Google Sheets refreshes it on a schedule, with no cookie and no
+     * header to carry — so the token needs an indexed, constant-shape lookup.
+     * Hashing it means the column that is queried is not the column that would
+     * hand someone the feed if the table ever leaked.
+     */
+    secretHash: text("secret_hash"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
     updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
   },
-  (t) => [index("idx_integrations_org").on(t.organizationId)],
+  (t) => [
+    index("idx_integrations_org").on(t.organizationId),
+    index("idx_integrations_form").on(t.formId, t.provider),
+    uniqueIndex("idx_integrations_secret").on(t.secretHash),
+  ],
 );
 
 /**

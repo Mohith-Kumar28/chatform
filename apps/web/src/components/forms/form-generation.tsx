@@ -103,7 +103,7 @@ export function useFormGeneration() {
 
   const start = useCallback(
     async (
-      body: { prompt: string; questionCount: number },
+      body: { prompt: string; questionCount?: number },
       onDone: (result: GenerationResult) => void,
     ) => {
       reset();
