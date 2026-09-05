@@ -98,6 +98,14 @@ export async function seedTenant(label: string): Promise<Tenant> {
     ),
   ]);
 
+  // Signup already gave this user an organization of its own, so the session is
+  // active in *that* one and `resolveOrgId` would prefer it over the org seeded
+  // above. Point the session at the tenant's org explicitly rather than leaving
+  // the answer to how `created_at` happens to tie-break.
+  await env.DB.prepare(`UPDATE sessions SET active_organization_id = ? WHERE user_id = ?`)
+    .bind(orgId, userId)
+    .run();
+
   return {
     userId,
     orgId,

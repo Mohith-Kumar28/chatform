@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { authClient, useActiveOrganization } from "@/lib/auth/auth-client";
+import { authClient } from "@/lib/auth/auth-client";
+import { useActiveOrg } from "@/hooks/use-active-org";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,10 +34,16 @@ import { Clock, Lock, UserPlus } from "lucide-react";
  * in. Everything else in the product resolves the org from
  * `sessions.active_organization_id`; this now does too.
  *
- * Members come from `useActiveOrganization`, which returns them with the
- * organization. The previous hand-written `fetch` in a `useEffect` was both a
- * second source of truth and a violation of the repo's no-hand-written-fetching
- * rule, and it swallowed every error it hit.
+ * Members come from `useActiveOrg`, which wraps Better Auth's
+ * `useActiveOrganization` and returns them with the organization. The previous
+ * hand-written `fetch` in a `useEffect` was both a second source of truth and a
+ * violation of the repo's no-hand-written-fetching rule, and it swallowed every
+ * error it hit.
+ *
+ * The wrapper exists because "no active organization" was, for every account
+ * created before the session hook landed, a session that had simply never
+ * picked one — not an account without a workspace. This page was the only place
+ * that difference was visible, and it read as the workspace having vanished.
  */
 
 /**
@@ -63,7 +70,7 @@ interface Invitation {
 }
 
 export default function TeamPage() {
-  const { data: org, isPending } = useActiveOrganization();
+  const { org, isPending } = useActiveOrg();
   const ent = useEntitlements();
 
   const [email, setEmail] = useState("");
@@ -140,7 +147,8 @@ export default function TeamPage() {
       <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
         <Card>
           <CardContent className="text-muted-foreground py-10 text-center text-sm">
-            No organization is active — create one from the dashboard to invite teammates.
+            You&apos;re not in a workspace yet — create one from the switcher in the header
+            to invite teammates.
           </CardContent>
         </Card>
       </div>

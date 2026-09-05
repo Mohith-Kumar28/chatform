@@ -70,6 +70,7 @@ async function createDefaultOrg(env: Bindings, user: { id: string; name?: string
           `INSERT INTO members (id, organization_id, user_id, role, created_at) VALUES (?, ?, ?, 'owner', ?)`,
         ).bind(`mem_${rand(12)}`, orgId, user.id, now),
       ]);
+      await adoptOrg(env, user.id, orgId);
       return;
     } catch (err) {
       if (attempt === 2) {
@@ -80,6 +81,58 @@ async function createDefaultOrg(env: Bindings, user: { id: string; name?: string
       }
     }
   }
+}
+
+/**
+ * Point the user's org-less sessions at `orgId`.
+ *
+ * Signup creates the session *before* this hook runs — Better Auth issues the
+ * cookie, then calls `user.create.after` — so the session that just came back to
+ * the browser already exists with a null active org and cannot be fixed by the
+ * session hook below. This catches it after the fact.
+ *
+ * Scoped to `IS NULL` so it can never move a session someone deliberately
+ * switched with the workspace picker.
+ */
+async function adoptOrg(env: Bindings, userId: string, orgId: string): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `UPDATE sessions SET active_organization_id = ? WHERE user_id = ? AND active_organization_id IS NULL`,
+    )
+      .bind(orgId, userId)
+      .run();
+  } catch (err) {
+    // The org and the membership are what make the account usable; a session
+    // that still has to be told which org it is in is a smaller problem than a
+    // signup that fails outright.
+    console.error("session_adopt_org_failed", userId, err);
+  }
+}
+
+/**
+ * The organization a new session should start in.
+ *
+ * Better Auth stores this on `sessions.active_organization_id`, and nothing was
+ * ever writing it. Everything that resolves an org from `members` —
+ * `resolveOrgId`, and so every API route — carried on working, which is exactly
+ * why this went unnoticed. The one screen that asks Better Auth itself,
+ * `/team`, showed "No organization is active" to a user whose workspace was
+ * named in the nav bar directly above it.
+ *
+ * This covers every sign-in after the first; signup is `adoptOrg`'s job,
+ * because there the membership does not exist yet when the session is made.
+ *
+ * The choice matches `resolveOrgId`'s fallback — the oldest membership — so the
+ * session's active org and the org the API reads are the same one from the
+ * first request, not two answers that happen to agree.
+ */
+async function defaultActiveOrgId(env: Bindings, userId: string): Promise<string | null> {
+  const row = await env.DB.prepare(
+    `SELECT organization_id AS org FROM members WHERE user_id = ? ORDER BY created_at ASC LIMIT 1`,
+  )
+    .bind(userId)
+    .first<{ org: string }>();
+  return row?.org ?? null;
 }
 
 export function createAuth(env: Bindings) {
@@ -129,6 +182,21 @@ export function createAuth(env: Bindings) {
         create: {
           after: async (user) => {
             await createDefaultOrg(env, user as { id: string; name?: string | null; email: string });
+          },
+        },
+      },
+      session: {
+        create: {
+          before: async (session) => {
+            // Never worth failing a sign-in over: a session with no active org
+            // is the state we already handle, and the web client repairs it on
+            // the next page load.
+            try {
+              const orgId = await defaultActiveOrgId(env, session.userId);
+              if (orgId) return { data: { ...session, activeOrganizationId: orgId } };
+            } catch (err) {
+              console.error("session_active_org_failed", session.userId, err);
+            }
           },
         },
       },

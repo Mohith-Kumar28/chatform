@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Building2, Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { authClient, useActiveOrganization, useListOrganizations } from "@/lib/auth/auth-client";
+import { authClient, useListOrganizations } from "@/lib/auth/auth-client";
+import { useActiveOrg } from "@/hooks/use-active-org";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,10 +34,17 @@ import { cn } from "@/lib/utils";
  *
  * All of this is Better Auth's organization plugin: `organization.create`,
  * `setActive` and `checkSlug` are endpoints it already ships.
+ *
+ * `useActiveOrg` rather than `useActiveOrganization` because this component was
+ * hiding the bug it now helps fix: falling back to `list[0]` meant a session
+ * with no active organization still showed a workspace name up here, while
+ * `/team` — which asks for the active org honestly — said there wasn't one.
+ * The fallback stays for the moment the repair is in flight; it is no longer
+ * the only thing standing between the user and a blank page.
  */
 export function WorkspaceSwitcher() {
   const { data: orgs } = useListOrganizations();
-  const { data: active } = useActiveOrganization();
+  const { org: active } = useActiveOrg();
   const [createOpen, setCreateOpen] = useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
 
