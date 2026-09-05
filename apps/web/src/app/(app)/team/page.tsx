@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { authClient, useActiveOrganization } from "@/lib/auth/auth-client";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { Button } from "@/components/ui/button";
@@ -8,9 +9,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { UserPlus, Lock } from "lucide-react";
+import { UsageMeter } from "@/components/ui/usage-meter";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Clock, Lock, UserPlus } from "lucide-react";
 
 /**
  * Who is in this organization, and inviting more of them.
@@ -43,6 +54,14 @@ const ROLES = [
 
 type Role = (typeof ROLES)[number]["value"];
 
+interface Invitation {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  expiresAt: string | Date;
+}
+
 export default function TeamPage() {
   const { data: org, isPending } = useActiveOrganization();
   const ent = useEntitlements();
@@ -56,6 +75,27 @@ export default function TeamPage() {
   const members = (org?.members ?? []) as { id: string; role: string; user?: { name?: string; email?: string } }[];
 
   /**
+   * Invites that have been sent and not yet accepted.
+   *
+   * Without this the page counted a seat as free the moment an invite was
+   * sent and showed nothing at all for someone who had been invited a week
+   * ago and never clicked the link — so the only way to find out was to
+   * invite them again.
+   */
+  const { data: invitations } = useQuery({
+    queryKey: ["organization", org?.id, "invitations"],
+    enabled: Boolean(org?.id),
+    queryFn: async () => {
+      const res = await authClient.organization.listInvitations();
+      return ((res.data ?? []) as Invitation[]).filter((i) => i.status === "pending");
+    },
+    // A refused list is an empty list here: pending invites are useful context,
+    // not something worth failing the page over.
+    retry: false,
+  });
+  const pending = invitations ?? [];
+
+  /**
    * Inviting is a role, not a plan — so a refusal here is a 403 and upgrading
    * would not fix it. The form is shown either way, switched off, for the same
    * reason locked features stay visible: a capability nobody can see is one
@@ -65,7 +105,8 @@ export default function TeamPage() {
 
   /** Seats are a plan limit, and hitting it is a 402 nobody should meet mid-invite. */
   const seatLimit = ent.limit("seats");
-  const seatsUsed = members.length;
+  // An outstanding invite is a seat already spoken for.
+  const seatsUsed = members.length + pending.length;
   const seatsFull = seatLimit !== null && seatsUsed >= seatLimit;
 
   const invite = async (e: React.FormEvent) => {
@@ -86,16 +127,17 @@ export default function TeamPage() {
 
   if (isPending) {
     return (
-      <div className="mx-auto w-full max-w-4xl space-y-3 px-6 py-10">
+      <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-8 sm:px-6">
         <Skeleton className="h-9 w-32" />
-        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-64 w-full" />
       </div>
     );
   }
 
   if (!org) {
     return (
-      <div className="mx-auto w-full max-w-4xl px-6 py-10">
+      <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
         <Card>
           <CardContent className="text-muted-foreground py-10 text-center text-sm">
             No organization is active — create one from the dashboard to invite teammates.
@@ -106,53 +148,120 @@ export default function TeamPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 py-10">
-      <header className="mb-8">
-        <h1 className="font-display text-3xl font-semibold tracking-tight">Team</h1>
-        <p className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-2 text-sm">
-          <span>{org.name}</span>
-          <span aria-hidden>·</span>
-          <span>
-            {seatsUsed} {seatsUsed === 1 ? "member" : "members"}
-            {seatLimit !== null && ` of ${seatLimit}`}
-          </span>
-        </p>
-      </header>
+    <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
+      <PageHeader
+        title="Team"
+        description={`${org.name} · ${members.length} ${members.length === 1 ? "member" : "members"}${
+          pending.length > 0 ? ` · ${pending.length} invited` : ""
+        }`}
+      />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-display text-base">Members</CardTitle>
-            <CardDescription>People with access to this organization.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {members.length === 0 && <p className="text-muted-foreground text-sm">No members yet.</p>}
-            {members.map((m) => {
-              const display = m.user?.name ?? m.user?.email ?? "Unknown";
-              return (
-                <div key={m.id} className="flex items-center gap-3 rounded-lg border px-3 py-2">
-                  {/*
-                    `text-primary-foreground`, not the hardcoded `text-white`
-                    this used to carry: white on the brand orange measures
-                    2.78:1. See the token's note in globals.css.
-                  */}
-                  <div className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold">
-                    {display.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{display}</p>
-                    {m.user?.email && m.user.email !== display && (
-                      <p className="text-muted-foreground truncate text-xs">{m.user.email}</p>
-                    )}
-                  </div>
-                  <Badge variant="secondary">{m.role}</Badge>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
+      <Card className="mt-6">
+        <CardContent className="pt-6">
+          <UsageMeter
+            label="Seats used"
+            used={seatsUsed}
+            limit={seatLimit}
+            hint={
+              seatsFull
+                ? "Every seat on your plan is taken. Add seats from billing to invite more people."
+                : "Pending invites count against your seats until they're accepted or expire."
+            }
+          />
+        </CardContent>
+      </Card>
 
-        <Card>
+      <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-display text-base">Members</CardTitle>
+              <CardDescription>People with access to this organization.</CardDescription>
+            </CardHeader>
+            <CardContent className="px-0">
+              {members.length === 0 ? (
+                <p className="text-muted-foreground px-6 text-sm">No members yet.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="pl-6">Member</TableHead>
+                      <TableHead className="pr-6 text-right">Role</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {members.map((m) => {
+                      const display = m.user?.name ?? m.user?.email ?? "Unknown";
+                      return (
+                        <TableRow key={m.id}>
+                          <TableCell className="py-2 pl-6">
+                            <div className="flex items-center gap-3">
+                              {/*
+                                `text-primary-foreground`, not the hardcoded
+                                `text-white` this used to carry: white on the
+                                brand orange measures 2.78:1. See the token's
+                                note in globals.css.
+                              */}
+                              <div className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+                                {display.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium">{display}</p>
+                                {m.user?.email && m.user.email !== display && (
+                                  <p className="text-muted-foreground truncate text-xs">{m.user.email}</p>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="pr-6 text-right">
+                            <Badge variant="secondary">{m.role}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {pending.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="font-display text-base">Pending invites</CardTitle>
+                <CardDescription>Sent, but not yet accepted.</CardDescription>
+              </CardHeader>
+              <CardContent className="px-0">
+                <Table>
+                  <TableBody>
+                    {pending.map((i) => (
+                      <TableRow key={i.id}>
+                        <TableCell className="pl-6">
+                          <div className="flex items-center gap-3">
+                            <span className="bg-muted text-muted-foreground grid size-8 shrink-0 place-items-center rounded-full">
+                              <Clock className="size-3.5" strokeWidth={1.75} />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm">{i.email}</p>
+                              <p className="text-muted-foreground text-xs">
+                                Expires {new Date(i.expiresAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="pr-6 text-right">
+                          <Badge variant="outline">{i.role}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        <Card className="h-fit">
           <CardHeader>
             <CardTitle className="font-display flex items-center gap-2 text-base">
               Invite a teammate
@@ -191,7 +300,7 @@ export default function TeamPage() {
                   <p className="text-muted-foreground text-xs">{ROLES.find((r) => r.value === role)?.blurb}</p>
                 </div>
 
-                <Button type="submit" className="w-full rounded-full">
+                <Button type="submit" shape="pill" className="w-full">
                   <UserPlus className="size-4" /> {sending ? "Sending…" : "Send invite"}
                 </Button>
               </fieldset>

@@ -21,6 +21,14 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { LockedControl } from "@/components/billing/gate";
 import { KeyRound, Plus, Trash2, RefreshCw, ShieldAlert } from "lucide-react";
 import { useClientValue } from "@/hooks/use-client-value";
@@ -193,7 +201,7 @@ export default function ApiKeysPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 py-10">
+    <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <PageHeader
         title="API keys"
         description="Drive chatform from your own products — a server integration, a custom interface, or a page that embeds a form."
@@ -204,7 +212,7 @@ export default function ApiKeysPage() {
            * a worse way to find out.
            */
           <LockedControl feature="api_access">
-            <Button className="rounded-full" onClick={() => setOpen(true)}>
+            <Button shape="pill" onClick={() => setOpen(true)}>
               <Plus className="size-4" /> Create key
             </Button>
           </LockedControl>
@@ -230,7 +238,7 @@ export default function ApiKeysPage() {
           description="A key lets your own code create responses, read them back, or run a conversation from your product."
           action={
             <LockedControl feature="api_access">
-              <Button className="rounded-full" onClick={() => setOpen(true)}>
+              <Button shape="pill" onClick={() => setOpen(true)}>
                 <Plus className="size-4" /> Create your first key
               </Button>
             </LockedControl>
@@ -238,72 +246,102 @@ export default function ApiKeysPage() {
           hint="Read the quickstart at chatform.in/docs/quickstart"
         />
       ) : (
-        <div className="space-y-3">
-          {keys.map((k) => (
-            <Card key={k.id} className={k.enabled ? undefined : "opacity-60"}>
-              <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-2 py-4">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{k.name ?? "Untitled key"}</span>
-                    <Badge variant={isPublishable(k.keyType) ? "secondary" : "default"}>
-                      {isPublishable(k.keyType) ? "Publishable" : "Secret"}
-                    </Badge>
-                    {k.environment === "test" && <Badge variant="outline">Test</Badge>}
-                    {!k.enabled && <Badge variant="destructive">Revoked</Badge>}
-                    {k.expiresAt && now > 0 && k.expiresAt > now && (
-                      <Badge variant="outline">expires in {hoursUntil(k.expiresAt, now)}h</Badge>
-                    )}
-                  </div>
-                  <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                    <code className="font-mono">{k.start ?? "—"}…</code>
-                    <span>last used {relative(k.lastUsedAt, now)}</span>
-                    {k.rateLimitMax && <span>{k.rateLimitMax}/min</span>}
-                    {k.origins.length > 0 && <span>{k.origins.length} origin(s)</span>}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {Object.entries(k.scopes ?? {}).flatMap(([resource, actions]) =>
-                      actions.map((a) => (
-                        <span
-                          key={`${resource}:${a}`}
-                          className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[11px]"
-                        >
-                          {resource}:{a}
-                        </span>
-                      )),
-                    )}
-                  </div>
-                </div>
-                {k.enabled && (
-                  <div className="flex items-center gap-1">
-                    {/*
-                      Rotation is confirmed like revocation is. It reads as the
-                      safe sibling of the two, but it starts a 24-hour clock on
-                      a key that is in production right now — a misclick here is
-                      a deploy deadline nobody agreed to.
-                    */}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={rotateKey.isPending}
-                      onClick={() => setRotating(k)}
-                    >
-                      <RefreshCw className="size-3.5" /> Rotate
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8"
-                      aria-label={`Revoke ${k.name ?? "this key"}`}
-                      onClick={() => setRevoking(k)}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Card className="overflow-hidden">
+          {/* A key is a row of comparable facts — prefix, scopes, last used —
+              and the stack of cards this was made it impossible to scan any
+              one of them down the list. */}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="pl-4">Key</TableHead>
+                <TableHead>Scopes</TableHead>
+                <TableHead className="hidden sm:table-cell">Last used</TableHead>
+                <TableHead className="pr-4 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {keys.map((k) => {
+                const scopes = Object.entries(k.scopes ?? {}).flatMap(([resource, actions]) =>
+                  actions.map((a) => `${resource}:${a}`),
+                );
+                return (
+                  <TableRow key={k.id} className={k.enabled ? undefined : "opacity-60"}>
+                    <TableCell className="h-auto py-3 pl-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{k.name ?? "Untitled key"}</span>
+                        <Badge variant={isPublishable(k.keyType) ? "secondary" : "default"}>
+                          {isPublishable(k.keyType) ? "Publishable" : "Secret"}
+                        </Badge>
+                        {k.environment === "test" && <Badge variant="outline">Test</Badge>}
+                        {!k.enabled && <Badge variant="destructive">Revoked</Badge>}
+                        {k.expiresAt && now > 0 && k.expiresAt > now && (
+                          <Badge variant="outline">expires in {hoursUntil(k.expiresAt, now)}h</Badge>
+                        )}
+                      </div>
+                      <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                        <code className="font-mono">{k.start ?? "—"}…</code>
+                        {k.rateLimitMax && <span>{k.rateLimitMax}/min</span>}
+                        {k.origins.length > 0 && (
+                          <span>
+                            {k.origins.length} origin{k.origins.length === 1 ? "" : "s"}
+                          </span>
+                        )}
+                        <span className="sm:hidden">last used {relative(k.lastUsedAt, now)}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="h-auto max-w-64 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {scopes.length === 0 ? (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        ) : (
+                          scopes.map((scope) => (
+                            <span
+                              key={scope}
+                              className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[11px]"
+                            >
+                              {scope}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground hidden py-3 text-xs sm:table-cell">
+                      {relative(k.lastUsedAt, now)}
+                    </TableCell>
+                    <TableCell className="py-3 pr-4 text-right">
+                      {k.enabled && (
+                        <div className="flex items-center justify-end gap-1">
+                          {/*
+                            Rotation is confirmed like revocation is. It reads as
+                            the safe sibling of the two, but it starts a 24-hour
+                            clock on a key that is in production right now — a
+                            misclick here is a deploy deadline nobody agreed to.
+                          */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={rotateKey.isPending}
+                            onClick={() => setRotating(k)}
+                          >
+                            <RefreshCw className="size-3.5" /> Rotate
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Revoke ${k.name ?? "this key"}`}
+                            onClick={() => setRevoking(k)}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Card>
       )}
 
       <Card className="mt-8">

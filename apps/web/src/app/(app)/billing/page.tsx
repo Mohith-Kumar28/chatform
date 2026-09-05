@@ -17,7 +17,16 @@ import { useEntitlements } from "@/hooks/use-entitlements";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatCard } from "@/components/ui/stat-card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableRow,
+} from "@/components/ui/table";
+import { UsageMeter } from "@/components/ui/usage-meter";
 import { cn } from "@/lib/utils";
 
 /**
@@ -145,7 +154,7 @@ export default function BillingPage() {
       that reads as a glitch.
     */
     return (
-      <div className="mx-auto w-full max-w-4xl px-6 py-10">
+      <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
         <header className="mb-8 space-y-2.5">
           <Skeleton className="h-9 w-56" />
           <div className="flex items-center gap-2">
@@ -171,9 +180,9 @@ export default function BillingPage() {
   const d = ent.data;
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 py-10">
-      <header className="mb-8">
-        <h1 className="font-display text-3xl font-semibold tracking-tight">Plan &amp; usage</h1>
+    <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
+      <header className="mb-6">
+        <h1 className="text-h1">Plan &amp; usage</h1>
         <p className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-2 text-sm">
           <Badge variant={d.planId === "free" ? "secondary" : "default"}>{d.planName}</Badge>
           {d.cycle && <span>billed {d.cycle}</span>}
@@ -209,91 +218,76 @@ export default function BillingPage() {
       {error && <p className="text-destructive mb-6 rounded-xl bg-[var(--destructive-soft)] p-4 text-sm">{error}</p>}
 
       {/* ── usage ── */}
-      <section className="space-y-3">
-        {METERS.map((m) => {
-          const limit = d.limits[m.limit];
-          const used = d.usage[m.metric] ?? 0;
-          // A metric this plan does not sell at all is noise, not information.
-          if (limit === 0) return null;
-          const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-          const over = limit !== null && used >= limit;
-          const near = limit !== null && !over && used / limit >= 0.8;
-          return (
-            <Card key={m.metric}>
-              <CardHeader className="pb-1">
-                <CardTitle className="text-sm font-medium">{m.label}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="bg-muted mb-1.5 h-2.5 overflow-hidden rounded-full">
-                  <div
-                    className={cn(
-                      "h-full rounded-full transition-[width]",
-                      over ? "bg-destructive" : near ? "bg-[var(--warning-foreground)]" : "bg-[var(--primary)]",
-                    )}
-                    style={{ width: `${Math.max(pct, 2)}%` }}
-                  />
-                </div>
-                <p className="text-muted-foreground text-xs">
-                  <span className={cn("tabular-nums", over ? "text-destructive font-medium" : "font-medium")}>
-                    {used.toLocaleString()}
-                  </span>{" "}
-                  / {limit === null ? "unlimited" : limit.toLocaleString()}
-                  {m.hint && <span className="ml-1.5">{m.hint}</span>}
-                </p>
-              </CardContent>
-            </Card>
-          );
-        })}
-
+      <section className="space-y-4">
         <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-sm font-medium">Account</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle className="font-display text-base">This period</CardTitle>
           </CardHeader>
-          <CardContent>
-            <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-              {GAUGES.map((g) => {
-                const limit = d.limits[g.limit];
-                return (
-                  <div key={g.key}>
-                    <dt className="text-muted-foreground text-xs">{g.label}</dt>
-                    <dd className="mt-0.5 font-medium tabular-nums">
-                      {(d.gauges[g.key] ?? 0).toLocaleString()}
-                      <span className="text-muted-foreground font-normal">
-                        {" / "}
-                        {limit === null ? "∞" : limit.toLocaleString()}
-                      </span>
-                    </dd>
-                  </div>
-                );
-              })}
-            </dl>
-            <p className="text-muted-foreground mt-3 text-xs">
-              Monthly counters reset on{" "}
-              {new Date(d.periodResetsAt).toLocaleDateString(undefined, { month: "long", day: "numeric" })}.
-            </p>
+          <CardContent className="grid gap-5 sm:grid-cols-2">
+            {METERS.map((m) => {
+              const limit = d.limits[m.limit];
+              // A metric this plan does not sell at all is noise, not information.
+              if (limit === 0) return null;
+              return (
+                <UsageMeter
+                  key={m.metric}
+                  label={m.label}
+                  used={d.usage[m.metric] ?? 0}
+                  limit={limit}
+                  hint={m.hint}
+                />
+              );
+            })}
           </CardContent>
         </Card>
+
+        {/* Gauges are a current count against a ceiling, not a period total —
+            so they read as figures rather than as bars that never move. */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {GAUGES.map((g) => {
+            const limit = d.limits[g.limit];
+            const used = d.gauges[g.key] ?? 0;
+            return (
+              <StatCard
+                key={g.key}
+                label={g.label}
+                tone={limit !== null && used >= limit ? "warning" : "default"}
+                value={
+                  <>
+                    {used.toLocaleString()}
+                    <span className="text-muted-foreground text-sm font-normal">
+                      {" / "}
+                      {limit === null ? "∞" : limit.toLocaleString()}
+                    </span>
+                  </>
+                }
+              />
+            );
+          })}
+        </div>
+
+        <p className="text-muted-foreground text-xs">
+          Monthly counters reset on{" "}
+          {new Date(d.periodResetsAt).toLocaleDateString(undefined, { month: "long", day: "numeric" })}.
+        </p>
       </section>
 
       {/* ── plans ── */}
       <section className="mt-10">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-display text-xl font-semibold tracking-tight">Plans</h2>
-          <div className="bg-muted flex rounded-lg p-0.5 text-sm">
-            {(["yearly", "monthly"] as const).map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setCycle(c)}
-                className={cn(
-                  "rounded-[0.4rem] px-3 py-1 font-medium transition-colors",
-                  cycle === c ? "bg-[var(--background)] shadow-sm" : "text-muted-foreground",
-                )}
-              >
-                {c === "yearly" ? `Yearly · save ${yearlySavingPercent(PLANS.pro)}%` : "Monthly"}
-              </button>
-            ))}
-          </div>
+          <h2 className="text-h2">Plans</h2>
+          {/* The product's one segmented control, rather than a fourth
+              hand-rolled version of it. */}
+          <SegmentedControl
+            size="sm"
+            ariaLabel="Billing cycle"
+            value={cycle}
+            onChange={(v) => setCycle(v as "yearly" | "monthly")}
+            options={[
+              { value: "yearly", label: `Yearly · save ${yearlySavingPercent(PLANS.pro)}%` },
+              { value: "monthly", label: "Monthly" },
+            ]}
+          />
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">
@@ -375,28 +369,34 @@ export default function BillingPage() {
             {!invoices?.invoices.length ? (
               <p className="text-muted-foreground text-xs">No payments yet.</p>
             ) : (
-              <ul className="divide-y divide-[var(--border)] text-sm">
-                {invoices.invoices.slice(0, 5).map((inv) => (
-                  <li key={inv.id} className="flex items-center justify-between gap-2 py-1.5">
-                    <span className="text-muted-foreground text-xs">
-                      {new Date(inv.paid_at ?? inv.created_at).toLocaleDateString()}
-                    </span>
-                    <span className="flex items-center gap-2 tabular-nums">
-                      ${(inv.amount_cents / 100).toFixed(2)}
-                      {inv.status !== "succeeded" && (
-                        <Badge variant="secondary" className="text-[0.625rem]">
-                          {inv.status}
-                        </Badge>
-                      )}
-                      {inv.invoice_url && (
-                        <a href={inv.invoice_url} target="_blank" rel="noreferrer" aria-label="Open invoice">
-                          <ArrowUpRight className="text-muted-foreground size-3.5" />
-                        </a>
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <Table>
+                <TableBody>
+                  {invoices.invoices.slice(0, 5).map((inv) => (
+                    <TableRow key={inv.id}>
+                      <TableCell className="text-muted-foreground pl-0 text-xs">
+                        {new Date(inv.paid_at ?? inv.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="tabular text-right">
+                        ${(inv.amount_cents / 100).toFixed(2)}
+                      </TableCell>
+                      <TableCell className="w-px">
+                        {inv.status !== "succeeded" && (
+                          <Badge variant="secondary" className="text-[0.625rem]">
+                            {inv.status}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="w-px pr-0">
+                        {inv.invoice_url && (
+                          <a href={inv.invoice_url} target="_blank" rel="noreferrer" aria-label="Open invoice">
+                            <ArrowUpRight className="text-muted-foreground hover:text-foreground size-3.5 transition-colors" />
+                          </a>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </CardContent>
         </Card>
