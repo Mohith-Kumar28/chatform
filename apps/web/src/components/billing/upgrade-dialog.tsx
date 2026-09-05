@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Check, Lock, ArrowRight } from "lucide-react";
 import { FEATURES, PLANS, yearlyPerMonthCents, yearlySavingPercent, type PlanId } from "@repo/entitlements";
 import { usePaywall } from "@/stores/paywall-store";
 import { ApiError } from "@/lib/api/mutator";
-import { usePostApiBillingCheckout } from "@/lib/api/billing/billing";
+import { usePostApiBillingCheckout, usePostApiBillingChangePlan } from "@/lib/api/billing/billing";
+import { useEntitlements, ENTITLEMENTS_KEY } from "@/hooks/use-entitlements";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +26,10 @@ export function UpgradeDialog() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const ent = useEntitlements();
   const checkout = usePostApiBillingCheckout();
+  const changePlan = usePostApiBillingChangePlan();
 
   if (!gate) return null;
 
@@ -33,8 +38,16 @@ export function UpgradeDialog() {
   const count = typeof gate.context.count === "number" ? gate.context.count : null;
   const noun = typeof gate.context.noun === "string" ? gate.context.noun : null;
 
+  /**
+   * What the organization is on *now*. `gate.plan` is a snapshot taken when the denial
+   * was raised and can be stale by the time this dialog is open, so entitlements wins
+   * where it has loaded.
+   */
+  const currentId: PlanId = ent.data?.planId ?? gate.plan;
+  const paying = currentId !== "free";
+
   /** The features this upgrade adds over what they have now. */
-  const current = PLANS[gate.plan];
+  const current = PLANS[currentId];
   const gained = plan.features.filter((f) => !(current.features as readonly string[]).includes(f));
   const headline = headlineFor(gate.code, count, noun, gate);
 
@@ -42,17 +55,48 @@ export function UpgradeDialog() {
     setBusy(true);
     setError(null);
     try {
-      const res = (await checkout.mutateAsync({
+      /**
+       * Two paths behind one button, the same split the billing page makes.
+       *
+       * An organization with no subscription buys one through checkout; one that already
+       * pays moves through change-plan, because a second checkout would leave it with two
+       * subscriptions and two charges. Sending everyone to checkout is what made an
+       * upgrade from Pro come back as "This organization is on Pro. Use change-plan
+       * instead." — the API refusing, correctly, to double-charge.
+       */
+      if (!paying) {
+        const res = (await checkout.mutateAsync({
+          data: { planId: targetId, cycle } as never,
+        })) as unknown as { url: string };
+        window.location.assign(res.url);
+        return;
+      }
+
+      const res = (await changePlan.mutateAsync({
         data: { planId: targetId, cycle } as never,
-      })) as unknown as { url: string };
-      window.location.assign(res.url);
+      })) as unknown as { paymentLink?: string | null };
+
+      // Dodo hands back a hosted link when the change needs money before it applies.
+      if (res?.paymentLink) {
+        window.location.assign(res.paymentLink);
+        return;
+      }
+
+      /*
+        Applied immediately. Re-read entitlements before closing: the gate that opened
+        this dialog is what the caller behind it is still rendering against, and closing
+        on stale data leaves the feature locked with no explanation.
+      */
+      await queryClient.invalidateQueries({ queryKey: ENTITLEMENTS_KEY });
+      setBusy(false);
+      close();
     } catch (err) {
       /**
-       * Checkout can legitimately be unavailable — no Dodo products linked on this
-       * environment, or an org that already pays and needs change-plan instead. Say so and
-       * send them to the billing page rather than leaving a dead button.
+       * Either path can legitimately be unavailable — no Dodo products linked on this
+       * environment, or a role without `billing:manage`. Say so rather than leaving a
+       * dead button.
        */
-      setError(err instanceof ApiError ? err.message : "Could not start checkout.");
+      setError(err instanceof ApiError ? err.message : "Could not start the upgrade.");
       setBusy(false);
     }
   };
@@ -132,7 +176,7 @@ export function UpgradeDialog() {
             disabled={busy}
             className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-[var(--primary)] px-4 text-sm font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:opacity-60"
           >
-            {busy ? "Opening checkout…" : `Upgrade to ${plan.name}`}
+            {busy ? (paying ? "Upgrading…" : "Opening checkout…") : `Upgrade to ${plan.name}`}
             {!busy && <ArrowRight className="size-3.5" aria-hidden />}
           </button>
           <button
