@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { Check, Lock, ArrowRight } from "lucide-react";
+import { Check, Lock, ArrowRight, CreditCard, ExternalLink } from "lucide-react";
 import { FEATURES, PLANS, yearlyPerMonthCents, yearlySavingPercent, type PlanId } from "@repo/entitlements";
 import { usePaywall } from "@/stores/paywall-store";
 import { ApiError } from "@/lib/api/mutator";
-import { usePostApiBillingCheckout, usePostApiBillingChangePlan } from "@/lib/api/billing/billing";
-import { useEntitlements, ENTITLEMENTS_KEY } from "@/hooks/use-entitlements";
+import { usePostApiBillingCheckout, usePostApiBillingPortal } from "@/lib/api/billing/billing";
+import { useEntitlements } from "@/hooks/use-entitlements";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +17,12 @@ import { cn } from "@/lib/utils";
  * Driven by the `GateError` envelope, so it renders correctly for a denial it has never
  * been told about — a new gate on the API needs no work here. Mounted once, in the app
  * shell.
+ *
+ * This is the half of billing that stays ours. Dodo owns the money and cannot own this:
+ * it has never heard of `respondent_auth_google`, so it cannot tell someone that the
+ * switch they just clicked is a Business feature and what else comes with it. What it
+ * *can* own is the transaction, so both buttons below leave — checkout for an org buying
+ * its first subscription, the portal for one that already pays.
  */
 export function UpgradeDialog() {
   const gate = usePaywall((s) => s.gate);
@@ -25,13 +30,10 @@ export function UpgradeDialog() {
   const [cycle, setCycle] = useState<"monthly" | "yearly">("yearly");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** Paid for, but the webhook that grants it has not landed inside our patience. */
-  const [pending, setPending] = useState(false);
   const router = useRouter();
-  const queryClient = useQueryClient();
   const ent = useEntitlements();
   const checkout = usePostApiBillingCheckout();
-  const changePlan = usePostApiBillingChangePlan();
+  const portal = usePostApiBillingPortal();
 
   if (!gate) return null;
 
@@ -58,55 +60,28 @@ export function UpgradeDialog() {
     setError(null);
     try {
       /**
-       * Two paths behind one button, the same split the billing page makes.
+       * Two destinations, both of them Dodo's.
        *
-       * An organization with no subscription buys one through checkout; one that already
-       * pays moves through change-plan, because a second checkout would leave it with two
-       * subscriptions and two charges. Sending everyone to checkout is what made an
-       * upgrade from Pro come back as "This organization is on Pro. Use change-plan
-       * instead." — the API refusing, correctly, to double-charge.
+       * A free org has no Dodo customer yet, so there is no portal to open and the first
+       * subscription has to go through checkout. Anything after that — including this
+       * upgrade — is a switch between products in one collection, which the portal does
+       * against its own record of the subscription.
+       *
+       * We used to call our own change-plan endpoint here and then reconcile the result.
+       * That is what charged a customer for Business and left them on Pro, so the
+       * transaction is no longer ours to run.
        */
-      if (!paying) {
-        const res = (await checkout.mutateAsync({
-          data: { planId: targetId, cycle } as never,
-        })) as unknown as { url: string };
-        window.location.assign(res.url);
-        return;
-      }
-
-      const res = (await changePlan.mutateAsync({
+      const res = (await (paying ? portal.mutateAsync() : checkout.mutateAsync({
         data: { planId: targetId, cycle } as never,
-      })) as unknown as { paymentLink?: string | null };
-
-      // Dodo hands back a hosted link when the change needs money before it applies.
-      if (res?.paymentLink) {
-        window.location.assign(res.paymentLink);
-        return;
-      }
-
-      /*
-        Applied at Dodo — but not yet here.
-
-        Our plan flips when Dodo's `subscription.updated` webhook lands, which is a second
-        or two behind this response, so a single refetch reads the OLD plan and the dialog
-        closes on a screen where nothing has changed. That is precisely how a successful,
-        paid-for upgrade reads as a button that did nothing. Wait for the plan to actually
-        arrive before saying it is done.
-      */
-      const upgraded = await waitForPlan(queryClient, targetId);
-      setBusy(false);
-      if (!upgraded) {
-        setPending(true);
-        return;
-      }
-      close();
+      }))) as unknown as { url: string };
+      window.location.assign(res.url);
     } catch (err) {
       /**
        * Either path can legitimately be unavailable — no Dodo products linked on this
        * environment, or a role without `billing:manage`. Say so rather than leaving a
        * dead button.
        */
-      setError(err instanceof ApiError ? err.message : "Could not start the upgrade.");
+      setError(err instanceof ApiError ? err.message : "Could not open billing.");
       setBusy(false);
     }
   };
@@ -131,30 +106,40 @@ export function UpgradeDialog() {
           {gate.feature && <p className="text-muted-foreground mt-1.5 text-sm">{FEATURES[gate.feature].blurb}</p>}
         </div>
 
-        {/* Annual first: it is the better deal for the customer and the better number for
-            us, and defaulting to it is standard practice rather than a trick. */}
-        <div className="bg-muted mt-5 flex rounded-lg p-0.5 text-sm">
-          {(["yearly", "monthly"] as const).map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setCycle(c)}
-              className={cn(
-                "flex-1 rounded-[0.4rem] px-3 py-1.5 font-medium transition-colors",
-                cycle === c ? "bg-[var(--background)] shadow-sm" : "text-muted-foreground",
-              )}
-            >
-              {c === "yearly" ? `Yearly · save ${saving}%` : "Monthly"}
-            </button>
-          ))}
-        </div>
+        {/* The toggle belongs to whoever takes the money. This dialog only takes it from an
+            org buying its first subscription; a paying one picks its cycle in the portal,
+            alongside the proration it is about to be quoted. Rendering a switch here for
+            them would be a control with nothing on the other end.
+
+            Annual first for the people who do see it: it is the better deal for the
+            customer and the better number for us, and defaulting to it is standard
+            practice rather than a trick. */}
+        {!paying && (
+          <div className="bg-muted mt-5 flex rounded-lg p-0.5 text-sm">
+            {(["yearly", "monthly"] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCycle(c)}
+                className={cn(
+                  "flex-1 rounded-[0.4rem] px-3 py-1.5 font-medium transition-colors",
+                  cycle === c ? "bg-[var(--background)] shadow-sm" : "text-muted-foreground",
+                )}
+              >
+                {c === "yearly" ? `Yearly · save ${saving}%` : "Monthly"}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="mt-4 flex items-baseline justify-center gap-1.5">
           <span className="font-display text-4xl font-semibold tracking-tight tabular-nums">
             ${(perMonth / 100).toFixed(0)}
           </span>
           <span className="text-muted-foreground text-sm">
-            /mo{cycle === "yearly" ? ` · $${(plan.priceYearlyCents / 100).toFixed(0)} billed yearly` : ""}
+            {paying
+              ? `/mo · from $${(plan.priceMonthlyCents / 100).toFixed(0)} monthly`
+              : `/mo${cycle === "yearly" ? ` · $${(plan.priceYearlyCents / 100).toFixed(0)} billed yearly` : ""}`}
           </span>
         </div>
 
@@ -178,25 +163,25 @@ export function UpgradeDialog() {
         )}
 
         {error && <p className="text-destructive mt-3 text-center text-sm">{error}</p>}
-        {/* Never leave this one silent: the money has moved and the feature has not
-            appeared yet, and a customer with no sentence to read assumes it failed. */}
-        {pending && (
-          <p className="text-muted-foreground mt-3 text-center text-sm">
-            Payment went through. {plan.name} is being applied — reload in a moment. If it has not
-            appeared in a few minutes, contact support and nothing will be charged twice.
-          </p>
-        )}
 
         <div className="mt-5 grid gap-2">
           <button
             type="button"
-            onClick={pending ? () => window.location.reload() : start}
+            onClick={start}
             disabled={busy}
             className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-[var(--primary)] px-4 text-sm font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:opacity-60"
           >
-            {busy ? (paying ? "Upgrading…" : "Opening checkout…") : pending ? "Reload" : `Upgrade to ${plan.name}`}
-            {!busy && !pending && <ArrowRight className="size-3.5" aria-hidden />}
+            {paying && !busy && <CreditCard className="size-3.5" aria-hidden />}
+            {busy ? "Opening…" : paying ? `Switch to ${plan.name}` : `Upgrade to ${plan.name}`}
+            {!busy && (paying ? <ExternalLink className="size-3" aria-hidden /> : <ArrowRight className="size-3.5" aria-hidden />)}
           </button>
+          {/* Say where the button goes before it goes there. A dialog that vanishes into a
+              payment provider with no warning reads as a redirect that went wrong. */}
+          {paying && (
+            <p className="text-muted-foreground text-center text-xs">
+              Opens the billing portal, where the change is priced and applied.
+            </p>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -217,27 +202,6 @@ export function UpgradeDialog() {
       </DialogContent>
     </Dialog>
   );
-}
-
-/**
- * Refetch entitlements until the new plan shows up, or until we run out of patience.
- *
- * Dodo applies the change and *then* tells us over a webhook, so there is a real gap
- * between "the API returned 200" and "this account is on Business". Backing off from half
- * a second to two gives the usual case an instant-feeling close without hammering the
- * endpoint if the webhook is delayed.
- *
- * Returns false when the plan never arrived; the caller says so rather than pretending.
- */
-async function waitForPlan(queryClient: QueryClient, target: PlanId): Promise<boolean> {
-  const delays = [0, 500, 1000, 1500, 2000, 2000, 3000];
-  for (const wait of delays) {
-    if (wait) await new Promise((r) => setTimeout(r, wait));
-    await queryClient.invalidateQueries({ queryKey: ENTITLEMENTS_KEY });
-    const fresh = queryClient.getQueryData<{ planId?: PlanId }>(ENTITLEMENTS_KEY);
-    if (fresh?.planId === target) return true;
-  }
-  return false;
 }
 
 /**

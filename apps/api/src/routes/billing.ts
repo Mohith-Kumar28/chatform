@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import {
-  PLANS,
   PLAN_LIST,
   FEATURES,
   LIMITS,
@@ -32,8 +31,6 @@ import { audit, markConverted } from "../lib/gate-log.js";
 import {
   createCheckoutSession,
   createPortalSession,
-  changePlan,
-  previewChangePlan,
   DodoError,
 } from "../lib/dodo.js";
 import { returnOrigin, webOrigins } from "../lib/origins.js";
@@ -312,7 +309,7 @@ billingRouter.post(
     summary: "Start a Dodo checkout for a plan",
     responses: {
       200: { description: "Checkout URL", content: { "application/json": { schema: resolver(z.object({ url: z.string() })) } } },
-      409: { description: "Already subscribed — change plan instead" },
+      409: { description: "Already subscribed — switch plans in the billing portal" },
       503: { description: "Dodo or the plan is not configured" },
     },
   }),
@@ -323,9 +320,18 @@ billingRouter.post(
 
     const ent = await getEntitlements(c.env, orgId);
     if (ent.planId !== "free") {
-      // A second checkout would leave the org with two subscriptions and two charges.
+      /*
+        A second checkout would leave the org with two subscriptions and two charges.
+        Switching between paid plans is the portal's job now — see `createPortalSession`
+        — so this is the only checkout the product ever starts, and only ever the first.
+      */
       return c.json(
-        { error: { code: "already_subscribed", message: `This organization is on ${ent.planName}. Use change-plan instead.` } },
+        {
+          error: {
+            code: "already_subscribed",
+            message: `This organization is on ${ent.planName}. Change plans from the billing portal.`,
+          },
+        },
         409,
       );
     }
@@ -385,6 +391,15 @@ billingRouter.post(
   },
 );
 
+/**
+ * The one door to everything that touches money.
+ *
+ * Switching plan, payment method, invoices, tax details, pausing and cancelling all live
+ * behind this link. We used to own the plan switch and reconcile the result; that is what
+ * charged a customer for Business and left them on Pro. Dodo's portal does it against its
+ * own product collection, and we find out the same way we find out about everything else
+ * — the webhook.
+ */
 billingRouter.post(
   "/billing/portal",
   requirePermission("billing", "manage"),
@@ -413,113 +428,6 @@ billingRouter.post(
     } catch (err) {
       return dodoFailure(c, err);
     }
-  },
-);
-
-const ChangeBody = z.object({
-  planId: z.enum(["free", "pro", "business"]),
-  cycle: z.enum(["monthly", "yearly"]).default("monthly"),
-});
-
-/** Rank used to decide upgrade vs downgrade, which decides when the change applies. */
-const RANK: Record<PlanId, number> = { free: 0, pro: 1, business: 2 };
-
-billingRouter.post(
-  "/billing/preview-change",
-  requirePermission("billing", "manage"),
-  validator("json", ChangeBody),
-  describeRoute({
-    tags: ["billing"],
-    summary: "Quote a plan change before committing to it",
-    responses: { 200: { description: "Quote" }, 404: { description: "No subscription to change" } },
-  }),
-  async (c) => {
-    const ctx = await planChangeContext(c);
-    if ("response" in ctx) return ctx.response;
-    try {
-      const preview = await previewChangePlan(c.env, {
-        subscriptionId: ctx.subscriptionId,
-        productId: ctx.productId,
-        direction: ctx.direction,
-      });
-      return c.json({ direction: ctx.direction, effectiveAt: ctx.direction === "upgrade" ? "immediately" : "next_billing_date", preview });
-    } catch (err) {
-      return dodoFailure(c, err);
-    }
-  },
-);
-
-billingRouter.post(
-  "/billing/change-plan",
-  requirePermission("billing", "manage"),
-  validator("json", ChangeBody),
-  describeRoute({
-    tags: ["billing"],
-    summary: "Upgrade or downgrade an existing subscription",
-    responses: { 200: { description: "Applied or scheduled" }, 404: { description: "No subscription to change" } },
-  }),
-  async (c) => {
-    const ctx = await planChangeContext(c);
-    if ("response" in ctx) return ctx.response;
-    const orgId = c.get("orgId")!;
-    try {
-      const result = await changePlan(c.env, {
-        subscriptionId: ctx.subscriptionId,
-        productId: ctx.productId,
-        direction: ctx.direction,
-      });
-
-      if (ctx.direction === "downgrade") {
-        // Record the intent locally so the UI can say "drops to Free on the 14th"
-        // immediately; the authoritative flip still arrives as subscription.updated.
-        await c.env.DB.prepare(
-          `UPDATE subscriptions SET scheduled_plan_id = ?, scheduled_at = ?, updated_at = ?
-            WHERE dodo_subscription_id = ?`,
-        )
-          .bind(ctx.targetPlanId, ctx.periodEnd, Date.now(), ctx.subscriptionId)
-          .run();
-      }
-
-      await invalidateEntitlements(c.env, orgId);
-      await audit(c.env, {
-        orgId,
-        action: ctx.direction === "upgrade" ? "billing.upgraded" : "billing.downgrade_scheduled",
-        actorType: "user",
-        actorId: c.get("userId") ?? null,
-        resourceType: "subscription",
-        resourceId: ctx.subscriptionId,
-        meta: { to: ctx.targetPlanId, cycle: ctx.cycle },
-      });
-
-      return c.json({
-        ok: true,
-        direction: ctx.direction,
-        effectiveAt: ctx.direction === "upgrade" ? "immediately" : "next_billing_date",
-        // Present when the business requires plan-change payments via a hosted link.
-        paymentLink: result.payment_link ?? null,
-      });
-    } catch (err) {
-      return dodoFailure(c, err);
-    }
-  },
-);
-
-billingRouter.get(
-  "/billing/invoices",
-  requirePermission("billing", "read"),
-  describeRoute({
-    tags: ["billing"],
-    summary: "Payment history",
-    responses: { 200: { description: "Payments" } },
-  }),
-  async (c) => {
-    const res = await c.env.DB.prepare(
-      `SELECT dodo_payment_id AS id, amount_cents, currency, status, invoice_url, paid_at, created_at
-         FROM payments WHERE organization_id = ? ORDER BY created_at DESC LIMIT 100`,
-    )
-      .bind(c.get("orgId")!)
-      .all();
-    return c.json({ invoices: res.results ?? [] });
   },
 );
 
@@ -838,9 +746,17 @@ export async function dispatch(env: Bindings, evt: DodoWebhookEvent): Promise<st
     case "payment.succeeded": {
       const paymentId = evt.data?.payment_id;
       if (!paymentId) return "ignored: no payment_id";
+      /**
+       * Recorded for support and reconciliation, not for display: invoices are shown in
+       * Dodo's portal, which has the PDF, the tax breakdown and the billing address.
+       *
+       * `invoice_url` stays null rather than taking `payment_link`, which is what it used
+       * to be given. A payment link is a "pay this" URL, not a receipt — so the little
+       * arrow on the payments list opened a checkout page for money already taken.
+       */
       await env.DB.prepare(
         `INSERT INTO payments (id, organization_id, subscription_id, dodo_payment_id, amount_cents, currency, status, invoice_url, paid_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'succeeded', ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, 'succeeded', NULL, ?, ?)
          ON CONFLICT (dodo_payment_id) DO UPDATE SET status = 'succeeded', paid_at = excluded.paid_at`,
       )
         .bind(
@@ -850,7 +766,6 @@ export async function dispatch(env: Bindings, evt: DodoWebhookEvent): Promise<st
           paymentId,
           evt.data?.total_amount ?? evt.data?.settlement_amount ?? 0,
           evt.data?.currency ?? "USD",
-          (evt.data?.payment_link as string | null) ?? null,
           Date.now(),
           Date.now(),
         )
@@ -1022,89 +937,6 @@ async function productIdFor(env: Bindings, planId: PlanId, cycle: "monthly" | "y
     .bind(planId)
     .first<{ dodo_product_monthly_id: string | null; dodo_product_yearly_id: string | null }>();
   return (cycle === "yearly" ? row?.dodo_product_yearly_id : row?.dodo_product_monthly_id) ?? null;
-}
-
-type ChangeCtx =
-  | { response: Response }
-  | {
-      subscriptionId: string;
-      productId: string;
-      direction: "upgrade" | "downgrade";
-      targetPlanId: PlanId;
-      cycle: "monthly" | "yearly";
-      periodEnd: number | null;
-    };
-
-/**
- * Everything both change-plan routes need, resolved once.
- *
- * Downgrading to Free is not a plan change in Dodo's model — there is no free product to
- * move to — so it is refused here with a pointer at the portal, which is where
- * cancellation belongs.
- */
-async function planChangeContext(c: {
-  env: Bindings;
-  get: (k: string) => unknown;
-  req: { valid: (t: "json") => { planId: PlanId; cycle: "monthly" | "yearly" } };
-  json: (b: unknown, s?: number) => Response;
-}): Promise<ChangeCtx> {
-  const orgId = c.get("orgId") as string;
-  const { planId, cycle } = c.req.valid("json");
-
-  const sub = await c.env.DB.prepare(
-    `SELECT dodo_subscription_id, plan_id, current_period_end FROM subscriptions
-      WHERE organization_id = ? AND status IN ('active','trialing','on_hold')
-      ORDER BY created_at DESC LIMIT 1`,
-  )
-    .bind(orgId)
-    .first<{ dodo_subscription_id: string; plan_id: string; current_period_end: number | null }>();
-
-  if (!sub) {
-    return {
-      response: c.json(
-        { error: { code: "no_subscription", message: "There is no subscription to change. Start one with checkout." } },
-        404,
-      ),
-    };
-  }
-
-  if (planId === "free") {
-    return {
-      response: c.json(
-        {
-          error: {
-            code: "use_portal",
-            message: "Moving to Free means cancelling. Use the billing portal so the cancellation is recorded by Dodo.",
-          },
-        },
-        409,
-      ),
-    };
-  }
-
-  const current = isPlanId(sub.plan_id) ? (sub.plan_id as PlanId) : "free";
-  if (current === planId) {
-    return { response: c.json({ error: { code: "same_plan", message: `Already on ${PLANS[planId].name}.` } }, 409) };
-  }
-
-  const productId = await productIdFor(c.env, planId, cycle);
-  if (!productId) {
-    return {
-      response: c.json(
-        { error: { code: "plan_not_configured", message: `The ${cycle} ${planId} product is not linked to Dodo yet.` } },
-        503,
-      ),
-    };
-  }
-
-  return {
-    subscriptionId: sub.dodo_subscription_id,
-    productId,
-    direction: RANK[planId] > RANK[current] ? "upgrade" : "downgrade",
-    targetPlanId: planId,
-    cycle,
-    periodEnd: sub.current_period_end,
-  };
 }
 
 /** One place that turns a Dodo failure into a response, so the mapping stays consistent. */

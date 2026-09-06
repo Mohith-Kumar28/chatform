@@ -719,39 +719,10 @@ describe("billing routes", () => {
       body: JSON.stringify({ planId: "business", cycle: "monthly" }),
     });
     expect(res.status).toBe(409);
-    expect((await res.json<{ error: { code: string } }>()).error.code).toBe("already_subscribed");
-  });
-
-  it("refuses a plan change with no subscription", async () => {
-    const res = await fetchApi("/api/billing/change-plan", {
-      method: "POST",
-      headers: auth(org),
-      body: JSON.stringify({ planId: "business", cycle: "monthly" }),
-    });
-    expect(res.status).toBe(404);
-    expect((await res.json<{ error: { code: string } }>()).error.code).toBe("no_subscription");
-  });
-
-  it("sends a downgrade-to-free at the portal, where cancellation belongs", async () => {
-    await deliver(subscriptionEvent("subscription.active", org.orgId));
-    const res = await fetchApi("/api/billing/change-plan", {
-      method: "POST",
-      headers: auth(org),
-      body: JSON.stringify({ planId: "free" }),
-    });
-    expect(res.status).toBe(409);
-    expect((await res.json<{ error: { code: string } }>()).error.code).toBe("use_portal");
-  });
-
-  it("refuses a change to the plan already held", async () => {
-    await deliver(subscriptionEvent("subscription.active", org.orgId));
-    const res = await fetchApi("/api/billing/change-plan", {
-      method: "POST",
-      headers: auth(org),
-      body: JSON.stringify({ planId: "pro", cycle: "monthly" }),
-    });
-    expect(res.status).toBe(409);
-    expect((await res.json<{ error: { code: string } }>()).error.code).toBe("same_plan");
+    const body = await res.json<{ error: { code: string; message: string } }>();
+    expect(body.error.code).toBe("already_subscribed");
+    // The refusal has to name where they CAN switch, now that we no longer do it here.
+    expect(body.error.message).toContain("billing portal");
   });
 
   it("has nothing to manage before the org has ever been billed", async () => {
@@ -769,15 +740,32 @@ describe("billing routes", () => {
     expect(body.problems.join(" ")).toContain("no monthly Dodo product id");
   });
 
-  it("lists payment history", async () => {
+  it("still records payments for support, with no invoice link it cannot source", async () => {
+    /*
+      There is no `/billing/invoices` endpoint any more — Dodo's portal shows invoices,
+      with the PDF and the tax breakdown we never had. The row is still written, because
+      reconciling a disputed charge without it means reading webhook payloads by hand.
+
+      `invoice_url` must stay null: it used to be filled with `payment_link`, so the
+      receipt arrow on the old payments table opened a pay-this page for money already
+      taken.
+    */
     await deliver({
       business_id: "b",
       type: "payment.succeeded",
-      data: { payload_type: "Payment", payment_id: "pay_h", total_amount: 2400, metadata: { organizationId: org.orgId } },
+      data: {
+        payload_type: "Payment",
+        payment_id: "pay_h",
+        total_amount: 2400,
+        payment_link: "https://checkout.dodopayments.com/pay/whatever",
+        metadata: { organizationId: org.orgId },
+      },
     });
-    const res = await fetchApi("/api/billing/invoices", { headers: auth(org) });
-    const body = await res.json<{ invoices: { id: string; amount_cents: number }[] }>();
-    expect(body.invoices[0]).toMatchObject({ id: "pay_h", amount_cents: 2400 });
+    const row = await DB()
+      .DB.prepare(`SELECT dodo_payment_id, amount_cents, invoice_url FROM payments WHERE organization_id = ?`)
+      .bind(org.orgId)
+      .first<{ dodo_payment_id: string; amount_cents: number; invoice_url: string | null }>();
+    expect(row).toMatchObject({ dodo_payment_id: "pay_h", amount_cents: 2400, invoice_url: null });
   });
 
   it("does not let a non-owner start a checkout", async () => {

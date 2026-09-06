@@ -6667,7 +6667,7 @@
             }
           },
           "409": {
-            "description": "Already subscribed — change plan instead"
+            "description": "Already subscribed — switch plans in the billing portal"
           },
           "503": {
             "description": "Dodo or the plan is not configured"
@@ -6708,131 +6708,6 @@
           },
           "404": {
             "description": "No Dodo customer for this organization yet"
-          }
-        },
-        "security": [
-          {
-            "sessionCookie": []
-          }
-        ]
-      }
-    },
-    "/api/billing/preview-change": {
-      "post": {
-        "operationId": "postApiBillingPreviewChange",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "planId": {
-                    "type": "string",
-                    "enum": [
-                      "free",
-                      "pro",
-                      "business"
-                    ]
-                  },
-                  "cycle": {
-                    "default": "monthly",
-                    "type": "string",
-                    "enum": [
-                      "monthly",
-                      "yearly"
-                    ]
-                  }
-                },
-                "required": [
-                  "planId"
-                ]
-              }
-            }
-          }
-        },
-        "tags": [
-          "billing"
-        ],
-        "summary": "Quote a plan change before committing to it",
-        "responses": {
-          "200": {
-            "description": "Quote"
-          },
-          "404": {
-            "description": "No subscription to change"
-          }
-        },
-        "security": [
-          {
-            "sessionCookie": []
-          }
-        ]
-      }
-    },
-    "/api/billing/change-plan": {
-      "post": {
-        "operationId": "postApiBillingChangePlan",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "planId": {
-                    "type": "string",
-                    "enum": [
-                      "free",
-                      "pro",
-                      "business"
-                    ]
-                  },
-                  "cycle": {
-                    "default": "monthly",
-                    "type": "string",
-                    "enum": [
-                      "monthly",
-                      "yearly"
-                    ]
-                  }
-                },
-                "required": [
-                  "planId"
-                ]
-              }
-            }
-          }
-        },
-        "tags": [
-          "billing"
-        ],
-        "summary": "Upgrade or downgrade an existing subscription",
-        "responses": {
-          "200": {
-            "description": "Applied or scheduled"
-          },
-          "404": {
-            "description": "No subscription to change"
-          }
-        },
-        "security": [
-          {
-            "sessionCookie": []
-          }
-        ]
-      }
-    },
-    "/api/billing/invoices": {
-      "get": {
-        "operationId": "getApiBillingInvoices",
-        "tags": [
-          "billing"
-        ],
-        "summary": "Payment history",
-        "responses": {
-          "200": {
-            "description": "Payments"
           }
         },
         "security": [

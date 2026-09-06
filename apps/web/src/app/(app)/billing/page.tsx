@@ -3,39 +3,40 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowUpRight, CreditCard, ExternalLink, TriangleAlert } from "lucide-react";
-import { PLANS, PLAN_LIST, yearlyPerMonthCents, yearlySavingPercent, type LimitKey, type MetricKey, type PlanId } from "@repo/entitlements";
+import { ArrowRight, CreditCard, ExternalLink, TriangleAlert } from "lucide-react";
+import { PLANS, isPlanId, type LimitKey, type MetricKey, type PlanId } from "@repo/entitlements";
 import { ApiError } from "@/lib/api/mutator";
-import {
-  useGetApiBillingInvoices,
-  getGetApiBillingInvoicesQueryKey,
-  usePostApiBillingCheckout,
-  usePostApiBillingChangePlan,
-  usePostApiBillingPortal,
-} from "@/lib/api/billing/billing";
+import { usePostApiBillingCheckout, usePostApiBillingPortal } from "@/lib/api/billing/billing";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard } from "@/components/ui/stat-card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-} from "@/components/ui/table";
 import { UsageMeter } from "@/components/ui/usage-meter";
-import { cn } from "@/lib/utils";
 
 /**
- * Plan, usage, upgrade, invoices, portal — one page.
+ * What you are on, what you have used, and one door to everything else.
  *
- * Replaces `/usage`, which showed three meters read from a payload it had mistyped. Note
- * what is *not* here: cancellation, payment methods and receipts all live in the Dodo
- * customer portal. Rebuilding those would mean duplicating the source of truth for money,
- * and adding cancellation friction is the one dark pattern that reliably backfires.
+ * This page used to carry three plan cards, a billing-cycle toggle and a payments table.
+ * All three are gone, and the reasoning is worth keeping:
+ *
+ * - The cards were a second pricing page that could disagree with the first, and their
+ *   "Current" badge compared plan id only. A customer on Pro *monthly* looking at the
+ *   yearly column saw "Current" and no button, so the one switch they wanted — monthly to
+ *   yearly — was the one the page made impossible.
+ * - The buy buttons drove our own change-plan endpoint. Reconciling a change we had
+ *   originated is precisely what charged a customer for Business and left them on Pro.
+ * - The payments table listed `payment_link` as though it were an invoice, so the receipt
+ *   arrow opened a pay-this page for money already taken.
+ *
+ * Dodo's portal does all three properly — plan switching across a product collection,
+ * invoices with PDFs and tax, payment methods, cancellation — and it is the system of
+ * record for money either way. So the money lives there and the entitlement story lives
+ * here: what the plan is, what it allows, and how much of it is left.
+ *
+ * The one exception is a first purchase. A free org has no Dodo customer yet and so has
+ * no portal to open; `/pricing` sends them here with `?plan=`, and checkout starts below.
  */
 
 /** The meters worth showing, in the order someone would look for them. */
@@ -58,25 +59,11 @@ const GAUGES: { key: string; limit: LimitKey; label: string }[] = [
   { key: "file_storage_mb", limit: "file_storage_mb", label: "File storage (MB)" },
 ];
 
-interface Invoice {
-  id: string;
-  amount_cents: number;
-  currency: string;
-  status: string;
-  invoice_url: string | null;
-  paid_at: number | null;
-  created_at: number;
-}
-
 export default function BillingPage() {
   const params = useSearchParams();
   const ent = useEntitlements();
-  const [cycle, setCycle] = useState<"monthly" | "yearly">(
-    params.get("cycle") === "monthly" ? "monthly" : "yearly",
-  );
-  const [busy, setBusy] = useState<PlanId | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   /**
    * The post-checkout message is *derived* from the URL rather than copied into state by an
@@ -85,63 +72,53 @@ export default function BillingPage() {
    */
   const checkout = params.get("checkout");
   const notice =
-    actionNotice ??
-    (checkout === "success"
+    checkout === "success"
       ? "Thanks — your plan is being activated. It may take a moment to appear."
       : checkout === "cancelled"
         ? "Checkout cancelled. Nothing was charged."
-        : null);
-
-  const { data: rawInvoices } = useGetApiBillingInvoices({
-    query: { queryKey: getGetApiBillingInvoicesQueryKey(), enabled: ent.allows("billing", "read") },
-  });
-  const invoices = rawInvoices as { invoices: Invoice[] } | undefined;
+        : null;
 
   const checkoutMutation = usePostApiBillingCheckout();
-  const changePlanMutation = usePostApiBillingChangePlan();
   const portalMutation = usePostApiBillingPortal();
 
   const plan = ent.data ? PLANS[ent.data.planId] : null;
   const canManage = ent.allows("billing", "manage");
 
+  /** Which plan `/pricing` sent them here to buy, if any. */
+  const wanted = params.get("plan");
+  const intended: PlanId | null = wanted && isPlanId(wanted) && wanted !== "free" ? wanted : null;
+  const cycle = params.get("cycle") === "monthly" ? "monthly" : "yearly";
+
   /**
-   * One button for both paths.
+   * The first purchase, and the only one this app starts.
    *
-   * An org with no subscription goes through checkout; one that already pays goes through
-   * change-plan, because a second checkout would leave them with two subscriptions and two
-   * charges. The API enforces this too — this just avoids showing a button that 409s.
+   * Everything after it — upgrade, downgrade, switching monthly to yearly — happens in the
+   * portal, because a paid org already has a Dodo customer and the portal can move it
+   * between products in the collection without us reconciling anything.
    */
-  const choose = async (target: PlanId) => {
-    setBusy(target);
+  const startCheckout = async (target: PlanId) => {
+    setBusy(true);
     setError(null);
     try {
-      if (ent.data?.planId === "free") {
-        const res = (await checkoutMutation.mutateAsync({
-          data: { planId: target, cycle } as never,
-        })) as unknown as { url: string };
-        window.location.assign(res.url);
-      } else {
-        await changePlanMutation.mutateAsync({ data: { planId: target, cycle } as never });
-        setActionNotice(
-          target === "free"
-            ? "Your plan will change at the end of the billing period."
-            : `Moved to ${PLANS[target].name}.`,
-        );
-        setBusy(null);
-      }
+      const res = (await checkoutMutation.mutateAsync({
+        data: { planId: target, cycle } as never,
+      })) as unknown as { url: string };
+      window.location.assign(res.url);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong.");
-      setBusy(null);
+      setError(err instanceof ApiError ? err.message : "Could not start checkout.");
+      setBusy(false);
     }
   };
 
   const openPortal = async () => {
+    setBusy(true);
     setError(null);
     try {
       const res = (await portalMutation.mutateAsync()) as unknown as { url: string };
       window.location.assign(res.url);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not open the billing portal.");
+      setBusy(false);
     }
   };
 
@@ -167,12 +144,7 @@ export default function BillingPage() {
             <Skeleton key={i} className="h-24 w-full rounded-xl" />
           ))}
         </div>
-        <Skeleton className="mt-10 mb-4 h-7 w-24" />
-        <div className="grid gap-3 md:grid-cols-3">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-64 w-full rounded-xl" />
-          ))}
-        </div>
+        <Skeleton className="mt-10 h-40 w-full rounded-xl" />
       </div>
     );
   }
@@ -272,132 +244,59 @@ export default function BillingPage() {
         </p>
       </section>
 
-      {/* ── plans ── */}
+      {/* ── the one door ── */}
       <section className="mt-10">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-h2">Plans</h2>
-          {/* The product's one segmented control, rather than a fourth
-              hand-rolled version of it. */}
-          <SegmentedControl
-            size="sm"
-            ariaLabel="Billing cycle"
-            value={cycle}
-            onChange={(v) => setCycle(v as "yearly" | "monthly")}
-            options={[
-              { value: "yearly", label: `Yearly · save ${yearlySavingPercent(PLANS.pro)}%` },
-              { value: "monthly", label: "Monthly" },
-            ]}
-          />
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-3">
-          {PLAN_LIST.map((p) => {
-            const isCurrent = p.id === d.planId;
-            const perMonth = cycle === "yearly" ? yearlyPerMonthCents(p) : p.priceMonthlyCents;
-            return (
-              <Card key={p.id} className={cn(isCurrent && "ring-2 ring-[var(--primary)]")}>
-                <CardContent className="pt-5">
-                  <div className="flex items-baseline justify-between">
-                    <h3 className="font-display font-semibold tracking-tight">{p.name}</h3>
-                    {isCurrent && <Badge variant="secondary">Current</Badge>}
-                  </div>
-                  <p className="text-muted-foreground mt-1 text-xs text-pretty">{p.tagline}</p>
-                  <p className="mt-3">
-                    <span className="font-display text-2xl font-semibold tracking-tight tabular-nums">
-                      ${(perMonth / 100).toFixed(0)}
-                    </span>
-                    <span className="text-muted-foreground text-xs">{p.id === "free" ? " forever" : "/mo"}</span>
-                  </p>
-                  {!isCurrent && p.id !== "free" && (
-                    <Button
-                      className="mt-3 w-full"
-                      size="sm"
-                      disabled={!canManage || busy !== null}
-                      onClick={() => choose(p.id)}
-                    >
-                      {busy === p.id ? "Working…" : d.planId === "free" ? `Upgrade to ${p.name}` : `Switch to ${p.name}`}
-                    </Button>
-                  )}
-                  {!isCurrent && p.id === "free" && d.planId !== "free" && (
-                    <p className="text-muted-foreground mt-3 text-xs">
-                      Cancel from the billing portal to move back to Free at the end of your period.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-
-        {!canManage && (
-          <p className="text-muted-foreground mt-3 text-xs">
-            Only an owner can change the plan. Ask whoever set up this organization.
-          </p>
-        )}
-
-        <p className="text-muted-foreground mt-3 text-xs">
-          <Link href="/pricing" className="underline">
-            Compare every feature and limit
-          </Link>
-        </p>
-      </section>
-
-      {/* ── portal + invoices ── */}
-      <section className="mt-10 grid gap-3 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-1">
-            <CardTitle className="text-sm font-medium">Billing details</CardTitle>
+            <CardTitle className="font-display text-base">
+              {d.planId === "free" ? "Get more out of it" : "Plan & billing"}
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground text-xs">
-              Payment method, invoices, tax details and cancellation are all handled by our payment
-              provider.
-            </p>
-            <Button variant="outline" size="sm" className="mt-3" disabled={!canManage} onClick={openPortal}>
-              <CreditCard className="size-3.5" />
-              Open billing portal
-              <ExternalLink className="size-3" />
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-sm font-medium">Payments</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!invoices?.invoices.length ? (
-              <p className="text-muted-foreground text-xs">No payments yet.</p>
+            {d.planId === "free" ? (
+              <>
+                <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+                  Pro and Business add your own branding, deeper analytics, verified respondents
+                  and a bigger AI allowance. Nothing you have already collected changes.
+                </p>
+                <Button
+                  size="lg"
+                  className="mt-4"
+                  disabled={!canManage || busy}
+                  onClick={() => startCheckout(intended ?? "pro")}
+                >
+                  {busy ? "Opening checkout…" : intended ? `Continue to ${PLANS[intended].name}` : "See plans"}
+                  <ArrowRight className="size-4" />
+                </Button>
+              </>
             ) : (
-              <Table>
-                <TableBody>
-                  {invoices.invoices.slice(0, 5).map((inv) => (
-                    <TableRow key={inv.id}>
-                      <TableCell className="text-muted-foreground pl-0 text-xs">
-                        {new Date(inv.paid_at ?? inv.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="tabular text-right">
-                        ${(inv.amount_cents / 100).toFixed(2)}
-                      </TableCell>
-                      <TableCell className="w-px">
-                        {inv.status !== "succeeded" && (
-                          <Badge variant="secondary" className="text-[0.625rem]">
-                            {inv.status}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="w-px pr-0">
-                        {inv.invoice_url && (
-                          <a href={inv.invoice_url} target="_blank" rel="noreferrer" aria-label="Open invoice">
-                            <ArrowUpRight className="text-muted-foreground hover:text-foreground size-3.5 transition-colors" />
-                          </a>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <>
+                <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+                  {/* Naming what is behind a link that leaves the site is the whole job here:
+                      the reason people do not click through to a portal is that they cannot
+                      tell whether the thing they came for is on the other side. */}
+                  Switch plan, move between monthly and yearly, update your card, download
+                  invoices, change tax details or cancel — all with our payment provider.
+                </p>
+                <Button size="lg" className="mt-4" disabled={!canManage || busy} onClick={openPortal}>
+                  <CreditCard className="size-4" />
+                  {busy ? "Opening…" : "Manage plan & billing"}
+                  <ExternalLink className="size-3.5" />
+                </Button>
+              </>
             )}
+
+            {!canManage && (
+              <p className="text-muted-foreground mt-3 text-xs">
+                Only an owner can change the plan. Ask whoever set up this organization.
+              </p>
+            )}
+
+            <p className="text-muted-foreground mt-4 text-xs">
+              <Link href="/pricing" className="underline">
+                Compare every feature and limit
+              </Link>
+            </p>
           </CardContent>
         </Card>
       </section>

@@ -151,67 +151,18 @@ export async function createPortalSession(
   });
 }
 
-// ──────────────────────────────── plan changes ────────────────────────────────
-
-export type ProrationMode =
-  | "prorated_immediately"
-  | "full_immediately"
-  | "difference_immediately"
-  | "do_not_bill";
-
-export interface ChangePlanArgs {
-  subscriptionId: string;
-  productId: string;
-  /** Upgrades apply now and prorate; downgrades wait for the boundary. */
-  direction: "upgrade" | "downgrade";
-}
-
-export interface ChangePlanResult {
-  payment_id?: string | null;
-  payment_link?: string | null;
-}
-
 /**
- * Move an existing subscription to a different product.
+ * Plan changes are not here on purpose.
  *
- * An upgrade charges the difference and applies immediately — the customer clicked because
- * they want the feature now. A downgrade is scheduled for `next_billing_date`, so they
- * keep what they already paid for and entitlements drop at the boundary rather than at the
- * click. Doing it the other way round means selling someone a month and taking it back.
+ * They used to be: `changePlan`, `previewChangePlan`, and the proration and effective-at
+ * rules that go with them. All of it now happens in Dodo's customer portal, where the
+ * products sit in one collection and the customer switches between them directly.
+ *
+ * That is not tidying. Reconciling a plan change we had originated is exactly what put a
+ * paying customer on Business at Dodo and Pro here, and the cheapest way to never make
+ * that class of mistake again is to not be the one making the change. We still read the
+ * result off the webhook — see `planForProduct` — but the money moves without us.
  */
-export async function changePlan(env: Bindings, args: ChangePlanArgs): Promise<ChangePlanResult> {
-  const upgrade = args.direction === "upgrade";
-  return call<ChangePlanResult>(env, `/subscriptions/${encodeURIComponent(args.subscriptionId)}/change-plan`, {
-    method: "POST",
-    body: JSON.stringify({
-      product_id: args.productId,
-      quantity: 1,
-      proration_billing_mode: upgrade ? "prorated_immediately" : "do_not_bill",
-      effective_at: upgrade ? "immediately" : "next_billing_date",
-    }),
-  });
-}
-
-export interface ChangePreview {
-  amount?: number | null;
-  currency?: string | null;
-  next_billing_date?: string | null;
-  [key: string]: unknown;
-}
-
-/** Quote a plan change before committing to it, so the UI can show the real number. */
-export async function previewChangePlan(env: Bindings, args: ChangePlanArgs): Promise<ChangePreview> {
-  const upgrade = args.direction === "upgrade";
-  return call<ChangePreview>(env, `/subscriptions/${encodeURIComponent(args.subscriptionId)}/preview-change-plan`, {
-    method: "POST",
-    body: JSON.stringify({
-      product_id: args.productId,
-      quantity: 1,
-      proration_billing_mode: upgrade ? "prorated_immediately" : "do_not_bill",
-      effective_at: upgrade ? "immediately" : "next_billing_date",
-    }),
-  });
-}
 
 export interface DodoSubscription {
   subscription_id: string;

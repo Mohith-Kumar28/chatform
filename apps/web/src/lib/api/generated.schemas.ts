@@ -1248,50 +1248,6 @@ export type PostApiBillingPortal200 = {
   url: string;
 };
 
-export type PostApiBillingPreviewChangeBodyPlanId = typeof PostApiBillingPreviewChangeBodyPlanId[keyof typeof PostApiBillingPreviewChangeBodyPlanId];
-
-
-export const PostApiBillingPreviewChangeBodyPlanId = {
-  free: 'free',
-  pro: 'pro',
-  business: 'business',
-} as const;
-
-export type PostApiBillingPreviewChangeBodyCycle = typeof PostApiBillingPreviewChangeBodyCycle[keyof typeof PostApiBillingPreviewChangeBodyCycle];
-
-
-export const PostApiBillingPreviewChangeBodyCycle = {
-  monthly: 'monthly',
-  yearly: 'yearly',
-} as const;
-
-export type PostApiBillingPreviewChangeBody = {
-  planId: PostApiBillingPreviewChangeBodyPlanId;
-  cycle?: PostApiBillingPreviewChangeBodyCycle;
-};
-
-export type PostApiBillingChangePlanBodyPlanId = typeof PostApiBillingChangePlanBodyPlanId[keyof typeof PostApiBillingChangePlanBodyPlanId];
-
-
-export const PostApiBillingChangePlanBodyPlanId = {
-  free: 'free',
-  pro: 'pro',
-  business: 'business',
-} as const;
-
-export type PostApiBillingChangePlanBodyCycle = typeof PostApiBillingChangePlanBodyCycle[keyof typeof PostApiBillingChangePlanBodyCycle];
-
-
-export const PostApiBillingChangePlanBodyCycle = {
-  monthly: 'monthly',
-  yearly: 'yearly',
-} as const;
-
-export type PostApiBillingChangePlanBody = {
-  planId: PostApiBillingChangePlanBodyPlanId;
-  cycle?: PostApiBillingChangePlanBodyCycle;
-};
-
 export type PostApiFormsByIdPreviewSessions200 = {
   sessionId: string;
   sseUrl: string;

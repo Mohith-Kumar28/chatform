@@ -12,6 +12,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useEntitlements } from "@/hooks/use-entitlements";
 import { BUILD_VIEWS } from "./builder-tabs";
 import { useBuilderStore } from "@/stores/builder-store";
 import { DesignSheet } from "./design-sheet";
@@ -40,6 +41,15 @@ export function BuildToolbar() {
   // inspector on the right; a Design link and an upgrade pill on top of that
   // is clutter. Keep the switcher there and nothing else.
   const showSideActions = !onFlow;
+  const ent = useEntitlements();
+  /**
+   * Only ever shown to someone who can act on it.
+   *
+   * `ready` matters as much as the plan here: entitlements load optimistically, so without
+   * it a paying customer gets an Upgrade chip on every first paint that then disappears.
+   * A nag aimed at a customer who already paid is worse than no chip at all.
+   */
+  const showUpgrade = showSideActions && ent.ready && ent.data?.planId === "free";
 
   return (
     <TooltipProvider delayDuration={400}>
@@ -116,9 +126,9 @@ export function BuildToolbar() {
         </div>
 
         <div className="flex flex-1 justify-end">
-          {showSideActions && (
+          {showUpgrade && (
             <Button size="sm" shape="pill" variant="soft" asChild>
-              <Link href="/usage">
+              <Link href="/billing">
                 <Sparkles className="size-3.5" />
                 Upgrade
               </Link>
