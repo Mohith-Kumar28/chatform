@@ -9,6 +9,12 @@ import { cn } from "@/lib/utils";
  *
  * `null` means unlimited: the bar is drawn flat rather than at zero, because
  * an empty track reads as "none left" at a glance.
+ *
+ * Three tones, not two. *At* the limit is amber, not red: a one-seat plan sits
+ * at 1/1 for its entire life, and painting that steady state in the colour the
+ * product uses for failure told every solo account something was broken. Red is
+ * reserved for `used > limit` — an allowance that was actually exceeded, which
+ * the server clamps and so should almost never appear.
  */
 export function UsageMeter({
   label,
@@ -24,7 +30,7 @@ export function UsageMeter({
   hint?: string;
   className?: string;
 }) {
-  const over = limit !== null && used >= limit;
+  const over = limit !== null && used > limit;
   const near = limit !== null && !over && used / limit >= 0.8;
   const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
 

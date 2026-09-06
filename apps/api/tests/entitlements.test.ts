@@ -326,6 +326,22 @@ describe("gauges", () => {
     await DB().DB.prepare(`DELETE FROM invitations WHERE id = 'inv_p'`).run();
   });
 
+  it("stops counting an invitation once it has expired", async () => {
+    // Better Auth never writes `status` back to `expired` — it compares
+    // `expires_at` at accept time and leaves the row `pending` forever. Counting
+    // on status alone leaked a seat for every invite that went unanswered, and
+    // nothing in the product could reclaim it.
+    await DB()
+      .DB.prepare(
+        `INSERT INTO invitations (id, organization_id, email, role, status, expires_at, inviter_id, created_at)
+         VALUES (?, ?, 'stale@example.com', 'editor', 'pending', ?, ?, ?)`,
+      )
+      .bind(`inv_x`, org.orgId, Date.now() - 1_000, org.userId, Date.now() - 86_400_000)
+      .run();
+    expect(await countSeats(DB(), org.orgId)).toBe(1);
+    await DB().DB.prepare(`DELETE FROM invitations WHERE id = 'inv_x'`).run();
+  });
+
   it("counts only confirmed bytes, and counts form-less org assets", async () => {
     const insert = (id: string, status: string, bytes: number, formId: string | null) =>
       DB()

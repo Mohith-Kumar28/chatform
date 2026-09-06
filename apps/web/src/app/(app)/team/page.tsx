@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { authClient } from "@/lib/auth/auth-client";
+import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { authClient, useSession } from "@/lib/auth/auth-client";
 import { useActiveOrg } from "@/hooks/use-active-org";
-import { useEntitlements } from "@/hooks/use-entitlements";
+import { useEntitlements, ENTITLEMENTS_KEY } from "@/hooks/use-entitlements";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,15 +16,24 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { UsageMeter } from "@/components/ui/usage-meter";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Clock, Lock, UserPlus } from "lucide-react";
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Check, Clock, Lock, MailWarning, MoreHorizontal, UserPlus } from "lucide-react";
 
 /**
  * Who is in this organization, and inviting more of them.
@@ -44,6 +55,20 @@ import { Clock, Lock, UserPlus } from "lucide-react";
  * created before the session hook landed, a session that had simply never
  * picked one — not an account without a workspace. This page was the only place
  * that difference was visible, and it read as the workspace having vanished.
+ *
+ * ## Layout
+ *
+ * One roster, not three lists. Members, live invitations and expired ones are
+ * the same question — "who can get into this organization, and who is on the
+ * way in" — and splitting them into separate cards meant the seat total was the
+ * only place they were ever added up. They share a table now; the row treatment
+ * carries the difference.
+ *
+ * The seat meter sits inside the invite card rather than in a band across the
+ * top. Seats are only ever interesting next to the control they constrain, and
+ * as a full-width card it was a lot of chrome around one number — which then
+ * repeated the "every seat is taken" sentence that the invite form was already
+ * saying two hundred pixels to the right.
  */
 
 /**
@@ -61,6 +86,26 @@ const ROLES = [
 
 type Role = (typeof ROLES)[number]["value"];
 
+/**
+ * What each role actually means, for the expandable matrix.
+ *
+ * Hand-written rather than derived from the permission statements, and
+ * deliberately so: `apps/api/src/lib/permissions.ts` is the enforcement
+ * boundary and lists twelve resources, most of which mean nothing to the person
+ * choosing between "Admin" and "Editor". This is the six sentences that change
+ * someone's answer. It is help text, not an authorization decision — the server
+ * refuses regardless of what this table claims — but it must not drift, so it
+ * is pinned to those statements by `apps/api/tests/team-roles.test.ts`.
+ */
+const CAPABILITIES = [
+  { label: "Read responses and analytics", owner: true, admin: true, editor: true, viewer: true },
+  { label: "Build, edit and publish forms", owner: true, admin: true, editor: true, viewer: false },
+  { label: "Export responses, see partial ones", owner: true, admin: true, editor: true, viewer: false },
+  { label: "API keys, custom domain, audit log", owner: true, admin: true, editor: false, viewer: false },
+  { label: "Invite and remove teammates", owner: true, admin: true, editor: false, viewer: false },
+  { label: "Change the plan", owner: true, admin: false, editor: false, viewer: false },
+] as const;
+
 interface Invitation {
   id: string;
   email: string;
@@ -69,17 +114,60 @@ interface Invitation {
   expiresAt: string | Date;
 }
 
+/** An invitation with its expiry already resolved against a single clock reading. */
+type ResolvedInvitation = Invitation & { expired: boolean };
+
+interface Member {
+  id: string;
+  userId: string;
+  role: string;
+  user?: { name?: string; email?: string };
+}
+
+/**
+ * Live invitations, with expiry resolved once against a single clock reading.
+ *
+ * At module scope rather than inside the query, and that is not only about
+ * `Date.now()` being impure — the compiler flags everything written inside the
+ * `useQuery` call, deferred or not. Taking the reading where the list arrives is
+ * also the more correct place: it is the same moment the server counted seats
+ * from, and a 48-hour window does not need a clock that ticks in render.
+ */
+function resolveInvitations(rows: Invitation[]): ResolvedInvitation[] {
+  const now = Date.now();
+  return rows
+    .filter((i) => i.status === "pending")
+    .map((i) => ({ ...i, expired: new Date(i.expiresAt).getTime() <= now }));
+}
+
+/** Better Auth stores multiple roles comma-separated; the first is the one to show. */
+function primaryRole(role: string): string {
+  return role.split(",")[0]?.trim() ?? role;
+}
+
+function roleLabel(role: string): string {
+  const r = primaryRole(role);
+  if (r === "member") return "editor";
+  return r;
+}
+
 export default function TeamPage() {
   const { org, isPending } = useActiveOrg();
+  const { data: session } = useSession();
   const ent = useEntitlements();
+  const qc = useQueryClient();
+  const { confirm, dialog } = useConfirm();
 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("editor");
   const [invited, setInvited] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  /** The row with a request in flight, so only its own menu goes quiet. */
+  const [busyRow, setBusyRow] = useState<string | null>(null);
 
-  const members = (org?.members ?? []) as { id: string; role: string; user?: { name?: string; email?: string } }[];
+  const members = (org?.members ?? []) as Member[];
+  const meId = session?.user?.id;
 
   /**
    * Invites that have been sent and not yet accepted.
@@ -89,18 +177,30 @@ export default function TeamPage() {
    * ago and never clicked the link — so the only way to find out was to
    * invite them again.
    */
+  const invitationsKey = ["organization", org?.id, "invitations"] as const;
   const { data: invitations } = useQuery({
-    queryKey: ["organization", org?.id, "invitations"],
+    queryKey: invitationsKey,
     enabled: Boolean(org?.id),
     queryFn: async () => {
       const res = await authClient.organization.listInvitations();
-      return ((res.data ?? []) as Invitation[]).filter((i) => i.status === "pending");
+      return resolveInvitations((res.data ?? []) as Invitation[]);
     },
     // A refused list is an empty list here: pending invites are useful context,
     // not something worth failing the page over.
     retry: false,
   });
-  const pending = invitations ?? [];
+
+  /**
+   * `status` is not enough to know an invitation is still live.
+   *
+   * Better Auth never writes the row back to `expired`; it compares `expiresAt`
+   * at accept time and leaves the status alone. So a `pending` row can be weeks
+   * dead. The server's seat count makes the same distinction (`countSeats`), and
+   * the two must agree or this page will insist there is a free seat that the
+   * invite endpoint then refuses — or the reverse.
+   */
+  const pending = (invitations ?? []).filter((i) => !i.expired);
+  const expired = (invitations ?? []).filter((i) => i.expired);
 
   /**
    * Inviting is a role, not a plan — so a refusal here is a 403 and upgrading
@@ -109,12 +209,30 @@ export default function TeamPage() {
    * nobody knows to ask their admin for.
    */
   const canInvite = ent.allows("invitation", "create");
+  const canCancel = ent.allows("invitation", "cancel");
+  const canRemove = ent.allows("member", "delete");
+  const canSetRole = ent.allows("member", "update");
 
   /** Seats are a plan limit, and hitting it is a 402 nobody should meet mid-invite. */
   const seatLimit = ent.limit("seats");
-  // An outstanding invite is a seat already spoken for.
+  // A live invite is a seat already spoken for. An expired one is not — it can
+  // never be accepted, and holding a seat for it is how an organization ends up
+  // permanently short of a seat it is paying for.
   const seatsUsed = members.length + pending.length;
   const seatsFull = seatLimit !== null && seatsUsed >= seatLimit;
+
+  /**
+   * Anything that changes the roster changes the seat count, and the seat count
+   * is served by the entitlements endpoint — which every gate in the product
+   * reads. Refreshing only the list would leave the meter above the form
+   * disagreeing with the server that enforces it.
+   */
+  const refresh = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: invitationsKey }),
+      qc.invalidateQueries({ queryKey: ENTITLEMENTS_KEY }),
+    ]);
+  };
 
   const invite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,6 +243,7 @@ export default function TeamPage() {
       if (res.error) throw new Error(res.error.message ?? "Invite failed");
       setInvited(email);
       setEmail("");
+      await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invite failed");
     } finally {
@@ -132,12 +251,63 @@ export default function TeamPage() {
     }
   };
 
+  /** One wrapper so every row action reports the same way. */
+  const run = async (rowId: string, label: string, fn: () => Promise<{ error?: unknown }>) => {
+    setBusyRow(rowId);
+    try {
+      const res = await fn();
+      const err = res?.error as { message?: string } | undefined;
+      if (err) throw new Error(err.message ?? `${label} failed`);
+      await refresh();
+      toast.success(label);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `${label} failed`);
+    } finally {
+      setBusyRow(null);
+    }
+  };
+
+  const changeRole = (m: Member, next: string) =>
+    run(m.id, "Role updated", () =>
+      authClient.organization.updateMemberRole({ memberId: m.id, role: next as never }),
+    );
+
+  const removeMember = (m: Member) => {
+    const who = m.user?.name ?? m.user?.email ?? "this person";
+    confirm({
+      title: `Remove ${who}?`,
+      description:
+        "They lose access to every form in this organization immediately. Responses they collected stay. You can invite them again later.",
+      confirmLabel: "Remove",
+      onConfirm: () =>
+        run(m.id, "Member removed", () =>
+          authClient.organization.removeMember({ memberIdOrEmail: m.id }),
+        ),
+    });
+  };
+
+  const revoke = (i: ResolvedInvitation) =>
+    run(i.id, "Invitation revoked", () =>
+      authClient.organization.cancelInvitation({ invitationId: i.id }),
+    );
+
+  const resend = (i: ResolvedInvitation) =>
+    run(i.id, "Invitation sent again", () =>
+      authClient.organization.inviteMember({
+        email: i.email,
+        role: primaryRole(i.role) as never,
+        resend: true,
+      }),
+    );
+
   if (isPending) {
     return (
-      <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-8 sm:px-6">
+      <div className="mx-auto w-full max-w-5xl space-y-6 px-4 py-8 sm:px-6">
         <Skeleton className="h-9 w-32" />
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-64 w-full" />
+        <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-72 w-full" />
+        </div>
       </div>
     );
   }
@@ -155,6 +325,8 @@ export default function TeamPage() {
     );
   }
 
+  const canManageRows = canRemove || canSetRole || canCancel;
+
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <PageHeader
@@ -164,109 +336,213 @@ export default function TeamPage() {
         }`}
       />
 
-      <Card className="mt-6">
-        <CardContent className="pt-6">
-          <UsageMeter
-            label="Seats used"
-            used={seatsUsed}
-            limit={seatLimit}
-            hint={
-              seatsFull
-                ? "Every seat on your plan is taken. Add seats from billing to invite more people."
-                : "Pending invites count against your seats until they're accepted or expire."
-            }
-          />
-        </CardContent>
-      </Card>
-
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[1.5fr_1fr]">
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="font-display text-base">Members</CardTitle>
-              <CardDescription>People with access to this organization.</CardDescription>
+              <CardTitle className="font-display text-base">People</CardTitle>
+              <CardDescription>
+                Everyone with access to this organization, and anyone on the way in.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="px-0">
-              {members.length === 0 ? (
-                <p className="text-muted-foreground px-6 text-sm">No members yet.</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="pl-6">Member</TableHead>
-                      <TableHead className="pr-6 text-right">Role</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {members.map((m) => {
-                      const display = m.user?.name ?? m.user?.email ?? "Unknown";
-                      return (
-                        <TableRow key={m.id}>
-                          <TableCell className="py-2 pl-6">
-                            <div className="flex items-center gap-3">
-                              {/*
-                                `text-primary-foreground`, not the hardcoded
-                                `text-white` this used to carry: white on the
-                                brand orange measures 2.78:1. See the token's
-                                note in globals.css.
-                              */}
-                              <div className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold">
-                                {display.charAt(0).toUpperCase()}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-medium">{display}</p>
-                                {m.user?.email && m.user.email !== display && (
-                                  <p className="text-muted-foreground truncate text-xs">{m.user.email}</p>
-                                )}
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="pr-6 text-right">
-                            <Badge variant="secondary">{m.role}</Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
+            <CardContent className="px-0 pb-2">
+              <ul className="divide-border divide-y">
+                {members.map((m) => {
+                  const display = m.user?.name ?? m.user?.email ?? "Unknown";
+                  const isMe = m.userId === meId;
+                  const isOwner = primaryRole(m.role) === "owner";
+                  // The owner's row has no menu at all. Their role cannot be
+                  // changed from here (transferring ownership is its own
+                  // operation) and the server refuses to remove the last one —
+                  // offering either would be a control that exists to fail.
+                  const actionable = canManageRows && !isOwner && !isMe;
+                  return (
+                    <li key={m.id} className="flex items-center gap-3 px-6 py-3">
+                      {/*
+                        `text-primary-foreground`, not the hardcoded
+                        `text-white` this used to carry: white on the
+                        brand orange measures 2.78:1. See the token's
+                        note in globals.css.
+                      */}
+                      <div className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+                        {display.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+                          {display}
+                          {isMe && (
+                            <span className="text-muted-foreground text-xs font-normal">you</span>
+                          )}
+                        </p>
+                        {m.user?.email && m.user.email !== display && (
+                          <p className="text-muted-foreground truncate text-xs">{m.user.email}</p>
+                        )}
+                      </div>
+                      <Badge variant={isOwner ? "soft" : "secondary"}>{roleLabel(m.role)}</Badge>
+                      {actionable ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              disabled={busyRow === m.id}
+                              aria-label={`Manage ${display}`}
+                            >
+                              <MoreHorizontal className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            {canSetRole && (
+                              <>
+                                <DropdownMenuLabel>Role</DropdownMenuLabel>
+                                <DropdownMenuRadioGroup
+                                  value={roleLabel(m.role)}
+                                  onValueChange={(v) => changeRole(m, v)}
+                                >
+                                  {ROLES.map((r) => (
+                                    <DropdownMenuRadioItem key={r.value} value={r.value}>
+                                      {r.label}
+                                    </DropdownMenuRadioItem>
+                                  ))}
+                                </DropdownMenuRadioGroup>
+                              </>
+                            )}
+                            {canSetRole && canRemove && <DropdownMenuSeparator />}
+                            {canRemove && (
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => removeMember(m)}
+                              >
+                                Remove from organization
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : (
+                        // Holds the column so names and badges stay on one
+                        // vertical rhythm whether or not a row has a menu.
+                        <span className="size-8 shrink-0" aria-hidden />
+                      )}
+                    </li>
+                  );
+                })}
+
+                {[...pending, ...expired].map((i) => {
+                  const dead = i.expired;
+                  return (
+                    <li key={i.id} className="flex items-center gap-3 px-6 py-3">
+                      <span
+                        className={
+                          dead
+                            ? "bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)] grid size-8 shrink-0 place-items-center rounded-full"
+                            : "bg-muted text-muted-foreground grid size-8 shrink-0 place-items-center rounded-full"
+                        }
+                      >
+                        {dead ? (
+                          <MailWarning className="size-3.5" strokeWidth={1.75} />
+                        ) : (
+                          <Clock className="size-3.5" strokeWidth={1.75} />
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm">{i.email}</p>
+                        <p className="text-muted-foreground text-xs">
+                          {dead
+                            ? "Invitation expired — it no longer holds a seat"
+                            : `Invited · expires ${new Date(i.expiresAt).toLocaleDateString()}`}
+                        </p>
+                      </div>
+                      <Badge variant="outline">{roleLabel(i.role)}</Badge>
+                      {canCancel || canInvite ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              disabled={busyRow === i.id}
+                              aria-label={`Manage invitation for ${i.email}`}
+                            >
+                              <MoreHorizontal className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            {canInvite && (
+                              <DropdownMenuItem onSelect={() => resend(i)}>
+                                Send invitation again
+                              </DropdownMenuItem>
+                            )}
+                            {canCancel && (
+                              <DropdownMenuItem variant="destructive" onSelect={() => revoke(i)}>
+                                {dead ? "Remove invitation" : "Revoke invitation"}
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : (
+                        <span className="size-8 shrink-0" aria-hidden />
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
             </CardContent>
           </Card>
 
-          {pending.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="font-display text-base">Pending invites</CardTitle>
-                <CardDescription>Sent, but not yet accepted.</CardDescription>
-              </CardHeader>
-              <CardContent className="px-0">
-                <Table>
-                  <TableBody>
-                    {pending.map((i) => (
-                      <TableRow key={i.id}>
-                        <TableCell className="pl-6">
-                          <div className="flex items-center gap-3">
-                            <span className="bg-muted text-muted-foreground grid size-8 shrink-0 place-items-center rounded-full">
-                              <Clock className="size-3.5" strokeWidth={1.75} />
-                            </span>
-                            <div className="min-w-0">
-                              <p className="truncate text-sm">{i.email}</p>
-                              <p className="text-muted-foreground text-xs">
-                                Expires {new Date(i.expiresAt).toLocaleDateString()}
-                              </p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="pr-6 text-right">
-                          <Badge variant="outline">{i.role}</Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
+          {/*
+            Roles are four words with no shared meaning across products, and the
+            invite form only ever showed one sentence about the one you happened
+            to have selected. This is the comparison someone is actually making.
+          */}
+          {/* `py-0`: the trigger brings its own vertical rhythm, and the card's
+              default padding on top of it made a collapsed row read as an empty
+              card with a sentence floating in it. */}
+          <Card className="py-0">
+            <Accordion type="single" collapsible>
+              <AccordionItem value="roles" className="border-b-0">
+                <AccordionTrigger className="px-6 py-4 text-sm">
+                  What each role can do
+                </AccordionTrigger>
+                <AccordionContent className="px-6">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[26rem] text-sm">
+                      <thead>
+                        <tr className="text-muted-foreground text-xs">
+                          <th className="py-2 text-left font-medium">Can</th>
+                          {["Owner", "Admin", "Editor", "Viewer"].map((r) => (
+                            <th key={r} className="w-16 py-2 text-center font-medium">
+                              {r}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {CAPABILITIES.map((c) => (
+                          <tr key={c.label} className="border-border border-t">
+                            <td className="py-2 pr-3">{c.label}</td>
+                            {([c.owner, c.admin, c.editor, c.viewer] as const).map((yes, i) => (
+                              <td key={i} className="py-2 text-center">
+                                {yes ? (
+                                  <Check
+                                    className="text-primary mx-auto size-4"
+                                    strokeWidth={2.25}
+                                    aria-label="yes"
+                                  />
+                                ) : (
+                                  <span className="text-muted-foreground/50" aria-label="no">
+                                    —
+                                  </span>
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </Card>
         </div>
 
         <Card className="h-fit">
@@ -281,7 +557,25 @@ export default function TeamPage() {
                 : "Your role cannot invite people. Ask an owner or admin."}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {/*
+              The seat meter lives here, next to the thing it constrains, rather
+              than in a band across the top of the page — and it is the only
+              place the seat story is told, so "every seat is taken" is not said
+              twice on one screen.
+            */}
+            <UsageMeter
+              label="Seats used"
+              used={seatsUsed}
+              limit={seatLimit}
+              hint={
+                seatsFull
+                  ? undefined
+                  : "Invitations hold a seat until they're accepted or they expire."
+              }
+              className="border-border border-b pb-4"
+            />
+
             <form onSubmit={invite} className="space-y-4">
               <fieldset disabled={!canInvite || seatsFull || sending} className="space-y-4">
                 <div className="space-y-1.5">
@@ -308,24 +602,37 @@ export default function TeamPage() {
                   <p className="text-muted-foreground text-xs">{ROLES.find((r) => r.value === role)?.blurb}</p>
                 </div>
 
-                <Button type="submit" shape="pill" className="w-full">
-                  <UserPlus className="size-4" /> {sending ? "Sending…" : "Send invite"}
-                </Button>
+                {/*
+                  Hidden rather than disabled when there is no seat: a dead
+                  primary button is the loudest thing on the card and does
+                  nothing. The button that *can* be pressed takes its place
+                  below.
+                */}
+                {!seatsFull && (
+                  <Button type="submit" shape="pill" className="w-full">
+                    <UserPlus className="size-4" /> {sending ? "Sending…" : "Send invite"}
+                  </Button>
+                )}
               </fieldset>
 
               {/*
                 Said before the click rather than after: hitting the seat limit
                 mid-invite means typing an address, pressing send, and being
-                shown a paywall instead of a confirmation.
+                shown a paywall instead of a confirmation. And the way out is
+                the button, not a sentence containing a link.
               */}
               {seatsFull && canInvite && (
-                <p className="rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-sm text-[var(--warning-soft-foreground)]">
-                  Every seat on your plan is taken. Add seats from{" "}
-                  <a href="/billing" className="underline underline-offset-2">
-                    billing
-                  </a>{" "}
-                  to invite more people.
-                </p>
+                <div className="space-y-2">
+                  <p className="text-muted-foreground text-sm">
+                    Every seat on your plan is taken.
+                    {expired.length > 0
+                      ? " Revoking an expired invitation above frees one, or add seats."
+                      : " Add seats to invite more people."}
+                  </p>
+                  <Button asChild shape="pill" className="w-full">
+                    <Link href="/billing">Add seats</Link>
+                  </Button>
+                </div>
               )}
               {error && (
                 <p className="text-destructive rounded-lg bg-[var(--destructive-soft)] px-3 py-2 text-sm" role="alert">
@@ -341,6 +648,8 @@ export default function TeamPage() {
           </CardContent>
         </Card>
       </div>
+
+      {dialog}
     </div>
   );
 }

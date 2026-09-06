@@ -318,12 +318,25 @@ export async function countWorkspaces(env: Bindings, orgId: string): Promise<num
   return row?.n ?? 0;
 }
 
+/**
+ * Members plus invitations that could still be accepted.
+ *
+ * The expiry clause is not decoration. Better Auth never writes `status` back to
+ * `expired` — an invitation stays `pending` in the row forever and is only
+ * rejected at accept time, by comparing `expires_at` there. Counting on `status`
+ * alone therefore leaked a seat every time an invite went unanswered: on a
+ * three-seat plan, two ignored invites permanently cost two seats that nobody
+ * could reclaim from anywhere in the product.
+ *
+ * `expires_at` is `timestamp_ms`, so the comparison is against `Date.now()`.
+ */
 export async function countSeats(env: Bindings, orgId: string): Promise<number> {
   const row = await env.DB.prepare(
     `SELECT (SELECT COUNT(*) FROM members WHERE organization_id = ?1)
-          + (SELECT COUNT(*) FROM invitations WHERE organization_id = ?1 AND status = 'pending') AS n`,
+          + (SELECT COUNT(*) FROM invitations
+               WHERE organization_id = ?1 AND status = 'pending' AND expires_at > ?2) AS n`,
   )
-    .bind(orgId)
+    .bind(orgId, Date.now())
     .first<{ n: number }>();
   return row?.n ?? 0;
 }
