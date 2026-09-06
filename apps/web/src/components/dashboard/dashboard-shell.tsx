@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { Menu, Search } from "lucide-react";
 import { AuthGuard } from "./auth-guard";
 import { AppNav, APP_NAV } from "./app-nav";
-import { UsagePill } from "./usage-pill";
+import { PlanBadge } from "./plan-badge";
 import { UserMenu } from "./user-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
@@ -87,7 +87,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               >
                 <Search className="size-4" />
               </Button>
-              <UsagePill />
+              <PlanBadge />
               <ThemeToggle />
               <UserMenu />
             </div>

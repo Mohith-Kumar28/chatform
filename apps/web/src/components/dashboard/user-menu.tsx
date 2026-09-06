@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { KeyRound, LogOut, Settings, Users } from "lucide-react";
+import { Crown, KeyRound, LogOut, Settings, Users } from "lucide-react";
 import { signOut, useSession } from "@/lib/auth/auth-client";
+import { useEntitlements } from "@/hooks/use-entitlements";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +21,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
  */
 export function UserMenu() {
   const { data: session } = useSession();
+  const ent = useEntitlements();
   if (!session) return null;
 
   const email = session.user.email;
@@ -39,6 +41,19 @@ export function UserMenu() {
         <DropdownMenuLabel className="font-normal">
           <p className="truncate text-sm font-medium">{name}</p>
           <p className="text-muted-foreground truncate text-xs">{email}</p>
+          {/*
+            The plan again, spelled out. The header badge is a mark you learn to
+            read; this is the sentence for the first time you see it, and it is
+            where someone looks when they want to check rather than glance.
+          */}
+          {ent.data && (
+            <p className="text-muted-foreground mt-1.5 flex items-center gap-1 text-xs">
+              {ent.data.planId !== "free" && (
+                <Crown className="text-brand-violet-soft-foreground size-3" strokeWidth={2.25} aria-hidden />
+              )}
+              {ent.data.planName} plan
+            </p>
+          )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
@@ -54,9 +69,10 @@ export function UserMenu() {
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/usage">
+          {/* `/billing` directly: `/usage` is a redirect stub kept for bookmarks. */}
+          <Link href="/billing">
             <Settings className="size-3.5" />
-            Usage &amp; billing
+            Plan &amp; usage
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
