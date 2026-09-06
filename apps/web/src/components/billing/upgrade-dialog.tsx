@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Check, Lock, ArrowRight } from "lucide-react";
 import { FEATURES, PLANS, yearlyPerMonthCents, yearlySavingPercent, type PlanId } from "@repo/entitlements";
 import { usePaywall } from "@/stores/paywall-store";
@@ -25,6 +25,8 @@ export function UpgradeDialog() {
   const [cycle, setCycle] = useState<"monthly" | "yearly">("yearly");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Paid for, but the webhook that grants it has not landed inside our patience. */
+  const [pending, setPending] = useState(false);
   const router = useRouter();
   const queryClient = useQueryClient();
   const ent = useEntitlements();
@@ -83,12 +85,20 @@ export function UpgradeDialog() {
       }
 
       /*
-        Applied immediately. Re-read entitlements before closing: the gate that opened
-        this dialog is what the caller behind it is still rendering against, and closing
-        on stale data leaves the feature locked with no explanation.
+        Applied at Dodo — but not yet here.
+
+        Our plan flips when Dodo's `subscription.updated` webhook lands, which is a second
+        or two behind this response, so a single refetch reads the OLD plan and the dialog
+        closes on a screen where nothing has changed. That is precisely how a successful,
+        paid-for upgrade reads as a button that did nothing. Wait for the plan to actually
+        arrive before saying it is done.
       */
-      await queryClient.invalidateQueries({ queryKey: ENTITLEMENTS_KEY });
+      const upgraded = await waitForPlan(queryClient, targetId);
       setBusy(false);
+      if (!upgraded) {
+        setPending(true);
+        return;
+      }
       close();
     } catch (err) {
       /**
@@ -168,16 +178,24 @@ export function UpgradeDialog() {
         )}
 
         {error && <p className="text-destructive mt-3 text-center text-sm">{error}</p>}
+        {/* Never leave this one silent: the money has moved and the feature has not
+            appeared yet, and a customer with no sentence to read assumes it failed. */}
+        {pending && (
+          <p className="text-muted-foreground mt-3 text-center text-sm">
+            Payment went through. {plan.name} is being applied — reload in a moment. If it has not
+            appeared in a few minutes, contact support and nothing will be charged twice.
+          </p>
+        )}
 
         <div className="mt-5 grid gap-2">
           <button
             type="button"
-            onClick={start}
+            onClick={pending ? () => window.location.reload() : start}
             disabled={busy}
             className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-[var(--primary)] px-4 text-sm font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:opacity-60"
           >
-            {busy ? (paying ? "Upgrading…" : "Opening checkout…") : `Upgrade to ${plan.name}`}
-            {!busy && <ArrowRight className="size-3.5" aria-hidden />}
+            {busy ? (paying ? "Upgrading…" : "Opening checkout…") : pending ? "Reload" : `Upgrade to ${plan.name}`}
+            {!busy && !pending && <ArrowRight className="size-3.5" aria-hidden />}
           </button>
           <button
             type="button"
@@ -199,6 +217,27 @@ export function UpgradeDialog() {
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * Refetch entitlements until the new plan shows up, or until we run out of patience.
+ *
+ * Dodo applies the change and *then* tells us over a webhook, so there is a real gap
+ * between "the API returned 200" and "this account is on Business". Backing off from half
+ * a second to two gives the usual case an instant-feeling close without hammering the
+ * endpoint if the webhook is delayed.
+ *
+ * Returns false when the plan never arrived; the caller says so rather than pretending.
+ */
+async function waitForPlan(queryClient: QueryClient, target: PlanId): Promise<boolean> {
+  const delays = [0, 500, 1000, 1500, 2000, 2000, 3000];
+  for (const wait of delays) {
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    await queryClient.invalidateQueries({ queryKey: ENTITLEMENTS_KEY });
+    const fresh = queryClient.getQueryData<{ planId?: PlanId }>(ENTITLEMENTS_KEY);
+    if (fresh?.planId === target) return true;
+  }
+  return false;
 }
 
 /**

@@ -698,12 +698,19 @@ export async function dispatch(env: Bindings, evt: DodoWebhookEvent): Promise<st
     case "subscription.active":
     case "subscription.renewed": {
       if (!subscriptionId) return "ignored: no subscription_id";
-      const planId = resolvePlanId(target.planId);
+      /**
+       * Product first, metadata only as a fallback. See `planForProduct`: a renewal that
+       * follows a plan change carries the ORIGINAL checkout's metadata, and resolving the
+       * plan from it silently walks a paid upgrade back to the tier it came from.
+       */
+      const billed = evt.data?.product_id ? await planForProduct(env, evt.data.product_id) : null;
+      const planId = billed?.planId ?? resolvePlanId(target.planId);
+      const cycle = billed?.cycle ?? target.cycle ?? "monthly";
       await upsertSubscription(env, {
         orgId,
         subscriptionId,
         planId,
-        cycle: target.cycle ?? "monthly",
+        cycle,
         status: evt.data?.trial_period_days && evt.type === "subscription.active" ? "trialing" : "active",
         productId: evt.data?.product_id ?? null,
         customerId,
@@ -722,7 +729,7 @@ export async function dispatch(env: Bindings, evt: DodoWebhookEvent): Promise<st
         actorType: "webhook",
         resourceType: "subscription",
         resourceId: subscriptionId,
-        meta: { planId, cycle: target.cycle },
+        meta: { planId, cycle, resolvedFrom: billed ? "product" : "metadata" },
       });
       return `${evt.type} → ${planId}`;
     }
@@ -753,6 +760,11 @@ export async function dispatch(env: Bindings, evt: DodoWebhookEvent): Promise<st
                 cancel_at_period_end = ?,
                 seats = COALESCE(?, seats),
                 plan_id = COALESCE(?, plan_id),
+                -- The product and cycle move with the plan. Leaving them behind is what
+                -- made the broken row readable as "on Pro, billed for the Business
+                -- product" and gave the next handler a reason to disagree with this one.
+                dodo_product_id = COALESCE(?, dodo_product_id),
+                cycle = COALESCE(?, cycle),
                 updated_at = ?
           WHERE dodo_subscription_id = ?`,
       )
@@ -762,13 +774,15 @@ export async function dispatch(env: Bindings, evt: DodoWebhookEvent): Promise<st
           toEpochMs(evt.data?.next_billing_date),
           evt.data?.cancel_at_next_billing_date ? 1 : 0,
           evt.data?.quantity ?? null,
-          fromProduct ?? (target.planId && isPlanId(target.planId) ? target.planId : null),
+          fromProduct?.planId ?? (target.planId && isPlanId(target.planId) ? target.planId : null),
+          evt.data?.product_id ?? null,
+          fromProduct?.cycle ?? null,
           Date.now(),
           subscriptionId,
         )
         .run();
       await invalidateEntitlements(env, orgId);
-      return `updated → ${status ?? "unchanged"}`;
+      return `updated → ${status ?? "unchanged"}${fromProduct ? `, ${fromProduct.planId}` : ""}`;
     }
 
     case "subscription.on_hold":
@@ -899,20 +913,33 @@ function mapStatus(status: string | undefined): string | null {
 }
 
 /**
- * Which plan a Dodo product id belongs to.
+ * Which plan and cycle a Dodo product id belongs to.
  *
- * The authoritative answer for a plan change, because the event's metadata still describes
- * the checkout that created the subscription rather than the tier it is on now.
+ * The authoritative answer for EVERY subscription event, not only a plan change: an
+ * event's metadata is frozen at the checkout that created the subscription, so it still
+ * says `pro` long after the customer moved to Business. The product id on the payload is
+ * what Dodo is actually billing today.
+ *
+ * Trusting metadata here cost a real customer their upgrade: change-plan moved the
+ * subscription to the Business product and charged the difference, `subscription.updated`
+ * wrote `business` correctly — and then the `subscription.renewed` that Dodo fires
+ * twenty seconds later for the proration invoice put `pro` straight back, because that
+ * branch resolved the plan from metadata. Paid for Business, entitled to Pro, no error
+ * anywhere.
  */
-async function planForProduct(env: Bindings, productId: string): Promise<PlanId | null> {
+async function planForProduct(
+  env: Bindings,
+  productId: string,
+): Promise<{ planId: PlanId; cycle: "monthly" | "yearly" } | null> {
   const row = await env.DB.prepare(
-    `SELECT id FROM plans
+    `SELECT id, dodo_product_yearly_id FROM plans
       WHERE dodo_product_monthly_id = ?1 OR dodo_product_yearly_id = ?1
       LIMIT 1`,
   )
     .bind(productId)
-    .first<{ id: string }>();
-  return row && isPlanId(row.id) ? (row.id as PlanId) : null;
+    .first<{ id: string; dodo_product_yearly_id: string | null }>();
+  if (!row || !isPlanId(row.id)) return null;
+  return { planId: row.id as PlanId, cycle: row.dodo_product_yearly_id === productId ? "yearly" : "monthly" };
 }
 
 /** An unrecognised plan id from metadata falls back to free, never to a paid plan. */

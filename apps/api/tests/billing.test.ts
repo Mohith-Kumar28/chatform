@@ -472,6 +472,59 @@ describe("the subscription lifecycle", () => {
     await DB().DB.prepare(`UPDATE plans SET dodo_product_monthly_id = NULL WHERE id = 'business'`).run();
   });
 
+  it("does not let the proration renewal walk a paid upgrade back to the old plan", async () => {
+    /**
+     * The real incident. Pro customer clicks "Upgrade to Business"; change-plan moves the
+     * subscription to the Business product and charges the difference; Dodo then fires,
+     * within the same second, `subscription.updated` AND the `subscription.renewed` for the
+     * proration invoice. Both carry the ORIGINAL checkout's metadata, `planId: "pro"`.
+     *
+     * The renewed handler used to resolve the plan from that metadata, so it landed twenty
+     * seconds after the update and put `pro` straight back — paid for Business, entitled to
+     * Pro, and not one error anywhere to say so.
+     */
+    await DB()
+      .DB.prepare(`UPDATE plans SET dodo_product_monthly_id = 'prod_biz_monthly' WHERE id = 'business'`)
+      .run();
+    await deliver(subscriptionEvent("subscription.active", org.orgId));
+
+    const changed = { status: "active", product_id: "prod_biz_monthly" };
+    await deliver(subscriptionEvent("subscription.updated", org.orgId, changed), { id: "evt_up_1" });
+    expect((await getEntitlements(DB(), org.orgId)).planId).toBe("business");
+
+    await deliver(subscriptionEvent("subscription.renewed", org.orgId, changed), { id: "evt_renew_1" });
+
+    const ent = await getEntitlements(DB(), org.orgId);
+    expect(ent.planId).toBe("business");
+    expect(ent.features.respondent_auth_google).toBe(true);
+
+    // The row agrees with itself: plan, product and cycle all describe Business monthly.
+    const row = await DB()
+      .DB.prepare(`SELECT plan_id, dodo_product_id, cycle FROM subscriptions WHERE organization_id = ?`)
+      .bind(org.orgId)
+      .first<{ plan_id: string; dodo_product_id: string; cycle: string }>();
+    expect(row).toMatchObject({ plan_id: "business", dodo_product_id: "prod_biz_monthly", cycle: "monthly" });
+
+    await DB().DB.prepare(`UPDATE plans SET dodo_product_monthly_id = NULL WHERE id = 'business'`).run();
+  });
+
+  it("reads the cycle off the product too, so a yearly upgrade is not recorded as monthly", async () => {
+    await DB()
+      .DB.prepare(`UPDATE plans SET dodo_product_yearly_id = 'prod_biz_yearly' WHERE id = 'business'`)
+      .run();
+    await deliver(
+      // metadata says monthly/pro — the yearly Business product is what is being billed.
+      subscriptionEvent("subscription.active", org.orgId, { product_id: "prod_biz_yearly" }),
+    );
+    const row = await DB()
+      .DB.prepare(`SELECT plan_id, cycle FROM subscriptions WHERE organization_id = ?`)
+      .bind(org.orgId)
+      .first<{ plan_id: string; cycle: string }>();
+    expect(row).toMatchObject({ plan_id: "business", cycle: "yearly" });
+
+    await DB().DB.prepare(`UPDATE plans SET dodo_product_yearly_id = NULL WHERE id = 'business'`).run();
+  });
+
   it("treats a paused subscription as on hold rather than cancelled", async () => {
     // A customer who pauses has not cancelled and is not entitled to more: `resolve()`
     // honours the period they already paid for, exactly as for a failed renewal.
