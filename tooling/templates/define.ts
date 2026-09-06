@@ -354,10 +354,16 @@ export function defineTemplate(input: TemplateInput): TemplateSeed {
     // reads them so it does not close an arm that has already said where it
     // goes, which would put two rules on one question and leave which of them
     // wins to evaluation order.
-    logic: [
-      ...jumps,
-      ...buildFlowRules(branches, blocks as never, [...endingRefs], jumps),
-    ],
+    //
+    // Ids are reassigned from the template's own code because `buildFlowRules`
+    // mints them with `crypto.randomUUID()` — correct at runtime, and fatal
+    // here: the generated SQL is committed and `pnpm templates:verify`
+    // regenerates it and diffs, so a random id makes every run report drift in
+    // a file nobody changed. Nothing inside a generated template refers to a
+    // rule by id, so renaming them costs nothing.
+    logic: [...jumps, ...buildFlowRules(branches, blocks as never, [...endingRefs], jumps)].map(
+      (rule, i) => ({ ...rule, id: `rl_${code}${String(i + 1).padStart(2, "0")}` }),
+    ),
   });
 
   /**
