@@ -45,7 +45,10 @@ import { cn } from "@/lib/utils";
 
 type Target = "html" | "react" | "email";
 
-const SWATCHES = ["#f97316", "#0ea5e9", "#8b5cf6", "#10b981", "#ef4444", "#111827"];
+// The brand pair leads, in the mark's order, then four hues far enough apart
+// to be told apart at 20px. `#8b5cf6` is gone: it sat one swatch away from the
+// brand violet and close enough to it that the two read as a rendering bug.
+const SWATCHES = ["#FD6F29", "#9D6EE4", "#0ea5e9", "#10b981", "#ef4444", "#111827"];
 
 const TRIGGERS: { value: EmbedConfig["openOn"]; label: string }[] = [
   { value: "click", label: "When the launcher is clicked" },

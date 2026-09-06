@@ -43,8 +43,29 @@ function themeBlocks(): { light: string; dark: string } {
   return { light: CSS.slice(0, darkStart), dark: CSS.slice(darkStart) };
 }
 
+/**
+ * Reads a token as oklch, following one hop of `var()` aliasing.
+ *
+ * The alias step exists because `--primary` is no longer a literal — it is
+ * `var(--brand-orange)`, so that the brand's two hues are named once and the
+ * roles point at them. Without this the reader returned null for `--primary`
+ * and four assertions passed vacuously... except they did not: they assert
+ * `not.toBeNull()` first, which is exactly why that was caught here rather
+ * than shipped. Keep that assertion.
+ *
+ * One hop, deliberately. A chain of aliases is a palette nobody can read, and
+ * failing loudly on the second hop is the right way to find out someone built
+ * one.
+ */
 function readToken(block: string, name: string): Oklch | null {
-  const m = new RegExp(`--${name}:\\s*oklch\\(([\\d.]+)\\s+([\\d.]+)\\s+([\\d.-]+)\\)`).exec(block);
+  const literal = new RegExp(`--${name}:\\s*oklch\\(([\\d.]+)\\s+([\\d.]+)\\s+([\\d.-]+)\\)`).exec(block);
+  if (literal) {
+    return { l: Number(literal[1]), c: Number(literal[2]), h: Number(literal[3]) };
+  }
+  const alias = new RegExp(`--${name}:\\s*var\\(--([\\w-]+)\\)`).exec(block);
+  if (!alias) return null;
+  const target = alias[1]!;
+  const m = new RegExp(`--${target}:\\s*oklch\\(([\\d.]+)\\s+([\\d.]+)\\s+([\\d.-]+)\\)`).exec(block);
   if (!m) return null;
   return { l: Number(m[1]), c: Number(m[2]), h: Number(m[3]) };
 }
@@ -136,6 +157,69 @@ describe("status token contrast", () => {
         const bg = readToken(block, fill) ?? readToken(light, fill);
         const fg = readToken(block, "primary-foreground") ?? readToken(light, "primary-foreground");
         expect(bg, `--${fill} must be defined`).not.toBeNull();
+        expect(contrast(fg!, bg!)).toBeGreaterThanOrEqual(AA);
+      });
+    }
+  }
+
+  /**
+   * The brand's other half, held to the same bar as the first.
+   *
+   * `--brand-violet` is a fill that carries small text — `Button`/`Badge`
+   * variant `brand`, the "Most popular" tab on the featured plan card — so
+   * body-strength AA is the bar, not the 3:1 large-text floor.
+   *
+   * The hover row is the one that earns its keep. The violet's first hover
+   * value darkened it, by analogy with `--primary-hover`, and measured 3.92:1
+   * against the shared near-black ink: the orange has the luminance headroom
+   * to darken and stay readable and the violet does not. It lightens instead,
+   * and this is what says so.
+   */
+  for (const [name, block] of Object.entries(themeBlocks())) {
+    for (const fill of ["brand-violet", "brand-violet-hover"] as const) {
+      it(`${fill} clears body-text AA with brand-violet-foreground in ${name}`, () => {
+        const light = themeBlocks().light;
+        const bg = readToken(block, fill) ?? readToken(light, fill);
+        // Defined only in `:root`: one ink serves both themes on this hue.
+        const fg =
+          readToken(block, "brand-violet-foreground") ??
+          readToken(light, "brand-violet-foreground");
+        expect(bg, `--${fill} must be defined`).not.toBeNull();
+        expect(fg, "--brand-violet-foreground must be defined").not.toBeNull();
+        expect(contrast(fg!, bg!)).toBeGreaterThanOrEqual(AA);
+      });
+    }
+
+    it(`brand-violet-soft is readable with brand-violet-soft-foreground in ${name}`, () => {
+      const light = themeBlocks().light;
+      const bg = readToken(block, "brand-violet-soft") ?? readToken(light, "brand-violet-soft");
+      const fg =
+        readToken(block, "brand-violet-soft-foreground") ??
+        readToken(light, "brand-violet-soft-foreground");
+      expect(bg, "--brand-violet-soft must be defined").not.toBeNull();
+      expect(fg, "--brand-violet-soft-foreground must be defined").not.toBeNull();
+      expect(contrast(fg!, bg!)).toBeGreaterThanOrEqual(AA);
+    });
+  }
+
+  /**
+   * The gradient band's single ink.
+   *
+   * `bg-brand-gradient` runs `--brand-orange` into `--brand-violet` under one
+   * text colour, `--on-primary`. A gradient has no "the" background, so the
+   * only way it is readable is if BOTH endpoints clear the bar — and the
+   * violet's L=0.638 was chosen for exactly this. If someone retints either
+   * hue toward the ink, the closing band on the landing page goes quietly
+   * unreadable across half its width, and this is the only thing watching.
+   */
+  for (const [name, block] of Object.entries(themeBlocks())) {
+    for (const end of ["brand-orange", "brand-violet"] as const) {
+      it(`the ${end} end of the brand gradient clears AA with on-primary in ${name}`, () => {
+        const light = themeBlocks().light;
+        const bg = readToken(block, end) ?? readToken(light, end);
+        const fg = readToken(block, "on-primary") ?? readToken(light, "on-primary");
+        expect(bg, `--${end} must be defined`).not.toBeNull();
+        expect(fg, "--on-primary must be defined").not.toBeNull();
         expect(contrast(fg!, bg!)).toBeGreaterThanOrEqual(AA);
       });
     }

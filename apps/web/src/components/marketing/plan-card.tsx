@@ -79,16 +79,22 @@ export function PlanCard({
 
   return (
     <div
-      style={featured ? { background: "var(--primary-soft)" } : undefined}
+      // The featured card is framed in violet and its button is orange — the
+      // mark's two hues, split the way the mark splits them. It used to be
+      // orange on orange: the wash, the ring, the "Most popular" tab and the
+      // CTA were one colour, so the only thing on the card you could actually
+      // click was the least distinguishable thing on it. Emphasis and action
+      // are different jobs and now they are different hues.
+      style={featured ? { background: "var(--brand-violet-soft)" } : undefined}
       className={cn(
         "relative flex flex-col rounded-2xl p-6",
         featured
-          ? "ring-primary/35 shadow-md ring-2"
+          ? "ring-brand-violet/35 shadow-md ring-2"
           : "bg-card border-border/70 shadow-xs border",
       )}
     >
       {featured && (
-        <span className="bg-primary text-primary-foreground text-micro absolute -top-3 left-6 rounded-full px-3 py-1 font-semibold">
+        <span className="bg-brand-violet text-brand-violet-foreground text-micro absolute -top-3 left-6 rounded-full px-3 py-1 font-semibold">
           Most popular
         </span>
       )}
@@ -131,7 +137,16 @@ export function PlanCard({
       <ul className="mt-6 flex flex-col gap-2.5">
         {(PLAN_HIGHLIGHTS[plan.id] ?? []).map((line) => (
           <li key={line} className="text-body flex items-start gap-2.5">
-            <Check className="text-primary mt-0.5 size-4 shrink-0" strokeWidth={2.5} />
+            {/* The ticks take the card's own hue so they sit on its ground
+                rather than on top of it — orange ink on the violet wash is
+                the one place these two genuinely fight. */}
+            <Check
+              className={cn(
+                "mt-0.5 size-4 shrink-0",
+                featured ? "text-brand-violet-soft-foreground" : "text-primary",
+              )}
+              strokeWidth={2.5}
+            />
             <span>{line}</span>
           </li>
         ))}

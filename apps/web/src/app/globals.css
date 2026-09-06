@@ -11,7 +11,8 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    chatform design tokens
 
-   Warm cream paper, ink text, orange accent. Deliberately not blue-grey: the
+   Warm cream paper, ink text, and the mark's two hues — orange and violet —
+   as the brand pair. Deliberately not blue-grey: the
    product is a conversation, and the surface should feel like paper rather
    than a dashboard. Dark mode is warm charcoal for the same reason — never
    blue-black.
@@ -42,10 +43,49 @@
   --accent-foreground: oklch(0.3 0.03 60);
   --border: oklch(0.905 0.011 80);
   --input: oklch(0.905 0.011 80);
-  --ring: oklch(0.705 0.19 43);
+  --ring: var(--brand-orange);
 
-  /* ── brand ── */
-  --primary: oklch(0.705 0.19 43); /* chatform orange */
+  /* ── brand ────────────────────────────────────────────────────────────────
+     The mark has two plates and two hues, and for a long time only one of them
+     was a brand colour. Orange was `--primary`; the violet existed only as
+     `--family-scale`, a *question-family* token that the logo and two marketing
+     surfaces borrowed because there was nothing else to reach for. Borrowing a
+     semantic token for brand work is how a palette drifts: retint the rating
+     blocks and the logo changes colour.
+
+     So both hues are named here, at the top, as the pair they are:
+
+       --brand-orange   #FD6F29  the lower-left plate. The action colour.
+       --brand-violet   #9769DC  the upper-right plate. The counterpart.
+
+     `--primary` is now an alias of the orange rather than a second copy of it.
+     Orange keeps the primary role — a product with two equally loud call-to-
+     actions has neither — and violet carries everything that answers it: the
+     second series in a chart, a secondary CTA, the gradient the two make
+     together. In the mark, orange is the respondent's plate and violet the
+     interviewer's; that division is what the pair means, and it is worth
+     keeping wherever both appear.
+
+     Both are the logo hexes, converted. The light violet is nudged from
+     L=0.620 to L=0.638 for one reason: `--on-primary` measures 4.38:1 on the
+     logo value and 4.71:1 here, so the same warm near-black is readable ink on
+     BOTH brand grounds. That is what makes an orange-to-violet gradient band
+     with a single ink colour possible at all. The dark-theme values are
+     `logo-dark.svg` exactly and need no such nudge (6.9:1 and 6.6:1).         */
+  --brand-orange: oklch(0.705 0.19 43); /* #FD6F29 */
+  --brand-violet: oklch(0.638 0.174 300); /* #9D6EE4 — the logo's #9769DC */
+  /* Hover LIGHTENS, where `--primary-hover` darkens, and that is not an
+     inconsistency — it is the same rule. A hover state has to move the fill
+     AWAY from its own ink, and both brand hues carry the same warm near-black.
+     The orange has the luminance headroom to darken and still clear AA (6.1 to
+     5.0); the violet does not. Darkened to L=0.595 it measures 3.92:1 against
+     that ink, so the state you spend the most time looking at would be the one
+     that fails. Lightened, it goes 4.7 to 5.7. */
+  --brand-violet-hover: oklch(0.685 0.168 300);
+  --brand-violet-soft: oklch(0.955 0.035 300); /* tinted wash for badges */
+  --brand-violet-soft-foreground: oklch(0.44 0.16 300);
+
+  --primary: var(--brand-orange);
   /* Ink on the orange. Near-black, not white.
      White measured 2.78:1 here — under even the 3:1 large-text floor — so every
      primary button and badge in the light theme was unreadable rather than
@@ -146,6 +186,27 @@
      with. */
   --on-primary: oklch(0.225 0.012 55);
 
+  /* The same ink, on the violet ground. One value, both hues, both themes —
+     see the brand block. `--brand-violet-foreground` is the name to pair with
+     `bg-brand-violet`; `--on-brand-violet` names the intent for a hand-built
+     band. They are deliberately equal, exactly as the orange's two are. */
+  --brand-violet-foreground: oklch(0.225 0.012 55);
+  --on-brand-violet: oklch(0.225 0.012 55);
+
+  /* The two plates, in the order the mark reads them: orange at the lower left,
+     violet at the upper right. 100deg rather than 90 so the seam tilts the way
+     the mark's does. Ink on this is `--on-primary`, which clears 4.7:1 at the
+     violet end and 5.8:1 at the orange — the whole reason the violet was
+     nudged. */
+  --brand-gradient: linear-gradient(100deg, var(--brand-orange) 0%, var(--brand-violet) 100%);
+
+  /* The brand hues at band strength, derived exactly as the families are, so a
+     brand ground is a pastel on cream and a deep tint on charcoal from one
+     declaration. */
+  --brand-violet-band: color-mix(in oklch, var(--brand-violet) var(--band-mix), var(--background));
+  --brand-violet-band-muted: color-mix(in oklch, var(--brand-violet-soft-foreground) var(--band-muted-mix), var(--foreground));
+  --brand-orange-band: color-mix(in oklch, var(--brand-orange) var(--band-mix), var(--background));
+
   --family-content-band: color-mix(in oklch, var(--family-content) var(--band-mix), var(--background));
   --family-content-band-muted: color-mix(in oklch, var(--family-content-ink) var(--band-muted-mix), var(--foreground));
   --family-text-band: color-mix(in oklch, var(--family-text) var(--band-mix), var(--background));
@@ -161,10 +222,14 @@
   --family-advanced-band: color-mix(in oklch, var(--family-advanced) var(--band-mix), var(--background));
   --family-advanced-band-muted: color-mix(in oklch, var(--family-advanced-ink) var(--band-muted-mix), var(--foreground));
 
-  /* ── charts: orange / teal / violet / amber / rose / sky ── */
-  --chart-1: oklch(0.705 0.19 43);
-  --chart-2: oklch(0.68 0.115 195);
-  --chart-3: oklch(0.6 0.16 295);
+  /* ── charts: orange / violet / teal / amber / rose / sky ──
+     The first two series are the brand pair, in the mark's order. They used to
+     be orange then teal, with the violet demoted to third — so the commonest
+     chart on the product, a two-series comparison, was the one place the brand
+     did not appear. Teal keeps its place, one slot later. */
+  --chart-1: var(--brand-orange);
+  --chart-2: var(--brand-violet);
+  --chart-3: oklch(0.68 0.115 195);
   --chart-4: oklch(0.79 0.14 80);
   --chart-5: oklch(0.65 0.19 15);
   --chart-6: oklch(0.7 0.13 235);
@@ -177,13 +242,13 @@
   --sidebar: var(--background);
   --panel: var(--card);
   --sidebar-foreground: oklch(0.255 0.01 65);
-  --sidebar-primary: oklch(0.705 0.19 43);
+  --sidebar-primary: var(--brand-orange);
   /* Same orange, same reasoning as `--primary-foreground` above. */
   --sidebar-primary-foreground: oklch(0.225 0.012 55);
   --sidebar-accent: oklch(0.93 0.02 75);
   --sidebar-accent-foreground: oklch(0.3 0.02 60);
   --sidebar-border: oklch(0.905 0.011 80);
-  --sidebar-ring: oklch(0.705 0.19 43);
+  --sidebar-ring: var(--brand-orange);
 
   /* ── elevation: warm-tinted, never neutral grey ── */
   --shadow-xs: 0 1px 2px oklch(0.25 0.02 65 / 0.06);
@@ -226,13 +291,26 @@
   --accent-foreground: oklch(0.95 0.008 88);
   --border: oklch(0.32 0.011 62);
   --input: oklch(0.34 0.011 62);
-  --ring: oklch(0.75 0.17 50);
+  --ring: var(--brand-orange);
 
-  --primary: oklch(0.75 0.17 50); /* lifted for contrast on charcoal */
+  /* Both plates, lifted for charcoal — and these are `logo-dark.svg` exactly
+     (#FF893B, #B48DF4), which is the light theme's arrangement too: the mark
+     and the interface are drawn from one pair of values per theme, not two. */
+  --brand-orange: oklch(0.75 0.17 50); /* #FF893B */
+  --brand-violet: oklch(0.721 0.15 300); /* #B48DF4 */
+  --brand-violet-hover: oklch(0.755 0.14 300);
+  --brand-violet-soft: oklch(0.32 0.055 300);
+  --brand-violet-soft-foreground: oklch(0.88 0.09 300);
+
+  --primary: var(--brand-orange);
   --primary-foreground: oklch(0.19 0.02 60);
   --primary-hover: oklch(0.79 0.16 52);
   --primary-soft: oklch(0.32 0.05 50);
   --primary-soft-foreground: oklch(0.88 0.08 55);
+
+  /* `--brand-violet-foreground` and `--on-brand-violet` are NOT restated: the
+     light theme's warm near-black clears 6.6:1 on this lifted violet, exactly
+     as `--on-primary` does on the lifted orange. One ink, both themes. */
 
   /* The soft fills are deep here, so their ink is light. See the note in the
      light block: this is the pairing every `*-soft` background needs. */
@@ -253,9 +331,9 @@
   --info-soft: oklch(0.29 0.05 245);
   --info-soft-foreground: oklch(0.88 0.07 245);
 
-  --chart-1: oklch(0.75 0.17 50);
-  --chart-2: oklch(0.74 0.11 195);
-  --chart-3: oklch(0.7 0.15 295);
+  --chart-1: var(--brand-orange);
+  --chart-2: var(--brand-violet);
+  --chart-3: oklch(0.74 0.11 195);
   --chart-4: oklch(0.83 0.13 80);
   --chart-5: oklch(0.72 0.17 15);
   --chart-6: oklch(0.75 0.12 235);
@@ -294,12 +372,12 @@
   --sidebar: var(--background);
   --panel: oklch(0.232 0.009 64);
   --sidebar-foreground: oklch(0.95 0.008 88);
-  --sidebar-primary: oklch(0.75 0.17 50);
+  --sidebar-primary: var(--brand-orange);
   --sidebar-primary-foreground: oklch(0.19 0.02 60);
   --sidebar-accent: oklch(0.3 0.02 60);
   --sidebar-accent-foreground: oklch(0.95 0.008 88);
   --sidebar-border: oklch(0.32 0.011 62);
-  --sidebar-ring: oklch(0.75 0.17 50);
+  --sidebar-ring: var(--brand-orange);
 
   /* Shadows read as depth on paper and as noise on charcoal — deepen and
      tighten them rather than reusing the light values. */
@@ -321,6 +399,12 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-hover: var(--primary-hover);
   --color-primary-soft: var(--primary-soft);
+  --color-brand-orange: var(--brand-orange);
+  --color-brand-violet: var(--brand-violet);
+  --color-brand-violet-foreground: var(--brand-violet-foreground);
+  --color-brand-violet-hover: var(--brand-violet-hover);
+  --color-brand-violet-soft: var(--brand-violet-soft);
+  --color-brand-violet-soft-foreground: var(--brand-violet-soft-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -466,6 +550,20 @@
 @utility text-micro {
   font-size: 0.75rem;
   line-height: 1.4;
+}
+
+/* Both hues at once, as one class, so a brand gradient is a token reference
+   rather than a pair of `from-` and `to-` utilities copied between files and
+   drifting apart.
+
+   There is deliberately no `text-brand-gradient` sibling. Clipped gradient type
+   needs a `@supports` gate to avoid rendering as nothing where
+   `-webkit-text-fill-color` lands without `background-clip: text`, and shipping
+   that machinery for a headline nobody has asked for is a utility that exists
+   to be found rather than used. The hero says the same thing better anyway, by
+   colouring two whole words rather than fading across them.                    */
+@utility bg-brand-gradient {
+  background-image: var(--brand-gradient);
 }
 
 /* Numeric columns and metrics: keep digits from jittering as values change. */

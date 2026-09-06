@@ -10,6 +10,13 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
+        brand:
+          "bg-brand-violet text-brand-violet-foreground [a&]:hover:bg-brand-violet/90",
+        // The pale wash pair, for a label that has to sit inside dense type
+        // without shouting: plan tiers, "Pro", "Beta".
+        "brand-soft":
+          "bg-brand-violet-soft text-brand-violet-soft-foreground [a&]:hover:bg-brand-violet-soft/70",
+        soft: "bg-primary-soft text-primary-soft-foreground [a&]:hover:bg-primary-soft/70",
         secondary:
           "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
         destructive:

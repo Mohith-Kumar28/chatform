@@ -38,7 +38,7 @@ curl -X POST https://api.chatform.in/v1/chat/sessions/ses_91xQ/messages \\
   src="https://chatform.in/embed.js"
   data-form="team-onboarding"
   data-mode="side-tab"
-  data-color="#f97316"
+  data-color="#FD6F29"
   data-label="Chat with us"
 ></script>`,
   },

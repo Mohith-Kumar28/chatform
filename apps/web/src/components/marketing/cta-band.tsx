@@ -2,7 +2,7 @@ import Link from "next/link";
 import { LogoMark } from "@/components/brand/logo";
 
 /**
- * The close: full-strength orange, edge to edge, one line of type.
+ * The close: full-strength brand, edge to edge, one line of type.
  *
  * The old version was a rounded card of `--primary-soft` floating in white
  * space with a heading, a two-sentence paragraph and two buttons — a polite
@@ -14,19 +14,29 @@ import { LogoMark } from "@/components/brand/logo";
  * cards immediately above. Repeating it a third time at maximum volume is not
  * emphasis.
  *
+ * The ground is `--brand-gradient` — orange at the left, violet at the right,
+ * on the mark's diagonal. It was flat orange, and the note here used to say a
+ * violet plate on orange is a clash. That is still true of a *plate*: a hard
+ * edge between the two at full strength is two posters fighting. A sweep is
+ * not a plate. There is no edge to clash on, and it is the only place in the
+ * product where both hues run at full strength across the same surface, which
+ * is what earns it the last band on the page.
+ *
  * Type is `--on-primary`, not `--primary-foreground` — see the token's note.
- * White on this orange is 2.7:1.
+ * The gradient is exactly why the violet was nudged a step lighter: this one
+ * ink has to hold from end to end, and it does, at 5.8:1 over the orange and
+ * 4.7:1 over the violet. White would be 2.7:1 and 3.5:1 — unreadable at both.
  */
 export function CtaBand() {
   return (
     <section
-      className="relative overflow-hidden px-6 py-24 sm:py-28"
-      style={{ background: "var(--primary)", color: "var(--on-primary)" }}
+      className="bg-brand-gradient relative overflow-hidden px-6 py-24 sm:py-28"
+      style={{ color: "var(--on-primary)" }}
     >
       {/* The mark, oversized and bled off the right edge — the same shape the
           hero's wash is split on, closing the page where it opened. Ink at low
-          opacity rather than a second hue: a violet plate on orange is a clash,
-          and this is a texture, not a logo placement. */}
+          opacity rather than a second hue: the ground is already carrying both
+          of them, and this is a texture, not a logo placement. */}
       <LogoMark
         variant="mono"
         className="pointer-events-none absolute -right-16 -bottom-24 size-96 opacity-[0.07] sm:-right-8 sm:size-[28rem]"

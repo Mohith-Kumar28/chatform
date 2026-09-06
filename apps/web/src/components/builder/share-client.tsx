@@ -145,7 +145,7 @@ export function ShareClient({
 
 function emailSnippet(url: string): string {
   return `<a href="${url}"
-   style="display:inline-block;padding:12px 24px;background:#f97316;color:#fff;
+   style="display:inline-block;padding:12px 24px;background:#FD6F29;color:#201a16;
           border-radius:9999px;font-family:sans-serif;text-decoration:none">
   Answer a few questions →
 </a>`;

@@ -26,6 +26,12 @@ const DEMO_SLUG = process.env.NEXT_PUBLIC_DEMO_FORM_SLUG;
  * In: the seam. The wash behind this section is split on the same diagonal as
  * the mark, in the mark's two hues, at an opacity you notice only as warmth.
  * The logo is the page, at page scale.
+ *
+ * Both halves are now `-band` tokens. They used to be `--primary-soft` against
+ * `--family-scale-band` — two tiers of two different systems, mixed at
+ * different strengths, so the orange side was a whisper and the violet side a
+ * tint. Derived from the same `--band-mix`, the two halves finally weigh the
+ * same, which is the only way a seam reads as a seam rather than as a fade.
  */
 export function Hero() {
   return (
@@ -35,7 +41,7 @@ export function Hero() {
         className="pointer-events-none absolute inset-0 -top-24 opacity-70 [mask-image:radial-gradient(ellipse_75%_65%_at_50%_10%,black,transparent)]"
         style={{
           background:
-            "linear-gradient(115deg, var(--primary-soft) 0%, var(--primary-soft) 38%, var(--family-scale-band) 62%, var(--family-scale-band) 100%)",
+            "linear-gradient(115deg, var(--brand-orange-band) 0%, var(--brand-orange-band) 38%, var(--brand-violet-band) 62%, var(--brand-violet-band) 100%)",
         }}
       />
       {/* The dot grid keeps the wash from reading as a flat panel. */}

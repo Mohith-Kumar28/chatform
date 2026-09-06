@@ -212,16 +212,41 @@ export function knowledgeSize(entries: { title: string; body: string }[]): numbe
 export type SettingsDoc = z.output<typeof SettingsDoc>;
 export type SettingsInput = z.input<typeof SettingsDoc>;
 
+/**
+ * The default palette is the brand's, and it is the brand's two hues rather
+ * than one.
+ *
+ * These used to be `#f97316` — Tailwind's orange-500, which is not the mark's
+ * orange and never was. A new form therefore opened in an orange close enough
+ * to the product's to look like a mistake rather than a choice. `#FD6F29` is
+ * the logo, exactly.
+ *
+ * The respondent's bubble is the violet plate, so a default form carries both
+ * halves of the mark in the one place a respondent actually looks. Every value
+ * is still a `.default()`, so this changes new forms only; a saved theme has
+ * its own hexes and does not move.
+ *
+ * Both ink values were `#ffffff`, at 2.8:1 on the orange — the same failure the
+ * app tokens document at `--primary-foreground`, shipped to respondents rather
+ * than to us. `#201a16` is that token's value in hex and clears 6.1:1 on the
+ * orange and 4.7:1 on the violet.
+ */
+const BRAND_ORANGE = "#FD6F29";
+/** The nudged violet, not the logo's `#9769DC`: bubble copy is body text, and
+ *  the logo value measures 4.4:1 against the ink where this clears 4.7:1. */
+const BRAND_VIOLET = "#9D6EE4";
+const BRAND_INK = "#201a16";
+
 export const ThemeDoc = z.object({
   colorScheme: z.enum(["light", "dark", "auto"]).default("light"),
   background: z.string().max(40).default("#faf7f2"),
   surface: z.string().max(40).default("#ffffff"),
   text: z.string().max(40).default("#1c1917"),
-  accent: z.string().max(40).default("#f97316"),
-  accentText: z.string().max(40).default("#ffffff"),
+  accent: z.string().max(40).default(BRAND_ORANGE),
+  accentText: z.string().max(40).default(BRAND_INK),
   botBubble: z.string().max(40).default("#ffffff"),
-  userBubble: z.string().max(40).default("#f97316"),
-  userBubbleText: z.string().max(40).default("#ffffff"),
+  userBubble: z.string().max(40).default(BRAND_VIOLET),
+  userBubbleText: z.string().max(40).default(BRAND_INK),
   radius: z.enum(["none", "sm", "md", "lg", "full"]).default("lg"),
   fontHeading: z.string().max(100).default("Bricolage Grotesque"),
   fontBody: z.string().max(100).default("Inter"),

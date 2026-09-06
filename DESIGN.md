@@ -383,10 +383,20 @@ Light (default — warm cream):
 --color-accent:          oklch(0.935 0.042 70);  /* peach wash */
 --color-border:          oklch(0.905 0.011 80);
 --color-input:           oklch(0.905 0.011 80);
---color-ring:            oklch(0.705 0.190 43);
+--color-ring:            var(--brand-orange);
 
---color-primary:         oklch(0.705 0.190 43);  /* chatform orange */
---color-primary-foreground: oklch(0.995 0.005 85);
+/* The brand is a PAIR — the mark's two plates. Both are named tokens; neither
+   is derived from a question family (see 4.1b). */
+--brand-orange:          oklch(0.705 0.190 43);  /* #FD6F29, lower-left plate */
+--brand-violet:          oklch(0.638 0.174 300); /* #9D6EE4, upper-right plate */
+--brand-violet-hover:    oklch(0.595 0.185 300);
+--brand-violet-soft:     oklch(0.955 0.035 300);
+--brand-violet-soft-foreground: oklch(0.440 0.160 300);
+--brand-violet-foreground: oklch(0.225 0.012 55); /* = --on-primary */
+--brand-gradient:        linear-gradient(100deg, var(--brand-orange), var(--brand-violet));
+
+--color-primary:         var(--brand-orange);
+--color-primary-foreground: oklch(0.225 0.012 55);  /* warm near-black, 6.1:1 */
 --color-primary-hover:   oklch(0.655 0.195 41);
 --color-primary-soft:    oklch(0.952 0.038 60);  /* tint bg */
 
@@ -395,15 +405,42 @@ Light (default — warm cream):
 --color-warning:         oklch(0.775 0.155 75);
 --color-info:            oklch(0.620 0.135 250);
 
---color-chart-1..6: orange / teal / violet / amber / rose / sky;
+--color-chart-1..6: orange / violet / teal / amber / rose / sky;  /* 1 and 2 are the brand pair */
 ```
+
+### 4.1b The brand pair — which hue does which job
+
+Orange and violet are equals in the mark and are **not** equals in the
+interface. A product with two equally loud call-to-actions has neither, so the
+two hues divide by role and the division is the rule:
+
+| | orange (`--brand-orange`, aliased `--primary`) | violet (`--brand-violet`) |
+|---|---|---|
+| Means | **action** — the thing you press | **state and emphasis** — where you are, what is highlighted |
+| Wears it | primary buttons, links, the send control, focus ring | active nav pill, the featured plan card, chart series 2, `Badge`/`Button` variant `brand` |
+| In the mark | the respondent's plate | the interviewer's plate |
+
+Both together — `--brand-gradient` / `bg-brand-gradient` — are reserved for
+surfaces that are *about* the brand: the hero wash, the closing CTA band, the
+mark itself. A gradient is not a way to make an ordinary control more
+interesting, and there is no gradient-text utility for the same reason.
+
+One ink serves both grounds. `--on-primary` (warm near-black, `#201a16`)
+measures 6.1:1 on the orange and 4.7:1 on the violet; white is 2.8:1 and 3.6:1
+and is never correct on either. The light violet is set at L=0.638 rather than
+the logo's L=0.620 precisely so that one ink clears AA on both, which is what
+makes an orange→violet gradient band with a single text colour possible.
+
+Runtime form themes (§3.8) default to the same pair: accent `#FD6F29`, the
+respondent's bubble `#9D6EE4`, ink `#201a16` on both.
 
 Dark (class `.dark`, next-themes, warm charcoal — never blue-black):
 
 ```css
 --color-background: oklch(0.205 0.008 65);  --color-card: oklch(0.245 0.009 63);
 --color-foreground: oklch(0.950 0.008 88);  --color-muted: oklch(0.280 0.010 62);
---color-border: oklch(0.320 0.011 62);      --color-primary: oklch(0.750 0.170 50); /* lifted orange for contrast */
+--color-border: oklch(0.320 0.011 62);      --brand-orange: oklch(0.750 0.170 50); /* #FF893B — logo-dark.svg */
+                                           --brand-violet: oklch(0.721 0.150 300); /* #B48DF4 — logo-dark.svg */
 ```
 
 Chat-specific tokens: `--cf-chat-bg`, `--cf-bot-bubble-bg/border/radius`, `--cf-user-bubble-bg`, `--cf-composer-bg`, `--cf-chip-bg/border-hover`, mapped from theme JSON at runtime (§3.8).
@@ -428,9 +465,10 @@ Scale (px/leading/tracking): display-xl 48/1.05/-0.02em (landing only) · displa
 
 ### 4.4 Component language decisions
 
-- Primary buttons: orange fill, white text, hover darkens + translateY(-1px)? No — keep static; press scales 0.98. Focus ring 2px offset.
+- Primary buttons: orange fill, **warm near-black text** (not white — 2.8:1), hover darkens + translateY(-1px)? No — keep static; press scales 0.98. Focus ring 2px offset. `variant="brand"` is the violet twin, for the second action in a pair.
+- The two brand hues never share an edge at full strength — a hard orange/violet seam is two posters fighting. They meet as a gradient (`--brand-gradient`) or across a ground/mark split (violet band, orange chip), never as adjacent plates.
 - Cards: white on cream with border + shadow-xs; interactive cards lift (shadow-md, -2px) with 150ms ease-out.
-- Badges: pill, soft backgrounds (primary-soft/accent/destructive/10%).
+- Badges: pill, soft backgrounds (primary-soft/brand-violet-soft/accent/destructive/10%).
 - Tables: header sticky, row hover bg-muted/50, dense 40px rows.
 - Icons: lucide, 16px inline / 20px controls, stroke 1.75.
 - Illustrations: single duotone style — ink strokes + orange/peach fills, hand-drawn wobble; used ONLY in empty states and marketing.

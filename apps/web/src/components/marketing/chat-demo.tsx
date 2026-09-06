@@ -598,7 +598,7 @@ function DemoEnding({ ending, inline }: { ending: DemoTurn; inline?: boolean }) 
     setColors(
       // The mark's two hues plus two families, so the burst reads as the
       // product's confetti rather than a generic party.
-      ["--cf-accent", "--family-scale", "--family-choice", "--family-number"]
+      ["--cf-accent", "--brand-violet", "--family-choice", "--family-number"]
         .map((v) => cs.getPropertyValue(v).trim())
         .filter(Boolean),
     );

@@ -68,7 +68,11 @@ export const EMBED_DEFAULTS: EmbedConfig = {
   mode: "popup",
   position: "bottom-right",
   offset: 20,
-  color: "#f97316",
+  // The mark's orange. Must stay in step with the same default in
+  // `public/embed.js` — the snippet generators diff against this to decide
+  // which attributes to spell out, so a drift here writes `data-color` into
+  // every snippet for a value the loader would have used anyway.
+  color: "#FD6F29",
   label: "Questions?",
   icon: true,
   theme: "auto",

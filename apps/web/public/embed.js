@@ -23,7 +23,7 @@
  *   data-height      panel height in px; inline takes "auto"     default 600 / auto
  *   data-target      CSS selector for inline mode                default appends
  *   data-app         the Chatform origin                         default this script's origin
- *   data-color       launcher colour                             default #f97316
+ *   data-color       launcher colour                             default #FD6F29
  *   data-label       launcher text; "" for an icon-only bubble   default "Questions?"
  *   data-icon        chat | none                                 default chat
  *   data-theme       light | dark | auto                         default auto
@@ -53,7 +53,7 @@
   var scriptOrigin = new URL(script.src, window.location.href).origin;
   var app = script.getAttribute("data-app") || scriptOrigin;
   var mode = script.getAttribute("data-mode") || "popup";
-  var color = script.getAttribute("data-color") || "#f97316";
+  var color = script.getAttribute("data-color") || "#FD6F29";
   var labelAttr = script.getAttribute("data-label");
   var label = labelAttr === null ? "Questions?" : labelAttr;
   var showIcon = script.getAttribute("data-icon") !== "none";

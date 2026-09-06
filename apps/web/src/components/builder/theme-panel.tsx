@@ -19,14 +19,28 @@ const COLOR_FIELDS: { key: keyof Theme; label: string }[] = [
   { key: "userBubbleText", label: "Their text" },
 ];
 
+/**
+ * `Chatform` is the product's own palette and the schema's defaults, so the
+ * first preset is the form you already have rather than a fifth thing to try.
+ * It is the only two-hue preset: accent orange for what you press, violet for
+ * the respondent's own words — the mark's two plates, in the mark's roles.
+ *
+ * The others stay single-hue on purpose. A preset is a starting point someone
+ * then edits one field of, and a two-colour scheme with one field changed is
+ * how a form ends up with a palette nobody chose.
+ */
 const PRESETS: { name: string; theme: Partial<Theme> }[] = [
   {
+    name: "Chatform",
+    theme: { background: "#faf7f2", accent: "#FD6F29", botBubble: "#ffffff", userBubble: "#9D6EE4", text: "#1c1917" },
+  },
+  {
     name: "Warm",
-    theme: { background: "#faf7f2", accent: "#f97316", botBubble: "#ffffff", userBubble: "#f97316", text: "#1c1917" },
+    theme: { background: "#faf7f2", accent: "#FD6F29", botBubble: "#ffffff", userBubble: "#FD6F29", text: "#1c1917" },
   },
   {
     name: "Midnight",
-    theme: { background: "#0c0a09", accent: "#a78bfa", botBubble: "#1c1917", userBubble: "#a78bfa", text: "#fafaf9" },
+    theme: { background: "#0c0a09", accent: "#B48DF4", botBubble: "#1c1917", userBubble: "#B48DF4", text: "#fafaf9" },
   },
   {
     name: "Ocean",
@@ -107,7 +121,7 @@ export function ThemePanel({
                   <Input
                     value={value}
                     onChange={(e) => patch({ [key]: e.target.value } as Partial<Theme>)}
-                    placeholder="#f97316"
+                    placeholder="#FD6F29"
                     className="font-mono text-xs"
                   />
                 </div>

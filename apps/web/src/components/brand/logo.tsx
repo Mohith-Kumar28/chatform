@@ -22,6 +22,11 @@ import { cn } from "@/lib/utils";
  *  - The tails sweep rather than point straight out. A narrow vertical tail on
  *    the top edge reads as a stem and turns the whole mark into a piece of
  *    fruit; the sweep is what keeps it a tail. This was worth four attempts.
+ *  - The plates read from `--brand-orange` and `--brand-violet`, not from
+ *    `--primary` and `--family-scale`. The old pairing worked by coincidence:
+ *    `--family-scale` is the *ratings and scales* question family, which
+ *    happened to be mixed at the logo's violet. The mark now names the two
+ *    brand hues directly, so retinting the rating blocks cannot repaint it.
  *  - `mono` exists because two-tone on the orange CTA band or the ink band is
  *    a colour clash, not a logo. It draws the full silhouette in
  *    `currentColor`, seam included — the seam is in the outline, so the
@@ -60,8 +65,8 @@ export function LogoMark({
         <path d={SILHOUETTE} fill="currentColor" />
       ) : (
         <>
-          <path d={PLATE_ASK} className="fill-primary" />
-          <path d={PLATE_ANSWER} style={{ fill: "var(--family-scale)" }} />
+          <path d={PLATE_ASK} className="fill-brand-orange" />
+          <path d={PLATE_ANSWER} className="fill-brand-violet" />
         </>
       )}
     </svg>

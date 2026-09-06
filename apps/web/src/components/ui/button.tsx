@@ -30,6 +30,14 @@ const buttonVariants = cva(
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         soft: "bg-primary-soft text-primary hover:bg-primary-soft/70",
+        // The brand's other half. `brand` is the counterpart to `default`, for
+        // the second action in a pair where `outline` would read as a retreat
+        // — "See pricing" beside "Start free". Its ink is the same warm
+        // near-black `default` uses; see the token note in globals.css.
+        brand:
+          "bg-brand-violet text-brand-violet-foreground shadow-xs hover:bg-brand-violet-hover",
+        "brand-soft":
+          "bg-brand-violet-soft text-brand-violet-soft-foreground hover:bg-brand-violet-soft/70",
         link: "text-primary underline-offset-4 hover:underline",
       },
       shape: {

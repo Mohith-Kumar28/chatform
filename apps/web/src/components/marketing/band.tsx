@@ -16,12 +16,20 @@ import { cn } from "@/lib/utils";
  * picked. The scroll reads as a progression through the same colours a
  * respondent moves through, which is the one thing this product's palette
  * already means.
+ *
+ * `brand` is the one tone that is not a family. It grounds a band in the
+ * mark's violet, and it exists so the page's loudest band can be the brand's
+ * rather than a question type's. It used to be spelled `scale`, which put the
+ * *ratings and scales* family under the section about the agent answering
+ * back — the right colour for the wrong reason, and a tint that would have
+ * moved the moment someone restyled a rating block.
  */
 
 export type BandTone =
   | "paper"
   | "sand"
   | "ink"
+  | "brand"
   | "content"
   | "text"
   | "contact"
@@ -33,6 +41,7 @@ export type BandTone =
 /** Ground and heading colour for each tone. Family tones read from the tokens. */
 function groundStyle(tone: BandTone): React.CSSProperties | undefined {
   if (tone === "paper" || tone === "sand" || tone === "ink") return undefined;
+  if (tone === "brand") return { background: "var(--brand-violet-band)" };
   return { background: `var(--family-${tone}-band)` };
 }
 
@@ -113,11 +122,13 @@ export function BandLede({
   tone?: BandTone;
   className?: string;
 }) {
-  const familyTinted = tone !== "paper" && tone !== "sand" && tone !== "ink";
+  const tinted = tone !== "paper" && tone !== "sand" && tone !== "ink";
+  const mutedVar =
+    tone === "brand" ? "var(--brand-violet-band-muted)" : `var(--family-${tone}-band-muted)`;
 
   return (
     <p
-      style={familyTinted ? { color: `var(--family-${tone}-band-muted)` } : undefined}
+      style={tinted ? { color: mutedVar } : undefined}
       className={cn(
         "text-body-lg mt-4 max-w-lg text-balance",
         tone === "ink" && "opacity-70",

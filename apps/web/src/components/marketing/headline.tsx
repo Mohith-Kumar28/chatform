@@ -31,7 +31,14 @@ export function Headline({
   segments,
   className,
 }: {
-  /** One entry per word. `tone` colours it; `br` forces a line break after. */
+  /**
+   * One entry per word. `tone` colours it; `br` forces a line break after.
+   *
+   * The two tones are the mark's two plates: `primary` is the orange the
+   * respondent's side is drawn in, `answer` the violet of the interviewer's.
+   * "answers back" is the product's whole claim, so the headline says it in
+   * the two colours the logo says it in.
+   */
   segments: readonly { text: string; tone?: "primary" | "answer"; br?: boolean }[];
   className?: string;
 }) {
@@ -48,7 +55,7 @@ export function Headline({
               ...(seg.tone === "primary"
                 ? { color: "var(--primary)" }
                 : seg.tone === "answer"
-                  ? { color: "var(--family-scale-ink)" }
+                  ? { color: "var(--brand-violet-soft-foreground)" }
                   : null),
             }}
           >

@@ -117,8 +117,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                     className={cn(
                       "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm",
                       "transition-colors duration-[var(--duration-micro)]",
+                      // The drawer is the same nav as `AppNav` at a narrower
+                      // breakpoint, so it wears the same violet. See the note
+                      // there on why state and action are different colours.
                       active
-                        ? "bg-primary-soft text-primary font-medium"
+                        ? "bg-brand-violet-soft text-brand-violet-soft-foreground font-medium"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >

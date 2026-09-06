@@ -28,6 +28,16 @@ export const APP_NAV = [
   { href: "/team", label: "Team", icon: Users },
 ] as const;
 
+/**
+ * The travelling pill is violet, not orange, and that is a division of labour
+ * rather than a preference. Orange is the action colour: every primary button
+ * in the product is orange, and a nav item is not an action — it is where you
+ * already are. When both wore it, the loudest thing in the header was a
+ * statement of fact competing with the button you were meant to press.
+ *
+ * Violet is the mark's other half and carries state throughout the app chrome,
+ * so "where am I" and "what do I press" are never the same colour.
+ */
 export function AppNav({ className }: { className?: string }) {
   const pathname = usePathname();
   // The highlight still moves; it just stops sliding (DESIGN.md §4.5 — under
@@ -47,13 +57,15 @@ export function AppNav({ className }: { className?: string }) {
                   className={cn(
                     "relative isolate flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm",
                     "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
-                    active ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground",
+                    active
+                      ? "text-brand-violet-soft-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {active && (
                     <motion.span
                       layoutId="app-nav-pill"
-                      className="bg-primary-soft absolute inset-0 -z-10 rounded-full"
+                      className="bg-brand-violet-soft absolute inset-0 -z-10 rounded-full"
                       transition={
                         reduced ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 40 }
                       }

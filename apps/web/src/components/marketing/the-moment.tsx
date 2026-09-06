@@ -39,10 +39,10 @@ const CALLOUTS = [
 
 export function TheMoment() {
   return (
-    <Band id="the-moment" tone="scale" size="tall">
+    <Band id="the-moment" tone="brand" size="tall">
       <div className="max-w-2xl">
         <BandTitle>It answers their questions, too.</BandTitle>
-        <BandLede tone="scale">
+        <BandLede tone="brand">
           Watch the respondent stop answering and start asking.
         </BandLede>
       </div>
@@ -54,7 +54,8 @@ export function TheMoment() {
           {CALLOUTS.map((c) => (
             <li key={c.title} className="flex gap-4">
               {/* Orange on violet: the mark's two hues, doing the same job here
-                  that they do in the logo. */}
+                  that they do in the logo — the ground is the interviewer's
+                  plate, the chip is the respondent's. */}
               <span className="bg-primary text-primary-foreground mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl">
                 <c.icon className="size-4.5" strokeWidth={2} />
               </span>
@@ -62,7 +63,7 @@ export function TheMoment() {
                 <h3 className="text-h3">{c.title}</h3>
                 <p
                   className="text-body mt-1 leading-relaxed"
-                  style={{ color: "var(--family-scale-band-muted)" }}
+                  style={{ color: "var(--brand-violet-band-muted)" }}
                 >
                   {c.body}
                 </p>
