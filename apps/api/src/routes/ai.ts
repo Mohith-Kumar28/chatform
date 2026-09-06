@@ -7,7 +7,7 @@ import { requireSession, requireOrg, assertFormAccess, type GuardVars } from "..
 import { requirePermission, requireQuota, requireGauge, type AuthzVars } from "../lib/authorize.js";
 import { meter } from "../lib/entitlements.js";
 import { generateFormDraft, generateEdit, streamFormDraft, researchBrief, type GenerationDraft } from "../lib/ai.js";
-import { buildFlowGeneratorPrompt, buildEditPrompt, type BuilderTurn } from "../lib/agent-prompts.js";
+import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, type BuilderTurn } from "../lib/agent-prompts.js";
 import { draftToDoc, normalizeEditBlocks, resolveBranches } from "../lib/draft-normalize.js";
 import { extractUrls, readSites } from "../lib/research.js";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
@@ -27,9 +27,23 @@ aiRouter.use("/ai/*", requireQuota("ai_generations", "ai.generate"));
 aiRouter.post("/ai/generate-form/stream", requirePermission("form", "create"));
 aiRouter.post("/ai/generate-form/stream", requireGauge("forms_count", "forms.create"));
 
+/**
+ * `questionCount` is optional, and that is the fix rather than a loosening.
+ *
+ * It was `.default(6)` and the dashboard has never sent one, so the default was
+ * not a fallback — it was the length of every form chatform has ever generated.
+ * "Make me a detailed waitlist with different flows per platform" produced six
+ * questions and a straight line, and the author's only way to get the form they
+ * described was to tell the builder's AI bar it had written too few.
+ *
+ * Absent, the model sizes the form against the request (see
+ * `FORM_DESIGNER_SYSTEM`). Present, it is a number the author typed and is
+ * obeyed exactly. The ceiling is 19 because `GenerationDraft` caps blocks at 20
+ * and the welcome block is one of them.
+ */
 const GenerateBody = z.object({
   prompt: z.string().min(5).max(2000),
-  questionCount: z.number().int().min(2).max(20).default(6),
+  questionCount: z.number().int().min(2).max(19).optional(),
 });
 
 /** A generation that produced a valid document, plus what it cost. */
@@ -46,7 +60,8 @@ interface Generated {
 async function generateWithRetry(opts: {
   env: Bindings;
   prompt: string;
-  questionCount: number;
+  /** Undefined means "you decide" — see `GenerateBody`. */
+  questionCount?: number;
   research: { brief: string; sources: string[] } | null;
   /** Called for each question as it is drafted; enables the streaming path. */
   onBlock?: (b: { index: number; title: string; type: string }) => void;
@@ -63,8 +78,8 @@ async function generateWithRetry(opts: {
     let draft: GenerationDraft;
     try {
       const result = opts.onBlock
-        ? await streamFormDraft({ env: opts.env, prompt, onBlock: opts.onBlock })
-        : await generateFormDraft({ env: opts.env, prompt });
+        ? await streamFormDraft({ env: opts.env, system: FORM_DESIGNER_SYSTEM, prompt, onBlock: opts.onBlock })
+        : await generateFormDraft({ env: opts.env, system: FORM_DESIGNER_SYSTEM, prompt });
       draft = result.draft;
       tokens += result.tokens;
     } catch (err) {
@@ -476,6 +491,7 @@ for (const path of ["/ai/edit-form", "/ai/add-blocks"] as const) {
       try {
         const result = await generateEdit({
           env: c.env,
+          system: FORM_DESIGNER_SYSTEM,
           prompt: buildEditPrompt(doc, prompt, history as BuilderTurn[]),
         });
         draft = result.draft;

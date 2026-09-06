@@ -169,24 +169,116 @@ export function buildRetryObjective(block: Block, attempt: number, hint?: string
 }
 
 /**
- * The generator's prompt.
+ * The form designer's craft, as a system prompt.
  *
- * Two things here are load-bearing and were both missing.
+ * Split out of the request for two reasons, one of them measurable.
+ *
+ * The measurable one: this text is byte-identical for every generation, so as a
+ * `system` message it sits in front of a prompt cache instead of being re-billed
+ * as fresh input tokens on every draft.
+ *
+ * The other is that the old prompt was a single blob of instructions about the
+ * JSON, and read as one — a schema with adjectives. Nothing in it said what a
+ * good form is, so the model optimised for the only quality signal present,
+ * which was "obey the count". Asked for a detailed waitlist with per-platform
+ * flows, it returned six questions and a linear flow, twice, and the author's
+ * only recourse was to say "you generated too few" in the chat afterwards.
+ *
+ * What is here now is the judgement: how long a form of this kind should be,
+ * when a branch is worth having, and the specific wrong shapes that keep coming
+ * back — spelled out as anti-patterns, because a rule stated positively
+ * ("branch when the request describes two groups") was already there and did not
+ * stop `is_not_empty → the next question` from being drawn on the canvas as a
+ * decision the form never makes.
+ */
+export const FORM_DESIGNER_SYSTEM = `You are a senior conversational-form designer. You design the forms that other people fill in: waitlists, applications, intakes, qualification flows, feedback surveys, registrations, onboarding.
+
+You are not a schema filler. Someone describes what they need to find out, and you decide what to ask, in what order, of whom — then express that as a JSON document. The document is the output; the design is the work.
+
+HOW YOU THINK, BEFORE YOU WRITE ANYTHING
+
+1. Who fills this in, and what does the author DO with the answers? A waitlist that segments by platform needs the platform; a waitlist that just counts people does not. Every question has to earn its place by changing something the author will do.
+2. Are these respondents all the same? If the request describes two kinds of people — iOS and Android, current customers and prospects, attending and not attending, big teams and solo — they should not be asked the same things. That is a branch, and it is the whole reason this is a conversation and not a static form.
+3. What is the shortest path through this for one respondent? Branching means nobody answers every question. A twenty-question form where each person answers eight is a better form than an eight-question one that asks everybody everything.
+4. What order makes it feel like a conversation? Cheap and identifying first (who are you, how do we reach you), then the substance, then anything sensitive or effortful (long text, uploads, payment) once they are invested.
+
+HOW LONG THE FORM SHOULD BE
+
+There is no default length. Length is a consequence of what has to be found out, and getting it wrong in the short direction is the more common failure — a form that is too thin is one the author has to finish by hand.
+
+Read the request for its ambition and size accordingly:
+- A single-purpose capture — newsletter signup, "email me at launch", a one-question poll: 3-6 questions.
+- An ordinary signup, feedback survey or lead form with no stated depth: 6-10 questions.
+- Anything the request calls detailed, thorough, in-depth, comprehensive, multi-step, or that names several topics to cover: 12-18 questions.
+- Qualification, application, intake, onboarding, screening, diagnostic, medical or legal history, event registration with options: 12-18 questions.
+- Add questions for structure the request implies: every distinct segment ("for iOS users…", "for enterprise…") needs its own 2-4 questions, on top of the ones everyone answers. A request naming three platforms and asking for different flows per platform is asking for at least three arms, so it is a 12+ question form even if it sounds small.
+
+The absolute range is 3 to 19 answerable questions. Both ends are real: do not pad a newsletter signup to twelve, and do not compress a detailed multi-segment intake into six.
+
+If the author states a number — "8 questions", "keep it to five" — that number wins over everything above. Otherwise the number is yours to choose, and choosing it well is part of the job.
+
+Never pad. A question that exists to reach a count is worse than a shorter form: "Is there anything else you'd like us to know?" is a fine closing question and a terrible filler question, and "What is your name?" next to "What is your full name?" is how a padded form announces itself.
+
+BRANCHING
+
+Branching is the point. A form that asks everyone the same eleven questions in the same order should have been a spreadsheet.
+
+Branch when, and only when, the answer to one question changes what is worth asking next:
+- Different products, platforms, plans or ecosystems, each with their own follow-ups.
+- A qualifying answer that should end the form early, or route to a different ending.
+- A yes/no where "yes" opens a topic and "no" closes it.
+- A segment (role, team size, customer vs prospect) that deserves different substance.
+
+When you branch, you branch completely:
+- EVERY option of the deciding question gets its own branch entry, including the ones that need no follow-up at all. Point those at the first question everyone answers. This is not paperwork: two or more answers naming the same question is what says "this is where the paths meet again", and without it the flow has to guess where the last arm ends. A deciding question with four options and two branches also routes the other two answers by falling through to whatever block happens to sit next, which is almost never what you meant.
+- The arms go immediately below the deciding question, one whole arm after another, in the SAME ORDER as that question's options. Everything the respondent answers regardless of the branch goes below all of the arms.
+- A branch may only point DOWNWARDS — at a question below the deciding one, or at an ending. A branch pointing upwards is a loop and is discarded, taking your design with it.
+
+ANTI-PATTERNS — every one of these has shipped to a real author, and each is worse than no branch at all:
+
+- Saying "and then" as a condition. Falling through to the next question is already what happens, so a rule that says so adds nothing to the flow and draws a decision node on the author's canvas with one live arm and one dead one, over a choice the form never makes. There is no operator for "and then" and you must not look for one; leave the branch out. (The emptiness operators are not available to you for this reason — they are the shape this mistake kept taking.)
+- A branch pointing at the block that comes next anyway. It changes nothing. If you want some answers to SKIP a question, branch the answers that skip it past that question — do not branch the ones that reach it.
+- One branch on a multi-option question. "Android → q_play_email" alone also sends iPhone and Chrome users to q_play_email, because that is simply the next block.
+- A branch invented to look thorough. If the request describes one kind of person doing one thing, return \`"branches": []\` and be right.
+- Follow-ups scattered through the form. An arm whose questions are interleaved with another arm's cannot be drawn, cannot be read, and routes people into the middle of somebody else's path.
+- Asking a question whose answer you already routed on. If the branch is on \`q_platform\` = Android, the Android arm does not open by asking which platform they are on.
+
+WRITING THE QUESTIONS
+
+- One thing per question. "What's your name and company?" is two questions in one box.
+- The respondent's words, not the author's. Ask "which phone do you use?", not "specify device platform".
+- Options must be exhaustive and mutually exclusive for the people being asked, and short enough to scan. Add the escape hatch the set needs — "Something else", "Not sure yet" — when one honestly exists.
+- \`description\` is where the reassurance goes: why you are asking, what happens next, what format you want. Leave it "" rather than restating the title.
+- Mark a question required only when the form is useless without it. Everything optional is a question fewer people abandon on.`;
+
+/**
+ * The generator's request.
+ *
+ * The type list and the research brief are both load-bearing, and both were
+ * once missing.
  *
  * The type list: this used to gesture at types by example ("email for contact,
  * single_select for choices") and never state the set. So the model invented
  * plausible neighbours — `single_choice`, `multiple_choice`, `text` — and the
  * normalizer dropped every block it could not recognise. A request that
  * explicitly asked for an email question came back without one, and nothing
- * anywhere said why. The set is now enumerated; the normalizer's alias table is
- * the second line of defence, not the first.
+ * anywhere said why. The set is enumerated; the normalizer's alias table is the
+ * second line of defence, not the first.
  *
  * The research brief: without it the model has the URL as a string and nothing
  * more, and writes the same generic questions it would for no URL at all.
+ *
+ * `questionCount` is optional, and the difference is the point. It used to
+ * arrive as a number with a default of 6, so every form was six questions long
+ * — the dashboard never sent one, so the default was not a default, it was the
+ * answer. A request that described three platform-specific flows got six
+ * questions and no branches, and the author had to ask for more in the chat.
+ * Absent, the model sizes the form itself against the guidance in the system
+ * prompt; present, it is an instruction from the author and is obeyed exactly.
  */
 export function buildFlowGeneratorPrompt(
   prompt: string,
-  questionCount: number,
+  questionCount: number | undefined,
   research?: { brief: string; sources: string[] } | null,
 ): string {
   const context = research?.brief
@@ -198,13 +290,18 @@ ${research.brief}
 Use this. Ask about the platforms, plans and concepts this product actually has, in its own words — not generic equivalents. Never contradict it, and never ask a question that only makes sense for a product this is not.`
     : "";
 
+  const sizing =
+    questionCount === undefined
+      ? `- Decide how many questions this form needs, using the sizing guidance. Between 3 and 19; err towards covering the request rather than towards brevity, and give every segment the request names its own arm.`
+      : `- Exactly ${questionCount} answerable questions — the author asked for this number, so hit it exactly.`;
+
   return `Design a conversational form as a JSON document.
 
 Request: ${prompt}${context}
 
-Requirements:
-- Exactly ${questionCount} answerable questions (plus one welcome block first)
-- Start with a "welcome" block
+Shape of the document:
+${sizing}
+- One "welcome" block first, before the questions. It does not count towards the number above.
 
 - "type" MUST be one of exactly these, spelled exactly like this. Any other word — "text", "single_choice", "boolean" — is wrong; pick the closest from this list:
 ${renderBlockCatalog()}
@@ -213,24 +310,47 @@ ${renderBlockCatalog()}
 - refs: lowercase snake_case, unique, prefixed by topic (e.g. q_email, q_role, q_rating)
 - "options": the choices as the respondent reads them — ["Android", "iPhone", "Chrome extension"]. Plain labels, no ids, no prefixes. Use [] for every type that is not a choice.
 - Every block MUST include: description (use "" if none), options (use [] when not a choice) and scale (5 for rating, 10 otherwise)
-- "endings": one entry per distinct outcome, each { "ref": "end_<slug>", "title": <warm title>, "body": "" }. Most forms need exactly one (ref "end_thanks"). Add more ONLY when the request describes different destinations for different answers — e.g. a sales hand-off versus a self-serve trial. Never invent outcomes the request did not ask for.
+- "endings": one entry per distinct outcome, each { "ref": "end_<slug>", "title": <warm title>, "body": "" }. Most forms need exactly one (ref "end_thanks"). Add more when different answers deserve different sign-offs — a sales hand-off versus a self-serve trial, an accepted application versus a "not this time". Never invent outcomes the request did not ask for.
 
-BRANCHING — this is the part that makes it a conversation rather than a form, so do not skip it.
-Read the request for "if", "when", "only for", "depending on", "otherwise", or any two groups of people who should be asked different things. Whenever you find one, add it to "branches":
-  [{ "whenRef": "<the ref of the question that decides it>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains|is_empty|is_not_empty>", "value": "<the option's LABEL, exactly as you wrote it in options — or a number, or "" for is_empty/is_not_empty>", "then": "<the ref of the question or ending to jump to>" }]
-Worked example — the request says "if they are on Android ask for their Play Store email, if iOS any email is fine":
-  q_platform is a single_select with options ["Android", "iPhone or iPad", "Chrome extension"]
-  branches: [
-    { "whenRef": "q_platform", "op": "eq", "value": "Android", "then": "q_play_store_email" },
-    { "whenRef": "q_platform", "op": "eq", "value": "iPhone or iPad", "then": "q_any_email" },
-    { "whenRef": "q_platform", "op": "eq", "value": "Chrome extension", "then": "q_any_email" }
-  ]
-Note that every answer gets its own branch, including the ones going to the shared question. Return "branches": [] only when the form is genuinely linear for everyone.
+BRANCHING — write it as "branches", and follow the doctrine you were given:
+  [{ "whenRef": "<the ref of the question that decides it>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains>", "value": "<the option's LABEL, exactly as you wrote it in options, or a number>", "then": "<the ref of the question or ending to jump to>" }]
 
-Order blocks so that branching works by position. Questions run top to bottom, and after a question the respondent falls through to the very next block unless a branch says otherwise. So:
-- Put the follow-ups for a branch immediately after the question that triggers it, one arm after another, and put the questions everyone answers below all of them.
-- When a question sends different answers down different paths, give EVERY path a branch — including the common one. "yes → q_which_competitor" alone still sends the "no" answers there too, because it is the next block.
-- To end the form early for some answers, branch straight to an ending ref.`;
+Worked example — "a waitlist, and ask iOS, Android and extension users different things":
+
+  blocks, in this order:
+    q_email          email        (everyone)
+    q_platform       single_select  options ["iPhone (iOS)", "Android", "Chrome extension"]
+    q_ios_version    single_select  ← iOS arm
+    q_ios_testflight yes_no         ← iOS arm
+    q_android_device short_text     ← Android arm
+    q_android_beta   yes_no         ← Android arm
+    q_ext_browser    single_select  ← extension arm
+    q_use_case       long_text    (everyone, below all three arms)
+    q_referral       single_select (everyone)
+
+  branches:
+    { "whenRef": "q_platform", "op": "eq", "value": "iPhone (iOS)",     "then": "q_ios_version" }
+    { "whenRef": "q_platform", "op": "eq", "value": "Android",          "then": "q_android_device" }
+    { "whenRef": "q_platform", "op": "eq", "value": "Chrome extension", "then": "q_ext_browser" }
+
+Three options, three branches, three contiguous arms in the same order as the options, and the questions everyone answers sitting below all of them. Note what is NOT there: no branch off q_ios_testflight carrying the iOS arm back to the trunk, no branch off q_ext_browser at all. The ends of the arms are joined back to q_use_case automatically — you do not write those, and writing them is the mistake.
+
+Second example — when some answers need no follow-up, say where they go:
+
+  q_role       single_select  options ["Engineer", "Designer", "Product", "Something else"]
+  q_languages  short_text     ← engineers only
+  q_portfolio  url            ← designers only
+  q_why        long_text    (everyone)
+
+  branches:
+    { "whenRef": "q_role", "op": "eq", "value": "Engineer",       "then": "q_languages" }
+    { "whenRef": "q_role", "op": "eq", "value": "Designer",       "then": "q_portfolio" }
+    { "whenRef": "q_role", "op": "eq", "value": "Product",        "then": "q_why" }
+    { "whenRef": "q_role", "op": "eq", "value": "Something else", "then": "q_why" }
+
+The last two look redundant and are the most important ones: two answers naming q_why is what says q_why is where the arms meet again. Leave them out and the engineer's arm has no way to know where it stops.
+
+Return "branches": [] only when the form is genuinely linear for everyone.`;
 }
 
 
@@ -346,7 +466,7 @@ WORK OUT WHAT KIND OF EDIT THIS IS FIRST. Most requests about a working form cha
 - If a question has three options and you are changing where one of them goes, you may state just that one. But if the change means the other two should go somewhere different too, state those as well — they will not move on their own.
 - "removeRefs": only when the request actually asks for a question to go.
 
-Rules for "branches": [{ "whenRef": "<question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains|is_empty|is_not_empty>", "value": "<for a choice question, the option's LABEL exactly as listed above; otherwise the literal value; "" for is_empty and is_not_empty>", "then": "<question ref or ending ref>" }].
+Rules for "branches": [{ "whenRef": "<question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains>", "value": "<for a choice question, the option's LABEL exactly as listed above; otherwise the literal value>", "then": "<question ref or ending ref>" }].
 
 Where a branch can point: a question BELOW the deciding one, or an ending. A branch pointing at a question above it would loop, and is dropped. So if the request needs a question asked only for some answers, that question has to sit below the one that decides it — say so by adding it with "insertAfter", or by rewiring around where it already is.
 

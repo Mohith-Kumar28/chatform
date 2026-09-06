@@ -1,4 +1,4 @@
-import { conditionIsAlwaysTrue } from "../conditions";
+import { conditionIsAlwaysFalse, conditionIsAlwaysTrue } from "../conditions";
 import type { Block } from "../blocks";
 import type { LogicRuleInput } from "../logic";
 
@@ -134,10 +134,17 @@ export function buildFlowRules(
     // then": it can never be false, so keeping it as a condition would draw a
     // decision with one live arm and one dead one. Store what it means.
     const sourceBlock = blocks.find((b) => b.ref === br.when.ref);
-    const unconditional = conditionIsAlwaysTrue(
-      { left: { kind: "ref", ref: br.when.ref }, op: br.when.op, ...(br.when.value === null ? {} : { value: br.when.value }) },
-      sourceBlock,
-    );
+    const condition = {
+      left: { kind: "ref" as const, ref: br.when.ref },
+      op: br.when.op,
+      ...(br.when.value === null ? {} : { value: br.when.value }),
+    };
+    // Its opposite: `is_empty` on a required question can never fire, so the
+    // rule is a wire nobody travels — and, worse, it makes the question look
+    // like a decision point on the canvas. Dropping it is not a loss of intent
+    // because there was no reachable intent to lose.
+    if (conditionIsAlwaysFalse(condition, sourceBlock)) continue;
+    const unconditional = conditionIsAlwaysTrue(condition, sourceBlock);
     if (unconditional) {
       rules.push(alwaysRule(br.when.ref, br.then, isEnding ? "ending" : "block"));
       routed.add(br.when.ref);
@@ -206,9 +213,23 @@ export function buildFlowRules(
       : dedupeByTarget(arms);
     if (trueArms.length === 0) continue;
 
+    // Without a shared target the trunk has to be inferred, and the only
+    // evidence is where the last arm stops. `armExtent` reads that from the
+    // branch list — a follow-up question decided from inside the arm belongs to
+    // it — rather than assuming the last arm is one question long, which put
+    // every earlier arm's rejoin in the MIDDLE of the last one.
+    //
+    // It is still an inference, and the way to avoid needing it is to name the
+    // trunk: two answers pointing at the same question say "this is where we
+    // all meet again" outright, which is why both prompts ask for a branch per
+    // answer including the ones that need no follow-up.
     const rejoin = shared
       ? { ref: shared, kind: "block" as const }
-      : destinationAfter(index.get(trueArms[trueArms.length - 1]!.then)!, blocks, endingRefs);
+      : destinationAfter(
+          armExtent(index.get(trueArms[trueArms.length - 1]!.then)!, branches, blocks),
+          blocks,
+          endingRefs,
+        );
     if (!rejoin) continue;
 
     for (let i = 0; i < trueArms.length - 1; i++) {

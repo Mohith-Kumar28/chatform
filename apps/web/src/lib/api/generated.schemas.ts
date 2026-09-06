@@ -328,7 +328,7 @@ export type PostApiAiGenerateFormBody = {
   prompt: string;
   /**
      * @minimum 2
-     * @maximum 20
+     * @maximum 19
      */
   questionCount?: number;
 };
@@ -347,7 +347,7 @@ export type PostApiAiGenerateFormStreamBody = {
   prompt: string;
   /**
      * @minimum 2
-     * @maximum 20
+     * @maximum 19
      */
   questionCount?: number;
 };

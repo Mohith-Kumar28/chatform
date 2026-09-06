@@ -2,13 +2,18 @@
 
 import { useMemo, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
+  Asterisk,
   GitBranch,
   CornerDownRight,
   Copy,
   Flag,
   GripVertical,
+  Hash,
   Plus,
   Search,
+  SquarePen,
   Trash2,
 } from "lucide-react";
 import {
@@ -27,8 +32,16 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { toast } from "sonner";
 import type { Block } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
 import { TooltipHint } from "@/components/ui/kbd";
 import {
@@ -138,6 +151,7 @@ export function BlockList() {
                       index={i}
                       selected={selectedRef === block.ref}
                       flow={flow.get(block.ref)}
+                      total={doc.blocks.length}
                       onSelect={() => select(block.ref)}
                       onDuplicate={() => duplicateBlock(block.ref)}
                       onDelete={() => removeBlock(block.ref)}
@@ -228,6 +242,7 @@ function InsertPoint({ onClick }: { onClick: () => void }) {
 function SortableRow({
   block,
   index,
+  total,
   selected,
   flow,
   onSelect,
@@ -236,6 +251,8 @@ function SortableRow({
 }: {
   block: Block;
   index: number;
+  /** How many questions there are, so the row knows when it cannot move down. */
+  total: number;
   selected: boolean;
   /** What this row can say about itself: see `computeQuestionFlow`. */
   flow: QuestionFlow | undefined;
@@ -247,8 +264,24 @@ function SortableRow({
     id: block.ref,
   });
   const meta = blockMeta(block.type);
+  const moveBlock = useBuilderStore((s) => s.moveBlock);
+  const updateBlock = useBuilderStore((s) => s.updateBlock);
+  const openPicker = useBuilderStore((s) => s.openPicker);
 
   return (
+    <RowMenu
+      block={block}
+      index={index}
+      total={total}
+      onSelect={onSelect}
+      onDuplicate={onDuplicate}
+      onDelete={onDelete}
+      onInsertAbove={() => openPicker(index)}
+      onInsertBelow={() => openPicker(index + 1)}
+      onMoveUp={() => moveBlock(index, index - 1)}
+      onMoveDown={() => moveBlock(index, index + 1)}
+      onToggleRequired={() => updateBlock(block.ref, { required: !block.required } as Partial<Block>)}
+    >
     <div
       ref={setNodeRef}
       style={{
@@ -373,6 +406,117 @@ function SortableRow({
         </div>
       )}
     </div>
+    </RowMenu>
+  );
+}
+
+/**
+ * Right-click on a question in the list.
+ *
+ * The row already carries duplicate and delete, on hover, in a strip that
+ * fades in over the title — which is the right amount of chrome for a list this
+ * dense and the wrong place to put the other six things you might want. Moving
+ * a question meant dragging it, inserting one meant finding the hairline
+ * between two rows, and making one required meant opening the inspector.
+ *
+ * All of it is here, on the gesture that costs nothing to try. Built on
+ * `@/components/ui/context-menu` — shadcn's, over Radix's — so it behaves like
+ * every other menu in the app rather than like a bespoke popover.
+ *
+ * The welcome block gets a shorter menu for the same reason it has no hover
+ * actions: it cannot be duplicated, moved or deleted, and offering to do so
+ * would be a menu of disabled rows.
+ */
+function RowMenu({
+  block,
+  index,
+  total,
+  onSelect,
+  onDuplicate,
+  onDelete,
+  onInsertAbove,
+  onInsertBelow,
+  onMoveUp,
+  onMoveDown,
+  onToggleRequired,
+  children,
+}: {
+  block: Block;
+  index: number;
+  total: number;
+  onSelect: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onInsertAbove: () => void;
+  onInsertBelow: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onToggleRequired: () => void;
+  children: React.ReactNode;
+}) {
+  const welcome = block.type === "welcome";
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-52">
+        <ContextMenuItem onSelect={onSelect}>
+          <SquarePen />
+          Open in details
+        </ContextMenuItem>
+        {!welcome && (
+          <ContextMenuItem onSelect={onDuplicate}>
+            <Copy />
+            Duplicate
+          </ContextMenuItem>
+        )}
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={onInsertAbove}>
+          <Plus />
+          Add a question above
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onInsertBelow}>
+          <Plus />
+          Add a question below
+        </ContextMenuItem>
+        {!welcome && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem disabled={index <= 1} onSelect={onMoveUp}>
+              <ArrowUp />
+              Move up
+            </ContextMenuItem>
+            <ContextMenuItem disabled={index >= total - 1} onSelect={onMoveDown}>
+              <ArrowDown />
+              Move down
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={onToggleRequired}>
+              <Asterisk />
+              {block.required ? "Make optional" : "Make required"}
+            </ContextMenuItem>
+          </>
+        )}
+        <ContextMenuItem
+          onSelect={() => {
+            void navigator.clipboard?.writeText(block.ref);
+            toast(`Copied ${block.ref}`, {
+              description: "The name this answer is stored and exported under.",
+            });
+          }}
+        >
+          <Hash />
+          Copy reference
+        </ContextMenuItem>
+        {!welcome && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem variant="destructive" onSelect={onDelete}>
+              <Trash2 />
+              Delete
+            </ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

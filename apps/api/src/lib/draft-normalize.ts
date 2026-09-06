@@ -6,6 +6,7 @@ import {
   FormDoc,
   lintFormDoc,
   buildFlowRules,
+  orderBlocksForBranches,
   type Block,
   type DraftBranch,
   type FormDocInput,
@@ -483,33 +484,48 @@ export function resolveBranches(
   for (const br of branches) {
     const block = byRef.get(br.whenRef);
     if (!block) continue;
+    // The emptiness operators are not available to a model.
+    //
+    // Not because they are wrong — an author can pick either of them in the
+    // builder, and on a genuinely optional question "only ask this if they
+    // skipped it" is a real thing to want. Because in a draft they are, every
+    // time we have looked, a model spelling "and then" as a condition. Falling
+    // through to the next question is already what happens, so the rule adds
+    // nothing to the flow and a great deal to the picture of it: the canvas
+    // draws the question as a decision, with one arm labelled "is not empty"
+    // and an "otherwise" beneath it, over a choice the form never makes. An
+    // author looking at that reasonably concludes the AI has invented a branch
+    // at random, and they are right.
+    //
+    // `buildFlowRules` already collapses or drops the pair on a REQUIRED
+    // question, where they are provably always true and always false. This
+    // covers the optional case, where they are merely meaningless — and the
+    // cost of being wrong is a branch the author adds back by hand in ten
+    // seconds, against a nonsense node they cannot explain.
+    if (br.op === "is_empty" || br.op === "is_not_empty") continue;
 
-    let value: string | number | boolean | null = br.value ?? "";
-    if (br.op === "is_empty" || br.op === "is_not_empty") {
-      value = null;
+    const raw = String(br.value ?? "").trim();
+    const optionIds = optionIdsByRef.get(br.whenRef);
+    const matched = optionIds?.get(raw.toLowerCase());
+    let value: string | number | boolean;
+    if (matched) {
+      value = matched;
+    } else if ("options" in block && Array.isArray(block.options)) {
+      // The model may have written the id after all, or a label whose case or
+      // punctuation drifted. Match against the block's own options both ways.
+      const opts = block.options as { id: string; label: string }[];
+      const hit =
+        opts.find((o) => o.id.toLowerCase() === raw.toLowerCase()) ??
+        opts.find((o) => o.label.toLowerCase() === raw.toLowerCase()) ??
+        opts.find((o) => o.label.toLowerCase().includes(raw.toLowerCase()) && raw.length > 2);
+      value = hit ? hit.id : raw;
+    } else if (block.type === "yes_no") {
+      value = /^(y|yes|true|1)$/i.test(raw) ? true : /^(n|no|false|0)$/i.test(raw) ? false : raw;
+    } else if (block.type === "number" || block.type === "nps" || block.type === "rating" || block.type === "opinion_scale") {
+      const n = Number(raw);
+      value = Number.isFinite(n) ? n : raw;
     } else {
-      const raw = String(value).trim();
-      const optionIds = optionIdsByRef.get(br.whenRef);
-      const matched = optionIds?.get(raw.toLowerCase());
-      if (matched) {
-        value = matched;
-      } else if ("options" in block && Array.isArray(block.options)) {
-        // The model may have written the id after all, or a label whose case or
-        // punctuation drifted. Match against the block's own options both ways.
-        const opts = block.options as { id: string; label: string }[];
-        const hit =
-          opts.find((o) => o.id.toLowerCase() === raw.toLowerCase()) ??
-          opts.find((o) => o.label.toLowerCase() === raw.toLowerCase()) ??
-          opts.find((o) => o.label.toLowerCase().includes(raw.toLowerCase()) && raw.length > 2);
-        value = hit ? hit.id : raw;
-      } else if (block.type === "yes_no") {
-        value = /^(y|yes|true|1)$/i.test(raw) ? true : /^(n|no|false|0)$/i.test(raw) ? false : raw;
-      } else if (block.type === "number" || block.type === "nps" || block.type === "rating" || block.type === "opinion_scale") {
-        const n = Number(raw);
-        value = Number.isFinite(n) ? n : raw;
-      } else {
-        value = raw;
-      }
+      value = raw;
     }
 
     out.push({ when: { ref: br.whenRef, op: br.op, value }, then: br.then });
@@ -572,17 +588,21 @@ export function draftToDoc(draft: GenerationDraft): NormalizedDraft {
     };
   });
 
-  const logic = buildFlowRules(
-    resolveBranches(draft.branches ?? [], blocks, optionIdsByRef),
-    blocks,
-    endings.map((e) => e.ref),
-  );
+  const branches = resolveBranches(draft.branches ?? [], blocks, optionIdsByRef);
+  // A branch pointing at a question above the one that decides it is discarded
+  // by `buildFlowRules`, because honouring it would loop. Ordering the blocks
+  // first turns that from a lost branch into a moved question — see
+  // `orderBlocksForBranches`. Nothing moves when the draft was already in
+  // order, which it usually is.
+  const ordered = orderBlocksForBranches(blocks, branches);
+
+  const logic = buildFlowRules(branches, ordered, endings.map((e) => e.ref));
 
   const doc = FormDoc.parse({
     schemaVersion: 1,
     title: draft.title,
     description: draft.description,
-    blocks,
+    blocks: ordered,
     endings,
     logic,
     endingRules: [],
@@ -592,7 +612,7 @@ export function draftToDoc(draft: GenerationDraft): NormalizedDraft {
     theme: {},
   } satisfies FormDocInput);
 
-  return { doc, issues: lintFormDoc(doc), blocks, ruleCount: logic.length };
+  return { doc, issues: lintFormDoc(doc), blocks: ordered, ruleCount: logic.length };
 }
 
 /** The edit draft's new blocks, normalized against a form that already exists. */

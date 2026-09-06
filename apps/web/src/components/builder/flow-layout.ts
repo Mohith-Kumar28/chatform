@@ -71,7 +71,67 @@ export function layoutGraph(nodes: Node[], edges: Edge[]): Map<string, { x: numb
     // dagre centres its boxes; React Flow positions by the top-left corner.
     out.set(node.id, { x: placed.x - placed.width / 2, y: placed.y - placed.height / 2 });
   }
+  alignArmsWithTheirRows(nodes, edges, out, g);
   return out;
+}
+
+/**
+ * Put a branch's follow-ups in the order its rows are listed.
+ *
+ * dagre minimises edge crossings over the whole graph, which is the right
+ * global objective and says nothing about the one thing an author reads a
+ * branch node for: iPhone is the first row, so the iPhone question should be
+ * the top box. When it is not, two wires cross between a node and its own
+ * children — the graph is drawn correctly and looks like a mistake, and it is
+ * the complaint the canvas gets most.
+ *
+ * dagre has no way to be told "this parent's children are ordered", so the
+ * ordering is imposed afterwards, and imposed as narrowly as it can be: the
+ * arm heads are permuted among the vertical slots they were ALREADY given.
+ * Nothing else moves, no slot is invented, and every node keeps a position
+ * dagre chose — so the spacing, the ranks and the rest of the layout are
+ * exactly what they were. Only which box sits in which slot changes.
+ *
+ * Restricted to arms of equal height sharing a rank, which is the case that
+ * matters (a run of question nodes) and the only one where swapping two boxes
+ * cannot make them overlap.
+ */
+function alignArmsWithTheirRows(
+  nodes: Node[],
+  edges: Edge[],
+  out: Map<string, { x: number; y: number }>,
+  g: InstanceType<typeof dagre.graphlib.Graph>,
+): void {
+  /** How many wires arrive at each node — an arm two questions share is not this branch's to move. */
+  const incoming = new Map<string, number>();
+  for (const edge of edges) incoming.set(edge.target, (incoming.get(edge.target) ?? 0) + 1);
+
+  for (const node of nodes) {
+    if (node.type !== "branch") continue;
+    const data = node.data as { cases?: { target: string }[] };
+    const wanted = (data.cases ?? []).map((c) => c.target);
+    if (wanted.length < 2) continue;
+
+    /** The arms this branch alone owns, grouped by the rank and the size they landed at. */
+    const slots = new Map<string, { ref: string; at: { x: number; y: number } }[]>();
+    for (const ref of wanted) {
+      const at = out.get(ref);
+      const box = g.node(ref) as { height?: number } | undefined;
+      if (!at || box?.height === undefined || (incoming.get(ref) ?? 0) !== 1) continue;
+      const key = `${Math.round(at.x)} ${Math.round(box.height)}`;
+      const group = slots.get(key);
+      if (group) group.push({ ref, at });
+      else slots.set(key, [{ ref, at }]);
+    }
+
+    for (const group of slots.values()) {
+      if (group.length < 2) continue;
+      // The slots, top to bottom, handed back out in row order — `group` is
+      // already in row order, because `wanted` is.
+      const ys = group.map((m) => m.at.y).sort((a, b) => a - b);
+      group.forEach((member, i) => out.set(member.ref, { x: member.at.x, y: ys[i]! }));
+    }
+  }
 }
 
 /**

@@ -35,7 +35,58 @@ describe("template catalogue", () => {
     for (const t of TEMPLATES) {
       expect(() => FormDoc.parse(t.doc), t.slug).not.toThrow();
       expect(t.doc.blocks.length, t.slug).toBeGreaterThan(1);
-      expect(t.doc.endings.length, t.slug).toBe(1);
+      // A template may have several outcomes now — a sales hand-off beside a
+      // self-serve trial, an unresolved ticket beside a resolved one — but
+      // `end_thanks` is always the one reached when nothing routes elsewhere.
+      expect(t.doc.endings.length, t.slug).toBeGreaterThan(0);
+      expect(t.doc.endings[0]?.ref, t.slug).toBe("end_thanks");
+    }
+  });
+
+  /**
+   * Branching is the product, and the gallery is where someone meets it.
+   *
+   * Every template used to be a straight line, because the authoring type had
+   * no way to express a branch — so the first thing an author saw of a
+   * "conversational form" was thirty forms that behaved like paper. These pin
+   * the fix at the level that matters: the catalogue as a whole is mostly
+   * branched, and each template is long enough to be worth starting from.
+   */
+  it("mostly branches, rather than asking everyone everything", () => {
+    const branched = TEMPLATES.filter((t) => t.doc.logic.some((r) => r.action_kind === "goto"));
+    expect(branched.length).toBeGreaterThanOrEqual(Math.ceil(TEMPLATES.length * 0.8));
+  });
+
+  it("asks enough to be worth starting from", () => {
+    for (const t of TEMPLATES) {
+      expect(t.blockCount, t.slug).toBeGreaterThanOrEqual(8);
+    }
+  });
+
+  it("routes to every ending it declares", () => {
+    for (const t of TEMPLATES) {
+      const aimedAt = new Set(
+        t.doc.logic
+          .filter((r) => r.action_kind === "goto" && (r.targetKind ?? "block") === "ending")
+          .map((r) => r.target),
+      );
+      for (const ending of t.doc.endings.slice(1)) {
+        expect(aimedAt.has(ending.ref), `${t.slug}: nothing routes to ${ending.ref}`).toBe(true);
+      }
+    }
+  });
+
+  it("never routes a branch backwards, which would loop", () => {
+    for (const t of TEMPLATES) {
+      const at = new Map(t.doc.blocks.map((b, i) => [b.ref, i]));
+      for (const rule of t.doc.logic) {
+        if (rule.action_kind !== "goto") continue;
+        if ((rule.targetKind ?? "block") === "ending") continue;
+        const from = rule.from ? at.get(rule.from) : undefined;
+        const to = at.get(rule.target);
+        if (from === undefined || to === undefined) continue;
+        expect(to, `${t.slug}: ${rule.from} -> ${rule.target}`).toBeGreaterThan(from);
+      }
     }
   });
 

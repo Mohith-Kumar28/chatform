@@ -115,3 +115,26 @@ export function conditionIsAlwaysTrue(
   if (!sourceBlock || !sourceBlock.required) return false;
   return condition.left.ref === sourceBlock.ref;
 }
+
+/**
+ * Can this condition ever be true?
+ *
+ * The mirror of `conditionIsAlwaysTrue`, and the case it does not cover.
+ * `is_empty` on a required question can never fire — the respondent cannot move
+ * past it without answering — so a route hanging off one is a wire nobody ever
+ * travels, drawn on the canvas as a decision the form appears to make and never
+ * does.
+ *
+ * It arrives from the same place its twin does: a model reaching for the
+ * emptiness operators as a way of spelling "and then", then negating one of
+ * them because the arm it wanted was the other way round.
+ */
+export function conditionIsAlwaysFalse(
+  condition: Condition,
+  sourceBlock: { ref: string; required: boolean } | null | undefined,
+): boolean {
+  if (condition.op !== "is_empty") return false;
+  if (condition.left.kind !== "ref") return false;
+  if (!sourceBlock || !sourceBlock.required) return false;
+  return condition.left.ref === sourceBlock.ref;
+}

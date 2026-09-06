@@ -1585,10 +1585,9 @@
                     "maxLength": 2000
                   },
                   "questionCount": {
-                    "default": 6,
                     "type": "integer",
                     "minimum": 2,
-                    "maximum": 20
+                    "maximum": 19
                   }
                 },
                 "required": [
@@ -1658,10 +1657,9 @@
                     "maxLength": 2000
                   },
                   "questionCount": {
-                    "default": 6,
                     "type": "integer",
                     "minimum": 2,
-                    "maximum": 20
+                    "maximum": 19
                   }
                 },
                 "required": [

@@ -153,12 +153,28 @@ describe("resolveBranches", () => {
         { whenRef: "q_yes", op: "eq", value: "yes", then: "q_text" },
         { whenRef: "q_score", op: "lte", value: "6", then: "q_text" },
         { whenRef: "q_text", op: "contains", value: "urgent", then: "q_yes" },
-        { whenRef: "q_text", op: "is_empty", value: "", then: "q_yes" },
       ],
       blocks,
       new Map(),
     );
-    expect(resolved.map((r) => r.when.value)).toEqual([true, 6, "urgent", null]);
+    expect(resolved.map((r) => r.when.value)).toEqual([true, 6, "urgent"]);
+  });
+
+  // A model reaches for these to spell "and then", which the flow already does
+  // by falling through — and the canvas then draws the question as a decision
+  // with a live arm and a dead one. An author can still pick either operator by
+  // hand in the builder; a draft may not.
+  it("drops the emptiness operators, which a draft only ever uses as filler", () => {
+    const resolved = resolveBranches(
+      [
+        { whenRef: "q_text", op: "is_not_empty", value: "", then: "q_yes" },
+        { whenRef: "q_text", op: "is_empty", value: "", then: "q_yes" },
+        { whenRef: "q_text", op: "contains", value: "urgent", then: "q_yes" },
+      ],
+      blocks,
+      new Map(),
+    );
+    expect(resolved.map((r) => r.when.op)).toEqual(["contains"]);
   });
 
   it("drops a branch hanging off a question that does not exist", () => {

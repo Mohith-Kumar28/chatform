@@ -3,6 +3,7 @@ import { ADDABLE_BLOCK_TYPES, BLOCK_TYPES, FormDoc } from "@repo/form-schema";
 import {
   buildEditPrompt,
   buildFlowGeneratorPrompt,
+  FORM_DESIGNER_SYSTEM,
   buildStablePrefix,
   buildTurnSuffix,
 } from "../src/lib/agent-prompts.js";
@@ -135,5 +136,42 @@ describe("every block type reaches the model", () => {
       expect(prompt).toContain("currency=");
       expect(prompt).toContain("url=<booking link>");
     }
+  });
+});
+
+/**
+ * How long the generated form is.
+ *
+ * `questionCount` was a required number defaulting to 6, and the dashboard has
+ * never sent one — so "six questions" was not a fallback, it was the length of
+ * every form the product had ever generated, however much detail the author
+ * asked for. These pin the two halves of the fix: absent means the model
+ * decides, and present means the author decided.
+ */
+describe("the generator sizes the form", () => {
+  it("hands the decision to the model when no count was asked for", () => {
+    const prompt = buildFlowGeneratorPrompt("A detailed waitlist with per-platform flows", undefined, null);
+    expect(prompt).toContain("Decide how many questions this form needs");
+    expect(prompt).not.toMatch(/Exactly \d+ answerable questions/);
+  });
+
+  it("obeys a count the author typed", () => {
+    const prompt = buildFlowGeneratorPrompt("A short poll", 4, null);
+    expect(prompt).toContain("Exactly 4 answerable questions");
+  });
+
+  it("does not offer the emptiness operators, which drafts only use as filler", () => {
+    const prompt = buildFlowGeneratorPrompt("A waitlist", undefined, null);
+    const ops = prompt.match(/"op": "<[^>]+>"/g) ?? [];
+    expect(ops.length).toBeGreaterThan(0);
+    for (const op of ops) expect(op).not.toContain("is_empty");
+  });
+
+  it("carries the design doctrine in the system prompt, not the request", () => {
+    // The doctrine is byte-identical on every call, so it belongs in front of
+    // the provider's prompt cache rather than inside a prompt that changes.
+    expect(FORM_DESIGNER_SYSTEM).toContain("BRANCHING");
+    expect(FORM_DESIGNER_SYSTEM).toContain("ANTI-PATTERNS");
+    expect(buildFlowGeneratorPrompt("A waitlist", undefined, null)).not.toContain("ANTI-PATTERNS");
   });
 });

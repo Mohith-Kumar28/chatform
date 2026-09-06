@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspector";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
 import { layoutGraph, placeNodes } from "./flow-layout";
+import { CanvasMenuProvider, NodeMenu, PaneMenu, type CanvasMenuActions } from "./node-menu";
 import { toast } from "sonner";
 import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
@@ -141,6 +142,13 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
   const storeSelectedEnding = useBuilderStore((st) => st.selectedEndingRef);
   const selectInStore = useBuilderStore((st) => st.select);
   const selectEndingInStore = useBuilderStore((st) => st.selectEnding);
+  // The canvas and the Questions list edit the same store, so the right-click
+  // menu here reuses the operations the list already has rather than writing
+  // its own — `duplicateBlock` alone has to keep refs unique, and two versions
+  // of that rule is how the two views come to disagree about a form.
+  const duplicateBlock = useBuilderStore((st) => st.duplicateBlock);
+  const updateBlock = useBuilderStore((st) => st.updateBlock);
+  const addBlock = useBuilderStore((st) => st.addBlock);
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(
     focusRef?.startsWith("branch_") ? focusRef : null,
   );
@@ -389,6 +397,15 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
     setTimeout(() => frame(300), 60);
   }, [nodes, edges, doc, onChange, frame]);
 
+  /**
+   * Where the last right-click landed, in flow coordinates.
+   *
+   * A ref rather than state: it is read once, inside the handler the menu
+   * fires, and storing it in state would re-render the whole canvas on every
+   * right-click for a value nothing renders.
+   */
+  const menuAt = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
   const addEndingAt = useCallback(
     (position: { x: number; y: number }) => {
       const e: FormDoc["endings"][number] = {
@@ -555,6 +572,62 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
       setSelectedEdgeId(null);
     },
     [doc, setRules],
+  );
+
+  /**
+   * What the right-click menus can do.
+   *
+   * Every one of these already existed on the canvas — in the left library, in
+   * the details panel, or on the Questions list — and reaching them meant
+   * leaving the node you were looking at. The menu is a second way in, not a
+   * second implementation: each entry calls the same callback the existing
+   * control does.
+   */
+  const menuActions = useMemo<CanvasMenuActions>(
+    () => ({
+      open: (id) => {
+        setSelectedNodeId(id);
+        setSelectedEdgeId(null);
+      },
+      duplicate: (ref) => duplicateBlock(ref),
+      addQuestionBelow: (ref, type) => {
+        const at = doc.blocks.findIndex((b) => b.ref === ref);
+        const block = defaultBlock(type);
+        addBlock(block, at < 0 ? undefined : at + 1);
+        setSelectedNodeId(block.ref);
+        setSelectedEdgeId(null);
+      },
+      addRoute: (ref) => addCase(ref),
+      toggleRequired: (ref) => {
+        const block = doc.blocks.find((b) => b.ref === ref);
+        if (!block) return;
+        updateBlock(ref, { required: !block.required } as Partial<Block>);
+      },
+      copyRef: (ref) => {
+        void navigator.clipboard?.writeText(ref);
+        toast(`Copied ${ref}`, { description: "The name this answer is stored and exported under." });
+      },
+      remove: (id) => onNodesDelete([{ id } as Node]),
+      addBlockHere: (type) => addBlockAt(type, menuAt.current),
+      addBranchHere: () => addConditionAt(menuAt.current),
+      addEndingHere: () => addEndingAt(menuAt.current),
+      autoArrange,
+      fitToScreen: () => frame(300),
+    }),
+    [
+      doc.blocks,
+      addBlock,
+      addBlockAt,
+      addCase,
+      addConditionAt,
+      addEndingAt,
+      autoArrange,
+      duplicateBlock,
+      frame,
+      onNodesDelete,
+      setSelectedNodeId,
+      updateBlock,
+    ],
   );
 
   // ── inspector targets ──────────────────────────────────────────────────
@@ -731,73 +804,86 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
             </button>
           </div>
         )}
-        <div
-          ref={wrapper}
-          data-tour="wf-canvas"
-          className="relative min-h-0 flex-1"
-          onPointerDown={showMap}
-          onWheel={showMap}
-        >
-        <ReactFlow
-          nodes={nodes}
-          edges={shownEdges}
-          nodeTypes={nodeTypes}
-          onNodesChange={onNodesChange}
-          onNodeClick={(_, n) => {
-            setSelectedNodeId(n.id);
-            setSelectedEdgeId(null);
-          }}
-          onPaneClick={clearSelection}
-          onEdgeClick={(_, e) => {
-            setSelectedEdgeId(e.id);
-            setSelectedNodeId(null);
-          }}
-          onConnect={onConnect}
-          onNodesDelete={onNodesDelete}
-          onEdgesDelete={onEdgesDelete}
-          onNodeDragStop={(_, node) => updateLayout(node.id, node.position)}
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "move";
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            const kind = dragType.current;
-            if (!kind || !wrapper.current) return;
-            const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-            if (kind.kind === "block" && kind.blockType) addBlockAt(kind.blockType, pos);
-            else if (kind.kind === "condition") addConditionAt(pos);
-            else if (kind.kind === "ending") addEndingAt(pos);
-            dragType.current = null;
-          }}
-          // Delete only. Backspace over a canvas whose nodes are the form's
-          // actual questions means one stray keystroke — after typing in a
-          // field and clicking away, say — silently destroys a question and
-          // everything wired to it.
-          deleteKeyCode={["Delete"]}
-          minZoom={0.25}
-          // Framing is done by `frame()`, which anchors the left edge instead
-          // of centring — see the comment there.
-          proOptions={{ hideAttribution: true }}
-        >
-          <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
-          <Panel position="top-right">
-            <Button variant="outline" size="sm" shape="pill" onClick={autoArrange} className="shadow-sm">
-              <LayoutGrid className="size-3.5" />
-              Auto arrange
-            </Button>
-          </Panel>
-          <Controls showInteractive={false} />
-            <MiniMap
-              pannable
-              zoomable
-              className={cn(
-                "hidden transition-opacity duration-[var(--duration-standard)] md:block",
-                navigating ? "opacity-100" : "pointer-events-none opacity-0",
-              )}
-            />
-          </ReactFlow>
-        </div>
+        <CanvasMenuProvider actions={menuActions}>
+          <PaneMenu>
+            {/*
+              `onContextMenu` records where the pointer was before the menu
+              opens, so "add a question" puts it there rather than at the
+              origin. A node's own menu stops this event, so a right-click on a
+              question never moves the mark.
+            */}
+            <div
+              ref={wrapper}
+              data-tour="wf-canvas"
+              className="relative min-h-0 flex-1"
+              onPointerDown={showMap}
+              onWheel={showMap}
+              onContextMenu={(e) => {
+                menuAt.current = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+              }}
+            >
+              <ReactFlow
+                nodes={nodes}
+                edges={shownEdges}
+                nodeTypes={nodeTypes}
+                onNodesChange={onNodesChange}
+                onNodeClick={(_, n) => {
+                  setSelectedNodeId(n.id);
+                  setSelectedEdgeId(null);
+                }}
+                onPaneClick={clearSelection}
+                onEdgeClick={(_, e) => {
+                  setSelectedEdgeId(e.id);
+                  setSelectedNodeId(null);
+                }}
+                onConnect={onConnect}
+                onNodesDelete={onNodesDelete}
+                onEdgesDelete={onEdgesDelete}
+                onNodeDragStop={(_, node) => updateLayout(node.id, node.position)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const kind = dragType.current;
+                  if (!kind || !wrapper.current) return;
+                  const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+                  if (kind.kind === "block" && kind.blockType) addBlockAt(kind.blockType, pos);
+                  else if (kind.kind === "condition") addConditionAt(pos);
+                  else if (kind.kind === "ending") addEndingAt(pos);
+                  dragType.current = null;
+                }}
+                // Delete only. Backspace over a canvas whose nodes are the form's
+                // actual questions means one stray keystroke — after typing in a
+                // field and clicking away, say — silently destroys a question and
+                // everything wired to it.
+                deleteKeyCode={["Delete"]}
+                minZoom={0.25}
+                // Framing is done by `frame()`, which anchors the left edge instead
+                // of centring — see the comment there.
+                proOptions={{ hideAttribution: true }}
+              >
+                <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
+                <Panel position="top-right">
+                  <Button variant="outline" size="sm" shape="pill" onClick={autoArrange} className="shadow-sm">
+                    <LayoutGrid className="size-3.5" />
+                    Auto arrange
+                  </Button>
+                </Panel>
+                <Controls showInteractive={false} />
+                  <MiniMap
+                    pannable
+                    zoomable
+                    className={cn(
+                      "hidden transition-opacity duration-[var(--duration-standard)] md:block",
+                      navigating ? "opacity-100" : "pointer-events-none opacity-0",
+                    )}
+                  />
+              </ReactFlow>
+            </div>
+          </PaneMenu>
+        </CanvasMenuProvider>
       </div>
 
       {/* right: inspector (collapsible) */}
@@ -943,6 +1029,7 @@ function deriveGraph(
   const edges: Edge[] = [];
   const endingRefs = new Set(doc.endings.map((e) => e.ref));
 
+  const ruleById = new Map(gotoRules.map((r) => [r.id, r]));
   // Conditional rules, grouped by the question they hang off.
   const casesBySource = new Map<string, BranchCase[]>();
   /** Unconditional jumps: they replace fall-through, they do not branch. */
@@ -988,6 +1075,23 @@ function deriveGraph(
     const cases = casesBySource.get(b.ref);
     const always = alwaysBySource.get(b.ref);
     const next = doc.blocks[i + 1];
+
+    // The rows read in the same order as the question's own options.
+    //
+    // They used to read in whatever order the rules happened to sit in the
+    // document, which is the order they were written or last edited. So a
+    // question offering iPhone, Android and Chrome extension could list
+    // Android above iPhone on its branch node while the canvas placed their
+    // follow-ups the other way round, and the two wires crossed for no reason
+    // an author could see. Option order is the order they chose; a route that
+    // is not a choice — a number comparison, a text match — keeps its place
+    // behind the ones that are.
+    if (cases && cases.length > 1 && "options" in b && Array.isArray(b.options)) {
+      const rank = new Map((b.options as { id: string }[]).map((o, at) => [o.id, at]));
+      const place = (c: BranchCase) =>
+        rank.get(String(condOf(ruleById.get(c.ruleId)!)?.value ?? "")) ?? Number.MAX_SAFE_INTEGER;
+      cases.sort((x, y) => place(x) - place(y));
+    }
 
     if (cases?.length) {
       const branchId = `branch_${b.ref}`;
@@ -1094,59 +1198,63 @@ const nodeTypes: NodeTypes = {
   branch: BranchNode,
 };
 
-function StartNode({ data, selected }: NodeProps) {
+function StartNode({ id, data, selected }: NodeProps) {
   const { block, index } = data as { block: Block; index: number };
   return (
-    <div
-      className={`rounded-full border-2 px-4 py-2 shadow-sm ${selected ? "border-primary ring-2 ring-primary/30" : "border-green-600/50"}`}
-      style={{ background: "var(--card)" }}
-    >
-      <div className="flex items-center gap-2">
-        <Play className="size-3 fill-green-600 text-green-600" />
-        <span className="tabular text-[0.625rem] opacity-60">{index}</span>
-        <span className="max-w-44 truncate text-xs font-semibold">{block.title}</span>
+    <NodeMenu id={id} kind="start" deletable={false}>
+      <div
+        className={`rounded-full border-2 px-4 py-2 shadow-sm ${selected ? "border-primary ring-2 ring-primary/30" : "border-green-600/50"}`}
+        style={{ background: "var(--card)" }}
+      >
+        <div className="flex items-center gap-2">
+          <Play className="size-3 fill-green-600 text-green-600" />
+          <span className="tabular text-[0.625rem] opacity-60">{index}</span>
+          <span className="max-w-44 truncate text-xs font-semibold">{block.title}</span>
+        </div>
+        <Handle type="source" position={Position.Right} className="!bg-green-600" />
       </div>
-      <Handle type="source" position={Position.Right} className="!bg-green-600" />
-    </div>
+    </NodeMenu>
   );
 }
 
 /** A node the flow cannot serve: unreachable, or with no way to finish. */
 type NodeProblem = { level: "error" | "warning"; messages: string[] };
 
-function QuestionNode({ data, selected }: NodeProps) {
+function QuestionNode({ id, data, selected }: NodeProps) {
   const { block, index, problem } = data as { block: Block; index: number; problem?: NodeProblem };
   const meta = blockMeta(block.type);
   const accent = TONE_ACCENT[meta.tone];
+  // Selection is a spine in the block's family colour, matching the Questions
+  // list, rather than a generic orange ring.
   return (
-    // Selection is a spine in the block's family colour, matching the Questions
-    // list, rather than a generic orange ring.
-    <div
-      className={cn(
-        "w-56 rounded-xl bg-[var(--card)] px-3 py-2.5 transition-shadow",
-        selected ? "shadow-md" : "shadow-xs",
-        // A broken node is outlined, not tinted: the fill is the block's family
-        // colour and carries meaning of its own.
-        problem && "ring-2 ring-[var(--destructive)]",
-      )}
-      style={{ boxShadow: selected ? `inset 3px 0 0 0 ${accent}, var(--shadow-md)` : undefined }}
-    >
-      <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
-      <div className="flex items-center gap-2">
-        <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-md", TONE_CLASSES[meta.tone])}>
-          <meta.icon className="size-3.5" strokeWidth={2} />
-        </span>
-        <span className="tabular text-[0.625rem] opacity-60">{index}</span>
-        <span className="min-w-0 flex-1 truncate text-xs font-medium">{block.title}</span>
-        {block.required && <span className="text-destructive text-xs">*</span>}
+    <NodeMenu id={id} kind="question" required={block.required}>
+      <div
+        className={cn(
+          "w-56 rounded-xl bg-[var(--card)] px-3 py-2.5 transition-shadow",
+          selected ? "shadow-md" : "shadow-xs",
+          // A broken node is outlined, not tinted: the fill is the block's family
+          // colour and carries meaning of its own.
+          problem && "ring-2 ring-[var(--destructive)]",
+        )}
+        style={{ boxShadow: selected ? `inset 3px 0 0 0 ${accent}, var(--shadow-md)` : undefined }}
+      >
+        <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
+        <div className="flex items-center gap-2">
+          <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-md", TONE_CLASSES[meta.tone])}>
+            <meta.icon className="size-3.5" strokeWidth={2} />
+          </span>
+          <span className="tabular text-[0.625rem] opacity-60">{index}</span>
+          <span className="min-w-0 flex-1 truncate text-xs font-medium">{block.title}</span>
+          {block.required && <span className="text-destructive text-xs">*</span>}
+        </div>
+        {problem ? (
+          <ProblemNote problem={problem} />
+        ) : (
+          <p className="text-muted-foreground mt-1 text-[10px] tracking-wide uppercase">{meta.label}</p>
+        )}
+        <Handle type="source" position={Position.Right} style={{ background: accent }} />
       </div>
-      {problem ? (
-        <ProblemNote problem={problem} />
-      ) : (
-        <p className="text-muted-foreground mt-1 text-[10px] tracking-wide uppercase">{meta.label}</p>
-      )}
-      <Handle type="source" position={Position.Right} style={{ background: accent }} />
-    </div>
+    </NodeMenu>
   );
 }
 
@@ -1179,24 +1287,26 @@ function shortProblem(message: string): string {
   return "Broken connection";
 }
 
-function EndingNode({ data, selected }: NodeProps) {
+function EndingNode({ id, data, selected, deletable }: NodeProps) {
   const { title, problem } = data as { title: string; problem?: NodeProblem };
   return (
-    <div
-      className={cn(
-        "w-44 rounded-xl border-2 border-dashed px-3 py-2.5 shadow-sm",
-        selected ? "border-primary ring-2 ring-primary/30" : "border-primary/60",
-        problem && "!border-[var(--destructive)] ring-2 ring-[var(--destructive)]",
-      )}
-      style={{ background: "var(--accent)" }}
-    >
-      <Handle type="target" position={Position.Left} className="!bg-primary" />
-      <div className="flex items-center gap-2">
-        <Flag className={cn("size-3.5 shrink-0", problem ? "text-destructive" : "text-primary")} />
-        <span className="truncate text-xs font-semibold">{title}</span>
+    <NodeMenu id={id} kind="ending" deletable={deletable !== false}>
+      <div
+        className={cn(
+          "w-44 rounded-xl border-2 border-dashed px-3 py-2.5 shadow-sm",
+          selected ? "border-primary ring-2 ring-primary/30" : "border-primary/60",
+          problem && "!border-[var(--destructive)] ring-2 ring-[var(--destructive)]",
+        )}
+        style={{ background: "var(--accent)" }}
+      >
+        <Handle type="target" position={Position.Left} className="!bg-primary" />
+        <div className="flex items-center gap-2">
+          <Flag className={cn("size-3.5 shrink-0", problem ? "text-destructive" : "text-primary")} />
+          <span className="truncate text-xs font-semibold">{title}</span>
+        </div>
+        {problem && <ProblemNote problem={problem} />}
       </div>
-      {problem && <ProblemNote problem={problem} />}
-    </div>
+    </NodeMenu>
   );
 }
 
@@ -1208,8 +1318,9 @@ function EndingNode({ data, selected }: NodeProps) {
  * always "otherwise" — the path taken when no case matches, which is real and
  * used to be invisible.
  */
-function BranchNode({ data, selected }: NodeProps) {
-  const { sourceTitle, index, cases, fallback } = data as {
+function BranchNode({ id, data, selected }: NodeProps) {
+  const { sourceRef, sourceTitle, index, cases, fallback } = data as {
+    sourceRef: string;
     sourceTitle: string;
     index: number;
     cases: BranchCase[];
@@ -1219,74 +1330,76 @@ function BranchNode({ data, selected }: NodeProps) {
   const broken = cases.some((c) => c.missing);
 
   return (
-    <div
-      className={cn(
-        "w-56 rounded-xl border-2 bg-[var(--card)] pb-1 shadow-sm",
-        selected ? "border-primary ring-primary/30 shadow-md ring-2" : "border-amber-500/60",
-        broken && "!border-[var(--destructive)] ring-2 ring-[var(--destructive)]",
-      )}
-    >
-      <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
-
-      <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">
-        <span
-          className={cn(
-            "flex size-5 shrink-0 items-center justify-center rounded-md",
-            broken ? "bg-[color-mix(in_oklch,var(--destructive)_18%,transparent)]" : "bg-amber-500/15",
-          )}
-        >
-          {broken ? (
-            <AlertTriangle className="text-destructive size-3" strokeWidth={2.5} />
-          ) : (
-            <GitBranch className="size-3 text-amber-600" />
-          )}
-        </span>
-        <span className="tabular text-[0.625rem] opacity-60">{index}</span>
-        <span className="truncate text-[11px] font-semibold">{sourceTitle || "Branch"}</span>
-      </div>
-
-      <div className="border-t border-dashed pt-0.5">
-        {cases.map((c) => (
-          <BranchRow
-            key={c.ruleId}
-            label={c.label}
-            handleId={c.ruleId}
-            missing={c.missing}
-            title={
-              c.missing
-                ? `This answer points at "${c.target}", which no longer exists. Drag from the dot to give it a destination.`
-                : undefined
-            }
-          />
-        ))}
-        {/*
-          When every answer is already spoken for there is no path left for
-          "otherwise" to take, so offering one is a wire to nowhere.
-
-          Otherwise it is drawn, but never as a peer of the cases above it.
-          Nobody authored this row — it is derived, and it read as a branch
-          someone had written and then abandoned, which is why it kept getting
-          reported as a mistake. So: its own rule above it, marked `auto`, and
-          worded as a consequence rather than as an option label. It cannot be
-          removed, because it is the half of a conditional question that does
-          the skipping: delete it and every "only ask this sometimes" question
-          is asked of everyone.
-        */}
-        {fallback && (
-          <BranchRow
-            label="otherwise"
-            destination={fallback.title}
-            handleId={OTHERWISE}
-            derived={!fallback.explicit}
-            title={
-              fallback.explicit
-                ? `Every other answer goes to "${fallback.title}", because you aimed it there.`
-                : `Every other answer carries on to "${fallback.title}", which is simply what comes next. Drag from the dot to send it somewhere else instead.`
-            }
-          />
+    <NodeMenu id={id} kind="branch" sourceRef={sourceRef}>
+      <div
+        className={cn(
+          "w-56 rounded-xl border-2 bg-[var(--card)] pb-1 shadow-sm",
+          selected ? "border-primary ring-primary/30 shadow-md ring-2" : "border-amber-500/60",
+          broken && "!border-[var(--destructive)] ring-2 ring-[var(--destructive)]",
         )}
+      >
+        <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
+
+        <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">
+          <span
+            className={cn(
+              "flex size-5 shrink-0 items-center justify-center rounded-md",
+              broken ? "bg-[color-mix(in_oklch,var(--destructive)_18%,transparent)]" : "bg-amber-500/15",
+            )}
+          >
+            {broken ? (
+              <AlertTriangle className="text-destructive size-3" strokeWidth={2.5} />
+            ) : (
+              <GitBranch className="size-3 text-amber-600" />
+            )}
+          </span>
+          <span className="tabular text-[0.625rem] opacity-60">{index}</span>
+          <span className="truncate text-[11px] font-semibold">{sourceTitle || "Branch"}</span>
+        </div>
+
+        <div className="border-t border-dashed pt-0.5">
+          {cases.map((c) => (
+            <BranchRow
+              key={c.ruleId}
+              label={c.label}
+              handleId={c.ruleId}
+              missing={c.missing}
+              title={
+                c.missing
+                  ? `This answer points at "${c.target}", which no longer exists. Drag from the dot to give it a destination.`
+                  : undefined
+              }
+            />
+          ))}
+          {/*
+            When every answer is already spoken for there is no path left for
+            "otherwise" to take, so offering one is a wire to nowhere.
+
+            Otherwise it is drawn, but never as a peer of the cases above it.
+            Nobody authored this row — it is derived, and it read as a branch
+            someone had written and then abandoned, which is why it kept getting
+            reported as a mistake. So: its own rule above it, marked `auto`, and
+            worded as a consequence rather than as an option label. It cannot be
+            removed, because it is the half of a conditional question that does
+            the skipping: delete it and every "only ask this sometimes" question
+            is asked of everyone.
+          */}
+          {fallback && (
+            <BranchRow
+              label="otherwise"
+              destination={fallback.title}
+              handleId={OTHERWISE}
+              derived={!fallback.explicit}
+              title={
+                fallback.explicit
+                  ? `Every other answer goes to "${fallback.title}", because you aimed it there.`
+                  : `Every other answer carries on to "${fallback.title}", which is simply what comes next. Drag from the dot to send it somewhere else instead.`
+              }
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </NodeMenu>
   );
 }
 

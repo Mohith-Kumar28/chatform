@@ -1,4 +1,12 @@
-import { FormDoc, type BlockInput } from "@repo/form-schema";
+import {
+  buildFlowRules,
+  FormDoc,
+  hasErrors,
+  lintFormDoc,
+  type BlockInput,
+  type ConditionOp,
+  type DraftBranch,
+} from "@repo/form-schema";
 
 /**
  * The authoring shape for a template.
@@ -76,6 +84,42 @@ export type Question = DistributiveOmit<
   columns?: string[];
 };
 
+/**
+ * One conditional route, written the way a person would say it.
+ *
+ * Templates had no way to express this at all, which is why every one of the
+ * thirty-odd in the catalogue was a straight line — and why a product whose
+ * whole pitch is "a form that behaves like a conversation" shipped a gallery of
+ * forms that behave like paper. The gap was in the authoring type, not in the
+ * schema: `FormDoc.logic` has always supported this, and `buildFlowRules` has
+ * always derived the rejoins.
+ *
+ * `is` is the option's LABEL, exactly as written in `options`, for the same
+ * reason the AI draft schema asks for labels: the ids are generated here,
+ * afterwards, and an author cannot know them.
+ */
+export interface TemplateBranch {
+  /** The ref of the question that decides. */
+  when: string;
+  op?: ConditionOp;
+  /** For a choice question, the option's label. Omit for the unary operators. */
+  is?: string | number | boolean;
+  /** Ref of the question or ending to jump to. Must sit below `when`. */
+  then: string;
+  /**
+   * No condition: everyone who reaches `when` goes to `then`.
+   *
+   * This is how an arm says where it stops. `buildFlowRules` derives most of
+   * those on its own — it knows where the next arm starts, so it knows where
+   * this one ends — but it can only ever rejoin the trunk, and the interesting
+   * arms do not rejoin. A webinar registration that splits the people joining
+   * live from the ones who only want the recording has two outcomes, and
+   * without this the second ending is drawn on the canvas with nothing pointing
+   * at it: an outcome the form can never reach.
+   */
+  always?: boolean;
+}
+
 export interface TemplateInput {
   slug: string;
   title: string;
@@ -90,7 +134,18 @@ export interface TemplateInput {
   /** The opening line. Every template has one — a conversation starts by speaking. */
   greeting: string;
   questions: Question[];
+  /** The default sign-off, reached when nothing routes elsewhere. Ref `end_thanks`. */
   ending: { title: string; body?: string };
+  /**
+   * Further sign-offs, for the outcomes that deserve their own.
+   *
+   * A screening form that turns someone away should not thank them for their
+   * order, and a qualification form that hands a lead to sales should say so.
+   * Refs must start `end_`.
+   */
+  endings?: { ref: string; title: string; body?: string }[];
+  /** Conditional routing. Every arm of a decision, including the shared ones. */
+  branches?: TemplateBranch[];
 }
 
 export interface TemplateSeed {
@@ -154,9 +209,50 @@ function labelled(labels: string[], prefix: string, taken: Set<string>) {
  * Deliberately rough and deliberately computed: an author guessing "about two
  * minutes" for their own template is guessing, and the guess would then be a
  * number in a database that nothing recomputes when the template changes.
+ *
+ * Counted over the LONGEST PATH rather than over every question, now that a
+ * template can branch. Nobody answers a branched form end to end — an
+ * eighteen-question intake where each respondent sees ten is a five-minute
+ * form, and calling it nine is the kind of overstatement that makes someone
+ * close the tab before starting.
  */
 function estimateMinutes(questionCount: number): number {
   return Math.max(1, Math.ceil((questionCount * 15 + 20) / 60));
+}
+
+/**
+ * The most questions anyone can be asked on one run through this form.
+ *
+ * The flow is a DAG — `buildFlowRules` drops any jump that would run backwards
+ * — so this is a plain longest-path walk, computed from the back. Each block
+ * leads to its conditional targets, to its unconditional jump if it has one,
+ * and otherwise to whatever sits directly below it.
+ */
+function longestPath(doc: FormDoc): number {
+  const index = new Map(doc.blocks.map((b, i) => [b.ref, i]));
+  const endings = new Set(doc.endings.map((e) => e.ref));
+  const gotos = doc.logic.filter((r) => r.action_kind === "goto");
+
+  /** Where each block can lead, as positions; an ending is the end of the walk. */
+  const next = doc.blocks.map((b, i): number[] => {
+    const from = gotos.filter((r) => r.from === b.ref);
+    const conditional = from.filter((r) => (r.when?.conditions.length ?? 0) > 0);
+    const always = from.find((r) => (r.when?.conditions.length ?? 0) === 0);
+    const targets = [...conditional, ...(always ? [always] : [])]
+      .map((r) => (endings.has(r.target) ? -1 : (index.get(r.target) ?? -1)))
+      .filter((at) => at > i);
+    // Without an unconditional jump, an unmatched answer falls through.
+    if (!always) targets.push(i + 1 < doc.blocks.length ? i + 1 : -1);
+    return targets;
+  });
+
+  const asked = doc.blocks.map((b) => (b.type === "welcome" || b.type === "statement" ? 0 : 1));
+  const best = new Array<number>(doc.blocks.length).fill(0);
+  for (let i = doc.blocks.length - 1; i >= 0; i--) {
+    const onward = next[i]!.filter((at) => at >= 0).map((at) => best[at]!);
+    best[i] = asked[i]! + (onward.length > 0 ? Math.max(...onward) : 0);
+  }
+  return best[0] ?? 0;
 }
 
 export function defineTemplate(input: TemplateInput): TemplateSeed {
@@ -195,21 +291,113 @@ export function defineTemplate(input: TemplateInput): TemplateSeed {
     }),
   ];
 
+  const endings = [
+    {
+      id: `end_${code}01`,
+      ref: "end_thanks",
+      title: input.ending.title,
+      bodyMd: input.ending.body ?? "",
+    },
+    ...(input.endings ?? []).map((e, i) => ({
+      id: `end_${code}${String(i + 2).padStart(2, "0")}`,
+      ref: e.ref,
+      title: e.title,
+      bodyMd: e.body ?? "",
+    })),
+  ];
+
+  /**
+   * Labels back to the ids they were given a moment ago.
+   *
+   * The same resolution the AI path does in `resolveBranches`, and here for the
+   * same reason: an author writes "Android" because that is the word on the
+   * button, and `opt_android` is ours.
+   */
+  const optionIdOf = (ref: string, label: string | number | boolean): string | number | boolean => {
+    const block = blocks.find((b) => b.ref === ref) as { options?: { id: string; label: string }[] } | undefined;
+    const hit = block?.options?.find((o) => o.label === String(label));
+    return hit ? hit.id : label;
+  };
+
+  const endingRefs = new Set(endings.map((e) => e.ref));
+  const authored = input.branches ?? [];
+
+  /** Arms that state their own destination; see `TemplateBranch.always`. */
+  const jumps = authored
+    .filter((br) => br.always)
+    .map((br, i) => ({
+      id: `rl_${code}${String(i + 1).padStart(2, "0")}`,
+      action_kind: "goto" as const,
+      from: br.when,
+      when: { op: "and" as const, conditions: [], groups: [] },
+      target: br.then,
+      targetKind: endingRefs.has(br.then) ? ("ending" as const) : ("block" as const),
+    }));
+
+  const branches: DraftBranch[] = authored
+    .filter((br) => !br.always)
+    .map((br) => ({
+      when: {
+        ref: br.when,
+        op: (br.op ?? "eq") as DraftBranch["when"]["op"],
+        value: br.is === undefined ? null : optionIdOf(br.when, br.is),
+      },
+      then: br.then,
+    }));
+
   const doc = FormDoc.parse({
     title: input.title,
     description: input.description,
     blocks,
-    endings: [
-      {
-        id: `end_${code}01`,
-        ref: "end_thanks",
-        title: input.ending.title,
-        bodyMd: input.ending.body ?? "",
-      },
+    endings,
+    // The authored jumps are passed as `existing` as well as kept: derivation
+    // reads them so it does not close an arm that has already said where it
+    // goes, which would put two rules on one question and leave which of them
+    // wins to evaluation order.
+    logic: [
+      ...jumps,
+      ...buildFlowRules(branches, blocks as never, [...endingRefs], jumps),
     ],
   });
 
-  const blockCount = input.questions.length;
+  /**
+   * A template that does not lint is a template that cannot be published.
+   *
+   * The gallery is the first thing an author touches, so a broken flow here is
+   * a broken flow in their form before they have typed anything — and the
+   * branching added to these is exactly the kind of thing that strands a
+   * question nothing routes to. Generation is the right place to catch it:
+   * `pnpm gen:templates` fails, rather than someone finding out at publish.
+   */
+  /**
+   * An ending nothing routes to is an outcome the form can never reach.
+   *
+   * The linter does not check this — an unused ending breaks nothing at
+   * runtime — but in a template it is always a mistake, and a silent one: the
+   * author who wrote "we'll miss you" for the guests who decline sees it drawn
+   * on the canvas with no wire into it, and every guest who declines gets
+   * thanked for coming instead.
+   */
+  const aimedAt = new Set(
+    doc.logic.filter((r) => r.action_kind === "goto" && (r.targetKind ?? "block") === "ending").map((r) => r.target),
+  );
+  const orphaned = endings.slice(1).filter((e) => !aimedAt.has(e.ref));
+  if (orphaned.length > 0) {
+    throw new Error(
+      `template "${input.slug}" declares endings nothing routes to: ${orphaned.map((e) => e.ref).join(", ")}`,
+    );
+  }
+
+  const issues = lintFormDoc(doc);
+  if (hasErrors(issues)) {
+    const said = issues
+      .filter((i) => i.level === "error")
+      .map((i) => `  ${i.code}: ${i.message}`)
+      .join("\n");
+    throw new Error(`template "${input.slug}" has a broken flow:\n${said}`);
+  }
+
+  const blockCount = input.questions.filter((q) => q.type !== "statement").length;
   return {
     slug: input.slug,
     title: input.title,
@@ -220,7 +408,7 @@ export function defineTemplate(input: TemplateInput): TemplateSeed {
     icon: input.icon,
     accent: CATEGORY_ACCENT[input.category],
     blockCount,
-    estMinutes: estimateMinutes(blockCount),
+    estMinutes: estimateMinutes(longestPath(doc)),
     doc,
   };
 }

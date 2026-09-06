@@ -348,11 +348,20 @@ export const GENERATION_PROVIDER_OPTIONS = {
   openrouter: { reasoning: { effort: "low" as const, exclude: true } },
 } as const;
 
-/** Edit an existing form: questions added or removed, and how the flow rewires. */
-export async function generateEdit(opts: { env: Bindings; prompt: string }): Promise<{ draft: EditDraft; tokens: number }> {
+/**
+ * Edit an existing form: questions added or removed, and how the flow rewires.
+ *
+ * `system` carries the same design doctrine the generator gets. An edit is
+ * where branching goes wrong most often — the form already has a shape, and the
+ * model has to change part of it without contradicting the rest — so the rules
+ * about covering every option and keeping arms contiguous matter more here, not
+ * less. It used to see none of them.
+ */
+export async function generateEdit(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: EditDraft; tokens: number }> {
   const result = await generateObject({
     model: chatModel(opts.env, MODELS.generation),
     schema: EditDraft,
+    system: opts.system,
     prompt: opts.prompt,
     providerOptions: GENERATION_PROVIDER_OPTIONS,
   });
@@ -362,11 +371,18 @@ export async function generateEdit(opts: { env: Bindings; prompt: string }): Pro
   };
 }
 
-/** AI flow generator: prompt → loose draft (normalized to FormDoc by the caller). */
-export async function generateFormDraft(opts: { env: Bindings; prompt: string }): Promise<{ draft: GenerationDraft; tokens: number }> {
+/**
+ * AI flow generator: prompt → loose draft (normalized to FormDoc by the caller).
+ *
+ * `system` is separate from `prompt` so the design doctrine — which is by far
+ * the larger half and is byte-identical on every call — sits in front of the
+ * provider's prompt cache instead of being billed as fresh input each time.
+ */
+export async function generateFormDraft(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: GenerationDraft; tokens: number }> {
   const result = await generateObject({
     model: chatModel(opts.env, MODELS.generation),
     schema: GenerationDraft,
+    system: opts.system,
     prompt: opts.prompt,
     providerOptions: GENERATION_PROVIDER_OPTIONS,
   });
@@ -401,12 +417,14 @@ export interface DraftBlockPreview {
 export async function streamFormDraft(opts: {
   env: Bindings;
   prompt: string;
+  system?: string;
   onBlock?: (block: DraftBlockPreview) => void;
   abortSignal?: AbortSignal;
 }): Promise<{ draft: GenerationDraft; tokens: number }> {
   const result = streamObject({
     model: chatModel(opts.env, MODELS.generation),
     schema: GenerationDraft,
+    system: opts.system,
     prompt: opts.prompt,
     providerOptions: GENERATION_PROVIDER_OPTIONS,
     abortSignal: opts.abortSignal,
