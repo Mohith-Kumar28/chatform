@@ -2,7 +2,16 @@
 
 import type { ReactNode } from "react";
 import { Lock } from "lucide-react";
-import { FEATURES, PLANS, minPlanFor, type FeatureKey, type PlanId } from "@repo/entitlements";
+import {
+  FEATURES,
+  LIMITS,
+  PLANS,
+  minPlanFor,
+  nextPlanWithMore,
+  type FeatureKey,
+  type LimitKey,
+  type PlanId,
+} from "@repo/entitlements";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { usePaywall } from "@/stores/paywall-store";
 import { Button } from "@/components/ui/button";
@@ -17,24 +26,67 @@ import { cn } from "@/lib/utils";
  * reads as a bug rather than a price.
  */
 
-/** Open the paywall for a feature, from a click rather than a failed request. */
+/**
+ * Why a control is locked.
+ *
+ * Two shapes, because the product locks things for two different reasons, and
+ * they were only ever expressible as one. A **feature** is absent from the plan
+ * — API access, webhooks — and entitlements alone can answer it. A **limit** is
+ * present but spent, which entitlements cannot answer on their own: only the
+ * caller knows how many seats are taken.
+ *
+ * Everything downstream of this type is identical for both. Same padlock chip,
+ * same inert treatment, same paywall on click. That is the point of naming the
+ * reason rather than the treatment: seats used to be the one gate in the
+ * product with a look of its own, because there was nowhere to say "locked by a
+ * limit" and someone reached for a different component instead.
+ */
+export type LockReason =
+  | { feature: FeatureKey; limit?: never; used?: never }
+  | { limit: LimitKey; feature?: never; used?: number | null };
+
+/** The plan that would lift this lock, or `null` when nothing above does. */
+function requiredPlanFor(reason: LockReason, from: PlanId): PlanId | null {
+  return reason.feature ? minPlanFor(reason.feature) : nextPlanWithMore(reason.limit!, from);
+}
+
+/** What the lock is about, in the reader's words. */
+function lockLabel(reason: LockReason): string {
+  return reason.feature ? FEATURES[reason.feature].label : LIMITS[reason.limit!].label;
+}
+
+/**
+ * Open the paywall for a lock, from a click rather than a failed request.
+ *
+ * The gate it builds is deliberately the same shape the *server* sends when it
+ * refuses the same thing — `feature_locked` for a feature, `limit_reached` for
+ * a limit — so the dialog cannot say one thing when the user presses the
+ * padlock and another when they push past it and the API answers.
+ */
 export function useUpgrade() {
   const open = usePaywall((s) => s.open);
-  return (feature: FeatureKey, context: Record<string, unknown> = {}) => {
-    const requiredPlan = minPlanFor(feature);
+  const { data } = useEntitlements();
+  const plan: PlanId = data?.planId ?? "free";
+
+  return (reason: LockReason, context: Record<string, unknown> = {}) => {
+    const requiredPlan = requiredPlanFor(reason, plan);
+    const label = lockLabel(reason);
+    const limitValue = reason.limit ? (data?.limits?.[reason.limit] ?? null) : null;
     open(
       {
-        code: "feature_locked",
-        message: `${FEATURES[feature].label} is a ${PLANS[requiredPlan].name} feature.`,
-        feature,
-        metric: null,
-        used: null,
-        limit: null,
-        plan: "free",
+        code: reason.feature ? "feature_locked" : "limit_reached",
+        message: reason.feature
+          ? `${label} is a ${requiredPlan ? PLANS[requiredPlan].name : "paid"} feature.`
+          : `${PLANS[plan].name} includes ${limitValue ?? "a limited number of"} ${label.toLowerCase()}.`,
+        feature: reason.feature ?? null,
+        metric: reason.limit ?? null,
+        used: reason.used ?? null,
+        limit: limitValue,
+        plan,
         requiredPlan,
         resetsAt: null,
         context,
-        upgradeUrl: `/billing?plan=${requiredPlan}&from=${feature}`,
+        upgradeUrl: `/billing${requiredPlan ? `?plan=${requiredPlan}` : ""}`,
       },
       "click",
     );
@@ -61,64 +113,36 @@ export function Gate({ feature, children, fallback = null }: GateProps) {
  * click is a dead end, and the moment they touch it is the moment they are curious.
  */
 export function LockChip({
-  feature,
+  reason,
   className,
   context,
 }: {
-  feature: FeatureKey;
+  reason: LockReason;
   className?: string;
   context?: Record<string, unknown>;
 }) {
   const upgrade = useUpgrade();
-  const plan = PLANS[minPlanFor(feature)];
+  const { data } = useEntitlements();
+  const requiredPlan = requiredPlanFor(reason, data?.planId ?? "free");
+  const label = lockLabel(reason);
   return (
     <button
       type="button"
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        upgrade(feature, context ?? {});
+        upgrade(reason, context ?? {});
       }}
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[0.625rem] font-medium",
         "bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)] transition-opacity hover:opacity-80",
         className,
       )}
-      title={`${FEATURES[feature].label} — ${plan.name}`}
+      title={`${label} — ${requiredPlan ? PLANS[requiredPlan].name : "a higher plan"}`}
     >
       <Lock className="size-2.5" aria-hidden />
-      {plan.name}
+      {requiredPlan ? PLANS[requiredPlan].name : "Upgrade"}
     </button>
-  );
-}
-
-/**
- * The same chip, naming a plan rather than a lock.
- *
- * `LockChip` is for a control you cannot use: it wears a padlock and the
- * warning wash, and `LockedControl` makes the thing behind it inert. Some
- * controls are the opposite case — pressable, and the press is the way *to* the
- * plan. "Add seats" on `/team` is the example: the seat limit is a limit, not a
- * feature flag, so nothing is locked and disabling the one button that helps
- * would be perverse.
- *
- * What was missing was the tier. Every other paid surface names the plan on the
- * control — API keys, the settings switches — and this one sent people to
- * `/billing` to find out which plan they were being asked for. Same chip, same
- * position, violet rather than amber, because it is naming a destination and
- * not refusing a click.
- */
-export function PlanChip({ plan, className }: { plan: PlanId; className?: string }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[0.625rem] font-medium",
-        "bg-brand-violet-soft text-brand-violet-soft-foreground",
-        className,
-      )}
-    >
-      {PLANS[plan].name}
-    </span>
   );
 }
 
@@ -149,19 +173,41 @@ export function PlanChip({ plan, className }: { plan: PlanId; className?: string
  */
 export function LockedControl({
   feature,
+  limit,
+  used,
+  locked: lockedByCaller,
   children,
   className,
 }: {
-  feature: FeatureKey;
+  /** Locked because the plan lacks a feature. Entitlements decide. */
+  feature?: FeatureKey;
+  /** Locked because a limit is spent. The caller decides, via `locked`. */
+  limit?: LimitKey;
+  /** How many are already used, for the paywall's copy. Limit mode only. */
+  used?: number | null;
+  /**
+   * Limit mode only, and required there.
+   *
+   * A feature lock is a property of the plan and this component can read it. A
+   * limit lock is a property of the *data* — how many seats are taken, how many
+   * forms exist — which lives with whoever rendered the control. Passing it in
+   * is what lets both kinds share one component instead of one of them growing
+   * a look of its own.
+   */
+  locked?: boolean;
   children: ReactNode;
   className?: string;
 }) {
   const { can, ready } = useEntitlements();
-  if (ready && can(feature)) return <>{children}</>;
 
-  const locked = ready;
+  const reason: LockReason = feature ? { feature } : { limit: limit!, used };
+  const locked = feature ? ready && !can(feature) : Boolean(lockedByCaller);
+  const settled = feature ? ready : true;
+
+  if (settled && !locked) return <>{children}</>;
+
   return (
-    <div className={cn("relative", className)} aria-busy={!ready || undefined}>
+    <div className={cn("relative", className)} aria-busy={!settled || undefined}>
       <div
         className={cn(
           "select-none",
@@ -178,7 +224,7 @@ export function LockedControl({
         not push anything around when it arrives. Only its contents change.
       */}
       <div className="absolute inset-0 z-10 flex items-start justify-end p-1">
-        {locked && <LockChip feature={feature} />}
+        {locked && <LockChip reason={reason} />}
       </div>
     </div>
   );
@@ -248,7 +294,7 @@ export function LockedOverlay({
           {/* Full-strength brand on a deliberately drained surface — the rows
               behind it are blurred and desaturated, so this is the only colour
               left in the frame. That is the whole composition. */}
-          <Button variant="gradient" className="mt-4" onClick={() => upgrade(feature, { count, ...context })}>
+          <Button variant="gradient" className="mt-4" onClick={() => upgrade({ feature }, { count, ...context })}>
             Unlock with {plan.name}
           </Button>
 

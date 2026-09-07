@@ -47,7 +47,7 @@ export function CustomDomainField({ slug }: { slug: string }) {
         {!entitled && (
           <button
             type="button"
-            onClick={() => upgrade("custom_domain", { surface: "share.domain" })}
+            onClick={() => upgrade({ feature: "custom_domain" }, { surface: "share.domain" })}
             className="shrink-0 rounded-lg bg-[var(--warning-soft)] px-3 text-xs font-medium text-[var(--warning-soft-foreground)] transition-opacity hover:opacity-80"
           >
             {plan.name}

@@ -159,7 +159,7 @@ export function SpreadsheetPanel({ formId }: { formId: string }) {
                   <Label htmlFor="feed-partials" className="text-sm">
                     Include unfinished responses
                   </Label>
-                  {!canPartials && <LockChip feature="export_partials" />}
+                  {!canPartials && <LockChip reason={{ feature: "export_partials" }} />}
                 </div>
                 <p className="text-muted-foreground text-micro">
                   What people told you before they left.

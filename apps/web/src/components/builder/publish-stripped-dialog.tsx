@@ -77,7 +77,7 @@ export function PublishStrippedDialog({
             className="flex-1"
             onClick={() => {
               onClose();
-              upgrade(items[0]!.feature, { surface: "publish", strippedCount: items.length });
+              upgrade({ feature: items[0]!.feature }, { surface: "publish", strippedCount: items.length });
             }}
           >
             Unlock with {plan.name}

@@ -59,7 +59,7 @@ export function FirstPartialToast({
         duration: 12_000,
         action: {
           label: "Take a look",
-          onClick: () => upgrade("partial_responses", { count: partials, surface: "first-partial-toast" }),
+          onClick: () => upgrade({ feature: "partial_responses" }, { count: partials, surface: "first-partial-toast" }),
         },
       },
     );

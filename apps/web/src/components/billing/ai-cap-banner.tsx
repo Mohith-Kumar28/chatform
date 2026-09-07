@@ -94,7 +94,7 @@ export function AiCapBanner() {
       <Button
         size="sm"
         variant={reached ? "default" : "outline"}
-        onClick={() => upgrade(w.feature, { surface: "usage-banner", metric: w.metric, used, limit })}
+        onClick={() => upgrade({ feature: w.feature }, { surface: "usage-banner", metric: w.metric, used, limit })}
       >
         Raise the limit
       </Button>

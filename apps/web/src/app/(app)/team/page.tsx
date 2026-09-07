@@ -16,8 +16,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { UsageMeter } from "@/components/ui/usage-meter";
-import { PlanChip } from "@/components/billing/gate";
-import { nextPlanWithMore } from "@repo/entitlements";
+import { LockedControl } from "@/components/billing/gate";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   Accordion,
@@ -214,9 +213,6 @@ export default function TeamPage() {
   // permanently short of a seat it is paying for.
   const seatsUsed = members.length + pending.length;
   const seatsFull = seatLimit !== null && seatsUsed >= seatLimit;
-  // The plan that would actually raise the ceiling — `null` on the top plan,
-  // where more seats are bought rather than upgraded to.
-  const seatUpgrade = ent.data ? nextPlanWithMore("seats", ent.data.planId) : null;
 
   /**
    * Anything that changes the roster changes the seat count, and the seat count
@@ -600,16 +596,29 @@ export default function TeamPage() {
                 </div>
 
                 {/*
-                  Hidden rather than disabled when there is no seat: a dead
-                  primary button is the loudest thing on the card and does
-                  nothing. The button that *can* be pressed takes its place
-                  below.
+                  Show, don't hide — the rule `gate.tsx` opens with, and the one
+                  place in the product that used to break it.
+
+                  This hid "Send invite" when the seats ran out and put an "Add
+                  seats" button in its place, on the reasoning that a dead
+                  primary button is loud and useless. But every other paid wall
+                  in the product — Create key, the export switches, the custom
+                  domain — stays exactly where it is, inert, wearing a padlock
+                  and the name of the plan that opens it. A control that
+                  disappears reads as a bug; one that is visibly locked reads as
+                  a price, and it is the only version that teaches anybody what
+                  they are missing.
+
+                  Seats were the exception only because `LockedControl` could
+                  not express "a limit is spent" — it keyed on feature flags.
+                  Now it takes either, so this is the same component, the same
+                  chip and the same paywall as everywhere else.
                 */}
-                {!seatsFull && (
+                <LockedControl limit="seats" used={seatsUsed} locked={seatsFull}>
                   <Button type="submit" shape="pill" className="w-full">
                     <UserPlus className="size-4" /> {sending ? "Sending…" : "Send invite"}
                   </Button>
-                )}
+                </LockedControl>
               </fieldset>
 
               {/*
@@ -639,11 +648,13 @@ export default function TeamPage() {
                     on the top plan, where extra seats are bought by the seat and
                     there is no tier to move to.
                   */}
-                  <Button asChild shape="pill" className="w-full">
-                    <Link href="/billing">
-                      Add seats
-                      {seatUpgrade && <PlanChip plan={seatUpgrade} />}
-                    </Link>
+                  {/*
+                    The way out, and deliberately quieter than the locked
+                    control above it. The padlock names the plan; this is the
+                    door. Two loud buttons stacked would just be shouting.
+                  */}
+                  <Button asChild variant="outline" shape="pill" className="w-full">
+                    <Link href="/billing">Add seats</Link>
                   </Button>
                 </div>
               )}

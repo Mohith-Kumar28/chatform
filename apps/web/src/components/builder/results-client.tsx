@@ -288,11 +288,11 @@ function DownloadMenu({
               </>
             ) : (
               <DropdownMenuItem
-                onSelect={() => upgrade("export_partials", { count: partials, noun: "partial responses" })}
+                onSelect={() => upgrade({ feature: "export_partials" }, { count: partials, noun: "partial responses" })}
               >
                 <Lock />
                 <span className="flex-1">Unfinished responses</span>
-                <LockChip feature="export_partials" context={{ count: partials }} />
+                <LockChip reason={{ feature: "export_partials" }} context={{ count: partials }} />
               </DropdownMenuItem>
             )}
           </>
@@ -392,7 +392,7 @@ function AnalyticsTab({ analytics, entitled }: { analytics?: Analytics; entitled
           <StatCard label="Didn't finish" value={analytics.abandoned} icon={TrendingDown} tone="warning" />
           <button
             type="button"
-            onClick={() => upgrade("advanced_analytics", { surface: "results.analytics" })}
+            onClick={() => upgrade({ feature: "advanced_analytics" }, { surface: "results.analytics" })}
             className="bg-card hover:bg-muted/40 flex items-center justify-between gap-2 rounded-xl p-4 text-left transition-colors"
           >
             <div>
@@ -401,7 +401,7 @@ function AnalyticsTab({ analytics, entitled }: { analytics?: Analytics; entitled
                 48s
               </p>
             </div>
-            <LockChip feature="advanced_analytics" />
+            <LockChip reason={{ feature: "advanced_analytics" }} />
           </button>
         </div>
 
