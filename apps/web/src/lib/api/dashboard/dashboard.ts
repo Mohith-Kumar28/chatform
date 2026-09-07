@@ -21,6 +21,8 @@ import type {
 
 import type {
   DeleteApiFormsById200,
+  DeleteApiFormsByIdSubmissions200,
+  DeleteApiFormsByIdSubmissionsBody,
   DeleteApiKeysById200,
   DeleteApiWebhooksById200,
   GetApiAuditLogs200,
@@ -1336,7 +1338,104 @@ export function useGetApiFormsByIdSubmissions<TData = Awaited<ReturnType<typeof 
 
 
 
-export type getApiFormsByIdSubmissionsExportResponse200 = {
+export type deleteApiFormsByIdSubmissionsResponse200 = {
+  data: DeleteApiFormsByIdSubmissions200
+  status: 200
+}
+
+export type deleteApiFormsByIdSubmissionsResponse403 = {
+  data: void
+  status: 403
+}
+
+export type deleteApiFormsByIdSubmissionsResponseSuccess = (deleteApiFormsByIdSubmissionsResponse200) & {
+  headers: Headers;
+};
+export type deleteApiFormsByIdSubmissionsResponseError = (deleteApiFormsByIdSubmissionsResponse403) & {
+  headers: Headers;
+};
+
+export type deleteApiFormsByIdSubmissionsResponse = (deleteApiFormsByIdSubmissionsResponseSuccess | deleteApiFormsByIdSubmissionsResponseError)
+
+export const getDeleteApiFormsByIdSubmissionsUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/submissions`
+}
+
+/**
+ * @summary Delete responses
+ */
+export const deleteApiFormsByIdSubmissions = async (id: string,
+    deleteApiFormsByIdSubmissionsBody: DeleteApiFormsByIdSubmissionsBody, options?: Parameters<typeof customFetch>[1]): Promise<deleteApiFormsByIdSubmissionsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<deleteApiFormsByIdSubmissionsResponse>(getDeleteApiFormsByIdSubmissionsUrl(id),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(deleteApiFormsByIdSubmissionsBody)
+  }
+);}
+
+
+
+
+
+export const getDeleteApiFormsByIdSubmissionsMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFormsByIdSubmissions>>, TError,DeleteApiFormsByIdSubmissionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiFormsByIdSubmissions>>, TError,DeleteApiFormsByIdSubmissionsMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiFormsByIdSubmissions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiFormsByIdSubmissions>>, DeleteApiFormsByIdSubmissionsMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  deleteApiFormsByIdSubmissions(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiFormsByIdSubmissionsMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiFormsByIdSubmissions>>>
+    export type DeleteApiFormsByIdSubmissionsMutationBody = DeleteApiFormsByIdSubmissionsBody
+    export type DeleteApiFormsByIdSubmissionsMutationError = void
+    export type DeleteApiFormsByIdSubmissionsMutationVariables = {id: string;data: DeleteApiFormsByIdSubmissionsBody}
+
+    /**
+ * @summary Delete responses
+ */
+export const useDeleteApiFormsByIdSubmissions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFormsByIdSubmissions>>, TError,DeleteApiFormsByIdSubmissionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiFormsByIdSubmissions>>,
+        TError,
+        DeleteApiFormsByIdSubmissionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiFormsByIdSubmissionsMutationOptions(options));
+    }
+    export type getApiFormsByIdSubmissionsExportResponse200 = {
   data: string
   status: 200
 }

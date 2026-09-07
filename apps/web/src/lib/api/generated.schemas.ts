@@ -477,6 +477,18 @@ export type GetApiFormsByIdSubmissions200Item = {
   transcript: GetApiFormsByIdSubmissions200ItemTranscriptItem[];
 };
 
+export type DeleteApiFormsByIdSubmissionsBody = {
+  /**
+     * @minItems 1
+     * @maxItems 200
+     */
+  ids: string[];
+};
+
+export type DeleteApiFormsByIdSubmissions200 = {
+  deleted: number;
+};
+
 export type GetApiFormsByIdAnalytics200PerBlockItem = {
   blockRef: string;
   blockType: string;

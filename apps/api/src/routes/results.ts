@@ -220,6 +220,70 @@ resultsRouter.get(
 );
 
 /**
+ * Delete responses, by id.
+ *
+ * The `submission:delete` permission has been in the role table since roles
+ * existed and nothing has ever asked for it — the dashboard could show a
+ * response and export it, but a test run, a duplicate, or someone's private
+ * data submitted by mistake could not be removed by the person responsible for
+ * it. Bulk by construction: the table selects with checkboxes, and one
+ * statement for a hundred ids beats a hundred round trips to D1.
+ *
+ * The transcript goes with it. A conversation is the response's content, not a
+ * separate artefact, so leaving `chat_messages` behind after deleting the
+ * answers would keep exactly the thing the person asked to be rid of; the
+ * session row is deleted and its messages cascade.
+ */
+resultsRouter.delete(
+  "/forms/:id/submissions",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Delete responses",
+    responses: {
+      200: { description: "How many were deleted", content: { "application/json": { schema: resolver(z.object({ deleted: z.number() })) } } },
+      403: { description: "Role may not delete responses" },
+    },
+  }),
+  validator("json", z.object({ ids: z.array(z.string()).min(1).max(200) })),
+  async (c) => {
+    const formId = c.get("form")!.id;
+    const denied = await assertPermission(c, "submission", "delete");
+    if (denied) return denied;
+
+    const { ids } = c.req.valid("json");
+    const holes = ids.map(() => "?").join(",");
+
+    // Scoped to this form as well as to the ids: `requireFormAccess` proves the
+    // caller owns the form, and this is what stops an id from another form —
+    // or another tenant — riding along in the list.
+    const owned = await c.env.DB.prepare(
+      `SELECT id, session_id FROM submissions WHERE form_id = ? AND id IN (${holes})`,
+    )
+      .bind(formId, ...ids)
+      .all<{ id: string; session_id: string | null }>();
+
+    const rows = owned.results ?? [];
+    if (rows.length === 0) return c.json({ deleted: 0 });
+
+    const sessionIds = rows.map((r) => r.session_id).filter((s): s is string => s !== null);
+    const stmts = [
+      c.env.DB.prepare(
+        `DELETE FROM submissions WHERE form_id = ? AND id IN (${rows.map(() => "?").join(",")})`,
+      ).bind(formId, ...rows.map((r) => r.id)),
+    ];
+    if (sessionIds.length > 0) {
+      stmts.push(
+        c.env.DB.prepare(
+          `DELETE FROM chat_sessions WHERE id IN (${sessionIds.map(() => "?").join(",")})`,
+        ).bind(...sessionIds),
+      );
+    }
+    await c.env.DB.batch(stmts);
+    return c.json({ deleted: rows.length });
+  },
+);
+
+/**
  * The exports.
  *
  * CSV and XLSX are the same table in two containers, so they are one handler

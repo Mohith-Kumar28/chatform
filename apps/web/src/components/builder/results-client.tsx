@@ -18,21 +18,31 @@ import {
   Eye,
   Inbox,
   MessageSquare,
+  FileText,
+  Lock,
+  Sheet,
   TrendingDown,
   Users,
-  ShieldCheck,} from "lucide-react";
-import { displayAnswer, type Block, type FormDoc } from "@repo/form-schema";
+} from "lucide-react";
+import { type FormDoc } from "@repo/form-schema";
 import {
   useGetApiFormsById,
   useGetApiFormsByIdAnalytics,
   useGetApiFormsByIdSubmissions,
 } from "@/lib/api/dashboard/dashboard";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { StatCard } from "@/components/ui/stat-card";
-import { blockMeta, TONE_CLASSES } from "./block-library";
-import { cn } from "@/lib/utils";
+import { SubmissionsTable, type SubmissionRecord } from "./submissions-table";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { LockedOverlay, LockChip, SkeletonRows, SkeletonChart, useUpgrade } from "@/components/billing/gate";
 import { FirstPartialToast } from "@/components/billing/first-partial-toast";
@@ -75,32 +85,18 @@ interface Analytics {
   } | null;
 }
 
-interface SubRow {
-  id: string;
-  status: string;
-  startedAt: number;
-  completedAt: number | null;
-  durationMs: number | null;
-  answers: { blockRef: string; blockType: string; value: unknown }[];
-  transcript: { role: string; content: string; createdAt: number }[];
-  /** Only for forms that required sign-in. */
-  respondent: { provider: string; label: string; name: string | null } | null;
-}
-
 export function ResultsClient({ formId }: ResultsClientProps) {
   const [tab, setTab] = useState<"submissions" | "summary" | "analytics">("submissions");
   const [statusFilter, setStatusFilter] = useState<"completed" | "abandoned">("completed");
-  const [openRow, setOpenRow] = useState<string | null>(null);
 
   const { data: rawAnalytics } = useGetApiFormsByIdAnalytics(formId as never);
   const { data: rawSubs, isLoading } = useGetApiFormsByIdSubmissions(formId as never);
   const { data: rawForm } = useGetApiFormsById(formId as never);
 
   const analytics = rawAnalytics as Analytics | undefined;
-  const subs = (Array.isArray(rawSubs) ? rawSubs : []) as SubRow[];
+  const subs = (Array.isArray(rawSubs) ? rawSubs : []) as SubmissionRecord[];
   const doc = (rawForm as { workingSchema?: FormDoc } | undefined)?.workingSchema;
   const ent = useEntitlements();
-  const upgrade = useUpgrade();
 
   const canPartials = ent.can("partial_responses");
   const canAnalytics = ent.can("advanced_analytics");
@@ -110,7 +106,6 @@ export function ResultsClient({ formId }: ResultsClientProps) {
     [doc],
   );
 
-  const hasRespondents = subs.some((s) => s.respondent);
   const completedCount = subs.filter((s) => s.status === "completed").length;
   /**
    * The real number of unfinished responses, even when the rows themselves are locked.
@@ -123,6 +118,24 @@ export function ResultsClient({ formId }: ResultsClientProps) {
   const partialCount = canPartials ? subs.length - completedCount : (analytics?.abandoned ?? 0);
   const rows = subs.filter((s) =>
     statusFilter === "completed" ? s.status === "completed" : s.status !== "completed",
+  );
+
+  /**
+   * Hoisted, because it belongs to the table rather than to the page: on the
+   * table it sits in the same row as full screen and the selection actions, and
+   * every other branch below still needs it above whatever it renders instead.
+   */
+  const statusSwitcher = (
+    <SegmentedControl
+      size="sm"
+      options={[
+        { value: "completed", label: "Completed", badge: completedCount },
+        { value: "abandoned", label: "Partial", badge: partialCount },
+      ]}
+      value={statusFilter}
+      onChange={setStatusFilter}
+      ariaLabel="Submission status"
+    />
   );
 
   return (
@@ -142,55 +155,16 @@ export function ResultsClient({ formId }: ResultsClientProps) {
           onChange={setTab}
           ariaLabel="Results view"
         />
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" shape="pill" asChild>
-            {/* Goes through the browser so the session cookie rides along. Exporting what
-                you finished collecting is free — taking your own data out is never the
-                thing behind the paywall. */}
-            <a href={`${API_ORIGIN}/api/forms/${formId}/submissions/export`} download>
-              <Download className="size-3.5" />
-              Export {completedCount > 0 ? `${completedCount} ` : ""}responses
-            </a>
-          </Button>
-          {/* The same slice that is gated everywhere else, offered here by name and count
-              rather than hidden. */}
-          {!canPartials && partialCount > 0 && (
-            <button
-              type="button"
-              onClick={() => upgrade("export_partials", { count: partialCount, noun: "partial responses" })}
-              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
-            >
-              + {partialCount} partial
-              <LockChip feature="export_partials" context={{ count: partialCount }} />
-            </button>
-          )}
-          {canPartials && partialCount > 0 && (
-            <Button variant="ghost" size="sm" shape="pill" asChild>
-              <a href={`${API_ORIGIN}/api/forms/${formId}/submissions/export?includePartials=true`} download>
-                + {partialCount} partial
-              </a>
-            </Button>
-          )}
-        </div>
+        <DownloadMenu
+          formId={formId}
+          completed={completedCount}
+          partials={partialCount}
+          canPartials={canPartials}
+        />
       </div>
 
       {tab === "submissions" && (
         <div className="space-y-3">
-          <SegmentedControl
-            size="sm"
-            options={[
-              { value: "completed", label: "Completed", badge: completedCount },
-              {
-                value: "abandoned",
-                label: "Partial",
-                badge: partialCount,
-              },
-            ]}
-            value={statusFilter}
-            onChange={setStatusFilter}
-            ariaLabel="Submission status"
-          />
-
           {/*
             The gate that pays for everything.
             The tab is visible with its real count, and opening it shows a blurred
@@ -199,88 +173,46 @@ export function ResultsClient({ formId }: ResultsClientProps) {
             something here".
           */}
           {statusFilter === "abandoned" && !canPartials ? (
-            <LockedOverlay
-              feature="partial_responses"
-              count={partialCount}
-              noun={partialCount === 1 ? "person started" : "people started"}
-              headline={
-                partialCount > 0
-                  ? "…and didn't finish. See what they told you before they left."
-                  : "When someone starts and doesn't finish, you'll see what they said here."
-              }
-              className="bg-card"
-            >
-              <SkeletonRows rows={Math.min(6, Math.max(3, partialCount))} />
-            </LockedOverlay>
+            <>
+              {statusSwitcher}
+              <LockedOverlay
+                feature="partial_responses"
+                count={partialCount}
+                noun={partialCount === 1 ? "person started" : "people started"}
+                headline={
+                  partialCount > 0
+                    ? "…and didn't finish. See what they told you before they left."
+                    : "When someone starts and doesn't finish, you'll see what they said here."
+                }
+                className="bg-card"
+              >
+                <SkeletonRows rows={Math.min(6, Math.max(3, partialCount))} />
+              </LockedOverlay>
+            </>
           ) : isLoading ? (
-            <div className="space-y-2">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="shimmer h-12 rounded-lg" />
-              ))}
-            </div>
-          ) : rows.length === 0 ? (
-            <EmptyState
-              icon={Inbox}
-              title={statusFilter === "completed" ? "No responses yet" : "No partial responses"}
-              description={
-                statusFilter === "completed"
-                  ? "Share your form and answers will appear here — with the whole conversation, not just the fields."
-                  : "Partial responses are conversations someone started but didn't finish."
-              }
-            />
-          ) : (
-            <div className="bg-card overflow-hidden rounded-xl">
-              {/* Wide tables scroll inside their own container so the page
-                  itself never scrolls sideways. */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 sticky top-0">
-                    <tr>
-                      <th className="text-muted-foreground px-3 py-2.5 text-left text-xs font-medium">
-                        Submitted
-                      </th>
-                      {/* Only present when the form asked people to sign in;
-                          an always-empty column is worse than no column. */}
-                      {hasRespondents && (
-                        <th className="text-muted-foreground px-3 py-2.5 text-left text-xs font-medium">
-                          Respondent
-                        </th>
-                      )}
-                      {columns.map((b) => {
-                        const meta = blockMeta(b.type);
-                        return (
-                          <th
-                            key={b.ref}
-                            className="text-muted-foreground max-w-[14rem] px-3 py-2.5 text-left text-xs font-medium"
-                          >
-                            <span className="flex items-center gap-1.5">
-                              {/* lucide, consistent with the rest of the app —
-                                  this column header used emoji glyphs. */}
-                              <span className={cn("grid size-4 shrink-0 place-items-center rounded", TONE_CLASSES[meta.tone])}>
-                                <meta.icon className="size-2.5" strokeWidth={2} />
-                              </span>
-                              <span className="truncate">{b.title}</span>
-                            </span>
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row) => (
-                      <SubmissionRow
-                        key={row.id}
-                        row={row}
-                        columns={columns}
-                        showRespondent={hasRespondents}
-                        open={openRow === row.id}
-                        onToggle={() => setOpenRow(openRow === row.id ? null : row.id)}
-                      />
-                    ))}
-                  </tbody>
-                </table>
+            <>
+              {statusSwitcher}
+              <div className="space-y-2">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="shimmer h-12 rounded-lg" />
+                ))}
               </div>
-            </div>
+            </>
+          ) : rows.length === 0 ? (
+            <>
+              {statusSwitcher}
+              <EmptyState
+                icon={Inbox}
+                title={statusFilter === "completed" ? "No responses yet" : "No partial responses"}
+                description={
+                  statusFilter === "completed"
+                    ? "Share your form and answers will appear here — with the whole conversation, not just the fields."
+                    : "Partial responses are conversations someone started but didn't finish. They show up here once someone answers at least one question."
+                }
+              />
+            </>
+          ) : (
+            <SubmissionsTable formId={formId} rows={rows} columns={columns} filters={statusSwitcher} />
           )}
         </div>
       )}
@@ -292,118 +224,98 @@ export function ResultsClient({ formId }: ResultsClientProps) {
 }
 
 /**
- * A submission row, expanding into a transcript-first detail view.
+ * Taking the data out, as one control.
  *
- * DESIGN.md north star #3: "Every response is stored and displayed as a
- * transcript first, fields second." The conversation is the thing a normal
- * form platform structurally cannot show.
+ * This was three: a button reading "Export 1 responses", a bare "+ 5 partial"
+ * next to it, and — depending on the plan — either a second link or a lock
+ * chip. Nobody could tell from looking whether "+ 5 partial" was a count, a
+ * button, or something that would be added to the download, and the button
+ * itself could not count ("1 responses").
+ *
+ * One button now, with the choice inside it where a choice belongs: what to
+ * download, and in which format. The partial rows stay gated — same gate, same
+ * count in the label — but as a menu item that says what it is instead of an
+ * orphaned number beside an unrelated button.
  */
-function SubmissionRow({
-  row,
-  columns,
-  showRespondent,
-  open,
-  onToggle,
+function DownloadMenu({
+  formId,
+  completed,
+  partials,
+  canPartials,
 }: {
-  row: SubRow;
-  columns: { ref: string; title: string; type: string }[];
-  showRespondent: boolean;
-  open: boolean;
-  onToggle: () => void;
+  formId: string;
+  completed: number;
+  partials: number;
+  canPartials: boolean;
 }) {
-  const byRef = new Map(row.answers.map((a) => [a.blockRef, a.value]));
+  const upgrade = useUpgrade();
+  // Straight browser navigation, so the session cookie rides along.
+  const href = (opts: { partials?: boolean; xlsx?: boolean }) =>
+    `${API_ORIGIN}/api/forms/${formId}/submissions/export${opts.xlsx ? ".xlsx" : ""}${
+      opts.partials ? "?includePartials=true" : ""
+    }`;
+
+  const total = completed + partials;
 
   return (
-    <>
-      <tr
-        onClick={onToggle}
-        className={cn(
-          "hover:bg-muted/40 cursor-pointer transition-colors",
-          open && "bg-muted/50",
-        )}
-      >
-        <td className="text-muted-foreground px-3 py-2.5 whitespace-nowrap">
-          {new Date(row.completedAt ?? row.startedAt).toLocaleString(undefined, {
-            month: "short",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </td>
-        {showRespondent && (
-          <td className="px-3 py-2.5 whitespace-nowrap">
-            {row.respondent ? (
-              <span className="flex items-center gap-1.5">
-                <ShieldCheck className="size-3.5 shrink-0 text-[var(--success)]" />
-                <span className="truncate">{row.respondent.label}</span>
-              </span>
-            ) : (
-              <span className="text-muted-foreground">—</span>
-            )}
-          </td>
-        )}
-        {columns.map((b) => (
-          <td key={b.ref} className="max-w-[14rem] truncate px-3 py-2.5">
-            {displayCell(b, byRef.get(b.ref))}
-          </td>
-        ))}
-      </tr>
-      {open && (
-        <tr>
-          <td colSpan={columns.length + (showRespondent ? 2 : 1)} className="bg-muted/20 p-4">
-            <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-              <div className="space-y-2">
-                <p className="text-muted-foreground text-micro font-medium tracking-wide uppercase">
-                  The conversation
-                </p>
-                <div className="bg-card max-h-80 space-y-2 overflow-y-auto rounded-xl p-3">
-                  {row.transcript.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No transcript recorded.</p>
-                  ) : (
-                    row.transcript.map((m, i) => (
-                      <div
-                        key={i}
-                        className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
-                      >
-                        <p
-                          className={cn(
-                            "max-w-[85%] rounded-2xl px-3 py-1.5 text-sm whitespace-pre-wrap",
-                            m.role === "user"
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted",
-                          )}
-                        >
-                          {m.content}
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" shape="pill" disabled={total === 0}>
+          <Download className="size-3.5" />
+          Download
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel className="text-muted-foreground text-micro font-medium tracking-wide uppercase">
+          {completed === 1 ? "1 completed response" : `${completed} completed responses`}
+        </DropdownMenuLabel>
+        <DropdownMenuItem asChild>
+          <a href={href({})} download>
+            <FileText />
+            CSV
+          </a>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <a href={href({ xlsx: true })} download>
+            <Sheet />
+            Excel workbook
+          </a>
+        </DropdownMenuItem>
 
-              <div className="space-y-2">
-                <p className="text-muted-foreground text-micro font-medium tracking-wide uppercase">
-                  What we extracted
-                </p>
-                <dl className="bg-card space-y-2 rounded-xl p-3">
-                  {columns.map((b) => (
-                    <div key={b.ref}>
-                      <dt className="text-muted-foreground text-xs">{b.title}</dt>
-                      <dd className="text-sm">{displayCell(b, byRef.get(b.ref)) || "—"}</dd>
-                    </div>
-                  ))}
-                </dl>
-                {row.durationMs !== null && (
-                  <p className="text-muted-foreground text-micro">
-                    Took {Math.round(row.durationMs / 1000)}s
-                  </p>
-                )}
-              </div>
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
+        {partials > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-muted-foreground text-micro font-medium tracking-wide uppercase">
+              Including {partials} unfinished
+            </DropdownMenuLabel>
+            {canPartials ? (
+              <>
+                <DropdownMenuItem asChild>
+                  <a href={href({ partials: true })} download>
+                    <FileText />
+                    CSV
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <a href={href({ partials: true, xlsx: true })} download>
+                    <Sheet />
+                    Excel workbook
+                  </a>
+                </DropdownMenuItem>
+              </>
+            ) : (
+              <DropdownMenuItem
+                onSelect={() => upgrade("export_partials", { count: partials, noun: "partial responses" })}
+              >
+                <Lock />
+                <span className="flex-1">Unfinished responses</span>
+                <LockChip feature="export_partials" context={{ count: partials }} />
+              </DropdownMenuItem>
+            )}
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -627,19 +539,4 @@ function Metric({ label, value }: { label: string; value: React.ReactNode }) {
       <p className="tabular text-h2">{value}</p>
     </div>
   );
-}
-
-/**
- * One answer in the table, resolved against its block.
- *
- * The old local formatter never saw the block, so it could only print what was
- * stored: `opt_founder001` for a select, `itm_speed0001, itm_price0001` for a
- * ranking, and `{"row_ui000001":"col_bad00001"}` for a matrix. `displayAnswer`
- * has the block and the option lists, and is the same function the respondent's
- * own review card uses — so what the builder reads in this table is exactly
- * what the person answering was shown.
- */
-function displayCell(block: { ref: string; type: string }, value: unknown): string {
-  if (value === undefined || value === null || value === "") return "";
-  return displayAnswer(block as Block, value);
 }
