@@ -234,7 +234,16 @@ export function LockedControl({
           // distinguishable from the waiting one rather than identical to it.
           locked ? "pointer-events-none opacity-55" : "pointer-events-none opacity-80",
         )}
-        {...({ inert: "" } as Record<string, string>)}
+        /*
+          `inert={true}`, not `inert=""`.
+
+          React 19 reads an empty string on a boolean attribute as *false* and
+          logs a warning for it, so the cast that was here did not merely look
+          odd — it plausibly left the subtree tabbable, which is the one thing
+          this attribute is here to prevent. React 19 takes the boolean
+          directly and needs no cast at all.
+        */
+        inert
       >
         {children}
       </div>
@@ -291,7 +300,16 @@ export function LockedOverlay({
       <div
         aria-hidden
         className="pointer-events-none blur-[6px] saturate-50 select-none"
-        {...({ inert: "" } as Record<string, string>)}
+        /*
+          `inert={true}`, not `inert=""`.
+
+          React 19 reads an empty string on a boolean attribute as *false* and
+          logs a warning for it, so the cast that was here did not merely look
+          odd — it plausibly left the subtree tabbable, which is the one thing
+          this attribute is here to prevent. React 19 takes the boolean
+          directly and needs no cast at all.
+        */
+        inert
       >
         {children}
       </div>
