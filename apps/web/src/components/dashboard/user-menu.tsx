@@ -1,6 +1,15 @@
 "use client";
 
-import { BookOpen, Building2, Check, Crown, LogOut, Monitor, Moon, Sun, UserRound } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  Crown,
+  LogOut,
+  Monitor,
+  Moon,
+  Settings as SettingsIcon,
+  Sun,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import { signOut, useSession } from "@/lib/auth/auth-client";
@@ -91,23 +100,20 @@ export function UserMenu() {
         <DropdownMenuSeparator />
 
         {/*
-          The two screens this menu is the only route to. Everything else in
-          here is a setting or a way out; these are places. "Account" is you —
-          your name, your address, your password, your sessions — and
-          "Workspace" is the one you are signed into, including the way to
-          leave it. Neither has a nav slot, which is exactly why they belong
-          in the menu that opens off your own avatar.
+          One door, six rooms.
+
+          This used to be two items — "Account" for you, "Workspace" for the one
+          you are signed into — and they were here because neither had a nav
+          slot. Meanwhile Team and API keys *did* have nav slots, so the same
+          category of screen was split across the header and this menu with no
+          principle deciding which went where. They are all sections of
+          `/settings` now, so this is one item, and the menu is back to holding
+          only what has nowhere else to be.
         */}
         <DropdownMenuItem asChild>
-          <Link href="/account">
-            <UserRound className="size-3.5" strokeWidth={1.75} />
-            Account
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/organization">
-            <Building2 className="size-3.5" strokeWidth={1.75} />
-            Workspace
+          <Link href="/settings">
+            <SettingsIcon className="size-3.5" strokeWidth={1.75} />
+            Settings
           </Link>
         </DropdownMenuItem>
 

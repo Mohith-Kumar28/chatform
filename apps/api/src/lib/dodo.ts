@@ -116,13 +116,14 @@ export async function createCheckoutSession(env: Bindings, args: CheckoutArgs): 
         ? { customer_id: args.existingCustomerId }
         : { email: args.customerEmail, name: args.customerName },
       billing_currency: "USD",
-      // `/usage` is where the plan and its meters live; `/billing` still redirects
+      // `/settings/usage` is where the plan and its meters live; `/usage` and
+      // `/billing` both still redirect there, query string intact.
       // there and forwards this parameter, so links minted before the rename land
       // in the right place too. Cancelling says nothing on arrival — a banner about
       // a purchase that did not happen is not news — but the parameter is still
       // distinct, so it can be told apart in logs.
-      return_url: `${args.returnTo}/usage?checkout=success`,
-      cancel_url: `${args.returnTo}/usage?checkout=cancelled`,
+      return_url: `${args.returnTo}/settings/usage?checkout=success`,
+      cancel_url: `${args.returnTo}/settings/usage?checkout=cancelled`,
       metadata: {
         organizationId: args.orgId,
         planId: args.planId,

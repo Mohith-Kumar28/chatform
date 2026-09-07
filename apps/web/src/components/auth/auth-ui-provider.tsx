@@ -58,7 +58,25 @@ export function AuthUIProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider
       authClient={authClient}
-      basePaths={{ auth: "/auth", settings: "/account", organization: "/organization" }}
+      /**
+       * Every settings surface now lives under one root.
+       *
+       * These are not cosmetic. The library composes navigation from `basePaths`
+       * and `viewPaths` at runtime, inside components we never render and cannot
+       * see: leaving a workspace pushes `${settings}/${organizations}`, a
+       * password change lands on `${settings}/${security}`, and a row in the
+       * workspace list links to `${organization}/${organization.settings}`.
+       * Pointed at the old roots, each of those becomes a visible double-hop
+       * through our own redirect stub — and a redirect loop the moment a stub's
+       * target is itself library-owned.
+       *
+       * `organization` shares the `/settings` root because a workspace's own
+       * pages are sections of the same area now, not a second destination.
+       */
+      basePaths={{ auth: "/auth", settings: "/settings", organization: "/settings" }}
+      // "account" is the library's word; the rail says Profile, and a URL that
+      // disagrees with the link that reached it is its own small confusion.
+      viewPaths={{ settings: { account: "profile" } }}
       redirectTo="/dashboard"
       socialProviders={google ? ["google"] : []}
       emailAndPassword={{

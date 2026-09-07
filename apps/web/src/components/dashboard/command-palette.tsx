@@ -6,15 +6,10 @@ import {
   BookOpen,
   ExternalLink,
   FileClock,
-  FileStack,
-  Gauge,
   Keyboard,
-  KeyRound,
-  LayoutGrid,
   Moon,
   Plus,
   Sun,
-  Users,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
@@ -26,6 +21,8 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
+import { APP_NAV } from "@/components/dashboard/app-nav";
+import { SETTINGS_SECTIONS } from "@/components/settings/sections";
 import { BUILDER_TABS } from "@/components/builder/builder-tabs";
 import { showHistory } from "@/components/builder/history-sheet";
 import { showShortcuts } from "@/components/builder/use-builder-shortcuts";
@@ -212,17 +209,36 @@ export function CommandPalette() {
             </CommandGroup>
           )}
 
+          {/* Derived from APP_NAV rather than retyped, so a nav change cannot
+              leave the palette pointing at a route that moved. */}
           <CommandGroup heading="Go to">
-            {[
-              { label: "Forms", href: "/dashboard", icon: LayoutGrid },
-              { label: "Templates", href: "/templates", icon: FileStack },
-              { label: "API keys", href: "/api-keys", icon: KeyRound },
-              { label: "Usage", href: "/usage", icon: Gauge },
-              { label: "Team", href: "/team", icon: Users },
-            ].map((item) => (
+            {APP_NAV.map((item) => (
               <CommandItem key={item.href} value={item.label} onSelect={() => go(item.href)}>
                 <item.icon className="size-3.5 opacity-60" />
                 {item.label}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+
+          {/*
+            This group is what stops the consolidation from *hiding* things.
+
+            Team and API keys gave up their nav slots; if the only way back were
+            remembering they are now inside Settings, the change would have made
+            them harder to reach rather than easier. The `value` strings carry the
+            words somebody would actually type — "invite", "seats", "password",
+            "leave workspace" — so the match does not depend on knowing our
+            section names.
+          */}
+          <CommandGroup heading="Settings">
+            {SETTINGS_SECTIONS.map((s) => (
+              <CommandItem
+                key={s.href}
+                value={`${s.label} ${s.keywords}`}
+                onSelect={() => go(s.href)}
+              >
+                <s.icon className="size-3.5 opacity-60" />
+                {s.label}
               </CommandItem>
             ))}
           </CommandGroup>

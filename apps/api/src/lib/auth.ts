@@ -15,8 +15,8 @@ import { createDb, schema } from "@repo/db";
 import type { Bindings } from "../env.js";
 import { ac, roles } from "./permissions.js";
 import { apiKeyPlugin } from "./apikey-config.js";
-import { getEntitlements, countSeats } from "./entitlements.js";
-import { seatLimit } from "@repo/entitlements";
+import { getEntitlements, countSeats, workspaceAllowance } from "./entitlements.js";
+import { seatLimit, limitReached } from "@repo/entitlements";
 import { APIError } from "better-auth/api";
 import { webOrigins, returnOrigin, needsCrossSiteCookies, isSecureOrigin } from "./origins.js";
 import { enqueueMail } from "./mail.js";
@@ -406,6 +406,35 @@ export function createAuth(env: Bindings) {
          * invites all pass on a one-seat plan and the org quietly ends up over.
          */
         organizationHooks: {
+          /**
+           * The workspace limit, enforced where workspaces are actually created.
+           *
+           * It was sold and never checked. `workspaces_count` is advertised on the
+           * pricing page at 1 / 10 / 25, declared `mode: "hard"` in the limits
+           * table, and had no call site anywhere — so a free account could create
+           * as many workspaces as it liked from the switcher, while the usage page
+           * showed "1 of 1" because the gauge was counting a different, internal
+           * table that only ever holds one row per organization.
+           *
+           * Same shape as the seat gate below, and for the same reason: Better
+           * Auth owns the create endpoint, so a Hono middleware would not see the
+           * client SDK calling it directly.
+           *
+           * Enforced on create only, never retroactively. An account already over
+           * the line keeps everything it has — clamping downward would lock people
+           * out of their own data over a limit we were not applying yesterday.
+           */
+          beforeCreateOrganization: async ({ user }) => {
+            const { owned, limit, planId } = await workspaceAllowance(env, user.id);
+            if (limit == null || owned < limit) return;
+            const body = limitReached({
+              limitKey: "workspaces_count",
+              plan: planId,
+              used: owned,
+              limit,
+            });
+            throw new APIError("PAYMENT_REQUIRED", body as unknown as Record<string, unknown>);
+          },
           beforeCreateInvitation: async ({ invitation }) => {
             const orgId = invitation.organizationId;
             if (!orgId) return;

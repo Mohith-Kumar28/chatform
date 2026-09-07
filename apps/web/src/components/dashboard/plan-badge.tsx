@@ -54,7 +54,7 @@ import { cn } from "@/lib/utils";
 export function PlanBadge() {
   const ent = useEntitlements();
   const openPlans = usePlansDialog((s) => s.openPlans);
-  const onUsage = usePathname() === "/usage";
+  const onUsage = usePathname() === "/settings/usage";
 
   /**
    * A placeholder of roughly the badge's width, rather than nothing.
@@ -113,7 +113,7 @@ export function PlanBadge() {
 
   return (
     <Link
-      href="/usage"
+      href="/settings/usage"
       title={
         lapsed
           ? `Your ${planName} subscription needs attention — ${status.replace(/_/g, " ")}. Update payment to keep it.`

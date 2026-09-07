@@ -76,6 +76,21 @@ export const organizationPlugin = createAuthPlugin(
        * is a broken session rather than a large one.
        */
       logo: { upload: uploadAuthImage, ...options.logo },
+      /**
+       * The segments the settings rail actually uses.
+       *
+       * Set here rather than at the provider because `organizationPlugin()` is
+       * called bare in more than one place and each call reads its own
+       * `viewPaths` — a default is the only way every call site agrees. The
+       * library's own words are "organizations" and "settings"; ours are
+       * "workspaces" and "general", and these are the URLs the rail links to,
+       * so a mismatch shows up as a section that navigates to a 404.
+       */
+      viewPaths: {
+        ...options.viewPaths,
+        settings: { organizations: "workspaces", ...options.viewPaths?.settings },
+        organization: { settings: "general", ...options.viewPaths?.organization },
+      },
       localization: { ...workspaceLocalization, ...options.localization }
     })
 

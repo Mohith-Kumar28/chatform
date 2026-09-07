@@ -25,5 +25,5 @@ export default async function BillingPage({
     else if (Array.isArray(value) && value[0]) qs.set(key, value[0]);
   }
   const query = qs.toString();
-  redirect(query ? `/usage?${query}` : "/usage");
+  redirect(query ? `/settings/usage?${query}` : "/settings/usage");
 }

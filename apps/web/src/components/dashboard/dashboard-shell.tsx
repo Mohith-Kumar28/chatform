@@ -3,12 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Search } from "lucide-react";
+import { Menu, Search, Settings as SettingsIcon } from "lucide-react";
 import { AuthGuard } from "./auth-guard";
-import { AppNav, APP_NAV } from "./app-nav";
+import { APP_NAV } from "./app-nav";
 import { AppMark } from "./app-mark";
 import { PlanBadge } from "./plan-badge";
 import { UserMenu } from "./user-menu";
+import { UsagePill } from "./usage-pill";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { CommandPalette, openCommandPalette } from "./command-palette";
 import { useAppShortcuts } from "./use-app-shortcuts";
@@ -58,11 +59,20 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <WorkspaceSwitcher />
             </div>
 
-            <div className="mx-auto hidden md:block">
-              <AppNav />
-            </div>
+            {/*
+              No nav pills.
 
-            <div className="ml-auto flex shrink-0 items-center gap-1.5 md:ml-0">
+              There were five, then three, and the honest end of that argument is
+              zero: Forms is the product and the logo already goes there, the
+              templates gallery is a second door to a picker the New form flow
+              already opens, and usage is only worth looking at when something is
+              close to running out — which `UsagePill` says, when it is true, and
+              says nothing the rest of the time. A one-item pill nav is not a nav.
+
+              Everything that used to be a pill is a keystroke away in ⌘K and a
+              click away behind the gear.
+            */}
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
               {/*
                 The palette has been ⌘K-only since it was built, which means it
                 existed for the people who already guessed it existed. This is
@@ -85,7 +95,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               >
                 <Search className="size-4" />
               </Button>
+              <UsagePill />
               <PlanBadge />
+              {/* The gear is here as well as in the account menu, because
+                  Settings absorbed two nav items and a dropdown entry — burying
+                  the only door to all of it one level deep would have made those
+                  screens harder to reach, not easier. */}
+              <Button variant="ghost" size="icon-sm" asChild aria-label="Settings">
+                <Link href="/settings">
+                  <SettingsIcon className="size-4" strokeWidth={1.75} />
+                </Link>
+              </Button>
               {/* Theme moved into the account menu: it is a setting you change
                   once, and it was spending a permanent header slot next to the
                   avatar that opens a menu with room for it. */}
@@ -117,9 +137,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                     className={cn(
                       "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm",
                       "transition-colors duration-[var(--duration-micro)]",
-                      // The drawer is the same nav as `AppNav` at a narrower
-                      // breakpoint, so it wears the same violet. See the note
-                      // there on why state and action are different colours.
+                      // Violet marks where you are, throughout the chrome —
+                      // the header spends the same colour on nothing else now
+                      // that the pills are gone.
                       active
                         ? "bg-brand-violet-soft text-brand-violet-soft-foreground font-medium"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground",

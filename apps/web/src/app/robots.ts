@@ -13,7 +13,21 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/dashboard", "/forms/", "/preview/", "/api/", "/team", "/usage", "/api-keys", "/billing"],
+        disallow: [
+          "/dashboard",
+          "/forms/",
+          "/preview/",
+          "/api/",
+          "/settings",
+          "/usage",
+          // Still listed: they resolve as redirects into /settings, and a
+          // crawler that already knows them should not follow one to find out.
+          "/team",
+          "/api-keys",
+          "/account",
+          "/organization",
+          "/billing",
+        ],
       },
     ],
     sitemap: `${SITE}/sitemap.xml`,

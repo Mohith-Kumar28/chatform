@@ -99,7 +99,7 @@ const GAUGES: { limit: LimitKey; gauge: string; href?: string; hint?: string }[]
   {
     limit: "seats",
     gauge: "seats",
-    href: "/team",
+    href: "/settings/people",
     hint: "A pending invitation holds a seat until it is accepted or expires.",
   },
   { limit: "workspaces_count", gauge: "workspaces_count" },
@@ -129,6 +129,16 @@ function stateFor(ratio: number, used: number, limit: number | null): MeterState
  * - A `degrade` limit at its cap has stopped nothing. Amber, never red.
  */
 function isDanger(mode: EnforcementMode, kind: LimitKind, state: MeterState): boolean {
+  // A gauge is never red, not even over its ceiling.
+  //
+  // Being over is not an incident for a standing count — it is usually history.
+  // `workspaces_count` went unenforced for a long time, so accounts legitimately
+  // hold more than their plan sells, and enforcement is deliberately not
+  // retroactive: they keep everything they have. Painting that red tells a
+  // long-standing customer they have done something wrong by existing. What is
+  // actually true — that they cannot add another — is a sentence, and the row
+  // says it.
+  if (kind === "gauge") return false;
   if (state === "over") return true;
   if (mode !== "hard") return false;
   return kind === "monthly" && state === "at";
@@ -150,7 +160,7 @@ function isDanger(mode: EnforcementMode, kind: LimitKind, state: MeterState): bo
  */
 export function meterTone(row: MeterRowData): "quiet" | "neutral" | "warning" | "danger" {
   if (row.danger) return "danger";
-  if (row.kind === "gauge") return row.state === "at" ? "quiet" : "neutral";
+  if (row.kind === "gauge") return row.state === "at" || row.state === "over" ? "quiet" : "neutral";
   if (row.state === "near" || row.state === "critical" || row.state === "at") return "warning";
   return "neutral";
 }
@@ -260,7 +270,10 @@ export function mostPressured(rows: MeterRowData[]): MeterRowData | null {
   return (
     rows
       .filter((r) => !r.locked && !r.latent && r.limit !== null && r.mode !== "clamp")
-      .filter((r) => r.kind !== "gauge" || r.state === "over")
+      // Gauges never lead. Not at their ceiling, and not over it: neither is an
+      // event, and an account that has quietly been over an unenforced limit for
+      // months does not want that as the first sentence on the screen.
+      .filter((r) => r.kind !== "gauge")
       .sort((a, b) => b.ratio - a.ratio)[0] ?? null
   );
 }

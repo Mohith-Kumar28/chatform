@@ -129,7 +129,7 @@ export function IntegrationsWorkspace({
             name="API"
             blurb="Read responses and drive conversations from your own code."
             state="link"
-            href="/api-keys"
+            href="/settings/api-keys"
           />
           {/*
             Named, not hidden, and honestly labelled. A destination grid that

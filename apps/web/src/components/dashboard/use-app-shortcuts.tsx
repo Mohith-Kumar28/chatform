@@ -41,6 +41,18 @@ export function useAppShortcuts(): {
     return [
       ...navKeys,
       {
+        /*
+          Settings gave up its claim on a digit when it stopped being a nav item,
+          so it takes the key every other product uses for it. Two of the old
+          digits now do nothing, and this is where the screens they reached went.
+        */
+        keys: ",",
+        label: "Go to Settings",
+        group: "Move around",
+        match: (e) => plain(e) && !e.shiftKey && e.key === ",",
+        run: () => router.push("/settings"),
+      },
+      {
         keys: `${modLabel()}K`,
         label: "Search and jump anywhere",
         group: "Move around",

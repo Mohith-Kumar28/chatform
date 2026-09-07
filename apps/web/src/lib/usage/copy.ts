@@ -63,7 +63,11 @@ export function rowNote(row: MeterRowData, resets: string, planName: string): st
 
   switch (row.state) {
     case "over":
-      return `${formatValue(row.used - row.limit, row.unit)} over the limit`;
+      // Said plainly and without alarm for a standing count: nothing is being
+      // taken away, there is simply no room for another.
+      return monthly
+        ? `${formatValue(row.used - row.limit, row.unit)} over the limit`
+        : `Above your plan's ${formatValue(row.limit, row.unit)} — you can't add more`;
     case "at":
       if (row.mode === "degrade") return `Still running, at reduced quality until ${resets}`;
       return monthly ? `New ones are refused until ${resets}` : "Full — a bigger plan adds more";
@@ -89,9 +93,10 @@ export function rowBadge(row: MeterRowData): { text: string; tone: "danger" | "w
   if (row.state !== "at" && row.state !== "over") return null;
   if (row.mode === "degrade") return { text: "Reduced", tone: "warning" };
   if (row.mode === "hard") {
-    return row.kind === "monthly"
-      ? { text: "Stopped", tone: "danger" }
-      : { text: "Full", tone: "warning" };
+    if (row.kind !== "monthly") {
+      return { text: row.state === "over" ? "Over limit" : "Full", tone: "warning" };
+    }
+    return { text: "Stopped", tone: "danger" };
   }
   return null;
 }

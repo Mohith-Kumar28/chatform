@@ -1,37 +1,20 @@
-"use client";
-
-import { use } from "react";
-import { notFound } from "next/navigation";
-import { PageHeader } from "@/components/ui/page-header";
-import { Organization } from "@/components/auth/organization/organization";
-import { organizationPlugin } from "@/lib/auth/organization-plugin";
+import { redirect } from "next/navigation";
 
 /**
- * The workspace you are currently in.
+ * `/organization` is now the workspace half of `/settings`.
  *
- * `/team` answers "who is in this workspace and what can they do" — it is the
- * screen built around our seat limits and plan gates, and it stays. This one
- * answers the questions it never covered: what the workspace is called, what
- * its slug and logo are, and how to get out of it. Leaving is the one that was
- * genuinely missing — there was no way to do it anywhere in the product.
- *
- * `teams` and `roles` are real segments in the plugin but nothing enables them
- * on the server, so they are left out of the allow-list rather than rendered
- * as tabs that resolve to nothing.
+ * `people` matters most here: it was one of the two members screens the product
+ * shipped at once, and it is the one that lost. Anyone who bookmarked it gets
+ * the surviving one, which does strictly more.
  */
-const VIEW_PATHS = organizationPlugin().viewPaths.organization;
-const ALLOWED = [VIEW_PATHS.settings, VIEW_PATHS.people];
+const SECTIONS: Record<string, string> = {
+  settings: "/settings/general",
+  general: "/settings/general",
+  people: "/settings/people",
+  members: "/settings/people",
+};
 
-export default function OrganizationPage({ params }: { params: Promise<{ path?: string[] }> }) {
-  const { path } = use(params);
-  const segment = path?.[0] ?? VIEW_PATHS.settings;
-  if (path && path.length > 1) notFound();
-  if (!ALLOWED.includes(segment)) notFound();
-
-  return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
-      <PageHeader title="Workspace" description="The workspace's name and logo, who is in it, and how to leave." />
-      <Organization path={segment} className="mt-6" />
-    </div>
-  );
+export default async function OrganizationPage({ params }: { params: Promise<{ path?: string[] }> }) {
+  const { path } = await params;
+  redirect(SECTIONS[path?.[0] ?? ""] ?? "/settings/general");
 }

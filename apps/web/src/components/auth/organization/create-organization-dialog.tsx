@@ -1,17 +1,20 @@
-"use client"
+"use client";
 
 import {
   getAdditionalFieldDefaultValues,
   getAdditionalFieldSubmitValues,
-  validateStringLength
-} from "@better-auth-ui/core"
-import type { OrganizationAuthClient } from "@better-auth-ui/core/plugins/organization"
-import { useAuth, useAuthPlugin } from "@better-auth-ui/react"
-import { useCreateOrganization } from "@better-auth-ui/react/plugins/organization"
-import { useQueryClient } from "@tanstack/react-query"
-import { Briefcase } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
-import { buttonVariants } from "@/components/ui/button"
+  validateStringLength,
+} from "@better-auth-ui/core";
+import type { OrganizationAuthClient } from "@better-auth-ui/core/plugins/organization";
+import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
+import { useCreateOrganization } from "@better-auth-ui/react/plugins/organization";
+import { gateErrorFrom } from "@/lib/auth/paywalled";
+import { openPaywall } from "@/stores/paywall-store";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { Briefcase } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -19,33 +22,33 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle
-} from "@/components/ui/dialog"
-import { Field, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { ENTITLEMENTS_KEY } from "@/hooks/use-entitlements"
-import { organizationPlugin } from "@/lib/auth/organization-plugin"
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { ENTITLEMENTS_KEY } from "@/hooks/use-entitlements";
+import { organizationPlugin } from "@/lib/auth/organization-plugin";
 import {
   getAuthAdditionalFieldValidators,
   isAuthFormFieldInvalid,
-  useAuthForm
-} from "../auth-form"
-import { InviteTeammatesStep } from "./invite-teammates-step"
-import { OrganizationLogoField } from "./organization-logo-field"
-import { SlugField, sanitizeSlug } from "./slug-field"
+  useAuthForm,
+} from "../auth-form";
+import { InviteTeammatesStep } from "./invite-teammates-step";
+import { OrganizationLogoField } from "./organization-logo-field";
+import { SlugField, sanitizeSlug } from "./slug-field";
 
 /** Props for the `CreateOrganizationDialog` component. */
 export type CreateOrganizationDialogProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  hideSlug?: boolean
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  hideSlug?: boolean;
   /**
    * Skip the invite step and close as soon as the organization exists.
    *
    * For callers with nowhere sensible to send an invitation — not the common
    * case, which is why inviting is the default.
    */
-  hideInvite?: boolean
+  hideInvite?: boolean;
   /**
    * The flow is over: created, and then either invitations sent or skipped.
    *
@@ -54,8 +57,8 @@ export type CreateOrganizationDialogProps = {
    * navigate on Cancel. Fires once, whether the invite step was completed,
    * skipped or dismissed.
    */
-  onCompleted?: () => void
-}
+  onCompleted?: () => void;
+};
 
 /**
  * Create a workspace: name it, give it a logo, then invite the people who will
@@ -93,18 +96,18 @@ export function CreateOrganizationDialog({
   onOpenChange,
   hideSlug: hideSlugProp,
   hideInvite,
-  onCompleted
+  onCompleted,
 }: CreateOrganizationDialogProps) {
-  const { authClient, localization } = useAuth<OrganizationAuthClient>()
+  const { authClient, localization } = useAuth<OrganizationAuthClient>();
   const {
     additionalFields,
     localization: organizationLocalization,
-    hideSlug: pluginHideSlug
-  } = useAuthPlugin(organizationPlugin)
-  const hideSlug = hideSlugProp ?? pluginHideSlug ?? false
+    hideSlug: pluginHideSlug,
+  } = useAuthPlugin(organizationPlugin);
+  const hideSlug = hideSlugProp ?? pluginHideSlug ?? false;
 
-  const qc = useQueryClient()
-  const [slugEdited, setSlugEdited] = useState(false)
+  const qc = useQueryClient();
+  const [slugEdited, setSlugEdited] = useState(false);
   /**
    * The workspace that now exists, and the flag that moves the dialog to its
    * second step.
@@ -114,36 +117,69 @@ export function CreateOrganizationDialog({
    * it. The id, because the invite step must not infer it — see `finishCreate`.
    */
   const [created, setCreated] = useState<{ id: string; name: string } | null>(
-    null
-  )
-  const submissionGeneration = useRef(0)
-  const submissionAttemptGeneration = useRef(0)
+    null,
+  );
+  const submissionGeneration = useRef(0);
+  const submissionAttemptGeneration = useRef(0);
 
-  const { mutateAsync: createOrganization } = useCreateOrganization(authClient)
+  /**
+   * A refusal by the plan is a paywall, not a toast.
+   *
+   * Overriding `onError` replaces the library's own handler, which reported the
+   * raw `PAYMENT_REQUIRED` code — so the non-gate branch has to keep saying
+   * something, or an ordinary failure (a slug already taken) would fail silently.
+   */
+  const { mutateAsync: createOrganization } = useCreateOrganization(
+    authClient,
+    {
+      onError: (error) => {
+        const gate = gateErrorFrom(error);
+        if (gate) {
+          openPaywall(gate);
+          return;
+        }
+        toast.error(
+          (error as { message?: string })?.message ||
+            "Could not create the workspace.",
+        );
+      },
+    },
+  );
 
   const form = useAuthForm({
     defaultValues: {
       additionalFields: getAdditionalFieldDefaultValues(additionalFields),
       logo: "",
       name: "",
-      slug: ""
+      slug: "",
     },
     onSubmit: async ({ value }) => {
-      const generation = submissionAttemptGeneration.current
-      if (generation !== submissionGeneration.current) return
-      const name = value.name.trim() || value.name
-      const organization = await createOrganization({
-        ...getAdditionalFieldSubmitValues(
-          additionalFields,
-          value.additionalFields
-        ),
-        // Omitted rather than sent empty: `logo` is nullish in the endpoint's
-        // schema, and "" would be stored and then rendered as a broken image.
-        ...(value.logo ? { logo: value.logo } : {}),
-        name: value.name,
-        slug: hideSlug ? undefined : value.slug
-      })
-      if (generation !== submissionGeneration.current) return
+      const generation = submissionAttemptGeneration.current;
+      if (generation !== submissionGeneration.current) return;
+      const name = value.name.trim() || value.name;
+      /*
+        `onError` has already opened the paywall by the time this rejects; the
+        catch only has to stop the rest of the flow, which would otherwise go on
+        to activate a workspace that was never created.
+      */
+      let organization;
+      try {
+        organization = await createOrganization({
+          ...getAdditionalFieldSubmitValues(
+            additionalFields,
+            value.additionalFields,
+          ),
+          // Omitted rather than sent empty: `logo` is nullish in the endpoint's
+          // schema, and "" would be stored and then rendered as a broken image.
+          ...(value.logo ? { logo: value.logo } : {}),
+          name: value.name,
+          slug: hideSlug ? undefined : value.slug,
+        });
+      } catch (err) {
+        if (gateErrorFrom(err)) return;
+        throw err;
+      }
+      if (generation !== submissionGeneration.current) return;
 
       /**
        * Make it the active workspace, explicitly.
@@ -161,9 +197,9 @@ export function CreateOrganizationDialog({
        * actually moves the user. It is also why this is awaited before the
        * invite step renders: that step reads seats for the active workspace.
        */
-      const organizationId = organization?.id
+      const organizationId = organization?.id;
       if (organizationId) {
-        await authClient.organization.setActive({ organizationId })
+        await authClient.organization.setActive({ organizationId });
         /**
          * Everything keyed on "the active workspace" now describes the wrong
          * one, and the invite step is about to read the most load-bearing of
@@ -172,32 +208,32 @@ export function CreateOrganizationDialog({
          * that actually moved the user, and an effect would have to run twice
          * in development and cancel itself doing it.
          */
-        await qc.invalidateQueries({ queryKey: ENTITLEMENTS_KEY })
+        await qc.invalidateQueries({ queryKey: ENTITLEMENTS_KEY });
       }
-      if (generation !== submissionGeneration.current) return
+      if (generation !== submissionGeneration.current) return;
 
       if (hideInvite || !organizationId) {
-        onOpenChange(false)
-        onCompleted?.()
-        return
+        onOpenChange(false);
+        onCompleted?.();
+        return;
       }
-      setCreated({ id: organizationId, name })
-    }
-  })
+      setCreated({ id: organizationId, name });
+    },
+  });
 
   useEffect(() => {
     if (!open) {
-      submissionGeneration.current += 1
-      form.reset()
-      setSlugEdited(false)
-      setCreated(null)
+      submissionGeneration.current += 1;
+      form.reset();
+      setSlugEdited(false);
+      setCreated(null);
     }
-  }, [form, open])
+  }, [form, open]);
 
   /** Sending, skipping and dismissing the invite step are the same ending. */
   function finish() {
-    onOpenChange(false)
-    onCompleted?.()
+    onOpenChange(false);
+    onCompleted?.();
   }
 
   return (
@@ -207,10 +243,10 @@ export function CreateOrganizationDialog({
         // Past the point of no return: the workspace exists, so closing the
         // dialog is skipping the invitations rather than cancelling anything.
         if (!next && created !== null) {
-          finish()
-          return
+          finish();
+          return;
         }
-        onOpenChange(next)
+        onOpenChange(next);
       }}
     >
       <DialogContent>
@@ -225,7 +261,8 @@ export function CreateOrganizationDialog({
             <form.AuthFormRoot
               className="flex flex-col gap-6"
               onBeforeSubmit={() => {
-                submissionAttemptGeneration.current = submissionGeneration.current
+                submissionAttemptGeneration.current =
+                  submissionGeneration.current;
               }}
             >
               <DialogHeader>
@@ -264,12 +301,12 @@ export function CreateOrganizationDialog({
                     onChange: ({ value }) =>
                       validateStringLength(value, {
                         requiredMessage: localization.auth.fieldRequired,
-                        trim: true
-                      })
+                        trim: true,
+                      }),
                   }}
                 >
                   {(field) => {
-                    const isInvalid = isAuthFormFieldInvalid(field.state.meta)
+                    const isInvalid = isAuthFormFieldInvalid(field.state.meta);
 
                     return (
                       <Field data-invalid={isInvalid}>
@@ -285,10 +322,10 @@ export function CreateOrganizationDialog({
                           value={field.state.value}
                           onBlur={field.handleBlur}
                           onChange={(event) => {
-                            const value = event.target.value
-                            field.handleChange(value)
+                            const value = event.target.value;
+                            field.handleChange(value);
                             if (!slugEdited) {
-                              form.setFieldValue("slug", sanitizeSlug(value))
+                              form.setFieldValue("slug", sanitizeSlug(value));
                             }
                           }}
                           aria-invalid={isInvalid}
@@ -296,7 +333,7 @@ export function CreateOrganizationDialog({
 
                         <field.AuthFormFieldError />
                       </Field>
-                    )
+                    );
                   }}
                 </form.AppField>
 
@@ -307,8 +344,8 @@ export function CreateOrganizationDialog({
                         id="create-organization-slug"
                         value={field.state.value}
                         onChange={(value) => {
-                          field.handleChange(value)
-                          setSlugEdited(true)
+                          field.handleChange(value);
+                          setSlugEdited(true);
                         }}
                       />
                     )}
@@ -321,7 +358,7 @@ export function CreateOrganizationDialog({
                     name={`additionalFields.${configuredField.name}`}
                     validators={getAuthAdditionalFieldValidators(
                       configuredField,
-                      localization.auth.fieldRequired
+                      localization.auth.fieldRequired,
                     )}
                   >
                     {(field) => (
@@ -351,5 +388,5 @@ export function CreateOrganizationDialog({
         )}
       </DialogContent>
     </Dialog>
-  )
+  );
 }

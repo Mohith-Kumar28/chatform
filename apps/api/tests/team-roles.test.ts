@@ -15,7 +15,8 @@ import { roleAllows, ASSIGNABLE_ROLES, type RoleName } from "../src/lib/permissi
  * it stands for. Widen or narrow a role and this fails, naming the row of the
  * table that has gone stale.
  *
- * Keep in step with `CAPABILITIES` in `apps/web/src/app/(app)/team/page.tsx`.
+ * Keep in step with `CAPABILITIES` in
+ * `apps/web/src/components/settings/people-section.tsx`.
  */
 const CAPABILITIES: {
   label: string;
