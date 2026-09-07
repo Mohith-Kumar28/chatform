@@ -61,6 +61,8 @@ export function PlanCard({
   featured,
   ctaHref = "/signin",
   ctaLabel,
+  onCta,
+  ctaDisabled,
   /** Priced-but-unbuilt feature names, already lowercased by the caller. */
   soonLabels,
   /** Shown under the CTA when this environment has no checkout product. */
@@ -71,6 +73,18 @@ export function PlanCard({
   featured?: boolean;
   ctaHref?: string;
   ctaLabel?: string;
+  /**
+   * Buy from here rather than navigate.
+   *
+   * The two public callers link out — the landing page and `/pricing` are read
+   * by people who are not signed in, and the next step is an account. `/billing`
+   * is read by someone who already has one, and for them the next step is the
+   * checkout itself; sending them to a URL that re-renders the page they are on
+   * so they can press a second button is a step that exists only because the
+   * card could not do anything but link.
+   */
+  onCta?: () => void;
+  ctaDisabled?: boolean;
   soonLabels?: readonly string[];
   note?: string;
 }) {
@@ -124,16 +138,28 @@ export function PlanCard({
           with it, which is what the flat-orange button on this ground never
           quite did. Every other card stays `outline`: three loud buttons in a
           row is a row with no recommendation in it. */}
-      <Button
-        asChild
-        shape="pill"
-        variant={featured ? "gradient" : "outline"}
-        className="mt-5 w-full"
-      >
-        <Link href={ctaHref}>
+      {onCta ? (
+        <Button
+          shape="pill"
+          variant={featured ? "gradient" : "outline"}
+          className="mt-5 w-full"
+          disabled={ctaDisabled}
+          onClick={onCta}
+        >
           {ctaLabel ?? (free ? "Start free" : `Start with ${plan.name}`)}
-        </Link>
-      </Button>
+        </Button>
+      ) : (
+        <Button
+          asChild
+          shape="pill"
+          variant={featured ? "gradient" : "outline"}
+          className="mt-5 w-full"
+        >
+          <Link href={ctaHref}>
+            {ctaLabel ?? (free ? "Start free" : `Start with ${plan.name}`)}
+          </Link>
+        </Button>
+      )}
 
       {/* Never offer a button that 503s: if the environment has no checkout
           product for this plan, say so rather than letting someone click into a

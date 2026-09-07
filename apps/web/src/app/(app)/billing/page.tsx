@@ -14,6 +14,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard } from "@/components/ui/stat-card";
 import { UsageMeter } from "@/components/ui/usage-meter";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { PlanCard } from "@/components/marketing/plan-card";
+import { useGetApiBillingPlans } from "@/lib/api/billing/billing";
 
 /**
  * What you are on, what you have used, and one door to everything else.
@@ -38,6 +41,18 @@ import { UsageMeter } from "@/components/ui/usage-meter";
  * The one exception is a first purchase. A free org has no Dodo customer yet and so has
  * no portal to open; `/pricing` sends them here with `?plan=`, and checkout starts below.
  */
+
+/** One row of `/api/billing/plans`, narrowed to what the card and the buy need. */
+interface PlanRow {
+  id: string;
+  name: string;
+  tagline: string;
+  priceMonthlyCents: number;
+  priceYearlyCents: number;
+  priceYearlyPerMonthCents: number;
+  yearlySavingPercent: number;
+  checkoutReady: boolean;
+}
 
 /** The meters worth showing, in the order someone would look for them. */
 const METERS: { metric: MetricKey; limit: LimitKey; label: string; hint?: string }[] = [
@@ -87,7 +102,32 @@ export default function BillingPage() {
   /** Which plan `/pricing` sent them here to buy, if any. */
   const wanted = params.get("plan");
   const intended: PlanId | null = wanted && isPlanId(wanted) && wanted !== "free" ? wanted : null;
-  const cycle = params.get("cycle") === "monthly" ? "monthly" : "yearly";
+  /**
+   * The seeded catalogue, same endpoint `/pricing` reads.
+   *
+   * Only the paid tiers are offered here: the reader is already on free, and a
+   * "Start free" card next to the plan you are looking at is a card with
+   * nothing behind it.
+   */
+  const catalogue = useGetApiBillingPlans();
+  const paidPlans = (
+    ((catalogue.data as { plans?: PlanRow[] } | undefined)?.plans ?? []) as PlanRow[]
+  ).filter((row) => row.id !== "free");
+  /** The saving is the argument for yearly, so the toggle makes it. */
+  const yearlySaving = paidPlans.find((row) => row.id === "pro")?.yearlySavingPercent ?? 0;
+  const yearlyLabel = yearlySaving > 0 ? `Yearly · save ${yearlySaving}%` : "Yearly";
+
+  /**
+   * Yearly unless asked otherwise, and changeable here.
+   *
+   * It used to be read straight from the query string on every render, which
+   * was right when the only way to reach a purchase was `/pricing` choosing the
+   * cycle for you. The picker below lets someone change their mind without
+   * going back, so the parameter seeds the state rather than being the state.
+   */
+  const [cycle, setCycle] = useState<"monthly" | "yearly">(
+    params.get("cycle") === "monthly" ? "monthly" : "yearly",
+  );
 
   /**
    * The first purchase, and the only one this app starts.
@@ -275,20 +315,91 @@ export default function BillingPage() {
                   Pro and Business add your own branding, deeper analytics, verified respondents
                   and a bigger AI allowance. Nothing you have already collected changes.
                 </p>
-                {/* Gradient here and plain `default` on the portal button
-                    below, deliberately: this one asks for money, that one is
-                    account admin. The hue is the difference between the two,
-                    not the size. */}
-                <Button
-                  size="lg"
-                  variant="gradient"
-                  className="mt-4"
-                  disabled={!canManage || busy}
-                  onClick={() => startCheckout(intended ?? "pro")}
-                >
-                  {busy ? "Opening checkout…" : intended ? `Continue to ${PLANS[intended].name}` : "See plans"}
-                  <ArrowRight className="size-4" />
-                </Button>
+
+                {/*
+                  The plans, here, rather than a button labelled "See plans"
+                  that did not show any.
+
+                  That button went straight to Pro's checkout — it named the one
+                  thing it did not do, and it picked the tier on the reader's
+                  behalf. Deciding to pay means reading what changes between
+                  tiers, so the tiers have to be on the page where the decision
+                  is made.
+
+                  Only on the free plan. Everything a *paying* customer does —
+                  switching tier, moving between monthly and yearly, cancelling
+                  — stays in the portal, because that is Dodo's record to change
+                  and reconciling a switch we had originated is what once
+                  charged somebody for Business and left them on Pro. A first
+                  purchase has nothing to reconcile: there is no subscription
+                  yet, and `startCheckout` is the same call `/pricing` has
+                  always made.
+
+                  Fed from `/api/billing/plans`, the seeded catalogue, which is
+                  what `/pricing` reads too — so the prices here and the prices
+                  there cannot drift, and neither can drift from what the gates
+                  enforce.
+                */}
+                {catalogue.isPending ? (
+                  <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                    <Skeleton className="h-80 rounded-2xl" />
+                    <Skeleton className="h-80 rounded-2xl" />
+                  </div>
+                ) : paidPlans.length > 0 ? (
+                  <div className="mt-5">
+                    <SegmentedControl
+                      options={[
+                        { value: "yearly", label: yearlyLabel },
+                        { value: "monthly", label: "Monthly" },
+                      ]}
+                      value={cycle}
+                      onChange={(v) => setCycle(v as "monthly" | "yearly")}
+                      size="sm"
+                      ariaLabel="Billing cycle"
+                    />
+                    <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                      {paidPlans.map((row) => (
+                        <PlanCard
+                          key={row.id}
+                          plan={row}
+                          annual={cycle === "yearly"}
+                          // Pro is the recommendation, and the one the paywall
+                          // sends most people to. Two outline cards side by side
+                          // is a row with no recommendation in it.
+                          featured={row.id === "pro"}
+                          ctaLabel={busy ? "Opening checkout…" : `Choose ${row.name}`}
+                          onCta={() => startCheckout(row.id as PlanId)}
+                          ctaDisabled={!canManage || busy || !row.checkoutReady}
+                          note={
+                            !row.checkoutReady
+                              ? "Not available in this environment yet."
+                              : !canManage
+                                ? "Only an owner can change the plan."
+                                : undefined
+                          }
+                        />
+                      ))}
+                    </div>
+                    {/* No "compare every feature" link here: the card already
+                        carries one directly below, and two links to the same
+                        page two lines apart reads as a mistake. */}
+                    <p className="text-muted-foreground mt-4 text-xs">
+                      Checkout, invoices and cancellation are handled by our payment provider.
+                    </p>
+                  </div>
+                ) : (
+                  // The catalogue failed or is empty. One working button beats a
+                  // grid that is not there.
+                  <Button
+                    size="lg"
+                    className="mt-4"
+                    disabled={!canManage || busy}
+                    onClick={() => startCheckout(intended ?? "pro")}
+                  >
+                    {busy ? "Opening checkout…" : `Continue to ${PLANS[intended ?? "pro"].name}`}
+                    <ArrowRight className="size-4" />
+                  </Button>
+                )}
               </>
             ) : (
               <>
