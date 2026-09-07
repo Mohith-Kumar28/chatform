@@ -383,9 +383,11 @@ function IconAction({
 /**
  * The publish clock, shown once the save clock has nothing left to say.
  *
- * Deliberately plain about the awkward state: "Edited since publishing" names the exact
- * condition rather than the vaguer "unpublished changes", because the thing someone needs
- * to know is that what they are looking at is not what is out there.
+ * "Unpublished changes" rather than the older "Edited since publishing": both
+ * name the same condition, but one names it from the reader's side. What
+ * someone needs to know is that there is something of theirs the world has not
+ * got yet — a state with an obvious next action — not that an event happened in
+ * the past tense.
  */
 function PublishIndicator({
   stale,
@@ -406,7 +408,7 @@ function PublishIndicator({
     return (
       <span className="flex shrink-0 items-center gap-1 text-[var(--warning-soft-foreground)]">
         <span className="size-1.5 rounded-full bg-current" aria-hidden />
-        Edited since publishing
+        Unpublished changes
       </span>
     );
   }

@@ -56,6 +56,26 @@ export function BlockInspector() {
 
   const meta = blockMeta(block.type);
   const patch = (p: Partial<Block>, coalesceKey?: string) => updateBlock(block.ref, p, coalesceKey);
+
+  /** Change the block's type, keeping what identifies the question. */
+  const changeType = (next: string) => {
+    if (next === block.type) return;
+    // Rebuild from defaults for the new type, but carry across the things that
+    // identify the question rather than its shape.
+    const refs = new Set(doc?.blocks.map((b) => b.ref) ?? []);
+    refs.delete(block.ref);
+    const fresh = defaultBlock(next as Block["type"], refs);
+    patch({
+      ...fresh,
+      id: block.id,
+      ref: block.ref,
+      title: block.title,
+      description: block.description,
+      required: block.required,
+      agentHints: block.agentHints,
+      visibility: block.visibility,
+    } as Partial<Block>);
+  };
   const key = (f: string) => `${f}:${block.ref}`;
 
   // Logic rules that fire on this block, surfaced so the Workflow tab isn't a
@@ -66,54 +86,27 @@ export function BlockInspector() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
-        <div className="flex min-w-0 items-center gap-2">
+        {/*
+          The header names the type and is also how you change it.
+          
+          It used to say the type three ways: an icon, the word beside it, and a
+          full-width "Type" select immediately below repeating both. And under
+          the word sat the ref — `q_payment` — which nobody types anywhere in
+          this panel; it belongs to the flow, and it is on the row's tooltip for
+          the rare moment someone wants it.
+        */}
+        <div className="flex min-w-0 items-center gap-2" title={block.ref}>
           <div className={cn("grid size-7 shrink-0 place-items-center rounded-lg", TONE_CLASSES[meta.tone])}>
             <meta.icon className="size-3.5" strokeWidth={1.75} />
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">{meta.label}</p>
-            <p className="text-muted-foreground truncate font-mono text-[0.6875rem]">{block.ref}</p>
-          </div>
-        </div>
-        {block.type !== "welcome" && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Delete block"
-            onClick={() => setConfirmDelete(true)}
-            className="text-muted-foreground hover:text-destructive shrink-0"
-          >
-            <Trash2 className="size-3.5" />
-          </Button>
-        )}
-      </div>
-
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
-        {/* type switcher */}
-        {block.type !== "welcome" && (
-          <Field label="Type">
-            <Select
-              value={block.type}
-              onValueChange={(next) => {
-                if (next === block.type) return;
-                // Rebuild from defaults for the new type, but carry across the
-                // things that identify the question rather than its shape.
-                const refs = new Set(doc?.blocks.map((b) => b.ref) ?? []);
-                refs.delete(block.ref);
-                const fresh = defaultBlock(next as Block["type"], refs);
-                patch({
-                  ...fresh,
-                  id: block.id,
-                  ref: block.ref,
-                  title: block.title,
-                  description: block.description,
-                  required: block.required,
-                  agentHints: block.agentHints,
-                  visibility: block.visibility,
-                } as Partial<Block>);
-              }}
-            >
-              <SelectTrigger className="w-full">
+          {block.type === "welcome" ? (
+            <p className="min-w-0 truncate text-sm font-semibold">{meta.label}</p>
+          ) : (
+            <Select value={block.type} onValueChange={changeType}>
+              <SelectTrigger
+                aria-label="Block type"
+                className="text-foreground h-auto min-w-0 gap-1 border-0 bg-transparent p-0 text-sm font-semibold shadow-none focus-visible:ring-0 data-[size=default]:h-auto"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -133,9 +126,22 @@ export function BlockInspector() {
                 })}
               </SelectContent>
             </Select>
-          </Field>
+          )}
+        </div>
+        {block.type !== "welcome" && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Delete block"
+            onClick={() => setConfirmDelete(true)}
+            className="text-muted-foreground hover:text-destructive shrink-0"
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
         )}
+      </div>
 
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
         <TextField
           label="Question"
           // Where ↵ lands when a question is selected in the list.
