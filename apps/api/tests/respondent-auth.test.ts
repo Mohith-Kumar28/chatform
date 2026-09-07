@@ -3,6 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it, afterEach } from "vitest";
 import { applySchema } from "./helpers.js";
 import {
   verifyGoogleIdToken,
+  verifyFirebasePhoneToken,
   startPhoneChallenge,
   verifyPhoneChallenge,
   pruneOtpChallenges,
@@ -10,9 +11,16 @@ import {
 import type { Bindings } from "../src/env.js";
 
 const GOOGLE_RESPONDENT_CLIENT_ID = "1234.apps.googleusercontent.com";
+const FIREBASE_PROJECT_ID = "chatform-test";
 
 function bindings(over: Partial<Bindings> = {}): Bindings {
-  return { ...(env as unknown as Bindings), GOOGLE_RESPONDENT_CLIENT_ID, ENVIRONMENT: "development", ...over };
+  return {
+    ...(env as unknown as Bindings),
+    GOOGLE_RESPONDENT_CLIENT_ID,
+    FIREBASE_PROJECT_ID,
+    ENVIRONMENT: "development",
+    ...over,
+  };
 }
 
 // ───────────────────────── Google ID tokens ─────────────────────────
@@ -70,7 +78,10 @@ beforeAll(async () => {
 beforeEach(() => {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    if (url.startsWith("https://www.googleapis.com/oauth2/v3/certs")) {
+    if (
+      url.startsWith("https://www.googleapis.com/oauth2/v3/certs") ||
+      url.startsWith("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com")
+    ) {
       return new Response(JSON.stringify(jwks), { headers: { "content-type": "application/json" } });
     }
     return realFetch(input as RequestInfo, init);
@@ -79,6 +90,111 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = realFetch;
+});
+
+/**
+ * Mint a Firebase ID token, signed with the same test key. Serving one key set
+ * at both endpoints is deliberate: it means a token that differs from a valid
+ * one *only* in its claims still carries a good signature, so the claim checks
+ * are what these tests actually exercise.
+ */
+async function mintFirebaseToken(claims: Record<string, unknown> = {}): Promise<string> {
+  const header = b64urlJson({ alg: "RS256", kid: KID, typ: "JWT" });
+  const now = Math.floor(Date.now() / 1000);
+  const payload = b64urlJson({
+    iss: `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
+    aud: FIREBASE_PROJECT_ID,
+    sub: "firebase-uid-abc",
+    iat: now,
+    exp: now + 3600,
+    phone_number: "+917799444494",
+    firebase: { sign_in_provider: "phone" },
+    ...claims,
+  });
+  const sig = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    keyPair.privateKey,
+    new TextEncoder().encode(`${header}.${payload}`),
+  );
+  return `${header}.${payload}.${b64url(new Uint8Array(sig))}`;
+}
+
+describe("Firebase phone token verification", () => {
+  it("accepts a phone sign-in and reports the number as the identity", async () => {
+    const res = await verifyFirebasePhoneToken(bindings(), await mintFirebaseToken());
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.identity.provider).toBe("phone");
+    expect(res.identity.phone).toBe("+917799444494");
+    // The subject is the number, not the Firebase uid, so the same person is
+    // one identity whether they verified here or through the server OTP.
+    expect(res.identity.subject).toBe("+917799444494");
+  });
+
+  it("refuses a token from another Firebase project", async () => {
+    const token = await mintFirebaseToken({
+      iss: "https://securetoken.google.com/someone-elses-app",
+      aud: "someone-elses-app",
+    });
+    const res = await verifyFirebasePhoneToken(bindings(), token);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe("bad_issuer");
+  });
+
+  it("refuses a token whose audience is not our project", async () => {
+    const res = await verifyFirebasePhoneToken(bindings(), await mintFirebaseToken({ aud: "another-project" }));
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe("bad_audience");
+  });
+
+  /**
+   * The check that carries the most weight. A project with any second sign-in
+   * method enabled signs those tokens with the very same key, so without this
+   * anyone could sign in anonymously and claim a phone number they never held.
+   */
+  it("refuses a token from a sign-in method that was not phone", async () => {
+    const token = await mintFirebaseToken({ firebase: { sign_in_provider: "anonymous" } });
+    const res = await verifyFirebasePhoneToken(bindings(), token);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe("wrong_provider");
+  });
+
+  it("refuses a phone token carrying no number", async () => {
+    const res = await verifyFirebasePhoneToken(bindings(), await mintFirebaseToken({ phone_number: undefined }));
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe("no_phone");
+  });
+
+  it("refuses an expired token", async () => {
+    const past = Math.floor(Date.now() / 1000) - 60;
+    const res = await verifyFirebasePhoneToken(bindings(), await mintFirebaseToken({ exp: past }));
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe("expired");
+  });
+
+  it("refuses a token whose signature does not match", async () => {
+    const token = await mintFirebaseToken();
+    const tampered = `${token.slice(0, -6)}AAAAAA`;
+    const res = await verifyFirebasePhoneToken(bindings(), tampered);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe("bad_signature");
+  });
+
+  it("stays off when no Firebase project is configured", async () => {
+    const res = await verifyFirebasePhoneToken(
+      bindings({ FIREBASE_PROJECT_ID: undefined }),
+      await mintFirebaseToken(),
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe("phone_not_configured");
+  });
 });
 
 describe("Google ID token verification", () => {

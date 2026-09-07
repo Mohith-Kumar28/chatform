@@ -4,7 +4,12 @@ import { z } from "zod";
 import { readFormDoc, type RespondentIdentity } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { SessionDO } from "../do/session-do.js";
-import { verifyGoogleIdToken, startPhoneChallenge, verifyPhoneChallenge } from "../lib/respondent-auth.js";
+import {
+  verifyGoogleIdToken,
+  verifyFirebasePhoneToken,
+  startPhoneChallenge,
+  verifyPhoneChallenge,
+} from "../lib/respondent-auth.js";
 
 /**
  * Respondent sign-in routes, mounted twice.
@@ -23,6 +28,7 @@ const phoneStartSchema = z.object({
   dialHint: z.string().max(4).optional(),
 });
 const phoneVerifySchema = z.object({ code: z.string().min(4).max(10) });
+const phoneTokenSchema = z.object({ idToken: z.string().min(10).max(8000) });
 
 /**
  * These handlers read `c.env` and `c.req`, and nothing from Variables, so the
@@ -124,6 +130,22 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
     const sessionId = await resolve(c);
     if (!sessionId) return unauthorized(c);
     const result = await verifyGoogleIdToken(c.env, c.req.valid("json").idToken);
+    if (!result.ok) return c.json({ error: { code: result.code, message: result.message } }, 400);
+    return attach(c, result.identity, sessionId);
+  });
+
+  /**
+   * The hosted form's phone path: Firebase already sent the SMS and checked the
+   * code in the browser, so there is one round trip and it carries the proof.
+   *
+   * Sits beside `phone/start` + `phone/verify` rather than replacing them —
+   * those two remain the only phone sign-in a headless `/v1` caller can drive,
+   * since this one presupposes a browser that ran a reCAPTCHA.
+   */
+  router.post(`${base}/auth/phone/token`, zValidator("json", phoneTokenSchema), async (c) => {
+    const sessionId = await resolve(c);
+    if (!sessionId) return unauthorized(c);
+    const result = await verifyFirebasePhoneToken(c.env, c.req.valid("json").idToken);
     if (!result.ok) return c.json({ error: { code: result.code, message: result.message } }, 400);
     return attach(c, result.identity, sessionId);
   });

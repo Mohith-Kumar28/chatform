@@ -10,10 +10,22 @@ import type { Bindings } from "../env.js";
  *    Better Auth account, join an organization, or set a cookie. The result is
  *    an attestation the DO stores on the session.
  * 2. It has to work headlessly. The `/v1` API lets a customer drive the whole
- *    conversation from their own server, so neither method may depend on our
- *    page being open. Google is verified from an ID token the caller supplies;
- *    phone is our own OTP over HTTP. That ruled out Firebase phone auth, which
- *    is a browser SDK flow with a reCAPTCHA step and no server-side entry.
+ *    conversation from their own server, so no method may be the *only* way in
+ *    while depending on our page being open. Google is verified from an ID
+ *    token the caller supplies; phone has two entries that meet at the same
+ *    identity shape:
+ *
+ *      - `verifyFirebasePhoneToken` — what the hosted form uses. Firebase
+ *        sends and checks the SMS, so there is no number to rent and no Indian
+ *        DLT registration to sit through, which is the whole reason it is here.
+ *        It is a browser SDK flow with a reCAPTCHA step, so it cannot be the
+ *        headless path.
+ *      - `startPhoneChallenge` / `verifyPhoneChallenge` — our own OTP over
+ *        HTTP, which is. It needs an SMS provider configured; without one it
+ *        fails closed.
+ *
+ *    Both mint `provider: "phone"` with the E.164 number as the subject, so a
+ *    respondent verified either way is the same person to `onePerIdentity`.
  */
 
 // ───────────────────────────── Google ─────────────────────────────
@@ -30,25 +42,31 @@ interface Jwk {
 }
 
 /**
- * Google rotates signing keys on the order of days, so the set is cached for
+ * Google rotates signing keys on the order of days, so each set is cached for
  * the lifetime of the isolate with a short TTL. A `kid` miss forces a refetch
  * once — that is what makes rotation a non-event rather than an outage.
+ *
+ * Keyed by URL because Google publishes its OAuth keys and the ones Firebase
+ * signs session tokens with at two different endpoints, and a single shared
+ * cache would let a token signed for one be checked against the other's keys.
  */
-let jwksCache: { keys: Jwk[]; fetchedAt: number } | null = null;
+const jwksCaches = new Map<string, { keys: Jwk[]; fetchedAt: number }>();
 const JWKS_TTL_MS = 60 * 60 * 1000;
 
-async function getGoogleKey(kid: string, allowRefetch = true): Promise<CryptoKey | null> {
-  if (!jwksCache || Date.now() - jwksCache.fetchedAt > JWKS_TTL_MS) {
-    const res = await fetch(GOOGLE_JWKS_URL);
+async function getSigningKey(jwksUrl: string, kid: string, allowRefetch = true): Promise<CryptoKey | null> {
+  let cache = jwksCaches.get(jwksUrl);
+  if (!cache || Date.now() - cache.fetchedAt > JWKS_TTL_MS) {
+    const res = await fetch(jwksUrl);
     if (!res.ok) return null;
     const body = (await res.json()) as { keys: Jwk[] };
-    jwksCache = { keys: body.keys ?? [], fetchedAt: Date.now() };
+    cache = { keys: body.keys ?? [], fetchedAt: Date.now() };
+    jwksCaches.set(jwksUrl, cache);
   }
-  const jwk = jwksCache.keys.find((k) => k.kid === kid);
+  const jwk = cache.keys.find((k) => k.kid === kid);
   if (!jwk) {
     if (!allowRefetch) return null;
-    jwksCache = null; // key rotated mid-cache; refetch once
-    return getGoogleKey(kid, false);
+    jwksCaches.delete(jwksUrl); // key rotated mid-cache; refetch once
+    return getSigningKey(jwksUrl, kid, false);
   }
   return crypto.subtle.importKey(
     "jwk",
@@ -57,6 +75,37 @@ async function getGoogleKey(kid: string, allowRefetch = true): Promise<CryptoKey
     false,
     ["verify"],
   );
+}
+
+/**
+ * Check an RS256 JWT's signature against a published key set and hand back the
+ * decoded claims. Shared by both ID-token paths: everything up to "is this
+ * token authentic" is identical, and only the claim checks differ.
+ */
+async function verifyRs256<T>(
+  jwksUrl: string,
+  token: string,
+): Promise<{ ok: true; claims: T } | { ok: false; code: string; message: string }> {
+  const parts = token.split(".");
+  if (parts.length !== 3) return { ok: false, code: "malformed_token", message: "That sign-in could not be read." };
+
+  const header = b64urlToJson<{ alg: string; kid: string }>(parts[0]!);
+  const claims = b64urlToJson<T>(parts[1]!);
+  if (!header || !claims) return { ok: false, code: "malformed_token", message: "That sign-in could not be read." };
+  if (header.alg !== "RS256") return { ok: false, code: "bad_alg", message: "Unsupported sign-in token." };
+
+  const key = await getSigningKey(jwksUrl, header.kid);
+  if (!key) return { ok: false, code: "unknown_key", message: "Could not verify that sign-in. Try again." };
+
+  const verified = await crypto.subtle.verify(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    b64urlToBytes(parts[2]!) as BufferSource,
+    new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
+  );
+  if (!verified) return { ok: false, code: "bad_signature", message: "Could not verify that sign-in." };
+
+  return { ok: true, claims };
 }
 
 function b64urlToBytes(input: string): Uint8Array {
@@ -105,24 +154,9 @@ export async function verifyGoogleIdToken(env: Bindings, idToken: string): Promi
     return { ok: false, code: "google_not_configured", message: "Google sign-in is not set up for this form." };
   }
 
-  const parts = idToken.split(".");
-  if (parts.length !== 3) return { ok: false, code: "malformed_token", message: "That sign-in could not be read." };
-
-  const header = b64urlToJson<{ alg: string; kid: string }>(parts[0]!);
-  const claims = b64urlToJson<GoogleClaims>(parts[1]!);
-  if (!header || !claims) return { ok: false, code: "malformed_token", message: "That sign-in could not be read." };
-  if (header.alg !== "RS256") return { ok: false, code: "bad_alg", message: "Unsupported sign-in token." };
-
-  const key = await getGoogleKey(header.kid);
-  if (!key) return { ok: false, code: "unknown_key", message: "Could not verify that sign-in. Try again." };
-
-  const verified = await crypto.subtle.verify(
-    "RSASSA-PKCS1-v1_5",
-    key,
-    b64urlToBytes(parts[2]!) as BufferSource,
-    new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
-  );
-  if (!verified) return { ok: false, code: "bad_signature", message: "Could not verify that sign-in." };
+  const signed = await verifyRs256<GoogleClaims>(GOOGLE_JWKS_URL, idToken);
+  if (!signed.ok) return signed;
+  const { claims } = signed;
 
   if (!GOOGLE_ISSUERS.has(claims.iss)) return { ok: false, code: "bad_issuer", message: "Could not verify that sign-in." };
   // Without this check a token minted for any other Google app would be
@@ -147,7 +181,96 @@ export async function verifyGoogleIdToken(env: Bindings, idToken: string): Promi
   };
 }
 
-// ────────────────────────────── Phone ──────────────────────────────
+// ───────────────────────── Firebase phone ─────────────────────────
+
+/**
+ * Firebase signs session tokens with its own key set, published in JWK form at
+ * this endpoint. (The `robot/v1/metadata/x509` URL every Admin-SDK example
+ * reaches for serves PEM certificates, which Workers cannot import directly.)
+ */
+const FIREBASE_JWKS_URL =
+  "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
+
+interface FirebaseClaims {
+  iss: string;
+  aud: string;
+  sub: string;
+  exp: number;
+  iat: number;
+  auth_time?: number;
+  phone_number?: string;
+  firebase?: { sign_in_provider?: string };
+}
+
+/**
+ * Verify a Firebase ID token minted by a phone sign-in and turn it into a
+ * phone identity.
+ *
+ * Firebase carries the SMS — no number to rent, no DLT registration, no per
+ * message billing of ours — but that also means the SMS never passes through
+ * this worker, so this token is the *only* evidence the number was proved. It
+ * gets checked as hard as the Google one, plus two constraints that are
+ * specific to Firebase and easy to leave out:
+ *
+ *   - `sign_in_provider` must be "phone". A Firebase project usually has more
+ *     than one method enabled, and a token from an anonymous or email sign-in
+ *     is signed by the very same key. Without this check anyone could enable a
+ *     throwaway method, sign in with it, and present the result as a verified
+ *     phone number.
+ *   - `phone_number` must be present. It is the subject we store and the value
+ *     `onePerIdentity` de-duplicates on; a token without one is not an identity
+ *     this function has any business minting.
+ */
+export async function verifyFirebasePhoneToken(env: Bindings, idToken: string): Promise<AuthResult> {
+  const projectId = env.FIREBASE_PROJECT_ID;
+  if (!projectId) {
+    return { ok: false, code: "phone_not_configured", message: "Phone sign-in is not set up for this form." };
+  }
+
+  const signed = await verifyRs256<FirebaseClaims>(FIREBASE_JWKS_URL, idToken);
+  if (!signed.ok) return signed;
+  const { claims } = signed;
+
+  // Both are derived from the project id, so a token from anyone else's
+  // Firebase project fails here even though Google signed it with a key this
+  // endpoint publishes. This pair is the entire tenant boundary.
+  if (claims.iss !== `https://securetoken.google.com/${projectId}`) {
+    return { ok: false, code: "bad_issuer", message: "Could not verify that sign-in." };
+  }
+  if (claims.aud !== projectId) {
+    return { ok: false, code: "bad_audience", message: "Could not verify that sign-in." };
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  if (claims.exp <= now) return { ok: false, code: "expired", message: "That sign-in expired. Try again." };
+  if (claims.iat > now + 300) return { ok: false, code: "bad_iat", message: "Could not verify that sign-in." };
+  if (!claims.sub) return { ok: false, code: "malformed_token", message: "That sign-in could not be read." };
+
+  if (claims.firebase?.sign_in_provider !== "phone") {
+    return { ok: false, code: "wrong_provider", message: "That sign-in did not verify a phone number." };
+  }
+
+  // Firebase already emits E.164, but normalising means one spelling of a
+  // number reaches the database however it was verified — otherwise the same
+  // person could answer twice, once through each path.
+  const phone = normalizeE164(claims.phone_number ?? "");
+  if (!phone) return { ok: false, code: "no_phone", message: "That sign-in did not verify a phone number." };
+
+  return {
+    ok: true,
+    identity: {
+      provider: "phone",
+      subject: phone,
+      email: null,
+      phone,
+      name: null,
+      pictureUrl: null,
+      verifiedAt: Date.now(),
+    },
+  };
+}
+
+// ──────────────────────── Phone, our own OTP ────────────────────────
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;

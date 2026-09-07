@@ -99,8 +99,26 @@ GOOGLE_RESPONDENT_CLIENT_ID=
 GOOGLE_DASHBOARD_CLIENT_ID=
 GOOGLE_DASHBOARD_CLIENT_SECRET=
 
-# ── SMS (Twilio) ──────────────────────────────────────────────────────────────
-# Absent in dev: phone OTP codes are logged instead of sent.
+# ── Phone sign-in, hosted form (Firebase) ─────────────────────────────────────
+# Firebase sends and checks the SMS, so there is no number to rent and no Indian
+# DLT registration to complete. This worker only verifies the ID token that comes
+# back, so the project id is the whole server-side configuration — there is no
+# service-account key to store here.
+#
+# The browser needs the matching NEXT_PUBLIC_FIREBASE_* values in apps/web, and
+# the Firebase console must list the form's domain under
+# Authentication → Settings → Authorized domains.
+#
+# Unset in dev: the form falls back to the server OTP below, which prints the
+# code instead of sending it. That is the intended local setup — running the
+# form does not require a Firebase project.
+FIREBASE_PROJECT_ID=
+
+# ── Phone sign-in, headless /v1 (Twilio) ──────────────────────────────────────
+# Only for /v1 callers, who drive the conversation from their own server and so
+# cannot run Firebase's browser reCAPTCHA. The hosted form does not use this.
+# Absent in dev: phone OTP codes are logged instead of sent. Absent in
+# production: the server OTP path fails closed rather than handing out codes.
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_FROM=

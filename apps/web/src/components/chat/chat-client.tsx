@@ -300,6 +300,7 @@ export function ChatClient({
               onGoogle={(t) => void chat.signInWithGoogle(t)}
               onRequestCode={(phone, hint) => void chat.requestPhoneCode(phone, hint)}
               onVerifyCode={(code) => void chat.verifyPhoneCode(code)}
+              onPhoneToken={(t) => void chat.signInWithPhoneToken(t)}
               onChangeNumber={chat.changePhoneNumber}
             />
           )}

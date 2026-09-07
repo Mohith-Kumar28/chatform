@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Loader2, Phone, ShieldCheck } from "lucide-react";
 import type { AuthState } from "./use-chat";
+import { firebasePhoneConfigured, sendPhoneCode, type PhoneCodeSent } from "./firebase-phone";
 
 const GOOGLE_RESPONDENT_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_RESPONDENT_CLIENT_ID ?? "";
 const GSI_SRC = "https://accounts.google.com/gsi/client";
@@ -51,12 +52,14 @@ export function AuthCard({
   onGoogle,
   onRequestCode,
   onVerifyCode,
+  onPhoneToken,
   onChangeNumber,
 }: {
   auth: AuthState;
   onGoogle: (idToken: string) => void;
   onRequestCode: (phone: string, dialHint?: string) => void;
   onVerifyCode: (code: string) => void;
+  onPhoneToken: (idToken: string) => void;
   onChangeNumber: () => void;
 }) {
   const showGoogle = auth.methods.includes("google");
@@ -79,14 +82,24 @@ export function AuthCard({
         </div>
       )}
 
-      {showPhone && (
-        <PhoneFlow
-          auth={auth}
-          onRequestCode={onRequestCode}
-          onVerifyCode={onVerifyCode}
-          onChangeNumber={onChangeNumber}
-        />
-      )}
+      {/*
+        Two ways to prove a phone number, picked by what this deployment has
+        configured. Firebase carries the SMS in production; the server-side OTP
+        is the fallback, and is what runs locally where it prints the code
+        instead of sending it — so the form is testable with no Firebase
+        project and no money spent.
+      */}
+      {showPhone &&
+        (firebasePhoneConfigured ? (
+          <FirebasePhoneFlow auth={auth} onPhoneToken={onPhoneToken} />
+        ) : (
+          <PhoneFlow
+            auth={auth}
+            onRequestCode={onRequestCode}
+            onVerifyCode={onVerifyCode}
+            onChangeNumber={onChangeNumber}
+          />
+        ))}
 
       {auth.error && (
         <p role="alert" className="text-destructive text-xs">
@@ -153,87 +166,101 @@ function GoogleButton({ onToken, disabled }: { onToken: (t: string) => void; dis
   );
 }
 
-function PhoneFlow({
-  auth,
-  onRequestCode,
-  onVerifyCode,
-  onChangeNumber,
+/**
+ * The number step and the code step, as plain rendering.
+ *
+ * Both phone flows below put a respondent through exactly these two screens —
+ * only what happens between them differs — so the markup lives here once and
+ * the controllers stay small enough to read in one go.
+ */
+function NumberForm({
+  pending,
+  onSubmit,
 }: {
-  auth: AuthState;
-  onRequestCode: (phone: string, dialHint?: string) => void;
-  onVerifyCode: (code: string) => void;
-  onChangeNumber: () => void;
+  pending: boolean;
+  onSubmit: (phone: string) => void;
 }) {
   const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
   const phoneId = useId();
-  const codeId = useId();
-  const codeRef = useRef<HTMLInputElement>(null);
-
-  const sent = auth.phoneSentTo;
-
-  useEffect(() => {
-    if (sent) codeRef.current?.focus();
-  }, [sent]);
-
-  const submitCode = useCallback(
-    (value: string) => {
-      if (value.length >= 4 && !auth.pending) onVerifyCode(value);
-    },
-    [auth.pending, onVerifyCode],
-  );
-
-  if (!sent) {
-    return (
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (phone.trim() && !auth.pending) onRequestCode(phone.trim());
-        }}
-        className="space-y-2"
-      >
-        <label htmlFor={phoneId} className="sr-only">
-          Phone number
-        </label>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Phone className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 opacity-40" />
-            <input
-              id={phoneId}
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+1 415 555 0132"
-              disabled={auth.pending}
-              className="h-11 w-full rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-bg)] pr-3 pl-9 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--cf-accent)]"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={auth.pending || !phone.trim()}
-            className="h-11 shrink-0 rounded-full px-4 text-sm font-medium transition-transform active:scale-[0.98] disabled:opacity-50 motion-reduce:active:scale-100"
-            style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
-          >
-            {auth.pending ? <Loader2 className="size-4 animate-spin" /> : "Send code"}
-          </button>
-        </div>
-        <p className="text-[0.6875rem] opacity-45">Include your country code.</p>
-      </form>
-    );
-  }
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        submitCode(code);
+        if (phone.trim() && !pending) onSubmit(phone.trim());
+      }}
+      className="space-y-2"
+    >
+      <label htmlFor={phoneId} className="sr-only">
+        Phone number
+      </label>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Phone className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 opacity-40" />
+          <input
+            id={phoneId}
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="+1 415 555 0132"
+            disabled={pending}
+            className="h-11 w-full rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-bg)] pr-3 pl-9 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--cf-accent)]"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={pending || !phone.trim()}
+          className="h-11 shrink-0 rounded-full px-4 text-sm font-medium transition-transform active:scale-[0.98] disabled:opacity-50 motion-reduce:active:scale-100"
+          style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+        >
+          {pending ? <Loader2 className="size-4 animate-spin" /> : "Send code"}
+        </button>
+      </div>
+      <p className="text-[0.6875rem] opacity-45">Include your country code.</p>
+    </form>
+  );
+}
+
+function CodeForm({
+  sentTo,
+  pending,
+  devCode,
+  onSubmit,
+  onChangeNumber,
+}: {
+  sentTo: string;
+  pending: boolean;
+  devCode?: string;
+  onSubmit: (code: string) => void;
+  onChangeNumber: () => void;
+}) {
+  const [code, setCode] = useState("");
+  const codeId = useId();
+  const codeRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    codeRef.current?.focus();
+  }, []);
+
+  const submit = useCallback(
+    (value: string) => {
+      if (value.length >= 4 && !pending) onSubmit(value);
+    },
+    [pending, onSubmit],
+  );
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit(code);
       }}
       className="space-y-2"
     >
       <label htmlFor={codeId} className="block text-xs opacity-60">
-        Enter the code sent to {sent}
+        Enter the code sent to {sentTo}
       </label>
       <div className="flex gap-2">
         <input
@@ -249,26 +276,141 @@ function PhoneFlow({
             setCode(next);
             // Six digits is the whole code, so submit rather than making them
             // reach for a button they can already see is redundant.
-            if (next.length === 6) submitCode(next);
+            if (next.length === 6) submit(next);
           }}
-          disabled={auth.pending}
+          disabled={pending}
           className="h-11 w-32 rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-bg)] px-4 text-center font-mono text-lg tracking-[0.3em] outline-none focus-visible:ring-2 focus-visible:ring-[var(--cf-accent)]"
         />
         <button
           type="submit"
-          disabled={auth.pending || code.length < 4}
+          disabled={pending || code.length < 4}
           className="h-11 flex-1 rounded-full text-sm font-medium transition-transform active:scale-[0.98] disabled:opacity-50 motion-reduce:active:scale-100"
           style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
         >
-          {auth.pending ? <Loader2 className="mx-auto size-4 animate-spin" /> : "Verify"}
+          {pending ? <Loader2 className="mx-auto size-4 animate-spin" /> : "Verify"}
         </button>
       </div>
       <div className="flex items-center gap-3 text-[0.6875rem]">
         <button type="button" onClick={onChangeNumber} className="underline opacity-55 hover:opacity-100">
           Use a different number
         </button>
-        {auth.devCode && <span className="font-mono opacity-40">dev code: {auth.devCode}</span>}
+        {devCode && <span className="font-mono opacity-40">dev code: {devCode}</span>}
       </div>
     </form>
+  );
+}
+
+/**
+ * Phone verification against our own OTP endpoints.
+ *
+ * The step the respondent is on is server state — `auth.phoneSentTo` is set by
+ * the reply to `phone/start` — because only the server knows whether an SMS
+ * was actually accepted for sending.
+ */
+function PhoneFlow({
+  auth,
+  onRequestCode,
+  onVerifyCode,
+  onChangeNumber,
+}: {
+  auth: AuthState;
+  onRequestCode: (phone: string, dialHint?: string) => void;
+  onVerifyCode: (code: string) => void;
+  onChangeNumber: () => void;
+}) {
+  const sent = auth.phoneSentTo;
+
+  if (!sent) return <NumberForm pending={auth.pending} onSubmit={onRequestCode} />;
+
+  return (
+    <CodeForm
+      sentTo={sent}
+      pending={auth.pending}
+      devCode={auth.devCode}
+      onSubmit={onVerifyCode}
+      onChangeNumber={onChangeNumber}
+    />
+  );
+}
+
+/**
+ * Phone verification through Firebase.
+ *
+ * Everything up to the ID token happens in the browser, so unlike `PhoneFlow`
+ * the step and its errors are local state — the server hears about this
+ * respondent exactly once, at the end, when there is something proven to say.
+ */
+function FirebasePhoneFlow({
+  auth,
+  onPhoneToken,
+}: {
+  auth: AuthState;
+  onPhoneToken: (idToken: string) => void;
+}) {
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Held in a ref, not state: replacing it must never re-render mid-flow, and
+  // it is read only inside callbacks.
+  const confirmation = useRef<PhoneCodeSent | null>(null);
+  // reCAPTCHA needs a real, mounted element to attach to — and to expand into
+  // if Google decides this visitor has to solve a challenge.
+  const recaptchaHost = useRef<HTMLDivElement>(null);
+
+  const pending = busy || auth.pending;
+
+  const send = useCallback(async (phone: string) => {
+    const host = recaptchaHost.current;
+    if (!host) return;
+    setBusy(true);
+    setError(null);
+    const res = await sendPhoneCode(phone, host);
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.message);
+      return;
+    }
+    confirmation.current = res.sent;
+    setSentTo(phone);
+  }, []);
+
+  const verify = useCallback(
+    async (code: string) => {
+      const pendingConfirmation = confirmation.current;
+      if (!pendingConfirmation) return;
+      setBusy(true);
+      setError(null);
+      const res = await pendingConfirmation.confirm(code);
+      setBusy(false);
+      if (!res.ok) {
+        setError(res.message);
+        return;
+      }
+      // From here the server owns the outcome, and `auth.error` reports it.
+      onPhoneToken(res.idToken);
+    },
+    [onPhoneToken],
+  );
+
+  const changeNumber = useCallback(() => {
+    confirmation.current = null;
+    setSentTo(null);
+    setError(null);
+  }, []);
+
+  return (
+    <div className="space-y-2">
+      {sentTo ? (
+        <CodeForm sentTo={sentTo} pending={pending} onSubmit={verify} onChangeNumber={changeNumber} />
+      ) : (
+        <NumberForm pending={pending} onSubmit={send} />
+      )}
+      <div ref={recaptchaHost} />
+      {error && (
+        <p role="alert" className="text-destructive text-xs">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

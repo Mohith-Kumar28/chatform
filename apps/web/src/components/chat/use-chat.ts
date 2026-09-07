@@ -995,6 +995,27 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
     [authPost],
   );
 
+  /**
+   * The hosted form's phone path: Firebase already proved the number in the
+   * browser, so this posts the resulting ID token and the gate clears in one
+   * call. Same ordering as `signInWithGoogle`, for the same reason.
+   */
+  const signInWithPhoneToken = useCallback(
+    async (idToken: string) => {
+      setAuth((a) => (a ? { ...a, pending: true, error: null } : a));
+      setThinking(true);
+      const { ok, data } = await authPost("phone/token", { idToken });
+      if (ok) {
+        setIdentity(data.identity as VerifiedIdentity);
+        setAuth(null);
+        return;
+      }
+      setThinking(false);
+      setAuth((a) => (a ? { ...a, pending: false, error: authError(data) } : a));
+    },
+    [authPost],
+  );
+
   /** Back out of the code step to correct a mistyped number. */
   const changePhoneNumber = useCallback(() => {
     setAuth((a) => (a ? { ...a, phoneSentTo: null, error: null, devCode: undefined } : a));
@@ -1128,6 +1149,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
     signInWithGoogle,
     requestPhoneCode,
     verifyPhoneCode,
+    signInWithPhoneToken,
     changePhoneNumber,
     escalatedRef,
     validationHint,
