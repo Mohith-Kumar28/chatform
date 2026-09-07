@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogBody, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { formatDateTime, formatDuration, formatRelative, formatShortDateTime } from "@/lib/format";
 import { useClientValue } from "@/hooks/use-client-value";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { blockMeta, TONE_CLASSES } from "./block-library";
@@ -427,12 +428,9 @@ function SubmissionDialog({
               {row.status === "completed" ? "Response" : "Partial response"}
             </DialogTitle>
             <p className="text-muted-foreground text-caption mt-0.5 truncate">
-              {new Date(row.completedAt ?? row.startedAt).toLocaleString(undefined, {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}
+              {formatDateTime(row.completedAt ?? row.startedAt)}
               {" · "}
-              {relativeTime(row.completedAt ?? row.startedAt)}
+              {formatRelative(row.completedAt ?? row.startedAt)}
               {" · "}
               <span className="font-mono">{row.id}</span>
             </p>
@@ -502,7 +500,7 @@ function SubmissionDialog({
               {answered} of {columns.length} answered
             </span>
             {row.durationMs !== null && (
-              <span className="text-muted-foreground">· took {Math.round(row.durationMs / 1000)}s</span>
+              <span className="text-muted-foreground">· took {formatDuration(row.durationMs)}</span>
             )}
             {row.respondent && (
               <span className="flex items-center gap-1 text-[var(--success)]">
@@ -512,18 +510,36 @@ function SubmissionDialog({
             )}
           </div>
 
-          <dl className="space-y-4">
+          {/*
+            The answer is the thing; the question is its label.
+            
+            Both were `text-sm` and both were ink, one merely a weight apart, so
+            eleven questions and eleven answers came out as twenty-two lines of
+            the same grey and you had to count to work out which was which. The
+            question is now a small muted label and the answer sits under it at
+            reading size in full-strength ink — the same relationship a field
+            has to its value everywhere else in the product — and a hairline
+            between rows says where one answer stops.
+          */}
+          <dl className="divide-border/60 divide-y">
             {columns.map((b) => {
               const meta = blockMeta(b.type);
               const value = displayCell(b, byRef.get(b.ref));
               return (
-                <div key={b.ref} className="flex gap-3">
+                <div key={b.ref} className="flex gap-3 py-3 first:pt-0 last:pb-0">
                   <span className={cn("mt-0.5 grid size-5 shrink-0 place-items-center rounded", TONE_CLASSES[meta.tone])}>
                     <meta.icon className="size-3" strokeWidth={2} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <dt className="text-sm font-medium">{b.title}</dt>
-                    <dd className={cn("mt-0.5 text-sm break-words whitespace-pre-wrap", !value && "text-muted-foreground/60")}>
+                    <dt className="text-muted-foreground text-caption leading-snug">{b.title}</dt>
+                    <dd
+                      className={cn(
+                        "mt-1 break-words whitespace-pre-wrap",
+                        value
+                          ? "text-[0.9375rem] leading-snug font-medium"
+                          : "text-muted-foreground/60 text-sm italic",
+                      )}
+                    >
                       {value || "Not answered"}
                     </dd>
                   </div>
@@ -560,29 +576,7 @@ function SubmissionDialog({
 }
 
 function formatWhen(row: SubmissionRecord): string {
-  return new Date(row.completedAt ?? row.startedAt).toLocaleString(undefined, {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
-  ["year", 31_536_000_000],
-  ["month", 2_592_000_000],
-  ["day", 86_400_000],
-  ["hour", 3_600_000],
-  ["minute", 60_000],
-];
-
-function relativeTime(at: number): string {
-  const diff = at - Date.now();
-  const fmt = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-  for (const [unit, ms] of RELATIVE_UNITS) {
-    if (Math.abs(diff) >= ms) return fmt.format(Math.round(diff / ms), unit);
-  }
-  return fmt.format(0, "minute");
+  return formatShortDateTime(row.completedAt ?? row.startedAt);
 }
 
 /**

@@ -365,14 +365,3 @@ export function Legend({ items }: { items: { label: string; color: string }[] })
     </ul>
   );
 }
-
-/** Seconds, minutes and hours, the way a person would say them. */
-export function formatDuration(ms: number | null | undefined): string {
-  if (!ms || ms <= 0) return "—";
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return s % 60 === 0 ? `${m}m` : `${m}m ${s % 60}s`;
-  const h = Math.floor(m / 60);
-  return m % 60 === 0 ? `${h}h` : `${h}h ${m % 60}m`;
-}

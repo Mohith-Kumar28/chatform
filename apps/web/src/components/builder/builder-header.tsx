@@ -33,6 +33,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TooltipHint } from "@/components/ui/kbd";
+import { formatDateTime, formatTime } from "@/lib/format";
 import { BUILDER_TABS, tabMatches } from "./builder-tabs";
 import { HistorySheet, showHistory } from "./history-sheet";
 import { KEY } from "./use-builder-shortcuts";
@@ -410,7 +411,7 @@ function PublishIndicator({
     );
   }
   return (
-    <span className="shrink-0" title={publishedAt ? new Date(publishedAt).toLocaleString() : undefined}>
+    <span className="shrink-0" title={publishedAt ? formatDateTime(publishedAt) : undefined}>
       {publishedAt ? `Published ${formatWhen(publishedAt)}` : "Published"}
     </span>
   );
@@ -479,7 +480,7 @@ function SaveIndicator() {
   return (
     <span className="shrink-0" onMouseEnter={() => force((n) => n + 1)}>
       {lastSavedAt
-        ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+        ? `Saved ${formatTime(lastSavedAt)}`
         : "Saved"}
     </span>
   );

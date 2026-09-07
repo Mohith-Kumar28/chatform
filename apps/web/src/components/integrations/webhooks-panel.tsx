@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { customFetch } from "@/lib/api/mutator";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/format";
 
 /**
  * Webhook endpoints for one form.
@@ -294,7 +295,7 @@ function Deliveries({ webhookId }: { webhookId: string }) {
             {row.attempt > 0 && ` · attempt ${row.attempt + 1}`}
           </span>
           <span className="text-muted-foreground ml-auto shrink-0">
-            {new Date(row.created_at).toLocaleString()}
+            {formatDateTime(row.created_at)}
           </span>
         </li>
       ))}
