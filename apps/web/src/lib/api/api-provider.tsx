@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { UpgradeDialog } from "@/components/billing/upgrade-dialog";
+import { PlansDialog } from "@/components/billing/plans-dialog";
 
 export function ApiProvider({ children }: { children: React.ReactNode }) {
   const [client] = useState(
@@ -23,6 +24,10 @@ export function ApiProvider({ children }: { children: React.ReactNode }) {
         renders nothing until a denial arrives.
       */}
       <UpgradeDialog />
+      {/* Its sibling: the paywall answers a refusal, this answers "what does it cost".
+          Mounted alongside it so any Upgrade control anywhere can raise the prices
+          without a navigation. Renders nothing until opened. */}
+      <PlansDialog />
     </QueryClientProvider>
   );
 }

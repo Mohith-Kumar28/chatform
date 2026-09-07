@@ -105,7 +105,7 @@ export function useUpgrade() {
         requiredPlan,
         resetsAt: null,
         context,
-        upgradeUrl: `/billing${requiredPlan ? `?plan=${requiredPlan}` : ""}`,
+        upgradeUrl: `/usage${requiredPlan ? `?plan=${requiredPlan}` : ""}`,
       },
       "click",
     );

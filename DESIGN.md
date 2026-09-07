@@ -47,8 +47,7 @@ Next.js App Router with three route groups. One deployable Next app (`apps/web`)
 | `/account` | `(app)` | Settings shell | Profile, password, sessions, danger zone (delete account) |
 | `/workspace/settings` | `(app)` | Settings shell | Workspace name, slug, branding, defaults |
 | `/team` | `(app)` | Settings shell | Members, roles, invites |
-| `/billing` | `(app)` | Settings shell | Plans, Stripe checkout portal, invoices |
-| `/usage` | `(app)` | Settings shell | Quota meters: submissions, AI messages, seats |
+| `/usage` | `(app)` | Full-width page | Quota meters and gauges, plan badge, and the plan picker dialog. `/billing` redirects here; money lives in the provider's portal |
 | `/api-keys` | `(app)` | Settings shell | Developer keys CRUD, scopes, last-used |
 | `/f/[slug]` | `(public)` | Bare (no chrome) | Hosted conversational form page |
 | `/f/[slug]/end` | `(public)` | Bare | Thank-you/completion screen state (also rendered inline) |
@@ -433,7 +432,7 @@ reservation has two halves:
 Everything else that is merely important stays `default`. The gradient is not a
 way to make an ordinary control more interesting: the moment a second one
 appears on a screen, the first stops meaning anything, and the button that
-actually needed to be seen is no longer the one wearing it. `/billing` is the
+actually needed to be seen is no longer the one wearing it. `/usage` is the
 worked example — the free plan's "See plans" is a gradient, the paying plan's
 "Manage plan & billing" beside it is not, because one asks for money and the
 other is account admin.

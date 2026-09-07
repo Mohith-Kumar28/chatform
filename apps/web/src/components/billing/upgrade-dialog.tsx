@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Check, Lock, ArrowRight, CreditCard, ExternalLink } from "lucide-react";
 import { FEATURES, PLANS, yearlyPerMonthCents, yearlySavingPercent, type PlanId } from "@repo/entitlements";
-import { usePaywall } from "@/stores/paywall-store";
-import { ApiError } from "@/lib/api/mutator";
-import { usePostApiBillingCheckout, usePostApiBillingPortal } from "@/lib/api/billing/billing";
+import { usePaywall, usePlansDialog } from "@/stores/paywall-store";
 import { useEntitlements } from "@/hooks/use-entitlements";
+import { useBillingActions } from "@/hooks/use-billing-actions";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -29,12 +27,9 @@ export function UpgradeDialog() {
   const gate = usePaywall((s) => s.gate);
   const close = usePaywall((s) => s.close);
   const [cycle, setCycle] = useState<"monthly" | "yearly">("yearly");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+  const openPlans = usePlansDialog((s) => s.openPlans);
   const ent = useEntitlements();
-  const checkout = usePostApiBillingCheckout();
-  const portal = usePostApiBillingPortal();
+  const { busy, error, startCheckout, openPortal } = useBillingActions();
 
   if (!gate) return null;
 
@@ -56,36 +51,16 @@ export function UpgradeDialog() {
   const gained = plan.features.filter((f) => !(current.features as readonly string[]).includes(f));
   const headline = headlineFor(gate.code, count, noun, gate);
 
-  const start = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      /**
-       * Two destinations, both of them Dodo's.
-       *
-       * A free org has no Dodo customer yet, so there is no portal to open and the first
-       * subscription has to go through checkout. Anything after that — including this
-       * upgrade — is a switch between products in one collection, which the portal does
-       * against its own record of the subscription.
-       *
-       * We used to call our own change-plan endpoint here and then reconcile the result.
-       * That is what charged a customer for Business and left them on Pro, so the
-       * transaction is no longer ours to run.
-       */
-      const res = (await (paying ? portal.mutateAsync() : checkout.mutateAsync({
-        data: { planId: targetId, cycle } as never,
-      }))) as unknown as { url: string };
-      window.location.assign(res.url);
-    } catch (err) {
-      /**
-       * Either path can legitimately be unavailable — no Dodo products linked on this
-       * environment, or a role without `billing:manage`. Say so rather than leaving a
-       * dead button.
-       */
-      setError(err instanceof ApiError ? err.message : "Could not open billing.");
-      setBusy(false);
-    }
-  };
+  /**
+   * Two destinations, both of them the provider's, and which one is not a preference.
+   *
+   * A free org has no customer record yet, so the first subscription has to go through
+   * checkout. Anything after that — including this upgrade — is a switch between products
+   * in one collection, which the portal does against its own record of the subscription.
+   * We used to call our own change-plan endpoint here and reconcile the result; that is
+   * what charged a customer for Business and left them on Pro.
+   */
+  const start = () => (paying ? openPortal() : startCheckout(targetId, cycle));
 
   const perMonth = cycle === "yearly" ? yearlyPerMonthCents(plan) : plan.priceMonthlyCents;
   const saving = yearlySavingPercent(plan);
@@ -181,15 +156,18 @@ export function UpgradeDialog() {
               Opens the billing portal, where the change is priced and applied.
             </p>
           )}
+          {/* The other tiers, in place. This used to push `/pricing`, which threw away
+              whatever the reader was doing when the gate stopped them — and made
+              "just show me the options" cost a full page load out of the app. */}
           <button
             type="button"
             onClick={() => {
               close();
-              router.push("/pricing");
+              openPlans({ plan: targetId, cycle });
             }}
             className="text-muted-foreground hover:text-foreground h-9 text-sm transition-colors"
           >
-            Compare plans
+            See all plans
           </button>
         </div>
 

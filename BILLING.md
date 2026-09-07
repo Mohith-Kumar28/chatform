@@ -512,7 +512,7 @@ specified before any handler is written.
     "plan": "free",
     "requiredPlan": "pro",
     "context": { "count": 14, "noun": "partial responses" },
-    "upgradeUrl": "/billing?plan=pro&from=partial_responses"
+    "upgradeUrl": "/usage?plan=pro&from=partial_responses"
   }
 }
 ```
@@ -612,8 +612,8 @@ await fetch(`${dodoBase(env)}/checkouts`, {
     product_cart: [{ product_id: productId, quantity: 1 }],
     customer: { email: billingEmail, name: orgName },
     billing_currency: "USD",
-    return_url: `${env.APP_ORIGIN}/billing?checkout=success`,
-    cancel_url: `${env.APP_ORIGIN}/billing?checkout=cancelled`,
+    return_url: `${env.APP_ORIGIN}/usage?checkout=success`,
+    cancel_url: `${env.APP_ORIGIN}/usage?checkout=cancelled`,
     metadata: { organizationId: orgId, planId, cycle, userId },
     feature_flags: { allow_discount_code: true },
     customization: { show_order_details: true },
@@ -725,7 +725,7 @@ instead, so a form authored on Pro keeps working after a downgrade.
   never be the only thing between a free user and Pro data.
 - `<UpgradeDialog>` — one global dialog, driven by a small Zustand store, that takes a 402
   envelope and renders feature name, required plan, price, the `context` count, and a
-  checkout button. Deep-linkable as `/billing?plan=pro&from=<feature>`.
+  checkout button. Deep-linkable as `/usage?plan=pro&from=<feature>`.
 - **Global 402 interception in `mutator.ts`.** `ApiError` already carries `status`; extend
   it to carry the parsed envelope and have `customFetch` push `feature_locked` /
   `limit_reached` into the store. Every existing and future call site then gets the correct

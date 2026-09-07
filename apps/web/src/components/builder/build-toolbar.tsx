@@ -13,6 +13,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useEntitlements } from "@/hooks/use-entitlements";
+import { usePlansDialog } from "@/stores/paywall-store";
 import { BUILD_VIEWS } from "./builder-tabs";
 import { useBuilderStore } from "@/stores/builder-store";
 import { DesignSheet } from "./design-sheet";
@@ -49,6 +50,7 @@ export function BuildToolbar() {
    * it a paying customer gets an Upgrade chip on every first paint that then disappears.
    * A nag aimed at a customer who already paid is worse than no chip at all.
    */
+  const openPlans = usePlansDialog((s) => s.openPlans);
   const showUpgrade = showSideActions && ent.ready && ent.data?.planId === "free";
 
   return (
@@ -129,12 +131,13 @@ export function BuildToolbar() {
           {/* The only ask on this toolbar, and the only thing here wearing the
               brand at full strength. `soft` put it at the same volume as the
               Design chip opposite it — two quiet pills, neither read. */}
+          {/* Opens the plan picker over the builder rather than navigating out of
+              it. Losing an unfinished form to go and read a price was never a
+              trade anybody wanted to make. */}
           {showUpgrade && (
-            <Button size="sm" shape="pill" variant="gradient" asChild>
-              <Link href="/billing">
-                <Sparkles className="size-3.5" />
-                Upgrade
-              </Link>
+            <Button size="sm" shape="pill" variant="gradient" onClick={() => openPlans()}>
+              <Sparkles className="size-3.5" />
+              Upgrade
             </Button>
           )}
         </div>

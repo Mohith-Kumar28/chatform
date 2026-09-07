@@ -179,7 +179,7 @@ export default function PricingPage() {
                     featured={plan.id === "pro"}
                     plan={plan}
                     ctaHref={
-                      plan.id === "free" ? "/signin" : `/billing?plan=${plan.id}&cycle=${cycle}`
+                      plan.id === "free" ? "/signin" : `/usage?plan=${plan.id}&cycle=${cycle}`
                     }
                     ctaLabel={plan.id === "free" ? "Start free" : `Choose ${plan.name}`}
                     note={plan.checkoutReady ? undefined : "Contact us to set this up"}

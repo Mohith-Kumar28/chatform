@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Crown, TriangleAlert } from "lucide-react";
 import { useEntitlements } from "@/hooks/use-entitlements";
+import { usePlansDialog } from "@/stores/paywall-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -10,7 +11,7 @@ import { cn } from "@/lib/utils";
  * What this account is paying for, worn in the header.
  *
  * This slot used to hold a usage counter — "0/200 AI chats" — which spent
- * essentially its whole life reading zero, repeated a meter that `/billing`
+ * essentially its whole life reading zero, repeated a meter that `/usage`
  * already shows in full, and duplicated the warning that `AiCapBanner` puts on
  * the dashboard the moment either number gets close. Three copies of a number,
  * two of them silent.
@@ -33,11 +34,11 @@ import { cn } from "@/lib/utils";
  * "Free" in a muted outline was a label for a state nobody chose and nobody is
  * proud of, sitting in the most valuable strip of the product and saying
  * nothing a reader could act on. It was also the only invitation to pay
- * anywhere outside `/billing`, dressed as the thing least likely to be pressed.
+ * anywhere outside `/usage`, dressed as the thing least likely to be pressed.
  *
  * So: a button — the `gradient` one, at `sm`. The sweep is reserved for the
  * commercial ask (DESIGN.md 4.1b) and this is the only one that exists outside
- * `/billing`, so the header is where the reservation gets spent rather than
+ * `/usage`, so the header is where the reservation gets spent rather than
  * where it gets wasted. What it is not is a soft violet pill, which was a
  * control wearing the shape of the badge beside it.
  *
@@ -51,6 +52,7 @@ import { cn } from "@/lib/utils";
  */
 export function PlanBadge() {
   const ent = useEntitlements();
+  const openPlans = usePlansDialog((s) => s.openPlans);
 
   /**
    * A placeholder of roughly the badge's width, rather than nothing.
@@ -73,26 +75,35 @@ export function PlanBadge() {
 
   if (!paid) {
     /*
-      To `/billing`, which is where the plans are compared and bought.
+      Opens the plan picker in place; it does not navigate.
 
-      It briefly pointed at Dodo's hosted storefront instead. That page lists
-      products, not plans — no feature comparison, no sense of which tier is
-      for whom, and a look that is theirs rather than ours. The decision to pay
-      is made by reading what changes between tiers, and that reading belongs
-      on a page we control.
+      It used to be a link to the plan page — which meant pressing Upgrade from
+      the builder cost you the builder, and landed on a page whose cards were
+      below the fold, so the prices were not even on screen on arrival. The
+      dialog puts them where the click was, and `PlansDialog` reads the same
+      seeded catalogue `/pricing` does, so nothing drifts.
+
+      (It briefly pointed at Dodo's hosted storefront, too. That page lists
+      products, not plans — no comparison, no sense of which tier is for whom,
+      and a look that is theirs rather than ours.)
     */
     return (
-      <Button asChild variant="gradient" size="sm" shape="pill" className="hidden md:inline-flex">
-        <Link href="/billing" title="See the paid plans and what they add.">
-          Upgrade
-        </Link>
+      <Button
+        variant="gradient"
+        size="sm"
+        shape="pill"
+        className="hidden md:inline-flex"
+        onClick={() => openPlans()}
+        title="See the paid plans and what they add."
+      >
+        Upgrade
       </Button>
     );
   }
 
   return (
     <Link
-      href="/billing"
+      href="/usage"
       title={
         lapsed
           ? `Your ${planName} subscription needs attention — ${status.replace(/_/g, " ")}. Update payment to keep it.`

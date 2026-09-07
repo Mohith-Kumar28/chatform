@@ -24,7 +24,7 @@ export const APP_NAV = [
   { href: "/dashboard", label: "Forms", icon: LayoutGrid },
   { href: "/templates", label: "Templates", icon: FileStack },
   { href: "/api-keys", label: "API keys", icon: KeyRound },
-  { href: "/billing", label: "Plan", icon: Gauge },
+  { href: "/usage", label: "Usage", icon: Gauge },
   { href: "/team", label: "Team", icon: Users },
 ] as const;
 
