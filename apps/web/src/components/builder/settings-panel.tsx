@@ -110,6 +110,7 @@ export function SettingsPanel({
         <div className="min-w-0 flex-1 space-y-3 overflow-y-auto p-6" style={{ maxHeight: "calc(100svh - 220px)" }}>
           {section === "general" && (
             <SettingSection title="Display">
+              <SettingGroup>
               <SettingRow
                 label="Progress bar"
                 description="Show respondents how far they are."
@@ -145,6 +146,8 @@ export function SettingsPanel({
                   onCheckedChange={(v) => patch({ branding: { ...settings.branding, hidePoweredBy: v } })}
                 />
               </LockedControl>
+              </SettingGroup>
+              <SettingGroup>
               <LockedControl feature="duplicate_prevention">
               <SettingRow label="Duplicate responses" description="Control whether the same person can respond twice.">
                 <Select
@@ -164,6 +167,7 @@ export function SettingsPanel({
                 </Select>
               </SettingRow>
               </LockedControl>
+              </SettingGroup>
             </SettingSection>
           )}
 
@@ -171,6 +175,7 @@ export function SettingsPanel({
               for the persona, goal, knowledge base and guardrails. */}
           {section === "access" && (
             <SettingSection title="Access & closing">
+              <SettingGroup label="Who can respond">
               <LockedControl feature="respondent_auth_google">
                 <SettingRow
                   label="Require sign-in"
@@ -212,9 +217,13 @@ export function SettingsPanel({
                       })}
                     </div>
                   </SettingRow>
-                  <SettingRow label="What the agent says">
-                    <Input
-                      className="max-w-md"
+                  <SettingRow
+                    label="What the agent says"
+                    description="The sentence shown above the sign-in buttons."
+                    stacked
+                  >
+                    <Textarea
+                      rows={2}
                       value={settings.requireAuth.message}
                       onChange={(e) => patch({ requireAuth: { ...settings.requireAuth, message: e.target.value } })}
                     />
@@ -248,6 +257,9 @@ export function SettingsPanel({
                 checked={settings.captcha.enabled}
                 onCheckedChange={(v) => patch({ captcha: { ...settings.captcha, enabled: v } })}
               />
+              </SettingGroup>
+
+              <SettingGroup label="Closing">
               <SettingRow label="Close automatically at" description="Stop accepting responses after this date.">
                 <Input
                   type="datetime-local"
@@ -279,14 +291,14 @@ export function SettingsPanel({
                   }
                 />
               </SettingRow>
-              <SettingRow label="Closed message" description="Shown when the form is closed.">
+              <SettingRow label="Closed message" description="Shown when the form is closed." stacked>
                 <Textarea
                   rows={2}
-                  className="max-w-md"
                   value={settings.closeRules.closedMessageMd}
                   onChange={(e) => patch({ closeRules: { ...settings.closeRules, closedMessageMd: e.target.value } })}
                 />
               </SettingRow>
+              </SettingGroup>
             </SettingSection>
           )}
 
@@ -299,9 +311,11 @@ export function SettingsPanel({
 
           {section === "link" && (
             <SettingSection title="Link & social">
+              {/* One line, not three: the panel below shows the card, which
+                  explains itself better than a list of the platforms it
+                  appears on. */}
               <p className="text-muted-foreground -mt-1 text-sm">
-                How your form link appears when it is opened or shared — on Facebook, X,
-                LinkedIn, iMessage, Slack, and in the browser tab.
+                How your link looks when someone shares it.
               </p>
               <LinkSettings
                 settings={settings}
@@ -314,6 +328,7 @@ export function SettingsPanel({
 
           {section === "completion" && (
             <SettingSection title="On completion">
+              <SettingGroup>
               <SettingRow label="Notification emails" description="Get an email for every completed response.">
                 <Input
                   className="max-w-md"
@@ -349,6 +364,7 @@ export function SettingsPanel({
                 />
               </SettingRow>
               </LockedControl>
+              </SettingGroup>
             </SettingSection>
           )}
         </div>
@@ -363,8 +379,30 @@ function SettingSection({ title, children }: { title: string; children: React.Re
   return (
     <>
       <h2 className="font-display text-lg font-semibold">{title}</h2>
-      <div className="space-y-3">{children}</div>
+      <div className="space-y-5">{children}</div>
     </>
+  );
+}
+
+/**
+ * Related settings, in one card.
+ *
+ * Every row used to carry its own border, so a section read as a stack of
+ * unrelated tiles — "Require sign-in", then a separate box for the methods that
+ * only exist because of it, then a third for the sentence it shows. Rows that
+ * belong to one decision now sit inside one frame, separated by a rule, and the
+ * frame is what says they belong together.
+ */
+function SettingGroup({ label, children }: { label?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      {label && (
+        <p className="text-muted-foreground text-caption font-medium tracking-wide uppercase">
+          {label}
+        </p>
+      )}
+      <div className="divide-border/60 divide-y rounded-xl border">{children}</div>
+    </div>
   );
 }
 
@@ -374,22 +412,47 @@ function SettingRow({
   children,
   checked,
   onCheckedChange,
+  /**
+   * Put the control under the label instead of beside it, at full width.
+   *
+   * A sentence the agent will say was being typed into a 20rem input squeezed
+   * against the right edge of the row, showing about four words of it.
+   */
+  stacked = false,
 }: {
   label: string;
   description?: string;
   children?: React.ReactNode;
   checked?: boolean;
   onCheckedChange?: (v: boolean) => void;
+  stacked?: boolean;
 }) {
+  const control =
+    checked !== undefined && onCheckedChange ? (
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    ) : (
+      children
+    );
+
+  if (stacked) {
+    return (
+      <div className="space-y-2 px-4 py-3.5">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{label}</p>
+          {description && <p className="text-muted-foreground mt-0.5 text-xs">{description}</p>}
+        </div>
+        {control}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border px-4 py-3.5">
+    <div className="flex items-center justify-between gap-4 px-4 py-3.5">
       <div className="min-w-0">
         <p className="text-sm font-medium">{label}</p>
         {description && <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">{description}</p>}
       </div>
-      <div className="shrink-0">
-        {checked !== undefined && onCheckedChange ? <Switch checked={checked} onCheckedChange={onCheckedChange} /> : children}
-      </div>
+      <div className="shrink-0">{control}</div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImageIcon, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import type { FormDoc } from "@repo/form-schema";
@@ -27,8 +27,8 @@ import { cn } from "@/lib/utils";
  *
  * The preview mirrors the fallbacks the hosted page actually uses — the form's
  * own title when no share title is set, the generic invitation when there is no
- * description — so an empty field shows what will really be posted rather than
- * an empty card.
+ * description, and our own branded card when no image has been uploaded — so an
+ * empty field shows what will really be posted rather than an empty card.
  */
 
 const TITLE_MAX = 120;
@@ -59,16 +59,21 @@ export function LinkSettings({
   const title = meta.ogTitle?.trim() || formTitle || "Untitled form";
   const description = meta.ogDescription?.trim() || FALLBACK_DESCRIPTION;
 
+  /**
+   * The card the crawler will actually fetch, drawn from the fields as they are
+   * now. Deferred by half a second so typing a title is not a request per
+   * keystroke.
+   */
+  const defaultImageUrl = useDebounced(
+    `/og/form?title=${encodeURIComponent(title)}&description=${encodeURIComponent(description)}`,
+    400,
+  );
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <LockedControl feature="form_metadata">
-        <div className="space-y-5">
-          <Field
-            label="Title"
-            hint={`Max ${TITLE_MAX} characters. Defaults to the form's own title.`}
-            count={meta.ogTitle?.length ?? 0}
-            max={TITLE_MAX}
-          >
+        <div className="space-y-7">
+          <Field label="Title" count={meta.ogTitle?.length ?? 0} max={TITLE_MAX}>
             <Input
               maxLength={TITLE_MAX}
               placeholder={formTitle}
@@ -77,12 +82,7 @@ export function LinkSettings({
             />
           </Field>
 
-          <Field
-            label="Description"
-            hint={`Max ${DESCRIPTION_MAX} characters.`}
-            count={meta.ogDescription?.length ?? 0}
-            max={DESCRIPTION_MAX}
-          >
+          <Field label="Description" count={meta.ogDescription?.length ?? 0} max={DESCRIPTION_MAX}>
             <Textarea
               rows={3}
               maxLength={DESCRIPTION_MAX}
@@ -93,34 +93,32 @@ export function LinkSettings({
           </Field>
 
           <ImageField
-            label="Social preview image"
-            hint="Recommended 1200×630. PNG, JPEG, GIF or WebP, under 25MB."
+            label="Preview image"
+            hint="1200×630"
             assetKey={meta.ogImageKey}
+            fallbackUrl={defaultImageUrl}
             aspect="aspect-[1200/630]"
             onChange={(key) => patchMeta({ ogImageKey: key })}
           />
 
           <ImageField
             label="Favicon"
-            hint="Recommended 60×60. A PNG or .ico — this is the icon in the browser tab."
+            hint="Square, 60×60"
             assetKey={meta.faviconKey}
+            fallbackUrl="/icon.svg"
             aspect="size-14"
             accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/webp"
             onChange={(key) => patchMeta({ faviconKey: key })}
           />
 
-          <div className="flex items-center justify-between gap-4 rounded-xl border px-4 py-3.5">
+          <div className="flex items-center justify-between gap-4 border-t pt-5">
             <div className="min-w-0">
               <p className="text-sm font-medium">Hide from search engines</p>
-              <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-                Adds noindex to the public form page. Link previews still work — this only
-                keeps the form out of search results.
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                Link previews still work.
               </p>
             </div>
-            <Switch
-              checked={meta.noIndex}
-              onCheckedChange={(v) => patchMeta({ noIndex: v })}
-            />
+            <Switch checked={meta.noIndex} onCheckedChange={(v) => patchMeta({ noIndex: v })} />
           </div>
         </div>
       </LockedControl>
@@ -130,40 +128,56 @@ export function LinkSettings({
         slug={slug}
         title={title}
         description={description}
-        imageUrl={assetUrl(meta.ogImageKey)}
-        faviconUrl={assetUrl(meta.faviconKey)}
+        imageUrl={assetUrl(meta.ogImageKey) ?? defaultImageUrl}
+        faviconUrl={assetUrl(meta.faviconKey) ?? "/icon.svg"}
+        branded={!meta.ogImageKey}
       />
     </div>
   );
 }
 
+/**
+ * A value that settles.
+ *
+ * The preview image is a server-rendered card fetched by URL, so binding it
+ * straight to the title field would be one render per keystroke.
+ */
+function useDebounced<T>(value: T, ms: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return settled;
+}
+
 function Field({
   label,
-  hint,
   count,
   max,
   children,
 }: {
   label: string;
-  hint: string;
   count: number;
   max: number;
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label className="text-sm font-medium">{label}</Label>
-      {children}
+    <div className="space-y-2">
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-muted-foreground text-xs">{hint}</p>
+        <Label className="text-sm font-medium">{label}</Label>
         {/* Counts up rather than down, and only once you are actually near the
-            ceiling — a permanent 0/120 is a number nobody needs. */}
+            ceiling — a permanent 0/120 is a number nobody needs. The character
+            limit and "defaults to the form's title" used to be spelled out
+            under every field, which is three lines of instruction for a box
+            whose placeholder already shows the default. */}
         {count > max * 0.7 && (
           <span className="text-muted-foreground tabular text-xs">
             {count}/{max}
           </span>
         )}
       </div>
+      {children}
     </div>
   );
 }
@@ -179,6 +193,8 @@ function ImageField({
   label,
   hint,
   assetKey,
+  /** What the hosted page will use when nothing is uploaded — our own card. */
+  fallbackUrl,
   aspect,
   accept = "image/png,image/jpeg,image/gif,image/webp",
   onChange,
@@ -186,6 +202,7 @@ function ImageField({
   label: string;
   hint: string;
   assetKey: string | null;
+  fallbackUrl?: string;
   aspect: string;
   accept?: string;
   onChange: (key: string | null) => void;
@@ -219,9 +236,16 @@ function ImageField({
     }
   }
 
+  // Ours until theirs. The thumbnail shows what the link will really carry
+  // rather than an empty grey box with a picture icon in it.
+  const shown = url ?? fallbackUrl ?? null;
+
   return (
-    <div className="space-y-1.5">
-      <Label className="text-sm font-medium">{label}</Label>
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <Label className="text-sm font-medium">{label}</Label>
+        <span className="text-muted-foreground text-xs">{hint}</span>
+      </div>
       <div className="flex items-center gap-3">
         <div
           className={cn(
@@ -230,9 +254,9 @@ function ImageField({
             aspect.startsWith("aspect") && "w-32",
           )}
         >
-          {url ? (
+          {shown ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={url} alt="" className="size-full object-cover" />
+            <img src={shown} alt="" className="size-full object-cover" />
           ) : (
             <ImageIcon className="size-4" strokeWidth={1.75} />
           )}
@@ -240,9 +264,9 @@ function ImageField({
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" disabled={busy} onClick={() => inputRef.current?.click()}>
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
-            {busy ? "Uploading…" : url ? "Replace" : "Choose file"}
+            {busy ? "Uploading…" : url ? "Replace" : "Upload"}
           </Button>
-          {url && (
+          {url ? (
             <Button
               variant="ghost"
               size="sm"
@@ -252,6 +276,8 @@ function ImageField({
               <Trash2 className="size-3.5" />
               Remove
             </Button>
+          ) : (
+            <span className="text-muted-foreground text-xs">Using the chatform default</span>
           )}
         </div>
         <input
@@ -267,7 +293,6 @@ function ImageField({
           }}
         />
       </div>
-      <p className="text-muted-foreground text-xs">{hint}</p>
     </div>
   );
 }
@@ -283,6 +308,7 @@ function SharePreview({
   description,
   imageUrl,
   faviconUrl,
+  branded,
 }: {
   host: string;
   slug: string | null;
@@ -290,39 +316,35 @@ function SharePreview({
   description: string;
   imageUrl: string | null;
   faviconUrl: string | null;
+  /** True while the card is ours rather than an uploaded one. */
+  branded: boolean;
 }) {
   return (
-    <aside className="bg-muted/30 h-fit space-y-3 rounded-2xl border p-4">
-      <div className="flex items-center gap-2">
-        {faviconUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={faviconUrl} alt="" className="size-4 rounded-sm object-cover" />
-        ) : (
-          <div className="bg-primary-soft text-primary grid size-4 place-items-center rounded-sm">
-            <ImageIcon className="size-2.5" strokeWidth={2} />
-          </div>
-        )}
-        <p className="text-sm font-medium">Preview</p>
+    <aside className="h-fit space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-muted-foreground text-caption font-medium tracking-wide uppercase">
+          Preview
+        </p>
+        {/* Says which card this is without a paragraph explaining that a
+            preview is a preview. */}
+        {branded && <span className="text-muted-foreground text-xs">chatform default</span>}
       </div>
-      <p className="text-muted-foreground text-xs">
-        How this link can appear when it&apos;s shared.
-      </p>
 
-      <div className="bg-card overflow-hidden rounded-xl border">
-        <div className="bg-muted text-muted-foreground grid aspect-[1200/630] place-items-center">
-          {imageUrl ? (
+      <div className="bg-card overflow-hidden rounded-xl border shadow-xs">
+        <div className="bg-muted grid aspect-[1200/630] place-items-center">
+          {imageUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={imageUrl} alt="" className="size-full object-cover" />
-          ) : (
-            <p className="px-4 text-center text-xs">
-              No image yet — most platforms will show a plain text card.
-            </p>
           )}
         </div>
-        <div className="space-y-1 p-3">
-          <p className="text-muted-foreground text-[0.625rem] uppercase tracking-wide">
-            {host || " "}
-          </p>
+        <div className="space-y-1 p-3.5">
+          <div className="text-muted-foreground flex items-center gap-1.5 text-[0.625rem] tracking-wide uppercase">
+            {faviconUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={faviconUrl} alt="" className="size-3.5 rounded-sm object-cover" />
+            )}
+            <span className="truncate">{host || " "}</span>
+          </div>
           <p className="line-clamp-2 text-sm font-semibold leading-snug">{title}</p>
           <p className="text-muted-foreground line-clamp-2 text-xs leading-snug">{description}</p>
         </div>

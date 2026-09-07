@@ -97,3 +97,92 @@ export function renderShareCard() {
     shareCardSize,
   );
 }
+
+/**
+ * The share card a *form* gets when its author has not uploaded one.
+ *
+ * Nothing was drawn before, so an unfurled form link was a bare text card —
+ * every link anyone shared out of this product looked like a broken one, and
+ * the fix was a paid upload most authors never make. This is the same card the
+ * marketing pages use, wearing the form's own title: the author's words with
+ * our frame around them.
+ *
+ * Rendered on request rather than stored, so it always matches the current
+ * title and costs nothing when nobody shares the link. Same rule as above about
+ * fonts and the mark: no network on this path.
+ */
+export function renderFormCard({ title, description }: { title: string; description?: string }) {
+  // Long titles step down rather than wrap into the description.
+  const size = title.length > 74 ? 58 : title.length > 44 ? 70 : title.length > 24 ? 84 : 96;
+
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          background: CREAM,
+          padding: "72px 76px 0",
+          fontFamily: "sans-serif",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <svg width="46" height="46" viewBox="0 0 32 32">
+            <path d={PLATE_ASK} fill={ORANGE} />
+            <path d={PLATE_ANSWER} fill={VIOLET} />
+          </svg>
+          <div style={{ fontSize: 29, fontWeight: 700, color: INK, letterSpacing: -1.2 }}>
+            chatform
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 20, paddingBottom: 8 }}>
+          <div
+            style={{
+              fontSize: size,
+              fontWeight: 800,
+              color: INK,
+              letterSpacing: -3.4,
+              lineHeight: 1.02,
+              maxWidth: 1000,
+              display: "flex",
+            }}
+          >
+            {title}
+          </div>
+          {description ? (
+            <div style={{ fontSize: 30, color: MUTED, maxWidth: 860, display: "flex" }}>
+              {description}
+            </div>
+          ) : null}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6 }}>
+            <div
+              style={{
+                display: "flex",
+                background: ORANGE,
+                color: "#201A16",
+                fontSize: 24,
+                fontWeight: 600,
+                padding: "10px 22px",
+                borderRadius: 999,
+              }}
+            >
+              Answer in a chat
+            </div>
+            <div style={{ display: "flex", fontSize: 24, color: MUTED }}>takes about a minute</div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", width: "100%", height: 14 }}>
+          {SPECTRUM.map((s) => (
+            <div key={s.hue} style={{ flex: s.w, height: "100%", background: s.hue }} />
+          ))}
+        </div>
+      </div>
+    ),
+    shareCardSize,
+  );
+}

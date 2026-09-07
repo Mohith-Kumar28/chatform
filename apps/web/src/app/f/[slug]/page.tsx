@@ -9,6 +9,8 @@ import { EmbedBridge } from "@/components/chat/embed-bridge";
 // worker is reachable internally; both default to the deployed API.
 const API_ORIGIN = process.env.API_ORIGIN ?? process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.in";
 const PUBLIC_API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.in";
+// Absolute, because a crawler resolves `og:image` against nothing.
+const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_ORIGIN ?? "https://chatform.in";
 
 async function getConfig(slug: string): Promise<PublicFormConfig | null> {
   try {
@@ -28,23 +30,39 @@ export async function generateMetadata({ params }: PageProps<"/f/[slug]">): Prom
   const title = config.meta?.ogTitle ?? config.title;
   const description = config.meta?.ogDescription ?? `Answer a few questions — it only takes a minute.`;
 
+  /**
+   * Every form link unfurls as a card, uploaded or not.
+   *
+   * Without an image a shared link was a bare line of text in Slack and a grey
+   * box on LinkedIn — the least trustworthy thing a link can look like, and it
+   * was the default for every form nobody had uploaded an image to. The
+   * fallback is our own card wearing the form's title, drawn on request at
+   * `/og/form`, so the author's link looks deliberate before they have done
+   * anything. Their own upload still wins the moment there is one.
+   */
+  const ogImage =
+    config.meta?.ogImageUrl ??
+    `${SITE_ORIGIN}/og/form?title=${encodeURIComponent(title)}&description=${encodeURIComponent(description)}`;
+
   return {
     title,
     description,
     robots: config.meta?.noIndex ? { index: false, follow: false } : undefined,
     // A form's own favicon when it has one, so a hosted form in a tab is the
-    // sender's brand rather than ours.
+    // sender's brand rather than ours. Absent, Next falls back to the app's own
+    // icon, which is the chatform mark.
     icons: config.meta?.faviconUrl ? { icon: config.meta.faviconUrl } : undefined,
     openGraph: {
       title,
       description,
       type: "website",
-      images: config.meta?.ogImageUrl ? [{ url: config.meta.ogImageUrl }] : undefined,
+      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
     },
     twitter: {
-      card: config.meta?.ogImageUrl ? "summary_large_image" : "summary",
+      card: "summary_large_image",
       title,
       description,
+      images: [ogImage],
     },
   };
 }
