@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { API_ORIGIN, authClient } from "@/lib/auth/auth-client";
+import { uploadAuthImage } from "@/lib/auth/upload-image";
 import { deleteUserPlugin } from "@/lib/auth/delete-user-plugin";
 import { emailOtpPlugin } from "@/lib/auth/email-otp-plugin";
 import { organizationPlugin } from "@/lib/auth/organization-plugin";
@@ -72,30 +73,16 @@ export function AuthUIProvider({ children }: { children: React.ReactNode }) {
         requireEmailVerification: true,
       }}
       /**
-       * The avatar goes to R2, not into the session.
+       * The avatar goes to R2, not into the session. See `uploadAuthImage` for
+       * why that is not a preference.
        *
-       * Left alone, these components fall back to writing a data URL straight
-       * into `user.image`. That column is serialised into the session cookie
-       * cache — a 256px PNG is tens of kilobytes and a cookie's ceiling is
-       * four, so the fallback would not degrade, it would break sign-in
-       * outright. `POST /api/assets` is the upload path the builder already
-       * uses for logos and question media, and `/p/assets/<id>` serves them
-       * public, immutable and MIME-checked.
+       * Note what this does NOT reach: the organization plugin resolves its
+       * own `logo` config from Better Auth UI's *default* avatar settings, not
+       * from this one, so an uploader set here never arrives there. The
+       * organization logo has to say so again, and does, in
+       * `lib/auth/organization-plugin`.
        */
-      avatar={{
-        upload: async (file: File) => {
-          const body = new FormData();
-          body.append("file", file);
-          const res = await fetch(`${API_ORIGIN}/api/assets`, {
-            method: "POST",
-            credentials: "include",
-            body,
-          });
-          if (!res.ok) throw new Error("Could not upload that image");
-          const asset = (await res.json()) as { fileId: string };
-          return `${API_ORIGIN}/p/assets/${asset.fileId}`;
-        },
-      }}
+      avatar={{ upload: uploadAuthImage }}
       /**
        * Same-origin paths only.
        *

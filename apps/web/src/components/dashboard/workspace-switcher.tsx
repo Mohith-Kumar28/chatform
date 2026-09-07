@@ -15,18 +15,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { CreateOrganizationDialog } from "@/components/auth/organization/create-organization-dialog";
 
 /**
  * Organization switcher.
@@ -153,86 +144,29 @@ export function WorkspaceSwitcher() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <CreateOrgDialog open={createOpen} onOpenChange={setCreateOpen} />
+      {/* Better Auth UI's own dialog, extended with a logo field and an
+          invite step. This component used to carry a second create form of its
+          own — including a hand-written copy of the slug-collision retry that
+          `useCreateOrganization` already does — so the product had two
+          different "new workspace" experiences depending on whether you came
+          from this menu or from Settings. Now it has one.
+
+          `hideSlug` keeps this menu's behaviour: the slug is derived from the
+          name and never asked for. */}
+      <CreateOrganizationDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        hideSlug
+        onCompleted={() => {
+          // The new workspace is active in the session cookie — Better Auth's
+          // `organization.create` sets it server-side — and the server reads
+          // that on every request, so this has to be a real navigation. A
+          // client transition would render the previous workspace's cached
+          // dashboard under the new workspace's name.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+          window.location.assign("/dashboard");
+        }}
+      />
     </>
-  );
-}
-
-function CreateOrgDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function create() {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setBusy(true);
-    try {
-      // Slugs are globally unique, so derive one and let checkSlug tell us it
-      // is taken rather than colliding on insert.
-      const base =
-        trimmed
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/(^-|-$)/g, "")
-          .slice(0, 40) || "workspace";
-      let slug = base;
-      for (let i = 0; i < 5; i++) {
-        const check = await authClient.organization.checkSlug({ slug });
-        if (check.data?.status) break;
-        slug = `${base}-${Math.random().toString(36).slice(2, 6)}`;
-      }
-
-      const created = await authClient.organization.create({ name: trimmed, slug });
-      if (created.error) throw new Error(created.error.message ?? "Could not create");
-      if (created.data?.id) {
-        await authClient.organization.setActive({ organizationId: created.data.id });
-      }
-      // As above: the new workspace is only active once the server re-reads the cookie.
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.assign("/dashboard");
-    } catch (err) {
-      setBusy(false);
-      toast.error("Couldn't create the workspace", {
-        description: err instanceof Error ? err.message : undefined,
-      });
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => (busy ? null : onOpenChange(o))}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>New workspace</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-1.5">
-          <Label htmlFor="org-name">Name</Label>
-          <Input
-            id="org-name"
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Acme Inc"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && name.trim()) void create();
-            }}
-          />
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancel
-          </Button>
-          <Button onClick={create} disabled={busy || !name.trim()}>
-            {busy && <Loader2 className="size-3.5 animate-spin" />}
-            Create
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
