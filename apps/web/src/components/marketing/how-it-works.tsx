@@ -126,14 +126,14 @@ function Beat({
 }) {
   return (
     <li
-      style={{ background: `var(--family-${tone}-band)` }}
+      style={{
+        background: `var(--family-${tone}-band-vivid)`,
+        color: "var(--on-band-vivid)",
+      }}
       className="flex h-full min-w-0 flex-col rounded-2xl p-6"
     >
       <h3 className="text-h1 font-bold tracking-[-0.02em]">{title}</h3>
-      <p
-        className="text-body mt-1.5 leading-relaxed"
-        style={{ color: `var(--family-${tone}-band-muted)` }}
-      >
+      <p className="text-body mt-1.5 leading-relaxed" style={{ color: "var(--on-band-vivid-muted)" }}>
         {body}
       </p>
       <div className="mt-5 flex-1">{children}</div>

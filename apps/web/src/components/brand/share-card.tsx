@@ -18,7 +18,7 @@ import { ImageResponse } from "next/og";
    cards — a scan position, so it names the category. The drawn headline below
    keeps the claim; a screen reader that got only the metaphor would be the one
    reader who never finds out what this is. */
-export const shareCardAlt = "chatform — agentic forms that interview for you";
+export const shareCardAlt = "chatform — AI chat forms people actually finish";
 export const shareCardSize = { width: 1200, height: 630 };
 export const shareCardContentType = "image/png";
 
@@ -82,10 +82,10 @@ export function renderShareCard() {
               display: "flex",
             }}
           >
-            The first form that answers back.
+            Turn any form into a chat.
           </div>
           <div style={{ fontSize: 32, color: MUTED, maxWidth: 780, display: "flex" }}>
-            An AI interviewer that asks your questions — and answers theirs.
+            AI asks the questions. People answer like people.
           </div>
         </div>
 

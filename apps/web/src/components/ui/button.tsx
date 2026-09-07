@@ -59,6 +59,18 @@ const buttonVariants = cva(
           "before:duration-[var(--duration-micro)] before:ease-[var(--ease-out)]",
           "hover:before:opacity-100",
         ].join(" "),
+        // Controls that sit ON a full-strength brand ground — the hero wash,
+        // the closing band. Every other variant assumes a page-coloured
+        // surface underneath it, so `default` puts orange on orange and
+        // `outline` draws a cream border on cream. These invert instead: the
+        // page's own ground becomes the fill, which is the highest-contrast
+        // thing available on a saturated band in either theme.
+        //
+        // Hand-rolled in `cta-band.tsx` first. Promoted here when the hero
+        // needed the same two buttons, because the second copy is where a
+        // pattern starts drifting.
+        "on-brand": "bg-background text-foreground shadow-sm hover:bg-card",
+        "on-brand-outline": "border-2 border-current bg-transparent hover:opacity-70",
         link: "text-primary underline-offset-4 hover:underline",
       },
       shape: {

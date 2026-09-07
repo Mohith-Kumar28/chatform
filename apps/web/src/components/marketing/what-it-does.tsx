@@ -72,7 +72,7 @@ export function WhatItDoes() {
             <TileTitle className="text-display font-bold tracking-[-0.025em]">
               Brief it the way you&rsquo;d brief a person.
             </TileTitle>
-            <TileBody tone="content" className="text-body-lg max-w-md">
+            <TileBody className="text-body-lg max-w-md">
               A persona, a goal, a knowledge base it can quote — and the topics it
               will not touch.
             </TileBody>
@@ -84,7 +84,7 @@ export function WhatItDoes() {
 
         <Tile tone="contact" span={7}>
           <TileTitle>Read the conversation, not the row.</TileTitle>
-          <TileBody tone="contact">
+          <TileBody>
             What you asked, what they said, and what got recorded — side by side.
           </TileBody>
           <div className="mt-5">
@@ -97,7 +97,7 @@ export function WhatItDoes() {
         <Tile tone="text" span={5} className="justify-between">
           <div>
             <TileTitle>It understands what people type.</TileTitle>
-            <TileBody tone="text">
+            <TileBody>
               Choices stay exact-match and instant. Only free text goes to the model,
               and a low-confidence read becomes a follow-up rather than a guess.
             </TileBody>
@@ -122,7 +122,7 @@ export function WhatItDoes() {
 
         <Tile tone="number" span={5}>
           <TileTitle>It can&rsquo;t publish a dead end.</TileTitle>
-          <TileBody tone="number">
+          <TileBody>
             Nineteen operators, nested groups, scoring. The linter walks every path
             before publish.
           </TileBody>
@@ -187,7 +187,14 @@ function Tile({
 }) {
   return (
     <div
-      style={{ background: `var(--family-${tone}-band)` }}
+      /* Vivid, like the bands, and for the same reason: five pastel tiles on a
+         sand ground is five ways of saying "off-white". The mosaic's whole
+         argument is that no two of these are the same kind of object, and
+         colour is the fastest way to say so. */
+      style={{
+        background: `var(--family-${tone}-band-vivid)`,
+        color: "var(--on-band-vivid)",
+      }}
       className={cn("flex flex-col rounded-2xl p-6 sm:p-7", SPANS[span], className)}
     >
       {children}
@@ -209,18 +216,25 @@ function TileTitle({
   );
 }
 
+/**
+ * `tone` is gone from the signature, not just unused.
+ *
+ * On the pastel tier this had to be told which family it sat on, so the
+ * secondary line could be pulled toward that family's own dark ink instead of
+ * going grey on a coloured ground. The vivid tier needs no such thing: one
+ * step down from the near-black already on the tile is the same colour on all
+ * five of them.
+ */
 function TileBody({
   children,
-  tone,
   className,
 }: {
   children: React.ReactNode;
-  tone: "content" | "text" | "contact" | "number" | "choice";
   className?: string;
 }) {
   return (
     <p
-      style={{ color: `var(--family-${tone}-band-muted)` }}
+      style={{ color: "var(--on-band-vivid-muted)" }}
       className={cn("text-body mt-2 leading-relaxed", className)}
     >
       {children}

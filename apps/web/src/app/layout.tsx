@@ -48,18 +48,20 @@ export const metadata: Metadata = {
    * has a second reading in English — talking back is what an insolent child
    * does — and that was the string in every tab on the site.
    *
-   * So the category goes where people scan and search, and the claim stays
-   * where people read. "Agentic" is the honest word for it rather than a
-   * fashionable one: this thing carries a persona, a goal and a knowledge
-   * base, and a *conversational* form is only the chat bubbles, which the
-   * category has had since 2015.
+   * The words here are deliberately the plainest available. "Agentic forms
+   * that interview for you" was the previous attempt and it failed the only
+   * test a title has to pass: a stranger, one second in, knowing what this is.
+   * Nobody searches for an interviewer. Everybody knows what a form is and
+   * what a chat is, so the title is built from those two and nothing else. The
+   * clever version reads better and communicates less, and this is a scan
+   * position, where communicating is the entire job.
    */
   title: {
-    default: "chatform — agentic forms that interview for you",
+    default: "chatform — AI chat forms",
     template: "%s · chatform",
   },
   description:
-    "Agentic forms: an AI interviewer with a persona, a goal and a knowledge base. It asks your questions one at a time, answers theirs, and gets to the point.",
+    "Turn any form into a chat. AI asks one question at a time, understands what people write, and answers their questions too — so more people finish.",
 };
 
 export const viewport: Viewport = {

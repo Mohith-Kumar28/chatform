@@ -10,14 +10,13 @@ import { CtaBand } from "@/components/marketing/cta-band";
 import { Band, BandTitle, BandLede } from "@/components/marketing/band";
 
 /**
- * The scan positions carry the category; the page carries the claim.
+ * Plain words in every position, page and metadata alike.
  *
- * Both titles used to be "the first form that answers back", which is the
- * headline four inches below and the headline drawn into the share card
- * itself. An unfurl that repeats its own image in its own title has said one
- * thing twice and the other thing never — so the card keeps the claim, drawn,
- * and the title beside it names what the product is. See the note in
- * `app/layout.tsx` for why the split exists at all.
+ * This has been through two clever versions — "the first form that answers
+ * back", then "agentic forms that interview for you" — and both lost the same
+ * bet: that a visitor would decode a metaphor before deciding whether to stay.
+ * They will not. "Turn any form into a chat" uses two words everyone already
+ * owns and needs no decoding, which is what a first line is for.
  */
 export const metadata: Metadata = {
   /**
@@ -28,12 +27,12 @@ export const metadata: Metadata = {
    * sees. Every other route wants the template and keeps it; only the
    * home page names the brand itself.
    */
-  title: { absolute: "chatform — agentic forms that interview for you" },
+  title: { absolute: "chatform — AI chat forms people actually finish" },
   description:
-    "Agentic forms: an AI interviewer that asks your questions one at a time, understands what people actually type, and answers their questions from a knowledge base you write.",
+    "Turn any form into a chat. AI asks one question at a time, understands what people write, and answers their questions too — so more people finish.",
   openGraph: {
-    title: "chatform — agentic forms that interview for you",
-    description: "An AI interviewer that asks your questions — and answers theirs.",
+    title: "chatform — AI chat forms people actually finish",
+    description: "AI asks one question at a time, understands the answers, and answers questions back.",
     type: "website",
   },
 };

@@ -10,13 +10,12 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Pricing",
   /**
-   * Names the product before it prices it. Someone arriving here from a search
-   * for "agentic form pricing" lands on a number with no idea what it buys —
-   * this page is often the first one a comparison shopper sees, not the
-   * second.
+   * Names the product before it prices it. Someone arriving here from search
+   * lands on a number with no idea what it buys — this page is often the first
+   * one a comparison shopper sees, not the second.
    */
   description:
-    "Pricing for chatform's agentic forms. Unlimited forms and unlimited responses on every plan, including free. Compare limits, question types and features across Free, Pro and Business.",
+    "Pricing for chatform's AI chat forms. Unlimited forms and unlimited responses on every plan, including free. Compare limits, question types and features across Free, Pro and Business.",
   openGraph: {
     title: "chatform pricing — collect for free, pay to look closer",
     description:

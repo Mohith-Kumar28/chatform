@@ -171,6 +171,35 @@
   --band-mix: 17%;
   --band-muted-mix: 45%;
 
+  /* ── vivid bands: the same seven hues, at the volume a landing page needs ──
+     17% is the correct mix for a surface someone works in front of for eight
+     hours. It is the wrong mix for a page seen once, for thirty seconds, by
+     someone deciding whether this product is worth their attention — there the
+     hue arrives as a rumour of itself, and seven rumours in a row read as one
+     long grey scroll.
+     `--band-vivid-mix` is that same derivation at the other end: the hue,
+     barely softened, so a band is the colour rather than a memory of it. It is
+     a separate token rather than a bigger `--band-mix` on purpose. Raising the
+     shared one would repaint the builder, the dashboard and every question
+     chip in the app, which is the one place the quiet version is right.
+     Ink on a vivid band is the warm near-black, exactly as on the brand
+     gradient and for exactly the same reason: every one of these hues sits at
+     L≈0.62–0.82 in its own theme, the band that the near-black was chosen to
+     hold. White would fail on all seven. The contrast test asserts both inks
+     against all nine grounds in both themes, so a retint that breaks one
+     fails there rather than in front of someone.
+
+     Light and dark want opposite mixes, exactly as `--band-mix` does and for
+     the mirror reason. On cream the hue is DARKER than the page, so a higher
+     mix drives the ground down toward the ink and contrast falls. On charcoal
+     the hue is LIGHTER, so a higher mix lifts the ground away from the ink and
+     contrast rises — which is why the dark theme gets the bolder number and
+     the brighter page. 86/96 is the pair where the worst of eighteen ground ×
+     ink combinations still clears 4.61:1.                                    */
+  --band-vivid-mix: 86%;
+  --on-band-vivid: oklch(0.225 0.012 55);
+  --on-band-vivid-muted: oklch(0.28 0.035 55);
+
   /* Ink for type on a full-strength `--primary` ground.
      Deliberately NOT `--primary-foreground`. That token is near-white in light
      mode, which lands at 2.7:1 on the orange — under even the 3:1 large-text
@@ -234,6 +263,19 @@
   --family-scale-band-muted: color-mix(in oklch, var(--family-scale-ink) var(--band-muted-mix), var(--foreground));
   --family-advanced-band: color-mix(in oklch, var(--family-advanced) var(--band-mix), var(--background));
   --family-advanced-band-muted: color-mix(in oklch, var(--family-advanced-ink) var(--band-muted-mix), var(--foreground));
+
+  /* The same nine grounds at landing-page strength. One derivation, one mix,
+     nothing hand-picked — so the vivid tier cannot drift away from the quiet
+     one the way a second hand-tuned palette would. */
+  --brand-violet-band-vivid: color-mix(in oklch, var(--brand-violet) var(--band-vivid-mix), var(--background));
+  --brand-orange-band-vivid: color-mix(in oklch, var(--brand-orange) var(--band-vivid-mix), var(--background));
+  --family-content-band-vivid: color-mix(in oklch, var(--family-content) var(--band-vivid-mix), var(--background));
+  --family-text-band-vivid: color-mix(in oklch, var(--family-text) var(--band-vivid-mix), var(--background));
+  --family-contact-band-vivid: color-mix(in oklch, var(--family-contact) var(--band-vivid-mix), var(--background));
+  --family-number-band-vivid: color-mix(in oklch, var(--family-number) var(--band-vivid-mix), var(--background));
+  --family-choice-band-vivid: color-mix(in oklch, var(--family-choice) var(--band-vivid-mix), var(--background));
+  --family-scale-band-vivid: color-mix(in oklch, var(--family-scale) var(--band-vivid-mix), var(--background));
+  --family-advanced-band-vivid: color-mix(in oklch, var(--family-advanced) var(--band-vivid-mix), var(--background));
 
   /* ── charts: orange / violet / teal / olive / rose / sky ──
      The first two series are the brand pair, in the mark's order. They used to
@@ -397,6 +439,13 @@
      because `.dark` and `:root` are the same element and this wins there. */
   --band-mix: 26%;
   --band-muted-mix: 55%;
+  /* The vivid tier goes the other way in the dark, and it is the reason the
+     dark landing page stops being charcoal. Against a 0.205 ground a lifted
+     hue LIFTS as the mix rises, so 96% is both the brightest option and the
+     most readable one — the two things that usually trade off here agree.
+     The inks are not restated: near-black on a bright ground is near-black in
+     either theme, which is the whole point of deriving one ink for both. */
+  --band-vivid-mix: 96%;
 
   --sidebar: var(--background);
   --panel: oklch(0.232 0.009 64);

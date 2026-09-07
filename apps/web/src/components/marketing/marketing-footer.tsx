@@ -54,8 +54,8 @@ export function MarketingFooter() {
               crowding out the only sentence on the page that says what the
               product is. */}
           <p className="text-body text-muted-foreground mt-3 max-w-xs">
-            Agentic forms: an AI interviewer that asks your questions, answers theirs, and gets to
-            the point.
+            AI chat forms. One question at a time, in plain conversation — and it answers
+            questions back.
           </p>
           <div className="mt-4">
             <ThemeToggle />

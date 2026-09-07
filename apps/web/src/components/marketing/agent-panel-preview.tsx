@@ -7,7 +7,7 @@ import { BookOpen, ShieldCheck, Target } from "lucide-react";
  */
 export function AgentPanelPreview() {
   return (
-    <div className="border-border/70 bg-background flex flex-col gap-3 rounded-xl border p-3.5">
+    <div className="border-border/70 bg-background text-foreground flex flex-col gap-3 rounded-xl border p-3.5">
       <Row icon={Target} label="Goal">
         Qualify the lead and book a demo if they&apos;re a fit.
       </Row>

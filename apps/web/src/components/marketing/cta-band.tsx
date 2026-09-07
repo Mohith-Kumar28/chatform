@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { LogoMark } from "@/components/brand/logo";
 
 /**
@@ -47,19 +48,17 @@ export function CtaBand() {
           Ask better questions. Get better answers.
         </h2>
 
+        {/* These two were hand-rolled here first. They are now `on-brand` and
+            `on-brand-outline` on `Button`, because the hero needed the same
+            pair on the same kind of ground and a second hand-rolled copy is
+            where a pattern starts drifting. */}
         <div className="mt-9 flex flex-wrap items-center gap-3">
-          <Link
-            href="/signin"
-            className="bg-background text-foreground hover:bg-card focus-visible:ring-offset-primary inline-flex h-12 items-center rounded-full px-8 font-medium transition-colors duration-[var(--duration-micro)] focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2"
-          >
-            Start free
-          </Link>
-          <Link
-            href="/pricing"
-            className="inline-flex h-12 items-center rounded-full border-2 border-current px-8 font-medium transition-opacity duration-[var(--duration-micro)] hover:opacity-70"
-          >
-            See pricing
-          </Link>
+          <Button asChild size="lg" shape="pill" variant="on-brand" className="h-12 px-8">
+            <Link href="/signin">Start free</Link>
+          </Button>
+          <Button asChild size="lg" shape="pill" variant="on-brand-outline" className="h-12 px-8">
+            <Link href="/pricing">See pricing</Link>
+          </Button>
         </div>
       </div>
     </section>

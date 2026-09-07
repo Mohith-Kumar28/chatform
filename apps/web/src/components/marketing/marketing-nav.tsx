@@ -3,6 +3,7 @@
 import { MARKETING_LINKS } from "./nav-links";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +40,16 @@ const LINKS = MARKETING_LINKS;
 export function MarketingNav() {
   const [scrolled, setScrolled] = useState(false);
   /**
+   * The landing hero is a full-strength brand wash that now runs up behind
+   * this bar, and the nav's own colours assume a page-coloured ground: muted
+   * grey links and an orange CTA, which on an orange wash is an invisible
+   * button on unreadable text. While the bar is transparent over that wash it
+   * borrows the band ink instead — the same near-black the hero sets on
+   * itself. Once scrolled, the backdrop is back and so are the normal colours.
+   */
+  const overWash = usePathname() === "/";
+  const ctaVariant = overWash && !scrolled ? ("on-brand" as const) : ("default" as const);
+  /**
    * These pages are static, so the session is only knowable in the browser.
    * Until the fetch settles the CTAs are a placeholder rather than the
    * signed-out pair: drawing "Sign in" first and swapping it a moment later is
@@ -59,6 +70,7 @@ export function MarketingNav() {
         "sticky top-0 z-[var(--z-sticky)] transition-colors duration-[var(--duration-standard)] ease-[var(--ease-out)]",
         scrolled && "bg-background/80 border-border/60 border-b backdrop-blur-md",
       )}
+      style={overWash && !scrolled ? { color: "var(--on-band-vivid)" } : undefined}
     >
       <nav
         aria-label="Main"
@@ -74,7 +86,12 @@ export function MarketingNav() {
             <li key={link.href}>
               <Link
                 href={link.href}
-                className="text-body text-muted-foreground hover:text-foreground hover:bg-accent/60 rounded-full px-3 py-1.5 transition-colors duration-[var(--duration-micro)]"
+                className={cn(
+                  "text-body rounded-full px-3 py-1.5 transition-colors duration-[var(--duration-micro)]",
+                  overWash && !scrolled
+                    ? "opacity-75 hover:bg-black/5 hover:opacity-100"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60",
+                )}
               >
                 {link.label}
               </Link>
@@ -84,18 +101,26 @@ export function MarketingNav() {
 
         <div className="ml-auto flex items-center gap-1.5 lg:ml-0">
           <ThemeToggle />
+          {/* `on-brand` while the bar is transparent over the hero wash: the
+              orange fill would be an orange pill on an orange ground. */}
           {isPending ? (
             <div className="shimmer hidden h-8 w-28 rounded-full sm:block" aria-hidden />
           ) : session ? (
-            <Button asChild size="sm" shape="pill" className="hidden sm:inline-flex">
+            <Button asChild size="sm" shape="pill" variant={ctaVariant} className="hidden sm:inline-flex">
               <Link href="/dashboard">Dashboard</Link>
             </Button>
           ) : (
             <>
-              <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
+              <Button
+                asChild
+                variant={overWash && !scrolled ? "on-brand-outline" : "ghost"}
+                size="sm"
+                shape="pill"
+                className="hidden sm:inline-flex"
+              >
                 <Link href="/signin">Sign in</Link>
               </Button>
-              <Button asChild size="sm" shape="pill" className="hidden sm:inline-flex">
+              <Button asChild size="sm" shape="pill" variant={ctaVariant} className="hidden sm:inline-flex">
                 <Link href="/signin">Start free</Link>
               </Button>
             </>

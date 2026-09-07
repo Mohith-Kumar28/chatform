@@ -62,8 +62,13 @@ export function TheMoment() {
               <div>
                 <h3 className="text-h3">{c.title}</h3>
                 <p
+                  /* `--brand-violet-band-muted` was ink for the PASTEL violet
+                     this band used to be — a pale tint of the hue, which on
+                     the saturated ground it is now reads as light grey text on
+                     a strong colour. The vivid tier's muted ink is a step down
+                     from the near-black already on the band. */
                   className="text-body mt-1 leading-relaxed"
-                  style={{ color: "var(--brand-violet-band-muted)" }}
+                  style={{ color: "var(--on-band-vivid-muted)" }}
                 >
                   {c.body}
                 </p>
