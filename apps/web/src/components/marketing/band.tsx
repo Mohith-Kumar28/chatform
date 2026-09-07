@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { DotField, MarkWatermark } from "./annotate";
 
 /**
  * A full-bleed horizontal band, tinted by one block family.
@@ -79,12 +80,27 @@ export function Band({
   /** `tight` for connective bands; `tall` for the two that carry the argument. */
   size?: "tight" | "default" | "tall";
 }) {
+  /**
+   * The plain tones are the flat ones.
+   *
+   * `paper`, `sand` and `ink` have no hue to carry them, so at full width they
+   * are large empty rectangles between the coloured bands — the page visibly
+   * running out of things to say. They get the two background devices: the
+   * mark at scale, bled off a corner, and a dot field that fades before it
+   * reaches the type. Both are `currentColor`, so one declaration works on
+   * cream and on charcoal, and both are cheap enough to be everywhere.
+   *
+   * The coloured bands get neither. They already have a ground doing this job,
+   * and a watermark on top of a saturated hue is texture on texture.
+   */
+  const flat = tone === "paper" || tone === "sand" || tone === "ink";
+
   return (
     <section
       id={id}
       style={groundStyle(tone)}
       className={cn(
-        "scroll-mt-20 px-6",
+        "relative overflow-hidden scroll-mt-20 px-6",
         size === "tight" && "py-14 sm:py-16",
         size === "default" && "py-20 sm:py-24",
         size === "tall" && "py-24 sm:py-32",
@@ -93,7 +109,22 @@ export function Band({
         className,
       )}
     >
-      <div className={cn("mx-auto max-w-6xl", containerClassName)}>{children}</div>
+      {flat && (
+        <>
+          <DotField
+            className="[mask-image:radial-gradient(ellipse_80%_70%_at_50%_50%,black,transparent)]"
+            opacity={0.06}
+          />
+          {/* Bled off the right edge and cropped, so it reads as a shape the
+              page is standing on rather than a logo somebody placed. */}
+          <MarkWatermark
+            className="-right-24 -bottom-32 size-[26rem] sm:-right-12 sm:size-[32rem]"
+            opacity={0.05}
+          />
+        </>
+      )}
+
+      <div className={cn("relative mx-auto max-w-6xl", containerClassName)}>{children}</div>
     </section>
   );
 }

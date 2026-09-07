@@ -76,8 +76,22 @@ export function MarketingNav() {
         aria-label="Main"
         className="mx-auto flex max-w-6xl items-center gap-6 px-6 py-3.5"
       >
-        <Link href="/" className="rounded-md focus-visible:ring-ring/50 focus-visible:ring-[3px]">
-          <Logo />
+        {/* Over the hero the two-tone mark is two brand-coloured plates on a
+            brand-coloured wash: the orange plate all but disappears into the
+            orange half of the ground.
+            The answer is the `mono` variant, which the logo has carried since
+            the CTA band needed it and whose note says exactly this — two-tone
+            on a brand ground is a colour clash, not a logo. It draws the whole
+            silhouette in `currentColor`, so here it picks up the near-black the
+            header is already using and the mark reads at full contrast with no
+            plate, no border and no second surface. A pale plate was the first
+            attempt and it was worse: `--background` is charcoal in the dark
+            theme, so it put near-black type on a near-black pill. */}
+        <Link
+          href="/"
+          className="rounded-md focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+        >
+          <Logo variant={overWash && !scrolled ? "mono" : "duo"} />
           <span className="sr-only">chatform home</span>
         </Link>
 

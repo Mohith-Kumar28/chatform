@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Band, BandTitle } from "./band";
+import { Band, BandTitle, BandLede } from "./band";
+import { MessageSquareText, Link2, Wand2 } from "lucide-react";
 import { AgentPanelPreview } from "./agent-panel-preview";
+import { AiBuildPreview } from "./ai-build-preview";
+import { ArrowMark, HandNote } from "./annotate";
 import { ResultsPreview } from "./results-preview";
 import { FlowPreview } from "./flow-preview";
 
@@ -26,6 +29,29 @@ import { FlowPreview } from "./flow-preview";
  * was dropped — the settings inventory, the seat counts and the quota numbers
  * moved to `/pricing`, where somebody comparing plans actually wants them.
  */
+
+/**
+ * The three ways a form gets built here, in the order somebody would try them.
+ * All three are shipped endpoints, not a roadmap — see the note on the lead
+ * tile for which is which.
+ */
+const BUILD_WAYS = [
+  {
+    icon: MessageSquareText,
+    label: "Type what you want.",
+    detail: "\u201cOnboarding for a design agency\u201d \u2192 a whole form.",
+  },
+  {
+    icon: Link2,
+    label: "Or paste your website.",
+    detail: "It reads your pages and asks in your own vocabulary.",
+  },
+  {
+    icon: Wand2,
+    label: "Then just ask for changes.",
+    detail: "\u201cAdd a budget question and skip it under 10 people.\u201d",
+  },
+] as const;
 
 /** The last tile: everything that is genuinely a one-liner, kept as one. */
 const REST = [
@@ -60,24 +86,81 @@ const REST = [
 export function WhatItDoes() {
   return (
     <Band id="features" tone="sand">
-      <BandTitle className="max-w-2xl">
-        Everything a form builder does — then the part it can&rsquo;t.
-      </BandTitle>
+      {/* The heading names the thing you do instead of the thing you used to
+          do. "Everything a form builder does — then the part it can't" was
+          written from a competitor's point of view: it needs you to already
+          know what a form builder does before it lands, and it never once says
+          what you actually do here. You do not build. You ask. */}
+      <BandTitle className="max-w-3xl">You don&rsquo;t build it. You just ask.</BandTitle>
+      <BandLede>
+        The AI writes the questions, the wording and the branching. You change your mind by
+        saying so.
+      </BandLede>
 
       <div className="mt-12 grid gap-4 lg:grid-cols-12">
-        {/* Lead tile. The agent brief is the most differentiated thing in the
-            builder and the only one with a panel worth showing at this size. */}
-        <Tile tone="content" span={12} className="lg:grid lg:grid-cols-[1fr_0.85fr] lg:gap-10">
+        {/* The lead tile is now the build story, which had been missing from
+            this page entirely. Every one of these three is a shipped endpoint —
+            `POST /ai/generate-form` for the prompt, the researcher that fetches
+            and reads a URL before drafting, and `POST /ai/edit-form`, which
+            proposes a document and waits rather than saving over your work. */}
+        <Tile tone="content" span={12} className="lg:grid lg:grid-cols-[1fr_0.9fr] lg:gap-10">
           <div className="flex flex-col justify-center">
             <TileTitle className="text-display font-bold tracking-[-0.025em]">
-              Brief it the way you&rsquo;d brief a person.
+              Describe your form. Get your form.
             </TileTitle>
             <TileBody className="text-body-lg max-w-md">
-              A persona, a goal, a knowledge base it can quote — and the topics it
-              will not touch.
+              One sentence about what you need, and every question is written for you —
+              wording, order, question types and the branching between them.
             </TileBody>
+
+            <ul className="mt-6 flex flex-col gap-3">
+              {BUILD_WAYS.map((w) => (
+                <li key={w.label} className="flex items-start gap-3">
+                  <span
+                    aria-hidden
+                    className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg"
+                    style={{
+                      background: "var(--on-band-vivid)",
+                      color: "var(--family-content-band-vivid)",
+                    }}
+                  >
+                    <w.icon className="size-3.5" strokeWidth={2.25} />
+                  </span>
+                  <p className="text-body leading-snug">
+                    <span className="font-semibold">{w.label}</span>{" "}
+                    <span style={{ color: "var(--on-band-vivid-muted)" }}>{w.detail}</span>
+                  </p>
+                </li>
+              ))}
+            </ul>
           </div>
+
           <div className="mt-6 lg:mt-0 lg:self-center">
+            <AiBuildPreview />
+            {/* One pen mark in this band, on the line people do not believe
+                until they see it. In normal flow rather than absolutely
+                positioned: the first attempt floated it over the panel's
+                bottom-left corner, where the panel simply painted on top of
+                it. A note that can be covered is a note that will be. */}
+            <div className="mt-3 flex items-center justify-end gap-1 pr-1">
+              <ArrowMark dir="up-right" positioned={false} className="size-10 shrink-0 opacity-60" />
+              <HandNote tilt={-5} style={{ color: "var(--on-band-vivid)" }}>
+                it really reads your site
+              </HandNote>
+            </div>
+          </div>
+        </Tile>
+
+        {/* The agent brief. Demoted from the lead but not dropped: it is about
+            how the conversation RUNS, where the tile above is about how the
+            form gets made, and the page needs both. */}
+        <Tile tone="scale" span={5}>
+          <TileTitle>Then brief it like a person.</TileTitle>
+          <TileBody>
+            A persona, a goal, a knowledge base it can quote — and the topics it will not
+            touch.
+          </TileBody>
+          <div className="mt-5">
             <AgentPanelPreview />
           </div>
         </Tile>
@@ -102,25 +185,59 @@ export function WhatItDoes() {
               and a low-confidence read becomes a follow-up rather than a guess.
             </TileBody>
           </div>
-          <div className="mt-8 flex items-baseline gap-4">
-            <span className="text-caption text-muted-foreground max-w-[9rem] font-mono leading-snug">
-              &ldquo;we&rsquo;re about a dozen people right now&rdquo;
-            </span>
-            <span
-              aria-hidden
-              className="h-px flex-1 self-center"
-              style={{ background: "var(--family-text)" }}
-            />
-            <span
-              className="text-display-lg tabular font-mono font-bold"
-              style={{ color: "var(--family-text-ink)" }}
-            >
-              12
-            </span>
+          {/* The extraction, shown rather than described — and it has to say
+              what it is, which the old version did not.
+
+              It was a grey quote, a hairline, and a bare "12" in
+              `--family-text-ink`: two colours meant for a pale tint, now sitting
+              on the saturated blue, so the sentence was barely legible and the
+              number was a mystery. Nobody could tell what 12 referred to, which
+              made the one graphic that proves the feature the one graphic that
+              needed explaining. Labels on both ends, the band's own inks, and
+              an arrow that says which way the transformation runs. */}
+          <div className="mt-8">
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-micro font-semibold uppercase tracking-[0.1em] opacity-70">
+                  They typed
+                </p>
+                <p className="text-caption mt-1 font-mono leading-snug">
+                  &ldquo;we&rsquo;re about a dozen people right now&rdquo;
+                </p>
+              </div>
+
+              <svg
+                aria-hidden
+                viewBox="0 0 40 24"
+                fill="none"
+                className="h-5 w-9 shrink-0 opacity-60"
+              >
+                <path
+                  d="M2 12 H32"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M25 5 L34 12 L25 19"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+
+              <div className="shrink-0 text-right">
+                <p className="text-micro font-semibold uppercase tracking-[0.1em] opacity-70">
+                  Team size
+                </p>
+                <p className="font-display tabular mt-0.5 text-4xl leading-none font-bold">12</p>
+              </div>
+            </div>
           </div>
         </Tile>
 
-        <Tile tone="number" span={5}>
+        <Tile tone="number" span={7}>
           <TileTitle>It can&rsquo;t publish a dead end.</TileTitle>
           <TileBody>
             Nineteen operators, nested groups, scoring. The linter walks every path
@@ -133,20 +250,20 @@ export function WhatItDoes() {
 
         {/* The list tile. Six claims that are honestly one line each, kept as one
             line each instead of inflated into six more cards. */}
-        <Tile tone="choice" span={7}>
+        <Tile tone="choice" span={12}>
           <TileTitle>And the ordinary things, done properly.</TileTitle>
-          <dl className="mt-5 flex flex-col gap-3">
+          <dl className="mt-5 grid gap-3 sm:grid-cols-2 sm:gap-x-10">
             {REST.map((item) => (
               <div key={item.label} className="flex items-baseline gap-3">
                 <span
                   aria-hidden
                   className="size-2 shrink-0 translate-y-[-0.15em] rounded-full"
-                  style={{ background: `var(--family-${item.tone})` }}
+                  style={{ background: "var(--on-band-vivid)", opacity: 0.55 }}
                 />
                 <dt className="text-body shrink-0 font-semibold">{item.label}</dt>
                 <dd
                   className="text-caption min-w-0 flex-1 leading-snug"
-                  style={{ color: "var(--family-choice-band-muted)" }}
+                  style={{ color: "var(--on-band-vivid-muted)" }}
                 >
                   {item.detail}
                 </dd>
@@ -157,7 +274,7 @@ export function WhatItDoes() {
             <Link
               href="/pricing"
               className="font-medium underline underline-offset-4"
-              style={{ color: "var(--family-choice-ink)" }}
+              style={{ color: "var(--on-band-vivid)" }}
             >
               Every limit, per plan →
             </Link>
@@ -180,7 +297,7 @@ function Tile({
   children,
   className,
 }: {
-  tone: "content" | "text" | "contact" | "number" | "choice";
+  tone: "content" | "text" | "contact" | "number" | "choice" | "scale";
   span: 5 | 7 | 12;
   children: React.ReactNode;
   className?: string;

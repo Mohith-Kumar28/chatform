@@ -3,7 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatDemo } from "./chat-demo";
 import { HERO_SCRIPT } from "./chat-demo-scripts";
-import { Headline } from "./headline";
+import { ArrowMark, CircleMark, HandNote } from "./annotate";
 
 /**
  * `NEXT_PUBLIC_DEMO_FORM_SLUG` replaces the hardcoded `/f/test-waitlist` the
@@ -77,33 +77,48 @@ export function Hero() {
         <div>
           {/* Plain words, and that is the whole brief.
               This said "An interviewer, not a form." — a line that reads well
-              and communicates nothing to the one person it is for: someone who
-              has been on this page for one second and does not yet know what
-              the product is. Nobody arrives wanting an "interviewer". They
-              understand "form" and they understand "chat", so the headline is
-              built out of those two words and nothing else.
-              No tones on the words either: the ground behind them is now those
-              two hues at full strength, and orange type on an orange wash is
-              the one thing guaranteed to disappear. Emphasis is weight and
-              scale, which is where it belongs at this size. */}
-          <Headline
-            segments={[
-              { text: "Turn" },
-              { text: "any" },
-              { text: "form", br: true },
-              { text: "into" },
-              { text: "a" },
-              { text: "chat." },
-            ]}
-            className="max-w-[13ch]"
-          />
+              and communicates nothing to the one person it is for: someone one
+              second into the page who does not yet know what this is. Everyone
+              knows what a form is and what a chat is, so the headline is built
+              from those two words and nothing else.
+              "chat" is ringed by hand and annotated, which does two jobs at
+              once. It puts the emphasis on the word the whole product turns
+              on, and it does it without colour — the ground behind this is the
+              brand's two hues at full strength, where coloured type is the one
+              thing guaranteed to disappear. */}
+          <h1 className="text-display-2xl font-bold tracking-[-0.045em] max-w-[13ch] text-balance">
+            <span className="word-rise inline-block" style={{ animationDelay: "60ms" }}>
+              Turn any form
+            </span>{" "}
+            <span className="word-rise inline-block" style={{ animationDelay: "150ms" }}>
+              into a{" "}
+              <span className="relative inline-block">
+                chat.
+                <CircleMark className="text-[var(--on-band-vivid)] opacity-80" />
+              </span>
+            </span>
+          </h1>
+
+          {/* The note goes in the margin, which is the space to the RIGHT of a
+              13ch headline — not under it, where the first attempt put it and
+              where it landed straight on top of the paragraph. Zero height and
+              absolutely positioned, so it can never push the copy around, and
+              not drawn below `lg` where there is no margin to write in. */}
+          <div className="pointer-events-none relative hidden h-0 lg:block" aria-hidden>
+            <div className="absolute -top-24 left-[27rem] flex items-start gap-0.5">
+              <ArrowMark dir="down-left" className="mt-1 size-12 opacity-65" />
+              <HandNote className="mt-8 whitespace-nowrap opacity-80" tilt={-8}>
+                one question at a time
+              </HandNote>
+            </div>
+          </div>
 
           <p
             style={{ color: "var(--on-band-vivid-muted)" }}
             className="text-body-lg mt-6 max-w-md text-balance"
           >
-            AI asks one question at a time, understands what people write, and answers their
-            questions too. More people finish.
+            Describe what you need and AI writes the whole thing — or paste your website and it
+            reads that instead. Then it runs the conversation and gets you real answers.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -124,8 +139,12 @@ export function Hero() {
             </Button>
           </div>
 
+          {/* "200 AI conversations a month" is a metering detail nobody has
+              the context to value before they have used the product once. The
+              two facts that actually decide whether somebody signs up are that
+              it costs nothing and that the thing they collect is not capped. */}
           <p style={{ color: "var(--on-band-vivid-muted)" }} className="text-caption mt-6">
-            No card · 200 AI conversations a month, free
+            Free forever · Unlimited forms and responses · No card
             {DEMO_SLUG && (
               <>
                 {" · "}

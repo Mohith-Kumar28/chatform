@@ -26,7 +26,7 @@ const bricolage = Bricolage_Grotesque({
  * writes six short notes on one page and nothing else in the product.
  */
 const caveat = Caveat({
-  variable: "--font-hand",
+  variable: "--font-caveat",
   subsets: ["latin"],
   display: "swap",
   weight: ["500", "700"],
