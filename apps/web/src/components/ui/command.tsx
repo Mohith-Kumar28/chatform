@@ -1,10 +1,36 @@
 "use client"
 
 import * as React from "react"
-import { Command as CommandPrimitive } from "cmdk"
+import { Command as CommandPrimitive, defaultFilter } from "cmdk"
 import { SearchIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+
+/**
+ * cmdk's own filter is a subsequence match: a value counts as a hit whenever
+ * the typed letters appear in order anywhere inside it, however far apart.
+ * Typing "docs" in the palette put seven unrelated templates above the docs
+ * pages themselves, because "Customer satisfaction Pro(d)uct csat feedback
+ * supp(o)rt bran(c)hing" is a match by that rule — and once tags and category
+ * are folded into the searchable string, almost everything is.
+ *
+ * Requiring each typed word to appear as a real substring throws those out.
+ * Ranking is still cmdk's, so the things that genuinely match order as before;
+ * the positional fallback only covers words typed out of order, which
+ * command-score scores at zero.
+ */
+function substringFilter(value: string, search: string, keywords?: string[]): number {
+  const haystack = (keywords?.length ? `${value} ${keywords.join(" ")}` : value).toLowerCase()
+  const terms = search.toLowerCase().split(/\s+/).filter(Boolean)
+  if (terms.length === 0) return 1
+  let earliest = Number.POSITIVE_INFINITY
+  for (const term of terms) {
+    const at = haystack.indexOf(term)
+    if (at === -1) return 0
+    earliest = Math.min(earliest, at)
+  }
+  return defaultFilter(value, search, keywords) || 1 / (1 + earliest)
+}
 
 /**
  * The ⌘K palette hand-styled `cmdk` inline, with the group and item classes
@@ -16,13 +42,18 @@ import { cn } from "@/lib/utils"
  */
 function Command({
   className,
+  filter = substringFilter,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive>) {
   return (
     <CommandPrimitive
       data-slot="command"
+      filter={filter}
       className={cn(
-        "bg-card text-foreground flex h-full w-full flex-col overflow-hidden rounded-xl",
+        // No `h-full`: nothing here wraps the palette in a sized dialog, so
+        // that stretched the card to the whole viewport and left a page of
+        // empty card hanging below the footer. It hugs its list instead.
+        "bg-card text-foreground flex w-full flex-col overflow-hidden rounded-xl",
         className
       )}
       {...props}
