@@ -179,20 +179,35 @@ export async function getUsage(env: Bindings, orgId: string, metric: MetricKey, 
   return row?.used ?? 0;
 }
 
+/**
+ * Every metric's value in one `YYYY-MM` bucket.
+ *
+ * Split out from `getAllUsage` so the usage page can ask for a month that is not this
+ * one. Counters are never deleted when a period rolls over — a new period simply starts
+ * writing new rows — so any past month is a single indexed read on the same unique key.
+ */
+export async function getUsageForPeriod(
+  env: Bindings,
+  orgId: string,
+  period: string,
+): Promise<Record<string, number>> {
+  const res = await env.DB.prepare(
+    `SELECT metric, used FROM usage_counters WHERE organization_id = ? AND period = ?`,
+  )
+    .bind(orgId, period)
+    .all<{ metric: string; used: number }>();
+  const out: Record<string, number> = {};
+  for (const r of res.results ?? []) out[r.metric] = r.used;
+  return out;
+}
+
 /** Every metric's current value, for the usage page and the entitlements payload. */
 export async function getAllUsage(
   env: Bindings,
   orgId: string,
   now = Date.now(),
 ): Promise<Record<string, number>> {
-  const res = await env.DB.prepare(
-    `SELECT metric, used FROM usage_counters WHERE organization_id = ? AND period = ?`,
-  )
-    .bind(orgId, periodKey(now))
-    .all<{ metric: string; used: number }>();
-  const out: Record<string, number> = {};
-  for (const r of res.results ?? []) out[r.metric] = r.used;
-  return out;
+  return getUsageForPeriod(env, orgId, periodKey(now));
 }
 
 /**

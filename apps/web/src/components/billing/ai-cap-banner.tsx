@@ -1,10 +1,12 @@
 "use client";
 
 import { MessageSquareOff, Inbox } from "lucide-react";
-import type { FeatureKey, LimitKey, MetricKey } from "@repo/entitlements";
+import type { LimitKey } from "@repo/entitlements";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { useUpgrade } from "@/components/billing/gate";
 import { Button } from "@/components/ui/button";
+import { monthlyRows, mostPressured } from "@/lib/usage/meters";
+import { statusSentence, statusTone } from "@/lib/usage/copy";
 
 /**
  * The two limits an owner needs warning about before they bite.
@@ -15,40 +17,22 @@ import { Button } from "@/components/ui/button";
  * costs reputation rather than money, so it is worth shouting about early.
  *
  * Nothing renders below 80%. The rule everywhere is never to sell before there is data.
+ *
+ * ## Why the sentences are not written here any more
+ *
+ * They were, in four hand-written lambdas — and the usage page had its own wording for
+ * the same two caps, in a popover. Two surfaces describing one event in two voices is a
+ * drift waiting to happen, and the one that mattered ("your forms keep collecting, they
+ * just stop being conversational") was the one buried behind an icon. Both now read from
+ * `lib/usage/copy`, which derives the sentence from the limit's enforcement mode, so
+ * neither can quietly disagree with the other.
  */
-interface Warning {
-  metric: MetricKey;
-  limit: LimitKey;
-  feature: FeatureKey;
-  icon: typeof MessageSquareOff;
-  /** Copy for 80–99%. */
-  approaching: (used: number, limit: number) => string;
-  /** Copy at 100%. */
-  reached: (used: number, limit: number, resets: string) => string;
-}
+const WATCHED: LimitKey[] = ["responses_ceiling_per_month", "ai_conversations_per_month"];
 
-const WARNINGS: Warning[] = [
-  {
-    metric: "responses",
-    limit: "responses_ceiling_per_month",
-    feature: "partial_responses",
-    icon: Inbox,
-    approaching: (used, limit) =>
-      `${used.toLocaleString()} of ${limit.toLocaleString()} responses this month. Past the ceiling your forms stop accepting new ones.`,
-    reached: (used, limit, resets) =>
-      `Your forms have reached ${limit.toLocaleString()} responses this month and are showing your closed message. Resets ${resets}.`,
-  },
-  {
-    metric: "ai_conversations",
-    limit: "ai_conversations_per_month",
-    feature: "agent_persona",
-    icon: MessageSquareOff,
-    approaching: (used, limit) =>
-      `${used.toLocaleString()} of ${limit.toLocaleString()} AI conversations used this month. Past the cap your forms keep collecting, just without the conversation.`,
-    reached: (used, limit, resets) =>
-      `${used.toLocaleString()}/${limit.toLocaleString()} AI conversations used. Your forms are still collecting — they're asking their questions directly instead of conversationally. Resets ${resets}.`,
-  },
-];
+const ICONS: Partial<Record<LimitKey, typeof Inbox>> = {
+  responses_ceiling_per_month: Inbox,
+  ai_conversations_per_month: MessageSquareOff,
+};
 
 export function AiCapBanner() {
   const ent = useEntitlements();
@@ -61,25 +45,16 @@ export function AiCapBanner() {
     day: "numeric",
   });
 
-  /**
-   * Only the most urgent one is shown.
-   *
-   * Two stacked banners on a dashboard read as noise and get dismissed as a set, which is
-   * the opposite of what either is for.
-   */
-  const active = WARNINGS.map((w) => {
-    const limit = ent.limit(w.limit);
-    const used = ent.usage(w.metric);
-    return limit ? { w, used, limit, ratio: used / limit } : null;
-  })
-    .filter((x): x is { w: Warning; used: number; limit: number; ratio: number } => x !== null && x.ratio >= 0.8)
-    .sort((a, b) => b.ratio - a.ratio)[0];
+  /*
+    Only the most urgent one is shown. Two stacked banners on a dashboard read as noise
+    and get dismissed as a set, which is the opposite of what either is for.
+  */
+  const row = mostPressured(monthlyRows(ent.data).filter((r) => WATCHED.includes(r.limitKey)));
+  const tone = statusTone(row);
+  if (!row || tone === "ok") return null;
 
-  if (!active) return null;
-
-  const { w, used, limit, ratio } = active;
-  const reached = ratio >= 1;
-  const Icon = w.icon;
+  const Icon = ICONS[row.limitKey] ?? Inbox;
+  const reached = row.state === "at" || row.state === "over";
 
   return (
     <div
@@ -90,11 +65,16 @@ export function AiCapBanner() {
       }
     >
       <Icon className="size-4 shrink-0" aria-hidden />
-      <p className="min-w-0 flex-1">{reached ? w.reached(used, limit, resets) : w.approaching(used, limit)}</p>
+      <p className="min-w-0 flex-1 text-pretty">{statusSentence(row, resets)}</p>
       <Button
         size="sm"
         variant={reached ? "default" : "outline"}
-        onClick={() => upgrade({ feature: w.feature }, { surface: "usage-banner", metric: w.metric, used, limit })}
+        onClick={() =>
+          upgrade(
+            { limit: row.limitKey, used: row.used },
+            { surface: "usage-banner", metric: row.metric ?? null, used: row.used, limit: row.limit },
+          )
+        }
       >
         Raise the limit
       </Button>

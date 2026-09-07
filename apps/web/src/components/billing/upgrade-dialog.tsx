@@ -2,7 +2,18 @@
 
 import { useState } from "react";
 import { Check, Lock, ArrowRight, CreditCard, ExternalLink } from "lucide-react";
-import { FEATURES, PLANS, yearlyPerMonthCents, yearlySavingPercent, type PlanId } from "@repo/entitlements";
+import {
+  FEATURES,
+  LIMITS,
+  LIMIT_KEYS,
+  PLANS,
+  limitMeta,
+  yearlyPerMonthCents,
+  yearlySavingPercent,
+  type LimitKey,
+  type PlanId,
+} from "@repo/entitlements";
+import { inlineLabel } from "@/lib/usage/copy";
 import { usePaywall, usePlansDialog } from "@/stores/paywall-store";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { useBillingActions } from "@/hooks/use-billing-actions";
@@ -188,6 +199,23 @@ export function UpgradeDialog() {
  * research is that naming the number converts and naming the feature does not. A quota
  * denial and a locked feature want different sentences.
  */
+/**
+ * The allowance's name, as a person would say it.
+ *
+ * `gate.metric` arrives as a raw key — and as either kind of key, because the server
+ * sends a `MetricKey` (`ai_generations`) while a click-built gate sends the `LimitKey`
+ * (`ai_generations_per_month`). De-underscoring whichever turns up produced "You've used
+ * this month's ai generations per month", which reads like a database column apologising.
+ * The limits table already holds the written name, so use it, and fall back to the old
+ * behaviour only for a key that is in neither shape.
+ */
+function meterNoun(metric: string | null): string {
+  if (!metric) return "allowance";
+  if (metric in LIMITS) return inlineLabel(limitMeta(metric as LimitKey).label);
+  const key = LIMIT_KEYS.find((k) => limitMeta(k).metric === metric);
+  return key ? inlineLabel(limitMeta(key).label) : metric.replaceAll("_", " ");
+}
+
 function headlineFor(
   code: string,
   count: number | null,
@@ -198,7 +226,7 @@ function headlineFor(
     return `${noun} are waiting for you.`;
   }
   if (code === "limit_reached" && gate.limit !== null) {
-    return `You've used this month's ${gate.metric?.replaceAll("_", " ") ?? "allowance"}.`;
+    return `You've used this month's ${meterNoun(gate.metric)}.`;
   }
   if (code === "ceiling_reached") return "This form has hit its monthly response ceiling.";
   if (code === "seat_limit") return "Bring your team along.";

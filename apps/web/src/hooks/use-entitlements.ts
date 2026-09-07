@@ -36,6 +36,8 @@ export interface EntitlementsPayload {
   features: Record<FeatureKey, boolean>;
   limits: Record<LimitKey, number | null>;
   usage: Record<MetricKey, number>;
+  /** Last calendar month's counters, or `null` in an organization's first month. */
+  previousUsage: Record<MetricKey, number> | null;
   gauges: Record<string, number>;
   periodResetsAt: number;
   role: string;
@@ -49,6 +51,15 @@ export const ENTITLEMENTS_KEY = getGetApiBillingEntitlementsQueryKey();
 export interface Entitlements {
   data: EntitlementsPayload | undefined;
   isLoading: boolean;
+  /**
+   * The fetch failed and will not retry again on its own.
+   *
+   * Every gated control treats "no answer" as "keep going" (see `can` below), which is
+   * right for a padlock and wrong for a page whose entire subject is this payload: the
+   * usage page rendered its skeleton forever on a failed fetch, with no way to retry.
+   */
+  isError: boolean;
+  refetch: () => void;
   /**
    * Has the answer arrived?
    *
@@ -75,7 +86,7 @@ export interface Entitlements {
 
 export function useEntitlements(): Entitlements {
   // Generated hook, per the project rule that no frontend data fetching is hand-written.
-  const { data: raw, isLoading } = useGetApiBillingEntitlements({
+  const { data: raw, isLoading, isError, refetch } = useGetApiBillingEntitlements({
     query: {
       queryKey: ENTITLEMENTS_KEY,
       staleTime: 60_000,
@@ -88,6 +99,8 @@ export function useEntitlements(): Entitlements {
   return {
     data,
     isLoading,
+    isError,
+    refetch: () => void refetch(),
     ready: data !== undefined,
     /**
      * Optimistic while loading: `true` until we know otherwise.

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Crown, TriangleAlert } from "lucide-react";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { usePlansDialog } from "@/stores/paywall-store";
@@ -53,6 +54,7 @@ import { cn } from "@/lib/utils";
 export function PlanBadge() {
   const ent = useEntitlements();
   const openPlans = usePlansDialog((s) => s.openPlans);
+  const onUsage = usePathname() === "/usage";
 
   /**
    * A placeholder of roughly the badge's width, rather than nothing.
@@ -86,7 +88,15 @@ export function PlanBadge() {
       (It briefly pointed at Dodo's hosted storefront, too. That page lists
       products, not plans — no comparison, no sense of which tier is for whom,
       and a look that is theirs rather than ours.)
+
+      Silent on `/usage`. The gradient is reserved for the commercial ask and
+      capped at one per screen (DESIGN.md §4.1b) — the moment a second appears,
+      neither is the money moment any more. `/usage` states the prices itself
+      and carries its own ask beside them, attached to whichever meter is
+      actually running out, so the generic chrome button is the one that yields.
     */
+    if (onUsage) return null;
+
     return (
       <Button
         variant="gradient"

@@ -10,6 +10,7 @@ import {
   yearlyPerMonthCents,
   yearlySavingPercent,
   periodResetsAt,
+  previousPeriodKey,
   type PlanId,
 } from "@repo/entitlements";
 import type { Bindings } from "../env.js";
@@ -20,6 +21,7 @@ import {
   getEntitlements,
   invalidateEntitlements,
   getAllUsage,
+  getUsageForPeriod,
   countForms,
   countSeats,
   countWorkspaces,
@@ -195,6 +197,7 @@ billingRouter.get(
                 features: z.record(z.string(), z.boolean()),
                 limits: z.record(z.string(), z.number().nullable()),
                 usage: z.record(z.string(), z.number()),
+                previousUsage: z.record(z.string(), z.number()).nullable(),
                 gauges: z.record(z.string(), z.number()),
                 periodResetsAt: z.number(),
                 role: z.string(),
@@ -210,9 +213,19 @@ billingRouter.get(
   async (c) => {
     const orgId = c.get("orgId")!;
     const userId = c.get("userId")!;
-    const [ent, usage, roleRow] = await Promise.all([
+    /**
+     * Last month rides along on this call rather than getting a route of its own.
+     *
+     * The comment above is the reason: this endpoint is deliberately one call so nothing
+     * can render with the plan loaded and the usage not. A second endpoint for the
+     * comparison would reintroduce exactly that skew, one month out of date, which is
+     * worse than no comparison. Counters are never deleted when a period rolls over, so
+     * this is one more indexed read on the same unique key.
+     */
+    const [ent, usage, previous, roleRow] = await Promise.all([
       getEntitlements(c.env, orgId),
       getAllUsage(c.env, orgId),
+      getUsageForPeriod(c.env, orgId, previousPeriodKey(Date.now())),
       c.env.DB.prepare(`SELECT role FROM members WHERE organization_id = ? AND user_id = ?`)
         .bind(orgId, userId)
         .first<{ role: string }>(),
@@ -233,6 +246,16 @@ billingRouter.get(
     return c.json({
       ...ent,
       usage: Object.fromEntries(METRICS.map((m) => [m, usage[m] ?? 0])),
+      /**
+       * `null` when the organization has no row for last month at all — which is every
+       * account in its first calendar month. That is different from a month of zeros,
+       * and the UI needs to tell them apart: a delta against a month that never existed
+       * is not "up 100%", it is "no comparison to make".
+       */
+      previousUsage:
+        Object.keys(previous).length === 0
+          ? null
+          : Object.fromEntries(METRICS.map((m) => [m, previous[m] ?? 0])),
       gauges: {
         forms_count: forms,
         seats,

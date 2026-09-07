@@ -274,8 +274,30 @@ Full `Dialog` (max-w-2xl), 3 stages:
 
 ### 2.12 Usage & billing
 
-- **Usage:** three meter cards (submissions, AI messages, seats) — radial progress + "used/quota" + resets-on date; 90-day stacked bar history chart; per-form breakdown table sorted desc; over-quota state turns meter rose + upgrade CTA.
-- **Billing:** current plan card (name, price, renewal, manage-in-Stripe button), plan comparison `Table` w/ per-plan CTA (Current/Upgrade), invoices table (date, amount, status badge, PDF link), payment method row (brand •••• last4, update → Stripe portal).
+One page, `/usage`. `/billing` redirects to it, query string intact. The money itself —
+invoices, cards, tax, cancellation — belongs to the payment provider's portal, and
+mirroring it here is how the two end up disagreeing.
+
+- **Header:** plan badge, price, cycle, renewal date. Free states its own `$0/mo` *and*
+  what the paid tiers cost, because Free is the plan that came looking for a price.
+- **Status line:** one sentence naming the limit closest to biting, and what happens at
+  it. Answers "am I okay?" before any number is read; says so explicitly when the answer
+  is yes. Carries the upgrade ask when — and only when — something is actually near.
+- **Two lists, not a tile grid:** "This month" (the metered allowances) and "Your
+  workspace" (standing counts). Rows, because rows may differ in density: unlimited draws
+  no bar and no denominator, a limit the plan does not sell draws a `LockChip` and no
+  figures, and a monthly meter draws both plus a month-over-month delta.
+- **Consequence is derived from `LIMITS[key].mode`, never hand-written per metric:**
+  `hard` stops ("Stopped", red, "New ones are refused until…"), `degrade` does not
+  ("Reduced", amber, "Still running, at reduced quality until…"), `meter` has no edge.
+  `lib/usage/copy.ts` owns the strings; `AiCapBanner` reads the same ones.
+- **Tone by limit *kind*, not by ratio.** A gauge sitting at its ceiling is the plan
+  working as sold — `seats: 1` means a free account is born at 1/1 — so it never colours,
+  and never ranks in the status line. Only a monthly meter running out is an event.
+- **Plans** open in `PlansDialog` from anywhere, rather than as a section of this page.
+
+Not built, and deliberately: per-form attribution and a daily trend. `usage_counters` is
+monthly buckets, so the delta is month-over-month and nothing pretends otherwise.
 
 ### 2.13 Team & account
 
