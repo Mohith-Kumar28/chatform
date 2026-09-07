@@ -59,6 +59,10 @@ export async function purgeUserData(env: Bindings, userId: string): Promise<void
       still be sitting in R2 with nothing left that knows its key. Orphaned
       objects are not a tidiness problem — they are the customer's respondents'
       uploads, surviving a deletion that told everyone it had removed them.
+
+      It also means anything that throws in here throws with objects already
+      destroyed, which is why `purgeOrgObjects` is written so that nothing in
+      it scales with the size of the workspace.
     */
     await purgeOrgObjects(env, org);
     await env.DB.prepare(`DELETE FROM organizations WHERE id = ?`).bind(org).run();
@@ -77,32 +81,48 @@ export async function purgeUserData(env: Bindings, userId: string): Promise<void
 /**
  * Delete one organization's objects from R2.
  *
- * Paged rather than read whole: a busy workspace's `files` table is unbounded,
- * and `R2.delete` takes at most a thousand keys at a time. Both limits are the
- * same number, which is why the page size is the batch size.
+ * Paged, because a busy workspace's `files` table is unbounded and `R2.delete`
+ * takes at most a thousand keys at a time.
+ *
+ * The page advances on an `id` cursor rather than by deleting the rows it just
+ * cleared, and that is the whole point of the shape. Naming each key in a
+ * `WHERE r2_key IN (…)` spent one bound parameter per key against a D1 query
+ * that accepts a hundred — so a workspace with a hundred uploaded files, which
+ * is one form with a file question and a hundred responses, threw
+ * `too many SQL variables` *after* `R2.delete` had already succeeded. The
+ * respondent's uploads were gone, the rows still pointed at them, and the
+ * deletion the customer asked for came back as a failure. Three bound
+ * parameters now, whatever the size of the workspace.
+ *
+ * The single `DELETE` at the end is belt and braces: these rows cascade with
+ * the organization anyway. It runs because "the objects are gone" and "the
+ * index of them is gone" should be one step, not two separated by a cascade
+ * nobody reading this function can see.
  */
 async function purgeOrgObjects(env: Bindings, orgId: string): Promise<void> {
+  // R2's own per-call ceiling, so the page size is the batch size.
   const PAGE = 1000;
+  let after = "";
+
   for (;;) {
     const page = await env.DB.prepare(
-      `SELECT r2_key FROM files WHERE organization_id = ?1 AND r2_key IS NOT NULL ORDER BY id LIMIT ${PAGE}`,
+      `SELECT id, r2_key AS key FROM files
+        WHERE organization_id = ?1 AND r2_key IS NOT NULL AND id > ?2
+        ORDER BY id LIMIT ${PAGE}`,
     )
-      .bind(orgId)
-      .all<{ r2_key: string }>();
+      .bind(orgId, after)
+      .all<{ id: string; key: string }>();
 
-    const keys = (page.results ?? []).map((r) => r.r2_key).filter(Boolean);
-    if (keys.length === 0) return;
+    const rows = page.results ?? [];
+    if (rows.length === 0) break;
 
-    await env.R2.delete(keys);
-    // The rows are removed as they are cleared so the next page is genuinely
-    // the next page — the organization row that would cascade them away is
-    // not deleted until every object is gone.
-    await env.DB.prepare(
-      `DELETE FROM files WHERE organization_id = ?1 AND r2_key IN (${keys.map(() => "?").join(",")})`,
-    )
-      .bind(orgId, ...keys)
-      .run();
-
-    if (keys.length < PAGE) return;
+    await env.R2.delete(rows.map((r) => r.key));
+    // Advanced before the rows are gone, which is why the cursor exists: the
+    // table is cleared once, at the end, so "the next page" has to be a
+    // position rather than "whatever is left".
+    after = rows[rows.length - 1]!.id;
+    if (rows.length < PAGE) break;
   }
+
+  await env.DB.prepare(`DELETE FROM files WHERE organization_id = ?`).bind(orgId).run();
 }
