@@ -55,6 +55,21 @@ export const KEY = {
   },
 } as const;
 
+/**
+ * Opening the shortcut sheet from somewhere that is not a keystroke.
+ *
+ * An event rather than a prop for the same reason the command palette uses one: the
+ * sheet's state lives in this hook, inside the builder shell, and the thing that now
+ * offers it — a palette mounted as the shell's sibling — is neither its parent nor its
+ * child. The header used to hold a permanent Keyboard button instead, which spent a
+ * screen slot on a link to a list of shortcuts nobody opens twice.
+ */
+const SHOW_SHORTCUTS_EVENT = "chatform:show-shortcuts";
+
+export function showShortcuts(): void {
+  window.dispatchEvent(new CustomEvent(SHOW_SHORTCUTS_EVENT));
+}
+
 export function useBuilderShortcuts(actions: {
   onPreview: () => void;
   onPublish: () => void;
@@ -322,6 +337,16 @@ export function useBuilderShortcuts(actions: {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [shortcuts, helpOpen]);
+
+  // Its own effect: this listener does not depend on the registry, and re-binding it
+  // every time a shortcut's closure changes would be work for nothing.
+  useEffect(() => {
+    function onShow() {
+      setHelpOpen(true);
+    }
+    window.addEventListener(SHOW_SHORTCUTS_EVENT, onShow);
+    return () => window.removeEventListener(SHOW_SHORTCUTS_EVENT, onShow);
+  }, []);
 
   return { shortcuts, helpOpen, setHelpOpen };
 }

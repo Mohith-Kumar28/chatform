@@ -114,6 +114,9 @@ interface StoredSession {
   collectedCount: number;
   invalidCounts?: Record<string, number>;
   sessionTokensUsed?: number;
+  phrasingTokensUsed?: number;
+  extractionCalls?: number;
+  editingRef?: string | null;
   degraded?: boolean;
   pendingEndingRef?: string | null;
 }
@@ -145,6 +148,32 @@ const MAX_REPLAY = 200;
 const WRITE_STALL_MS = 5000;
 
 /**
+ * How long one agentic turn may spend inside the model provider.
+ *
+ * `streamText` has no deadline of its own, so a provider that accepts the
+ * request and then says nothing holds the turn open indefinitely — and the
+ * turn is what emits the next `question` event, so the respondent sits on
+ * typing dots with no way forward and no error to show them. Cutting it loose
+ * is cheap: the catch below falls back to the deterministic phrasing, which is
+ * the same path a missing API key or a spent token budget already takes. Set
+ * well above a slow-but-real turn (a long reply with three tool calls lands
+ * inside ten seconds) so this only ever fires on a turn that is not coming.
+ */
+const AI_TURN_TIMEOUT_MS = 45000;
+
+/**
+ * How many times one session may fall back to the extraction model.
+ *
+ * A ceiling, not a budget: extraction runs only after every deterministic
+ * matcher has already failed, so in a healthy conversation it fires once or
+ * twice. This exists so a pathological session cannot spend without bound, and
+ * it is set far above any real interview rather than tuned as a cost lever —
+ * the thing on the other side of it is a respondent who cannot answer the
+ * question at all.
+ */
+const MAX_EXTRACTION_CALLS = 40;
+
+/**
  * SessionDO — one instance per chat session. Owns the interview FSM,
  * the transcript (DO SQLite = source of truth during the session),
  * SSE fan-out, and finalization into D1.
@@ -165,7 +194,22 @@ export class SessionDO extends DurableObject<Bindings> {
   private collectedCount = 0;
   private loaded = false;
   private encoder = new TextEncoder();
+  /** Every token this session has spent, for the org meter. */
   private sessionTokensUsed = 0;
+  /**
+   * The subset of that spent on the interviewer's own words.
+   *
+   * `sessionTokenBudget` is an allowance for phrasing, and it is what decides
+   * when the agent stops rewording questions and the deterministic templates
+   * take over. Comprehension used to draw on the same pot, so the moment the
+   * allowance ran out the form also lost the ability to *read* a reply: a
+   * plain "yeah, use the same address" stopped resolving and came back as
+   * "That doesn't look like a valid email address", twice, and then a dead
+   * end. Two different things, two different counters.
+   */
+  private phrasingTokensUsed = 0;
+  /** Extraction calls made, against MAX_EXTRACTION_CALLS. */
+  private extractionCalls = 0;
   /** Consecutive guard rejections; 3 drops the session to template mode. */
   private toolErrorStreak = 0;
   /** Sticky: once true this session never calls the model again. */
@@ -176,6 +220,14 @@ export class SessionDO extends DurableObject<Bindings> {
   private suppressNextAsk = false;
   /** Ending awaiting an explicit submit, when `requireSubmit` is on. */
   private pendingEndingRef: string | null = null;
+  /**
+   * The block a respondent went back to change, while they are changing it.
+   *
+   * Persisted, because it decides where the conversation resumes and a
+   * respondent may well take a coffee break between reopening a question and
+   * answering it — long enough for the durable object to be evicted.
+   */
+  private editingRef: string | null = null;
   private pendingUserTextPersisted = false;
   /** The transcript row an in-flight answer belongs to, so `answer_recorded` can name it. */
   private pendingUserMessageId: string | null = null;
@@ -312,7 +364,18 @@ export class SessionDO extends DurableObject<Bindings> {
     // Only start the flow if the gate is what was holding it. A session that
     // verified mid-conversation (a settings change, a resumed session) must not
     // be rewound to question one.
-    if (!this.meta.currentRef && this.collectedCount === 0) await this.beginInterview();
+    if (!this.meta.currentRef && this.collectedCount === 0) {
+      try {
+        await this.beginInterview();
+      } catch (err) {
+        // Verification itself succeeded and is already recorded, so this must
+        // not be reported as a failed sign-in — the respondent would be sent
+        // back to a gate they have already cleared. Say the turn failed and
+        // leave the session in a state `resync` can rebuild.
+        console.error("begin_interview_failed", { sessionId: this.meta.sessionId, err });
+        await this.failTurn("interview_start_failed", "We couldn't get started. Give it another moment.");
+      }
+    }
     return { accepted: true };
   }
 
@@ -357,6 +420,11 @@ export class SessionDO extends DurableObject<Bindings> {
     // actually a cap). They are part of session state and must survive.
     this.invalidCounts = new Map(Object.entries(stored.invalidCounts ?? {}));
     this.sessionTokensUsed = stored.sessionTokensUsed ?? 0;
+    // Sessions written before the split carried one number; the phrasing
+    // budget inherits it so an upgrade cannot hand anyone a fresh allowance.
+    this.phrasingTokensUsed = stored.phrasingTokensUsed ?? stored.sessionTokensUsed ?? 0;
+    this.extractionCalls = stored.extractionCalls ?? 0;
+    this.editingRef = stored.editingRef ?? null;
     this.degraded = stored.degraded ?? false;
     this.pendingEndingRef = stored.pendingEndingRef ?? null;
     this.loaded = true;
@@ -375,6 +443,9 @@ export class SessionDO extends DurableObject<Bindings> {
       collectedCount: this.collectedCount,
       invalidCounts: Object.fromEntries(this.invalidCounts),
       sessionTokensUsed: this.sessionTokensUsed,
+      phrasingTokensUsed: this.phrasingTokensUsed,
+      extractionCalls: this.extractionCalls,
+      editingRef: this.editingRef,
       degraded: this.degraded,
       pendingEndingRef: this.pendingEndingRef,
     } satisfies StoredSession);
@@ -496,7 +567,31 @@ export class SessionDO extends DurableObject<Bindings> {
     return (
       this.env.OPENROUTER_API_KEY !== undefined &&
       mode !== "template" &&
-      this.sessionTokensUsed < (this.doc?.settings.agent.sessionTokenBudget ?? 12000)
+      this.phrasingTokensUsed < (this.doc?.settings.agent.sessionTokenBudget ?? 12000)
+    );
+  }
+
+  /**
+   * Whether the session may still *understand* a reply, as opposed to phrase one.
+   *
+   * Deliberately not `aiEnabled()`. Running out of phrasing allowance is a
+   * graceful downgrade — the interviewer stops rewording and the templates
+   * take over — but it must never take comprehension with it, because
+   * comprehension is the difference between a form that can be answered and
+   * one that dead-ends. Nor is it gated on `degraded`: that flag means the
+   * model mishandled its *tools*, and extraction has none — it is a single
+   * constrained call whose output still goes through `validateAnswer`.
+   *
+   * It is reached only after the deterministic matchers have already failed,
+   * so the alternative to allowing it is telling someone their answer is
+   * invalid when it plainly was not.
+   */
+  private comprehensionEnabled(): boolean {
+    const mode = this.doc?.settings.agent.mode ?? "template";
+    return (
+      this.env.OPENROUTER_API_KEY !== undefined &&
+      mode !== "template" &&
+      this.extractionCalls < MAX_EXTRACTION_CALLS
     );
   }
 
@@ -518,6 +613,20 @@ export class SessionDO extends DurableObject<Bindings> {
 
     const started = Date.now();
     const { model, id: modelId } = interviewModel(this.env, this.doc.settings.agent.model);
+
+    /**
+     * Declared out here so the catch can close a bubble the try opened.
+     *
+     * A `message_start` with no matching `message_end` leaves the client
+     * rendering a streaming bubble — blinking caret, markdown deliberately not
+     * parsed — forever, because "still streaming" is a state only the end
+     * event clears. Any throw past the first token used to do exactly that:
+     * the deterministic fallback then printed the question underneath, so the
+     * respondent was left looking at a half-finished sentence that would never
+     * finish above the question they were meant to answer.
+     */
+    const messageId = crypto.randomUUID();
+    let opened = false;
 
     try {
       const answered = Object.keys(this.state.answers).length;
@@ -549,13 +658,14 @@ export class SessionDO extends DurableObject<Bindings> {
         // own headroom on top so it can never starve the answer.
         maxOutputTokens: this.doc.settings.agent.responseMaxTokens + REASONING_HEADROOM_TOKENS,
         providerOptions: INTERVIEW_PROVIDER_OPTIONS,
+        // A turn that never returns is worse than a turn phrased by template.
+        // See AI_TURN_TIMEOUT_MS.
+        abortSignal: AbortSignal.timeout(AI_TURN_TIMEOUT_MS),
       });
 
       // Open the bubble lazily, on the first token. A turn that spends itself
       // on tool calls and says nothing used to leave an empty bubble in the
       // transcript, immediately followed by the deterministic fallback.
-      const messageId = crypto.randomUUID();
-      let opened = false;
       let text = "";
       for await (const delta of result.textStream) {
         if (!delta) continue;
@@ -589,15 +699,17 @@ export class SessionDO extends DurableObject<Bindings> {
        */
       const reasoningTok = usage?.outputTokenDetails?.reasoningTokens ?? 0;
       const budget = this.doc.settings.agent.sessionTokenBudget;
-      const wasWithinBudget = this.sessionTokensUsed < budget;
-      this.sessionTokensUsed += inTok + Math.max(0, outTok - reasoningTok);
+      const wasWithinBudget = this.phrasingTokensUsed < budget;
+      const spent = inTok + Math.max(0, outTok - reasoningTok);
+      this.phrasingTokensUsed += spent;
+      this.sessionTokensUsed += spent;
       // Running out is not an error, but it changes the product mid-conversation
       // — the interviewer becomes a form — so it should not be invisible.
-      if (wasWithinBudget && this.sessionTokensUsed >= budget) {
+      if (wasWithinBudget && this.phrasingTokensUsed >= budget) {
         console.warn("agent_budget_spent", {
           sessionId: this.meta.sessionId,
           budget,
-          used: this.sessionTokensUsed,
+          used: this.phrasingTokensUsed,
           turns: this.turnCount,
         });
       }
@@ -619,6 +731,15 @@ export class SessionDO extends DurableObject<Bindings> {
       return text.trim().length > 0 || this.pendingEffects.length > 0;
     } catch (err) {
       console.error("ai_stream_failed", err);
+      // Close whatever was opened before returning to the template path, so
+      // the caller's fallback question lands under a finished bubble.
+      if (opened) {
+        try {
+          await this.emit("message_end", { messageId, interrupted: true });
+        } catch {
+          /* the stream is already gone; the client will replay */
+        }
+      }
       return false;
     }
   }
@@ -633,9 +754,10 @@ export class SessionDO extends DurableObject<Bindings> {
    * instead of recording a guess.
    */
   private async extractTypedAnswer(block: Block, text: string): Promise<unknown | null> {
-    if (!this.aiEnabled() || !needsExtraction(block)) return null;
+    if (!this.comprehensionEnabled() || !needsExtraction(block)) return null;
     const schema = extractionSchema(block);
     if (!schema) return null;
+    this.extractionCalls += 1;
 
     const started = Date.now();
     try {
@@ -649,6 +771,8 @@ export class SessionDO extends DurableObject<Bindings> {
         transcript,
       });
       if (!out) return null;
+      // Metered like everything else, but never charged to the phrasing
+      // allowance — see `comprehensionEnabled`.
       this.sessionTokensUsed += out.tokens;
       await this.logAiUsage("extraction", out.tokens, 0, MODELS.extraction, Date.now() - started);
       if (!out.confident || out.value === null || out.value === undefined) return null;
@@ -782,7 +906,46 @@ export class SessionDO extends DurableObject<Bindings> {
 
   // ────────────────────────── turns ──────────────────────────
 
+  /**
+   * One respondent turn, and the promise that it always ends in an event.
+   *
+   * The client clears its typing indicator on what arrives over the stream,
+   * not on the status code of the POST that started the turn — it has to,
+   * because a turn can also be started by another tab, by the headless API, or
+   * by a retry the browser never saw the response to. So a turn that throws
+   * halfway has to say so on the stream as well, or it leaves the form frozen
+   * with an error nobody can see. The `finally`-shaped tail here re-states the
+   * question, which puts the controls back exactly as they were.
+   */
   async handleUserTurn(input: { type: "text"; text: string } | { type: "structured"; ref: string; value: unknown }): Promise<{ accepted: boolean; error?: string }> {
+    try {
+      return await this.runUserTurn(input);
+    } catch (err) {
+      console.error("turn_failed", { sessionId: this.meta?.sessionId, err });
+      await this.failTurn("turn_failed", "Something went wrong on our side. Please try that again.");
+      return { accepted: false, error: "turn_failed" };
+    }
+  }
+
+  /**
+   * Tell the stream a turn is over and unsuccessful, then put the question
+   * back. Every step is best-effort: this runs on the failure path, and a
+   * throw here would replace one hidden error with another.
+   */
+  private async failTurn(code: string, message: string): Promise<void> {
+    try {
+      await this.emit("error_event", { code, message });
+    } catch (err) {
+      console.error("fail_turn_emit_failed", err);
+    }
+    try {
+      await this.emitQuestion();
+    } catch (err) {
+      console.error("fail_turn_requestion_failed", err);
+    }
+  }
+
+  private async runUserTurn(input: { type: "text"; text: string } | { type: "structured"; ref: string; value: unknown }): Promise<{ accepted: boolean; error?: string }> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta || !this.doc) return { accepted: false, error: "session_not_found" };
     if (this.meta.status !== "active") return { accepted: false, error: "session_closed" };
@@ -931,6 +1094,12 @@ export class SessionDO extends DurableObject<Bindings> {
     if (count >= agent.escalateAfterInvalid) {
       await this.emitMessage(escalateText(block));
       await this.emit("escalate_ui", { ref: block.ref, spec: toPublicBlock(block), reason: "repeated_invalid" });
+      // Escalating used to be the one branch here that did not re-state the
+      // question. The client arms its controls off the `question` event, so
+      // the respondent reached the step meant to make answering *easier* and
+      // found the affordance gone — the exact opposite of the intent, at the
+      // exact moment they were already struggling.
+      await this.emitQuestion();
     } else if (this.aiEnabled()) {
       // Agentic retry: address what they actually said — which is often a
       // question of their own — then steer back. The form author's per-block
@@ -1010,11 +1179,54 @@ export class SessionDO extends DurableObject<Bindings> {
     return Math.min(100, Math.round((this.collectedCount / answerable) * 100));
   }
 
+  /**
+   * Where the conversation resumes after a single answer was changed.
+   *
+   * Correcting one answer used to hand the flow straight back to
+   * `resolveNext`, which does the only thing it can: returns the question
+   * after the one that was just answered. Every question after the corrected
+   * one therefore got asked a second time, so changing a single word meant
+   * re-answering the rest of the form — which makes the pencil worse than
+   * useless, because it looks like a small edit and costs the whole tail.
+   *
+   * This walks forward the way the flow itself does, honouring branching at
+   * every hop, and simply does not stop at questions that already have an
+   * answer. Landing back where they were is the common case. The interesting
+   * case is the other one: if the new answer opens a path the respondent has
+   * not been down, the first unanswered question on that path is exactly where
+   * the walk stops — so a changed branch does get its questions asked, and
+   * nothing on the old path is asked again.
+   */
+  private resumeAfterEdit(
+    fromRef: string,
+  ): { kind: "block"; block: Block } | { kind: "ending"; ending: Ending } {
+    let cursor = resolveNext(this.doc!, fromRef, this.state);
+    for (let hops = 0; cursor.kind === "block" && hops <= this.doc!.blocks.length; hops += 1) {
+      const settled =
+        this.state.answers[cursor.block.ref] !== undefined ||
+        ["welcome", "statement"].includes(cursor.block.type);
+      if (!settled) return cursor;
+      cursor = resolveNext(this.doc!, cursor.block.ref, this.state);
+    }
+    return cursor;
+  }
+
   private async advanceTo(
-    next: { kind: "block"; block: Block } | { kind: "ending"; ending: Ending },
+    target: { kind: "block"; block: Block } | { kind: "ending"; ending: Ending },
     fromRef?: string,
   ): Promise<void> {
     if (!this.doc || !this.meta) return;
+    /**
+     * Consumed here rather than at the call sites, so every way of leaving an
+     * edited question — answering it, skipping it — resumes the same way, and
+     * so a bookmark can never outlive the edit that set it.
+     */
+    let next = target;
+    if (this.editingRef !== null && fromRef !== undefined) {
+      const wasEditing = this.editingRef === fromRef;
+      this.editingRef = null;
+      if (wasEditing) next = this.resumeAfterEdit(fromRef);
+    }
     if (next.kind === "block") {
       const jumped = fromRef !== undefined && next.block.ref !== nextInSequence(this.doc, fromRef);
       if (jumped) {
@@ -1040,14 +1252,33 @@ export class SessionDO extends DurableObject<Bindings> {
         return;
       }
 
-      const aiOk = await this.aiStreamMessage(
-        verbatim
-          ? `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
-              `Acknowledge it in one short sentence and answer anything they asked. Do NOT ask the next question — it follows immediately, word for word.`
-          : `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
-              `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref} — which is: "${next.block.title}" (${next.block.type}) — in your own words. Ask ONLY that question.`,
-      );
-      if (aiOk) await this.applyPendingEffects();
+      /**
+       * The agent's phrasing is a nicety. The question is the product.
+       *
+       * Everything between here and `emitQuestion()` talks to a model or acts
+       * on what a model asked for, and any of it can throw. When it did, it
+       * took the `question` event with it: the browser was left holding typing
+       * dots for a turn that was never going to arrive, with its answer
+       * controls hidden behind them, and the only way out was a page reload.
+       * A failure here costs the respondent a nicely worded sentence and
+       * nothing else — the deterministic phrasing below covers it.
+       */
+      let aiOk = false;
+      try {
+        aiOk = await this.aiStreamMessage(
+          verbatim
+            ? `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
+                `Acknowledge it in one short sentence and answer anything they asked. Do NOT ask the next question — it follows immediately, word for word.`
+            : `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
+                `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref} — which is: "${next.block.title}" (${next.block.type}) — in your own words. Ask ONLY that question.`,
+        );
+        if (aiOk) await this.applyPendingEffects();
+      } catch (err) {
+        console.error("advance_ai_phase_failed", { sessionId: this.meta.sessionId, err });
+        // Effects from a turn that did not finish are not trustworthy.
+        this.pendingEffects = [];
+        aiOk = false;
+      }
 
       // Verbatim mode: the FSM emits the question itself, so the exact wording
       // is guaranteed rather than merely requested of the model. Also covers
@@ -1276,9 +1507,44 @@ export class SessionDO extends DurableObject<Bindings> {
     return { events: [...stored.values()], latestSeq: this.seq };
   }
 
+  /**
+   * The block the flow should be on when `currentRef` has gone missing.
+   *
+   * Resolved through `resolveNext` from the last block that actually has an
+   * answer, so branching is honoured — walking the block list for the first
+   * unanswered one would happily re-ask a question the respondent's own
+   * answers had branched past. Used only for recovery: a session that is
+   * active, is not waiting on a submit, and has no current block is a session
+   * whose last turn died halfway, and the alternative to rebuilding it is a
+   * conversation that can never be continued.
+   */
+  private recoverCurrentBlock(): Block | null {
+    if (!this.doc) return null;
+    const answered = this.doc.blocks.filter((b) => this.state.answers[b.ref] !== undefined);
+    const lastAnswered = answered.length > 0 ? answered[answered.length - 1]!.ref : null;
+    let cursor = resolveNext(this.doc, lastAnswered, this.state);
+    // Welcome and statement blocks are narration, not questions. The FSM walks
+    // past them on the way in; recovery has to do the same or it would park
+    // the session on a block that can never be answered.
+    for (let hops = 0; cursor.kind === "block" && hops <= this.doc.blocks.length; hops += 1) {
+      if (!["welcome", "statement"].includes(cursor.block.type)) return cursor.block;
+      cursor = resolveNext(this.doc, cursor.block.ref, this.state);
+    }
+    return null;
+  }
+
   private async emitQuestion(): Promise<void> {
-    const block = await this.currentBlock();
-    if (!block || !this.doc) return;
+    if (!this.doc || !this.meta) return;
+    let block = await this.currentBlock();
+    if (!block && this.meta.status === "active" && this.pendingEndingRef === null) {
+      block = this.recoverCurrentBlock();
+      if (block) {
+        console.warn("question_recovered", { sessionId: this.meta.sessionId, ref: block.ref });
+        this.meta.currentRef = block.ref;
+        await this.persistMeta();
+      }
+    }
+    if (!block) return;
     const answered = Object.keys(this.state.answers).length;
     await this.emit("question", {
       messageId: crypto.randomUUID(),
@@ -1299,9 +1565,69 @@ export class SessionDO extends DurableObject<Bindings> {
     }
   }
 
+  /**
+   * Say again, in fresh events, where the conversation stands.
+   *
+   * The client dedupes replay by sequence number — that is what makes a
+   * reconnect invisible instead of a flicker — but it also means a reconnect
+   * can never restore a state the browser has already seen and then lost.
+   * A respondent looking at typing dots for a turn that finished is looking at
+   * exactly that, and until now their only way out was to reload the page.
+   * This is the same recovery, done for them: re-state the current step under
+   * new sequence numbers, which the ratchet cannot swallow.
+   *
+   * It reads state and emits; it never advances the flow. Calling it twice in
+   * a row is the same as calling it once.
+   */
+  async resync(): Promise<{ ok: boolean }> {
+    const loaded = await this.ensureLoaded();
+    if (!loaded || !this.meta || !this.doc) return { ok: false };
+
+    if (this.meta.status === "completed") {
+      const ending =
+        (this.meta.endingRef && this.doc.endings.find((e) => e.ref === this.meta!.endingRef)) ||
+        this.doc.endings[0];
+      if (ending) {
+        await this.emit("ending", { ending: toPublicEnding(ending, this.doc.settings.onComplete) });
+      }
+      return { ok: true };
+    }
+    if (this.meta.status !== "active") return { ok: true };
+
+    // Order matters, and it is the same order the flow itself uses: the gate
+    // outranks the questions, and the review step outranks the current block.
+    if (this.authGateBlocks()) {
+      const gate = this.doc.settings.requireAuth;
+      await this.emit("auth_required", { methods: gate.methods, message: gate.message });
+      return { ok: true };
+    }
+    if (this.pendingEndingRef !== null) {
+      await this.emit("review", { answers: this.answerSummary() });
+      return { ok: true };
+    }
+    // `emitQuestion` rebuilds `currentRef` when a dead turn left it empty.
+    await this.emitQuestion();
+    return { ok: true };
+  }
+
   async action(input: {
     action: "skip" | "stop" | "restart" | "edit" | "submit";
     /** For `edit`: the block to go back and re-answer. */
+    ref?: string;
+  }): Promise<{ accepted: boolean; error?: string }> {
+    // Same reasoning as `handleUserTurn`: skipping and submitting advance the
+    // flow, so they can leave the client waiting on an event too.
+    try {
+      return await this.runAction(input);
+    } catch (err) {
+      console.error("action_failed", { sessionId: this.meta?.sessionId, action: input.action, err });
+      await this.failTurn("action_failed", "Something went wrong on our side. Please try that again.");
+      return { accepted: false, error: "action_failed" };
+    }
+  }
+
+  private async runAction(input: {
+    action: "skip" | "stop" | "restart" | "edit" | "submit";
     ref?: string;
   }): Promise<{ accepted: boolean; error?: string }> {
     const ok = await this.ensureLoaded();
@@ -1364,6 +1690,9 @@ export class SessionDO extends DurableObject<Bindings> {
       this.invalidCounts.delete(target.ref);
       this.meta.currentRef = target.ref;
       this.meta.status = "active";
+      // Remembered so `advanceTo` can put them back where they were instead of
+      // re-asking everything after this question. See `resumeAfterEdit`.
+      this.editingRef = target.ref;
       // Leaving the review step: the form is no longer finished.
       this.pendingEndingRef = null;
       await this.persistMeta();

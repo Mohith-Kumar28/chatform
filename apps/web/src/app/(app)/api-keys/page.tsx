@@ -1,17 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetApiKeys,
   usePostApiKeys,
   useDeleteApiKeysById,
-  usePostApiKeysByIdRotate,
   useGetApiKeysScopes,
   getGetApiKeysQueryKey,
 } from "@/lib/api/dashboard/dashboard";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -30,19 +30,26 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { LockedControl } from "@/components/billing/gate";
-import { KeyRound, Plus, Trash2, RefreshCw, ShieldAlert } from "lucide-react";
+import { ArrowUpRight, ExternalLink, KeyRound, Plus, Trash2, ShieldAlert } from "lucide-react";
 import { useClientValue } from "@/hooks/use-client-value";
-import { ApiError } from "@/lib/api/mutator";
+import { API_ORIGIN, ApiError } from "@/lib/api/mutator";
 
 /**
  * API keys.
  *
- * The backend grew four key types, real scopes, per-key rate limits, origin
- * allowlists and rotation; this page could create one thing, called it "a key",
- * and listed keys by their creator so a teammate could not revoke a colleague's.
- * Everything here is driven by the generated hooks — the old page hand-wrote its
- * own row type over raw fetches, which is how it drifted from the API in the
- * first place.
+ * Two things this page owes a developer: the keys themselves, and the way in.
+ * It shipped with only the first — no base URL, no first request, no link to
+ * the docs or to the two packages we publish — so a key was a string with
+ * nowhere to go. The rest of the page had drifted the other way: a per-row
+ * rate-limit figure and a paragraph about 429s and 24-hour grace windows, all
+ * of it reference material that belongs in /docs/rate-limits and nowhere near
+ * a list of keys.
+ *
+ * Rotation is gone too. It read as the mild sibling of revoke and was in fact
+ * the sharper one — a click started a 24-hour clock on a key serving
+ * production traffic. Nobody else offers it on this screen: you create a
+ * second key, deploy it, then revoke the first, which is the same rotation
+ * with each step under your control.
  */
 
 type KeyType = "sk_live" | "sk_test" | "pk_live" | "pk_test";
@@ -77,6 +84,24 @@ const PUBLISHABLE_CEILING: Record<string, string[]> = {
   session: ["create", "write", "read"],
   file: ["write"],
 };
+
+/** Enough to see the shape of a key's access; the rest is a hover away. */
+const SCOPES_SHOWN = 3;
+
+const FIRST_REQUEST = `curl ${API_ORIGIN}/v1/me \\
+  -H "x-api-key: $CHATFORM_SECRET_KEY"`;
+
+const SDKS = [
+  { pkg: "@chatformhq/js", blurb: "Typed client" },
+  { pkg: "@chatformhq/react", blurb: "Hooks & embed" },
+];
+
+const DOC_LINKS = [
+  { href: "/docs/quickstart", title: "Quickstart", blurb: "A key to a stored answer in five minutes." },
+  { href: "/docs/authentication", title: "Authentication", blurb: "Key types, headers, and what a 401 means." },
+  { href: "/docs/scopes", title: "Scopes", blurb: "What each scope grants — and never grants." },
+  { href: "/docs/rate-limits", title: "Rate limits", blurb: "Per-key limits, quotas, and the headers to watch." },
+];
 
 function isPublishable(type: KeyType) {
   return type.startsWith("pk_");
@@ -114,8 +139,6 @@ export default function ApiKeysPage() {
   const [open, setOpen] = useState(false);
   const [created, setCreated] = useState<{ key: string; keyType: KeyType } | null>(null);
   const [revoking, setRevoking] = useState<KeyRow | null>(null);
-  const [rotating, setRotating] = useState<KeyRow | null>(null);
-  const [rotated, setRotated] = useState<{ key: string; oldKeyExpiresAt: number | null } | null>(null);
   /**
    * Refusals, shown where they happened.
    *
@@ -139,7 +162,6 @@ export default function ApiKeysPage() {
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: getGetApiKeysQueryKey() });
   const createKey = usePostApiKeys({ mutation: { onSuccess: invalidate } });
   const revokeKey = useDeleteApiKeysById({ mutation: { onSuccess: invalidate } });
-  const rotateKey = usePostApiKeysByIdRotate({ mutation: { onSuccess: invalidate } });
 
   /**
    * The vocabulary comes from the API rather than a copy of it here — a scope
@@ -187,14 +209,10 @@ export default function ApiKeysPage() {
     }
   }
 
-  async function rotate(row: KeyRow) {
+  async function revoke(row: KeyRow) {
     setListError(null);
     try {
-      const res = (await rotateKey.mutateAsync({
-        id: row.id,
-        data: { graceHours: 24 } as never,
-      })) as unknown as { key: string; oldKeyExpiresAt: number | null };
-      setRotated(res);
+      await revokeKey.mutateAsync({ id: row.id });
     } catch (err) {
       setListError(messageFor(err));
     }
@@ -220,143 +238,219 @@ export default function ApiKeysPage() {
       />
 
       {listError && (
-        <p className="text-destructive mb-4 rounded-xl bg-[var(--destructive-soft)] px-4 py-3 text-sm" role="alert">
+        <p className="text-destructive mt-6 rounded-xl bg-[var(--destructive-soft)] px-4 py-3 text-sm" role="alert">
           {listError}
         </p>
       )}
 
-      {isLoading ? (
-        <div className="space-y-3">
-          {[0, 1].map((i) => (
-            <div key={i} className="bg-muted h-20 animate-pulse rounded-xl" />
-          ))}
-        </div>
-      ) : keys.length === 0 ? (
-        <EmptyState
-          icon={KeyRound}
-          title="No API keys yet"
-          description="A key lets your own code create responses, read them back, or run a conversation from your product."
-          action={
-            <LockedControl feature="api_access">
-              <Button shape="pill" onClick={() => setOpen(true)}>
-                <Plus className="size-4" /> Create your first key
-              </Button>
-            </LockedControl>
-          }
-          hint="Read the quickstart at chatform.in/docs/quickstart"
-        />
-      ) : (
-        <Card className="overflow-hidden">
-          {/* A key is a row of comparable facts — prefix, scopes, last used —
-              and the stack of cards this was made it impossible to scan any
-              one of them down the list. */}
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="pl-4">Key</TableHead>
-                <TableHead>Scopes</TableHead>
-                <TableHead className="hidden sm:table-cell">Last used</TableHead>
-                <TableHead className="pr-4 text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {keys.map((k) => {
-                const scopes = Object.entries(k.scopes ?? {}).flatMap(([resource, actions]) =>
-                  actions.map((a) => `${resource}:${a}`),
-                );
-                return (
-                  <TableRow key={k.id} className={k.enabled ? undefined : "opacity-60"}>
-                    <TableCell className="h-auto py-3 pl-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{k.name ?? "Untitled key"}</span>
-                        <Badge variant={isPublishable(k.keyType) ? "secondary" : "default"}>
-                          {isPublishable(k.keyType) ? "Publishable" : "Secret"}
-                        </Badge>
-                        {k.environment === "test" && <Badge variant="outline">Test</Badge>}
-                        {!k.enabled && <Badge variant="destructive">Revoked</Badge>}
-                        {k.expiresAt && now > 0 && k.expiresAt > now && (
-                          <Badge variant="outline">expires in {hoursUntil(k.expiresAt, now)}h</Badge>
-                        )}
-                      </div>
-                      <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                        <code className="font-mono">{k.start ?? "—"}…</code>
-                        {k.rateLimitMax && <span>{k.rateLimitMax}/min</span>}
-                        {k.origins.length > 0 && (
-                          <span>
-                            {k.origins.length} origin{k.origins.length === 1 ? "" : "s"}
-                          </span>
-                        )}
-                        <span className="sm:hidden">last used {relative(k.lastUsedAt, now)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="h-auto max-w-64 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {scopes.length === 0 ? (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        ) : (
-                          scopes.map((scope) => (
-                            <span
-                              key={scope}
-                              className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[11px]"
-                            >
-                              {scope}
+      <div className="mt-6">
+        {isLoading ? (
+          <div className="space-y-3">
+            {[0, 1].map((i) => (
+              <div key={i} className="bg-muted h-20 animate-pulse rounded-xl" />
+            ))}
+          </div>
+        ) : keys.length === 0 ? (
+          <EmptyState
+            icon={KeyRound}
+            title="No API keys yet"
+            description="A key lets your own code create responses, read them back, or run a conversation from your product."
+            action={
+              <LockedControl feature="api_access">
+                <Button shape="pill" onClick={() => setOpen(true)}>
+                  <Plus className="size-4" /> Create your first key
+                </Button>
+              </LockedControl>
+            }
+            hint={
+              <Link href="/docs/quickstart" className="underline underline-offset-2">
+                Read the quickstart
+              </Link>
+            }
+          />
+        ) : (
+          <Card className="overflow-hidden">
+            {/* A key is a row of comparable facts — prefix, scopes, last used —
+                and the stack of cards this was made it impossible to scan any
+                one of them down the list. */}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-4">Key</TableHead>
+                  <TableHead>Scopes</TableHead>
+                  <TableHead className="hidden sm:table-cell">Last used</TableHead>
+                  <TableHead className="pr-4 text-right">
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {keys.map((k) => {
+                  const scopes = Object.entries(k.scopes ?? {}).flatMap(([resource, actions]) =>
+                    actions.map((a) => `${resource}:${a}`),
+                  );
+                  // Three chips read as a summary; five wrap to three lines and
+                  // read as a wall. The full list is on the row's title.
+                  const shown = scopes.slice(0, SCOPES_SHOWN);
+                  const overflow = scopes.length - shown.length;
+                  return (
+                    <TableRow key={k.id} className={k.enabled ? undefined : "opacity-60"}>
+                      <TableCell className="h-auto py-3 pl-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{k.name ?? "Untitled key"}</span>
+                          <Badge variant={isPublishable(k.keyType) ? "secondary" : "default"}>
+                            {isPublishable(k.keyType) ? "Publishable" : "Secret"}
+                          </Badge>
+                          {k.environment === "test" && <Badge variant="outline">Test</Badge>}
+                          {!k.enabled && <Badge variant="destructive">Revoked</Badge>}
+                          {k.expiresAt && now > 0 && k.expiresAt > now && (
+                            <Badge variant="outline">expires in {hoursUntil(k.expiresAt, now)}h</Badge>
+                          )}
+                        </div>
+                        <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                          <code className="font-mono">{k.start ?? "—"}…</code>
+                          <span>created {relative(k.createdAt, now)}</span>
+                          {k.origins.length > 0 && (
+                            <span>
+                              {k.origins.length} origin{k.origins.length === 1 ? "" : "s"}
                             </span>
-                          ))
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground hidden py-3 text-xs sm:table-cell">
-                      {relative(k.lastUsedAt, now)}
-                    </TableCell>
-                    <TableCell className="py-3 pr-4 text-right">
-                      {k.enabled && (
-                        <div className="flex items-center justify-end gap-1">
-                          {/*
-                            Rotation is confirmed like revocation is. It reads as
-                            the safe sibling of the two, but it starts a 24-hour
-                            clock on a key that is in production right now — a
-                            misclick here is a deploy deadline nobody agreed to.
-                          */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={rotateKey.isPending}
-                            onClick={() => setRotating(k)}
-                          >
-                            <RefreshCw className="size-3.5" /> Rotate
-                          </Button>
+                          )}
+                          <span className="sm:hidden">last used {relative(k.lastUsedAt, now)}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="h-auto max-w-64 py-3">
+                        <div className="flex flex-wrap items-center gap-1" title={scopes.join(" ")}>
+                          {scopes.length === 0 ? (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          ) : (
+                            <>
+                              {shown.map((scope) => (
+                                <span
+                                  key={scope}
+                                  className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[11px]"
+                                >
+                                  {scope}
+                                </span>
+                              ))}
+                              {overflow > 0 && (
+                                <span className="text-muted-foreground text-[11px]">+{overflow}</span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground hidden py-3 text-xs sm:table-cell">
+                        {relative(k.lastUsedAt, now)}
+                      </TableCell>
+                      <TableCell className="py-3 pr-4 text-right">
+                        {k.enabled && (
                           <Button
                             variant="ghost"
                             size="icon-sm"
+                            title="Revoke key"
                             aria-label={`Revoke ${k.name ?? "this key"}`}
                             onClick={() => setRevoking(k)}
                           >
                             <Trash2 className="size-3.5" />
                           </Button>
-                        </div>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </Card>
-      )}
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Card>
+        )}
+      </div>
 
-      <Card className="mt-8">
-        <CardContent className="py-5">
-          <h2 className="font-display mb-1 text-base font-medium">Rate limits</h2>
-          <p className="text-muted-foreground text-sm">
-            Secret keys are limited per key, per minute; publishable keys get more headroom because one page can
-            hold many respondents at once. Every response carries <code>RateLimit-Remaining</code>, so you can slow
-            down before you are told to.
-          </p>
-          <p className="text-muted-foreground mt-2 text-sm">
-            A 429 means slow down. A 402 means your monthly quota is spent and retrying will not help.
-          </p>
-        </CardContent>
-      </Card>
+      {/* ── the way in ─────────────────────────────────────────────────── */}
+      <section className="mt-12">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 className="text-h3">Start building</h2>
+          <Link
+            href="/docs"
+            className="text-muted-foreground hover:text-foreground text-xs transition-colors"
+          >
+            All documentation →
+          </Link>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {/* The one request that proves the key works, ready to paste. */}
+          <Card className="gap-0 overflow-hidden py-0">
+            <div className="flex items-center justify-between gap-2 border-b px-4 py-2">
+              <span className="text-muted-foreground text-xs font-medium">Your first request</span>
+              <CopyButton value={FIRST_REQUEST} toastMessage="Snippet copied" />
+            </div>
+            <pre className="overflow-x-auto px-4 py-3 text-xs leading-relaxed">
+              <code className="font-mono">{FIRST_REQUEST}</code>
+            </pre>
+          </Card>
+
+          <Card className="gap-0 overflow-hidden py-0">
+            <div className="flex items-center justify-between gap-2 border-b px-4 py-2">
+              <span className="text-muted-foreground text-xs font-medium">Official SDKs</span>
+              <Link
+                href="/docs/sdk"
+                className="text-muted-foreground hover:text-foreground text-xs transition-colors"
+              >
+                Guide →
+              </Link>
+            </div>
+            <ul className="divide-y">
+              {SDKS.map((s) => (
+                <li key={s.pkg} className="flex items-center gap-2 py-1.5 pr-3 pl-4">
+                  <code className="min-w-0 flex-1 truncate font-mono text-xs">npm i {s.pkg}</code>
+                  <span className="text-muted-foreground hidden text-xs sm:inline">{s.blurb}</span>
+                  <CopyButton value={`npm i ${s.pkg}`} toastMessage="Command copied" />
+                  <a
+                    href={`https://www.npmjs.com/package/${s.pkg}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`${s.pkg} on npm`}
+                    title="View on npm"
+                    className="text-muted-foreground hover:text-foreground p-1 transition-colors"
+                  >
+                    <ExternalLink className="size-3.5" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {DOC_LINKS.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="group bg-card hover:border-ring rounded-xl border p-3.5 transition-colors"
+            >
+              <span className="flex items-center gap-1 text-sm font-medium">
+                {l.title}
+                <ArrowUpRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+              </span>
+              <span className="text-muted-foreground mt-0.5 block text-xs text-pretty">{l.blurb}</span>
+            </Link>
+          ))}
+        </div>
+
+        {/*
+          The reference facts, one line, at the bottom — the page used to give
+          rate limiting a card of its own between the keys and nothing at all,
+          which put a paragraph about 429s in front of everyone who came here
+          to copy a key.
+        */}
+        <p className="text-muted-foreground mt-4 text-xs">
+          Base URL <code className="font-mono">{API_ORIGIN}/v1</code> · authenticate with the{" "}
+          <code className="font-mono">x-api-key</code> header · requests are limited per key,{" "}
+          <Link href="/docs/rate-limits" className="underline underline-offset-2">
+            see rate limits
+          </Link>
+          .
+        </p>
+      </section>
 
       {/* ── create ─────────────────────────────────────────────────────── */}
       <Dialog
@@ -485,48 +579,16 @@ export default function ApiKeysPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── rotation result ────────────────────────────────────────────── */}
-      <Dialog open={rotated !== null} onOpenChange={(o) => !o && setRotated(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-display">Rotated</DialogTitle>
-            <DialogDescription>
-              The old key keeps working for 24 hours. Deploy this one, then revoke the old one — a deploy is not
-              atomic, and revoking first would mean downtime in between.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="bg-muted flex items-center gap-2 rounded-lg p-3">
-            <code className="min-w-0 flex-1 break-all font-mono text-xs">{rotated?.key}</code>
-            <CopyButton value={rotated?.key ?? ""} toastMessage="Key copied" variant="outline" size="sm" />
-          </div>
-          <Button className="rounded-full" onClick={() => setRotated(null)}>
-            Done
-          </Button>
-        </DialogContent>
-      </Dialog>
-
-      <ConfirmDialog
-        open={rotating !== null}
-        onOpenChange={(o) => !o && setRotating(null)}
-        title="Rotate this key?"
-        description={`A replacement is issued now and ${rotating?.name ?? "this key"} keeps working for 24 hours, then stops. Deploy the new one within that window — after it, anything still using the old key starts failing.`}
-        confirmLabel="Rotate"
-        onConfirm={() => {
-          const row = rotating;
-          setRotating(null);
-          if (row) void rotate(row);
-        }}
-      />
-
       <ConfirmDialog
         open={revoking !== null}
         onOpenChange={(o) => !o && setRevoking(null)}
         title="Revoke this key?"
-        description={`Anything using ${revoking?.name ?? "this key"} stops working immediately. This cannot be undone — create a new key instead if you are rotating.`}
+        description={`Anything using ${revoking?.name ?? "this key"} stops working immediately, and this cannot be undone. To replace a key without downtime, create the new one first, deploy it, then revoke this one.`}
         confirmLabel="Revoke"
         onConfirm={() => {
-          if (revoking) revokeKey.mutate({ id: revoking.id });
+          const row = revoking;
           setRevoking(null);
+          if (row) void revoke(row);
         }}
       />
     </div>

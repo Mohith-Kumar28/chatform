@@ -110,14 +110,30 @@ export default function BillingPage() {
     }
   };
 
+  /**
+   * The portal opens in its own tab, and the tab is opened *synchronously* on the click.
+   *
+   * Two reasons, in that order. It is somebody else's site — leaving this one to look up an
+   * invoice and then having to navigate back is the wrong trade for a page you were reading.
+   * And the tab cannot be opened after the `await`: by then the browser no longer attributes
+   * it to a user gesture and blocks it as a popup, which is the failure mode where the button
+   * appears to do nothing at all. So a blank tab is claimed first and pointed at the URL once
+   * we have it — with `opener` severed, so the portal has no handle back on this window.
+   */
   const openPortal = async () => {
     setBusy(true);
     setError(null);
+    const tab = window.open("about:blank", "_blank");
+    if (tab) tab.opener = null;
     try {
       const res = (await portalMutation.mutateAsync()) as unknown as { url: string };
-      window.location.assign(res.url);
+      if (tab) tab.location.replace(res.url);
+      // Popup blocked, or opened in a context that returns no handle: same tab beats no tab.
+      else window.location.assign(res.url);
     } catch (err) {
+      tab?.close();
       setError(err instanceof ApiError ? err.message : "Could not open the billing portal.");
+    } finally {
       setBusy(false);
     }
   };

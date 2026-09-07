@@ -563,7 +563,19 @@ export async function extractAnswer(opts: {
       model: chatModel(opts.env, MODELS.extraction),
       schema: opts.schema,
       system:
-        "You convert a person's free-text reply into a structured value. You never invent information they did not give. If their reply is ambiguous, incomplete, or does not answer the question, return value=null and confident=false.",
+        "You convert a person's free-text reply into a structured value. " +
+        "You never invent information they did not give. " +
+        // Without this, a reply that points at something instead of repeating
+        // it — "yes, use the same one", "the address I signed in with", "same
+        // as above" — was read as giving nothing, and the respondent was told
+        // their perfectly clear answer was invalid. Resolving a reference to
+        // something already in the conversation is not inventing; it is the
+        // most common way people answer a question they have effectively
+        // already answered.
+        "A reply may refer to something stated earlier in the conversation rather than repeat it. " +
+        "When it does, resolve the reference against the conversation and return the value it points to. " +
+        "If their reply is ambiguous, incomplete, refers to something the conversation does not actually contain, " +
+        "or does not answer the question, return value=null and confident=false.",
       prompt: `Question asked: ${opts.question}
 ${opts.guidance}
 ${opts.transcript ? `\nRecent conversation:\n${opts.transcript}\n` : ""}

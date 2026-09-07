@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   FileStack,
   Gauge,
+  Keyboard,
   KeyRound,
   LayoutGrid,
   Moon,
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
 import { BUILDER_TABS } from "@/components/builder/builder-tabs";
+import { showShortcuts } from "@/components/builder/use-builder-shortcuts";
 import { getGetApiFormsQueryKey, useGetApiForms } from "@/lib/api/dashboard/dashboard";
 import { apiData } from "@/lib/api/payload";
 import { templateAccent } from "@/lib/category-accent";
@@ -125,6 +127,23 @@ export function CommandPalette() {
                   <Kbd>{i + 1}</Kbd>
                 </CommandItem>
               ))}
+              {/*
+                The shortcut sheet used to sit in the header as a permanent Keyboard
+                button — a screen slot spent on a list most people open once. It lives
+                here instead, where someone goes when they are looking for a faster way
+                to do something, and stays on ? for everyone who already knows.
+              */}
+              <CommandItem
+                value="Keyboard shortcuts"
+                onSelect={() => {
+                  setOpen(false);
+                  showShortcuts();
+                }}
+              >
+                <Keyboard className="size-3.5 opacity-60" />
+                <span className="min-w-0 flex-1">Keyboard shortcuts</span>
+                <Kbd>?</Kbd>
+              </CommandItem>
             </CommandGroup>
           )}
 

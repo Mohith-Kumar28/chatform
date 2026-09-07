@@ -249,6 +249,25 @@ sessionsRouter.post("/sessions/:id/actions", zValidator("json", actionSchema), a
   return c.json({ ok: true }, 202);
 });
 
+/**
+ * "Tell me again where we are."
+ *
+ * The client calls this when its own state has stopped agreeing with the
+ * stream — typing dots that outlived their turn, a question that never
+ * arrived, a socket that went quiet. It re-emits the current step over SSE
+ * under fresh sequence numbers, which is the one thing a reconnect cannot do,
+ * because replay is deduped by sequence. Read-only with respect to the flow:
+ * it never advances the conversation, so a client that calls it too eagerly
+ * costs nothing but a repeated event.
+ */
+sessionsRouter.post("/sessions/:id/resync", async (c) => {
+  const sessionId = await requireRespondent(c);
+  if (!sessionId) return c.json({ error: { code: "unauthorized", message: "Invalid session token" } }, 401);
+  const result = await stub(c.env, sessionId).resync();
+  if (!result.ok) return c.json({ error: { code: "not_found", message: "Session not found" } }, 404);
+  return c.json({ ok: true }, 202);
+});
+
 sessionsRouter.get("/sessions/:id", async (c) => {
   const sessionId = await requireRespondent(c);
   if (!sessionId) return c.json({ error: { code: "unauthorized", message: "Invalid session token" } }, 401);

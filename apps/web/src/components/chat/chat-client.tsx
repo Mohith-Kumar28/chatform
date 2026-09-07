@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ArrowDown,
@@ -86,6 +86,19 @@ export function ChatClient({
     return () => el.removeEventListener("scroll", onScroll);
   }, [chat.resolving, chat.submitted]);
 
+  /**
+   * Follow a new turn arriving.
+   *
+   * Keyed on how many messages there are, not on the array itself. Every
+   * streamed token replaces the array, so depending on it started a fresh
+   * *smooth* scroll dozens of times a second — each one cancelling the last
+   * before it arrived, while the resize observer below drove the same element
+   * instantly for the same growth. Two animations fighting over one scroll
+   * position is the jitter, and it is worst exactly where it can least be
+   * afforded: a cheap phone, mid-answer. Growth from tokens is a resize, and
+   * the observer already owns it; this owns the arrival of a new bubble.
+   */
+  const turnCount = chat.messages.length;
   useEffect(() => {
     if (!pinned) return;
     const el = scrollRef.current;
@@ -93,7 +106,7 @@ export function ChatClient({
     // Drive the container directly. scrollIntoView targeted the window and put
     // the anchor behind the sticky composer.
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [chat.messages, chat.thinking, chat.question, chat.ending, chat.auth, chat.review, pinned]);
+  }, [turnCount, chat.thinking, chat.question, chat.ending, chat.auth, chat.review, pinned]);
 
   /**
    * Follow the thread when it grows *without* a new message.
@@ -131,6 +144,25 @@ export function ChatClient({
   }, [chat.ending, previewMode]);
 
   const themeVars = useMemo(() => chatThemeVars(config.theme), [config.theme]);
+
+  /*
+    Stable handlers for the question controls.
+   
+    Inline arrows here gave the (memoised) affordance a new prop on every
+    streamed token, which defeats the memo entirely — the one place it matters
+    most, since that subtree holds the respondent's half-made selection.
+  */
+  const currentRef = chat.question?.block.ref;
+  const { sendStructured, sendAction } = chat;
+  const onStructured = useCallback(
+    (value: unknown, display: string) => {
+      if (currentRef) void sendStructured(currentRef, value, display);
+    },
+    [currentRef, sendStructured],
+  );
+  const onSkip = useCallback(() => void sendAction("skip"), [sendAction]);
+  const uploadBase = chat.getUploadBase();
+  const respondentToken = chat.getRespondentToken();
 
   /**
    * Hold the frame until we know which screen this is.
@@ -202,10 +234,10 @@ export function ChatClient({
 
       <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto">
         <div ref={contentRef} className="mx-auto w-full max-w-2xl space-y-3 px-4 pt-6 pb-10">
-          {/* Screen readers announce new agent messages without stealing focus. */}
-          <div className="sr-only" aria-live="polite" aria-atomic="false">
-            {chat.messages.filter((m) => m.role === "assistant" && !m.streaming).at(-1)?.text}
-          </div>
+          {/* Screen readers announce new agent messages without stealing focus.
+              Memoised: this walked the whole thread on every render, and a
+              render happens on every streamed token. */}
+          <LiveRegion messages={chat.messages} />
 
           {chat.messages.map((m) => (
             <div key={m.id}>
@@ -239,17 +271,23 @@ export function ChatClient({
           {/* Not while a sign-in gate is up: the server refuses every turn until
               it is cleared, so chips there are a control that cannot work — and
               their number keys would fire under the card. */}
-          {!chat.ending && !chat.auth && chat.question && !chat.thinking && (
+          {!chat.ending && !chat.auth && chat.question && (
             <div key={chat.question.block.ref} className="animate-message-in pt-0.5 pl-1">
               <QuestionAffordance
                 block={chat.question.block}
-                disabled={chat.status === "error"}
-                uploadBase={chat.getUploadBase()}
-                respondentToken={chat.getRespondentToken()}
-                onStructured={(value, display) =>
-                  void chat.sendStructured(chat.question!.block.ref, value, display)
-                }
-                onSkip={() => void chat.sendAction("skip")}
+                // `answering`, not `thinking`. The comment above says these are
+                // disabled rather than unmounted, and `!chat.thinking` in the
+                // condition quietly made that untrue: any flag that raised the
+                // typing dots — a branch jump, a sign-in round trip — took the
+                // chips off the screen with it, and a flag that got stuck took
+                // them away for good. That is how a respondent ended up staring
+                // at a question whose three options had been delivered, were on
+                // the page a reload away, and could not be seen or tapped.
+                disabled={chat.status === "error" || chat.answering}
+                uploadBase={uploadBase}
+                respondentToken={respondentToken}
+                onStructured={onStructured}
+                onSkip={onSkip}
               />
             </div>
           )}
@@ -345,7 +383,14 @@ export function ChatClient({
               a phone, bouncing the keyboard. The draft is cleared on a real
               question change inside the component instead.
             */}
-            <Composer chat={chat} config={config} />
+            <Composer
+              block={chat.question?.block}
+              status={chat.status}
+              validationHint={chat.validationHint}
+              send={chat.send}
+              sendAction={chat.sendAction}
+              config={config}
+            />
           </div>
           {!config.brandingHidden && (
             <p className="pb-2 text-center text-[0.6875rem] opacity-40">
@@ -537,6 +582,26 @@ const Bubble = memo(function Bubble({
           </div>
         )}
       </div>
+    </div>
+  );
+});
+
+/**
+ * The finished agent message, announced once it has settled.
+ *
+ * Its own component so the scan is memoised against the message list, and so a
+ * render caused by a streamed token does not re-run it. Streaming messages are
+ * skipped deliberately: a live region that changed on every token would read
+ * the sentence aloud a word at a time.
+ */
+const LiveRegion = memo(function LiveRegion({ messages }: { messages: ChatMessage[] }) {
+  const latest = useMemo(
+    () => messages.filter((m) => m.role === "assistant" && !m.streaming).at(-1)?.text,
+    [messages],
+  );
+  return (
+    <div className="sr-only" aria-live="polite" aria-atomic="false">
+      {latest}
     </div>
   );
 });
@@ -851,9 +916,33 @@ function EndingCard({
  * sit in the thread as an offer (see `QuestionAffordance`), not as a
  * replacement for the ability to speak.
  */
-function Composer({ chat, config }: { chat: ReturnType<typeof useChat>; config: PublicFormConfig }) {
+/**
+ * The message box.
+ *
+ * Given the four values it reads rather than the whole `useChat` result, and
+ * memoised on them. The hook returns a fresh object on every render, and a
+ * render happens on every streamed token, so passing it whole re-rendered the
+ * text field — including its controlled value and its autofocus — dozens of
+ * times a second while the agent was talking. On a slow phone that is felt in
+ * the keyboard, which is the one place in a form that has to stay perfectly
+ * still.
+ */
+const Composer = memo(function Composer({
+  block,
+  status,
+  validationHint,
+  send,
+  sendAction,
+  config,
+}: {
+  block: PublicBlock | undefined;
+  status: string;
+  validationHint: string | null;
+  send: (text: string) => Promise<void>;
+  sendAction: (action: "skip" | "restart" | "stop" | "submit") => Promise<void>;
+  config: PublicFormConfig;
+}) {
   const [text, setText] = useState("");
-  const block = chat.question?.block;
 
   /**
    * The draft belongs to one question, so it is cleared when the question
@@ -882,24 +971,24 @@ function Composer({ chat, config }: { chat: ReturnType<typeof useChat>; config: 
   if (!block) {
     return (
       <p className="text-center text-sm opacity-50">
-        {chat.status === "connecting" ? "Connecting…" : " "}
+        {status === "connecting" ? "Connecting…" : " "}
       </p>
     );
   }
 
-  const disabled = chat.status === "error";
+  const disabled = status === "error";
   const canSkip = config.allowSkip && !block.required;
 
   function submit() {
     const value = text.trim();
     if (!value) return;
     setText("");
-    void chat.send(value);
+    void send(value);
   }
 
   return (
     <div className="space-y-2">
-      {chat.validationHint && <p className="px-1 text-sm opacity-70">{chat.validationHint}</p>}
+      {validationHint && <p className="px-1 text-sm opacity-70">{validationHint}</p>}
 
       <SendRow onSend={submit} disabled={disabled || !text.trim()}>
         <TextInput
@@ -927,7 +1016,7 @@ function Composer({ chat, config }: { chat: ReturnType<typeof useChat>; config: 
       {canSkip && (
         <button
           type="button"
-          onClick={() => void chat.sendAction("skip")}
+          onClick={() => void sendAction("skip")}
           className="flex items-center gap-1 px-1 text-xs opacity-50 transition-opacity hover:opacity-100"
         >
           <SkipForward className="size-3" />
@@ -936,7 +1025,7 @@ function Composer({ chat, config }: { chat: ReturnType<typeof useChat>; config: 
       )}
     </div>
   );
-}
+});
 
 /** Nudges people that typing is allowed even when chips are on offer. */
 function placeholderFor(type: PublicBlock["type"]): string {

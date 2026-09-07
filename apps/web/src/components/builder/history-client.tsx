@@ -342,8 +342,8 @@ function VersionGroup({
 
       {group.entries.length === 0 ? (
         <p className="text-caption text-muted-foreground px-5 py-4">
-          Published before change tracking, so there is no changelog for this one — the document
-          itself is still here and can be restored.
+          We couldn&apos;t work out what this version changed — its stored document wouldn&apos;t
+          read. The version itself is intact and can still be restored.
         </p>
       ) : (
         <EntryList entries={group.entries} expanded={expanded} onToggle={onToggle} />

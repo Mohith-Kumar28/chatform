@@ -6,7 +6,7 @@ import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 import { requirePermission, type AuthzVars } from "../lib/authorize.js";
-import { afterResponse, loadFormHistory, parseStoredDoc, recordFormEvent, resolveActorNames } from "../lib/form-activity.js";
+import { afterResponse, backfillVersionActivity, loadFormHistory, parseStoredDoc, recordFormEvent, resolveActorNames } from "../lib/form-activity.js";
 import { audit } from "../lib/gate-log.js";
 
 /**
@@ -103,7 +103,25 @@ formHistoryRouter.get(
   }),
   async (c) => {
     const { limit, before } = c.req.valid("query");
-    return c.json(await loadFormHistory(c.env, c.get("form")!.id, { limit, before }));
+    const form = c.get("form")!;
+
+    /*
+      Versions published before this table existed have no changelog of their own, and
+      the published document that would explain them is sitting in `form_versions` the
+      whole time. Recovered on the first read of the page that would otherwise show the
+      gap, and awaited rather than deferred: a timeline that fills itself in a second
+      after you look at it is a timeline you have to reload to trust.
+
+      It costs one query on every subsequent load — the count that finds nothing to do —
+      and writes only the first time.
+    */
+    if (before === undefined) {
+      await backfillVersionActivity(c.env, form.id, form.organization_id).catch((err) =>
+        console.error("form_activity_backfill_failed", err),
+      );
+    }
+
+    return c.json(await loadFormHistory(c.env, form.id, { limit, before }));
   },
 );
 

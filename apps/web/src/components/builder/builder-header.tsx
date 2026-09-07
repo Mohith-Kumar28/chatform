@@ -9,7 +9,6 @@ import {
   CircleAlert,
   CloudOff,
   ExternalLink,
-  Keyboard,
   Link2,
   Loader2,
   Play,
@@ -54,7 +53,6 @@ export function BuilderHeader({
   publishing,
   onPreview,
   onCopyLink,
-  onShowShortcuts,
 }: {
   formId: string;
   title: string;
@@ -69,7 +67,6 @@ export function BuilderHeader({
   onPreview: () => void;
   /** Copies the live link. Owned by the shell so ⇧⌘C runs the same code. */
   onCopyLink: () => void;
-  onShowShortcuts: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -187,15 +184,15 @@ export function BuilderHeader({
               open — then publish. Each is a tinted target rather than a grey
               icon, so they read as actions and not decoration. */}
           <div className="flex flex-1 items-center justify-end gap-1.5">
+            {/*
+              Undo and redo only. The Keyboard button that used to sit beside them was a
+              permanent slot spent on a list you read once and never again — it is in the
+              ⌘K palette now, and still on ?, which is where a header button would have
+              taught you to look anyway.
+            */}
             <div className="mr-0.5 hidden items-center rounded-full md:flex">
               <IconAction label="Undo" shortcut={KEY.undo()} icon={Undo2} disabled={!canUndo} onClick={undo} />
               <IconAction label="Redo" shortcut={KEY.redo()} icon={Redo2} disabled={!canRedo} onClick={redo} />
-              <IconAction
-                label="Keyboard shortcuts"
-                shortcut={KEY.help}
-                icon={Keyboard}
-                onClick={onShowShortcuts}
-              />
             </div>
 
             <Tooltip>

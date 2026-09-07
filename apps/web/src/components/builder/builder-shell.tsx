@@ -179,7 +179,6 @@ export function BuilderShell({
             publishing={publishing}
             onPreview={() => setPreviewOpen(true)}
             onCopyLink={copyLink}
-            onShowShortcuts={() => setHelpOpen(true)}
           />
         )}
 

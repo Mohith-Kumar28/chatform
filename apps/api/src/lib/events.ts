@@ -49,6 +49,20 @@ export type ServerEvent =
     }
   | { type: "ending"; data: { ending: PublicEnding } }
   | { type: "complete"; data: { submissionId: string; durationMs: number } }
-  | { type: "error"; data: { code: string; message: string } }
+  | {
+      /**
+       * A turn that failed in a way the respondent has to be told about.
+       *
+       * Named `error_event`, not `error`: SSE event names become
+       * `EventSource` event names, and `error` is already the one the browser
+       * fires for transport failures. A server event called `error` would have
+       * been read as "the connection died" and triggered a reconnect instead
+       * of being shown. It is also what unsticks the typing indicator when a
+       * turn ends without a question — an HTTP status cannot do that, because
+       * the turn may have been started by something other than this client.
+       */
+      type: "error_event";
+      data: { code: string; message: string };
+    }
   | { type: "rate_limited"; data: { retryAfter: number } }
   | { type: "ping"; data: Record<string, never> };

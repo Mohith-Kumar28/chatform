@@ -28,18 +28,19 @@ import { filterTemplates, templateCategories, useTemplates } from "@/lib/templat
 import { cn } from "@/lib/utils";
 
 /**
- * Every way into a new form, on one screen.
+ * Every way into a new form, on one screen — but not three equal ways.
  *
- * Three ways in, ranked by how most forms actually get made: describe it,
- * start from a template, start from nothing. All visible at once — a tab
- * would put the gallery back behind a click, which is the problem.
+ * The describe box is the primary path and now reads like it: full width, a
+ * three-line well, text at reading size, and the only filled button on the
+ * screen. Under it sits the quiet fallback (blank), and then, after real air
+ * and a rule, the template gallery. All three used to be stacked at the same
+ * weight in the same rounded boxes, three rows apart, which read as three
+ * competing offers rather than one suggestion with alternatives.
  *
- * The describe box carries no chrome of its own. It had a heading, a hint
- * line, five example pills and a row of tone/length/language selects, which
- * is more instruction than the one sentence it is asking for — and the pills
- * duplicated the template gallery sitting directly beneath them. A box and a
- * button is the whole control now; length and tone are the model's call, and
- * anyone who wants a different one can say so in the sentence.
+ * The composer also carries no brand wash of its own any more. A tinted
+ * orange panel wrapping an orange button is the brand twice at two
+ * strengths, and it muddies both; the card is neutral, and the button
+ * carries the colour alone.
  */
 
 /** The endpoint caps the prompt at 2000 characters; so does this. */
@@ -173,7 +174,7 @@ export function CreateFormDialog({
               onRetry={generate}
             />
           ) : (
-            <div className="space-y-4">
+            <div>
               <AiPanel
                 prompt={prompt}
                 setPrompt={setPrompt}
@@ -181,20 +182,26 @@ export function CreateFormDialog({
                 onGenerate={generate}
               />
 
-              <BlankRow
-                open={blankOpen}
-                setOpen={setBlankOpen}
-                title={title}
-                setTitle={setTitle}
-                pending={createBlank.isPending}
-                onCreate={() =>
-                  createBlank.mutate({ data: { title: title.trim() || "Untitled form" } })
-                }
-              />
+              {/* The alternative, kept close to the composer so it reads as
+                  part of the same decision rather than a separate offer. */}
+              <div className="mt-3">
+                <BlankRow
+                  open={blankOpen}
+                  setOpen={setBlankOpen}
+                  title={title}
+                  setTitle={setTitle}
+                  pending={createBlank.isPending}
+                  onCreate={() =>
+                    createBlank.mutate({ data: { title: title.trim() || "Untitled form" } })
+                  }
+                />
+              </div>
 
-              <section className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-sm font-medium">Templates</h3>
+              {/* A rule and real air: the gallery is its own offer, not the
+                  third box in a stack of boxes. */}
+              <section className="border-border mt-9 space-y-4 border-t pt-7">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h3 className="font-display text-base font-semibold">Templates</h3>
                   <div className="relative ml-auto w-full sm:w-56">
                     <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2" />
                     <Input
@@ -255,13 +262,11 @@ export function CreateFormDialog({
           )}
         </DialogBody>
 
+        {/* The ⌘↵ hint used to live down here, a full screen away from the box
+            it applies to. It sits in the composer now, so this bar is left
+            with the one thing that belongs on it. */}
         {!drafting && (
-          <div className="border-border text-muted-foreground flex shrink-0 items-center justify-between gap-3 border-t px-6 py-3 text-xs">
-            <span className="flex items-center gap-1.5">
-              <Kbd>⌘</Kbd>
-              <Kbd>↵</Kbd>
-              to generate
-            </span>
+          <div className="border-border text-muted-foreground flex shrink-0 items-center justify-end gap-3 border-t px-6 py-3 text-xs">
             <Link
               href="/templates"
               onClick={() => onOpenChange(false)}
@@ -277,7 +282,7 @@ export function CreateFormDialog({
   );
 }
 
-/** The prompt box. A box and a button — nothing else. */
+/** The prompt box: the one thing on this screen asking to be used. */
 function AiPanel({
   prompt,
   setPrompt,
@@ -291,29 +296,34 @@ function AiPanel({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  // Grow to fit, up to a ceiling. A fixed four-row box either wastes half the
-  // panel on one line or hides the end of a paragraph.
+  // Grow to fit, between a floor and a ceiling. The floor is three lines, so
+  // the box reads as the main event before anything is typed; the ceiling
+  // stops a pasted paragraph from pushing the gallery off the screen.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 176)}px`;
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 88), 208)}px`;
   }, [prompt]);
 
   return (
     <section
       className={cn(
-        "border-primary/20 bg-primary-soft/40 rounded-2xl border p-2",
-        "focus-within:border-primary/45 transition-colors duration-[var(--duration-standard)]",
+        "border-border bg-card rounded-2xl border shadow-xs",
+        "transition-[border-color,box-shadow] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
+        // Focus darkens the edge rather than lighting up the brand ring. The
+        // ring is orange, and a full orange outline around a box this size is
+        // the wash this panel just lost, drawn one pixel thick instead.
+        "focus-within:border-foreground/25 focus-within:shadow-md",
       )}
     >
       {/* Borderless inside its own container: two nested boxes around one
-          sentence is a box too many. The placeholder is dimmed past the
-          usual muted step so it cannot be mistaken for typed text. */}
+          sentence is a box too many. Held at text-base on every breakpoint —
+          this is the field the screen is built around, not a settings input. */}
       <Textarea
         ref={ref}
         id="ai-prompt"
-        rows={2}
+        rows={3}
         value={prompt}
         maxLength={PROMPT_MAX}
         onChange={(e) => setPrompt(e.target.value)}
@@ -321,16 +331,27 @@ function AiPanel({
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canGenerate) onGenerate();
         }}
         aria-label="Describe the form you need"
-        placeholder="Describe your form — or paste your site's URL"
+        placeholder="Describe the form you need…"
         className={cn(
-          "min-h-0 resize-none border-0 bg-transparent px-3 py-2 text-sm shadow-none",
-          "placeholder:text-muted-foreground/55 focus-visible:border-0 focus-visible:ring-0",
+          "field-sizing-fixed min-h-0 resize-none border-0 bg-transparent shadow-none",
+          "px-4 pt-4 pb-1 text-base leading-relaxed md:text-base",
+          "placeholder:text-muted-foreground/60 focus-visible:border-0 focus-visible:ring-0",
           "dark:bg-transparent",
         )}
       />
 
-      <div className="flex justify-end">
-        <Button shape="pill" size="sm" disabled={!canGenerate} onClick={onGenerate}>
+      {/* The URL trick belongs on this line, not in the placeholder: a
+          placeholder offering two options is an instruction, and it vanishes
+          the moment anyone starts typing. */}
+      <div className="flex items-center gap-3 px-4 pt-1 pb-3">
+        <p className="text-muted-foreground hidden text-xs sm:block">
+          Or paste your site&rsquo;s URL and I&rsquo;ll read it.
+        </p>
+        <span className="text-muted-foreground ml-auto hidden items-center gap-1 text-xs sm:flex">
+          <Kbd>⌘</Kbd>
+          <Kbd>↵</Kbd>
+        </span>
+        <Button shape="pill" disabled={!canGenerate} onClick={onGenerate} className="max-sm:ml-auto">
           <Sparkles className="size-4" />
           Generate
         </Button>
@@ -339,7 +360,13 @@ function AiPanel({
   );
 }
 
-/** The blank option: a row until it is chosen, then a name field. */
+/**
+ * The blank option: one quiet control under the composer, then a name field.
+ *
+ * It was a full-width card with a hover lift, which gave the fallback the
+ * same weight as the thing above it and the cards below it. It is the
+ * fallback, so it is sized like one.
+ */
 function BlankRow({
   open,
   setOpen,
@@ -362,48 +389,34 @@ function BlankRow({
 
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={cn(
-          "border-border bg-card group flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left",
-          "shadow-xs transition-[box-shadow,transform,border-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
-          "hover:-translate-y-0.5 hover:shadow-md motion-reduce:hover:translate-y-0",
-          "focus-visible:ring-ring/40 focus-visible:ring-2 focus-visible:outline-none",
-        )}
-      >
-        <span className="bg-muted text-foreground grid size-8 shrink-0 place-items-center rounded-lg">
-          <Plus className="size-4" strokeWidth={1.75} />
-        </span>
-        <span className="font-display min-w-0 flex-1 text-sm font-semibold">Blank form</span>
-        <ArrowRight className="text-muted-foreground group-hover:text-foreground size-4 shrink-0 transition-colors" />
-      </button>
+      <Button variant="outline" size="sm" shape="pill" onClick={() => setOpen(true)}>
+        <Plus className="size-4" strokeWidth={1.75} />
+        Start blank
+      </Button>
     );
   }
 
   return (
-    <div className="border-border bg-card rounded-2xl border p-3">
-      <div className="flex flex-wrap gap-2">
-        <Input
-          ref={ref}
-          id="form-title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          aria-label="Form name"
-          placeholder="Name your form"
-          className="min-w-0 flex-1"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !pending) onCreate();
-            if (e.key === "Escape") setOpen(false);
-          }}
-        />
-        <Button shape="pill" disabled={pending} onClick={onCreate}>
-          {pending ? "Creating…" : "Create"}
-        </Button>
-        <Button shape="pill" variant="ghost" onClick={() => setOpen(false)}>
-          Cancel
-        </Button>
-      </div>
+    <div className="flex flex-wrap items-center gap-2">
+      <Input
+        ref={ref}
+        id="form-title"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        aria-label="Form name"
+        placeholder="Name your form"
+        className="h-9 min-w-0 flex-1 rounded-full px-4"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !pending) onCreate();
+          if (e.key === "Escape") setOpen(false);
+        }}
+      />
+      <Button variant="outline" shape="pill" disabled={pending} onClick={onCreate}>
+        {pending ? "Creating…" : "Create"}
+      </Button>
+      <Button shape="pill" variant="ghost" onClick={() => setOpen(false)}>
+        Cancel
+      </Button>
     </div>
   );
 }

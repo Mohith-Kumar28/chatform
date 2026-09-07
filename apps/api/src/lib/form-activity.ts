@@ -439,6 +439,131 @@ export async function loadFormHistory(
 }
 
 /**
+ * Reconstruct the changelog of versions published before this table existed.
+ *
+ * Nothing was actually lost when change tracking shipped: `form_versions` has held the
+ * full published document since the first release, so the history of an older form is
+ * unread rather than gone. Diffing each published document against the one before it
+ * recovers exactly what a live recording would have written — which questions arrived,
+ * which left, which were reworded — and the alternative was a form whose first four
+ * versions say "published before change tracking" forever.
+ *
+ * Idempotent by construction: each reconstructed row's id is derived from the version it
+ * describes, so a second pass inserts nothing and a concurrent one cannot double up. The
+ * one-row-per-version shape is also what makes the pass self-terminating — a version with
+ * no document changes still gets its row, so it is not re-diffed on every read.
+ *
+ * Attributed to `system` on purpose. These rows were computed after the fact from two
+ * documents; the person named on them is whoever published the version, but the surface
+ * that produced the line was this function, and a timeline that claims otherwise is
+ * inventing detail it does not have.
+ */
+export async function backfillVersionActivity(env: Bindings, formId: string, orgId: string): Promise<number> {
+  const res = await env.DB.prepare(
+    `SELECT v.id, v.version, v.schema_json, v.published_at, v.created_at, v.created_by,
+            (SELECT COUNT(*) FROM form_activity a WHERE a.form_version_id = v.id) AS entries
+       FROM form_versions v
+      WHERE v.form_id = ?
+      ORDER BY v.version ASC`,
+  )
+    .bind(formId)
+    .all<{
+      id: string;
+      version: number;
+      schema_json: string;
+      published_at: number | null;
+      created_at: number;
+      created_by: string | null;
+      entries: number;
+    }>();
+
+  const versions = res.results ?? [];
+  // The common path by far: every version already carries its own entries.
+  if (versions.length === 0 || versions.every((v) => v.entries > 0)) return 0;
+
+  const statements = [];
+  let prev: FormDoc | null = null;
+
+  for (const v of versions) {
+    const doc = parseStoredDoc(v.schema_json);
+    /*
+      A version whose document will not parse breaks the chain rather than ending it: the
+      next version has nothing trustworthy to diff against, so it is skipped too, and the
+      one after that picks up again. Better a gap than a changelog that reports every
+      question as new because its predecessor was unreadable.
+    */
+    if (!doc) {
+      prev = null;
+      continue;
+    }
+
+    if (v.entries > 0) {
+      prev = doc;
+      continue;
+    }
+
+    const changes = prev
+      ? diffFormDoc(prev, doc)
+      : v.version === versions[0]!.version
+        ? /*
+            The earliest version has no predecessor, and "Form created" alone throws away
+            the useful part. Every question it shipped with is listed instead, which is
+            both true and the thing someone scrolling to the bottom came to see.
+          */
+          doc.blocks.map((b) => ({ op: "question.added" as const, target: b.id, label: questionLabel(b) }))
+        : null;
+
+    // A gap in the chain (see above) — leave the version's changelog unclaimed.
+    if (changes === null) {
+      prev = doc;
+      continue;
+    }
+
+    const kind = prev ? (changes.length === 0 ? "published" : "edited") : "created";
+    const summary =
+      changes.length === 0
+        ? "Republished with no changes to the document"
+        : prev
+          ? summarizeChanges(changes)
+          : `Form created with ${doc.blocks.length} ${doc.blocks.length === 1 ? "question" : "questions"}`;
+
+    statements.push(
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO form_activity
+           (id, form_id, organization_id, form_version_id, kind, actor_type, actor_id, actor_label, source, summary, changes, change_count, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'user', ?, NULL, 'system', ?, ?, ?, ?, ?)`,
+      ).bind(
+        // Derived from the version, so the row can only ever exist once.
+        `act_bf_${v.id}`,
+        formId,
+        orgId,
+        v.id,
+        kind,
+        v.created_by,
+        summary,
+        changes.length > 0 ? JSON.stringify(changes.slice(0, MAX_CHANGES_PER_ENTRY)) : null,
+        changes.length,
+        v.published_at ?? v.created_at,
+        v.published_at ?? v.created_at,
+      ),
+    );
+
+    prev = doc;
+  }
+
+  if (statements.length === 0) return 0;
+  await env.DB.batch(statements);
+  return statements.length;
+}
+
+/** `blockLabel` from the diff, which is not exported — same rule, same fallbacks. */
+function questionLabel(b: { id: string; ref?: string | null; title?: string | null }): string {
+  const title = (b.title ?? "").trim();
+  if (title) return title.length > 72 ? `${title.slice(0, 71)}…` : title;
+  return b.ref || "Untitled question";
+}
+
+/**
  * Keep the table bounded.
  *
  * Published entries are kept far longer than draft ones: a stamped row is part of a

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isMeetingRoom, schedulingLabel, type PublicBlock } from "@repo/form-schema";
 import { Chip } from "./composers/primitives";
 import { RatingComposer, ScaleComposer } from "./composers/rating";
@@ -32,7 +32,14 @@ import { cn } from "@/lib/utils";
  * Keyed on the question's ref by its caller, which is what stops one
  * question's half-filled state showing up under the next one.
  */
-export function QuestionAffordance(props: {
+/*
+ * Memoised, for the same reason the bubbles are: this whole subtree — chips,
+ * scales, calendars, ranking lists — re-rendered on every streamed token of
+ * the agent's *next* message, because its parent does. Its props are five
+ * primitives and two stable callbacks, so identity comparison is enough to
+ * leave a half-filled multi-select completely alone while the agent talks.
+ */
+export const QuestionAffordance = memo(function QuestionAffordance(props: {
   block: PublicBlock;
   disabled?: boolean;
   uploadBase: string | null;
@@ -55,7 +62,7 @@ export function QuestionAffordance(props: {
       <AffordanceControls {...props} />
     </div>
   );
-}
+});
 
 /**
  * The numbered choices a question offers, in the order the chips show them.

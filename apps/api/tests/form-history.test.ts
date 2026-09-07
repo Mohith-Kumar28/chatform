@@ -280,6 +280,68 @@ describe("restore", () => {
   });
 });
 
+/**
+ * Versions published before `form_activity` existed carried no changelog, and the screen
+ * said so on every one of them. The published documents were there the whole time, so the
+ * changelog is recovered from them on read.
+ */
+describe("versions published before change tracking", () => {
+  /** Two versions, then the history wiped — a form as it looked before this shipped. */
+  async function twoUntrackedVersions(): Promise<void> {
+    await save(org, (d) => { d.blocks[1]!.title = "Email?"; });
+    await publish(org);
+    await save(org, (d) => {
+      d.blocks[1]!.title = "What is your email?";
+      d.blocks.push({ id: "blk_hist3", ref: "q_budget", type: "short_text", title: "Budget?", required: false } as never);
+    });
+    await publish(org);
+    await DB().DB.prepare(`DELETE FROM form_activity WHERE form_id = ?`).bind(org.formId).run();
+  }
+
+  it("reconstructs each version's changelog from the documents it published", async () => {
+    await twoUntrackedVersions();
+
+    const groups = await history(org);
+    const v1 = groups.find((g) => g.version === 1)!;
+    const v2 = groups.find((g) => g.version === 2)!;
+
+    // The earliest version has no predecessor, so it is reported as the form arriving.
+    expect(v1.entries).toHaveLength(1);
+    expect(v1.entries[0]!.kind).toBe("created");
+    expect(v1.entries[0]!.changes.every((c) => c.op === "question.added")).toBe(true);
+    expect(v1.entries[0]!.changeCount).toBe(2);
+
+    // The second is a real diff against the first: one question added, one reworded.
+    expect(v2.entries).toHaveLength(1);
+    expect(v2.entries[0]!.kind).toBe("edited");
+    expect(v2.entries[0]!.changes.map((c) => c.op)).toContain("question.added");
+    expect(v2.entries[0]!.changes.map((c) => c.op)).toContain("question.renamed");
+    expect(v2.entries[0]!.source).toBe("system");
+  });
+
+  it("reconstructs once, however many times the page is opened", async () => {
+    await twoUntrackedVersions();
+
+    await history(org);
+    await history(org);
+    const groups = await history(org);
+
+    expect(groups.find((g) => g.version === 1)!.entries).toHaveLength(1);
+    expect(groups.find((g) => g.version === 2)!.entries).toHaveLength(1);
+  });
+
+  it("leaves versions that already have a changelog alone", async () => {
+    await save(org, (d) => { d.blocks[1]!.title = "Tracked all along"; });
+    await publish(org);
+
+    const before = (await history(org)).find((g) => g.version === 1)!.entries.length;
+    const after = (await history(org)).find((g) => g.version === 1)!.entries.length;
+    expect(after).toBe(before);
+    // Nothing reconstructed: every entry came from the live recording.
+    expect((await history(org)).find((g) => g.version === 1)!.entries.every((e) => e.source !== "system")).toBe(true);
+  });
+});
+
 describe("tenancy", () => {
   it("does not show one organization another's history", async () => {
     await save(org, (d) => { d.blocks[1]!.title = "Private"; });

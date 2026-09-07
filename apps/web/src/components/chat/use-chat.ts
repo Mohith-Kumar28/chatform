@@ -5,6 +5,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PublicBlock } from "@repo/form-schema";
 
 export interface ChatMessage {
+  /**
+   * Stable for the life of the bubble, and therefore usable as a React key.
+   *
+   * For an answer this is the *local* echo's id, kept even after the server
+   * confirms the message under an id of its own — see `serverId`.
+   */
   id: string;
   /**
    * `system` is a note about the conversation rather than a turn in it —
@@ -18,6 +24,16 @@ export interface ChatMessage {
   streaming?: boolean;
   /** Locally-rendered echo awaiting its server-confirmed twin. */
   optimistic?: boolean;
+  /**
+   * The id the server knows this message by, once it has confirmed one.
+   *
+   * Kept beside `id` rather than replacing it. Swapping the id on confirmation
+   * changed the bubble's React key, so React unmounted the pale bubble and
+   * mounted a fresh one in its place: `animate-message-in` replayed and every
+   * accepted answer visibly flinched a moment after it was sent. Same key,
+   * same element, one prop change — the only thing that moves now is opacity.
+   */
+  serverId?: string;
   /** The question this message answered, when it was an answer. */
   answeredRef?: string;
 }
@@ -106,6 +122,45 @@ const MAX_RECONNECT_ATTEMPTS = 8;
  * manual page refresh used to do by hand.
  */
 const STALL_MS = 45000;
+
+/**
+ * How long the typing indicator may run against a silent stream before we
+ * treat it as a bug rather than a wait.
+ *
+ * Nothing above this line is supposed to be able to strand it — but "supposed
+ * to" is not a good enough guarantee for the one thing standing between a
+ * respondent and the controls they need. Whatever the cause (a flag armed
+ * after its own turn had already landed, an event lost to a half-open socket,
+ * a turn the server abandoned mid-flight), dots over a stream that has said
+ * nothing while the screen already holds something to act on is a stuck form,
+ * and a stuck form has to get itself unstuck.
+ */
+const THINKING_STALE_MS = 6000;
+
+/**
+ * ...and how long before we stop reasoning about it and ask the server.
+ *
+ * Longer, because this is the case where the screen holds nothing to fall back
+ * on, so the only safe recovery is to have the conversation re-state itself —
+ * the same thing a page reload does, minus the reload.
+ */
+const RESYNC_AFTER_MS = 12000;
+
+/** Give up asking after this many; three failures is a real outage, not a blip. */
+const MAX_RESYNC_ATTEMPTS = 3;
+
+/**
+ * The longest the boot screen may hold the frame.
+ *
+ * `resolving` exists to answer one question — fresh conversation, resumed one,
+ * or "you have already answered this" — and it was lowered only by the
+ * stream's readiness signal. A stream that connects but never says it is ready
+ * therefore held a full-screen skeleton indefinitely, hiding the error banner
+ * and the Retry button that were the way out of it. Past this, the chat is
+ * shown regardless: a header that says "Reconnecting…" is a state a person can
+ * understand and act on, and a spinner with no end is not.
+ */
+const BOOT_MAX_MS = 8000;
 
 /**
  * Where a respondent's place in a form is remembered.
@@ -200,6 +255,18 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
   const [uploadSpec, setUploadSpec] = useState<UploadSpec | null>(null);
   /** True between sending a turn and the agent's first token. */
   const [thinking, setThinking] = useState(false);
+  /**
+   * True while the answer to the question on screen is in flight.
+   *
+   * Deliberately not `thinking`. `thinking` means "the agent is composing" and
+   * is armed by things that have nothing to do with the current controls — a
+   * branch jump, a sign-in round trip — so using it to gate the answer chips
+   * meant any unrelated flag could take the only way to answer off the screen,
+   * and one that got stuck took it away permanently. This one is armed by a
+   * send and disarmed by the server's reply to that send, and nothing else
+   * touches it.
+   */
+  const [answering, setAnswering] = useState(false);
   const [rateLimited, setRateLimited] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewState | null>(null);
   const [submitted, setSubmitted] = useState<SubmittedState | null>(null);
@@ -255,7 +322,10 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
     if (echoId) pendingEchoRef.current = null;
 
     setMessages((prev) => {
-      if (prev.some((m) => m.id === msg.id)) return prev;
+      // Matched on both ids: a confirmed answer keeps its echo's `id`, so
+      // without `serverId` a redelivery of the same server message would not
+      // recognise itself and would append a duplicate.
+      if (prev.some((m) => m.id === msg.id || m.serverId === msg.id)) return prev;
       // A server-confirmed user message replaces its own optimistic echo
       // rather than appearing twice.
       //
@@ -267,7 +337,12 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
         const echoIndex = prev.findIndex((m) => m.id === echoId);
         if (echoIndex !== -1) {
           const next = [...prev];
-          next[echoIndex] = { ...msg, text: prev[echoIndex]!.text || msg.text };
+          next[echoIndex] = {
+            ...msg,
+            id: prev[echoIndex]!.id,
+            serverId: msg.id,
+            text: prev[echoIndex]!.text || msg.text,
+          };
           return next;
         }
       }
@@ -281,6 +356,17 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
     if (!id) return;
     pendingEchoRef.current = null;
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, optimistic: false } : m)));
+  }, []);
+
+  /**
+   * The server has spoken: nothing this device sent is still in flight.
+   *
+   * Every event that resolves a turn goes through here, so "the dots are down"
+   * and "the controls are live again" can never disagree.
+   */
+  const settleTurn = useCallback(() => {
+    setThinking(false);
+    setAnswering(false);
   }, []);
 
   const appendToken = useCallback((messageId: string, delta: string) => {
@@ -398,7 +484,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
         emitEmbedEvent({ type: "answer", ref });
         setMessages((prev) => {
           const idx = messageId
-            ? prev.findIndex((m) => m.id === messageId)
+            ? prev.findIndex((m) => m.serverId === messageId || m.id === messageId)
             : (() => {
                 const r = [...prev].reverse().findIndex((m) => m.role === "user" && !m.answeredRef);
                 return r === -1 ? -1 : prev.length - 1 - r;
@@ -437,8 +523,12 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
           total: data.progress?.totalEstimate,
         });
         setQuestion(data);
-        setThinking(false);
-        setEscalatedRef(null);
+        settleTurn();
+        // Cleared when the conversation moves on, not when the *same* question
+        // is re-stated. Escalation now re-emits its own question so the
+        // controls come back with it, and clearing unconditionally threw the
+        // escalation away in the same breath that raised it.
+        setEscalatedRef((prev) => (prev && prev === data.block?.ref ? prev : null));
         setValidationHint(null);
         // A new question means the last one is behind us; a "slow down" notice
         // that outlived it is just noise.
@@ -448,7 +538,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
       on("validation_error", (e) => {
         const { message } = JSON.parse((e as MessageEvent).data) as { message: string };
         setValidationHint(message);
-        setThinking(false);
+        settleTurn();
         // A refused answer never gets a server twin. Settle its echo here or it
         // stays pale forever and the next answer inherits its text.
         settleEcho();
@@ -469,7 +559,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
       on("escalate_ui", (e) => {
         const { ref } = JSON.parse((e as MessageEvent).data) as { ref: string };
         setEscalatedRef(ref);
-        setThinking(false);
+        settleTurn();
       });
 
       on("branch_jump", () => setThinking(true));
@@ -479,13 +569,13 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
       on("error_event", (e) => {
         const { message } = JSON.parse((e as MessageEvent).data) as { message?: string };
         setError(message ?? "Something went wrong");
-        setThinking(false);
+        settleTurn();
       });
 
       on("rate_limited", (e) => {
         const { message } = JSON.parse((e as MessageEvent).data) as { message?: string };
         setRateLimited(message ?? "You're going a bit fast — give it a moment.");
-        setThinking(false);
+        settleTurn();
       });
 
       on("auth_required", (e) => {
@@ -496,7 +586,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
         setAuth((prev) =>
           prev ?? { methods: data.methods, message: data.message, phoneSentTo: null, pending: false, error: null },
         );
-        setThinking(false);
+        settleTurn();
       });
 
       on("auth_verified", (e) => {
@@ -514,7 +604,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
       on("review", (e) => {
         setReview(JSON.parse((e as MessageEvent).data) as ReviewState);
         setQuestion(null);
-        setThinking(false);
+        settleTurn();
       });
 
       on("ending", (e) => {
@@ -522,7 +612,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
         setEnding(ending);
         setQuestion(null);
         setReview(null);
-        setThinking(false);
+        settleTurn();
       });
 
       on("complete", (e) => {
@@ -539,6 +629,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
           durationMs: payload.durationMs,
         });
         setStatus("ended");
+        settleTurn();
         // The active session is done, but remember that this device answered —
         // a return visit should say so rather than silently starting over.
         //
@@ -570,7 +661,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
         }
       };
     },
-    [apiOrigin, appendToken, ephemeral, pushMessage, settleEcho, slug],
+    [apiOrigin, appendToken, ephemeral, pushMessage, settleEcho, settleTurn, slug],
   );
 
   useEffect(() => {
@@ -688,22 +779,22 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
         });
         if (res.status === 429) {
           setRateLimited("You're going a bit fast — give it a moment.");
-          setThinking(false);
+          settleTurn();
           settleEcho();
         } else if (!res.ok) {
-          // Any other refusal. `thinking` gates the question's controls now, so
-          // leaving it true on a 4xx would hide the chips with nothing coming
-          // back.
-          setThinking(false);
+          // Any other refusal: nothing is coming back over the stream for this
+          // turn, so the dots have to come down and the controls have to come
+          // back here, or the refusal reads as a hang.
+          settleTurn();
           settleEcho();
         }
       } catch {
-        setThinking(false);
+        settleTurn();
         setError("That didn't send. Check your connection and try again.");
         settleEcho();
       }
     },
-    [apiOrigin, settleEcho],
+    [apiOrigin, settleEcho, settleTurn],
   );
 
   const send = useCallback(
@@ -714,6 +805,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
       pendingEchoRef.current = id;
       pushMessage({ id, role: "user", text, optimistic: true });
       setThinking(true);
+      setAnswering(true);
       setValidationHint(null);
       await post("messages", { type: "text", text });
     },
@@ -730,6 +822,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
         pushMessage({ id, role: "user", text: display, optimistic: true });
       }
       setThinking(true);
+      setAnswering(true);
       setValidationHint(null);
       await post("messages", { type: "structured", ref, value });
     },
@@ -739,6 +832,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
   const sendAction = useCallback(
     async (action: "skip" | "restart" | "stop" | "submit") => {
       setThinking(true);
+      setAnswering(true);
       await post("actions", { action });
     },
     [post],
@@ -748,6 +842,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
   const editAnswer = useCallback(
     async (ref: string) => {
       setThinking(true);
+      setAnswering(true);
       setEnding(null);
       setReview(null);
       await post("actions", { action: "edit", ref });
@@ -798,6 +893,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
     setUploadSpec(null);
     setEscalatedRef(null);
     setThinking(false);
+    setAnswering(false);
     setQuestion(null);
     setEnding(null);
     setReview(null);
@@ -836,16 +932,32 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
   const authError = (data: Record<string, unknown>): string =>
     ((data.error as { message?: string } | undefined)?.message) ?? "That didn't work. Please try again.";
 
+  /**
+   * Armed BEFORE the request, never after it.
+   *
+   * Verifying an identity is not a quick acknowledgement. The same call clears
+   * the gate *and* runs the whole first turn inside the durable object, so the
+   * greeting, the agent's first question and the `question` event that arms
+   * the answer chips have all normally arrived over SSE before this `await`
+   * resolves. Setting `thinking` afterwards therefore raised the typing dots
+   * for a turn that was already over — and since every event that lowers them
+   * had been and gone, nothing was left to come and turn them off. The form
+   * sat on three bouncing dots, with the chips it had already been sent hidden
+   * behind them, until the respondent thought to reload the page. Arming
+   * first puts the flag ahead of the events that clear it, which is the only
+   * ordering that cannot lose the race.
+   */
   const signInWithGoogle = useCallback(
     async (idToken: string) => {
       setAuth((a) => (a ? { ...a, pending: true, error: null } : a));
+      setThinking(true);
       const { ok, data } = await authPost("google", { idToken });
       if (ok) {
         setIdentity(data.identity as VerifiedIdentity);
         setAuth(null);
-        setThinking(true);
         return;
       }
+      setThinking(false);
       setAuth((a) => (a ? { ...a, pending: false, error: authError(data) } : a));
     },
     [authPost],
@@ -866,16 +978,18 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
     [authPost],
   );
 
+  /** Same ordering as `signInWithGoogle`, for the same reason. */
   const verifyPhoneCode = useCallback(
     async (code: string) => {
       setAuth((a) => (a ? { ...a, pending: true, error: null } : a));
+      setThinking(true);
       const { ok, data } = await authPost("phone/verify", { code });
       if (ok) {
         setIdentity(data.identity as VerifiedIdentity);
         setAuth(null);
-        setThinking(true);
         return;
       }
+      setThinking(false);
       setAuth((a) => (a ? { ...a, pending: false, error: authError(data) } : a));
     },
     [authPost],
@@ -892,6 +1006,98 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
   }, [apiOrigin]);
 
   const getRespondentToken = useCallback(() => sessionRef.current?.token ?? null, []);
+
+  /**
+   * The boot screen is a decision, not a wait. See BOOT_MAX_MS.
+   */
+  useEffect(() => {
+    if (!resolving) return;
+    const t = setTimeout(() => setResolving(false), BOOT_MAX_MS);
+    return () => clearTimeout(t);
+  }, [resolving]);
+
+  /**
+   * Ask the conversation to say again where it stands.
+   *
+   * The stream dedupes replay by sequence number, which is what makes a
+   * reconnect invisible — and also what makes a reconnect useless for
+   * recovering a state this device saw once and then lost. The server re-emits
+   * the current step under fresh sequence numbers, which the ratchet cannot
+   * swallow. It advances nothing, so calling it when it turns out not to have
+   * been needed costs one repeated event.
+   */
+  const resync = useCallback(async () => {
+    const session = sessionRef.current;
+    if (!session) return;
+    try {
+      await fetch(`${apiOrigin}/p/sessions/${session.sessionId}/resync`, {
+        method: "POST",
+        headers: { "x-respondent-token": session.token },
+      });
+    } catch {
+      // The watchdog below decides whether to try again.
+    }
+  }, [apiOrigin]);
+
+  /**
+   * What the watchdog below needs to know, kept somewhere it can read without
+   * being rebuilt — and therefore restarted — every time any of it changes.
+   */
+  const liveRef = useRef({ answering: false, actionable: false });
+  const actionable = Boolean(question || review || ending || auth || submitted);
+  useEffect(() => {
+    liveRef.current = { answering, actionable };
+  }, [answering, actionable]);
+
+  /**
+   * The typing indicator can never be the last thing that happens.
+   *
+   * Everything above tries to keep `thinking` honest; this exists because
+   * "tries" is not a good enough guarantee for the only thing standing between
+   * a respondent and the controls they need. It never second-guesses a live
+   * turn — any event at all, a keep-alive ping included, counts as the agent
+   * still working — and only acts on a stream that has gone quiet underneath
+   * raised dots. Then, in order of how much it has to assume:
+   *
+   *  1. Nothing was sent from here and the screen already holds something to
+   *     act on. Then no turn is outstanding and the dots are simply wrong.
+   *  2. Otherwise the conversation itself may have been lost mid-turn, so ask
+   *     the server to re-state it — the recovery a page reload performs, done
+   *     without one.
+   *  3. If even that goes unanswered, stop pretending and say so, with a
+   *     Retry that reconnects.
+   */
+  useEffect(() => {
+    if (!thinking) return;
+    const armedAt = Date.now();
+    let attempts = 0;
+    let lastAttemptAt = 0;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      // Something is arriving: the agent really is mid-turn. A keep-alive ping
+      // counts — it is the server saying the connection is real.
+      if (now - lastEventAtRef.current < THINKING_STALE_MS) return;
+      if (now - armedAt < THINKING_STALE_MS) return;
+
+      if (!liveRef.current.answering && liveRef.current.actionable) {
+        settleTurn();
+        return;
+      }
+      if (now - armedAt < RESYNC_AFTER_MS) return;
+      // Spaced out. Three requests in three seconds is not a retry, it is a
+      // client hammering a server that is already having a bad time.
+      if (now - lastAttemptAt < THINKING_STALE_MS) return;
+      if (attempts >= MAX_RESYNC_ATTEMPTS) {
+        settleTurn();
+        setError("That took longer than it should have. Tap retry to pick up where you left off.");
+        return;
+      }
+      attempts += 1;
+      lastAttemptAt = now;
+      void resync();
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [thinking, resync, settleTurn]);
 
   useEffect(() => {
     const t = setTimeout(() => void start(), 0);
@@ -913,6 +1119,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
     status,
     error,
     thinking,
+    answering,
     resolving,
     rateLimited,
     resumed,
