@@ -195,6 +195,7 @@ export function LockedControl({
   limit,
   used,
   locked: lockedByCaller,
+  chip = "overlay",
   children,
   className,
 }: {
@@ -214,6 +215,16 @@ export function LockedControl({
    * a look of its own.
    */
   locked?: boolean;
+  /**
+   * Where the padlock chip sits.
+   *
+   * `overlay` pins it to the control's top-right corner, which is right for a
+   * panel or a card — something with room to spare. On a *button* it lands on
+   * the label: "Invite member" read as "Invite me…" with a chip over the rest,
+   * and "Create key" as "Create…". `inline` puts the chip beside the control
+   * instead, so both the thing you cannot press and the reason are legible.
+   */
+  chip?: "overlay" | "inline";
   children: ReactNode;
   className?: string;
 }) {
@@ -224,6 +235,17 @@ export function LockedControl({
   const settled = feature ? ready : true;
 
   if (settled && !locked) return <>{children}</>;
+
+  if (chip === "inline") {
+    return (
+      <div className={cn("flex items-center gap-2", className)} aria-busy={!settled || undefined}>
+        <div className={cn("select-none", locked ? "pointer-events-none opacity-55" : "pointer-events-none opacity-80")} inert>
+          {children}
+        </div>
+        {locked && <LockChip reason={reason} />}
+      </div>
+    );
+  }
 
   return (
     <div className={cn("relative", className)} aria-busy={!settled || undefined}>

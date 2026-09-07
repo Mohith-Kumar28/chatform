@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { organizationPlugin } from "@/lib/auth/organization-plugin"
+import { useClientValue } from "@/hooks/use-client-value"
 import { cn } from "@/lib/utils"
 import { OrganizationInvitationRowSkeleton } from "./organization-invitation-row-skeleton"
 import {
@@ -36,10 +37,19 @@ export type OrganizationInvitationRowProps = {
   showStatus?: boolean
 }
 
+/*
+  Design tokens, not raw palette steps.
+
+  `bg-amber-500/10 text-amber-600 dark:text-amber-400` is the library's default
+  and it is the one pairing this codebase has already shipped a contrast bug
+  with — the soft/foreground pairs are defined together precisely so the ink and
+  the ground are lit for each other in both themes.
+*/
 const statusBadgeClasses: Record<string, string> = {
-  pending: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  accepted: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  rejected: "bg-destructive/10 text-destructive",
+  pending: "bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)]",
+  expired: "bg-muted text-muted-foreground",
+  accepted: "bg-[var(--success-soft)] text-[var(--success-soft-foreground)]",
+  rejected: "bg-[var(--destructive-soft)] text-[var(--destructive-soft-foreground)]",
   canceled: "bg-muted text-muted-foreground"
 }
 
@@ -83,10 +93,30 @@ export function OrganizationInvitationRow({
 
   const roleLabel = memberRoleLabels(invitation.role, roles).join(", ")
 
-  const statusLabel =
-    organizationLocalization[
-      invitation.status as keyof typeof organizationLocalization
-    ] ?? invitation.status
+  /**
+   * An invitation that has lapsed still says `pending` in the row.
+   *
+   * Better Auth never writes `status` back to `expired` — expiry is only checked
+   * at accept time, against `expires_at`. So the table showed a week-old dead
+   * invite in the same amber as one sent a minute ago, and the only way to find
+   * out was to invite the person again. The server already excludes these from
+   * `countSeats`, so a seat is not being held; the row just has to stop implying
+   * that one is.
+   */
+  /* One clock reading per mount, not one per render: `Date.now()` in render is
+     impure, and a 48-hour window does not need a clock that ticks. */
+  const now = useClientValue(() => Date.now(), 0)
+  const expired =
+    now > 0 &&
+    invitation.status === "pending" &&
+    new Date(invitation.expiresAt).getTime() <= now
+  const effectiveStatus = expired ? "expired" : invitation.status
+
+  const statusLabel = expired
+    ? "Expired"
+    : (organizationLocalization[
+        invitation.status as keyof typeof organizationLocalization
+      ] ?? invitation.status)
 
   if (cancelPermissionPending || invitePermissionPending) {
     return <OrganizationInvitationRowSkeleton />
@@ -143,7 +173,7 @@ export function OrganizationInvitationRow({
         <TableCell className="text-sm">
           <Badge
             variant="secondary"
-            className={cn(statusBadgeClasses[invitation.status])}
+            className={cn(statusBadgeClasses[effectiveStatus])}
           >
             {String(statusLabel)}
           </Badge>

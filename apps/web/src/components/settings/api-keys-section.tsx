@@ -289,7 +289,7 @@ export function ApiKeysSection() {
             {/* The role check comes first: no padlock, no upgrade, because an
                 editor cannot buy their way to this one. */}
             {canCreate ? (
-              <LockedControl feature="api_access">
+              <LockedControl feature="api_access" chip="inline">
                 <Button shape="pill" onClick={() => setOpen(true)}>
                   <Plus className="size-4" /> Create key
                 </Button>

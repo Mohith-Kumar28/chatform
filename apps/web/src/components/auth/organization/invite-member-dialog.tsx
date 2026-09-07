@@ -23,6 +23,8 @@ import {
 import { ChevronDown, UserPlus } from "lucide-react"
 import { useEffect, useMemo, useRef } from "react"
 import { toast } from "sonner"
+import { gateErrorFrom } from "@/lib/auth/paywalled"
+import { openPaywall } from "@/stores/paywall-store"
 import { buttonVariants } from "@/components/ui/button"
 import {
   Dialog,
@@ -117,6 +119,28 @@ export function InviteMemberDialog({
       onSuccess: () => {
         onOpenChange(false)
         toast.success(organizationLocalization.inviteMemberSuccess)
+      },
+      /**
+       * A seat refusal is a paywall, not a toast.
+       *
+       * The server enforces seats in `beforeCreateInvitation` — the only place
+       * that sees every path into `invitations`, including this dialog calling
+       * the endpoint directly. That guard throws a real gate envelope, but Better
+       * Auth's client is a second HTTP stack that never passes through the app's
+       * fetch mutator, so without this the envelope was thrown away and the
+       * person saw the raw `PAYMENT_REQUIRED` code.
+       */
+      onError: (error) => {
+        const gate = gateErrorFrom(error)
+        if (gate) {
+          onOpenChange(false)
+          openPaywall(gate)
+          return
+        }
+        toast.error(
+          (error as { message?: string })?.message ||
+            "Could not send the invitation."
+        )
       }
     }
   )

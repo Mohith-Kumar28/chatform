@@ -42,6 +42,8 @@ import {
   TableRow
 } from "@/components/ui/table"
 import { organizationPlugin } from "@/lib/auth/organization-plugin"
+import { useEntitlements } from "@/hooks/use-entitlements"
+import { LockedControl, useUpgrade } from "@/components/billing/gate"
 import { cn } from "@/lib/utils"
 import { InviteMemberDialog } from "./invite-member-dialog"
 import { OrganizationMemberRow } from "./organization-member-row"
@@ -314,25 +316,65 @@ export function OrganizationMembers({
     table.resetRowSelection(true)
   }
 
+  /**
+   * The seat limit is the plan's, not a number in the plugin config.
+   *
+   * `membershipLimit` is a static plugin option, and ours moves with the
+   * subscription — so it is read from entitlements here instead. `gauges.seats`
+   * is the server's own `countSeats`: members plus invitations that could still
+   * be accepted, with expired ones excluded so an ignored invite does not squat
+   * a seat forever. Computing it again on the client is how the two end up
+   * disagreeing about whether there is room.
+   */
+  const ent = useEntitlements()
+  const upgrade = useUpgrade()
+  const seatLimit = ent.limit("seats")
+  const seatsUsed = ent.data?.gauges.seats ?? total
+  const atSeatLimit = seatLimit !== null && seatsUsed >= seatLimit
+
   const atMembershipLimit =
-    membershipLimit !== undefined && total >= membershipLimit
+    atSeatLimit || (membershipLimit !== undefined && total >= membershipLimit)
 
   return (
     <div className={cn("flex flex-col gap-3", className)} {...props}>
       <div className="flex items-end justify-between gap-3">
-        <h3 className="truncate text-sm font-semibold">
-          {organizationLocalization.members}
-        </h3>
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-semibold">
+            {organizationLocalization.members}
+          </h3>
+          {/* The seat count sits with the control it constrains. It was a
+              full-width meter card in the hand-built version of this screen,
+              which was a lot of chrome around one number — and it then repeated
+              the "every seat is taken" sentence the invite button already
+              carries. */}
+          {seatLimit !== null && (
+            <p className="text-muted-foreground text-micro tabular mt-0.5">
+              {seatsUsed} of {seatLimit} {seatLimit === 1 ? "seat" : "seats"} used
+            </p>
+          )}
+        </div>
 
         {(canInvite.isPending || canInvite.data?.success) && (
-          <Button
-            className="shrink-0"
-            size="sm"
-            disabled={canInvite.isPending || atMembershipLimit}
-            onClick={() => setInviteOpen(true)}
-          >
-            {organizationLocalization.inviteMember}
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            {atSeatLimit && (
+              <Button size="sm" variant="outline" onClick={() => upgrade({ limit: "seats", used: seatsUsed }, { surface: "team" })}>
+                {"Add seats"}
+              </Button>
+            )}
+            {/* Padlocked rather than merely disabled: a dead button explains
+                nothing, and the chip is the only thing on this screen that says
+                which plan would raise the ceiling. */}
+            <LockedControl limit="seats" used={seatsUsed} locked={atSeatLimit} chip="inline">
+              <Button
+                className="shrink-0"
+                size="sm"
+                disabled={canInvite.isPending || atMembershipLimit}
+                onClick={() => setInviteOpen(true)}
+              >
+                {organizationLocalization.inviteMember}
+              </Button>
+            </LockedControl>
+          </div>
         )}
       </div>
 
