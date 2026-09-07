@@ -53,6 +53,26 @@ function SignInForm() {
     };
   }, []);
 
+  /**
+   * Where to go after signing in.
+   *
+   * `?next=` exists so an invitation link survives the detour through sign-in:
+   * somebody who clicks an emailed invite while signed out should land back on
+   * it, not on a dashboard with no explanation of why they are there.
+   *
+   * Only same-origin *paths* are honoured. Reflecting the parameter as given
+   * would make this an open redirect on the one page where a customer is most
+   * primed to type a password, so anything that is not a single leading slash
+   * — a protocol, a `//host`, a backslash Chrome will normalise — falls back to
+   * the dashboard.
+   */
+  const nextPath = (() => {
+    const raw = params.get("next");
+    if (!raw) return "/dashboard";
+    if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return "/dashboard";
+    return raw;
+  })();
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPending(true);
@@ -69,8 +89,7 @@ function SignInForm() {
       // it keeps the RSC payload and every cached query from before sign-in, so
       // the dashboard would render against the previous session. Leaving the
       // page is what guarantees the server reads the new cookie.
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.assign("/dashboard");
+      window.location.assign(nextPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -94,7 +113,7 @@ function SignInForm() {
     try {
       const res = await signIn.social({
         provider: "google",
-        callbackURL: `${window.location.origin}/dashboard`,
+        callbackURL: `${window.location.origin}${nextPath}`,
         errorCallbackURL: `${window.location.origin}/signin?error=google`,
       });
       if (res.error) throw new Error(res.error.message ?? "Google sign-in failed");
@@ -147,7 +166,16 @@ function SignInForm() {
               <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-baseline justify-between">
+                <Label htmlFor="password">Password</Label>
+                {/* Sign-in only: offering a password reset to somebody creating
+                    an account is an answer to a question they have not asked. */}
+                {mode === "signin" && (
+                  <Link href="/forgot-password" className="text-muted-foreground text-xs hover:underline">
+                    Forgot?
+                  </Link>
+                )}
+              </div>
               <Input id="password" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
             </div>
             {error && <p className="text-destructive text-sm">{error}</p>}

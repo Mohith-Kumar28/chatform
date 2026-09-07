@@ -37,7 +37,25 @@ DODO_WEBHOOK_SECRET=
 #
 # Confirm with GET /api/billing/config-check as an owner.
 
+# ── Email ─────────────────────────────────────────────────────────────────────
+# Sending goes through the Cloudflare Email Service binding (`send_email` in
+# wrangler.jsonc) — no key, nothing to push. What IS required is onboarding the
+# sending domain once, in the dashboard under Compute > Email Service > Email
+# Sending; Cloudflare writes the MX, SPF, DKIM and DMARC records itself. Until
+# that is done every send fails E_SENDER_NOT_VERIFIED.
+#
+# Unset locally on purpose: Miniflare does not implement the binding, so dev logs
+# `mail_not_configured` with the recipient and subject instead of sending. That is
+# the behaviour you want while developing against real customer data.
+#
+# EMAIL_FROM defaults to `chatform <noreply@<apex of APP_ORIGIN>>`.
+EMAIL_FROM=
+EMAIL_REPLY_TO=
+
 # ── Optional ──────────────────────────────────────────────────────────────────
+# The fallback sender. Email Sending is in public beta on a daily quota that
+# Cloudflare scales with reputation and does not publish; set this and the binding
+# is bypassed for Resend's HTTP API, with no other change. See lib/mail.ts.
 RESEND_API_KEY=
 TURNSTILE_SECRET_KEY=
 FILE_ENCRYPTION_KEY=

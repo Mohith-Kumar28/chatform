@@ -6,6 +6,8 @@ import { pruneOtpChallenges } from "./lib/respondent-auth.js";
 import { pruneGateLog } from "./lib/gate-log.js";
 import { pruneFormActivity } from "./lib/form-activity.js";
 import { runExport, pruneExpiredExports, type ExportMessage } from "./lib/exports.js";
+import { runMailJob } from "./lib/mail-jobs.js";
+import type { MailJob } from "./lib/mail.js";
 import {
   sweepExpiredResponses,
   sweepExpiredSessions,
@@ -50,6 +52,21 @@ export default {
           console.error("export_failed", exportId, err);
           // The row is already marked failed with a reader-facing message;
           // retrying is for a transient D1 or R2 error.
+          msg.retry();
+        }
+      } else if (batch.queue === "q-emails") {
+        /**
+         * One job can be several messages — see `runMailJob`. A retry re-sends
+         * the whole job, so the five-retry ceiling is also the ceiling on how
+         * many duplicates a persistently failing recipient can cause.
+         */
+        const job = msg.body as MailJob;
+        try {
+          const n = await runMailJob(env, job);
+          if (n > 0) console.log("mail_sent", job.kind, n);
+          msg.ack();
+        } catch (err) {
+          console.error("mail_job_failed", job.kind, err);
           msg.retry();
         }
       } else {

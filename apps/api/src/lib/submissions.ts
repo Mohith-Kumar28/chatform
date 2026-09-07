@@ -1,5 +1,6 @@
 import type { Bindings } from "../env.js";
 import type { AnswerMap, RespondentIdentity } from "@repo/form-schema";
+import { enqueueMail } from "./mail.js";
 
 /**
  * Every write to `submissions` and `submission_answers`, in one place.
@@ -243,6 +244,28 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
     source: o.source,
     isTest: o.isTest === true,
   });
+
+  /**
+   * The owner's notification and the respondent's auto-reply.
+   *
+   * Here rather than in the Durable Object because this is the one place both
+   * surfaces meet — a chat completion and an API `complete` must email the same
+   * people — and because the `changed` guard above already makes it exactly
+   * once. Only completions: an abandoned response is not something to mail
+   * anybody about.
+   *
+   * The job carries identifiers and nothing else; the consumer reads the
+   * answers and the published settings itself. See `lib/mail-jobs.ts`.
+   */
+  if (a.status === "completed") {
+    await enqueueMail(o.env, {
+      kind: "submission",
+      organizationId: o.organizationId,
+      formId: o.formId,
+      responseId: a.responseId,
+      isTest: o.isTest === true,
+    });
+  }
 
   o.env.ANALYTICS.writeDataPoint({
     indexes: [o.formId],

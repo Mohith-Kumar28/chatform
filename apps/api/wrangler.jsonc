@@ -29,6 +29,11 @@
       "id": "a72116dbd29c4e07b7d887272c1e999e"
     }
   ],
+  // Cloudflare Email Service. The binding is the whole integration: no API key, no
+  // secret to push, no outbound fetch subrequest. `EMAIL` is optional in `Bindings`
+  // because Miniflare does not implement it — local dev logs the message instead of
+  // sending, which is also what we want when developing against real customer data.
+  "send_email": [{ "name": "EMAIL" }],
   "r2_buckets": [
     {
       "binding": "R2",
@@ -52,7 +57,8 @@
   "queues": {
     "producers": [
       { "binding": "Q_WEBHOOKS", "queue": "q-webhooks" },
-      { "binding": "Q_EXPORTS", "queue": "q-exports" }
+      { "binding": "Q_EXPORTS", "queue": "q-exports" },
+      { "binding": "Q_EMAIL", "queue": "q-emails" }
     ],
     "consumers": [
       {
@@ -66,6 +72,19 @@
         "queue": "q-exports",
         "max_batch_size": 1,
         "max_retries": 3
+      },
+      {
+        // Batched, because one completed response can fan out to eleven messages
+        // (ten notification addresses plus the auto-reply) and a batch of one
+        // would be eleven invocations.
+        "queue": "q-emails",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        // A send that fails five times is not going to succeed on the sixth: the
+        // usual causes are an unverified sender or a suppressed recipient, and
+        // neither is transient. The DLQ is where those go to be looked at.
+        "max_retries": 5,
+        "dead_letter_queue": "q-emails-dlq"
       }
     ]
   },

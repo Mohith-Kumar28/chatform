@@ -18,7 +18,8 @@ import { apiKeyPlugin } from "./apikey-config.js";
 import { getEntitlements, countSeats } from "./entitlements.js";
 import { seatLimit } from "@repo/entitlements";
 import { APIError } from "better-auth/api";
-import { webOrigins, needsCrossSiteCookies, isSecureOrigin } from "./origins.js";
+import { webOrigins, returnOrigin, needsCrossSiteCookies, isSecureOrigin } from "./origins.js";
+import { enqueueMail } from "./mail.js";
 
 /**
  * Give a brand-new user an organization to land in.
@@ -135,6 +136,21 @@ async function defaultActiveOrgId(env: Bindings, userId: string): Promise<string
   return row?.org ?? null;
 }
 
+/**
+ * Which web origin a link in an email should point at.
+ *
+ * Better Auth hands its callbacks the originating `Request` when it has one, so
+ * an invite sent from a local dev app links back to local dev and one sent from
+ * production links to production — the same reasoning as checkout's
+ * `returnOrigin`, and the same allowlist, so this cannot be pointed at a host
+ * that is not ours. No request means a background call, and the first
+ * `WEB_ORIGINS` entry is the deployment's canonical front door.
+ */
+function linkOrigin(env: Bindings, request?: Request): string {
+  if (!request) return webOrigins(env)[0]!;
+  return returnOrigin(env, { header: (name: string) => request.headers.get(name) ?? undefined });
+}
+
 export function createAuth(env: Bindings) {
   const db = createDb(env.DB);
   return betterAuth({
@@ -162,6 +178,30 @@ export function createAuth(env: Bindings) {
     emailAndPassword: {
       enabled: true,
       autoSignIn: true,
+      /**
+       * The reset link, mailed.
+       *
+       * The `url` Better Auth builds is ignored on purpose: it is derived from
+       * `baseURL`, which is this API's origin, so following it would land the
+       * customer on `api.chatform.in` — a host with no reset form on it. The
+       * token is what matters, and the page that consumes it lives in the web
+       * app.
+       *
+       * Queued rather than sent inline so a slow or failing provider cannot
+       * turn "forgot password" into a 500. The endpoint answers the same way
+       * whether or not the address exists, which is what keeps it from being a
+       * way to enumerate our customers — and that promise only holds if the
+       * response does not depend on a send.
+       */
+      sendResetPassword: async ({ user, token }, request) => {
+        const resetUrl = `${linkOrigin(env, request)}/reset-password?token=${encodeURIComponent(token)}`;
+        await enqueueMail(env, {
+          kind: "password_reset",
+          to: user.email,
+          name: user.name ?? null,
+          resetUrl,
+        });
+      },
     },
     /**
      * Google is registered only when both halves of the credential are present, so a
@@ -212,6 +252,28 @@ export function createAuth(env: Bindings) {
       organization({
         ac,
         roles,
+        /**
+         * The invitation, mailed.
+         *
+         * Better Auth deliberately does not build this URL — it stores the
+         * invitation and leaves delivery to the application — which is why
+         * `invitations` rows have been accumulating since this plugin was
+         * added while nobody was ever told they had been invited. The id is
+         * the whole credential; `/accept-invitation` exchanges it.
+         */
+        sendInvitationEmail: async (data, request) => {
+          const acceptUrl = `${linkOrigin(env, request)}/accept-invitation?id=${encodeURIComponent(data.id)}`;
+          await enqueueMail(env, {
+            kind: "invitation",
+            to: data.email,
+            inviterName: data.inviter.user.name ?? null,
+            inviterEmail: data.inviter.user.email ?? null,
+            organizationName: data.organization.name,
+            role: data.role,
+            acceptUrl,
+            expiresAt: data.invitation.expiresAt ? new Date(data.invitation.expiresAt).getTime() : null,
+          });
+        },
         /**
          * Seat limit, enforced where invitations are actually created.
          *

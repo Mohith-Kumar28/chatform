@@ -7,6 +7,7 @@ export interface Bindings {
   SESSION_DO: DurableObjectNamespace;
   Q_WEBHOOKS: Queue;
   Q_EXPORTS: Queue;
+  Q_EMAIL: Queue;
   ANALYTICS: AnalyticsEngineDataset;
   /** Per-request API telemetry. Optional: Miniflare does not always provide it. */
   ANALYTICS_API?: AnalyticsEngineDataset;
@@ -20,6 +21,17 @@ export interface Bindings {
   RATE_LIMIT?: RateLimit;
   RATE_LIMIT_PK?: RateLimit;
   WORKERS_AI?: Ai;
+  /**
+   * Cloudflare Email Service, bound directly rather than reached over HTTP.
+   *
+   * Optional because Miniflare does not implement the binding: local dev and the
+   * test suite would fail on a hard dependency, so `sendMail` logs the message
+   * instead when this is absent. That also means nothing developed locally can
+   * accidentally mail a real customer.
+   *
+   * `RESEND_API_KEY` below is the deliberate second path — see `lib/mail.ts`.
+   */
+  EMAIL?: SendEmail;
 
   ENVIRONMENT: string;
   /**
@@ -39,6 +51,18 @@ export interface Bindings {
   WEB_ORIGINS?: string;
   /** @deprecated single-value predecessor of `WEB_ORIGINS`; still honoured as a fallback. */
   WEB_ORIGIN?: string;
+
+  /**
+   * The From address on everything we send. A bare address or `Name <addr>`.
+   *
+   * Its domain must be onboarded for Email Sending in the Cloudflare dashboard, or
+   * every send fails `E_SENDER_NOT_VERIFIED`. Absent, `lib/mail.ts` derives
+   * `noreply@<apex of APP_ORIGIN>`, which is right for the deployment we have and
+   * wrong quietly enough that setting it explicitly is worth the variable.
+   */
+  EMAIL_FROM?: string;
+  /** Where replies land. Absent, replies go to the From address. */
+  EMAIL_REPLY_TO?: string;
 
   BETTER_AUTH_SECRET: string;
   OPENROUTER_API_KEY?: string;
