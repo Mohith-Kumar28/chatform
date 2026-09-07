@@ -996,3 +996,25 @@
 .cf-embedded [data-standalone-only] {
   display: none;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   reCAPTCHA badge
+
+   Phone verification runs an *invisible* reCAPTCHA: nothing is asked of the
+   respondent unless Google decides this visitor is worth challenging. What it
+   does draw unprompted is a floating "protected by reCAPTCHA" badge, and
+   because the verifier is bound to an element inside the sign-in card, that
+   badge lands in the middle of the conversation rather than in a page corner.
+
+   Google's terms allow hiding it on one condition: the attribution has to
+   appear somewhere the respondent can read it. `AuthCard` carries that line,
+   which is what buys this rule.
+
+   `visibility`, not `display`: the badge is also the anchor the challenge
+   dialog positions itself against, and removing it from layout puts that
+   dialog in the top-left corner of the page. Hidden but laid out keeps the
+   challenge — the one part a respondent must actually see — where it belongs.
+   ═════════════════════════════════════════════════════════════════════════ */
+.grecaptcha-badge {
+  visibility: hidden;
+}

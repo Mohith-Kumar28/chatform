@@ -405,12 +405,51 @@ function FirebasePhoneFlow({
       ) : (
         <NumberForm pending={pending} onSubmit={send} />
       )}
+      {/*
+        The verifier binds to this element. It stays in the layout even though
+        the badge itself is hidden in globals.css, because the challenge dialog
+        — shown only when Google is unsure about a visitor — positions itself
+        against it.
+      */}
       <div ref={recaptchaHost} />
       {error && (
         <p role="alert" className="text-destructive text-xs">
           {error}
         </p>
       )}
+      <RecaptchaNotice />
     </div>
+  );
+}
+
+/**
+ * The attribution Google's terms require in exchange for hiding the badge.
+ *
+ * Deliberately quiet — it is a legal notice at the bottom of a sign-in card,
+ * not something a respondent needs to read to get on with the form.
+ */
+function RecaptchaNotice() {
+  return (
+    <p className="text-[0.625rem] leading-relaxed opacity-40">
+      Protected by reCAPTCHA. Google&apos;s{" "}
+      <a
+        href="https://policies.google.com/privacy"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline hover:opacity-80"
+      >
+        Privacy Policy
+      </a>{" "}
+      and{" "}
+      <a
+        href="https://policies.google.com/terms"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline hover:opacity-80"
+      >
+        Terms
+      </a>{" "}
+      apply.
+    </p>
   );
 }
