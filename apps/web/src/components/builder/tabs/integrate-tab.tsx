@@ -14,6 +14,10 @@ import { useClientValue } from "@/hooks/use-client-value";
  */
 export function IntegrateTab() {
   const formId = useBuilderStore((s) => s.formId);
+  // The working document, not the published row: the preview draws the form's
+  // own theme and its own first questions, and both of those are being edited
+  // one tab away.
+  const doc = useBuilderStore((s) => s.doc);
   // The embed snippet addresses a form by slug, not by id — the same way the
   // Share tab does, from the same source.
   const { data } = useGetApiFormsById(formId as never);
@@ -22,15 +26,17 @@ export function IntegrateTab() {
   // window.location is not available during SSR; "" is what the server renders.
   const origin = useClientValue(() => window.location.origin, "");
 
-  if (!formId || !row) return null;
+  if (!formId || !row || !doc) return null;
   return (
     <div className="mx-auto w-full max-w-6xl p-6">
       <IntegrationsWorkspace
         formId={formId}
         slug={row.slug}
-        formTitle={row.title}
+        formTitle={doc.title || row.title}
         status={row.status}
         appOrigin={origin}
+        theme={doc.theme}
+        blocks={doc.blocks}
       />
     </div>
   );

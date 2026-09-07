@@ -1,7 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Code2, Mail, MousePointerClick, ShieldCheck } from "lucide-react";
+import {
+  Code2,
+  Mail,
+  Monitor,
+  PanelRightClose,
+  PanelRightOpen,
+  RotateCcw,
+  ShieldCheck,
+  Smartphone,
+} from "lucide-react";
+import type { Block, ThemeDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { EmbedPreview } from "./embed-preview";
+import { EmbedPreview, type PreviewDevice } from "./embed-preview";
 import {
   cspSnippet,
   emailSnippet,
@@ -41,6 +51,12 @@ import { cn } from "@/lib/utils";
  *
  * The controls write the snippet and draw the picture from the same object, so
  * the thing being copied and the thing being looked at cannot disagree.
+ *
+ * Layout: the picture and the controls are one row of a fixed height, and the
+ * controls scroll inside it. They used to be a column that grew with whatever
+ * the selected mode revealed — a popup's nine fields pushed the snippet, the
+ * one thing everybody came here to copy, a screen and a half below the fold,
+ * and left the preview stranded in a tall empty column beside them.
  */
 
 type Target = "html" | "react" | "email";
@@ -62,15 +78,20 @@ export function EmbedStudio({
   formTitle,
   appOrigin,
   status,
+  theme,
+  blocks,
 }: {
   slug: string;
   formTitle: string;
   appOrigin: string;
   status?: string;
+  theme: ThemeDoc;
+  blocks: Block[];
 }) {
   const [config, setConfig] = useState<EmbedConfig>(EMBED_DEFAULTS);
   const [target, setTarget] = useState<Target>("html");
   const [previewOpen, setPreviewOpen] = useState(true);
+  const [device, setDevice] = useState<PreviewDevice>("desktop");
 
   const set = <K extends keyof EmbedConfig>(key: K, value: EmbedConfig[K]) =>
     setConfig((prev) => ({ ...prev, [key]: value }));
@@ -84,6 +105,8 @@ export function EmbedStudio({
 
   const overlay = isOverlay(config.mode);
   const unpublished = status !== undefined && status !== "published";
+  const modeBlurb = EMBED_MODES.find((m) => m.mode === config.mode)?.blurb;
+  const modified = JSON.stringify(config) !== JSON.stringify(EMBED_DEFAULTS);
 
   return (
     <div className="space-y-4">
@@ -94,111 +117,180 @@ export function EmbedStudio({
         </p>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        {/* The picture first, and wider than the controls: the corner and the
-            proportions are the decision, and the selects are how it is made. */}
-        <div className="space-y-3">
-          <EmbedPreview
-            config={config}
-            formTitle={formTitle}
-            open={previewOpen}
-            onToggle={() => setPreviewOpen((v) => !v)}
-          />
-          {overlay && (
-            <p className="text-muted-foreground text-micro flex items-center gap-1.5">
-              <MousePointerClick className="size-3" />
-              Click the launcher to open and close the panel.
+      {/*
+        One row, one height. The picture takes the width because the corner and
+        the proportions are the decision; the rail is fixed at 320 and scrolls,
+        so switching from Inline (two controls) to Popup (nine) moves nothing on
+        the page around it.
+      */}
+      <div className="grid gap-4 lg:h-[min(46rem,calc(100svh-17rem))] lg:min-h-[30rem] lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="bg-muted/30 ring-border/60 flex h-[26rem] min-h-0 flex-col overflow-hidden rounded-2xl ring-1 lg:h-auto">
+          <div className="border-border/60 flex shrink-0 items-center gap-2 border-b px-3 py-2">
+            <SegmentedControl
+              size="sm"
+              options={[
+                { value: "desktop", label: "Desktop", icon: Monitor },
+                { value: "mobile", label: "Phone", icon: Smartphone },
+              ]}
+              value={device}
+              onChange={setDevice}
+              ariaLabel="Preview size"
+            />
+            <p className="text-muted-foreground text-micro ml-auto hidden truncate sm:block">
+              {overlay && device === "mobile"
+                ? "Below 520px the panel takes the whole screen."
+                : modeBlurb}
             </p>
-          )}
+            {overlay && (
+              <Button
+                variant="ghost"
+                size="sm"
+                shape="pill"
+                className="shrink-0"
+                onClick={() => setPreviewOpen((v) => !v)}
+              >
+                {previewOpen ? (
+                  <PanelRightClose className="size-3.5" />
+                ) : (
+                  <PanelRightOpen className="size-3.5" />
+                )}
+                {previewOpen ? "Close" : "Open"}
+              </Button>
+            )}
+          </div>
+
+          <div className="flex min-h-0 flex-1 p-4">
+            <EmbedPreview
+              config={config}
+              formTitle={formTitle}
+              theme={theme}
+              blocks={blocks}
+              device={device}
+              open={previewOpen}
+              onToggle={() => setPreviewOpen((v) => !v)}
+            />
+          </div>
         </div>
 
-        <div className="bg-card space-y-5 rounded-2xl p-5">
-          <Field label="How it appears">
-            <div className="grid grid-cols-2 gap-1.5">
-              {EMBED_MODES.map((m) => (
-                <ModeButton
-                  key={m.mode}
-                  active={config.mode === m.mode}
-                  label={m.label}
-                  blurb={m.blurb}
-                  onClick={() => set("mode", m.mode as EmbedMode)}
-                />
-              ))}
-            </div>
-          </Field>
-
-          {overlay && (
-            <>
-              <Field label="Corner" hint="Where the launcher sits on the page.">
-                <CornerPicker value={config.position} onChange={(p) => set("position", p)} />
-              </Field>
-
-              <Field label="Launcher">
-                <Input
-                  value={config.label}
-                  placeholder="Icon only"
-                  onChange={(e) => set("label", e.target.value)}
-                />
-                <div className="flex items-center justify-between pt-1">
-                  <Label htmlFor="embed-icon" className="text-muted-foreground text-caption font-normal">
-                    Show the chat icon
-                  </Label>
-                  <Switch
-                    id="embed-icon"
-                    checked={config.icon}
-                    onCheckedChange={(v) => set("icon", v)}
+        <div className="bg-card flex max-h-[32rem] min-h-0 flex-col overflow-hidden rounded-2xl lg:max-h-none">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+            <Field label="How it appears">
+              <div className="grid grid-cols-2 gap-1.5">
+                {EMBED_MODES.map((m) => (
+                  <ModeButton
+                    key={m.mode}
+                    active={config.mode === m.mode}
+                    label={m.label}
+                    blurb={m.blurb}
+                    onClick={() => set("mode", m.mode as EmbedMode)}
                   />
-                </div>
-              </Field>
+                ))}
+              </div>
+            </Field>
 
-              <Field label="Colour">
-                <div className="flex items-center gap-1.5">
-                  {SWATCHES.map((hex) => (
-                    <button
-                      key={hex}
-                      type="button"
-                      aria-label={hex}
-                      onClick={() => set("color", hex)}
-                      style={{ background: hex }}
-                      className={cn(
-                        "size-6 rounded-full transition-transform duration-[var(--duration-micro)]",
-                        config.color.toLowerCase() === hex
-                          ? "ring-foreground ring-2 ring-offset-2 ring-offset-[var(--card)]"
-                          : "hover:scale-110",
-                      )}
-                    />
-                  ))}
-                  <Input
-                    value={config.color}
-                    onChange={(e) => set("color", e.target.value)}
-                    className="ml-auto h-8 w-24 font-mono text-xs"
-                    aria-label="Launcher colour"
-                  />
-                </div>
-              </Field>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Width">
-                  <NumberInput
-                    value={config.width}
-                    min={280}
-                    max={720}
-                    onChange={(v) => set("width", v)}
-                  />
+            {overlay && (
+              <>
+                <Field label="Corner" hint="Where the launcher sits on the page.">
+                  <CornerPicker value={config.position} onChange={(p) => set("position", p)} />
                 </Field>
-                {/* A side tab is full height by definition, so it has no height
-                    to set — and the gap it does have is the launcher's. */}
-                {config.mode === "popup" ? (
-                  <Field label="Height">
+
+                <Field label="Launcher">
+                  <Input
+                    value={config.label}
+                    placeholder="Icon only"
+                    onChange={(e) => set("label", e.target.value)}
+                  />
+                  <div className="flex items-center justify-between pt-1">
+                    <Label
+                      htmlFor="embed-icon"
+                      className="text-muted-foreground text-caption font-normal"
+                    >
+                      Show the chat icon
+                    </Label>
+                    <Switch
+                      id="embed-icon"
+                      checked={config.icon}
+                      onCheckedChange={(v) => set("icon", v)}
+                    />
+                  </div>
+                </Field>
+
+                <Field
+                  label="Launcher colour"
+                  hint="The bubble only — the conversation uses the form's theme."
+                >
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {SWATCHES.map((hex) => (
+                      <button
+                        key={hex}
+                        type="button"
+                        aria-label={hex}
+                        onClick={() => set("color", hex)}
+                        style={{ background: hex }}
+                        className={cn(
+                          "size-6 rounded-full transition-transform duration-[var(--duration-micro)]",
+                          config.color.toLowerCase() === hex.toLowerCase()
+                            ? "ring-foreground ring-2 ring-offset-2 ring-offset-[var(--card)]"
+                            : "hover:scale-110",
+                        )}
+                      />
+                    ))}
+                  </div>
+                  {/*
+                    A colour well next to the hex, because "#FD6F29" is not a
+                    colour anybody can pick — it is one you can only paste.
+                  */}
+                  <div className="relative flex items-center gap-2">
+                    <input
+                      type="color"
+                      aria-label="Pick a launcher colour"
+                      value={/^#[0-9a-f]{6}$/i.test(config.color) ? config.color : "#000000"}
+                      onChange={(e) => set("color", e.target.value.toUpperCase())}
+                      className="border-border size-8 shrink-0 cursor-pointer rounded-lg border bg-transparent p-0.5"
+                    />
+                    <Input
+                      value={config.color}
+                      onChange={(e) => set("color", e.target.value)}
+                      className="h-8 font-mono text-xs"
+                      aria-label="Launcher colour, as hex"
+                    />
+                  </div>
+                </Field>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Width">
                     <NumberInput
-                      value={config.height}
-                      min={320}
-                      max={900}
-                      onChange={(v) => set("height", v)}
+                      value={config.width}
+                      min={280}
+                      max={720}
+                      onChange={(v) => set("width", v)}
                     />
                   </Field>
-                ) : (
-                  <Field label="Edge gap">
+                  {/* A side tab is full height by definition, so it has no height
+                      to set — and the gap it does have is the launcher's. */}
+                  {config.mode === "popup" ? (
+                    <Field label="Height">
+                      <NumberInput
+                        value={config.height}
+                        min={320}
+                        max={900}
+                        onChange={(v) => set("height", v)}
+                      />
+                    </Field>
+                  ) : (
+                    <Field label="Edge gap">
+                      <NumberInput
+                        value={config.offset}
+                        min={0}
+                        max={80}
+                        onChange={(v) => set("offset", v)}
+                      />
+                    </Field>
+                  )}
+                </div>
+
+                {config.mode === "popup" && (
+                  <Field label="Edge gap" hint="Distance from the corner, in pixels.">
                     <NumberInput
                       value={config.offset}
                       min={0}
@@ -207,85 +299,78 @@ export function EmbedStudio({
                     />
                   </Field>
                 )}
-              </div>
 
-              {config.mode === "popup" && (
-                <Field label="Edge gap" hint="Distance from the corner, in pixels.">
-                  <NumberInput value={config.offset} min={0} max={80} onChange={(v) => set("offset", v)} />
+                <Field label="Opens">
+                  <Select
+                    value={config.openOn}
+                    onValueChange={(v) => set("openOn", v as EmbedConfig["openOn"])}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TRIGGERS.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
-              )}
+              </>
+            )}
 
-              <Field label="Opens">
-                <Select
-                  value={config.openOn}
-                  onValueChange={(v) => set("openOn", v as EmbedConfig["openOn"])}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TRIGGERS.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>
-                        {t.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            {config.mode === "inline" && (
+              <Field label="Height">
+                <div className="flex items-center justify-between">
+                  <Label
+                    htmlFor="embed-auto-height"
+                    className="text-muted-foreground text-caption font-normal"
+                  >
+                    Grow to fit the conversation
+                  </Label>
+                  <Switch
+                    id="embed-auto-height"
+                    checked={config.autoHeight}
+                    onCheckedChange={(v) => set("autoHeight", v)}
+                  />
+                </div>
+                {!config.autoHeight && (
+                  <NumberInput
+                    value={config.height}
+                    min={320}
+                    max={1200}
+                    onChange={(v) => set("height", v)}
+                  />
+                )}
+                <p className="text-muted-foreground text-micro">
+                  {config.autoHeight
+                    ? "Starts at 620px and follows the conversation as it grows. Needs the loader."
+                    : "A plain iframe — no script, so it survives a strict CSP."}
+                </p>
               </Field>
-            </>
-          )}
+            )}
 
-          {config.mode === "inline" && (
-            <Field label="Height">
-              <div className="flex items-center justify-between">
-                <Label
-                  htmlFor="embed-auto-height"
-                  className="text-muted-foreground text-caption font-normal"
-                >
-                  Grow to fit the conversation
-                </Label>
-                <Switch
-                  id="embed-auto-height"
-                  checked={config.autoHeight}
-                  onCheckedChange={(v) => set("autoHeight", v)}
-                />
-              </div>
-              {!config.autoHeight && (
-                <NumberInput value={config.height} min={320} max={1200} onChange={(v) => set("height", v)} />
-              )}
+            {config.mode === "fullpage" && (
               <p className="text-muted-foreground text-micro">
-                {config.autoHeight
-                  ? "Uses the loader, which resizes the frame as questions arrive."
-                  : "A plain iframe — no script, so it survives a strict CSP."}
+                The form takes over the window, so there is nothing to place and nothing to size.
+                Everything it looks like comes from the form&apos;s own theme.
               </p>
-            </Field>
-          )}
+            )}
+          </div>
 
-          <Field label="Theme">
-            <Select
-              value={config.theme}
-              onValueChange={(v) => set("theme", v as EmbedConfig["theme"])}
+          <div className="border-border/60 shrink-0 border-t p-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full"
+              onClick={() => setConfig(EMBED_DEFAULTS)}
+              disabled={!modified}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">Match the visitor&apos;s system</SelectItem>
-                <SelectItem value="light">Always light</SelectItem>
-                <SelectItem value="dark">Always dark</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full"
-            onClick={() => setConfig(EMBED_DEFAULTS)}
-            disabled={JSON.stringify(config) === JSON.stringify(EMBED_DEFAULTS)}
-          >
-            Reset to defaults
-          </Button>
+              <RotateCcw className="size-3.5" />
+              Reset to defaults
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -305,7 +390,7 @@ export function EmbedStudio({
           <CopyButton value={snippet} label="Copy snippet" variant="default" />
         </div>
 
-        <pre className="bg-muted text-caption overflow-x-auto rounded-xl p-4 font-mono">
+        <pre className="bg-muted text-caption max-h-64 overflow-auto rounded-xl p-4 font-mono">
           <code>{snippet}</code>
         </pre>
 
@@ -407,8 +492,9 @@ function CornerPicker({
             onClick={() => onChange(position)}
             aria-pressed={active}
             aria-label={label}
+            title={label}
             className={cn(
-              "flex h-12 rounded-xl border p-2",
+              "flex h-11 rounded-xl border p-2",
               vertical,
               horizontal,
               "transition-colors duration-[var(--duration-micro)]",
@@ -416,10 +502,7 @@ function CornerPicker({
             )}
           >
             <span
-              className={cn(
-                "size-3 rounded-full",
-                active ? "bg-primary" : "bg-muted-foreground/30",
-              )}
+              className={cn("size-3 rounded-full", active ? "bg-primary" : "bg-muted-foreground/30")}
             />
           </button>
         );

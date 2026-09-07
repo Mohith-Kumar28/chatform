@@ -11,6 +11,7 @@ import {
   Webhook,
   Workflow,
 } from "lucide-react";
+import type { Block, ThemeDoc } from "@repo/form-schema";
 import { Badge } from "@/components/ui/badge";
 import {
   Sheet,
@@ -46,12 +47,18 @@ export function IntegrationsWorkspace({
   formTitle,
   status,
   appOrigin,
+  theme,
+  blocks,
 }: {
   formId: string;
   slug: string;
   formTitle: string;
   status?: string;
   appOrigin: string;
+  /** The form's own theme, so the preview panel is the panel respondents get. */
+  theme: ThemeDoc;
+  /** The form's own questions, for the same reason. */
+  blocks: Block[];
 }) {
   const [panel, setPanel] = useState<PanelKey | null>(null);
 
@@ -72,7 +79,7 @@ export function IntegrationsWorkspace({
   ).length;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <section className="space-y-3">
         <div>
           <h2 className="text-h2">Put it on your site</h2>
@@ -85,6 +92,8 @@ export function IntegrationsWorkspace({
           formTitle={formTitle}
           appOrigin={appOrigin}
           status={status}
+          theme={theme}
+          blocks={blocks}
         />
       </section>
 
