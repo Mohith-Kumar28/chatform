@@ -45,3 +45,30 @@ export function roleWithArticle(role: string): string {
   const r = roleLabel(role);
   return r === "owner" || r === "admin" || r === "editor" ? `an ${r}` : `a ${r}`;
 }
+
+/**
+ * The roles an invitation may assign, in the order they are offered.
+ *
+ * `owner` is not here: an organization has one, and transferring it is a
+ * different operation from inviting somebody. `member` is not here either —
+ * it is Better Auth's legacy name for `editor`, still accepted by the API for
+ * rows written before the role list settled, but never offered to a chooser.
+ *
+ * This is the fourth thing in the tree that had its own copy of the role list
+ * and the third that had its own copy of these blurbs. The blurbs are help
+ * text, not an authorization decision: `apps/api/src/lib/permissions.ts` is the
+ * enforcement boundary and refuses regardless of what this array claims. But
+ * they must not drift from it, which is a great deal easier to hold true with
+ * one copy than with three.
+ */
+export const ASSIGNABLE_ROLES = [
+  { value: "editor", label: "Editor", blurb: "Build forms and read every response." },
+  { value: "admin", label: "Admin", blurb: "Everything except billing." },
+  { value: "viewer", label: "Viewer", blurb: "Read completed responses and basic analytics." },
+] as const;
+
+/** One of the roles an invitation may assign. */
+export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number]["value"];
+
+/** The role an invite starts on: the one most people are invited as. */
+export const DEFAULT_INVITE_ROLE: AssignableRole = "editor";

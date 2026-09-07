@@ -8,6 +8,7 @@ import {
   PLANS,
   minPlanFor,
   nextPlanWithMore,
+  seatLimit,
   type FeatureKey,
   type LimitKey,
   type PlanId,
@@ -69,9 +70,27 @@ export function useUpgrade() {
   const plan: PlanId = data?.planId ?? "free";
 
   return (reason: LockReason, context: Record<string, unknown> = {}) => {
+    const limitValue = reason.limit ? (data?.limits?.[reason.limit] ?? null) : null;
+
+    /*
+      Seats get the server's own builder, not a lookalike.
+
+      `seatLimit` is what the API returns when it refuses an invite for want of
+      a seat, right down to `code: "seat_limit"` — which is the code the dialog
+      keys its headline off. Rebuilding the object by hand here produced
+      `limit_reached` instead, and `limit_reached` renders "You've used this
+      month's seats", which is the copy for a monthly allowance. Seats are a
+      gauge; you do not get a fresh three in February. Calling the same function
+      the server calls is the only version of "the same dialog either way" that
+      cannot drift.
+    */
+    if (reason.limit === "seats" && limitValue !== null) {
+      open(seatLimit(plan, reason.used ?? 0, limitValue).error, "click");
+      return;
+    }
+
     const requiredPlan = requiredPlanFor(reason, plan);
     const label = lockLabel(reason);
-    const limitValue = reason.limit ? (data?.limits?.[reason.limit] ?? null) : null;
     open(
       {
         code: reason.feature ? "feature_locked" : "limit_reached",

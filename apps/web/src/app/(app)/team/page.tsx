@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { authClient, useSession } from "@/lib/auth/auth-client";
@@ -16,7 +15,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { UsageMeter } from "@/components/ui/usage-meter";
-import { LockedControl } from "@/components/billing/gate";
+import { LockedControl, useUpgrade } from "@/components/billing/gate";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   Accordion,
@@ -37,7 +36,12 @@ import {
 import { Check, Clock, Lock, MailWarning, MoreHorizontal, UserPlus } from "lucide-react";
 // Shared with the workspace switcher, which shows the reader their own role.
 // Two copies of "member means editor" is one copy too many.
-import { primaryRole, roleLabel } from "@/lib/roles";
+import {
+  ASSIGNABLE_ROLES,
+  type AssignableRole,
+  primaryRole,
+  roleLabel,
+} from "@/lib/roles";
 
 /**
  * Who is in this organization, and inviting more of them.
@@ -76,19 +80,15 @@ import { primaryRole, roleLabel } from "@/lib/roles";
  */
 
 /**
- * The roles an invite may assign.
+ * The roles an invite may assign, and what each one means.
  *
- * `owner` is not here: an organization has one, and transferring it is a
- * different operation from inviting someone. `member` is Better Auth's legacy
- * name for `editor` and is accepted by the API but never offered.
+ * Moved to `lib/roles` when the create-workspace flow grew an invite step of
+ * its own: two copies of "Admin — everything except billing" is two places for
+ * it to stop being true.
  */
-const ROLES = [
-  { value: "editor", label: "Editor", blurb: "Build forms and read every response." },
-  { value: "admin", label: "Admin", blurb: "Everything except billing." },
-  { value: "viewer", label: "Viewer", blurb: "Read completed responses and basic analytics." },
-] as const;
+const ROLES = ASSIGNABLE_ROLES;
 
-type Role = (typeof ROLES)[number]["value"];
+type Role = AssignableRole;
 
 /**
  * What each role actually means, for the expandable matrix.
@@ -154,6 +154,7 @@ export default function TeamPage() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("editor");
   const [invited, setInvited] = useState<string | null>(null);
+  const upgrade = useUpgrade();
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   /** The row with a request in flight, so only its own menu goes quiet. */
@@ -570,7 +571,22 @@ export default function TeamPage() {
             />
 
             <form onSubmit={invite} className="space-y-4">
-              <fieldset disabled={!canInvite || seatsFull || sending} className="space-y-4">
+              {/*
+                `seatsFull` deliberately not here.
+
+                A disabled fieldset disables every form control inside it, and
+                the padlock chip `LockedControl` draws is a `<button>`. So
+                locking the seat gate this way killed the one thing on the card
+                that was supposed to be clickable — the chip opened the paywall
+                everywhere else in the product and did nothing here, which is
+                the discrepancy that got reported.
+
+                The seat lock belongs on the control it locks, not on the
+                fieldset around it. `canInvite` stays: a viewer has no business
+                typing an address at all, and there is no upgrade that fixes a
+                role.
+              */}
+              <fieldset disabled={!canInvite || sending} className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="invite-email">Email</Label>
                   <Input
@@ -649,12 +665,24 @@ export default function TeamPage() {
                     there is no tier to move to.
                   */}
                   {/*
-                    The way out, and deliberately quieter than the locked
-                    control above it. The padlock names the plan; this is the
-                    door. Two loud buttons stacked would just be shouting.
+                    The same paywall the padlock opens, from a control big
+                    enough to find.
+
+                    It used to be a link to `/billing`, which is a price list —
+                    it told somebody who already knew they needed seats to go
+                    and read about plans, then find the right one, then start a
+                    checkout. The paywall names the plan, the price and the
+                    monthly/yearly choice, and its button goes straight to
+                    Dodo. Same destination as every other gate in the product,
+                    which is the point: there is one way to be asked to pay.
                   */}
-                  <Button asChild variant="outline" shape="pill" className="w-full">
-                    <Link href="/billing">Add seats</Link>
+                  <Button
+                    variant="outline"
+                    shape="pill"
+                    className="w-full"
+                    onClick={() => upgrade({ limit: "seats", used: seatsUsed }, { surface: "team" })}
+                  >
+                    Add seats
                   </Button>
                 </div>
               )}
