@@ -102,9 +102,15 @@ export const SettingsDoc = z.object({
       ogTitle: z.string().max(120).optional(),
       ogDescription: z.string().max(300).optional(),
       ogImageKey: z.string().nullable().default(null),
+      /**
+       * The icon in the browser tab of the hosted form. Separate from the
+       * brand logo: a logo is drawn at 200px inside the conversation, a favicon
+       * at 16px in a tab, and one image is rarely right at both sizes.
+       */
+      faviconKey: z.string().nullable().default(null),
       noIndex: z.boolean().default(false),
     })
-    .default({ ogImageKey: null, noIndex: false }),
+    .default({ ogImageKey: null, faviconKey: null, noIndex: false }),
 
   branding: z
     .object({

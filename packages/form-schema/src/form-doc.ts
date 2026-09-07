@@ -289,6 +289,7 @@ export interface PublicFormConfig {
     ogTitle?: string;
     ogDescription?: string;
     ogImageUrl?: string;
+    faviconUrl?: string;
     noIndex: boolean;
   };
   /** The agent's display name, when the builder set one. */
@@ -312,11 +313,13 @@ export function toPublicConfig(
 ): PublicFormConfig {
   const metaSettings = doc.settings.meta;
   const ogImageKey = metaSettings.ogImageKey;
+  const faviconKey = metaSettings.faviconKey;
   return {
     meta: {
       ogTitle: metaSettings.ogTitle,
       ogDescription: metaSettings.ogDescription,
       ogImageUrl: ogImageKey && opts.assetUrl ? opts.assetUrl(ogImageKey) : undefined,
+      faviconUrl: faviconKey && opts.assetUrl ? opts.assetUrl(faviconKey) : undefined,
       noIndex: metaSettings.noIndex,
     },
     agentName: doc.settings.agent.displayName,

@@ -54,6 +54,24 @@ function getFirebaseAuth(): Promise<Auth> {
 }
 
 /**
+ * Codes that mean the *form owner* has not finished setting Firebase up. They
+ * are indistinguishable from a transient failure to a respondent, who will
+ * dutifully retry a thing that cannot work, so they are logged loudly — the
+ * console is the only channel back to whoever can actually fix it.
+ *
+ * Learned the hard way: with phone auth enabled but the SMS region policy left
+ * at its default empty allow-list, every send failed as a generic "couldn't
+ * send that code" and looked exactly like the Twilio outage it had replaced.
+ */
+const SETUP_ERRORS = new Set([
+  "auth/billing-not-enabled",
+  "auth/operation-not-allowed",
+  "auth/invalid-app-credential",
+  "auth/unauthorized-domain",
+  "auth/quota-exceeded",
+]);
+
+/**
  * Firebase reports failures as `auth/*` codes. Left raw they reach the
  * respondent as "Firebase: Error (auth/invalid-phone-number)", so the ones
  * that are actually the respondent's to fix get a sentence they can act on,
@@ -61,6 +79,18 @@ function getFirebaseAuth(): Promise<Auth> {
  */
 function messageFor(err: unknown): string {
   const code = typeof err === "object" && err && "code" in err ? String((err as { code: unknown }).code) : "";
+
+  if (SETUP_ERRORS.has(code)) {
+    console.error(
+      `[chatform] Phone verification is misconfigured: ${code}. ` +
+        "Check the Firebase console — billing plan, Authentication > Settings > SMS region policy, " +
+        "and that this domain is on the authorized list.",
+    );
+    // Never "try again": retrying cannot work until someone changes a setting,
+    // and inviting it just burns the respondent's patience.
+    return "Phone verification isn't available right now. Please use another sign-in option.";
+  }
+
   switch (code) {
     case "auth/invalid-phone-number":
     case "auth/missing-phone-number":
@@ -71,8 +101,6 @@ function messageFor(err: unknown): string {
       return "That code expired. Ask for a new one.";
     case "auth/too-many-requests":
       return "Too many attempts. Please wait a few minutes and try again.";
-    case "auth/quota-exceeded":
-      return "Verification is temporarily unavailable. Please try again later.";
     case "auth/captcha-check-failed":
       return "We couldn't confirm you're human. Please try again.";
     default:

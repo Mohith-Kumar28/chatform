@@ -146,6 +146,7 @@ const SETTING_LABELS: Record<string, string> = {
   "meta.ogTitle": "Share title",
   "meta.ogDescription": "Share description",
   "meta.ogImageKey": "Share image",
+  "meta.faviconKey": "Favicon",
   "meta.noIndex": "Search engine indexing",
   "branding.brandName": "Brand name",
   "branding.logoKey": "Logo",

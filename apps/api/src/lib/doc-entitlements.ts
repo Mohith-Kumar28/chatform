@@ -88,10 +88,11 @@ export function stripForPublish(input: FormDoc, ent: Entitlements): StripResult 
   // ── share & deliver ─────────────────────────────────────────────────────────
   if (!can(ent, "form_metadata")) {
     const m = s.meta;
-    if (m && (m.ogTitle || m.ogDescription || m.ogImageKey || m.noIndex)) {
+    if (m && (m.ogTitle || m.ogDescription || m.ogImageKey || m.faviconKey || m.noIndex)) {
       m.ogTitle = undefined;
       m.ogDescription = undefined;
       m.ogImageKey = null;
+      m.faviconKey = null;
       m.noIndex = false;
       note(stripped, "settings.meta", "form_metadata");
     }

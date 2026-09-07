@@ -278,6 +278,8 @@ filesAdminRouter.use("*", requireOrg);
  */
 const ASSET_MIME = new Set([
   "image/png", "image/jpeg", "image/gif", "image/webp",
+  // Favicons. `.ico` arrives under either name depending on the browser.
+  "image/x-icon", "image/vnd.microsoft.icon",
   "video/mp4", "video/webm",
   "application/pdf", "text/csv", "text/plain",
   "application/msword",
@@ -377,7 +379,7 @@ assetsRouter.get("/assets/:id", async (c) => {
   if (!row) return c.json({ error: { code: "not_found", message: "Asset not found" } }, 404);
 
   // SVG renders script, so it is never served inline from any origin of ours.
-  const renderable = /^(image\/(png|jpeg|gif|webp|avif)|font\/)/.test(row.mime);
+  const renderable = /^(image\/(png|jpeg|gif|webp|avif|x-icon|vnd\.microsoft\.icon)|font\/)/.test(row.mime);
   const obj = await c.env.R2.get(row.r2_key);
   if (!obj) return c.json({ error: { code: "not_found", message: "Object missing" } }, 404);
 

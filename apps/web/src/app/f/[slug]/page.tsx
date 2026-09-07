@@ -32,6 +32,9 @@ export async function generateMetadata({ params }: PageProps<"/f/[slug]">): Prom
     title,
     description,
     robots: config.meta?.noIndex ? { index: false, follow: false } : undefined,
+    // A form's own favicon when it has one, so a hosted form in a tab is the
+    // sender's brand rather than ours.
+    icons: config.meta?.faviconUrl ? { icon: config.meta.faviconUrl } : undefined,
     openGraph: {
       title,
       description,

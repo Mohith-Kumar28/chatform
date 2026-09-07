@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { FormDoc } from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
+import { LinkSettings } from "./link-settings";
 
 interface SettingsPanelProps {
   settings: FormDoc["settings"];
@@ -28,6 +29,8 @@ interface SettingsPanelProps {
   onHiddenFieldsChange: (fields: FormDoc["hiddenFields"]) => void;
   variables: FormDoc["variables"];
   onVariablesChange: (variables: FormDoc["variables"]) => void;
+  /** For the link preview's URL line. Absent until the form row has loaded. */
+  slug?: string | null;
 }
 
 // "Access" and "Access & closing" were two sections covering one concern —
@@ -51,9 +54,20 @@ export function SettingsPanel({
   onHiddenFieldsChange,
   variables,
   onVariablesChange,
+  slug,
 }: SettingsPanelProps) {
-  const [section, setSection] = useState<SectionId>("general");
   const params = useParams<{ id: string }>();
+  /**
+   * `?section=` opens a section directly, which is how Share links to link
+   * settings. Read once as the initial value rather than synced: after the
+   * first paint the sub-nav owns the choice, and a URL that kept overriding it
+   * would fight every click.
+   */
+  const search = useSearchParams();
+  const requested = search.get("section");
+  const [section, setSection] = useState<SectionId>(
+    SECTIONS.some((s) => s.id === requested) ? (requested as SectionId) : "general",
+  );
   const patch = (p: Partial<FormDoc["settings"]>) => onChange({ ...settings, ...p });
 
   return (
@@ -280,30 +294,16 @@ export function SettingsPanel({
 
           {section === "link" && (
             <SettingSection title="Link & social">
-              <LockedControl feature="form_metadata">
-              <SettingRow label="OG title" description="Title when the link is shared.">
-                <Input
-                  className="max-w-md"
-                  maxLength={120}
-                  value={settings.meta.ogTitle ?? ""}
-                  onChange={(e) => patch({ meta: { ...settings.meta, ogTitle: e.target.value || undefined } })}
-                />
-              </SettingRow>
-              <SettingRow label="OG description" description="Preview text when the link is shared.">
-                <Input
-                  className="max-w-md"
-                  maxLength={300}
-                  value={settings.meta.ogDescription ?? ""}
-                  onChange={(e) => patch({ meta: { ...settings.meta, ogDescription: e.target.value || undefined } })}
-                />
-              </SettingRow>
-              <SettingRow
-                label="Hide from search engines"
-                description="Adds noindex to the public form page."
-                checked={settings.meta.noIndex}
-                onCheckedChange={(v) => patch({ meta: { ...settings.meta, noIndex: v } })}
+              <p className="text-muted-foreground -mt-1 text-sm">
+                How your form link appears when it is opened or shared — on Facebook, X,
+                LinkedIn, iMessage, Slack, and in the browser tab.
+              </p>
+              <LinkSettings
+                settings={settings}
+                formTitle={formTitle ?? ""}
+                slug={slug ?? null}
+                onChange={onChange}
               />
-              </LockedControl>
             </SettingSection>
           )}
 
