@@ -33,7 +33,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TooltipHint } from "@/components/ui/kbd";
-import { BUILDER_TABS, HISTORY_SEGMENT, tabMatches } from "./builder-tabs";
+import { BUILDER_TABS, tabMatches } from "./builder-tabs";
+import { HistorySheet, showHistory } from "./history-sheet";
 import { KEY } from "./use-builder-shortcuts";
 import { useBuilderStore, useCanRedo, useCanUndo } from "@/stores/builder-store";
 import { cn } from "@/lib/utils";
@@ -93,7 +94,6 @@ export function BuilderHeader({
   const redo = useBuilderStore((s) => s.redo);
   const canUndo = useCanUndo();
   const canRedo = useCanRedo();
-  const onHistory = pathname.endsWith(`/${HISTORY_SEGMENT}`);
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -199,9 +199,10 @@ export function BuilderHeader({
 
             {/*
               History, beside undo and redo because that is what it is: the same
-              timeline, at a longer range. It used to be the seventh tab, which
-              spent a permanent nav slot on the one destination you reach for
-              only when something has already gone wrong.
+              timeline, at a longer range. It opens a sheet over the builder
+              rather than navigating to a page — you ask history a question
+              about the form in front of you, so taking the form away to answer
+              it was the wrong trade.
 
               Outside the `md` group above on purpose — undo and redo are hidden
               on a phone because you rarely reach for them there, but "what
@@ -210,19 +211,14 @@ export function BuilderHeader({
             */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Link
-                  href={`/forms/${formId}/${HISTORY_SEGMENT}`}
+                <button
+                  type="button"
+                  onClick={showHistory}
                   aria-label="Version history"
-                  aria-current={onHistory ? "page" : undefined}
-                  className={cn(
-                    "mr-0.5 grid size-8 place-items-center rounded-lg transition-colors",
-                    onHistory
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted",
-                  )}
+                  className="text-muted-foreground hover:text-foreground hover:bg-muted mr-0.5 grid size-8 place-items-center rounded-lg transition-colors"
                 >
                   <FileClock className="size-3.5" />
-                </Link>
+                </button>
               </TooltipTrigger>
               <TooltipContent side="bottom">History</TooltipContent>
             </Tooltip>
@@ -341,6 +337,10 @@ export function BuilderHeader({
           </div>
         </div>
       </header>
+
+      {/* Mounted here because the header persists across tab navigation, so the
+          panel outlives whichever tab you opened it from. */}
+      <HistorySheet formId={formId} />
     </TooltipProvider>
   );
 }

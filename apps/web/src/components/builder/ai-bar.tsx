@@ -4,70 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUp, Check, GitBranch, Loader2, Minus, Shuffle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { FormDoc as FormDocSchema, type Block, type FormDoc } from "@repo/form-schema";
+import { FormDoc as FormDocSchema } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { useBuilderStore } from "@/stores/builder-store";
 import { customFetch } from "@/lib/api/mutator";
 import { blockMeta, TONE_CLASSES } from "./block-library";
+import { loadHistory, saveHistory, type Turn } from "./ai-bar-thread";
 import { KEY } from "./use-builder-shortcuts";
 import { cn } from "@/lib/utils";
-
-interface Turn {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  /** Just for the preview list; applying uses `doc`. */
-  blocks?: Block[];
-  /** Refs of questions the proposal takes out. */
-  removed?: string[];
-  /** How many branching rules the proposal adds. */
-  rules?: number;
-  /** How many questions had their routing replaced. */
-  rewired?: number;
-  /**
-   * The whole proposed document.
-   *
-   * Applying used to push the new blocks onto the end of the local doc, which
-   * threw away both the positions the server chose and every branching rule it
-   * wrote — the two things that make a conditional question work.
-   */
-  doc?: FormDoc;
-  applied?: boolean;
-}
-
-/**
- * The thread outlives the popover.
- *
- * It used to live in component state, so clicking away — which is how the bar
- * collapses — erased what you had asked and what it answered. Kept per form,
- * because the conversation is about this form's questions and means nothing
- * next to another one.
- */
-const historyKey = (formId: string) => `chatform:aibar:${formId}`;
-const MAX_TURNS = 40;
-
-function loadHistory(formId: string): Turn[] {
-  try {
-    const raw = localStorage.getItem(historyKey(formId));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Turn[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveHistory(formId: string, turns: Turn[]) {
-  try {
-    // Proposed docs are large and only useful while the offer is live, so the
-    // stored copy keeps the conversation and drops the payloads.
-    const slim = turns.slice(-MAX_TURNS).map(({ doc, ...rest }) => (doc ? { ...rest, applied: rest.applied ?? false, stale: true } : rest));
-    localStorage.setItem(historyKey(formId), JSON.stringify(slim));
-  } catch {
-    // A full or blocked store is not worth failing a suggestion over.
-  }
-}
 
 /** Plain words for an edit whose summary came back empty. */
 function describeEdit(added: number, removed: number, rules: number): string {
@@ -291,6 +236,14 @@ export function AiBar() {
           className="flex items-end gap-2 px-3 py-2"
         >
           <Sparkles className="text-primary mb-2 size-4 shrink-0" />
+          {/* The key that gets you here, at the head of the line beside the
+              spark rather than trailing after the placeholder — it belongs with
+              the label for the input, not with the send button, and on the right
+              it read as something you press to send. Hidden once the bar is open
+              or has text, when it is only noise. */}
+          {!open && !prompt && (
+            <Kbd className="mb-2 hidden shrink-0 sm:inline-grid">{KEY.askAi}</Kbd>
+          )}
           <textarea
             ref={inputRef}
             // How `/` finds this from the shell's keyboard layer.
@@ -308,11 +261,6 @@ export function AiBar() {
             placeholder="Ask AI to make changes…"
             className="max-h-28 min-h-9 flex-1 resize-none bg-transparent py-2 text-sm outline-none placeholder:text-[color-mix(in_oklch,currentColor_45%,transparent)]"
           />
-          {/* The key that gets you here, shown only while the bar is closed —
-              once you are typing in it, it is noise. */}
-          {!open && !prompt && (
-            <Kbd className="mb-2 hidden shrink-0 sm:inline-grid">{KEY.askAi}</Kbd>
-          )}
           <Button
             type="submit"
             size="icon-sm"

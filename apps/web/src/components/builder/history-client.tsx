@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils";
 /**
  * A form's history.
  *
- * Two things people actually ask a screen like this, and the answer to both is the same
+ * Two things people actually ask a panel like this, and the answer to both is the same
  * list read at different depths: *what is live right now, and does my draft differ from
  * it?* — the top of the list — and *when did this question change, and can I have the
  * old one back?* — further down.
@@ -47,6 +47,10 @@ import { cn } from "@/lib/utils";
  * So it is one timeline, not a log tab beside a versions tab. Versions are the headings
  * and edits are the lines beneath them, because a version with no changelog is a row of
  * numbers and a changelog with no versions is a wall of noise.
+ *
+ * It lives in a sidebar sheet, which is why versions are labelled `V3` and not
+ * `Version 3`: at this width the word is six characters of chrome repeated down the
+ * whole column, and the number is the only part anyone reads.
  */
 
 interface DocChange {
@@ -170,7 +174,7 @@ export function HistoryClient({ formId }: { formId: string }) {
         queryClient.invalidateQueries({ queryKey: getGetApiFormsByIdVersionsQueryKey(formId as never) }),
       ]);
 
-      toast.success(`Version ${group.version} restored to your draft`, {
+      toast.success(`V${group.version} restored to your draft`, {
         description: "Nothing has changed for respondents yet — publish when you're ready.",
       });
     } catch (err) {
@@ -182,10 +186,10 @@ export function HistoryClient({ formId }: { formId: string }) {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-28 w-full rounded-2xl" />
-        <Skeleton className="h-40 w-full rounded-2xl" />
-        <Skeleton className="h-40 w-full rounded-2xl" />
+      <div className="space-y-3">
+        <Skeleton className="h-16 w-full rounded-xl" />
+        <Skeleton className="h-32 w-full rounded-xl" />
+        <Skeleton className="h-32 w-full rounded-xl" />
       </div>
     );
   }
@@ -208,7 +212,7 @@ export function HistoryClient({ formId }: { formId: string }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {draft && <DraftGroup group={draft} expanded={expanded} onToggle={toggle} />}
 
       {versions.map((group) => (
@@ -226,11 +230,11 @@ export function HistoryClient({ formId }: { formId: string }) {
       <ConfirmDialog
         open={pending !== null}
         onOpenChange={(open) => !open && setPending(null)}
-        title={`Restore version ${pending?.version}?`}
+        title={`Restore V${pending?.version}?`}
         description={
           <>
-            Your working draft will be replaced with version {pending?.version}. Your live form does
-            not change — respondents keep seeing the current version until you publish again.
+            Your working draft will be replaced with V{pending?.version}. Your live form does not
+            change — respondents keep seeing the current version until you publish again.
           </>
         }
         confirmLabel="Restore to draft"
@@ -265,8 +269,8 @@ function DraftGroup({
 
   if (count === 0) {
     return (
-      <div className="bg-muted/30 flex items-center gap-2.5 rounded-2xl px-5 py-4">
-        <Check className="text-[var(--success-soft-foreground)] size-4 shrink-0" strokeWidth={2} />
+      <div className="bg-muted/30 flex items-start gap-2.5 rounded-xl px-3.5 py-3">
+        <Check className="text-[var(--success-soft-foreground)] mt-0.5 size-4 shrink-0" strokeWidth={2} />
         <p className="text-caption text-muted-foreground">
           Your draft matches what&apos;s published. Nothing is waiting to go live.
         </p>
@@ -275,12 +279,12 @@ function DraftGroup({
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--warning)]/40 bg-[var(--warning-soft)]/40">
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-4">
+    <section className="overflow-hidden rounded-xl border border-[var(--warning)]/40 bg-[var(--warning-soft)]/40">
+      <header className="flex items-center gap-2 px-3.5 py-3">
         <CircleDot className="size-4 shrink-0 text-[var(--warning-soft-foreground)]" strokeWidth={2} />
-        <h2 className="text-h3 font-medium">Unpublished changes</h2>
-        <span className="text-micro text-muted-foreground tabular">
-          {count} {count === 1 ? "edit" : "edits"} since the last publish
+        <h2 className="text-caption font-medium">Unpublished</h2>
+        <span className="text-micro text-muted-foreground tabular ml-auto">
+          {count} {count === 1 ? "edit" : "edits"}
         </span>
       </header>
       <EntryList entries={group.entries} expanded={expanded} onToggle={onToggle} />
@@ -304,44 +308,56 @@ function VersionGroup({
   restoring: boolean;
 }) {
   return (
-    <section className="bg-card overflow-hidden rounded-2xl border shadow-xs">
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-5 py-4">
-        <span
-          className={cn(
-            "text-micro tabular rounded-full px-2.5 py-1 font-medium",
-            group.isActive ? "bg-primary-soft text-primary" : "bg-muted text-muted-foreground",
-          )}
-        >
-          Version {group.version}
-        </span>
-        {group.isActive && (
-          <span className="text-micro text-[var(--success-soft-foreground)] bg-[var(--success-soft)] rounded-full px-2.5 py-1 font-medium">
-            Live
+    <section className="bg-card overflow-hidden rounded-xl border shadow-xs">
+      {/*
+        Two rows, not one wrapping row. At sidebar width the identity of the version
+        (which one, is it live, can I get it back) and its provenance (when, who, how
+        many people answered it) were fighting for the same line and losing.
+      */}
+      <header className="space-y-1.5 border-b px-3.5 py-3">
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "text-micro tabular rounded-full px-2 py-0.5 font-medium",
+              group.isActive ? "bg-primary-soft text-primary" : "bg-muted text-muted-foreground",
+            )}
+          >
+            V{group.version}
           </span>
-        )}
-        {group.note && <p className="text-caption min-w-0 flex-1 truncate">{group.note}</p>}
-
-        <div className="text-micro text-muted-foreground ml-auto flex items-center gap-2">
-          <span>
-            {group.publishedAt ? relativeTime(group.publishedAt) : "—"}
-            {meta?.authorLabel ? ` · ${meta.authorLabel}` : ""}
-          </span>
-          {meta !== undefined && meta.responses > 0 && (
-            <span className="tabular">
-              · {meta.responses} {meta.responses === 1 ? "response" : "responses"}
+          {group.isActive && (
+            <span className="text-micro text-[var(--success-soft-foreground)] bg-[var(--success-soft)] rounded-full px-2 py-0.5 font-medium">
+              Live
             </span>
           )}
+          {group.note && <p className="text-caption min-w-0 flex-1 truncate">{group.note}</p>}
           {!group.isActive && (
-            <Button variant="ghost" size="sm" onClick={onRestore} disabled={restoring} className="ml-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRestore}
+              disabled={restoring}
+              className="ml-auto h-6 px-2"
+            >
               <RotateCcw className="size-3.5" strokeWidth={1.75} />
               Restore
             </Button>
           )}
         </div>
+
+        <p className="text-micro text-muted-foreground">
+          {group.publishedAt ? relativeTime(group.publishedAt) : "—"}
+          {meta?.authorLabel ? ` · ${meta.authorLabel}` : ""}
+          {meta !== undefined && meta.responses > 0 && (
+            <span className="tabular">
+              {" · "}
+              {meta.responses} {meta.responses === 1 ? "response" : "responses"}
+            </span>
+          )}
+        </p>
       </header>
 
       {group.entries.length === 0 ? (
-        <p className="text-caption text-muted-foreground px-5 py-4">
+        <p className="text-caption text-muted-foreground px-3.5 py-3">
           We couldn&apos;t work out what this version changed — its stored document wouldn&apos;t
           read. The version itself is intact and can still be restored.
         </p>
@@ -376,7 +392,7 @@ function EntryList({
               disabled={!detailed}
               aria-expanded={detailed ? open : undefined}
               className={cn(
-                "flex w-full items-start gap-3 px-5 py-3 text-left transition-colors duration-[120ms]",
+                "flex w-full items-start gap-2.5 px-3.5 py-2.5 text-left transition-colors duration-[120ms]",
                 detailed && "hover:bg-muted/50 cursor-pointer",
               )}
             >
@@ -398,7 +414,7 @@ function EntryList({
             </button>
 
             {open && (
-              <ul className="space-y-1.5 px-5 pb-3 pl-14">
+              <ul className="space-y-1.5 px-3.5 pb-3 pl-11">
                 {entry.changes.map((change, i) => {
                   const { icon: ChangeIcon, tone } = changeStyle(change.op);
                   return (

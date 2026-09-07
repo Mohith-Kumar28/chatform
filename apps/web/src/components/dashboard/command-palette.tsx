@@ -24,7 +24,8 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
-import { BUILDER_TABS, HISTORY_SEGMENT } from "@/components/builder/builder-tabs";
+import { BUILDER_TABS } from "@/components/builder/builder-tabs";
+import { showHistory } from "@/components/builder/history-sheet";
 import { showShortcuts } from "@/components/builder/use-builder-shortcuts";
 import { getGetApiFormsQueryKey, useGetApiForms } from "@/lib/api/dashboard/dashboard";
 import { apiData } from "@/lib/api/payload";
@@ -129,15 +130,18 @@ export function CommandPalette() {
                 </CommandItem>
               ))}
               {/*
-                History lost its tab, not its way in. It is a header icon beside
-                undo and redo now, and listed here by hand rather than through
-                BUILDER_TABS — a destination without a nav slot is exactly what
-                a command palette is for, and it carries no number because the
-                digit shortcuts are the tab strip's.
+                History lost its tab, not its way in. It is a sheet behind a
+                header icon beside undo and redo now, and listed here by hand
+                rather than through BUILDER_TABS — a panel without a nav slot is
+                exactly what a command palette is for, and it carries no number
+                because the digit shortcuts are the tab strip's.
               */}
               <CommandItem
                 value="History changes published versions"
-                onSelect={() => go(`/forms/${builder.formId}/${HISTORY_SEGMENT}`)}
+                onSelect={() => {
+                  setOpen(false);
+                  showHistory();
+                }}
               >
                 <FileClock className="size-3.5 opacity-60" />
                 <span className="min-w-0 flex-1 truncate">History</span>

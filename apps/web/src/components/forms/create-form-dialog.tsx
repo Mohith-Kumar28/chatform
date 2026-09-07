@@ -26,6 +26,7 @@ import { apiData } from "@/lib/api/payload";
 import { invalidateForms } from "@/lib/query-keys";
 import { filterTemplates, templateCategories, useTemplates } from "@/lib/templates";
 import { cn } from "@/lib/utils";
+import { seedAiBarThread } from "@/components/builder/ai-bar-thread";
 
 /**
  * Every way into a new form, on one screen — but not three equal ways.
@@ -106,10 +107,19 @@ export function CreateFormDialog({
   const canGenerate = prompt.trim().length > 5 && !busy;
 
   const generate = () => {
+    const brief = prompt.trim().slice(0, PROMPT_MAX);
     void generation.start(
-      { prompt: prompt.trim().slice(0, PROMPT_MAX) },
+      { prompt: brief },
       (result) => {
         void invalidateForms(queryClient);
+        // The brief starts the builder's AI thread, so the first message about
+        // this form is the one that made it — and every follow-up amends it
+        // instead of arriving out of nowhere.
+        seedAiBarThread(result.formId, brief, {
+          title: result.title,
+          questions: result.questions,
+          rules: result.rules,
+        });
         setPrompt("");
         // A beat on the finished checklist, so the last step is seen landing
         // rather than replaced mid-animation by a route change.
