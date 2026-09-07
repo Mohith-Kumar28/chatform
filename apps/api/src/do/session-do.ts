@@ -1869,12 +1869,74 @@ export class SessionDO extends DurableObject<Bindings> {
     }
   }
 
+  /** Is there anything on this session worth a row in the responses table? */
+  private async hasResponseContent(): Promise<boolean> {
+    // A row that already exists stays: answers may have been recorded and then
+    // retracted, and deleting it here would race the writes that made it.
+    if (await this.ctx.storage.get<string>("submission_id")) return true;
+    if (Object.keys(this.state.answers).length > 0) return true;
+    return this.meta?.identity != null;
+  }
+
+  /**
+   * Close out a session that produced no response row.
+   *
+   * `finalizeResponse` would have done this as part of its batch; since it is
+   * not running, the session still has to stop being active — otherwise it
+   * keeps its state snapshot and its respondent token until the expiry sweep
+   * gets to it, hours later.
+   */
+  private async closeEmptySession(): Promise<void> {
+    if (!this.meta) return;
+    try {
+      await this.env.DB.prepare(
+        `UPDATE chat_sessions
+            SET status = ?, current_block_ref = NULL, collected_count = 0, turn_count = ?,
+                state_snapshot_json = NULL, last_activity_at = ?
+          WHERE id = ?`,
+      )
+        .bind(this.meta.status, this.turnCount, Date.now(), this.meta.sessionId)
+        .run();
+    } catch (err) {
+      console.error("close_empty_session_failed", err);
+    }
+  }
+
   private async finalize(status: "completed" | "abandoned", endingRef: string | null, reason?: string): Promise<string> {
     if (!this.meta) throw new Error("no meta");
     if (this.meta.formVersionId === "preview") {
       // preview sessions never touch D1: no submissions, usage, webhooks, or analytics
       return `sbm_preview`;
     }
+
+    /**
+     * Somebody opening the link and leaving is not a partial response.
+     *
+     * The response row is created lazily — by the first answer, or by whatever
+     * gets here first — so a session that collected nothing had none until
+     * this method made one purely to mark it abandoned. Every bounce, every
+     * bot, every time the author opened their own live link to look at it,
+     * became a row in the Partial tab with a timestamp and not one filled
+     * cell: the tab that is meant to show what people told you before they
+     * left was mostly people who never said anything.
+     *
+     * The visit is not lost by skipping it. It was already counted as a view
+     * (`analytics_rollup_daily`) and metered as a response when the session
+     * opened; what changes is that `starts` now means "answered at least one
+     * question", which is the only reading under which the drop-off funnel
+     * says anything.
+     *
+     * A verified identity counts as content on its own — an email is what the
+     * sign-in gate exists to collect, and it is worth a row even if the
+     * conversation ended there. A transcript is deliberately NOT enough: a
+     * respondent who only chatted still leaves an empty row in a table of
+     * answers.
+     */
+    if (status === "abandoned" && !(await this.hasResponseContent())) {
+      await this.closeEmptySession();
+      return "";
+    }
+
     const submissionId = await this.ensureSubmissionRow();
 
     /**
