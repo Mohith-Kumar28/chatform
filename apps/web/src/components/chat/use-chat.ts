@@ -71,6 +71,12 @@ export interface AuthState {
   message: string;
   /** Set once a code has been sent; the card switches to the code step. */
   phoneSentTo: string | null;
+  /**
+   * When the most recent code went out. Drives the resend cooldown, and is a
+   * timestamp rather than a boolean so that asking again for the *same* number
+   * still restarts the countdown — `phoneSentTo` does not change on a resend.
+   */
+  phoneSentAt: number | null;
   pending: boolean;
   error: string | null;
   /** Dev convenience: with no SMS provider the API returns the code. */
@@ -584,7 +590,14 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
         // card had reached — re-mounting it at "enter your number" would throw
         // away a code the respondent is in the middle of typing.
         setAuth((prev) =>
-          prev ?? { methods: data.methods, message: data.message, phoneSentTo: null, pending: false, error: null },
+          prev ?? {
+            methods: data.methods,
+            message: data.message,
+            phoneSentTo: null,
+            phoneSentAt: null,
+            pending: false,
+            error: null,
+          },
         );
         settleTurn();
       });
@@ -970,7 +983,14 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
       setAuth((a) =>
         a
           ? ok
-            ? { ...a, pending: false, error: null, phoneSentTo: String(data.destination ?? phone), devCode: data.devCode as string | undefined }
+            ? {
+                ...a,
+                pending: false,
+                error: null,
+                phoneSentTo: String(data.destination ?? phone),
+                phoneSentAt: Date.now(),
+                devCode: data.devCode as string | undefined,
+              }
             : { ...a, pending: false, error: authError(data) }
           : a,
       );
@@ -1018,7 +1038,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
 
   /** Back out of the code step to correct a mistyped number. */
   const changePhoneNumber = useCallback(() => {
-    setAuth((a) => (a ? { ...a, phoneSentTo: null, error: null, devCode: undefined } : a));
+    setAuth((a) => (a ? { ...a, phoneSentTo: null, phoneSentAt: null, error: null, devCode: undefined } : a));
   }, []);
 
   const getUploadBase = useCallback(() => {

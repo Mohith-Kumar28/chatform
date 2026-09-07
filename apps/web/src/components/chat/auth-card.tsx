@@ -223,19 +223,62 @@ function NumberForm({
   );
 }
 
+/** Matches the server OTP cooldown, so neither path can outrun the other. */
+const RESEND_COOLDOWN_SECONDS = 30;
+
+/**
+ * Seconds left before another code may be asked for, ticking to zero.
+ *
+ * Keyed on `sentAt` rather than counted down from a mount, so a resend of the
+ * same number restarts the wait — the case a boolean "already sent" flag gets
+ * wrong, and the one a respondent who missed the first SMS actually hits.
+ */
+function useResendCountdown(sentAt: number | null): number {
+  const [left, setLeft] = useState(sentAt === null ? 0 : RESEND_COOLDOWN_SECONDS);
+  const [seen, setSeen] = useState(sentAt);
+
+  // Reset during render rather than from an effect. React sanctions setting
+  // state while rendering the same component — it re-runs before committing,
+  // with no extra paint — whereas doing this in an effect shows a stale count
+  // for one frame after every send.
+  if (sentAt !== seen) {
+    setSeen(sentAt);
+    setLeft(sentAt === null ? 0 : RESEND_COOLDOWN_SECONDS);
+  }
+
+  // Counting down rather than reading the clock: `Date.now()` during render is
+  // impure, and the value is only ever a label, so a second's drift over a
+  // thirty second wait costs nothing that accuracy would buy back.
+  const ticking = sentAt !== null && left > 0;
+  useEffect(() => {
+    if (!ticking) return;
+    const id = setInterval(() => setLeft((n) => Math.max(0, n - 1)), 1000);
+    // Torn down as soon as `ticking` flips false, so nothing keeps firing for
+    // the rest of the conversation once the wait is over.
+    return () => clearInterval(id);
+  }, [ticking]);
+
+  return left;
+}
+
 function CodeForm({
   sentTo,
+  sentAt,
   pending,
   devCode,
   onSubmit,
+  onResend,
   onChangeNumber,
 }: {
   sentTo: string;
+  sentAt: number | null;
   pending: boolean;
   devCode?: string;
   onSubmit: (code: string) => void;
+  onResend: () => void;
   onChangeNumber: () => void;
 }) {
+  const secondsLeft = useResendCountdown(sentAt);
   const [code, setCode] = useState("");
   const codeId = useId();
   const codeRef = useRef<HTMLInputElement>(null);
@@ -291,6 +334,23 @@ function CodeForm({
         </button>
       </div>
       <div className="flex items-center gap-3 text-[0.6875rem]">
+        {secondsLeft > 0 ? (
+          // Plain text, not a disabled button: there is nothing to press yet,
+          // and the number is the useful part — it says the wait is finite
+          // rather than leaving someone wondering if the tap registered.
+          <span className="opacity-45" aria-live="polite">
+            Resend in {secondsLeft}s
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={onResend}
+            disabled={pending}
+            className="underline opacity-55 hover:opacity-100 disabled:opacity-30"
+          >
+            Resend code
+          </button>
+        )}
         <button type="button" onClick={onChangeNumber} className="underline opacity-55 hover:opacity-100">
           Use a different number
         </button>
@@ -325,9 +385,13 @@ function PhoneFlow({
   return (
     <CodeForm
       sentTo={sent}
+      sentAt={auth.phoneSentAt}
       pending={auth.pending}
       devCode={auth.devCode}
       onSubmit={onVerifyCode}
+      // The server is the one that knows the number, and re-asking for the
+      // same one is exactly what `phone/start` already does.
+      onResend={() => onRequestCode(sent)}
       onChangeNumber={onChangeNumber}
     />
   );
@@ -348,6 +412,7 @@ function FirebasePhoneFlow({
   onPhoneToken: (idToken: string) => void;
 }) {
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const [sentAt, setSentAt] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Held in a ref, not state: replacing it must never re-render mid-flow, and
@@ -372,6 +437,7 @@ function FirebasePhoneFlow({
     }
     confirmation.current = res.sent;
     setSentTo(phone);
+    setSentAt(Date.now());
   }, []);
 
   const verify = useCallback(
@@ -395,13 +461,24 @@ function FirebasePhoneFlow({
   const changeNumber = useCallback(() => {
     confirmation.current = null;
     setSentTo(null);
+    setSentAt(null);
     setError(null);
   }, []);
 
   return (
     <div className="space-y-2">
       {sentTo ? (
-        <CodeForm sentTo={sentTo} pending={pending} onSubmit={verify} onChangeNumber={changeNumber} />
+        <CodeForm
+          sentTo={sentTo}
+          sentAt={sentAt}
+          pending={pending}
+          onSubmit={verify}
+          // `send` again, which mints a fresh reCAPTCHA and a fresh
+          // confirmation — the old one is abandoned, so a code from the
+          // earlier SMS stops working the moment a new one goes out.
+          onResend={() => void send(sentTo)}
+          onChangeNumber={changeNumber}
+        />
       ) : (
         <NumberForm pending={pending} onSubmit={send} />
       )}
