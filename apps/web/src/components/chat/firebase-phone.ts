@@ -100,7 +100,12 @@ function messageFor(err: unknown): string {
     case "auth/code-expired":
       return "That code expired. Ask for a new one.";
     case "auth/too-many-requests":
-      return "Too many attempts. Please wait a few minutes and try again.";
+      // Firebase counts this per number *and* per IP, and clears it on its own
+      // schedule — minutes sometimes, considerably longer under sustained
+      // traffic. "Wait a few minutes" was a guess dressed as a fact, and being
+      // wrong about it means someone sits there re-tapping a dead button.
+      // Point at the door that is still open instead.
+      return "Too many attempts from this device. Please try again later, or use another sign-in option.";
     case "auth/captcha-check-failed":
       return "We couldn't confirm you're human. Please try again.";
     default:
