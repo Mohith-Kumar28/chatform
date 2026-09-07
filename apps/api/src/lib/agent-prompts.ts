@@ -100,6 +100,7 @@ ${
       ? "- Do NOT reword the questions. Their exact wording matters. You acknowledge answers and respond to what the respondent says, but the question itself is delivered separately, word for word — never restate, paraphrase or preview it yourself."
       : "- Exactly one question per turn, in your own words, under 40 words."
   }
+- The answer controls are on screen, directly under your message: a question's options are already there as buttons the respondent can tap. Ask the question and stop. Never list, bullet, number or restate the options in your text — printing the same four choices the respondent is looking at is the one thing that makes this read like a form pretending to be a chat.
 - Acknowledge what they just said before moving on. Reference earlier answers when it is natural.
 - If they ask you something, answer it in one sentence, then re-ask the current question. Never ignore them; never repeat a question robotically.
 - If their message already answers the current question, confirm it briefly and move on.
@@ -107,6 +108,38 @@ ${
 - Mirror the respondent's language. Be brief and human.`);
 
   return parts.join("\n\n");
+}
+
+/**
+ * What the respondent can already see under this question, phrased as the one
+ * thing the agent must not do with it.
+ *
+ * The options are in the system prompt twice over — the question manifest
+ * lists them so the agent knows what an answer may be, and the tool schema
+ * takes their ids — and a model given a set of choices and asked to "ask the
+ * question in your own words" will helpfully write them out as a bulleted
+ * list. Which then renders directly above the same four choices as buttons:
+ * the respondent reads the set, reads it again, and taps the second copy.
+ *
+ * So it is said per-question, next to the question, rather than trusted to the
+ * standing rule in the persona alone. Only for the types whose labels are
+ * actually on screen — a `short_text` has nothing to duplicate.
+ */
+export function affordanceNote(block: Block): string | null {
+  if ("options" in block && block.options && block.options.length > 0) {
+    return `Its ${block.options.length} options are ALREADY on screen as buttons under your message. Ask the question and stop — do not list, bullet, number or spell them out, and do not write "choose one of the following". Naming one option inside a sentence is fine when it genuinely helps; reprinting the set is not.`;
+  }
+  switch (block.type) {
+    case "yes_no":
+    case "legal_consent":
+      return "Its buttons are ALREADY on screen under your message. Ask the question and stop — do not spell out the choices or tell them to reply yes or no.";
+    case "rating":
+    case "nps":
+    case "opinion_scale":
+      return "Its scale is ALREADY on screen under your message, one button per number. Saying the range in a sentence is fine; listing the numbers is not.";
+    default:
+      return null;
+  }
 }
 
 /** The volatile half: what is true only for this turn. */
@@ -119,13 +152,13 @@ export function buildTurnSuffix(
   const parts: string[] = [];
 
   const hint = currentBlock.agentHints;
-  if (hint) {
-    const lines: string[] = [];
-    if (hint.askStyle) lines.push(`Ask it like this: ${hint.askStyle}`);
-    if (hint.whyWeAsk) lines.push(`If they ask why: ${hint.whyWeAsk}`);
-    if (hint.examples.length > 0) lines.push(`Example answers: ${hint.examples.join(", ")}`);
-    if (lines.length > 0) parts.push(`ABOUT THIS QUESTION\n${lines.map((l) => `- ${l}`).join("\n")}`);
-  }
+  const lines: string[] = [];
+  const affordance = affordanceNote(currentBlock);
+  if (affordance) lines.push(affordance);
+  if (hint?.askStyle) lines.push(`Ask it like this: ${hint.askStyle}`);
+  if (hint?.whyWeAsk) lines.push(`If they ask why: ${hint.whyWeAsk}`);
+  if (hint?.examples.length) lines.push(`Example answers: ${hint.examples.join(", ")}`);
+  if (lines.length > 0) parts.push(`ABOUT THIS QUESTION\n${lines.map((l) => `- ${l}`).join("\n")}`);
 
   if (context?.transcript) parts.push(`CONVERSATION SO FAR\n${context.transcript}`);
   if (context?.answers) parts.push(`ANSWERS COLLECTED\n${context.answers}`);

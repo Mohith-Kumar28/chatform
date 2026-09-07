@@ -31,6 +31,7 @@ import {
   REASONING_HEADROOM_TOKENS,
 } from "../lib/ai.js";
 import {
+  affordanceNote,
   buildStablePrefix,
   buildTurnSuffix,
   buildRetryObjective,
@@ -1264,13 +1265,17 @@ export class SessionDO extends DurableObject<Bindings> {
        * nothing else — the deterministic phrasing below covers it.
        */
       let aiOk = false;
+      // Repeated at the point of asking as well as in the system prompt: this
+      // is the instruction a model is most prone to helpfully ignoring.
+      const affordance = affordanceNote(next.block);
       try {
         aiOk = await this.aiStreamMessage(
           verbatim
             ? `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
                 `Acknowledge it in one short sentence and answer anything they asked. Do NOT ask the next question — it follows immediately, word for word.`
             : `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
-                `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref} — which is: "${next.block.title}" (${next.block.type}) — in your own words. Ask ONLY that question.`,
+                `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref} — which is: "${next.block.title}" (${next.block.type}) — in your own words. Ask ONLY that question.` +
+                (affordance ? ` ${affordance}` : ""),
         );
         if (aiOk) await this.applyPendingEffects();
       } catch (err) {
