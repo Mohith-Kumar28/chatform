@@ -50,6 +50,14 @@ export interface MeterRowData {
   locked: boolean;
   /** A `meter` metric whose fair-use ceiling is not yet worth drawing. */
   latent: boolean;
+  /**
+   * The allowance is unlimited and this number is only a fair-use ceiling behind it.
+   *
+   * Stays true after `latent` flips, which is the point: once the bar appears, the row
+   * has to keep saying that the plan is still unlimited, or a count that grew a
+   * denominator halfway through the month reads as a downgrade nobody announced.
+   */
+  ceilingBacked: boolean;
   /** Last month's figure for the same metric, when there is a last month. */
   previous: number | null;
   /** Where this is actually managed, when it is managed somewhere else. */
@@ -195,6 +203,7 @@ function buildRow(args: {
     danger: isDanger(meta.mode, meta.kind, state),
     locked,
     latent,
+    ceilingBacked: isCeiling(args.limitKey),
     previous: args.previous,
     href: args.href,
     hint: args.hint,

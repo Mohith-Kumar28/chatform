@@ -48,6 +48,19 @@ export function rowNote(row: MeterRowData, resets: string, planName: string): st
   const left = remaining(row);
   const monthly = row.kind === "monthly";
 
+  /*
+    The crossover has to keep saying "unlimited".
+
+    A count that reads as unlimited all month and then quietly grows a denominator and a
+    bar is, from the reader's side, a plan that shrank while they were using it. It did
+    not: the allowance is still unlimited and this is the fair-use line behind it. So
+    until the ceiling actually refuses something, the note says both — what the number is
+    and that it is not a quota.
+  */
+  if (row.ceilingBacked && row.state !== "at" && row.state !== "over") {
+    return `Still unlimited — ${formatValue(row.limit, row.unit)} is a fair-use ceiling for one month`;
+  }
+
   switch (row.state) {
     case "over":
       return `${formatValue(row.used - row.limit, row.unit)} over the limit`;
@@ -99,6 +112,12 @@ export function statusSentence(row: MeterRowData | null, resets: string): string
   const used = formatValue(row.used, row.unit);
   const limit = row.limit === null ? "" : formatValue(row.limit, row.unit);
   const spent = row.state === "at" || row.state === "over";
+
+  /* Same correction as the row note: until the ceiling actually refuses something, the
+     headline must not describe an unlimited allowance as a limit being approached. */
+  if (row.ceilingBacked && !spent) {
+    return `${label} are unlimited — this month is ${used} against a ${limit} fair-use ceiling.`;
+  }
 
   if (row.state === "watch") {
     return `${label} is the closest to a limit — ${used} of ${limit} used.`;
