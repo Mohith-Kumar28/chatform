@@ -1,5 +1,5 @@
 ---
-title: Payment history
+title: Every published version of this form
 full: true
 _openapi:
   preload:
@@ -21,7 +21,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="chatform" operations={[{"path":"/api/billing/invoices","method":"get"}]} />
+      <Comp document="chatform" operations={[{"path":"/api/forms/{id}/versions","method":"get"}]} />
     </>
   );
 }

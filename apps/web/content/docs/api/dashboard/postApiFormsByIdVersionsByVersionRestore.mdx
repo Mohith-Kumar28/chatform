@@ -1,5 +1,5 @@
 ---
-title: Quote a plan change before committing to it
+title: Restore a published version into the working document
 full: true
 _openapi:
   preload:
@@ -21,7 +21,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="chatform" operations={[{"path":"/api/billing/preview-change","method":"post"}]} />
+      <Comp document="chatform" operations={[{"path":"/api/forms/{id}/versions/{version}/restore","method":"post"}]} />
     </>
   );
 }
