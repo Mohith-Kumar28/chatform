@@ -207,10 +207,34 @@ export function FormCard({
  * Static and derived — no screenshot to capture, nothing to keep in sync. The
  * "answer" is the next question rather than a real reply, so the shape reads
  * as a conversation without inventing respondent data that does not exist.
+ *
+ * The band sweeps orange to violet, which is the one gesture that says
+ * "chatform" without a logo in it. It was a peach-to-peach wash before —
+ * `--primary-soft` into `--accent`, two hues close enough that a grid of these
+ * read as one warm rectangle repeated.
+ *
+ * Band tokens rather than `--brand-gradient` itself, and that is not timidity:
+ * DESIGN.md §4.1b reserves the full-strength gradient for the brand mark and
+ * the upgrade ask, precisely so it keeps meaning something. A grid of twelve
+ * cards each carrying it would spend that reserve in one screen. The hero
+ * makes the same choice for the same reason — `--brand-orange-band-vivid` into
+ * `--brand-violet-band-vivid`, a mix toward the page ground rather than the
+ * hues at full strength — and 115deg is its angle, kept here so the two
+ * surfaces read as the same sweep.
+ *
+ * At `--band-mix` the ground stays pale enough for a solid `--primary` bubble
+ * to sit on it without the hard orange/violet seam §4.6 rules out, and the
+ * mix follows `--background`, so dark mode is handled by the tokens.
  */
 function ChatThumb({ opener, answer }: { opener: string; answer?: string }) {
   return (
-    <div className="from-primary-soft/70 to-accent/30 relative h-28 shrink-0 overflow-hidden bg-gradient-to-br p-3">
+    <div
+      className="relative h-28 shrink-0 overflow-hidden p-3"
+      style={{
+        backgroundImage:
+          "linear-gradient(115deg, var(--brand-orange-band) 0%, var(--brand-violet-band) 100%)",
+      }}
+    >
       <div className="flex items-start gap-1.5">
         <span className="bg-card/80 text-primary mt-0.5 grid size-5 shrink-0 place-items-center rounded-full">
           <MessageSquare className="size-2.5" strokeWidth={2} />

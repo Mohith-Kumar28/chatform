@@ -193,15 +193,28 @@ export function invitationEmail(a: {
 
 /**
  * The role names a person would recognise, which are not always the ones the
- * database stores — `member` is Better Auth's legacy default and means nothing
- * to the reader.
+ * database stores.
+ *
+ * `member` is Better Auth's legacy default and is the reason this map exists.
+ * It reads as a role and is not one — it is what `editor` was called before the
+ * role list settled, and the database still holds it for anyone invited back
+ * then. Saying "a member" tells the reader nothing about what they will be able
+ * to do, so it is spelled as what it actually grants.
+ *
+ * The web app says the same thing from `lib/roles.ts`, which is the copy this
+ * one has to agree with: the invitation email and `/accept-invitation` are two
+ * halves of one moment, and an email promising "a member" above a page offering
+ * "an editor" is the same invitation contradicting itself. Deliberately still
+ * two copies — `apps/api` and `apps/web` cannot import from each other, and a
+ * shared package for four strings costs more than it saves. If a fifth role
+ * arrives, it arrives here and there.
  */
 const ROLE_LABELS: Record<string, string> = {
   owner: "an owner",
   admin: "an admin",
   editor: "an editor",
   viewer: "a viewer",
-  member: "a member",
+  member: "an editor",
 };
 
 /** "expires in 3 days" / "expires today" / "has expired". */

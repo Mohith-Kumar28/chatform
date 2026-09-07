@@ -130,35 +130,19 @@ function hoursUntil(ts: number, now: number): number {
 }
 
 /**
- * The eye, and what it can honestly reveal.
+ * The prefix, and only the prefix.
  *
  * We store an Argon2 hash and the first few characters, so the secret itself is
- * unrecoverable the moment the create dialog closes — an eye that promised the
- * whole key would be a lie the backend cannot keep. What it hides and shows is
- * the prefix, which is the part that identifies a key on a screen someone else
- * might be looking at.
+ * unrecoverable the moment the create dialog closes. There is no eye here on
+ * purpose: a reveal toggle would promise a key the backend cannot produce, and
+ * the most it could ever uncover is the prefix already on screen — the part
+ * whose whole job is to let a developer tell two keys apart.
  */
 function KeyPrefix({ start, keyType }: { start: string | null; keyType: KeyType }) {
-  const [shown, setShown] = useState(false);
-  const visible = start ? `${start}${"•".repeat(8)}` : "—";
-  const masked = `${keyType}_${"•".repeat(10)}`;
   return (
-    <span className="inline-flex items-center gap-1">
-      <code className="font-mono">{shown ? visible : masked}</code>
-      <button
-        type="button"
-        // The row is a button too; without this the eye would also open the panel.
-        onClick={(e) => {
-          e.stopPropagation();
-          setShown((s) => !s);
-        }}
-        aria-label={shown ? "Hide key prefix" : "Show key prefix"}
-        title={shown ? "Hide key prefix" : "Show key prefix"}
-        className="text-muted-foreground hover:text-foreground rounded p-0.5 transition-colors"
-      >
-        {shown ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
-      </button>
-    </span>
+    <code className="font-mono" title="Only the prefix is stored — the full key is shown once, at creation.">
+      {start ? `${start}${"\u2022".repeat(8)}` : `${keyType}_${"\u2022".repeat(10)}`}
+    </code>
   );
 }
 

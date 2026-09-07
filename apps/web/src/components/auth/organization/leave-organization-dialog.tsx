@@ -34,7 +34,7 @@ export function LeaveOrganizationDialog({
   onOpenChange,
   organization
 }: LeaveOrganizationDialogProps) {
-  const { authClient, basePaths, localization, navigate } =
+  const { authClient, basePaths, localization } =
     useAuth<OrganizationAuthClient>()
   const {
     localization: organizationLocalization,
@@ -48,10 +48,27 @@ export function LeaveOrganizationDialog({
         onOpenChange(false)
         toast.success(organizationLocalization.leftOrganization)
 
-        navigate({
-          to: `${basePaths.settings}/${organizationPluginViewPaths.settings.organizations}`,
-          replace: true
-        })
+        /*
+          A real navigation, not a router transition.
+
+          The workspace you were in lives in the session cookie, and the server
+          reads it on every request — so leaving one changes state that no
+          client-side cache can see. Better Auth clears the session's active
+          organization on the way out, and a `router.replace` would then paint
+          the new page over a header, a workspace switcher and a react-query
+          cache all still holding the workspace you just left. That is exactly
+          what people saw: the nav bar naming a workspace they were no longer
+          a member of, and a refresh that did not help because the client had
+          never been told to forget it.
+
+          `WorkspaceSwitcher` reached the same conclusion for `setActive` and
+          says so in the same words. This is the other half of that rule: any
+          write that moves you between workspaces leaves the page.
+        */
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+        window.location.assign(
+          `${basePaths.settings}/${organizationPluginViewPaths.settings.organizations}`
+        )
       }
     }
   )

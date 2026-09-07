@@ -16,6 +16,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { UsageMeter } from "@/components/ui/usage-meter";
+import { PlanChip } from "@/components/billing/gate";
+import { nextPlanWithMore } from "@repo/entitlements";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   Accordion,
@@ -212,6 +214,9 @@ export default function TeamPage() {
   // permanently short of a seat it is paying for.
   const seatsUsed = members.length + pending.length;
   const seatsFull = seatLimit !== null && seatsUsed >= seatLimit;
+  // The plan that would actually raise the ceiling — `null` on the top plan,
+  // where more seats are bought rather than upgraded to.
+  const seatUpgrade = ent.data ? nextPlanWithMore("seats", ent.data.planId) : null;
 
   /**
    * Anything that changes the roster changes the seat count, and the seat count
@@ -621,8 +626,24 @@ export default function TeamPage() {
                       ? " Revoking an expired invitation above frees one, or add seats."
                       : " Add seats to invite more people."}
                   </p>
+                  {/*
+                    The tier, on the button, the way every other paid control in
+                    the product names it. "Add seats" on its own asked the reader
+                    to go to /billing to find out which plan they were being
+                    asked for — and seats are a limit rather than a feature, so
+                    there is no `LockedControl` here to have said it for us.
+
+                    `nextPlanWithMore` is the same rule the server uses when it
+                    refuses an invite for want of a seat, so the plan named here
+                    and the plan named in that denial cannot drift apart. Absent
+                    on the top plan, where extra seats are bought by the seat and
+                    there is no tier to move to.
+                  */}
                   <Button asChild shape="pill" className="w-full">
-                    <Link href="/billing">Add seats</Link>
+                    <Link href="/billing">
+                      Add seats
+                      {seatUpgrade && <PlanChip plan={seatUpgrade} />}
+                    </Link>
                   </Button>
                 </div>
               )}

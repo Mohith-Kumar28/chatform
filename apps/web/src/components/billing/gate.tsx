@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Lock } from "lucide-react";
-import { FEATURES, PLANS, minPlanFor, type FeatureKey } from "@repo/entitlements";
+import { FEATURES, PLANS, minPlanFor, type FeatureKey, type PlanId } from "@repo/entitlements";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { usePaywall } from "@/stores/paywall-store";
 import { Button } from "@/components/ui/button";
@@ -89,6 +89,36 @@ export function LockChip({
       <Lock className="size-2.5" aria-hidden />
       {plan.name}
     </button>
+  );
+}
+
+/**
+ * The same chip, naming a plan rather than a lock.
+ *
+ * `LockChip` is for a control you cannot use: it wears a padlock and the
+ * warning wash, and `LockedControl` makes the thing behind it inert. Some
+ * controls are the opposite case — pressable, and the press is the way *to* the
+ * plan. "Add seats" on `/team` is the example: the seat limit is a limit, not a
+ * feature flag, so nothing is locked and disabling the one button that helps
+ * would be perverse.
+ *
+ * What was missing was the tier. Every other paid surface names the plan on the
+ * control — API keys, the settings switches — and this one sent people to
+ * `/billing` to find out which plan they were being asked for. Same chip, same
+ * position, violet rather than amber, because it is naming a destination and
+ * not refusing a click.
+ */
+export function PlanChip({ plan, className }: { plan: PlanId; className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[0.625rem] font-medium",
+        "bg-brand-violet-soft text-brand-violet-soft-foreground",
+        className,
+      )}
+    >
+      {PLANS[plan].name}
+    </span>
   );
 }
 

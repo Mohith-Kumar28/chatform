@@ -354,9 +354,7 @@ function AiPanel({
           placeholder offering two options is an instruction, and it vanishes
           the moment anyone starts typing. */}
       <div className="flex items-center gap-3 px-4 pt-1 pb-3">
-        <p className="text-muted-foreground hidden text-xs sm:block">
-          Or paste your site&rsquo;s URL and I&rsquo;ll read it.
-        </p>
+     
         <span className="text-muted-foreground ml-auto hidden items-center gap-1 text-xs sm:flex">
           <Kbd>⌘</Kbd>
           <Kbd>↵</Kbd>

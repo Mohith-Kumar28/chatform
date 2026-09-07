@@ -183,8 +183,15 @@ export function forbidden(resource: string, action: string, plan: PlanId): GateE
   };
 }
 
-/** The cheapest plan above `from` that allows more of `limitKey`, if any. */
-function nextPlanWithMore(limitKey: LimitKey, from: PlanId): PlanId | null {
+/**
+ * The cheapest plan above `from` that allows more of `limitKey`, if any.
+ *
+ * Exported because the answer belongs on screen as well as in a denial. A gate
+ * raised by the server names the plan that would lift the limit; a control that
+ * is *about* to hit the same limit should name the same one, and it has to be
+ * the same rule or the two disagree in front of the customer.
+ */
+export function nextPlanWithMore(limitKey: LimitKey, from: PlanId): PlanId | null {
   const order: PlanId[] = ["free", "pro", "business"];
   const current = PLANS[from].limits[limitKey];
   for (const id of order.slice(order.indexOf(from) + 1)) {
