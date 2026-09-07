@@ -34,6 +34,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Check, Clock, Lock, MailWarning, MoreHorizontal, UserPlus } from "lucide-react";
+// Shared with the workspace switcher, which shows the reader their own role.
+// Two copies of "member means editor" is one copy too many.
+import { primaryRole, roleLabel } from "@/lib/roles";
 
 /**
  * Who is in this organization, and inviting more of them.
@@ -138,17 +141,6 @@ function resolveInvitations(rows: Invitation[]): ResolvedInvitation[] {
   return rows
     .filter((i) => i.status === "pending")
     .map((i) => ({ ...i, expired: new Date(i.expiresAt).getTime() <= now }));
-}
-
-/** Better Auth stores multiple roles comma-separated; the first is the one to show. */
-function primaryRole(role: string): string {
-  return role.split(",")[0]?.trim() ?? role;
-}
-
-function roleLabel(role: string): string {
-  const r = primaryRole(role);
-  if (r === "member") return "editor";
-  return r;
 }
 
 export default function TeamPage() {

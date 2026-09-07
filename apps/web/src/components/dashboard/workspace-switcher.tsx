@@ -5,6 +5,8 @@ import { Building2, Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { authClient, useListOrganizations } from "@/lib/auth/auth-client";
 import { useActiveOrg } from "@/hooks/use-active-org";
+import { useMyRole } from "@/hooks/use-my-role";
+import { roleWithArticle } from "@/lib/roles";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,10 +43,24 @@ import { cn } from "@/lib/utils";
  * `/team` — which asks for the active org honestly — said there wasn't one.
  * The fallback stays for the moment the repair is in flight; it is no longer
  * the only thing standing between the user and a blank page.
+ *
+ * The menu opens on the reader's own role, because this is the one control in
+ * the product that already names the workspace they are in, and "what can I do
+ * here" had no answer anywhere outside `/team` — a page an editor or a viewer
+ * has no other reason to open, and which a viewer reads as a roster of other
+ * people. Somebody who cannot publish a form should be able to find out why
+ * without being told.
+ *
+ * It sits above the switch list rather than beside a row, and that is the
+ * point: `organization.list` returns organizations without the membership that
+ * produced them, so a role per row would be a claim about workspaces this
+ * component cannot see into. One sentence about the workspace it *can* is both
+ * honest and the question being asked.
  */
 export function WorkspaceSwitcher() {
   const { data: orgs } = useListOrganizations();
   const { org: active } = useActiveOrg();
+  const myRole = useMyRole();
   const [createOpen, setCreateOpen] = useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
 
@@ -83,21 +99,39 @@ export function WorkspaceSwitcher() {
           <ChevronsUpDown className="size-3 opacity-50" />
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent align="start" className="w-60">
-          <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
-            Workspaces
-          </DropdownMenuLabel>
-          {list.map((org) => (
-            <DropdownMenuItem key={org.id} onSelect={() => void switchTo(org.id)}>
-              <span className="min-w-0 flex-1 truncate">{org.name}</span>
-              {switching === org.id ? (
-                <Loader2 className="size-3.5 shrink-0 animate-spin" />
-              ) : (
-                org.id === current?.id && <Check className="size-3.5 shrink-0" />
-              )}
-            </DropdownMenuItem>
-          ))}
+        <DropdownMenuContent align="start" className="w-64">
+          <div className="px-2 py-1.5">
+            <p className="truncate text-sm font-medium">{current?.name ?? "Workspace"}</p>
+            {/* A non-breaking space rather than nothing while the membership is
+                in flight, so the menu does not resize under the cursor when the
+                role lands a beat later. No placeholder text: a role that arrives
+                late is fine, a wrong one is not. */}
+            <p className="text-muted-foreground mt-0.5 text-xs">
+              {myRole ? `You're ${roleWithArticle(myRole)} here` : "\u00a0"}
+            </p>
+          </div>
           <DropdownMenuSeparator />
+          {/* Only when there is somewhere to switch to. With one workspace the
+              list was a single row repeating the name directly above it, with a
+              tick confirming the only thing it could have been. */}
+          {list.length > 1 && (
+            <>
+              <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
+                Switch workspace
+              </DropdownMenuLabel>
+              {list.map((org) => (
+                <DropdownMenuItem key={org.id} onSelect={() => void switchTo(org.id)}>
+                  <span className="min-w-0 flex-1 truncate">{org.name}</span>
+                  {switching === org.id ? (
+                    <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                  ) : (
+                    org.id === current?.id && <Check className="size-3.5 shrink-0" />
+                  )}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+            </>
+          )}
           <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
             <Plus className="size-3.5" />
             New workspace
