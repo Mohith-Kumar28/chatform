@@ -1,7 +1,8 @@
 "use client";
 
-import { BookOpen, Check, Crown, LogOut, Monitor, Moon, Sun } from "lucide-react";
+import { BookOpen, Building2, Check, Crown, LogOut, Monitor, Moon, Sun, UserRound } from "lucide-react";
 import { useTheme } from "next-themes";
+import Link from "next/link";
 import { signOut, useSession } from "@/lib/auth/auth-client";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { useHydrated } from "@/hooks/use-client-value";
@@ -87,6 +88,29 @@ export function UserMenu() {
             </p>
           )}
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+
+        {/*
+          The two screens this menu is the only route to. Everything else in
+          here is a setting or a way out; these are places. "Account" is you —
+          your name, your address, your password, your sessions — and
+          "Workspace" is the one you are signed into, including the way to
+          leave it. Neither has a nav slot, which is exactly why they belong
+          in the menu that opens off your own avatar.
+        */}
+        <DropdownMenuItem asChild>
+          <Link href="/account">
+            <UserRound className="size-3.5" strokeWidth={1.75} />
+            Account
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/organization">
+            <Building2 className="size-3.5" strokeWidth={1.75} />
+            Workspace
+          </Link>
+        </DropdownMenuItem>
+
         <DropdownMenuSeparator />
 
         <DropdownMenuSub>

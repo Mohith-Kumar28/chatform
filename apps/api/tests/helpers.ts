@@ -45,23 +45,46 @@ export async function seedTenant(label: string): Promise<Tenant> {
   // against a key the running code cannot recognise.
   const { defaultKeyHasher } = await import("@better-auth/api-key");
 
+  const email = `${label}@example.com`;
+  const password = "supersecret123";
+
   // Sign up through the real Better Auth endpoint so the session cookie is
   // produced and validated exactly as it is in production — guessing the
   // cookie format would make this test prove nothing.
   const signup = await fetchApi("/api/auth/sign-up/email", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: `${label}@example.com`, password: "supersecret123", name: label }),
+    body: JSON.stringify({ email, password, name: label }),
   });
   if (!signup.ok) throw new Error(`sign-up failed for ${label}: ${signup.status} ${await signup.text()}`);
-  const cookie = (signup.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
-  if (!cookie) throw new Error(`no session cookie returned for ${label}`);
 
   const userRow = await env.DB.prepare(`SELECT id FROM users WHERE email = ?`)
-    .bind(`${label}@example.com`)
+    .bind(email)
     .first<{ id: string }>();
   if (!userRow) throw new Error(`user row missing for ${label}`);
   const userId = userRow.id;
+
+  /**
+   * Sign-up no longer hands back a session: `requireEmailVerification` is on,
+   * so the account exists and cannot be used until the address is confirmed.
+   *
+   * The confirmation itself is skipped rather than simulated. Redeeming a real
+   * OTP would mean reaching into the `verifications` table for a hashed code,
+   * which tests the plugin's storage format and nothing this suite is about;
+   * flipping the column reaches the same state a confirmed code reaches. The
+   * *gate* is covered on its own in `email-verification.test.ts` — including
+   * the negative case, which is the half that matters.
+   */
+  await env.DB.prepare(`UPDATE users SET email_verified = 1 WHERE id = ?`).bind(userId).run();
+
+  const signin = await fetchApi("/api/auth/sign-in/email", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!signin.ok) throw new Error(`sign-in failed for ${label}: ${signin.status} ${await signin.text()}`);
+  const cookie = (signin.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+  if (!cookie) throw new Error(`no session cookie returned for ${label}`);
 
   await env.DB.batch([
     env.DB.prepare(

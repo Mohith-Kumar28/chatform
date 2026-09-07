@@ -10,16 +10,22 @@ import { applySchema, fetchApi } from "./helpers.js";
  * `active_organization_id` showed "No organization is active" to a user whose
  * workspace was named in the nav bar directly above it. Signup creates the org
  * and the membership; this asserts the session that follows points at it.
+ *
+ * "The session that follows" is now the one from sign-in rather than the one
+ * from sign-up: with `requireEmailVerification` on, creating the account no
+ * longer creates a session at all. The property under test is unchanged — the
+ * first session a new account gets lands in the org signup made for it.
  */
 describe("session active organization", () => {
   beforeAll(applySchema);
 
-  it("points a freshly signed-up session at the org signup created", async () => {
+  it("points a new account's first session at the org signup created", async () => {
     const email = "activeorg@example.com";
+    const password = "supersecret123";
     const res = await fetchApi("/api/auth/sign-up/email", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, password: "supersecret123", name: "Active Org" }),
+      body: JSON.stringify({ email, password, name: "Active Org" }),
     });
     expect(res.ok).toBe(true);
 
@@ -34,6 +40,16 @@ describe("session active organization", () => {
       .bind(user!.id)
       .first<{ org: string }>();
     expect(member?.org).toBeTruthy();
+
+    // Stand in for a redeemed code. `email-verification.test.ts` is what proves
+    // the gate itself; here it is only the precondition for having a session.
+    await env.DB.prepare(`UPDATE users SET email_verified = 1 WHERE id = ?`).bind(user!.id).run();
+    const signin = await fetchApi("/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    expect(signin.ok).toBe(true);
 
     const session = await env.DB.prepare(
       `SELECT active_organization_id AS active FROM sessions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`,

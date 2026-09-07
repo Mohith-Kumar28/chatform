@@ -242,6 +242,68 @@ export function passwordResetEmail(a: { name: string | null; resetUrl: string })
   };
 }
 
+// ─────────────────────────── one-time codes ───────────────────────────
+
+/**
+ * A six-digit code, and as little else as possible.
+ *
+ * The code is the message. It is set large and monospaced because most people
+ * read it off a phone lock screen and type it on a laptop, and because a
+ * proportional font makes `1` and `l` an unforced error. There is deliberately
+ * no link and no button: a code email that also contains a clickable action is
+ * a phishing template with our logo on it.
+ */
+export type OtpPurpose = "sign-in" | "email-verification" | "forget-password" | "change-email";
+
+export function otpEmail(a: { code: string; purpose: OtpPurpose }): Omit<MailMessage, "to"> {
+  const copy = OTP_COPY[a.purpose];
+  const spaced = a.code.split("").join(" ");
+
+  const body = [
+    h1(copy.heading),
+    p(escapeHtml(copy.lead)),
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
+  <tr>
+    <td align="center" style="padding:16px 28px;border:1px solid ${BORDER};border-radius:12px;background-color:${GROUND};font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;font-size:30px;font-weight:600;letter-spacing:0.22em;color:${INK};">${escapeHtml(a.code)}</td>
+  </tr>
+</table>`,
+    p(`<span style="color:${MUTED};font-size:13px;">The code expires in 10 minutes and can only be used once.</span>`),
+    p(`<span style="color:${MUTED};font-size:13px;">${escapeHtml(copy.disclaimer)}</span>`),
+  ].join("\n");
+
+  return {
+    // The code in the subject line, so it can be read from the notification
+    // without opening anything. Every provider that sends codes does this, and
+    // it is the single biggest saving in the whole flow.
+    subject: `${a.code} is your chatform code`,
+    html: layout({ preheader: `${spaced} — ${copy.heading.toLowerCase()}`, body }),
+    text: [copy.heading, ``, copy.lead, ``, a.code, ``, `Expires in 10 minutes.`, copy.disclaimer].join("\n"),
+  };
+}
+
+const OTP_COPY: Record<OtpPurpose, { heading: string; lead: string; disclaimer: string }> = {
+  "email-verification": {
+    heading: "Confirm your email",
+    lead: "Enter this code in chatform to finish setting up your account.",
+    disclaimer: "Didn't sign up? Ignore this email — nothing happens without the code.",
+  },
+  "sign-in": {
+    heading: "Your sign-in code",
+    lead: "Enter this code in chatform to sign in.",
+    disclaimer: "Didn't try to sign in? Ignore this email and change your password.",
+  },
+  "forget-password": {
+    heading: "Reset your password",
+    lead: "Enter this code in chatform to choose a new password.",
+    disclaimer: "Didn't ask for this? Ignore this email — your password stays as it is.",
+  },
+  "change-email": {
+    heading: "Confirm your email change",
+    lead: "Enter this code in chatform to confirm the address on your account.",
+    disclaimer: "Didn't ask for this? Ignore this email — your address stays as it is.",
+  },
+};
+
 // ───────────────────── new response, to the form owner ─────────────────────
 
 export interface AnswerLine {

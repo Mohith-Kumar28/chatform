@@ -64,6 +64,13 @@
       "when": 1788738605566,
       "tag": "0008_odd_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788797156194,
+      "tag": "0009_grandfather_verified_emails",
+      "breakpoints": true
     }
   ]
 }

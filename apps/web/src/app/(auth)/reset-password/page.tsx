@@ -6,8 +6,7 @@ import Link from "next/link";
 import { authClient } from "@/lib/auth/auth-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { PasswordField } from "@/components/auth/password-field";
 
 /**
  * Choose a new password.
@@ -80,31 +79,24 @@ function ResetPasswordForm() {
   return (
     <Shell title="Choose a new password" description="At least 8 characters.">
       <form onSubmit={submit} className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="password">New password</Label>
-          <Input
-            id="password"
-            type="password"
-            required
-            autoFocus
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="confirm">Confirm new password</Label>
-          <Input
-            id="confirm"
-            type="password"
-            required
-            minLength={8}
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            placeholder="••••••••"
-          />
-        </div>
+        <PasswordField
+          id="password"
+          label="New password"
+          value={password}
+          onChange={setPassword}
+          autoFocus
+          autoComplete="new-password"
+          disabled={pending}
+          strength
+        />
+        <PasswordField
+          id="confirm"
+          label="Confirm new password"
+          value={confirm}
+          onChange={setConfirm}
+          autoComplete="new-password"
+          disabled={pending}
+        />
         {error && <p className="text-destructive text-sm">{error}</p>}
         <Button type="submit" disabled={pending} className="w-full rounded-full">
           {pending ? "…" : "Change password"}

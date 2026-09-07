@@ -10,7 +10,7 @@ import type {} from "@better-auth/core";
 import type {} from "@better-auth/core/db/adapter";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { organization } from "better-auth/plugins";
+import { emailOTP, organization } from "better-auth/plugins";
 import { createDb, schema } from "@repo/db";
 import type { Bindings } from "../env.js";
 import { ac, roles } from "./permissions.js";
@@ -20,6 +20,7 @@ import { seatLimit } from "@repo/entitlements";
 import { APIError } from "better-auth/api";
 import { webOrigins, returnOrigin, needsCrossSiteCookies, isSecureOrigin } from "./origins.js";
 import { enqueueMail } from "./mail.js";
+import { purgeUserData } from "./delete-account.js";
 
 /**
  * Give a brand-new user an organization to land in.
@@ -177,7 +178,23 @@ export function createAuth(env: Bindings) {
       : { useSecureCookies: isSecureOrigin(env) },
     emailAndPassword: {
       enabled: true,
-      autoSignIn: true,
+      /**
+       * No session until the address is proven.
+       *
+       * Sign-up used to hand back a working session the instant the form was
+       * submitted, which meant an address was never anything more than a string
+       * somebody typed: you could open an account on a colleague's email, a
+       * competitor's, or one that does not exist. Every downstream promise this
+       * product makes — password reset, team invitations, submission
+       * notifications — assumes the address on the account belongs to the person
+       * holding it, and none of them were entitled to assume that.
+       *
+       * `autoSignIn` is off for the same reason `requireEmailVerification` is on:
+       * with verification required the sign-up response carries no session
+       * anyway, and leaving the flag true only makes the intent ambiguous.
+       */
+      autoSignIn: false,
+      requireEmailVerification: true,
       /**
        * The reset link, mailed.
        *
@@ -203,6 +220,36 @@ export function createAuth(env: Bindings) {
         });
       },
     },
+    emailVerification: {
+      /**
+       * No `sendVerificationEmail` here, deliberately.
+       *
+       * The `emailOTP` plugin supplies one from its `init`, and that is the
+       * only reason `overrideDefaultEmailVerification` does anything: plugin
+       * options are merged with `defu`, which lets the *caller's* value win, so
+       * a `sendVerificationEmail` written at this level silently outranks the
+       * override and every sign-up goes back to mailing a link. It looks like
+       * belt and braces and behaves like a switch that does nothing — which is
+       * exactly what it did until somebody read the mail the local queue
+       * printed and found a link in it.
+       */
+      sendOnSignUp: true,
+      /**
+       * A link that expires in an hour will be missed, and the person who missed
+       * it goes back to the sign-in form rather than hunting for a resend button.
+       * Sending a fresh one on that attempt is the difference between a recovered
+       * sign-up and a lost one; the sign-in page says so where the error appears.
+       */
+      sendOnSignIn: true,
+      /**
+       * Following the link is proof of the same two things a sign-in proves —
+       * the address and, since only somebody with the password could have
+       * created the account, the password. Making them type it again on the next
+       * screen adds no security and loses people at the last step.
+       */
+      autoSignInAfterVerification: true,
+      expiresIn: 60 * 60,
+    },
     /**
      * Google is registered only when both halves of the credential are present, so a
      * checkout with no Google setup keeps working on email and password alone instead of
@@ -217,6 +264,33 @@ export function createAuth(env: Bindings) {
           },
         }
       : {},
+    user: {
+      /**
+       * Closing an account, and meaning it.
+       *
+       * Gated on the password rather than on an emailed link. Better Auth asks
+       * for the credential on `deleteUser` when the account has one, and the
+       * card in settings puts that field in front of the confirmation — which
+       * is the check that actually matters here, because the person who can
+       * do damage with this button is somebody sitting at an unlocked laptop,
+       * and they already have the inbox.
+       *
+       * `beforeDelete` is where the real work happens: the account row itself
+       * cascades to four tables and would leave the workspace, its forms and
+       * every response behind. See `purgeUserData`. It throws rather than
+       * logs, so a failure leaves the account intact instead of half-deleted.
+       */
+      deleteUser: {
+        enabled: true,
+        beforeDelete: async (user) => {
+          await purgeUserData(env, user.id);
+        },
+        afterDelete: async (user) => {
+          // The one line that outlives the account, and it names no address.
+          console.log("account_deleted", user.id);
+        },
+      },
+    },
     databaseHooks: {
       user: {
         create: {
@@ -249,6 +323,53 @@ export function createAuth(env: Bindings) {
     // `editor`/`viewer` would resolve to no permissions at all.
     plugins: [
       apiKeyPlugin(),
+      /**
+       * Six digits instead of a link.
+       *
+       * A link is the wrong shape for the flow it sits in. Somebody signing up
+       * on a laptop reads the code off their phone and types it into the tab
+       * they are already looking at; a link asks them to open mail on the
+       * machine the session lives on, and drops the ones who cannot. It also
+       * survives the corporate scanners that follow every URL in an inbound
+       * message — which, with a one-shot link, silently consumes the token
+       * before the customer ever sees it.
+       *
+       * `overrideDefaultEmailVerification` is what makes this the *only* path:
+       * without it Better Auth would keep mailing links for sign-up while the
+       * app asked for a code.
+       */
+      emailOTP({
+        otpLength: 6,
+        expiresIn: 10 * 60,
+        // Three is Better Auth's default and is a support ticket waiting to
+        // happen for anyone who fat-fingers a digit twice. Five still leaves a
+        // 6-digit code with a ~1-in-200,000 chance per issued code.
+        allowedAttempts: 5,
+        /**
+         * Hashed at rest. A code is a credential for ten minutes, and the one
+         * thing worse than a database leak is a database leak that hands over
+         * live sign-in codes with it.
+         */
+        storeOTP: "hashed",
+        /**
+         * No account is created by a code alone. Without this, anyone who can
+         * receive mail at an address gets an account with no password —
+         * quietly reintroducing exactly the hole this change closes, from the
+         * other side.
+         */
+        disableSignUp: true,
+        overrideDefaultEmailVerification: true,
+        /**
+         * `verifyCurrentEmail` makes a change prove both ends: a code to the
+         * address on the account, then a code to the new one. A stolen session
+         * cannot move the account — and so cannot redirect password resets —
+         * without also holding the original inbox.
+         */
+        changeEmail: { enabled: true, verifyCurrentEmail: true },
+        sendVerificationOTP: async ({ email, otp, type }) => {
+          await enqueueMail(env, { kind: "otp", to: email, code: otp, purpose: type });
+        },
+      }),
       organization({
         ac,
         roles,

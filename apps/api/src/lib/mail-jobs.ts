@@ -5,6 +5,7 @@ import {
   autoReplyEmail,
   escapeHtml,
   invitationEmail,
+  otpEmail,
   passwordResetEmail,
   submissionNotificationEmail,
   type AnswerLine,
@@ -45,6 +46,12 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<number> {
 
     case "password_reset": {
       const msg = passwordResetEmail({ name: job.name, resetUrl: job.resetUrl });
+      await sendMail(env, { to: job.to, ...msg });
+      return 1;
+    }
+
+    case "otp": {
+      const msg = otpEmail({ code: job.code, purpose: job.purpose });
       await sendMail(env, { to: job.to, ...msg });
       return 1;
     }

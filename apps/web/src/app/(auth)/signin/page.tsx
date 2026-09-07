@@ -1,18 +1,28 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signIn, signUp } from "@/lib/auth/auth-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordField } from "@/components/auth/password-field";
 import { API_ORIGIN } from "@/lib/api/mutator";
 
 function SignInForm() {
-  // No router here on purpose: every success path on this page is a full
-  // navigation, because the session cookie has just changed. See `submit`.
+  /**
+   * The router is only for the paths that do NOT change the session.
+   *
+   * Landing on a dashboard uses `window.location.assign`, because the cookie
+   * has just changed and a client transition would render the new session
+   * against the previous session's cached RSC payload. The hop to
+   * `/auth/verify-email` is the opposite case — no cookie moved, nothing is
+   * cached that could be stale — so it is a normal navigation and keeps the
+   * `sessionStorage` entry the verify view is about to read.
+   */
+  const router = useRouter();
   const params = useSearchParams();
   /**
    * Both of these are read once, as initial state rather than from an effect.
@@ -30,6 +40,7 @@ function SignInForm() {
   );
   const [email, setEmail] = useState(() => params.get("email") ?? "");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [name, setName] = useState("");
   // A failed OAuth round trip comes back as a redirect, not a rejected promise, so the
   // reason only exists in the URL. Read once as the initial value rather than pushed in
@@ -94,15 +105,56 @@ function SignInForm() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Caught here rather than by the server, because the server cannot catch
+    // it: two boxes of dots that differ is not an error to Better Auth, it is
+    // a password. The whole value of the second field is this comparison.
+    if (mode === "signup" && password !== confirm) {
+      setError("Those two passwords don't match.");
+      return;
+    }
     setPending(true);
     setError(null);
     try {
       if (mode === "signup") {
         const res = await signUp.email({ email, password, name: name || (email.split("@")[0] ?? "User") });
         if (res.error) throw new Error(res.error.message ?? "Sign up failed");
-      } else {
-        const res = await signIn.email({ email, password });
-        if (res.error) throw new Error(res.error.message ?? "Sign in failed");
+        /*
+          Signing up no longer signs you in. The account exists and is inert
+          until the address is confirmed, so the only honest next screen is the
+          one asking for the code — and `?next=` is carried through it so an
+          invitation still survives the detour.
+
+          The address goes into session storage under the key the verify view
+          reads, which is how it knows who to resend to without asking again.
+        */
+        try {
+          sessionStorage.setItem("better-auth-ui.verify-email", email);
+        } catch {
+          // Private mode, or storage disabled. The view asks for the address.
+        }
+        router.push(`/auth/verify-email?redirectTo=${encodeURIComponent(nextPath)}`);
+        return;
+      }
+
+      const res = await signIn.email({ email, password });
+      if (res.error) {
+        /*
+          An unconfirmed address is not a failed sign-in, and saying "sign in
+          failed" to someone whose password was right sends them to the reset
+          form for a problem a reset cannot fix. The server has already mailed
+          a fresh code by the time this arrives — `sendOnSignIn` — so the right
+          move is to hand them the box to type it into.
+        */
+        if (res.error.status === 403 || /verif/i.test(res.error.message ?? "")) {
+          try {
+            sessionStorage.setItem("better-auth-ui.verify-email", email);
+          } catch {
+            // As above.
+          }
+          router.push(`/auth/verify-email?redirectTo=${encodeURIComponent(nextPath)}`);
+          return;
+        }
+        throw new Error(res.error.message ?? "Sign in failed");
       }
       // A full navigation, deliberately. `router.push` is a client transition:
       // it keeps the RSC payload and every cached query from before sign-in, so
@@ -184,19 +236,36 @@ function SignInForm() {
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
             </div>
-            <div className="space-y-1.5">
-              <div className="flex items-baseline justify-between">
-                <Label htmlFor="password">Password</Label>
-                {/* Sign-in only: offering a password reset to somebody creating
-                    an account is an answer to a question they have not asked. */}
-                {mode === "signin" && (
+            <PasswordField
+              id="password"
+              label="Password"
+              value={password}
+              onChange={setPassword}
+              disabled={pending}
+              autoComplete={mode === "signup" ? "new-password" : "current-password"}
+              // The meter belongs on the form where a password is *chosen*.
+              // Scoring one you already have is a judgement you cannot act on.
+              strength={mode === "signup"}
+              labelAction={
+                /* Sign-in only: offering a password reset to somebody creating
+                   an account is an answer to a question they have not asked. */
+                mode === "signin" ? (
                   <Link href="/forgot-password" className="text-muted-foreground text-xs hover:underline">
                     Forgot?
                   </Link>
-                )}
-              </div>
-              <Input id="password" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
-            </div>
+                ) : null
+              }
+            />
+            {mode === "signup" && (
+              <PasswordField
+                id="confirm-password"
+                label="Confirm password"
+                value={confirm}
+                onChange={setConfirm}
+                disabled={pending}
+                autoComplete="new-password"
+              />
+            )}
             {error && <p className="text-destructive text-sm">{error}</p>}
             <Button type="submit" disabled={pending} className="w-full rounded-full">
               {pending ? "…" : mode === "signin" ? "Sign in" : "Create account"}

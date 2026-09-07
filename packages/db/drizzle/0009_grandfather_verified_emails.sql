@@ -1,0 +1,11 @@
+-- Grandfather every account that existed before email verification was required.
+--
+-- `emailAndPassword.requireEmailVerification` is now on, and it is retroactive:
+-- without this, every customer who signed up under the old rules — where the
+-- address was never checked and `email_verified` stayed 0 — is locked out of
+-- their own workspace on the next deploy, with no way back in except a
+-- verification email they never asked for.
+--
+-- The cut-off is "already in the table when this ran", which is what a one-shot
+-- migration means. Everyone after this point verifies.
+UPDATE users SET email_verified = 1 WHERE email_verified = 0;

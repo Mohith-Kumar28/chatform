@@ -3,6 +3,7 @@ import { Bricolage_Grotesque, Caveat, Inter, JetBrains_Mono } from "next/font/go
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { ApiProvider } from "@/lib/api/api-provider";
+import { AuthUIProvider } from "@/components/auth/auth-ui-provider";
 import "./globals.css";
 
 const inter = Inter({
@@ -97,7 +98,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     >
       <body className="min-h-svh font-sans">
         <ThemeProvider>
-          <ApiProvider>{children}</ApiProvider>
+          {/*
+            Inside ApiProvider on purpose: Better Auth UI reads and writes
+            through TanStack Query, so it needs the client that already lives
+            there rather than a second one with its own cache of the session.
+          */}
+          <ApiProvider>
+            <AuthUIProvider>{children}</AuthUIProvider>
+          </ApiProvider>
           <Toaster />
         </ThemeProvider>
       </body>
