@@ -9,6 +9,7 @@ import {
   CircleAlert,
   CloudOff,
   ExternalLink,
+  FileClock,
   Link2,
   Loader2,
   Play,
@@ -32,7 +33,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TooltipHint } from "@/components/ui/kbd";
-import { BUILDER_TABS, tabMatches } from "./builder-tabs";
+import { BUILDER_TABS, HISTORY_SEGMENT, tabMatches } from "./builder-tabs";
 import { KEY } from "./use-builder-shortcuts";
 import { useBuilderStore, useCanRedo, useCanUndo } from "@/stores/builder-store";
 import { cn } from "@/lib/utils";
@@ -92,6 +93,7 @@ export function BuilderHeader({
   const redo = useBuilderStore((s) => s.redo);
   const canUndo = useCanUndo();
   const canRedo = useCanRedo();
+  const onHistory = pathname.endsWith(`/${HISTORY_SEGMENT}`);
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -194,6 +196,36 @@ export function BuilderHeader({
               <IconAction label="Undo" shortcut={KEY.undo()} icon={Undo2} disabled={!canUndo} onClick={undo} />
               <IconAction label="Redo" shortcut={KEY.redo()} icon={Redo2} disabled={!canRedo} onClick={redo} />
             </div>
+
+            {/*
+              History, beside undo and redo because that is what it is: the same
+              timeline, at a longer range. It used to be the seventh tab, which
+              spent a permanent nav slot on the one destination you reach for
+              only when something has already gone wrong.
+
+              Outside the `md` group above on purpose — undo and redo are hidden
+              on a phone because you rarely reach for them there, but "what
+              changed, and who published it" is exactly the question you get on
+              a phone, and hiding it would leave no way to answer it.
+            */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  href={`/forms/${formId}/${HISTORY_SEGMENT}`}
+                  aria-label="Version history"
+                  aria-current={onHistory ? "page" : undefined}
+                  className={cn(
+                    "mr-0.5 grid size-8 place-items-center rounded-lg transition-colors",
+                    onHistory
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                  )}
+                >
+                  <FileClock className="size-3.5" />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">History</TooltipContent>
+            </Tooltip>
 
             <Tooltip>
               <TooltipTrigger asChild>

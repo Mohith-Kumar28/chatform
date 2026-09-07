@@ -2,7 +2,6 @@ import {
   BarChart3,
   Blocks,
   Bot,
-  FileClock,
   GitBranch,
   Settings as SettingsIcon,
   Share2,
@@ -28,10 +27,20 @@ export const BUILDER_TABS = [
   { segment: "share", label: "Share", icon: Share2, hint: "Link, QR and email", alsoMatches: [] },
   { segment: "integrate", label: "Integrate", icon: Webhook, hint: "Embed, webhooks and spreadsheets", alsoMatches: [] },
   { segment: "settings", label: "Settings", icon: SettingsIcon, hint: "Access, email and metadata", alsoMatches: [] },
-  // Last, and deliberately so: it is where you go when something went wrong or you need
-  // to prove what changed, not part of building the form.
-  { segment: "history", label: "History", icon: FileClock, hint: "Changes and published versions", alsoMatches: [] },
 ] as const;
+
+/**
+ * History is a route, not a tab.
+ *
+ * It was the last slot in the strip, and a permanent nav slot is the most
+ * expensive thing this header has to give: every tab beside it is somewhere
+ * you go *while* building a form, and history is somewhere you go when
+ * something already went wrong or you need to prove what changed. Spending a
+ * seventh of the strip on it made the other six harder to scan for no gain.
+ * It sits beside undo and redo now — which is what it actually is, the same
+ * timeline at a longer range — and it is still on ⌘K and its own URL.
+ */
+export const HISTORY_SEGMENT = "history";
 
 /** The two views that live under the Build tab. */
 export const BUILD_VIEWS = [
@@ -43,6 +52,9 @@ export type BuilderSegment = (typeof BUILDER_TABS)[number]["segment"];
 
 export const BUILDER_SEGMENTS = [
   ...BUILDER_TABS.map((t) => t.segment),
+  // Listed by hand because they are real builder routes without a tab of their
+  // own — two views inside Build, and the history page behind the header icon.
+  HISTORY_SEGMENT,
   "workflow",
   "design",
 ] as readonly string[];
