@@ -109,6 +109,15 @@ function messageFor(err: unknown): string {
     case "auth/captcha-check-failed":
       return "We couldn't confirm you're human. Please try again.";
     default:
+      // Everything that reaches here is a code this file has never seen, and
+      // until now it vanished into a generic sentence that named nothing —
+      // leaving no way to tell a carrier hiccup from a bug in this module
+      // without reproducing it by hand against the live SDK.
+      //
+      // The raw error goes with it: Firebase hangs the useful part off
+      // `customData`/`serverResponse` rather than the message, and that detail
+      // is the difference between a guess and a diagnosis.
+      console.error("[chatform] Unhandled phone verification error:", code || "(no code)", err);
       return "We couldn't send that code. Please try again.";
   }
 }
