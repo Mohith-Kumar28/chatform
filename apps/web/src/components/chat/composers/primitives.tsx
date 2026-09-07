@@ -35,8 +35,17 @@ export function Chip({
         "active:scale-[0.97] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-50",
         // Minimum 44px touch target on coarse pointers.
         "min-h-[2.75rem] sm:min-h-0",
+        /*
+         * Selected reads as an outline, not a fill.
+         *
+         * A filled chip is the same shape, colour and weight as the Continue
+         * button sitting directly under it, so a multi-select with two picks
+         * showed three accent-filled pills and nothing saying which one
+         * finishes the question. A pick is now the accent *edge* plus a wash
+         * of it; the only filled thing on screen is the action.
+         */
         selected
-          ? "border-transparent bg-[var(--cf-accent)] text-[var(--cf-accent-text)]"
+          ? "border-[var(--cf-accent)] bg-[color-mix(in_oklch,var(--cf-accent)_10%,var(--cf-chip-bg))] shadow-[inset_0_0_0_1px_var(--cf-accent)]"
           : "border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] hover:border-[var(--cf-accent)]",
         className,
       )}
@@ -45,7 +54,9 @@ export function Chip({
         <kbd
           className={cn(
             "hidden size-4 place-items-center rounded text-[0.625rem] font-medium sm:grid",
-            selected ? "bg-white/20" : "bg-[var(--cf-chip-border)]/40",
+            selected
+              ? "bg-[var(--cf-accent)] text-[var(--cf-accent-text)]"
+              : "bg-[var(--cf-chip-border)]/40",
           )}
         >
           {shortcut}

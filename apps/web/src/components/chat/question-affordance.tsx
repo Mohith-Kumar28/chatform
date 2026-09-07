@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CornerDownLeft } from "lucide-react";
 import { isMeetingRoom, schedulingLabel, type PublicBlock } from "@repo/form-schema";
 import { Chip } from "./composers/primitives";
 import { RatingComposer, ScaleComposer } from "./composers/rating";
@@ -51,6 +52,9 @@ export const QuestionAffordance = memo(function QuestionAffordance(props: {
     <div
       inert={props.disabled}
       aria-busy={props.disabled}
+      /* Read by `useChoiceKeys`: inside this subtree Enter means "continue",
+         even when a chip has focus. */
+      data-affordance=""
       className={cn(
         "space-y-2 transition-opacity duration-[var(--duration-standard)] ease-[var(--ease-out)]",
         props.disabled && "opacity-55",
@@ -150,10 +154,19 @@ function useChoiceKeys(choices: Choice[], onPick: (choice: Choice) => void, onEn
       // Safe only while the box is empty: someone writing "1 or 2 a week"
       // keeps their digits.
       if (inField && (target as HTMLInputElement).value !== "") return;
-      // Never steal a keystroke from a control that is itself a choice — the
-      // button already handles Enter and Space.
+      /*
+       * Enter finishes a multi-select, and has to win against the chip.
+       *
+       * Picking the last option leaves that chip focused, so the browser's own
+       * "Enter activates the focused button" would un-pick what was just
+       * picked — the exact opposite of what the ⏎ on the Continue button now
+       * promises. Inside the affordance we take the key and preventDefault so
+       * the chip never sees the click; Space still toggles. Outside it — the
+       * skip link, the send button — the focused control keeps its Enter.
+       */
       if (e.key === "Enter") {
-        if (!latest.current.onEnter || tag === "BUTTON") return;
+        if (!latest.current.onEnter) return;
+        if (tag === "BUTTON" && !target?.closest("[data-affordance]")) return;
         e.preventDefault();
         latest.current.onEnter();
         return;
@@ -308,9 +321,11 @@ function AffordanceControls({
               type="button"
               disabled={disabled || multi.length < minSelections}
               onClick={submitMulti}
-              className="h-9 rounded-full bg-[var(--cf-accent)] px-4 text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
+              className="inline-flex h-9 items-center gap-2 rounded-full bg-[var(--cf-accent)] px-4 text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
             >
               Continue{multi.length > 0 ? ` · ${multi.length}` : ""}
+              {/* The shortcut was already live and completely invisible. */}
+              <CornerDownLeft className="hidden size-3.5 opacity-70 sm:block" aria-hidden />
             </button>
             <p className="text-xs opacity-55">
               {multi.length >= maxSelections
