@@ -9,12 +9,30 @@ import { PricingSection } from "@/components/marketing/pricing-section";
 import { CtaBand } from "@/components/marketing/cta-band";
 import { Band, BandTitle, BandLede } from "@/components/marketing/band";
 
+/**
+ * The scan positions carry the category; the page carries the claim.
+ *
+ * Both titles used to be "the first form that answers back", which is the
+ * headline four inches below and the headline drawn into the share card
+ * itself. An unfurl that repeats its own image in its own title has said one
+ * thing twice and the other thing never — so the card keeps the claim, drawn,
+ * and the title beside it names what the product is. See the note in
+ * `app/layout.tsx` for why the split exists at all.
+ */
 export const metadata: Metadata = {
-  title: "chatform — the first form that answers back",
+  /**
+   * `absolute`, because the root layout's `template: "%s · chatform"` appends
+   * the brand to every child title — and this title already opens with it. The
+   * landing page has been shipping `"chatform — … · chatform"` in the tab and
+   * in the Google result, which is the one page whose title anyone actually
+   * sees. Every other route wants the template and keeps it; only the
+   * home page names the brand itself.
+   */
+  title: { absolute: "chatform — agentic forms that interview for you" },
   description:
-    "An AI interviewer that asks your questions one at a time, understands what people actually type, and answers their questions from a knowledge base you write.",
+    "Agentic forms: an AI interviewer that asks your questions one at a time, understands what people actually type, and answers their questions from a knowledge base you write.",
   openGraph: {
-    title: "chatform — the first form that answers back",
+    title: "chatform — agentic forms that interview for you",
     description: "An AI interviewer that asks your questions — and answers theirs.",
     type: "website",
   },

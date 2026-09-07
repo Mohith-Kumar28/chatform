@@ -36,9 +36,30 @@ export const metadata: Metadata = {
    * this for absolute URLs.
    */
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_ORIGIN ?? "https://chatform.in"),
-  title: { default: "chatform — forms that talk back", template: "%s · chatform" },
+  /**
+   * Two vocabularies, doing two different jobs.
+   *
+   * The page headlines make the claim only we can make — "the first form that
+   * answers back" — and that is the right thing to say to someone who has
+   * already stopped and is reading. It is the wrong thing to say in a `title`,
+   * which is a browser tab, a Google result and a Slack unfurl: places people
+   * *scan*, where the reader has not yet decided what kind of product this is
+   * and will not work it out from a metaphor. Worse, "forms that talk back"
+   * has a second reading in English — talking back is what an insolent child
+   * does — and that was the string in every tab on the site.
+   *
+   * So the category goes where people scan and search, and the claim stays
+   * where people read. "Agentic" is the honest word for it rather than a
+   * fashionable one: this thing carries a persona, a goal and a knowledge
+   * base, and a *conversational* form is only the chat bubbles, which the
+   * category has had since 2015.
+   */
+  title: {
+    default: "chatform — agentic forms that interview for you",
+    template: "%s · chatform",
+  },
   description:
-    "Agentic chatbot forms. Your form is an AI interviewer that asks, answers questions back, and gets to the goal.",
+    "Agentic forms: an AI interviewer with a persona, a goal and a knowledge base. It asks your questions one at a time, answers theirs, and gets to the point.",
 };
 
 export const viewport: Viewport = {

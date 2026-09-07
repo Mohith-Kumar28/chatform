@@ -41,9 +41,21 @@ export function MarketingFooter() {
       <div className="mx-auto grid max-w-6xl gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_repeat(3,1fr)]">
         <div>
           <Logo />
+          {/* The one place on the page that names the category outright. A
+              footer under a logo is scanned, not read — it is where someone
+              who scrolled the whole page without working out what this is
+              finally finds out.
+
+              The stack is not repeated here. This line used to end "hosted at
+              the edge on Cloudflare Workers, D1 and Durable Objects", which is
+              the same list the bar at the foot of this very footer already
+              carries, four inches below. Said twice in one region, it stopped
+              reading as proof and started reading as filler — and it was
+              crowding out the only sentence on the page that says what the
+              product is. */}
           <p className="text-body text-muted-foreground mt-3 max-w-xs">
-            Forms answered as a conversation, hosted at the edge on Cloudflare Workers, D1 and
-            Durable Objects.
+            Agentic forms: an AI interviewer that asks your questions, answers theirs, and gets to
+            the point.
           </p>
           <div className="mt-4">
             <ThemeToggle />

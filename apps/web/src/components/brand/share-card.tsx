@@ -14,7 +14,11 @@ import { ImageResponse } from "next/og";
  * fetch.
  */
 
-export const shareCardAlt = "chatform — the first form that answers back";
+/* Alt text is read by someone who cannot see the card, in a feed of other
+   cards — a scan position, so it names the category. The drawn headline below
+   keeps the claim; a screen reader that got only the metaphor would be the one
+   reader who never finds out what this is. */
+export const shareCardAlt = "chatform — agentic forms that interview for you";
 export const shareCardSize = { width: 1200, height: 630 };
 export const shareCardContentType = "image/png";
 
