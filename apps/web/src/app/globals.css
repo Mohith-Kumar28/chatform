@@ -643,8 +643,10 @@
    needs a `@supports` gate to avoid rendering as nothing where
    `-webkit-text-fill-color` lands without `background-clip: text`, and shipping
    that machinery for a headline nobody has asked for is a utility that exists
-   to be found rather than used. The hero says the same thing better anyway, by
-   colouring two whole words rather than fading across them.                    */
+   to be found rather than used. The hero makes the point without it: the two
+   hues are the ground the headline sits ON, at full strength, and the type is
+   one near-black that holds from end to end. Emphasis there is weight and
+   scale, which is what a headline that size has to use anyway.                 */
 @utility bg-brand-gradient {
   background-image: var(--brand-gradient);
 }
