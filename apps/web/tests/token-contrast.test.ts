@@ -211,9 +211,15 @@ describe("status token contrast", () => {
    * violet's L=0.638 was chosen for exactly this. If someone retints either
    * hue toward the ink, the closing band on the landing page goes quietly
    * unreadable across half its width, and this is the only thing watching.
+   *
+   * Four endpoints, not two. `--brand-gradient-hover` runs `--primary-hover`
+   * into `--brand-violet-hover` under the same single ink, and it is now worn
+   * by a control — `Button` variant `gradient`, the upgrade ask — rather than
+   * by a band nobody hovers. The hovered state of a button is the state it is
+   * read in most, so it is checked exactly as hard as the resting one.
    */
   for (const [name, block] of Object.entries(themeBlocks())) {
-    for (const end of ["brand-orange", "brand-violet"] as const) {
+    for (const end of ["brand-orange", "brand-violet", "primary-hover", "brand-violet-hover"] as const) {
       it(`the ${end} end of the brand gradient clears AA with on-primary in ${name}`, () => {
         const light = themeBlocks().light;
         const bg = readToken(block, end) ?? readToken(light, end);

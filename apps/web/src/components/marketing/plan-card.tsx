@@ -118,10 +118,16 @@ export function PlanCard({
             : `${dollars(plan.priceMonthlyCents * 12)} a year at this rate`}
       </p>
 
+      {/* The featured card's button is the page's ask, so it takes both hues
+          rather than one. On the violet wash the sweep starts orange and lands
+          near the card's own colour — the card frames it instead of competing
+          with it, which is what the flat-orange button on this ground never
+          quite did. Every other card stays `outline`: three loud buttons in a
+          row is a row with no recommendation in it. */}
       <Button
         asChild
         shape="pill"
-        variant={featured ? "default" : "outline"}
+        variant={featured ? "gradient" : "outline"}
         className="mt-5 w-full"
       >
         <Link href={ctaHref}>

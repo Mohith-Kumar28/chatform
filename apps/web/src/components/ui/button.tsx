@@ -38,6 +38,27 @@ const buttonVariants = cva(
           "bg-brand-violet text-brand-violet-foreground shadow-xs hover:bg-brand-violet-hover",
         "brand-soft":
           "bg-brand-violet-soft text-brand-violet-soft-foreground hover:bg-brand-violet-soft/70",
+        // Both plates at once — the closing band's ground, at button size.
+        //
+        // Reserved, and the reservation is the whole design (DESIGN.md 4.1b):
+        // this is the *commercial ask*, and there is at most one on a screen.
+        // Upgrade, unlock, start the paid plan. Everything else that is merely
+        // important is `default`. A product where the gradient is how you make
+        // a control interesting is a product where the gradient means nothing,
+        // and the one button that actually needs to be seen is no longer the
+        // one wearing it.
+        //
+        // Hover cross-fades rather than swapping: `background-image` does not
+        // interpolate, so a straight swap of two gradients snaps. The overlay
+        // is a `::before` at negative z-index inside the button's own stacking
+        // context, which paints over the resting sweep and under the label.
+        gradient: [
+          "relative isolate bg-brand-gradient text-on-primary shadow-xs",
+          "before:absolute before:inset-0 before:-z-10 before:rounded-[inherit]",
+          "before:bg-brand-gradient-hover before:opacity-0 before:transition-opacity",
+          "before:duration-[var(--duration-micro)] before:ease-[var(--ease-out)]",
+          "hover:before:opacity-100",
+        ].join(" "),
         link: "text-primary underline-offset-4 hover:underline",
       },
       shape: {

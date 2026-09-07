@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/api/mutator";
 import { usePostApiBillingCheckout, usePostApiBillingPortal } from "@/lib/api/billing/billing";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -165,16 +166,14 @@ export function UpgradeDialog() {
         {error && <p className="text-destructive mt-3 text-center text-sm">{error}</p>}
 
         <div className="mt-5 grid gap-2">
-          <button
-            type="button"
-            onClick={start}
-            disabled={busy}
-            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-[var(--primary)] px-4 text-sm font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:opacity-60"
-          >
+          {/* The ask itself, in both hues. This is the one button in the
+              product that the gradient is for: if it is not this, it is not
+              anything. */}
+          <Button variant="gradient" size="lg" onClick={start} disabled={busy}>
             {paying && !busy && <CreditCard className="size-3.5" aria-hidden />}
             {busy ? "Opening…" : paying ? `Switch to ${plan.name}` : `Upgrade to ${plan.name}`}
             {!busy && (paying ? <ExternalLink className="size-3" aria-hidden /> : <ArrowRight className="size-3.5" aria-hidden />)}
-          </button>
+          </Button>
           {/* Say where the button goes before it goes there. A dialog that vanishes into a
               payment provider with no warning reads as a redirect that went wrong. */}
           {paying && (

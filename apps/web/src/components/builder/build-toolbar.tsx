@@ -126,8 +126,11 @@ export function BuildToolbar() {
         </div>
 
         <div className="flex flex-1 justify-end">
+          {/* The only ask on this toolbar, and the only thing here wearing the
+              brand at full strength. `soft` put it at the same volume as the
+              Design chip opposite it — two quiet pills, neither read. */}
           {showUpgrade && (
-            <Button size="sm" shape="pill" variant="soft" asChild>
+            <Button size="sm" shape="pill" variant="gradient" asChild>
               <Link href="/billing">
                 <Sparkles className="size-3.5" />
                 Upgrade

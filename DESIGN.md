@@ -394,6 +394,7 @@ Light (default — warm cream):
 --brand-violet-soft-foreground: oklch(0.440 0.160 300);
 --brand-violet-foreground: oklch(0.225 0.012 55); /* = --on-primary */
 --brand-gradient:        linear-gradient(100deg, var(--brand-orange), var(--brand-violet));
+--brand-gradient-hover:  linear-gradient(100deg, var(--primary-hover), var(--brand-violet-hover));
 
 --color-primary:         var(--brand-orange);
 --color-primary-foreground: oklch(0.225 0.012 55);  /* warm near-black, 6.1:1 */
@@ -420,10 +421,25 @@ two hues divide by role and the division is the rule:
 | Wears it | primary buttons, links, the send control, focus ring | active nav pill, the featured plan card, chart series 2, `Badge`/`Button` variant `brand` |
 | In the mark | the respondent's plate | the interviewer's plate |
 
-Both together — `--brand-gradient` / `bg-brand-gradient` — are reserved for
-surfaces that are *about* the brand: the hero wash, the closing CTA band, the
-mark itself. A gradient is not a way to make an ordinary control more
-interesting, and there is no gradient-text utility for the same reason.
+Both together — `--brand-gradient` / `bg-brand-gradient` — are reserved, and the
+reservation has two halves:
+
+1. **Surfaces that are *about* the brand** — the hero wash, the closing CTA
+   band, the mark itself.
+2. **The commercial ask** — `Button variant="gradient"`, and at most one per
+   screen. Upgrade, unlock, buy the plan. This is the money moment and it is
+   the only control in the product allowed to wear both hues at once.
+
+Everything else that is merely important stays `default`. The gradient is not a
+way to make an ordinary control more interesting: the moment a second one
+appears on a screen, the first stops meaning anything, and the button that
+actually needed to be seen is no longer the one wearing it. `/billing` is the
+worked example — the free plan's "See plans" is a gradient, the paying plan's
+"Manage plan & billing" beside it is not, because one asks for money and the
+other is account admin.
+
+There is still no gradient-text utility, for the same reason there is no
+gradient `Input`: type is read, not looked at.
 
 One ink serves both grounds. `--on-primary` (warm near-black, `#201a16`)
 measures 6.1:1 on the orange and 4.7:1 on the violet; white is 2.8:1 and 3.6:1
@@ -466,6 +482,7 @@ Scale (px/leading/tracking): display-xl 48/1.05/-0.02em (landing only) · displa
 ### 4.4 Component language decisions
 
 - Primary buttons: orange fill, **warm near-black text** (not white — 2.8:1), hover darkens + translateY(-1px)? No — keep static; press scales 0.98. Focus ring 2px offset. `variant="brand"` is the violet twin, for the second action in a pair.
+- `variant="gradient"` is the upgrade ask (§4.1b) — `--brand-gradient` under `--on-primary`, hovering to `--brand-gradient-hover`, where the orange end darkens and the violet end lightens because both move *away* from the one ink they share. All four endpoints clear AA and `tests/token-contrast.test.ts` asserts it. The hover **cross-fades** through a `::before` overlay: `background-image` does not interpolate, so swapping two gradients snaps.
 - The two brand hues never share an edge at full strength — a hard orange/violet seam is two posters fighting. They meet as a gradient (`--brand-gradient`) or across a ground/mark split (violet band, orange chip), never as adjacent plates.
 - Cards: white on cream with border + shadow-xs; interactive cards lift (shadow-md, -2px) with 150ms ease-out.
 - Badges: pill, soft backgrounds (primary-soft/brand-violet-soft/accent/destructive/10%).

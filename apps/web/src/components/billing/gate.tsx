@@ -5,6 +5,7 @@ import { Lock } from "lucide-react";
 import { FEATURES, PLANS, minPlanFor, type FeatureKey } from "@repo/entitlements";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { usePaywall } from "@/stores/paywall-store";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -214,13 +215,12 @@ export function LockedOverlay({
 
           <p className="mt-1 text-sm text-balance">{headline ?? meta.blurb}</p>
 
-          <button
-            type="button"
-            onClick={() => upgrade(feature, { count, ...context })}
-            className="mt-4 inline-flex h-9 items-center rounded-lg bg-[var(--primary)] px-3.5 text-sm font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90"
-          >
+          {/* Full-strength brand on a deliberately drained surface — the rows
+              behind it are blurred and desaturated, so this is the only colour
+              left in the frame. That is the whole composition. */}
+          <Button variant="gradient" className="mt-4" onClick={() => upgrade(feature, { count, ...context })}>
             Unlock with {plan.name}
-          </button>
+          </Button>
 
           <p className="text-muted-foreground mt-2 text-xs">
             ${(plan.priceMonthlyCents / 100).toFixed(0)}/mo, or $

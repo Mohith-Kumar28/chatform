@@ -275,8 +275,13 @@ export default function BillingPage() {
                   Pro and Business add your own branding, deeper analytics, verified respondents
                   and a bigger AI allowance. Nothing you have already collected changes.
                 </p>
+                {/* Gradient here and plain `default` on the portal button
+                    below, deliberately: this one asks for money, that one is
+                    account admin. The hue is the difference between the two,
+                    not the size. */}
                 <Button
                   size="lg"
+                  variant="gradient"
                   className="mt-4"
                   disabled={!canManage || busy}
                   onClick={() => startCheckout(intended ?? "pro")}

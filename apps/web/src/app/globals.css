@@ -200,6 +200,19 @@
      nudged. */
   --brand-gradient: linear-gradient(100deg, var(--brand-orange) 0%, var(--brand-violet) 100%);
 
+  /* The hover twin, for the one control that wears the gradient (`Button`
+     variant `gradient` — see the note there).
+
+     Each end moves the way its own hue is allowed to move: the orange darkens
+     to `--primary-hover`, the violet lightens to `--brand-violet-hover`. That
+     looks like an inconsistency and is the same rule stated twice — a hover
+     state moves the fill AWAY from its ink, and this fill carries one ink from
+     end to end. Both hover values clear AA against `--on-primary` (5.0:1 and
+     5.7:1 in light), which is what makes a gradient button legible in the
+     state you spend the most time looking at. The contrast test asserts all
+     four endpoints, not just the two resting ones.                            */
+  --brand-gradient-hover: linear-gradient(100deg, var(--primary-hover) 0%, var(--brand-violet-hover) 100%);
+
   /* The brand hues at band strength, derived exactly as the families are, so a
      brand ground is a pastel on cream and a deep tint on charcoal from one
      declaration. */
@@ -416,6 +429,11 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-soft: var(--primary-soft);
   --color-brand-orange: var(--brand-orange);
+  /* The ink both brand grounds share, as a class. `text-primary-foreground`
+     says "ink for `bg-primary`" and is wrong on a surface that has no single
+     background — a gradient. This is the same value under the name that fits
+     the job. */
+  --color-on-primary: var(--on-primary);
   --color-brand-violet: var(--brand-violet);
   --color-brand-violet-foreground: var(--brand-violet-foreground);
   --color-brand-violet-hover: var(--brand-violet-hover);
@@ -580,6 +598,13 @@
    colouring two whole words rather than fading across them.                    */
 @utility bg-brand-gradient {
   background-image: var(--brand-gradient);
+}
+
+/* The hovered sweep. Its own utility rather than an arbitrary-value class in
+   one component, for the same reason the resting one is: the pair is a token
+   reference in both places or it drifts. */
+@utility bg-brand-gradient-hover {
+  background-image: var(--brand-gradient-hover);
 }
 
 /* Numeric columns and metrics: keep digits from jittering as values change. */
