@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  BookOpen,
+  ExternalLink,
   FileClock,
   FileStack,
   Gauge,
@@ -221,6 +223,38 @@ export function CommandPalette() {
               <CommandItem key={item.href} value={item.label} onSelect={() => go(item.href)}>
                 <item.icon className="size-3.5 opacity-60" />
                 {item.label}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+
+          {/*
+            The docs are a different app in the same domain, and the palette is
+            where someone types "docs" expecting something to happen. Each opens
+            in a new tab: you look something up to keep working, not to lose the
+            screen you were working on. The `value` strings carry the words
+            people actually type — "api", "reference", "help", "scopes" — so the
+            match does not depend on remembering our page titles.
+          */}
+          <CommandGroup heading="Documentation">
+            {[
+              { label: "Documentation", href: "/docs", hint: "docs help guide reference" },
+              { label: "Quickstart", href: "/docs/quickstart", hint: "docs getting started first request" },
+              // Not `/docs/api`: that folder has no index page, only generated
+              // operation pages under it, so the link would 404.
+              { label: "Authentication", href: "/docs/authentication", hint: "docs api keys headers 401 auth" },
+              { label: "Scopes", href: "/docs/scopes", hint: "docs scopes permissions api keys reference" },
+            ].map((doc) => (
+              <CommandItem
+                key={doc.href}
+                value={`${doc.label} ${doc.hint}`}
+                onSelect={() => {
+                  setOpen(false);
+                  window.open(doc.href, "_blank", "noopener,noreferrer");
+                }}
+              >
+                <BookOpen className="size-3.5 opacity-60" />
+                <span className="min-w-0 flex-1 truncate">{doc.label}</span>
+                <ExternalLink className="text-muted-foreground size-3 shrink-0" />
               </CommandItem>
             ))}
           </CommandGroup>

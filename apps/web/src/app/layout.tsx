@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Bricolage_Grotesque, Inter, JetBrains_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Caveat, Inter, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { ApiProvider } from "@/lib/api/api-provider";
@@ -15,6 +15,21 @@ const bricolage = Bricolage_Grotesque({
   subsets: ["latin"],
   display: "swap",
   weight: ["500", "600", "700"],
+});
+/**
+ * The margin hand.
+ *
+ * Marketing only, and deliberately a real handwriting face rather than an
+ * italic of the display font: the point of an annotation is that it reads as
+ * something a person added AFTER the page was set, and a slanted Bricolage
+ * still reads as the page talking to itself. Two weights, no more — this
+ * writes six short notes on one page and nothing else in the product.
+ */
+const caveat = Caveat({
+  variable: "--font-hand",
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["500", "700"],
 });
 const jetbrains = JetBrains_Mono({
   variable: "--font-jetbrains",
@@ -78,7 +93,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${bricolage.variable} ${jetbrains.variable}`}
+      className={`${inter.variable} ${bricolage.variable} ${caveat.variable} ${jetbrains.variable}`}
     >
       <body className="min-h-svh font-sans">
         <ThemeProvider>

@@ -6,10 +6,10 @@ import { usePathname } from "next/navigation";
 import { Menu, Search } from "lucide-react";
 import { AuthGuard } from "./auth-guard";
 import { AppNav, APP_NAV } from "./app-nav";
+import { AppMark } from "./app-mark";
 import { PlanBadge } from "./plan-badge";
 import { UserMenu } from "./user-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { CommandPalette, openCommandPalette } from "./command-palette";
 import { useAppShortcuts } from "./use-app-shortcuts";
 import { ShortcutsDialog } from "@/components/ui/shortcuts-dialog";
@@ -50,9 +50,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             </Button>
 
             <Link href="/dashboard" className="flex shrink-0 items-center gap-2">
-              <span className="bg-primary text-primary-foreground grid size-7 place-items-center rounded-lg text-sm font-bold">
-                c
-              </span>
+              <AppMark />
               <span className="font-display hidden font-semibold sm:inline">chatform</span>
             </Link>
 
@@ -88,7 +86,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 <Search className="size-4" />
               </Button>
               <PlanBadge />
-              <ThemeToggle />
+              {/* Theme moved into the account menu: it is a setting you change
+                  once, and it was spending a permanent header slot next to the
+                  avatar that opens a menu with room for it. */}
               <UserMenu />
             </div>
           </div>

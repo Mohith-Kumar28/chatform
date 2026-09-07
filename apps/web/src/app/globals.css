@@ -560,6 +560,9 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-bricolage), var(--font-inter), sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  /* The margin hand. Marketing annotations only — never a control, never body
+     copy, and never anything a reader has to be able to read quickly. */
+  --font-hand: var(--font-caveat), ui-rounded, cursive;
 
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);

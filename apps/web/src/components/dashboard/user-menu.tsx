@@ -1,37 +1,69 @@
 "use client";
 
-import Link from "next/link";
-import { Crown, KeyRound, LogOut, Settings, Users } from "lucide-react";
+import { BookOpen, Check, Crown, LogOut, Monitor, Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 import { signOut, useSession } from "@/lib/auth/auth-client";
 import { useEntitlements } from "@/hooks/use-entitlements";
+import { useHydrated } from "@/hooks/use-client-value";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 /**
- * Account menu. Replaces a bare email string plus a "Sign out" ghost button,
- * and finally uses the `avatar` and `dropdown-menu` primitives, which had zero
- * importers despite being installed.
+ * Account menu.
+ *
+ * It used to be a second copy of the navigation — Team, API keys, Plan &
+ * usage — three items that are already in the header nav two inches to the
+ * left, and were the only things in the menu besides Sign out. A menu whose
+ * entire contents are duplicates of the visible nav is a menu that teaches
+ * people not to open it.
+ *
+ * What belongs here is what has nowhere else to be: who you are signed in as,
+ * the theme (a setting you change once, which was spending a permanent header
+ * slot on itself), the way out to the docs, and the way out entirely.
  */
+
+const THEMES = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "System", icon: Monitor },
+] as const;
+
 export function UserMenu() {
   const { data: session } = useSession();
   const ent = useEntitlements();
+  const { theme, setTheme } = useTheme();
+  // The server cannot know the resolved theme, so no tick is drawn until the
+  // client has told us which one is real.
+  const mounted = useHydrated();
   if (!session) return null;
 
   const email = session.user.email;
   const name = session.user.name || email;
+  const image = session.user.image;
   const initials = (name.match(/\b\w/g) ?? ["?"]).slice(0, 2).join("").toUpperCase();
+  const current = THEMES.find((t) => t.value === theme) ?? THEMES[2];
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="focus-visible:ring-ring/50 rounded-full outline-none focus-visible:ring-2">
         <Avatar className="size-8">
+          {/*
+            Google and GitHub both hand us a photo at sign-in and it was being
+            thrown away in favour of two letters. Radix only swaps in the
+            fallback when the image fails or is absent, so the initials still
+            cover an email signup — and a dead avatar URL.
+          */}
+          {image && <AvatarImage src={image} alt="" />}
           <AvatarFallback className="bg-primary-soft text-primary text-xs font-medium">
             {initials}
           </AvatarFallback>
@@ -56,25 +88,32 @@ export function UserMenu() {
           )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <current.icon className="size-3.5" strokeWidth={1.75} />
+            Theme
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-36">
+            {THEMES.map((opt) => (
+              <DropdownMenuItem key={opt.value} onSelect={() => setTheme(opt.value)}>
+                <opt.icon className="size-3.5" strokeWidth={1.75} />
+                <span className="flex-1">{opt.label}</span>
+                {mounted && theme === opt.value && <Check className="size-3.5" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
+        {/* New tab, not a navigation: reading the reference should not cost you
+            the screen you were reading it for. */}
         <DropdownMenuItem asChild>
-          <Link href="/team">
-            <Users className="size-3.5" />
-            Team
-          </Link>
+          <a href="/docs" target="_blank" rel="noreferrer">
+            <BookOpen className="size-3.5" />
+            Documentation
+          </a>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/api-keys">
-            <KeyRound className="size-3.5" />
-            API keys
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          {/* `/billing` directly: `/usage` is a redirect stub kept for bookmarks. */}
-          <Link href="/billing">
-            <Settings className="size-3.5" />
-            Plan &amp; usage
-          </Link>
-        </DropdownMenuItem>
+
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"
