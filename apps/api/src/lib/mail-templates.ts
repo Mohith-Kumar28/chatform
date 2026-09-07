@@ -26,6 +26,19 @@ const VIOLET = "#9d6ee4";
 /** The one ink that clears AA on both ends of the brand gradient. */
 const ON_PRIMARY = "#201a16";
 
+/**
+ * The mark, as a hosted PNG.
+ *
+ * Absolute and pinned to the production origin rather than threaded through
+ * from `APP_ORIGIN`: an email is opened days later, on a device that has never
+ * heard of a preview deployment and cannot reach a localhost, and a broken
+ * image in the header is worse than no image. SVG is not an option — Gmail and
+ * every version of Outlook strip it — so this is a 96px PNG served at 24, and
+ * the wordmark beside it stays live text so a client with images switched off
+ * still shows the name rather than an empty box.
+ */
+const MARK_URL = "https://chatform.in/brand/email-mark.png";
+
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -41,8 +54,14 @@ export function escapeHtml(s: string): string {
  * `preheader` is the grey line a client shows next to the subject in the
  * inbox list. Left unset it fills itself with whatever text comes first,
  * which is usually a logo alt attribute — so it is a required argument.
+ *
+ * `brand: false` removes the header lockup entirely, for the auto-reply of a
+ * customer who has paid to have our name off their mail. That flag already
+ * governed the footer; the header was quietly ignoring it, and putting a logo
+ * up there would have made a small inconsistency into a visible one.
  */
-function layout(opts: { preheader: string; body: string; footer?: string }): string {
+function layout(opts: { preheader: string; body: string; footer?: string; brand?: boolean }): string {
+  const brand = opts.brand !== false;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -60,13 +79,24 @@ function layout(opts: { preheader: string; body: string; footer?: string }): str
         <tr>
           <td style="height:4px;line-height:4px;font-size:0;background-color:${ORANGE};background-image:linear-gradient(100deg, ${ORANGE}, ${VIOLET});">&nbsp;</td>
         </tr>
-        <tr>
+        ${
+          brand
+            ? `<tr>
           <td style="padding:32px 32px 8px 32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-            <div style="font-size:15px;font-weight:600;letter-spacing:-0.01em;color:${INK};">chatform</div>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding-right:8px;line-height:0;" valign="middle">
+                  <img src="${MARK_URL}" width="24" height="24" alt="" style="display:block;width:24px;height:24px;border:0;outline:none;text-decoration:none;">
+                </td>
+                <td style="font-size:16px;font-weight:700;letter-spacing:-0.035em;color:${INK};" valign="middle">chatform</td>
+              </tr>
+            </table>
           </td>
-        </tr>
+        </tr>`
+            : ""
+        }
         <tr>
-          <td style="padding:8px 32px 32px 32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:${INK};">
+          <td style="padding:${brand ? "8px" : "32px"} 32px 32px 32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:${INK};">
 ${opts.body}
           </td>
         </tr>
@@ -292,6 +322,7 @@ export function autoReplyEmail(a: {
     html: layout({
       preheader: a.bodyText.slice(0, 140),
       body,
+      brand: a.showPoweredBy,
       footer: a.showPoweredBy
         ? `In reply to your response to ${escapeHtml(a.formTitle)}. Powered by chatform.`
         : `In reply to your response to ${escapeHtml(a.formTitle)}.`,

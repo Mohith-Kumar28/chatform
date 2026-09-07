@@ -231,6 +231,29 @@ describe("invitation and reset", () => {
     expect(m.text).toContain("https://app.chatform.in/accept-invitation?id=inv_1");
   });
 
+  /**
+   * The header lockup, on a message anybody can trigger.
+   *
+   * The mark is a remote PNG at an absolute production URL, because a relative
+   * one has no meaning in an inbox and `localhost` would be a permanently
+   * broken image in somebody's archive. The wordmark stays live text so a
+   * client with images blocked — which is most of them, on first open — still
+   * shows the name rather than an empty box.
+   */
+  it("puts the mark and the wordmark in the header", async () => {
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "password_reset",
+      to: "ada@example.com",
+      name: "Ada",
+      resetUrl: "https://app.chatform.in/reset-password?token=abc",
+    });
+    const html = sent[0]!.html;
+    expect(html).toContain("https://chatform.in/brand/email-mark.png");
+    expect(html).not.toContain(".svg");
+    expect(html).toContain(">chatform</td>");
+  });
+
   it("mails a reset link that points at the web app, not the API", async () => {
     const { sent, binding } = captureBinding();
     await runMailJob(withMail({ EMAIL: binding }), {
@@ -329,6 +352,38 @@ describe("submission notifications", () => {
 });
 
 describe("auto-reply", () => {
+  /**
+   * White-label means white-label.
+   *
+   * `hidePoweredBy` already removed our name from the footer of an auto-reply.
+   * The header was ignoring it and setting "chatform" above the customer's own
+   * message — tolerable while it was six grey characters, and not tolerable now
+   * that it is a logo. Both halves read the same flag.
+   */
+  it("removes the header lockup, not just the footer, when branding is hidden", async () => {
+    await publish({
+      ...DOC,
+      settings: {
+        branding: { hidePoweredBy: true },
+        onComplete: {
+          autoReplyEmail: { enabled: true, subject: "Thanks", bodyMd: "Got it." },
+        },
+      },
+    });
+    await seedResponse("sbm_mail_whitelabel", { respondentEmail: "ada@example.com" });
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_whitelabel",
+      isTest: false,
+    });
+    const html = sent[0]!.html;
+    expect(html).not.toContain("brand/email-mark.png");
+    expect(html).not.toContain("Powered by chatform");
+  });
+
   it("goes to the respondent and interpolates their answers", async () => {
     await publish({
       ...DOC,

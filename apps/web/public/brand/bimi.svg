@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.2" baseProfile="tiny-ps" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>chatform</title>
+  <rect x="0" y="0" width="1024" height="1024" fill="#FD6F29"/>
+  <path fill="#FFFFFF" d="M 402 314 L 450.4 314 L 635.2 245.8 L 608.8 314 L 622 314 A 132 132 0 0 1 754 446 L 754 578 A 132 132 0 0 1 622 710 L 573.6 710 L 388.8 778.2 L 415.2 710 L 402 710 A 132 132 0 0 1 270 578 L 270 446 A 132 132 0 0 1 402 314 Z"/>
+</svg>

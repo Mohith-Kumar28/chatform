@@ -39,6 +39,127 @@ dashboardRouter.get(
 );
 
 /**
+ * What an invitation link points at, before anybody has signed in.
+ *
+ * Better Auth's `GET /organization/get-invitation` needs a session *and* a
+ * session whose email is the invitee's, and it collapses every other case into
+ * one 400/403. So the page that consumes an invitation link could not tell
+ * "revoked" from "expired" from "you are signed in as someone else" — and the
+ * common case, an invitee who has no account yet, produced the worst reading of
+ * all: a pending invitation rendered as "no longer valid".
+ *
+ * This answers the question that page actually has to ask, with no session:
+ * who is this invitation for, to what workspace, from whom, and is it still
+ * live. The invitation id is a random 32-character bearer credential that only
+ * exists in one person's inbox, so it gates the response the same way the
+ * accept endpoint does — and the response deliberately carries nothing an
+ * invitation email does not already contain.
+ *
+ * Nothing here is a substitute for the real check. Accepting still goes through
+ * Better Auth, which still demands a matching signed-in address.
+ *
+ * Registered before the `/auth/*` catch-all, and named outside it, for the same
+ * reason `/auth-providers` is.
+ */
+dashboardRouter.get(
+  "/invitation-preview",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Public summary of an invitation link",
+    responses: {
+      200: {
+        description: "Invitation",
+        content: {
+          "application/json": {
+            schema: resolver(
+              z.object({
+                state: z.enum(["pending", "expired", "accepted", "rejected", "canceled", "not_found"]),
+                email: z.string().nullable(),
+                role: z.string().nullable(),
+                organizationName: z.string().nullable(),
+                inviterName: z.string().nullable(),
+                inviterEmail: z.string().nullable(),
+                expiresAt: z.number().nullable(),
+                recipientHasAccount: z.boolean(),
+              }),
+            ),
+          },
+        },
+      },
+    },
+  }),
+  async (c) => {
+    const id = c.req.query("id")?.trim();
+    const miss = {
+      state: "not_found" as const,
+      email: null,
+      role: null,
+      organizationName: null,
+      inviterName: null,
+      inviterEmail: null,
+      expiresAt: null,
+      recipientHasAccount: false,
+    };
+    if (!id) return c.json(miss);
+
+    const row = await c.env.DB.prepare(
+      `SELECT i.email        AS email,
+              i.role         AS role,
+              i.status       AS status,
+              i.expires_at   AS expiresAt,
+              o.name         AS organizationName,
+              u.name         AS inviterName,
+              u.email        AS inviterEmail,
+              (SELECT 1 FROM users WHERE lower(email) = lower(i.email) LIMIT 1) AS hasAccount
+         FROM invitations i
+         LEFT JOIN organizations o ON o.id = i.organization_id
+         LEFT JOIN users u ON u.id = i.inviter_id
+        WHERE i.id = ?`,
+    )
+      .bind(id)
+      .first<{
+        email: string;
+        role: string | null;
+        status: string;
+        expiresAt: number | null;
+        organizationName: string | null;
+        inviterName: string | null;
+        inviterEmail: string | null;
+        hasAccount: number | null;
+      }>();
+
+    if (!row) return c.json(miss);
+
+    /**
+     * Expiry outranks the stored status. Better Auth never rewrites `pending`
+     * to `expired` on a lapsed row — it compares the column at read time — so a
+     * row that says `pending` past its date is expired, and saying so is the
+     * difference between "ask for a new invite" and "this was cancelled".
+     */
+    const expired = typeof row.expiresAt === "number" && row.expiresAt < Date.now();
+    const state =
+      row.status === "pending"
+        ? expired
+          ? ("expired" as const)
+          : ("pending" as const)
+        : row.status === "accepted" || row.status === "rejected" || row.status === "canceled"
+          ? (row.status as "accepted" | "rejected" | "canceled")
+          : ("not_found" as const);
+
+    return c.json({
+      state,
+      email: row.email,
+      role: row.role,
+      organizationName: row.organizationName,
+      inviterName: row.inviterName,
+      inviterEmail: row.inviterEmail,
+      expiresAt: row.expiresAt ?? null,
+      recipientHasAccount: Boolean(row.hasAccount),
+    });
+  },
+);
+
+/**
  * The api-key plugin's own endpoints are not part of the public surface.
  *
  * Registering the plugin mounts `/api/auth/api-key/{create,update,delete,list,get}`

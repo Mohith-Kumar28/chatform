@@ -14,8 +14,21 @@ function SignInForm() {
   // No router here on purpose: every success path on this page is a full
   // navigation, because the session cookie has just changed. See `submit`.
   const params = useSearchParams();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [email, setEmail] = useState("");
+  /**
+   * Both of these are read once, as initial state rather than from an effect.
+   *
+   * An invitation link sends people here with the address it was mailed to and,
+   * when that address has no account yet, with `mode=signup`. Prefilling is not
+   * a nicety: an invitation is only redeemable by the exact address it names, so
+   * somebody who retypes it slightly differently — or signs up with the address
+   * they usually use — creates an account the invitation will refuse, and the
+   * only symptom is the accept page telling them they are signed in as somebody
+   * else. Both stay editable; this decides the starting point, not the answer.
+   */
+  const [mode, setMode] = useState<"signin" | "signup">(() =>
+    params.get("mode") === "signup" ? "signup" : "signin",
+  );
+  const [email, setEmail] = useState(() => params.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   // A failed OAuth round trip comes back as a redirect, not a rejected promise, so the
@@ -32,9 +45,15 @@ function SignInForm() {
 
   // Drop `?error=` from the address bar once it has been read, so a refresh does not
   // resurrect the message. `replaceState` deliberately bypasses the router: re-rendering
-  // this page is exactly what we do not want.
+  // this page is exactly what we do not want. Only that one parameter is removed —
+  // rewriting the URL to a bare `/signin` used to throw away the `next` of whoever
+  // arrived from an invitation, so a failed Google round trip lost the invitation.
   useEffect(() => {
-    if (params.get("error")) window.history.replaceState({}, "", "/signin");
+    if (!params.get("error")) return;
+    const rest = new URLSearchParams(params.toString());
+    rest.delete("error");
+    const query = rest.toString();
+    window.history.replaceState({}, "", query ? `/signin?${query}` : "/signin");
   }, [params]);
 
   useEffect(() => {

@@ -1,0 +1,75 @@
+# Email branding
+
+Two different things get called "the logo in the email", and only one of them is
+code.
+
+## 1. The logo inside the message — done
+
+`apps/api/src/lib/mail-templates.ts` renders a lockup at the top of every
+message: the mark as a 24px PNG next to the wordmark as live text. The PNG is
+served by the web app from `apps/web/public/brand/email-mark.png`, and the
+template links it absolutely at `https://chatform.in/brand/email-mark.png`.
+
+Three constraints shaped that and are worth not re-litigating:
+
+- **PNG, not SVG.** Gmail and every version of Outlook strip `<svg>`. The asset
+  is 96px and served at 24 so it stays sharp on a retina screen.
+- **Absolute, and pinned to production.** A relative URL has no meaning in an
+  inbox, and threading `APP_ORIGIN` through would put `localhost` in mail sent
+  from a dev machine — a broken image forever, in somebody's archive.
+- **The wordmark stays text.** Most clients block remote images by default on
+  first open. With images off the header still reads "chatform" instead of
+  showing an empty box where the whole brand used to be.
+
+A white-label auto-reply (`hidePoweredBy`) drops the header lockup along with
+the footer — see `layout({ brand })`.
+
+Regenerating the asset from the mark in `apps/web/src/components/brand/logo.tsx`:
+
+```sh
+magick -background none -density 600 mark-duo.svg -resize 96x96 \
+  -depth 8 -define png:color-type=6 -strip apps/web/public/brand/email-mark.png
+```
+
+## 2. The sender's avatar in the inbox list — DNS, and a certificate
+
+The circle next to the sender name in Gmail is **BIMI**, and it is not something
+an application can set. It is a DNS record plus, at Gmail/Apple/Yahoo, a paid
+certificate. Everything that can be done without spending money is done; the
+last step is a purchase decision.
+
+### Ready
+
+- **The logo.** `apps/web/public/brand/bimi.svg` — SVG Tiny PS (`version="1.2"`,
+  `baseProfile="tiny-ps"`, a `<title>`, a square viewBox, a solid background, no
+  gradients or external references), which is the only format BIMI accepts.
+  Served at `https://chatform.in/brand/bimi.svg`. The mono silhouette on solid
+  `#FD6F29` rather than the two-plate mark on white: the avatar is rendered at
+  about 26px inside a circle on a white inbox row, where a white logo is an
+  invisible one.
+- **DMARC.** `_dmarc.chatform.in` is already `p=quarantine`, which clears BIMI's
+  enforcement bar. (`p=none` would not.)
+
+### Not ready
+
+- **SPF.** `chatform.in` publishes no `TXT` SPF record at all right now. BIMI
+  requires DMARC to pass, which requires an aligned SPF *or* DKIM pass — DKIM
+  from Cloudflare Email Sending may be carrying it today, but the apex having no
+  SPF at all is worth fixing on deliverability grounds regardless.
+- **The BIMI record**, once the certificate below exists:
+
+  ```
+  default._bimi.chatform.in.  TXT  "v=BIMI1; l=https://chatform.in/brand/bimi.svg; a=https://chatform.in/brand/vmc.pem"
+  ```
+
+- **The VMC.** Gmail, Apple Mail and Yahoo all refuse to display a BIMI logo
+  without a Verified Mark Certificate (or a Common Mark Certificate) in `a=`.
+  They are issued by DigiCert and Entrust, run roughly $1,000–1,500 a year, and
+  a VMC requires a **registered** trademark on the mark. A CMC is cheaper and
+  accepts a mark that has merely been in use, but is honoured by fewer
+  providers. Publishing the record with `l=` and no `a=` is valid BIMI and
+  displays nothing at any of the three, so it is not worth doing on its own.
+
+`apps/web/public/brand/avatar.png` is the same artwork as a 512px raster, for
+the places that want a square image rather than BIMI — Gravatar, a Google
+Business profile, an app directory listing.
