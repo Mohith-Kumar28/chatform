@@ -4,6 +4,7 @@ import { SessionDO } from "./do/session-do.js";
 import { deliverWebhookEvent, retryFailedDeliveries, type WebhookEvent } from "./lib/webhooks.js";
 import { pruneOtpChallenges } from "./lib/respondent-auth.js";
 import { pruneGateLog } from "./lib/gate-log.js";
+import { pruneFormActivity } from "./lib/form-activity.js";
 import { runExport, pruneExpiredExports, type ExportMessage } from "./lib/exports.js";
 import {
   sweepExpiredResponses,
@@ -80,6 +81,13 @@ export default {
       await sweepPartialNotifications(env).catch((err) => console.error("partial_sweep_failed", err));
       await pruneIdempotencyKeys(env).catch((err) => console.error("idempotency_prune_failed", err));
       await pruneTestData(env).catch((err) => console.error("test_data_prune_failed", err));
+      /**
+       * A form's history, bounded. Entries that shipped in a version are kept for two
+       * years because they are that version's changelog; entries still marked
+       * unpublished describe a draft that was long since published or abandoned, and
+       * are kept for four months.
+       */
+      await pruneFormActivity(env).catch((err) => console.error("form_activity_prune_failed", err));
       // An export is a full copy of respondent data sitting in a bucket. It is
       // kept for a day, not forever.
       await pruneExpiredExports(env).catch((err) => console.error("export_prune_failed", err));

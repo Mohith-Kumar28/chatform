@@ -1040,6 +1040,19 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "publishedAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -1050,7 +1063,9 @@
                     "responses",
                     "updatedAt",
                     "workingSchema",
-                    "activeVersion"
+                    "activeVersion",
+                    "publishedAt",
+                    "hasUnpublishedChanges"
                   ]
                 }
               }
@@ -1210,6 +1225,19 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "publishedAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -1220,7 +1248,9 @@
                     "responses",
                     "updatedAt",
                     "workingSchema",
-                    "activeVersion"
+                    "activeVersion",
+                    "publishedAt",
+                    "hasUnpublishedChanges"
                   ]
                 }
               }

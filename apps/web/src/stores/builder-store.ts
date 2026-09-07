@@ -48,6 +48,22 @@ export interface BuilderState {
   saveState: SaveState;
   saveError: string | null;
   lastSavedAt: number | null;
+  /**
+   * Does the draft hold anything the live version does not?
+   *
+   * Distinct from `saveState`, and the distinction is the whole point: autosave answers
+   * "is my work safe", this answers "is my work live". On a published form those are
+   * routinely different, and the header used to show only the first — so someone who
+   * edited a live form five minutes after publishing it could not tell whether
+   * respondents were seeing the edit.
+   *
+   * Seeded from the server, which compares a fingerprint of the draft against the one the
+   * live version was published from, and kept honest locally so the indicator moves on the
+   * keystroke rather than on the next refetch. Undoing back to the published state leaves
+   * it set until the next publish or reload; every editor behaves that way, and the wrong
+   * direction to err in is the one that hides an unpublished change.
+   */
+  editedSincePublish: boolean;
   conflict: { theirs: FormDoc } | null;
 
   past: FormDoc[];
@@ -57,12 +73,14 @@ export interface BuilderState {
   lastEditAt: number;
 
   // ── lifecycle ──
-  hydrate: (formId: string, doc: FormDoc, baseVersion: number | null) => void;
+  hydrate: (formId: string, doc: FormDoc, baseVersion: number | null, editedSincePublish?: boolean) => void;
   /** Apply a mutation. `coalesceKey` merges rapid edits to one field. */
   edit: (recipe: (draft: FormDoc) => void, coalesceKey?: string) => void;
   markSaving: () => void;
   markSaved: (at: number) => void;
   markError: (message: string) => void;
+  /** The draft is now what is live. Called on a successful publish. */
+  markPublished: () => void;
   setConflict: (theirs: FormDoc | null) => void;
   /** Discard local edits and adopt the server's document. */
   acceptTheirs: () => void;
@@ -133,17 +151,19 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   saveState: "saved",
   saveError: null,
   lastSavedAt: null,
+  editedSincePublish: false,
   conflict: null,
   past: [],
   future: [],
   lastEditKey: null,
   lastEditAt: 0,
 
-  hydrate: (formId, doc, baseVersion) =>
+  hydrate: (formId, doc, baseVersion, editedSincePublish = false) =>
     set({
       formId,
       doc,
       baseVersion,
+      editedSincePublish,
       past: [],
       future: [],
       saveState: "saved",
@@ -178,6 +198,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         lastEditKey: coalesceKey ?? null,
         lastEditAt: now,
         saveState: "dirty",
+        editedSincePublish: true,
         saveError: null,
       };
     }),
@@ -191,6 +212,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       saveError: null,
     })),
   markError: (message) => set({ saveState: "error", saveError: message }),
+  markPublished: () => set({ editedSincePublish: false }),
   setConflict: (theirs) => set({ conflict: theirs ? { theirs } : null }),
   acceptTheirs: () =>
     set((s) =>
@@ -215,6 +237,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         past: s.past.slice(0, -1),
         future: [s.doc, ...s.future].slice(0, HISTORY_LIMIT),
         saveState: "dirty",
+        editedSincePublish: true,
         lastEditKey: null,
       };
     }),
@@ -228,6 +251,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         past: [...s.past, s.doc].slice(-HISTORY_LIMIT),
         future: s.future.slice(1),
         saveState: "dirty",
+        editedSincePublish: true,
         lastEditKey: null,
       };
     }),

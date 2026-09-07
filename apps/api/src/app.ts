@@ -19,6 +19,7 @@ import { billingRouter, billingPublicRouter } from "./routes/billing.js";
 import { previewRouter } from "./routes/preview.js";
 import { templatesRouter } from "./routes/templates.js";
 import { auditRouter } from "./routes/audit.js";
+import { formHistoryRouter } from "./routes/form-history.js";
 import { mountOpenApiSpec } from "./lib/openapi.js";
 import { requestId, type RequestIdVars } from "./lib/request-id.js";
 import { attachErrorContext } from "./lib/api-error.js";
@@ -134,6 +135,7 @@ export function createApp() {
   app.route("/api", templatesRouter);
   app.route("/api", filesAdminRouter);
   app.route("/api", auditRouter);
+  app.route("/api", formHistoryRouter);
 
   // OpenAPI spec + Scalar docs
   mountOpenApiSpec(app);

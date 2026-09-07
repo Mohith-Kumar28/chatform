@@ -57,6 +57,13 @@
       "when": 1788600399505,
       "tag": "0007_organic_thundra",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1788738605566,
+      "tag": "0008_odd_red_ghost",
+      "breakpoints": true
     }
   ]
 }

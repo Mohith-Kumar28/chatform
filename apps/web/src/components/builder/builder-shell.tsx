@@ -40,6 +40,7 @@ export function BuilderShell({
 
   const doc = useBuilderStore((s) => s.doc);
   const hydrate = useBuilderStore((s) => s.hydrate);
+  const markPublished = useBuilderStore((s) => s.markPublished);
   const loadedId = useBuilderStore((s) => s.formId);
 
   const { flush } = useAutosave(formId);
@@ -55,7 +56,16 @@ export function BuilderShell({
   const [stripped, setStripped] = useState<StrippedSetting[]>([]);
 
   const row = form as
-    | { id: string; title: string; slug: string; status: string; workingSchema: unknown; activeVersion: number | null }
+    | {
+        id: string;
+        title: string;
+        slug: string;
+        status: string;
+        workingSchema: unknown;
+        activeVersion: number | null;
+        publishedAt: number | null;
+        hasUnpublishedChanges: boolean;
+      }
     | undefined;
 
   // Hydrate once per form. The doc is migrated client-side too so a tab opened
@@ -67,7 +77,12 @@ export function BuilderShell({
       toast.error("This form's document could not be read.");
       return;
     }
-    hydrate(row.id, parsed.data, row.activeVersion);
+    /*
+      The server has compared a fingerprint of this draft against the one the live version
+      was published from, including the plan it was published on. That is the only place
+      the answer can be exact, so it seeds the store rather than being recomputed here.
+    */
+    hydrate(row.id, parsed.data, row.activeVersion, row.hasUnpublishedChanges);
   }, [row, loadedId, hydrate]);
 
   /**
@@ -123,6 +138,9 @@ export function BuilderShell({
         stripped?: StrippedSetting[];
       };
       if (result?.stripped?.length) setStripped(result.stripped);
+      // The draft is now what is live. Said locally as well as refetched, so the header
+      // settles on the click rather than after the round trip.
+      markPublished();
       /**
        * Publishing changes the form row — status Draft → Live, and a new active
        * version — and nothing was re-reading it. The toast said "Form
@@ -156,6 +174,7 @@ export function BuilderShell({
             slug={row.slug}
             status={row.status}
             activeVersion={row.activeVersion}
+            publishedAt={row.publishedAt}
             onPublish={onPublish}
             publishing={publishing}
             onPreview={() => setPreviewOpen(true)}

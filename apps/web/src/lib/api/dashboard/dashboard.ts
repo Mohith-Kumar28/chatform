@@ -31,9 +31,15 @@ import type {
   GetApiFormsById200,
   GetApiFormsById404,
   GetApiFormsByIdAnalytics200,
+  GetApiFormsByIdHistory200,
+  GetApiFormsByIdHistoryParams,
   GetApiFormsByIdIntegrations200Item,
   GetApiFormsByIdSubmissions200Item,
   GetApiFormsByIdSubmissionsParams,
+  GetApiFormsByIdVersions200Item,
+  GetApiFormsByIdVersionsByVersion200,
+  GetApiFormsByIdVersionsByVersion404,
+  GetApiFormsByIdVersionsByVersionParams,
   GetApiKeys200Item,
   GetApiTemplates200Item,
   GetApiTemplatesBySlug200,
@@ -55,6 +61,9 @@ import type {
   PostApiFormsByIdPublish200,
   PostApiFormsByIdPublish402,
   PostApiFormsByIdPublish422,
+  PostApiFormsByIdVersionsByVersionRestore200,
+  PostApiFormsByIdVersionsByVersionRestore404,
+  PostApiFormsByIdVersionsByVersionRestore422,
   PostApiKeys200,
   PostApiKeysBody,
   PostApiKeysByIdRotate200,
@@ -3314,3 +3323,400 @@ export function useGetApiAuditLogsExport<TData = Awaited<ReturnType<typeof getAp
 
 
 
+export type getApiFormsByIdHistoryResponse200 = {
+  data: GetApiFormsByIdHistory200
+  status: 200
+}
+
+export type getApiFormsByIdHistoryResponseSuccess = (getApiFormsByIdHistoryResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiFormsByIdHistoryResponse = (getApiFormsByIdHistoryResponseSuccess)
+
+export const getGetApiFormsByIdHistoryUrl = (id: string,
+    params?: GetApiFormsByIdHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/forms/${id}/history?${stringifiedParams}` : `/api/forms/${id}/history`
+}
+
+/**
+ * @summary This form's change history, grouped by publish
+ */
+export const getApiFormsByIdHistory = async (id: string,
+    params?: GetApiFormsByIdHistoryParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdHistoryResponse> => {
+
+  return customFetch<getApiFormsByIdHistoryResponse>(getGetApiFormsByIdHistoryUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiFormsByIdHistoryQueryKey = (id: string,
+    params?: GetApiFormsByIdHistoryParams,) => {
+    return [
+    `/api/forms/${id}/history`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiFormsByIdHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getApiFormsByIdHistory>>, TError = unknown>(id: string,
+    params?: GetApiFormsByIdHistoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsByIdHistoryQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFormsByIdHistory>>> = ({ signal }) => getApiFormsByIdHistory(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiFormsByIdHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFormsByIdHistory>>>
+export type GetApiFormsByIdHistoryQueryError = unknown
+
+
+/**
+ * @summary This form's change history, grouped by publish
+ */
+
+export function useGetApiFormsByIdHistory<TData = Awaited<ReturnType<typeof getApiFormsByIdHistory>>, TError = unknown>(
+ id: string,
+    params?: GetApiFormsByIdHistoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiFormsByIdHistoryQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiFormsByIdVersionsResponse200 = {
+  data: GetApiFormsByIdVersions200Item[]
+  status: 200
+}
+
+export type getApiFormsByIdVersionsResponseSuccess = (getApiFormsByIdVersionsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiFormsByIdVersionsResponse = (getApiFormsByIdVersionsResponseSuccess)
+
+export const getGetApiFormsByIdVersionsUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/versions`
+}
+
+/**
+ * @summary Every published version of this form
+ */
+export const getApiFormsByIdVersions = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdVersionsResponse> => {
+
+  return customFetch<getApiFormsByIdVersionsResponse>(getGetApiFormsByIdVersionsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiFormsByIdVersionsQueryKey = (id: string,) => {
+    return [
+    `/api/forms/${id}/versions`
+    ] as const;
+    }
+
+
+export const getGetApiFormsByIdVersionsQueryOptions = <TData = Awaited<ReturnType<typeof getApiFormsByIdVersions>>, TError = unknown>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsByIdVersionsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFormsByIdVersions>>> = ({ signal }) => getApiFormsByIdVersions(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdVersions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiFormsByIdVersionsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFormsByIdVersions>>>
+export type GetApiFormsByIdVersionsQueryError = unknown
+
+
+/**
+ * @summary Every published version of this form
+ */
+
+export function useGetApiFormsByIdVersions<TData = Awaited<ReturnType<typeof getApiFormsByIdVersions>>, TError = unknown>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiFormsByIdVersionsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiFormsByIdVersionsByVersionResponse200 = {
+  data: GetApiFormsByIdVersionsByVersion200
+  status: 200
+}
+
+export type getApiFormsByIdVersionsByVersionResponse404 = {
+  data: GetApiFormsByIdVersionsByVersion404
+  status: 404
+}
+
+export type getApiFormsByIdVersionsByVersionResponseSuccess = (getApiFormsByIdVersionsByVersionResponse200) & {
+  headers: Headers;
+};
+export type getApiFormsByIdVersionsByVersionResponseError = (getApiFormsByIdVersionsByVersionResponse404) & {
+  headers: Headers;
+};
+
+export type getApiFormsByIdVersionsByVersionResponse = (getApiFormsByIdVersionsByVersionResponseSuccess | getApiFormsByIdVersionsByVersionResponseError)
+
+export const getGetApiFormsByIdVersionsByVersionUrl = (id: string,
+    version: string,
+    params?: GetApiFormsByIdVersionsByVersionParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/forms/${id}/versions/${version}?${stringifiedParams}` : `/api/forms/${id}/versions/${version}`
+}
+
+/**
+ * @summary One published version, optionally diffed against another
+ */
+export const getApiFormsByIdVersionsByVersion = async (id: string,
+    version: string,
+    params?: GetApiFormsByIdVersionsByVersionParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdVersionsByVersionResponse> => {
+
+  return customFetch<getApiFormsByIdVersionsByVersionResponse>(getGetApiFormsByIdVersionsByVersionUrl(id,version,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiFormsByIdVersionsByVersionQueryKey = (id: string,
+    version: string,
+    params?: GetApiFormsByIdVersionsByVersionParams,) => {
+    return [
+    `/api/forms/${id}/versions/${version}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiFormsByIdVersionsByVersionQueryOptions = <TData = Awaited<ReturnType<typeof getApiFormsByIdVersionsByVersion>>, TError = GetApiFormsByIdVersionsByVersion404>(id: string,
+    version: string,
+    params?: GetApiFormsByIdVersionsByVersionParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdVersionsByVersion>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsByIdVersionsByVersionQueryKey(id,version,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFormsByIdVersionsByVersion>>> = ({ signal }) => getApiFormsByIdVersionsByVersion(id,version,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && version !== null && version !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdVersionsByVersion>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiFormsByIdVersionsByVersionQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFormsByIdVersionsByVersion>>>
+export type GetApiFormsByIdVersionsByVersionQueryError = GetApiFormsByIdVersionsByVersion404
+
+
+/**
+ * @summary One published version, optionally diffed against another
+ */
+
+export function useGetApiFormsByIdVersionsByVersion<TData = Awaited<ReturnType<typeof getApiFormsByIdVersionsByVersion>>, TError = GetApiFormsByIdVersionsByVersion404>(
+ id: string,
+    version: string,
+    params?: GetApiFormsByIdVersionsByVersionParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdVersionsByVersion>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiFormsByIdVersionsByVersionQueryOptions(id,version,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postApiFormsByIdVersionsByVersionRestoreResponse200 = {
+  data: PostApiFormsByIdVersionsByVersionRestore200
+  status: 200
+}
+
+export type postApiFormsByIdVersionsByVersionRestoreResponse404 = {
+  data: PostApiFormsByIdVersionsByVersionRestore404
+  status: 404
+}
+
+export type postApiFormsByIdVersionsByVersionRestoreResponse422 = {
+  data: PostApiFormsByIdVersionsByVersionRestore422
+  status: 422
+}
+
+export type postApiFormsByIdVersionsByVersionRestoreResponseSuccess = (postApiFormsByIdVersionsByVersionRestoreResponse200) & {
+  headers: Headers;
+};
+export type postApiFormsByIdVersionsByVersionRestoreResponseError = (postApiFormsByIdVersionsByVersionRestoreResponse404 | postApiFormsByIdVersionsByVersionRestoreResponse422) & {
+  headers: Headers;
+};
+
+export type postApiFormsByIdVersionsByVersionRestoreResponse = (postApiFormsByIdVersionsByVersionRestoreResponseSuccess | postApiFormsByIdVersionsByVersionRestoreResponseError)
+
+export const getPostApiFormsByIdVersionsByVersionRestoreUrl = (id: string,
+    version: string,) => {
+
+
+
+
+  return `/api/forms/${id}/versions/${version}/restore`
+}
+
+/**
+ * @summary Restore a published version into the working document
+ */
+export const postApiFormsByIdVersionsByVersionRestore = async (id: string,
+    version: string, options?: Parameters<typeof customFetch>[1]): Promise<postApiFormsByIdVersionsByVersionRestoreResponse> => {
+
+  return customFetch<postApiFormsByIdVersionsByVersionRestoreResponse>(getPostApiFormsByIdVersionsByVersionRestoreUrl(id,version),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiFormsByIdVersionsByVersionRestoreMutationOptions = <TError = PostApiFormsByIdVersionsByVersionRestore404 | PostApiFormsByIdVersionsByVersionRestore422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdVersionsByVersionRestore>>, TError,PostApiFormsByIdVersionsByVersionRestoreMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdVersionsByVersionRestore>>, TError,PostApiFormsByIdVersionsByVersionRestoreMutationVariables, TContext> => {
+
+const mutationKey = ['postApiFormsByIdVersionsByVersionRestore'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFormsByIdVersionsByVersionRestore>>, PostApiFormsByIdVersionsByVersionRestoreMutationVariables> = (props) => {
+          const {id,version} = props ?? {};
+
+          return  postApiFormsByIdVersionsByVersionRestore(id,version,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFormsByIdVersionsByVersionRestoreMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFormsByIdVersionsByVersionRestore>>>
+
+    export type PostApiFormsByIdVersionsByVersionRestoreMutationError = PostApiFormsByIdVersionsByVersionRestore404 | PostApiFormsByIdVersionsByVersionRestore422
+    export type PostApiFormsByIdVersionsByVersionRestoreMutationVariables = {id: string;version: string}
+
+    /**
+ * @summary Restore a published version into the working document
+ */
+export const usePostApiFormsByIdVersionsByVersionRestore = <TError = PostApiFormsByIdVersionsByVersionRestore404 | PostApiFormsByIdVersionsByVersionRestore422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdVersionsByVersionRestore>>, TError,PostApiFormsByIdVersionsByVersionRestoreMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFormsByIdVersionsByVersionRestore>>,
+        TError,
+        PostApiFormsByIdVersionsByVersionRestoreMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFormsByIdVersionsByVersionRestoreMutationOptions(options));
+    }

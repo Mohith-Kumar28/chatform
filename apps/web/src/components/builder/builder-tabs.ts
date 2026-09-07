@@ -2,6 +2,7 @@ import {
   BarChart3,
   Blocks,
   Bot,
+  FileClock,
   GitBranch,
   Settings as SettingsIcon,
   Share2,
@@ -27,6 +28,9 @@ export const BUILDER_TABS = [
   { segment: "share", label: "Share", icon: Share2, hint: "Link, QR and email", alsoMatches: [] },
   { segment: "integrate", label: "Integrate", icon: Webhook, hint: "Embed, webhooks and spreadsheets", alsoMatches: [] },
   { segment: "settings", label: "Settings", icon: SettingsIcon, hint: "Access, email and metadata", alsoMatches: [] },
+  // Last, and deliberately so: it is where you go when something went wrong or you need
+  // to prove what changed, not part of building the form.
+  { segment: "history", label: "History", icon: FileClock, hint: "Changes and published versions", alsoMatches: [] },
 ] as const;
 
 /** The two views that live under the Build tab. */

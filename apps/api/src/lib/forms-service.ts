@@ -2,6 +2,14 @@ import { FormDoc, lintFormDoc, hasErrors, migrateFormDoc, type FormDoc as FormDo
 import type { Bindings } from "../env.js";
 import { stripForPublish, checkDocLimits } from "./doc-entitlements.js";
 import { limitReached, type Entitlements } from "@repo/entitlements";
+import {
+  parseStoredDoc,
+  recordDocChange,
+  recordFormEvent,
+  stampVersionStatement,
+  type Actor,
+  type ActivitySource,
+} from "./form-activity.js";
 
 /**
  * Form writes, shared by the dashboard and the developer API.
@@ -51,13 +59,22 @@ export type PublishResult =
  */
 export async function publishForm(
   env: Bindings,
-  args: { formId: string; userId: string | null; ent: Entitlements },
+  args: {
+    formId: string;
+    userId: string | null;
+    ent: Entitlements;
+    /** Only needed to write history; a publish without it still publishes. */
+    orgId?: string;
+    /** An optional label for the version, so a changelog entry can have a name. */
+    note?: string | null;
+    source?: ActivitySource;
+  },
 ): Promise<PublishResult> {
   const row = await env.DB.prepare(
-    `SELECT working_schema, theme_json, settings_json FROM forms WHERE id = ? AND deleted_at IS NULL`,
+    `SELECT organization_id, working_schema, theme_json, settings_json FROM forms WHERE id = ? AND deleted_at IS NULL`,
   )
     .bind(args.formId)
-    .first<{ working_schema: string; theme_json: string | null; settings_json: string | null }>();
+    .first<{ organization_id: string; working_schema: string; theme_json: string | null; settings_json: string | null }>();
   if (!row) {
     return { ok: false, status: 404, body: { error: { code: "not_found", message: "Form not found" } } };
   }
@@ -112,10 +129,12 @@ export async function publishForm(
   const version = (max?.v ?? 0) + 1;
   const versionId = `ver_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 
+  const note = args.note?.trim().slice(0, 200) || null;
+
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO form_versions (id, form_id, version, schema_json, theme_json, settings_json, checksum, published_at, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO form_versions (id, form_id, version, schema_json, theme_json, settings_json, checksum, note, published_at, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       versionId,
       args.formId,
@@ -124,6 +143,7 @@ export async function publishForm(
       row.theme_json,
       row.settings_json,
       crypto.randomUUID().slice(0, 16),
+      note,
       Date.now(),
       args.userId,
       Date.now(),
@@ -133,14 +153,60 @@ export async function publishForm(
       Date.now(),
       args.formId,
     ),
+    /**
+     * Every edit still marked unpublished belongs to this version now. Batched with the
+     * insert because a publish whose changes stayed marked unpublished is a history that
+     * contradicts the form it describes.
+     */
+    stampVersionStatement(env, args.formId, versionId),
   ]);
+
+  await recordFormEvent(env, {
+    formId: args.formId,
+    orgId: args.orgId ?? row.organization_id,
+    kind: "published",
+    summary: note ? `Published v${version} — ${note}` : `Published version ${version}`,
+    versionId,
+    actor: { type: args.source === "api" ? "api_key" : "user", id: args.userId },
+    source: args.source ?? "api",
+  }).catch((err) => console.error("form_activity_failed", err));
 
   return { ok: true, version, versionId, stripped: stripped as unknown[] };
 }
 
-/** Store a working document. Callers must have validated it through `parseDoc` first. */
-export async function saveWorkingDoc(env: Bindings, formId: string, doc: FormDocT): Promise<void> {
+/**
+ * Store a working document. Callers must have validated it through `parseDoc` first.
+ *
+ * `activity` is optional and, when given, buys the form's history one extra point read:
+ * the document as it stood before this call, which is the only moment it still exists
+ * and the only way the timeline can say what the save actually did.
+ */
+export async function saveWorkingDoc(
+  env: Bindings,
+  formId: string,
+  doc: FormDocT,
+  activity?: { orgId: string; actor?: Actor; source?: ActivitySource },
+): Promise<void> {
+  const previous = activity
+    ? parseStoredDoc(
+        (await env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`).bind(formId).first<{ working_schema: string }>())
+          ?.working_schema,
+      )
+    : null;
+
   await env.DB.prepare(`UPDATE forms SET working_schema = ?, updated_at = ? WHERE id = ?`)
     .bind(JSON.stringify(doc), Date.now(), formId)
     .run();
+
+  if (!activity) return;
+  // Never at the expense of the save: the document is stored, and a missing history row
+  // is a worse timeline rather than a lost edit.
+  await recordDocChange(env, {
+    formId,
+    orgId: activity.orgId,
+    before: previous,
+    after: doc,
+    actor: activity.actor,
+    source: activity.source ?? "api",
+  }).catch((err) => console.error("form_activity_failed", err));
 }

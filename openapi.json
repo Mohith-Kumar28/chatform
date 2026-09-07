@@ -1040,6 +1040,19 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "publishedAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -1050,7 +1063,9 @@
                     "responses",
                     "updatedAt",
                     "workingSchema",
-                    "activeVersion"
+                    "activeVersion",
+                    "publishedAt",
+                    "hasUnpublishedChanges"
                   ]
                 }
               }
@@ -1210,6 +1225,19 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "publishedAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -1220,7 +1248,9 @@
                     "responses",
                     "updatedAt",
                     "workingSchema",
-                    "activeVersion"
+                    "activeVersion",
+                    "publishedAt",
+                    "hasUnpublishedChanges"
                   ]
                 }
               }
@@ -7329,6 +7359,714 @@
             "description": "Activity log is a Business feature"
           }
         },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/forms/{id}/history": {
+      "get": {
+        "operationId": "getApiFormsByIdHistory",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 60,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "This form's change history, grouped by publish",
+        "responses": {
+          "200": {
+            "description": "Groups, newest first, with unpublished work leading",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "versionId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "publishedAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "note": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "isActive": {
+                            "type": "boolean"
+                          },
+                          "entries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "type": "string"
+                                },
+                                "summary": {
+                                  "type": "string"
+                                },
+                                "changes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "op": {
+                                        "type": "string"
+                                      },
+                                      "target": {
+                                        "type": "string"
+                                      },
+                                      "label": {
+                                        "type": "string"
+                                      },
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "target",
+                                      "label"
+                                    ]
+                                  }
+                                },
+                                "changeCount": {
+                                  "type": "number"
+                                },
+                                "actorType": {
+                                  "type": "string"
+                                },
+                                "actorLabel": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "source": {
+                                  "type": "string"
+                                },
+                                "createdAt": {
+                                  "type": "number"
+                                },
+                                "updatedAt": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "kind",
+                                "summary",
+                                "changes",
+                                "changeCount",
+                                "actorType",
+                                "actorLabel",
+                                "source",
+                                "createdAt",
+                                "updatedAt"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "versionId",
+                          "publishedAt",
+                          "note",
+                          "isActive",
+                          "entries"
+                        ]
+                      }
+                    },
+                    "nextBefore": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "groups",
+                    "nextBefore"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/forms/{id}/versions": {
+      "get": {
+        "operationId": "getApiFormsByIdVersions",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Every published version of this form",
+        "responses": {
+          "200": {
+            "description": "Versions, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number"
+                      },
+                      "versionId": {
+                        "type": "string"
+                      },
+                      "note": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "publishedAt": {
+                        "type": "number"
+                      },
+                      "authorLabel": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "changeCount": {
+                        "type": "number"
+                      },
+                      "isActive": {
+                        "type": "boolean"
+                      },
+                      "responses": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "version",
+                      "versionId",
+                      "note",
+                      "publishedAt",
+                      "authorLabel",
+                      "changeCount",
+                      "isActive",
+                      "responses"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/forms/{id}/versions/{version}": {
+      "get": {
+        "operationId": "getApiFormsByIdVersionsByVersion",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "compare",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "version",
+            "required": true
+          }
+        ],
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "One published version, optionally diffed against another",
+        "responses": {
+          "200": {
+            "description": "The published document, plus a diff when `compare` is given",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number"
+                    },
+                    "versionId": {
+                      "type": "string"
+                    },
+                    "note": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "publishedAt": {
+                      "type": "number"
+                    },
+                    "doc": {},
+                    "comparedTo": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "op": {
+                            "type": "string"
+                          },
+                          "target": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "from": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "op",
+                          "target",
+                          "label"
+                        ]
+                      }
+                    },
+                    "summary": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "versionId",
+                    "note",
+                    "publishedAt",
+                    "doc",
+                    "comparedTo",
+                    "changes",
+                    "summary"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/forms/{id}/versions/{version}/restore": {
+      "post": {
+        "operationId": "postApiFormsByIdVersionsByVersionRestore",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Restore a published version into the working document",
+        "responses": {
+          "200": {
+            "description": "The draft now matches that version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "number"
+                    },
+                    "summary": {
+                      "type": "string"
+                    },
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "op": {
+                            "type": "string"
+                          },
+                          "target": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "from": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "op",
+                          "target",
+                          "label"
+                        ]
+                      }
+                    },
+                    "doc": {}
+                  },
+                  "required": [
+                    "ok",
+                    "version",
+                    "summary",
+                    "changes",
+                    "doc"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "That version cannot be read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "version",
+            "required": true
+          }
+        ],
         "security": [
           {
             "sessionCookie": []

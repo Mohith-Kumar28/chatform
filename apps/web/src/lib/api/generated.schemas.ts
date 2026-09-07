@@ -199,6 +199,8 @@ export type PostApiForms200 = {
   updatedAt: number;
   workingSchema: unknown;
   activeVersion: number | null;
+  publishedAt: number | null;
+  hasUnpublishedChanges: boolean;
 };
 
 export type PostApiForms403ErrorIssuesItem = {
@@ -234,6 +236,8 @@ export type GetApiFormsById200 = {
   updatedAt: number;
   workingSchema: unknown;
   activeVersion: number | null;
+  publishedAt: number | null;
+  hasUnpublishedChanges: boolean;
 };
 
 export type GetApiFormsById404ErrorIssuesItem = {
@@ -1374,5 +1378,167 @@ export type GetApiAuditLogs200EntriesItem = {
 export type GetApiAuditLogs200 = {
   entries: GetApiAuditLogs200EntriesItem[];
   nextBefore: number | null;
+};
+
+export type GetApiFormsByIdHistoryParams = {
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum -9007199254740991
+ * @maximum 9007199254740991
+ */
+before?: number;
+};
+
+export type GetApiFormsByIdHistory200GroupsItemEntriesItemChangesItem = {
+  op: string;
+  target: string;
+  label: string;
+  from?: string;
+  to?: string;
+};
+
+export type GetApiFormsByIdHistory200GroupsItemEntriesItem = {
+  id: string;
+  kind: string;
+  summary: string;
+  changes: GetApiFormsByIdHistory200GroupsItemEntriesItemChangesItem[];
+  changeCount: number;
+  actorType: string;
+  actorLabel: string | null;
+  source: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type GetApiFormsByIdHistory200GroupsItem = {
+  version: number | null;
+  versionId: string | null;
+  publishedAt: number | null;
+  note: string | null;
+  isActive: boolean;
+  entries: GetApiFormsByIdHistory200GroupsItemEntriesItem[];
+};
+
+export type GetApiFormsByIdHistory200 = {
+  groups: GetApiFormsByIdHistory200GroupsItem[];
+  nextBefore: number | null;
+};
+
+export type GetApiFormsByIdVersions200Item = {
+  version: number;
+  versionId: string;
+  note: string | null;
+  publishedAt: number;
+  authorLabel: string | null;
+  changeCount: number;
+  isActive: boolean;
+  responses: number;
+};
+
+export type GetApiFormsByIdVersionsByVersionParams = {
+/**
+ * @minimum 1
+ * @maximum 9007199254740991
+ */
+compare?: number;
+};
+
+export type GetApiFormsByIdVersionsByVersion200ChangesItem = {
+  op: string;
+  target: string;
+  label: string;
+  from?: string;
+  to?: string;
+};
+
+export type GetApiFormsByIdVersionsByVersion200 = {
+  version: number;
+  versionId: string;
+  note: string | null;
+  publishedAt: number;
+  doc: unknown;
+  comparedTo: number | null;
+  changes: GetApiFormsByIdVersionsByVersion200ChangesItem[];
+  summary: string | null;
+};
+
+export type GetApiFormsByIdVersionsByVersion404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type GetApiFormsByIdVersionsByVersion404Error = {
+  code: string;
+  message: string;
+  issues?: GetApiFormsByIdVersionsByVersion404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type GetApiFormsByIdVersionsByVersion404 = {
+  error: GetApiFormsByIdVersionsByVersion404Error;
+};
+
+export type PostApiFormsByIdVersionsByVersionRestore200ChangesItem = {
+  op: string;
+  target: string;
+  label: string;
+  from?: string;
+  to?: string;
+};
+
+export type PostApiFormsByIdVersionsByVersionRestore200 = {
+  ok: boolean;
+  version: number;
+  summary: string;
+  changes: PostApiFormsByIdVersionsByVersionRestore200ChangesItem[];
+  doc: unknown;
+};
+
+export type PostApiFormsByIdVersionsByVersionRestore404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdVersionsByVersionRestore404Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdVersionsByVersionRestore404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdVersionsByVersionRestore404 = {
+  error: PostApiFormsByIdVersionsByVersionRestore404Error;
+};
+
+export type PostApiFormsByIdVersionsByVersionRestore422ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdVersionsByVersionRestore422Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdVersionsByVersionRestore422ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdVersionsByVersionRestore422 = {
+  error: PostApiFormsByIdVersionsByVersionRestore422Error;
 };
 

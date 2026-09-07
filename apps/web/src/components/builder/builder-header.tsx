@@ -49,6 +49,7 @@ export function BuilderHeader({
   slug,
   status,
   activeVersion,
+  publishedAt,
   onPublish,
   publishing,
   onPreview,
@@ -60,6 +61,8 @@ export function BuilderHeader({
   slug: string | null;
   status: string | undefined;
   activeVersion: number | null;
+  /** When the live version went live. Null until the form is published once. */
+  publishedAt: number | null;
   onPublish: () => void | Promise<void>;
   publishing: boolean;
   /** Opens the full conversation preview. */
@@ -71,6 +74,22 @@ export function BuilderHeader({
   const pathname = usePathname();
   const router = useRouter();
   const published = status === "published";
+  /**
+   * Autosave gives this product two clocks, and the header used to show one.
+   *
+   * "Saved 05:09" answers whether the work is safe. It says nothing about whether
+   * respondents are seeing it, and on a live form those answers differ constantly — every
+   * edit after a publish is saved and not live. Someone who published five minutes ago and
+   * kept working had no way to tell which of their changes were out there.
+   *
+   * So: the save clock is shown only while it has something to say (saving, unsaved,
+   * failed, offline), and the rest of the time the line reports the publish clock instead.
+   * Two indicators competing for the same six words is what made it unreadable.
+   */
+  const editedSincePublish = useBuilderStore((s) => s.editedSincePublish);
+  const saveState = useBuilderStore((s) => s.saveState);
+  const settled = saveState === "saved";
+  const stale = published && editedSincePublish;
 
   const undo = useBuilderStore((s) => s.undo);
   const redo = useBuilderStore((s) => s.redo);
@@ -93,11 +112,11 @@ export function BuilderHeader({
             <div className="min-w-0 leading-tight">
               <h1 className="truncate text-sm font-semibold">{title}</h1>
               <p className="text-muted-foreground flex items-center gap-1.5 text-[0.6875rem]">
-                <span className={cn(published && "text-[var(--success)]")}>
+                <span className={cn(published && !stale && "text-[var(--success)]")}>
                   {published ? `Live · v${activeVersion ?? 1}` : "Draft"}
                 </span>
                 <span aria-hidden>·</span>
-                <SaveIndicator />
+                {settled ? <PublishIndicator stale={stale} published={published} publishedAt={publishedAt} /> : <SaveIndicator />}
               </p>
             </div>
           </div>
@@ -231,27 +250,63 @@ export function BuilderHeader({
             )}
 
 
+            {/*
+              Three states, because the button had one and it lied in two of them.
+
+              A live form with nothing to ship says so and does nothing — republishing an
+              identical document just mints a version nobody asked for, and a permanently
+              enabled primary button is what makes "did that go out?" unanswerable at a
+              glance. A live form with edits is the loud one, carrying a dot so it reads
+              from across the screen. A draft has never been anywhere, so it is simply
+              Publish.
+
+              The button stays mounted and only changes appearance: swapping elements here
+              costs the tooltip and the focus ring mid-interaction.
+            */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   size="sm"
                   shape="pill"
+                  variant={published && !stale ? "soft" : "default"}
                   onClick={async () => {
                     await onPublish();
                     toast.success(published ? "Changes published" : "Form published");
                   }}
-                  disabled={publishing}
+                  disabled={publishing || (published && !stale && settled)}
                 >
                   {publishing ? (
                     <Loader2 className="size-3.5 animate-spin" />
-                  ) : published ? (
+                  ) : published && !stale ? (
                     <Check className="size-3.5" />
+                  ) : stale ? (
+                    <span
+                      className="size-1.5 rounded-full bg-current"
+                      aria-hidden
+                    />
                   ) : null}
-                  {published ? "Publish changes" : "Publish"}
+                  {publishing
+                    ? "Publishing"
+                    : !published
+                      ? "Publish"
+                      : stale
+                        ? "Publish changes"
+                        : "Published"}
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">
-                <TooltipHint label={published ? "Publish changes" : "Publish"} keys={KEY.publish()} />
+                {published && !stale ? (
+                  /* The one state with no action attached still owes an explanation, and
+                     the useful one is when it last went out — that is the question the
+                     disabled button is answering. */
+                  <span className="text-xs">
+                    v{activeVersion ?? 1} is live
+                    {publishedAt ? ` · published ${formatWhen(publishedAt)}` : ""}. No changes to
+                    publish.
+                  </span>
+                ) : (
+                  <TooltipHint label={stale ? "Publish changes" : "Publish"} keys={KEY.publish()} />
+                )}
               </TooltipContent>
             </Tooltip>
           </div>
@@ -296,6 +351,60 @@ function IconAction({
 }
 
 /**
+ * The publish clock, shown once the save clock has nothing left to say.
+ *
+ * Deliberately plain about the awkward state: "Edited since publishing" names the exact
+ * condition rather than the vaguer "unpublished changes", because the thing someone needs
+ * to know is that what they are looking at is not what is out there.
+ */
+function PublishIndicator({
+  stale,
+  published,
+  publishedAt,
+}: {
+  stale: boolean;
+  published: boolean;
+  publishedAt: number | null;
+}) {
+  if (!published) return <span className="shrink-0">Not published</span>;
+  if (stale) {
+    /*
+      `--warning-soft-foreground`, not `--warning-foreground`: the latter is ink for the
+      saturated fill and sits at L≈0.22 in BOTH themes, so on this card it would be
+      dark-on-dark. See the status-colour note in globals.css.
+    */
+    return (
+      <span className="flex shrink-0 items-center gap-1 text-[var(--warning-soft-foreground)]">
+        <span className="size-1.5 rounded-full bg-current" aria-hidden />
+        Edited since publishing
+      </span>
+    );
+  }
+  return (
+    <span className="shrink-0" title={publishedAt ? new Date(publishedAt).toLocaleString() : undefined}>
+      {publishedAt ? `Published ${formatWhen(publishedAt)}` : "Published"}
+    </span>
+  );
+}
+
+/**
+ * Relative for the first day, absolute after.
+ *
+ * "3 days ago" is a worse answer than a date once it is a few days old — the reader has to
+ * do the arithmetic to get back to the thing they actually remember. Within a day the
+ * relative form is the one that needs no arithmetic at all.
+ */
+function formatWhen(at: number): string {
+  const seconds = Math.round((Date.now() - at) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/**
  * Save status. Every state is nameable — the old header showed three bare
  * strings ("saving…", "unsaved", "saved") and nothing at all when a save failed.
  */
@@ -332,6 +441,12 @@ function SaveIndicator() {
   if (saveState === "dirty") {
     return <span className="shrink-0">Unsaved</span>;
   }
+  /*
+    Settled. The header renders `PublishIndicator` instead of this in the settled state —
+    "Saved 05:09" next to "Live · v2" was two clocks in six words, and the one it left out
+    was the one being asked about. Kept as a fallback so this component is still correct
+    on its own, and it is what the timestamp is for.
+  */
   return (
     <span className="shrink-0" onMouseEnter={() => force((n) => n + 1)}>
       {lastSavedAt

@@ -8,6 +8,9 @@ import { hashPassword, isHashedPassword } from "../lib/crypto.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 import { requirePermission, requireGauge, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
 import { stripForPublish, checkDocLimits } from "../lib/doc-entitlements.js";
+import { publishFingerprint, hasUnpublishedChanges } from "../lib/publish-state.js";
+import { afterResponse, parseStoredDoc, recordDocChange, recordFormEvent, stampVersionStatement } from "../lib/form-activity.js";
+import { audit } from "../lib/gate-log.js";
 import { limitReached } from "@repo/entitlements";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
 
@@ -43,6 +46,10 @@ const FormSummary = z.object({
 const FormFull = FormSummary.extend({
   workingSchema: z.unknown(),
   activeVersion: z.number().nullable(),
+  /** When the live version went live. Null until the form is published once. */
+  publishedAt: z.number().nullable(),
+  /** True when the draft differs from what respondents are currently answering. */
+  hasUnpublishedChanges: z.boolean(),
 });
 
 /**
@@ -195,7 +202,15 @@ formsRouter.post(
     )
       .bind(id, ws.orgId, ws.wsId, userId, body.title, slug, workingSchema, crypto.randomUUID().slice(0, 16), Date.now(), Date.now())
       .run();
-    return c.json({ id, title: body.title, slug, status: "draft", responses: 0, updatedAt: Date.now(), workingSchema: JSON.parse(workingSchema), activeVersion: null });
+    await afterResponse(c, recordFormEvent(c.env, {
+        formId: id,
+        orgId: ws.orgId,
+        kind: "created",
+        summary: `Created “${body.title}”`,
+        actor: { type: "user", id: userId },
+        source: body.doc !== undefined ? "template" : "builder",
+      }).catch((err) => console.error("form_activity_failed", err)),);
+    return c.json({ id, title: body.title, slug, status: "draft", responses: 0, updatedAt: Date.now(), workingSchema: JSON.parse(workingSchema), activeVersion: null, publishedAt: null, hasUnpublishedChanges: false });
   },
 );
 
@@ -217,12 +232,23 @@ formsRouter.get(
   async (c) => {
     const id = c.get("form")!.id;
     const row = await c.env.DB.prepare(
-      `SELECT f.id, f.title, f.slug, f.status, f.working_schema, f.updated_at, fv.version
+      `SELECT f.id, f.title, f.slug, f.status, f.working_schema, f.updated_at,
+              fv.version, fv.published_at, fv.checksum
        FROM forms f LEFT JOIN form_versions fv ON fv.id = f.active_version_id
        WHERE f.id = ? AND f.deleted_at IS NULL`,
     )
       .bind(id)
-      .first<{ id: string; title: string; slug: string; status: string; working_schema: string; updated_at: number; version: number | null }>();
+      .first<{
+        id: string;
+        title: string;
+        slug: string;
+        status: string;
+        working_schema: string;
+        updated_at: number;
+        version: number | null;
+        published_at: number | null;
+        checksum: string | null;
+      }>();
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     // normalize legacy docs (missing settings/theme sub-objects) through the schema
     // Migrate on read. Stored rows are never rewritten in place — published
@@ -238,6 +264,17 @@ formsRouter.get(
       updatedAt: row.updated_at,
       workingSchema: normalized.success ? normalized.data : rawDoc,
       activeVersion: row.version,
+      /*
+        The publish clock, which is not the save clock. Autosave answers "is my work
+        safe"; these answer "is my work live", and the builder header needs both because
+        on a published form they are routinely different.
+      */
+      publishedAt: row.published_at,
+      hasUnpublishedChanges: hasUnpublishedChanges({
+        workingSchema: row.working_schema,
+        planId: (await entitlementsFor(c)).planId,
+        activeChecksum: row.checksum,
+      }),
     });
   },
 );
@@ -255,9 +292,39 @@ formsRouter.put(
     }
     const doc = await withHashedPassword(parsed.data);
     const issues = lintFormDoc(doc);
+
+    /*
+      The document as it stood a moment ago, read before it is overwritten. This is the
+      only place the previous state still exists, and without it the history could say
+      that the form was saved but never what the save did.
+
+      One indexed point read on the autosave path. The alternative — keeping a snapshot
+      per save and diffing later — would store a hundred near-identical copies of a form
+      to answer a question a sentence answers.
+    */
+    const previous = parseStoredDoc(
+      (await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`).bind(id).first<{ working_schema: string }>())
+        ?.working_schema,
+    );
+
     await c.env.DB.prepare(`UPDATE forms SET working_schema = ?, updated_at = ? WHERE id = ?`)
       .bind(JSON.stringify(doc), Date.now(), id)
       .run();
+
+    /*
+      Recorded after the response is on its way. Autosave latency is felt as the editor
+      stuttering, and a timeline row is never worth that — nor worth failing a save for,
+      hence the swallowed rejection.
+    */
+    await afterResponse(c, recordDocChange(c.env, {
+        formId: id,
+        orgId: c.get("form")!.organization_id,
+        before: previous,
+        after: doc,
+        actor: { type: "user", id: c.get("userId") ?? null },
+        source: "builder",
+      }).catch((err) => console.error("form_activity_failed", err)),);
+
     return c.json({ ok: true, issues });
   },
 );
@@ -268,6 +335,15 @@ formsRouter.post(
   async (c) => {
     const id = c.get("form")!.id;
     const userId = c.get("userId") as string;
+    /*
+      An optional label for the version, parsed leniently because the body is optional:
+      the builder's Publish button sends nothing at all, and a missing body must not be
+      the difference between publishing and a 400.
+    */
+    const publishNote = await c.req
+      .json<{ note?: unknown }>()
+      .then((b) => (typeof b?.note === "string" ? b.note.trim().slice(0, 200) || null : null))
+      .catch(() => null);
     const row = await c.env.DB.prepare(`SELECT working_schema, theme_json, settings_json FROM forms WHERE id = ? AND deleted_at IS NULL`).bind(id).first<{ working_schema: string; theme_json: string | null; settings_json: string | null }>();
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     const parsed = FormDoc.safeParse(migrateFormDoc(JSON.parse(row.working_schema)));
@@ -306,12 +382,53 @@ formsRouter.post(
     const max = await c.env.DB.prepare(`SELECT COALESCE(MAX(version), 0) AS v FROM form_versions WHERE form_id = ?`).bind(id).first<{ v: number }>();
     const version = (max?.v ?? 0) + 1;
     const verId = `ver_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
-    const checksum = crypto.randomUUID().slice(0, 16);
+    /*
+      A checksum that checksums something. This used to be `crypto.randomUUID()`, so the
+      column named `checksum` could not answer the one question a checksum exists to
+      answer — is the draft still what we published? — and nothing in the product could
+      tell a customer whether their last edit was live.
+
+      Fingerprinted from the working document rather than the stripped one, and salted
+      with the plan: the same draft publishes differently on Free and on Business, so an
+      upgrade correctly marks the form publishable again.
+    */
+    const checksum = publishFingerprint(row.working_schema, ent.planId);
     await c.env.DB.batch([
-      c.env.DB.prepare(`INSERT INTO form_versions (id, form_id, version, schema_json, theme_json, settings_json, checksum, published_at, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(verId, id, version, schemaJson, row.theme_json, row.settings_json, checksum, Date.now(), userId, Date.now()),
+      c.env.DB.prepare(`INSERT INTO form_versions (id, form_id, version, schema_json, theme_json, settings_json, checksum, note, published_at, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(verId, id, version, schemaJson, row.theme_json, row.settings_json, checksum, publishNote, Date.now(), userId, Date.now()),
       c.env.DB.prepare(`UPDATE forms SET status = 'published', active_version_id = ?, updated_at = ? WHERE id = ?`).bind(verId, Date.now(), id),
+      /*
+        Every edit still marked unpublished now belongs to this version. In the same
+        batch as the insert on purpose: a publish that succeeded while its changes were
+        left looking unpublished would be a history that lies, and the builder would go
+        on offering to publish work that is already live.
+      */
+      stampVersionStatement(c.env, id, verId),
     ]);
+
+    const orgId = c.get("form")!.organization_id;
+    await afterResponse(c, Promise.all([
+        recordFormEvent(c.env, {
+          formId: id,
+          orgId,
+          kind: "published",
+          summary: publishNote ? `Published v${version} — ${publishNote}` : `Published version ${version}`,
+          versionId: verId,
+          actor: { type: "user", id: userId },
+        }),
+        // The org-wide activity log had no idea forms existed. A publish is exactly the
+        // kind of thing the admin reading that log is trying to account for.
+        audit(c.env, {
+          orgId,
+          action: "form.published",
+          actorType: "user",
+          actorId: userId,
+          resourceType: "form",
+          resourceId: id,
+          meta: { version, note: publishNote, stripped: stripped.length },
+        }),
+      ]).catch((err) => console.error("form_activity_failed", err)),);
+
     return c.json({ ok: true, version, stripped });
   },
 );

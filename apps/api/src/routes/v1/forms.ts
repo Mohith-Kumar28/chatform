@@ -7,6 +7,7 @@ import { keyOwnsForm, type GuardVars } from "../../lib/guards.js";
 import { requireScope, entitlementsFor, type AuthzVars } from "../../lib/authorize.js";
 import { idempotent } from "../../lib/idempotency.js";
 import { parseDoc, publishForm, saveWorkingDoc } from "../../lib/forms-service.js";
+import { afterResponse, recordFormEvent } from "../../lib/form-activity.js";
 import { clampForRuntime, brandingHiddenFor } from "../../lib/doc-entitlements.js";
 import { decodeCursor, paginate } from "../../lib/cursor.js";
 import { getEntitlements } from "../../lib/entitlements.js";
@@ -197,6 +198,17 @@ formsV1Router.post(
       .bind(id, orgId, workspace.id, userId, body.title, slug, JSON.stringify(doc), crypto.randomUUID().slice(0, 12), now, now)
       .run();
 
+    // A form built by a script still has a history, and "created over the API" is the
+    // first thing someone wants to know when they find one they did not build.
+    await afterResponse(c, recordFormEvent(c.env, {
+        formId: id,
+        orgId,
+        kind: "created",
+        summary: `Created “${body.title}”`,
+        actor: { type: "api_key", id: userId, label: "API" },
+        source: "api",
+      }).catch((err) => console.error("form_activity_failed", err)),);
+
     return c.json({ id, title: body.title, slug, status: "draft", published: false, created_at: now, updated_at: now }, 201);
   },
 );
@@ -224,7 +236,11 @@ formsV1Router.put(
 
     const parsed = parseDoc(c.req.valid("json").doc);
     if (!parsed.ok) return c.json({ error: { code: parsed.code, message: parsed.message } }, parsed.status);
-    await saveWorkingDoc(c.env, id, parsed.doc);
+    await saveWorkingDoc(c.env, id, parsed.doc, {
+      orgId,
+      actor: { type: "api_key", id: c.get("userId") ?? null, label: "API" },
+      source: "api",
+    });
     /**
      * Issues are returned, not enforced. Saving a draft with problems in it is
      * the normal state of building one; publishing is where they become errors.
@@ -260,7 +276,22 @@ formsV1Router.post(
     if (!owned) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
 
     const ent = await entitlementsFor(c as never);
-    const result = await publishForm(c.env, { formId: id, userId: c.get("userId") ?? null, ent });
+    /*
+      An optional label for the version. Parsed leniently: publishing over the API with
+      no body at all is the common case and must not become a 400.
+    */
+    const note = await c.req
+      .json<{ note?: unknown }>()
+      .then((b) => (typeof b?.note === "string" ? b.note : null))
+      .catch(() => null);
+    const result = await publishForm(c.env, {
+      formId: id,
+      userId: c.get("userId") ?? null,
+      ent,
+      orgId,
+      note,
+      source: "api",
+    });
     if (!result.ok) return c.json(result.body as never, result.status);
     return c.json({ ok: true, version: result.version, versionId: result.versionId, stripped: result.stripped });
   },

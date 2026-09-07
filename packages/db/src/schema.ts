@@ -239,6 +239,53 @@ export const formVersions = sqliteTable(
   (t) => [uniqueIndex("uq_versions_form_version").on(t.formId, t.version), index("idx_versions_form_pub").on(t.formId, t.publishedAt)],
 );
 
+/**
+ * What changed in a form, and when — the builder's history.
+ *
+ * Separate from `audit_logs` on purpose. That table answers "who did what in this
+ * organization", is read by an admin, and is gated at Business. This one answers "what
+ * happened to *this form*", is read by whoever is building it, and is free: it is the
+ * safety net under the editor, and charging for undo makes people afraid to edit.
+ *
+ * One row is one sitting, not one autosave. `changes` holds the semantic diff and
+ * later saves from the same author merge into it while it is still open, so a minute
+ * of typing is one entry rather than twelve.
+ *
+ * `form_version_id` is null until the work ships. Publishing stamps every open row
+ * with the version it went out in, which is what turns a flat log into a changelog:
+ * the null rows are "unpublished changes", and the stamped ones group under the
+ * version they produced.
+ */
+export const formActivity = sqliteTable(
+  "form_activity",
+  {
+    id: text("id").primaryKey(),
+    formId: text("form_id").notNull().references(() => forms.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id").notNull(),
+    /** The publish this work shipped in. Null while it is still only a draft change. */
+    formVersionId: text("form_version_id").references(() => formVersions.id, { onDelete: "set null" }),
+    /** "created" | "edited" | "published" | "restored" | "unpublished" | "closed" | "reopened" */
+    kind: text("kind").notNull(),
+    actorType: text("actor_type").notNull().default("user"),
+    actorId: text("actor_id"),
+    actorLabel: text("actor_label"),
+    /** Which surface made the change: "builder", "api", "ai", "template", "system". */
+    source: text("source").notNull().default("builder"),
+    /** One human sentence, computed at write time so a list render needs no diff logic. */
+    summary: text("summary").notNull(),
+    /** The `DocChange[]` from `@repo/form-schema`, as JSON. Null for non-edit kinds. */
+    changes: text("changes"),
+    changeCount: integer("change_count").notNull().default(0),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+    /** Bumped when a later save merges into this row. Ordering uses `created_at`. */
+    updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("idx_activity_form_created").on(t.formId, t.createdAt),
+    index("idx_activity_form_version").on(t.formId, t.formVersionId),
+  ],
+);
+
 export const submissions = sqliteTable(
   "submissions",
   {
