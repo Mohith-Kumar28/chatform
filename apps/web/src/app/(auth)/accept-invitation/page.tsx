@@ -7,6 +7,7 @@ import { authClient, useSession, API_ORIGIN } from "@/lib/auth/auth-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { roleWithArticle } from "@/lib/roles";
 
 /**
  * Where an invitation email lands.
@@ -51,14 +52,6 @@ interface InvitationPreview {
   expiresAt: number | null;
   recipientHasAccount: boolean;
 }
-
-const ROLE_LABELS: Record<string, string> = {
-  owner: "an owner",
-  admin: "an admin",
-  editor: "an editor",
-  viewer: "a viewer",
-  member: "a member",
-};
 
 /** The dead ends, each with its own reason. "Ask for another" is only useful advice on some of them. */
 const DEAD_END: Record<Exclude<InvitationState, "pending">, { title: string; description: string }> = {
@@ -203,7 +196,14 @@ function AcceptInvitation() {
   }
 
   const org = preview.organizationName ?? "a workspace";
-  const roleLabel = preview.role ? (ROLE_LABELS[preview.role] ?? preview.role) : "a teammate";
+  /**
+   * "a teammate" when the invitation names no role — rare, but the sentence has
+   * to finish. Everything else goes through `lib/roles.ts`, which is also where
+   * the switcher's pill and the team roster's badge come from: an invitation
+   * that promises "an editor" and a menu that then says something else about
+   * the same membership is the drift that module exists to prevent.
+   */
+  const roleLabel = preview.role ? roleWithArticle(preview.role) : "a teammate";
   const who = preview.inviterName?.trim() || preview.inviterEmail?.trim() || "Someone";
 
   // Nobody signed in. The address is known, so the account they need is named
