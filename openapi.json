@@ -2251,7 +2251,7 @@
         "tags": [
           "dashboard"
         ],
-        "summary": "Analytics summary (counts + per-block funnel)",
+        "summary": "Analytics summary (counts, funnel, per-question distributions)",
         "responses": {
           "200": {
             "description": "Summary",
@@ -2285,6 +2285,16 @@
                         }
                       ]
                     },
+                    "medianDurationMs": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "perBlock": {
                       "type": "array",
                       "items": {
@@ -2304,6 +2314,9 @@
                           },
                           "answerRate": {
                             "type": "number"
+                          },
+                          "dropOff": {
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -2311,7 +2324,293 @@
                           "blockType",
                           "title",
                           "answered",
-                          "answerRate"
+                          "answerRate",
+                          "dropOff"
+                        ]
+                      }
+                    },
+                    "distributions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "blockRef": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "answered": {
+                            "type": "number"
+                          },
+                          "options": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "label": {
+                                  "type": "string"
+                                },
+                                "count": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "label",
+                                "count"
+                              ]
+                            }
+                          },
+                          "multi": {
+                            "type": "boolean"
+                          },
+                          "values": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": "number"
+                                },
+                                "count": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "count"
+                              ]
+                            }
+                          },
+                          "numericSummary": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "avg": {
+                                    "type": "number"
+                                  },
+                                  "min": {
+                                    "type": "number"
+                                  },
+                                  "max": {
+                                    "type": "number"
+                                  },
+                                  "median": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "avg",
+                                  "min",
+                                  "max",
+                                  "median"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "samples": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "ranking": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "label": {
+                                  "type": "string"
+                                },
+                                "avgRank": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "label",
+                                "avgRank"
+                              ]
+                            }
+                          },
+                          "matrix": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "rows": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "cols": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "counts": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "number"
+                                      }
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "rows",
+                                  "cols",
+                                  "counts"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "timeline": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "label": {
+                                  "type": "string"
+                                },
+                                "count": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "label",
+                                "count"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "blockRef",
+                          "title",
+                          "type",
+                          "answered",
+                          "options",
+                          "multi",
+                          "values",
+                          "numericSummary",
+                          "samples",
+                          "ranking",
+                          "matrix",
+                          "timeline"
+                        ]
+                      }
+                    },
+                    "daily": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date": {
+                            "type": "string"
+                          },
+                          "views": {
+                            "type": "number"
+                          },
+                          "starts": {
+                            "type": "number"
+                          },
+                          "completed": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "date",
+                          "views",
+                          "starts",
+                          "completed"
+                        ]
+                      }
+                    },
+                    "bySource": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "source",
+                          "count"
+                        ]
+                      }
+                    },
+                    "byCountry": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "country": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "country",
+                          "count"
+                        ]
+                      }
+                    },
+                    "byDevice": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mobile": {
+                              "type": "number"
+                            },
+                            "desktop": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "mobile",
+                            "desktop"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "durationBuckets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "count"
                         ]
                       }
                     },
@@ -2377,7 +2676,14 @@
                     "abandoned",
                     "completionRate",
                     "avgDurationMs",
+                    "medianDurationMs",
                     "perBlock",
+                    "distributions",
+                    "daily",
+                    "bySource",
+                    "byCountry",
+                    "byDevice",
+                    "durationBuckets",
                     "locked",
                     "lockedContext"
                   ]

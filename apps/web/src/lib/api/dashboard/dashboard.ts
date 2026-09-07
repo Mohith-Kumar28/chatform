@@ -1646,7 +1646,7 @@ export const getGetApiFormsByIdAnalyticsUrl = (id: string,) => {
 }
 
 /**
- * @summary Analytics summary (counts + per-block funnel)
+ * @summary Analytics summary (counts, funnel, per-question distributions)
  */
 export const getApiFormsByIdAnalytics = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdAnalyticsResponse> => {
 
@@ -1693,7 +1693,7 @@ export type GetApiFormsByIdAnalyticsQueryError = unknown
 
 
 /**
- * @summary Analytics summary (counts + per-block funnel)
+ * @summary Analytics summary (counts, funnel, per-question distributions)
  */
 
 export function useGetApiFormsByIdAnalytics<TData = Awaited<ReturnType<typeof getApiFormsByIdAnalytics>>, TError = unknown>(

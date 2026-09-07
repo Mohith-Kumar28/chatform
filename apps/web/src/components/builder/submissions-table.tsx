@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogBody, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { useClientValue } from "@/hooks/use-client-value";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { blockMeta, TONE_CLASSES } from "./block-library";
 import { cn } from "@/lib/utils";
@@ -82,13 +83,21 @@ export function SubmissionsTable({
    *
    * "Look at this one" was previously a screenshot: the expanded row had no
    * URL, so the only way to point a colleague at a response was to describe it.
-   * Read once, at mount — this component only ever renders after the rows have
-   * arrived from the browser's own fetch, so there is no server render to
-   * disagree with.
+   *
+   * The URL is read through `useClientValue`, which gives the server render a
+   * `null` and the first browser render the real value — reading
+   * `window.location` in a `useState` initialiser instead throws on the server,
+   * and an effect that sets state after mount renders the table twice on every
+   * visit. Once anything has been opened or closed by hand, that choice wins
+   * and the URL is only written to.
    */
-  const [openId, setOpenId] = useState<string | null>(
+  const urlResponse = useClientValue(
     () => new URLSearchParams(window.location.search).get("response"),
+    null as string | null,
   );
+  const [chosen, setChosen] = useState<{ id: string | null } | null>(null);
+  const openId = chosen ? chosen.id : urlResponse;
+  const setOpenId = useCallback((id: string | null) => setChosen({ id }), []);
   const [full, setFull] = useState(false);
   const [confirming, setConfirming] = useState<string[] | null>(null);
 
@@ -153,7 +162,7 @@ export function SubmissionsTable({
         queryClient.invalidateQueries({ queryKey: getGetApiFormsByIdAnalyticsQueryKey(formId as never) }),
       ]);
       setPicked(new Set());
-      setOpenId((cur) => (cur && ids.includes(cur) ? null : cur));
+      if (openId && ids.includes(openId)) setOpenId(null);
       toast.success(ids.length === 1 ? "Response deleted" : `${ids.length} responses deleted`);
     } catch {
       toast.error("Could not delete", { description: "Nothing was removed — try again." });

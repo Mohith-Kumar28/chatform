@@ -495,6 +495,82 @@ export type GetApiFormsByIdAnalytics200PerBlockItem = {
   title: string;
   answered: number;
   answerRate: number;
+  dropOff: number;
+};
+
+export type GetApiFormsByIdAnalytics200DistributionsItemOptionsItem = {
+  label: string;
+  count: number;
+};
+
+export type GetApiFormsByIdAnalytics200DistributionsItemValuesItem = {
+  value: number;
+  count: number;
+};
+
+export type GetApiFormsByIdAnalytics200DistributionsItemNumericSummary = {
+  avg: number;
+  min: number;
+  max: number;
+  median: number;
+} | null;
+
+export type GetApiFormsByIdAnalytics200DistributionsItemRankingItem = {
+  label: string;
+  avgRank: number;
+};
+
+export type GetApiFormsByIdAnalytics200DistributionsItemMatrix = {
+  rows: string[];
+  cols: string[];
+  counts: number[][];
+} | null;
+
+export type GetApiFormsByIdAnalytics200DistributionsItemTimelineItem = {
+  label: string;
+  count: number;
+};
+
+export type GetApiFormsByIdAnalytics200DistributionsItem = {
+  blockRef: string;
+  title: string;
+  type: string;
+  answered: number;
+  options: GetApiFormsByIdAnalytics200DistributionsItemOptionsItem[];
+  multi: boolean;
+  values: GetApiFormsByIdAnalytics200DistributionsItemValuesItem[];
+  numericSummary: GetApiFormsByIdAnalytics200DistributionsItemNumericSummary;
+  samples: string[];
+  ranking: GetApiFormsByIdAnalytics200DistributionsItemRankingItem[];
+  matrix: GetApiFormsByIdAnalytics200DistributionsItemMatrix;
+  timeline: GetApiFormsByIdAnalytics200DistributionsItemTimelineItem[];
+};
+
+export type GetApiFormsByIdAnalytics200DailyItem = {
+  date: string;
+  views: number;
+  starts: number;
+  completed: number;
+};
+
+export type GetApiFormsByIdAnalytics200BySourceItem = {
+  source: string;
+  count: number;
+};
+
+export type GetApiFormsByIdAnalytics200ByCountryItem = {
+  country: string;
+  count: number;
+};
+
+export type GetApiFormsByIdAnalytics200ByDevice = {
+  mobile: number;
+  desktop: number;
+} | null;
+
+export type GetApiFormsByIdAnalytics200DurationBucketsItem = {
+  label: string;
+  count: number;
 };
 
 export type GetApiFormsByIdAnalytics200LockedContext = {
@@ -512,7 +588,14 @@ export type GetApiFormsByIdAnalytics200 = {
   abandoned: number;
   completionRate: number;
   avgDurationMs: number | null;
+  medianDurationMs: number | null;
   perBlock: GetApiFormsByIdAnalytics200PerBlockItem[];
+  distributions: GetApiFormsByIdAnalytics200DistributionsItem[];
+  daily: GetApiFormsByIdAnalytics200DailyItem[];
+  bySource: GetApiFormsByIdAnalytics200BySourceItem[];
+  byCountry: GetApiFormsByIdAnalytics200ByCountryItem[];
+  byDevice: GetApiFormsByIdAnalytics200ByDevice;
+  durationBuckets: GetApiFormsByIdAnalytics200DurationBucketsItem[];
   locked: string[];
   lockedContext: GetApiFormsByIdAnalytics200LockedContext;
 };

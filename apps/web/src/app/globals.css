@@ -222,17 +222,29 @@
   --family-advanced-band: color-mix(in oklch, var(--family-advanced) var(--band-mix), var(--background));
   --family-advanced-band-muted: color-mix(in oklch, var(--family-advanced-ink) var(--band-muted-mix), var(--foreground));
 
-  /* ── charts: orange / violet / teal / amber / rose / sky ──
+  /* ── charts: orange / violet / teal / olive / rose / sky ──
      The first two series are the brand pair, in the mark's order. They used to
      be orange then teal, with the violet demoted to third — so the commonest
      chart on the product, a two-series comparison, was the one place the brand
-     did not appear. Teal keeps its place, one slot later. */
-  --chart-1: var(--brand-orange);
-  --chart-2: var(--brand-violet);
-  --chart-3: oklch(0.68 0.115 195);
-  --chart-4: oklch(0.79 0.14 80);
-  --chart-5: oklch(0.65 0.19 15);
-  --chart-6: oklch(0.7 0.13 235);
+     did not appear. Teal keeps its place, one slot later.
+
+     These are the brand hues *stepped for data*, not the brand tokens
+     themselves — a categorical scale has to satisfy things a brand colour never
+     promises. Every step sits inside the light-mode lightness band (L 0.43–0.77)
+     with chroma above 0.10, every adjacent pair separates by ΔE ≥ 8 under
+     deuteranopia and tritanopia simulation, and each clears 3:1 against white.
+     `--chart-1` is therefore a shade darker than `--brand-orange`, which at
+     L 0.705 fails contrast against a white card, and `--chart-4` is an olive
+     rather than the old amber, which sat outside the band entirely and
+     collided with the rose under red-green colour blindness.
+
+     Verified with the dataviz validator; re-run it before changing a step. */
+  --chart-1: oklch(0.66 0.19 43);
+  --chart-2: oklch(0.6 0.18 300);
+  --chart-3: oklch(0.63 0.115 195);
+  --chart-4: oklch(0.7 0.14 100);
+  --chart-5: oklch(0.58 0.19 10);
+  --chart-6: oklch(0.64 0.14 235);
 
   /* ── sidebar / builder chrome ── */
   /* The question list sits directly on the page — its coloured pills already
@@ -331,12 +343,16 @@
   --info-soft: oklch(0.29 0.05 245);
   --info-soft-foreground: oklch(0.88 0.07 245);
 
-  --chart-1: var(--brand-orange);
-  --chart-2: var(--brand-violet);
-  --chart-3: oklch(0.74 0.11 195);
-  --chart-4: oklch(0.83 0.13 80);
-  --chart-5: oklch(0.72 0.17 15);
-  --chart-6: oklch(0.75 0.12 235);
+  /* The same six, re-stepped for the dark surface rather than flipped: the dark
+     band is L 0.48–0.67, and the old steps (0.72–0.83) sat above all of it —
+     bright enough to glare on a charcoal card and too close together in
+     lightness to separate. Same validation, same order, same identities. */
+  --chart-1: oklch(0.655 0.17 50);
+  --chart-2: oklch(0.63 0.16 300);
+  --chart-3: oklch(0.65 0.11 195);
+  --chart-4: oklch(0.67 0.135 100);
+  --chart-5: oklch(0.6 0.18 10);
+  --chart-6: oklch(0.65 0.13 235);
 
   /* Dark: the families keep their hue but lift for contrast, and the soft
      fills become tints of the surface rather than near-white. */

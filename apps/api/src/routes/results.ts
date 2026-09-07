@@ -6,6 +6,7 @@ import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 import { requirePermission, assertPermission, assertFeature, hasFeature, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
 import { buildResponseTable, toCsv } from "../lib/response-table.js";
+import { computeAnalytics } from "../lib/analytics-service.js";
 import { buildXlsx } from "../lib/xlsx.js";
 
 export const resultsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
@@ -53,6 +54,7 @@ const Summary = z.object({
   abandoned: z.number(),
   completionRate: z.number(),
   avgDurationMs: z.number().nullable(),
+  medianDurationMs: z.number().nullable(),
   perBlock: z.array(
     z.object({
       blockRef: z.string(),
@@ -60,8 +62,37 @@ const Summary = z.object({
       title: z.string(),
       answered: z.number(),
       answerRate: z.number(),
+      dropOff: z.number(),
     }),
   ),
+  /** Per-question answer shapes — whichever of these the question's type fills in. */
+  distributions: z.array(
+    z.object({
+      blockRef: z.string(),
+      title: z.string(),
+      type: z.string(),
+      answered: z.number(),
+      options: z.array(z.object({ label: z.string(), count: z.number() })),
+      multi: z.boolean(),
+      values: z.array(z.object({ value: z.number(), count: z.number() })),
+      numericSummary: z
+        .object({ avg: z.number(), min: z.number(), max: z.number(), median: z.number() })
+        .nullable(),
+      samples: z.array(z.string()),
+      ranking: z.array(z.object({ label: z.string(), avgRank: z.number() })),
+      matrix: z
+        .object({ rows: z.array(z.string()), cols: z.array(z.string()), counts: z.array(z.array(z.number())) })
+        .nullable(),
+      timeline: z.array(z.object({ label: z.string(), count: z.number() })),
+    }),
+  ),
+  daily: z.array(
+    z.object({ date: z.string(), views: z.number(), starts: z.number(), completed: z.number() }),
+  ),
+  bySource: z.array(z.object({ source: z.string(), count: z.number() })),
+  byCountry: z.array(z.object({ country: z.string(), count: z.number() })),
+  byDevice: z.object({ mobile: z.number(), desktop: z.number() }).nullable(),
+  durationBuckets: z.array(z.object({ label: z.string(), count: z.number() })),
   /** Field names withheld because the plan or the role does not include them. */
   locked: z.array(z.string()),
   /** What it would take to see them, and enough truth to make that worth doing. */
@@ -370,116 +401,26 @@ resultsRouter.get(
   (c) => exportSubmissions(c, "xlsx"),
 );
 
-/** Analytics summary: counts + per-block answer rates from D1. */
+/**
+ * The analytics summary the dashboard draws.
+ *
+ * This used to be a second implementation of `computeAnalytics` — the same
+ * counts, the same funnel, the same distributions, written again inline and
+ * drifting: it read the *draft* schema while counting answers from published
+ * versions, and it cost two statements per question plus a correlated subquery
+ * for the total. The numbers the dashboard shows and the numbers `/v1` serves
+ * are now the same numbers.
+ */
 resultsRouter.get(
   "/forms/:id/analytics",
   describeRoute({
     tags: ["dashboard"],
-    summary: "Analytics summary (counts + per-block funnel)",
+    summary: "Analytics summary (counts, funnel, per-question distributions)",
     responses: { 200: { description: "Summary", content: { "application/json": { schema: resolver(Summary) } } } },
   }),
   async (c) => {
     const id = c.get("form")!.id;
-    const counts = await c.env.DB.prepare(
-      `SELECT
-         COUNT(*) AS starts,
-         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
-         SUM(CASE WHEN status = 'abandoned' THEN 1 ELSE 0 END) AS abandoned,
-         AVG(duration_ms) AS avg_duration
-       FROM submissions WHERE form_id = ?`,
-    )
-      .bind(id)
-      .first<{ starts: number; completed: number | null; abandoned: number | null; avg_duration: number | null }>();
-
-    const form = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`).bind(id).first<{ working_schema: string }>();
-    const doc = form ? JSON.parse(form.working_schema) : { blocks: [] };
-    const answerable = (doc.blocks as Block[]).filter((b) => !["welcome", "statement"].includes(b.type));
-
-    const perBlock: { blockRef: string; blockType: string; title: string; answered: number; answerRate: number }[] = [];
-    for (const b of answerable) {
-      const row = await c.env.DB.prepare(
-        `SELECT COUNT(DISTINCT a.submission_id) AS answered,
-                (SELECT COUNT(*) FROM submissions s2 WHERE s2.form_id = ?) AS total
-         FROM submission_answers a WHERE a.form_id = ? AND a.block_ref = ?`,
-      )
-        .bind(id, id, b.ref)
-        .first<{ answered: number; total: number }>();
-      const total = row?.total ?? 0;
-      perBlock.push({
-        blockRef: b.ref,
-        blockType: b.type,
-        title: b.title,
-        answered: row?.answered ?? 0,
-        answerRate: total > 0 ? Math.round(((row?.answered ?? 0) / total) * 100) : 0,
-      });
-    }
-
-    // per-question answer distributions (Summary tab)
-    const distributions = [];
-    for (const b of answerable) {
-      const rows = await c.env.DB.prepare(
-        `SELECT value_json, COUNT(*) AS n FROM submission_answers WHERE form_id = ? AND block_ref = ? GROUP BY value_json ORDER BY n DESC LIMIT 12`,
-      )
-        .bind(id, b.ref)
-        .all<{ value_json: string; n: number }>();
-      let numericSummary: { avg: number; min: number; max: number } | null = null;
-      const options: { label: string; count: number }[] = [];
-      const numericTypes = ["rating", "nps", "opinion_scale", "number"];
-      if (numericTypes.includes(b.type)) {
-        const agg = await c.env.DB.prepare(
-          `SELECT AVG(value_number) AS avg, MIN(value_number) AS min, MAX(value_number) AS max FROM submission_answers WHERE form_id = ? AND block_ref = ? AND value_number IS NOT NULL`,
-        )
-          .bind(id, b.ref)
-          .first<{ avg: number | null; min: number | null; max: number | null }>();
-        if (agg?.avg !== null && agg?.avg !== undefined) {
-          numericSummary = { avg: Math.round(agg.avg * 10) / 10, min: agg.min ?? 0, max: agg.max ?? 0 };
-        }
-      } else {
-        /**
-         * The Summary chart's bars are labelled with the option, not its id.
-         *
-         * A "Which best describes you?" chart read `opt_founder001` /
-         * `opt_dev0000001` down the axis — the one view whose entire job is to
-         * tell you at a glance what people picked.
-         *
-         * Multi-answer blocks are counted per option rather than per distinct
-         * combination, or a multi-select's chart is a list of every set anyone
-         * happened to choose, each with a count of one.
-         */
-        const tally = new Map<string, number>();
-        for (const row of rows.results ?? []) {
-          let parsed: unknown = row.value_json;
-          try {
-            parsed = JSON.parse(row.value_json);
-          } catch {
-            /* keep the raw text */
-          }
-          const parts = Array.isArray(parsed) ? parsed : [parsed];
-          const perValue = Array.isArray(parsed) ? parts : [parsed];
-          for (const part of perValue) {
-            const label = displayAnswer(b as Block, part);
-            tally.set(label, (tally.get(label) ?? 0) + row.n);
-          }
-        }
-        for (const [label, count] of [...tally.entries()].sort((a, z) => z[1] - a[1]).slice(0, 12)) {
-          options.push({ label, count });
-        }
-      }
-      distributions.push({
-        blockRef: b.ref,
-        title: b.title,
-        type: b.type,
-        answered: perBlock.find((p) => p.blockRef === b.ref)?.answered ?? 0,
-        numericSummary,
-        options,
-      });
-    }
-
-    // views from rollups
-    const viewsRow = await c.env.DB.prepare(`SELECT SUM(views) AS v FROM analytics_rollup_daily WHERE form_id = ?`).bind(id).first<{ v: number | null }>();
-
-    const starts = counts?.starts ?? 0;
-    const completed = counts?.completed ?? 0;
+    const agg = await computeAnalytics(c.env, id);
 
     /**
      * Basic analytics are free; advanced analytics are Pro.
@@ -488,7 +429,7 @@ resultsRouter.get(
      * completion rate and the abandoned count stay real and unblurred on every plan —
      * those are the numbers that make someone curious. What is withheld is the *detail*
      * that answers the curiosity: which question people drop off at, how each one
-     * performed, what the answers actually were.
+     * performed, what the answers actually were, and where they came from.
      *
      * `locked` names what was withheld and `worstBlock` names where the drop-off is
      * without giving the number, so a free user can be told "most people drop off at
@@ -498,28 +439,36 @@ resultsRouter.get(
     const roleAdvanced = !(await assertPermission(c, "analytics", "read_advanced"));
     const showDetail = advanced && roleAdvanced;
 
-    const worst = perBlock.reduce<{ title: string; index: number } | null>((acc, b, i) => {
+    const worst = agg.perBlock.reduce<{ title: string; index: number } | null>((acc, b, i) => {
       if (acc === null) return { title: b.title, index: i + 1 };
-      const prev = perBlock[acc.index - 1];
+      const prev = agg.perBlock[acc.index - 1];
       return prev && b.answerRate < prev.answerRate ? { title: b.title, index: i + 1 } : acc;
     }, null);
 
     return c.json({
-      views: viewsRow?.v ?? starts,
-      starts,
-      completed,
-      abandoned: counts?.abandoned ?? 0,
-      completionRate: starts > 0 ? Math.round((completed / starts) * 100) : 0,
-      avgDurationMs: showDetail ? (counts?.avg_duration ? Math.round(counts.avg_duration) : null) : null,
-      perBlock: showDetail ? perBlock : [],
-      distributions: showDetail ? distributions : [],
-      locked: showDetail ? [] : ["perBlock", "distributions", "avgDurationMs"],
+      views: agg.views,
+      starts: agg.starts,
+      completed: agg.completed,
+      abandoned: agg.abandoned,
+      completionRate: agg.completionRate,
+      avgDurationMs: showDetail ? agg.avgDurationMs : null,
+      medianDurationMs: showDetail ? agg.medianDurationMs : null,
+      perBlock: showDetail ? agg.perBlock : [],
+      distributions: showDetail ? agg.distributions : [],
+      daily: showDetail ? agg.daily : [],
+      bySource: showDetail ? agg.bySource : [],
+      byCountry: showDetail ? agg.byCountry : [],
+      byDevice: showDetail ? agg.byDevice : null,
+      durationBuckets: showDetail ? agg.durationBuckets : [],
+      locked: showDetail
+        ? []
+        : ["perBlock", "distributions", "avgDurationMs", "medianDurationMs", "daily", "bySource", "byCountry", "byDevice", "durationBuckets"],
       lockedContext: showDetail
         ? null
         : {
             feature: "advanced_analytics",
             requiredPlan: "pro",
-            questionCount: perBlock.length,
+            questionCount: agg.perBlock.length,
             worstBlockTitle: worst?.title ?? null,
             worstBlockIndex: worst?.index ?? null,
           },

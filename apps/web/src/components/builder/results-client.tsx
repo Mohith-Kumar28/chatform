@@ -2,29 +2,19 @@
 
 import { useMemo, useState } from "react";
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip as ReTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
   CheckCircle2,
-  Clock,
   Download,
   Eye,
-  Inbox,
-  MessageSquare,
   FileText,
+  Gauge,
+  Inbox,
   Lock,
+  MessageSquare,
   Sheet,
   TrendingDown,
   Users,
 } from "lucide-react";
-import { type FormDoc } from "@repo/form-schema";
+import { type Block, type FormDoc } from "@repo/form-schema";
 import {
   useGetApiFormsById,
   useGetApiFormsByIdAnalytics,
@@ -42,6 +32,8 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { StatCard } from "@/components/ui/stat-card";
+import { ResultsAnalytics, type AnalyticsPayload } from "./results-analytics";
+import { ResultsSummary, type Distribution } from "./results-summary";
 import { SubmissionsTable, type SubmissionRecord } from "./submissions-table";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { LockedOverlay, LockChip, SkeletonRows, SkeletonChart, useUpgrade } from "@/components/billing/gate";
@@ -53,23 +45,14 @@ interface ResultsClientProps {
   formId: string;
 }
 
-interface Analytics {
-  views: number;
-  starts: number;
-  completed: number;
-  abandoned: number;
-  completionRate: number;
-  avgDurationMs: number | null;
-  perBlock: { blockRef: string; title: string; answered: number; answerRate: number }[];
-  distributions?: {
-    blockRef: string;
-    title: string;
-    type: string;
-    counts?: { label: string; count: number }[];
-    avg?: number;
-    min?: number;
-    max?: number;
-  }[];
+/**
+ * What `GET /forms/:id/analytics` sends.
+ *
+ * The shape is the server's `AnalyticsAggregate` plus what the gate does to it:
+ * the paid halves arrive empty rather than absent, and `locked` names them.
+ */
+interface Analytics extends AnalyticsPayload {
+  distributions: Distribution[];
   /** Field names the server withheld because the plan does not include them. */
   locked?: string[];
   /**
@@ -217,7 +200,7 @@ export function ResultsClient({ formId }: ResultsClientProps) {
         </div>
       )}
 
-      {tab === "summary" && <SummaryTab analytics={analytics} entitled={canAnalytics} />}
+      {tab === "summary" && <SummaryTab analytics={analytics} entitled={canAnalytics} blocks={columns} />}
       {tab === "analytics" && <AnalyticsTab analytics={analytics} entitled={canAnalytics} />}
     </div>
   );
@@ -319,16 +302,23 @@ function DownloadMenu({
   );
 }
 
-function SummaryTab({ analytics, entitled }: { analytics?: Analytics; entitled: boolean }) {
-  const dists = analytics?.distributions ?? [];
-
-  /**
-   * Charted answers are advanced analytics.
-   *
-   * The real response count sits above the blur, because a number the user already knows
-   * is true is what makes the locked chart worth unlocking. An empty form gets the
-   * ordinary empty state instead — the rule is never to gate before there is data.
-   */
+/**
+ * The Summary tab: what people answered, gated.
+ *
+ * The gate wraps the charts and nothing else. The real response count sits
+ * above the blur, because a number the user already knows is true is what makes
+ * a locked chart worth unlocking, and an empty form gets the ordinary empty
+ * state — the rule is never to gate before there is data.
+ */
+function SummaryTab({
+  analytics,
+  entitled,
+  blocks,
+}: {
+  analytics?: Analytics;
+  entitled: boolean;
+  blocks: Block[];
+}) {
   if (!entitled) {
     const answered = analytics?.completed ?? 0;
     if (answered === 0) {
@@ -361,128 +351,66 @@ function SummaryTab({ analytics, entitled }: { analytics?: Analytics; entitled: 
     );
   }
 
-  if (dists.length === 0) {
-    return (
-      <EmptyState
-        icon={MessageSquare}
-        title="Nothing to summarise yet"
-        description="Once responses come in, you'll see how people answered each question."
-      />
-    );
-  }
-
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      {dists.map((d) => (
-        <div key={d.blockRef} className="bg-card rounded-xl p-4">
-          <p className="text-h3 mb-3">{d.title}</p>
-          {d.counts && d.counts.length > 0 ? (
-            <ResponsiveContainer width="100%" height={Math.max(140, d.counts.length * 34)}>
-              <BarChart data={d.counts} layout="vertical" margin={{ left: 8, right: 16 }}>
-                <CartesianGrid horizontal={false} stroke="var(--border)" />
-                <XAxis type="number" hide />
-                <YAxis
-                  type="category"
-                  dataKey="label"
-                  width={110}
-                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <ReTooltip
-                  cursor={{ fill: "var(--muted)" }}
-                  contentStyle={{
-                    background: "var(--popover)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "0.5rem",
-                    fontSize: "0.8125rem",
-                  }}
-                />
-                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                  {d.counts.map((_, i) => (
-                    <Cell key={i} fill={`var(--chart-${(i % 6) + 1})`} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="grid grid-cols-3 gap-3">
-              <Metric label="Average" value={d.avg?.toFixed(1) ?? "—"} />
-              <Metric label="Lowest" value={d.min ?? "—"} />
-              <Metric label="Highest" value={d.max ?? "—"} />
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
+    <ResultsSummary
+      distributions={analytics?.distributions ?? []}
+      starts={analytics?.starts ?? 0}
+      blocks={blocks}
+    />
   );
 }
 
+/**
+ * The Analytics tab.
+ *
+ * Views, starts, completions, the rate and the abandoned count stay real and
+ * unblurred on every plan — those are the numbers that make someone curious.
+ * What is behind the gate is the detail that answers the curiosity, and the
+ * server withholds it rather than the client hiding it: `worstBlockTitle`
+ * arrives without the numbers behind it, so the locked panel can truthfully say
+ * *where* people leave while the why stays locked.
+ */
 function AnalyticsTab({ analytics, entitled }: { analytics?: Analytics; entitled: boolean }) {
-  // Before the early return: a hook after one is called on some renders and not others,
-  // which changes hook order and breaks every hook below it.
   const upgrade = useUpgrade();
-  const upgradeAnalytics = () => upgrade("advanced_analytics", { surface: "results.analytics" });
 
   if (!analytics) return <div className="shimmer h-64 rounded-xl" />;
 
-  const funnel = analytics.perBlock ?? [];
-  const locked = analytics.lockedContext;
-
-  return (
-    <div className="space-y-6">
-      {/* 3x2 rather than the wrapping 6-across that broke at every width. */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard label="Views" value={analytics.views} icon={Eye} />
-        <StatCard label="Started" value={analytics.starts} icon={Users} />
-        <StatCard label="Completed" value={analytics.completed} icon={CheckCircle2} tone="success" />
-        <StatCard
-          label="Completion rate"
-          value={`${Math.round((analytics.completionRate ?? 0) * 100)}%`}
-          icon={TrendingDown}
-          tone="primary"
-        />
-        <StatCard label="Abandoned" value={analytics.abandoned} icon={Inbox} tone="warning" />
-        {/* Views, starts, completions, rate and abandoned stay real and unblurred on every
-            plan — those are the numbers that make someone curious. Average time is part of
-            the detail that answers the curiosity, so it goes behind the gate with the rest. */}
-        {entitled ? (
+  if (!entitled) {
+    const locked = analytics.lockedContext;
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <StatCard label="Views" value={analytics.views} icon={Eye} />
+          <StatCard label="Started" value={analytics.starts} icon={Users} />
+          <StatCard label="Completed" value={analytics.completed} icon={CheckCircle2} tone="success" />
           <StatCard
-            label="Average time"
-            value={analytics.avgDurationMs ? `${Math.round(analytics.avgDurationMs / 1000)}s` : "—"}
-            icon={Clock}
+            label="Completion rate"
+            value={`${analytics.completionRate ?? 0}%`}
+            icon={Gauge}
+            tone="primary"
           />
-        ) : (
+          <StatCard label="Didn't finish" value={analytics.abandoned} icon={TrendingDown} tone="warning" />
           <button
             type="button"
-            onClick={() => upgradeAnalytics()}
+            onClick={() => upgrade("advanced_analytics", { surface: "results.analytics" })}
             className="bg-card hover:bg-muted/40 flex items-center justify-between gap-2 rounded-xl p-4 text-left transition-colors"
           >
             <div>
-              <p className="text-muted-foreground text-caption">Average time</p>
+              <p className="text-muted-foreground text-caption">Median time</p>
               <p className="text-h3 blur-[5px] select-none" aria-hidden>
                 48s
               </p>
             </div>
             <LockChip feature="advanced_analytics" />
           </button>
-        )}
-      </div>
+        </div>
 
-      {!entitled ? (
-        /**
-         * The drop-off funnel, named but withheld.
-         *
-         * The server sends `worstBlockTitle` and `worstBlockIndex` without the numbers
-         * behind them, so this can truthfully say *where* people leave while the *why*
-         * stays locked. That one sentence is the entire upsell for this surface.
-         */
         <LockedOverlay
           feature="advanced_analytics"
           headline={
             locked?.worstBlockIndex
               ? `Most people drop off at question ${locked.worstBlockIndex} — “${locked.worstBlockTitle}”. Unlock to see why.`
-              : "See exactly which question people leave on."
+              : "See exactly which question people leave on, when responses arrive, and where they come from."
           }
           className="bg-card"
         >
@@ -491,52 +419,9 @@ function AnalyticsTab({ analytics, entitled }: { analytics?: Analytics; entitled
             <SkeletonChart bars={Math.min(9, Math.max(4, locked?.questionCount ?? 5))} />
           </div>
         </LockedOverlay>
-      ) : (
-      <div className="bg-card rounded-xl p-4">
-        <p className="text-h3 mb-1">Where people drop off</p>
-        <p className="text-muted-foreground text-caption mb-4">
-          The share of respondents who answered each question.
-        </p>
-        {funnel.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No responses yet.</p>
-        ) : (
-          <ResponsiveContainer width="100%" height={Math.max(160, funnel.length * 38)}>
-            <BarChart data={funnel} layout="vertical" margin={{ left: 8, right: 32 }}>
-              <CartesianGrid horizontal={false} stroke="var(--border)" />
-              <XAxis type="number" domain={[0, 1]} hide />
-              <YAxis
-                type="category"
-                dataKey="title"
-                width={140}
-                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <ReTooltip
-                cursor={{ fill: "var(--muted)" }}
-                formatter={(v) => [`${Math.round(Number(v ?? 0) * 100)}%`, "Answered"]}
-                contentStyle={{
-                  background: "var(--popover)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "0.5rem",
-                  fontSize: "0.8125rem",
-                }}
-              />
-              <Bar dataKey="answerRate" fill="var(--chart-1)" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        )}
       </div>
-      )}
-    </div>
-  );
-}
+    );
+  }
 
-function Metric({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="bg-muted/40 rounded-lg p-2.5 text-center">
-      <p className="text-muted-foreground text-micro">{label}</p>
-      <p className="tabular text-h2">{value}</p>
-    </div>
-  );
+  return <ResultsAnalytics analytics={analytics} />;
 }
