@@ -7,12 +7,22 @@ export const SettingsDoc = z.object({
   rtl: z.boolean().default(false),
 
   progressBar: z.enum(["percent", "steps", "none"]).default("percent"),
+  /**
+   * `allowSkip` defaults on, and that is the conversational default rather than
+   * the form one.
+   *
+   * A question the author marked optional is a question they said they could do
+   * without; defaulting to "no skipping" made the runtime hold a respondent on
+   * it anyway until they typed something, which turns an optional question into
+   * a required one with extra steps. Required questions are unaffected — the
+   * skip control never appears on those.
+   */
   navigation: z
     .object({
       allowBack: z.boolean().default(true),
-      allowSkip: z.boolean().default(false),
+      allowSkip: z.boolean().default(true),
     })
-    .default({ allowBack: true, allowSkip: false }),
+    .default({ allowBack: true, allowSkip: true }),
 
   closeRules: z
     .object({
