@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetApiKeys,
@@ -22,6 +21,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
   Table,
   TableBody,
   TableCell,
@@ -30,26 +36,31 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { LockedControl } from "@/components/billing/gate";
-import { ArrowUpRight, ExternalLink, KeyRound, Plus, Trash2, ShieldAlert } from "lucide-react";
+import { BookOpen, Eye, EyeOff, KeyRound, Plus, ShieldAlert, Trash2 } from "lucide-react";
 import { useClientValue } from "@/hooks/use-client-value";
-import { API_ORIGIN, ApiError } from "@/lib/api/mutator";
+import { ApiError } from "@/lib/api/mutator";
 
 /**
  * API keys.
  *
- * Two things this page owes a developer: the keys themselves, and the way in.
- * It shipped with only the first — no base URL, no first request, no link to
- * the docs or to the two packages we publish — so a key was a string with
- * nowhere to go. The rest of the page had drifted the other way: a per-row
- * rate-limit figure and a paragraph about 429s and 24-hour grace windows, all
- * of it reference material that belongs in /docs/rate-limits and nowhere near
- * a list of keys.
+ * The page's whole job is the keys. It had grown a documentation site inside
+ * itself — a first-request snippet, an SDK card, four doc tiles and a footnote
+ * carrying the base URL — all of it a worse copy of pages that already exist
+ * under /docs, and all of it in front of someone who came here to mint a key
+ * or read a prefix. One "Docs" button in the header replaces the lot: the
+ * reference lives in one place, and this screen stops pretending to be it.
  *
- * Rotation is gone too. It read as the mild sibling of revoke and was in fact
- * the sharper one — a click started a 24-hour clock on a key serving
- * production traffic. Nobody else offers it on this screen: you create a
- * second key, deploy it, then revoke the first, which is the same rotation
- * with each step under your control.
+ * What was missing is the opposite problem. A key's scopes are the entire
+ * reason a key is dangerous or safe, and the list showed three of them with a
+ * "+2" and no way to see the rest — the rows were not even clickable. A row
+ * now opens a panel with every scope, every allowed origin, the rate limit and
+ * the usage, which is the one screen you actually want when asking "what can
+ * this key do?".
+ *
+ * Rotation is gone, deliberately. It read as the mild sibling of revoke and
+ * was the sharper one — a click started a 24-hour clock on a key serving
+ * production traffic. Create a second key, deploy it, revoke the first: the
+ * same rotation with each step under your control.
  */
 
 type KeyType = "sk_live" | "sk_test" | "pk_live" | "pk_test";
@@ -85,26 +96,17 @@ const PUBLISHABLE_CEILING: Record<string, string[]> = {
   file: ["write"],
 };
 
-/** Enough to see the shape of a key's access; the rest is a hover away. */
+/** Enough to see the shape of a key's access; the row opens for the rest. */
 const SCOPES_SHOWN = 3;
-
-const FIRST_REQUEST = `curl ${API_ORIGIN}/v1/me \\
-  -H "x-api-key: $CHATFORM_SECRET_KEY"`;
-
-const SDKS = [
-  { pkg: "@chatformhq/js", blurb: "Typed client" },
-  { pkg: "@chatformhq/react", blurb: "Hooks & embed" },
-];
-
-const DOC_LINKS = [
-  { href: "/docs/quickstart", title: "Quickstart", blurb: "A key to a stored answer in five minutes." },
-  { href: "/docs/authentication", title: "Authentication", blurb: "Key types, headers, and what a 401 means." },
-  { href: "/docs/scopes", title: "Scopes", blurb: "What each scope grants — and never grants." },
-  { href: "/docs/rate-limits", title: "Rate limits", blurb: "Per-key limits, quotas, and the headers to watch." },
-];
 
 function isPublishable(type: KeyType) {
   return type.startsWith("pk_");
+}
+
+function scopeList(scopes: Record<string, string[]> | undefined): string[] {
+  return Object.entries(scopes ?? {}).flatMap(([resource, actions]) =>
+    actions.map((a) => `${resource}:${a}`),
+  );
 }
 
 /**
@@ -127,6 +129,49 @@ function hoursUntil(ts: number, now: number): number {
   return Math.max(1, Math.round((ts - now) / 3_600_000));
 }
 
+/**
+ * The eye, and what it can honestly reveal.
+ *
+ * We store an Argon2 hash and the first few characters, so the secret itself is
+ * unrecoverable the moment the create dialog closes — an eye that promised the
+ * whole key would be a lie the backend cannot keep. What it hides and shows is
+ * the prefix, which is the part that identifies a key on a screen someone else
+ * might be looking at.
+ */
+function KeyPrefix({ start, keyType }: { start: string | null; keyType: KeyType }) {
+  const [shown, setShown] = useState(false);
+  const visible = start ? `${start}${"•".repeat(8)}` : "—";
+  const masked = `${keyType}_${"•".repeat(10)}`;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <code className="font-mono">{shown ? visible : masked}</code>
+      <button
+        type="button"
+        // The row is a button too; without this the eye would also open the panel.
+        onClick={(e) => {
+          e.stopPropagation();
+          setShown((s) => !s);
+        }}
+        aria-label={shown ? "Hide key prefix" : "Show key prefix"}
+        title={shown ? "Hide key prefix" : "Show key prefix"}
+        className="text-muted-foreground hover:text-foreground rounded p-0.5 transition-colors"
+      >
+        {shown ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
+      </button>
+    </span>
+  );
+}
+
+/** A small labelled fact. The detail panel is a stack of these. */
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-1.5 text-sm">
+      <span className="text-muted-foreground shrink-0 text-xs">{label}</span>
+      <span className="min-w-0 text-right">{children}</span>
+    </div>
+  );
+}
+
 export default function ApiKeysPage() {
   const queryClient = useQueryClient();
   // Read once per mount, so the server and first client renders agree.
@@ -138,6 +183,8 @@ export default function ApiKeysPage() {
 
   const [open, setOpen] = useState(false);
   const [created, setCreated] = useState<{ key: string; keyType: KeyType } | null>(null);
+  const [revealCreated, setRevealCreated] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<KeyRow | null>(null);
   /**
    * Refusals, shown where they happened.
@@ -162,6 +209,10 @@ export default function ApiKeysPage() {
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: getGetApiKeysQueryKey() });
   const createKey = usePostApiKeys({ mutation: { onSuccess: invalidate } });
   const revokeKey = useDeleteApiKeysById({ mutation: { onSuccess: invalidate } });
+
+  // Tracked by id, not by object, so the panel keeps showing live data after a
+  // revoke invalidates the list rather than a frozen copy of the old row.
+  const detail = keys.find((k) => k.id === detailId) ?? null;
 
   /**
    * The vocabulary comes from the API rather than a copy of it here — a scope
@@ -203,6 +254,7 @@ export default function ApiKeysPage() {
           ...(parsedOrigins.length ? { origins: parsedOrigins } : {}),
         } as never,
       })) as unknown as { key: string };
+      setRevealCreated(false);
       setCreated({ key: result.key, keyType });
     } catch (err) {
       setFormError(messageFor(err));
@@ -222,18 +274,27 @@ export default function ApiKeysPage() {
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <PageHeader
         title="API keys"
-        description="Drive chatform from your own products — a server integration, a custom interface, or a page that embeds a form."
+        description="Drive chatform from your own code."
         actions={
-          /**
-           * Gated in the UI as well as the API. The server refuses on a plan
-           * without api_access, but discovering that after filling in a form is
-           * a worse way to find out.
-           */
-          <LockedControl feature="api_access">
-            <Button shape="pill" onClick={() => setOpen(true)}>
-              <Plus className="size-4" /> Create key
+          <>
+            {/* Everything this page used to explain, in one link. New tab: you
+                open the reference to keep it beside the key, not instead of it. */}
+            <Button variant="outline" shape="pill" asChild>
+              <a href="/docs" target="_blank" rel="noreferrer">
+                <BookOpen className="size-4" /> Docs
+              </a>
             </Button>
-          </LockedControl>
+            {/*
+             * Gated in the UI as well as the API. The server refuses on a plan
+             * without api_access, but discovering that after filling in a form
+             * is a worse way to find out.
+             */}
+            <LockedControl feature="api_access">
+              <Button shape="pill" onClick={() => setOpen(true)}>
+                <Plus className="size-4" /> Create key
+              </Button>
+            </LockedControl>
+          </>
         }
       />
 
@@ -263,9 +324,9 @@ export default function ApiKeysPage() {
               </LockedControl>
             }
             hint={
-              <Link href="/docs/quickstart" className="underline underline-offset-2">
+              <a href="/docs/quickstart" target="_blank" rel="noreferrer" className="underline underline-offset-2">
                 Read the quickstart
-              </Link>
+              </a>
             }
           />
         ) : (
@@ -286,15 +347,28 @@ export default function ApiKeysPage() {
               </TableHeader>
               <TableBody>
                 {keys.map((k) => {
-                  const scopes = Object.entries(k.scopes ?? {}).flatMap(([resource, actions]) =>
-                    actions.map((a) => `${resource}:${a}`),
-                  );
+                  const scopes = scopeList(k.scopes);
                   // Three chips read as a summary; five wrap to three lines and
-                  // read as a wall. The full list is on the row's title.
+                  // read as a wall. The panel has the full list.
                   const shown = scopes.slice(0, SCOPES_SHOWN);
                   const overflow = scopes.length - shown.length;
                   return (
-                    <TableRow key={k.id} className={k.enabled ? undefined : "opacity-60"}>
+                    <TableRow
+                      key={k.id}
+                      // A row of facts with more facts behind it should say so
+                      // by being pressable. Keyboard reachable, because the
+                      // panel is the only way to read a key's full access.
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setDetailId(k.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setDetailId(k.id);
+                        }
+                      }}
+                      className={`hover:bg-muted/50 focus-visible:ring-ring/50 cursor-pointer outline-none focus-visible:ring-2 ${k.enabled ? "" : "opacity-60"}`}
+                    >
                       <TableCell className="h-auto py-3 pl-4">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium">{k.name ?? "Untitled key"}</span>
@@ -308,18 +382,13 @@ export default function ApiKeysPage() {
                           )}
                         </div>
                         <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                          <code className="font-mono">{k.start ?? "—"}…</code>
+                          <KeyPrefix start={k.start} keyType={k.keyType} />
                           <span>created {relative(k.createdAt, now)}</span>
-                          {k.origins.length > 0 && (
-                            <span>
-                              {k.origins.length} origin{k.origins.length === 1 ? "" : "s"}
-                            </span>
-                          )}
                           <span className="sm:hidden">last used {relative(k.lastUsedAt, now)}</span>
                         </div>
                       </TableCell>
                       <TableCell className="h-auto max-w-64 py-3">
-                        <div className="flex flex-wrap items-center gap-1" title={scopes.join(" ")}>
+                        <div className="flex flex-wrap items-center gap-1">
                           {scopes.length === 0 ? (
                             <span className="text-muted-foreground text-xs">—</span>
                           ) : (
@@ -349,7 +418,10 @@ export default function ApiKeysPage() {
                             size="icon-sm"
                             title="Revoke key"
                             aria-label={`Revoke ${k.name ?? "this key"}`}
-                            onClick={() => setRevoking(k)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRevoking(k);
+                            }}
                           >
                             <Trash2 className="size-3.5" />
                           </Button>
@@ -364,93 +436,128 @@ export default function ApiKeysPage() {
         )}
       </div>
 
-      {/* ── the way in ─────────────────────────────────────────────────── */}
-      <section className="mt-12">
-        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2 className="text-h3">Start building</h2>
-          <Link
-            href="/docs"
-            className="text-muted-foreground hover:text-foreground text-xs transition-colors"
-          >
-            All documentation →
-          </Link>
-        </div>
+      {/* ── one key, in full ───────────────────────────────────────────── */}
+      <Sheet open={detail !== null} onOpenChange={(o) => !o && setDetailId(null)}>
+        <SheetContent side="right" className="w-full gap-0 overflow-y-auto sm:max-w-md">
+          {detail && (
+            <>
+              {/* `pr-10` clears the sheet's own absolute close button, which a
+                  long key name would otherwise run underneath. */}
+              <SheetHeader className="border-b pr-10">
+                <SheetTitle className="font-display">{detail.name ?? "Untitled key"}</SheetTitle>
+                <SheetDescription>
+                  {KEY_TYPES.find((t) => t.value === detail.keyType)?.blurb}
+                </SheetDescription>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <Badge variant={isPublishable(detail.keyType) ? "secondary" : "default"}>
+                    {isPublishable(detail.keyType) ? "Publishable" : "Secret"}
+                  </Badge>
+                  <Badge variant="outline">{detail.environment}</Badge>
+                  {!detail.enabled && <Badge variant="destructive">Revoked</Badge>}
+                </div>
+              </SheetHeader>
 
-        <div className="grid gap-3 md:grid-cols-2">
-          {/* The one request that proves the key works, ready to paste. */}
-          <Card className="gap-0 overflow-hidden py-0">
-            <div className="flex items-center justify-between gap-2 border-b px-4 py-2">
-              <span className="text-muted-foreground text-xs font-medium">Your first request</span>
-              <CopyButton value={FIRST_REQUEST} toastMessage="Snippet copied" />
-            </div>
-            <pre className="overflow-x-auto px-4 py-3 text-xs leading-relaxed">
-              <code className="font-mono">{FIRST_REQUEST}</code>
-            </pre>
-          </Card>
+              <div className="space-y-6 p-4">
+                <div>
+                  <h3 className="mb-1.5 text-xs font-medium">Scopes</h3>
+                  {/*
+                    Every one of them, grouped by the resource they act on.
+                    "+2 more" on the list row was the whole problem: the answer
+                    to "can this key read responses?" was hidden behind a number.
+                  */}
+                  {Object.keys(detail.scopes ?? {}).length === 0 ? (
+                    <p className="text-muted-foreground text-xs">
+                      No scopes. This key can authenticate and nothing else.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {Object.entries(detail.scopes).map(([resource, actions]) => (
+                        <div key={resource} className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-muted-foreground w-20 shrink-0 text-xs">{resource}</span>
+                          {actions.map((action) => (
+                            <span
+                              key={action}
+                              className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[11px]"
+                            >
+                              {resource}:{action}
+                            </span>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-muted-foreground mt-2 text-xs">
+                    No key can mint another key or change your plan.{" "}
+                    <a
+                      href="/docs/scopes"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-2"
+                    >
+                      Scope reference
+                    </a>
+                  </p>
+                </div>
 
-          <Card className="gap-0 overflow-hidden py-0">
-            <div className="flex items-center justify-between gap-2 border-b px-4 py-2">
-              <span className="text-muted-foreground text-xs font-medium">Official SDKs</span>
-              <Link
-                href="/docs/sdk"
-                className="text-muted-foreground hover:text-foreground text-xs transition-colors"
-              >
-                Guide →
-              </Link>
-            </div>
-            <ul className="divide-y">
-              {SDKS.map((s) => (
-                <li key={s.pkg} className="flex items-center gap-2 py-1.5 pr-3 pl-4">
-                  <code className="min-w-0 flex-1 truncate font-mono text-xs">npm i {s.pkg}</code>
-                  <span className="text-muted-foreground hidden text-xs sm:inline">{s.blurb}</span>
-                  <CopyButton value={`npm i ${s.pkg}`} toastMessage="Command copied" />
-                  <a
-                    href={`https://www.npmjs.com/package/${s.pkg}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={`${s.pkg} on npm`}
-                    title="View on npm"
-                    className="text-muted-foreground hover:text-foreground p-1 transition-colors"
+                {/* Origins only exist on publishable keys, and there they are
+                    the entire security model, so they are not a footnote. */}
+                {isPublishable(detail.keyType) && (
+                  <div>
+                    <h3 className="mb-1.5 text-xs font-medium">Allowed origins</h3>
+                    {detail.origins.length === 0 ? (
+                      <p className="text-muted-foreground text-xs">None.</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {detail.origins.map((o) => (
+                          <li key={o} className="bg-muted rounded px-2 py-1 font-mono text-[11px] break-all">
+                            {o}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                <div className="divide-y">
+                  <Fact label="Key">
+                    <KeyPrefix start={detail.start} keyType={detail.keyType} />
+                  </Fact>
+                  <Fact label="Requests">{detail.requestCount.toLocaleString()}</Fact>
+                  <Fact label="Rate limit">
+                    {detail.rateLimitMax ? `${detail.rateLimitMax}/min` : "default"}
+                  </Fact>
+                  <Fact label="Last used">{relative(detail.lastUsedAt, now)}</Fact>
+                  <Fact label="Created">{relative(detail.createdAt, now)}</Fact>
+                  {detail.expiresAt && (
+                    <Fact label="Expires">{new Date(detail.expiresAt).toLocaleString()}</Fact>
+                  )}
+                  {detail.formIds.length > 0 && (
+                    <Fact label="Forms">{detail.formIds.length} form(s)</Fact>
+                  )}
+                </div>
+
+                <p className="text-muted-foreground text-xs">
+                  The secret is stored as a hash and cannot be shown again.
+                </p>
+
+                {detail.enabled && (
+                  <Button
+                    variant="outline"
+                    className="text-destructive w-full rounded-full"
+                    onClick={() => {
+                      const row = detail;
+                      setDetailId(null);
+                      setRevoking(row);
+                    }}
                   >
-                    <ExternalLink className="size-3.5" />
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </div>
-
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {DOC_LINKS.map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className="group bg-card hover:border-ring rounded-xl border p-3.5 transition-colors"
-            >
-              <span className="flex items-center gap-1 text-sm font-medium">
-                {l.title}
-                <ArrowUpRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
-              </span>
-              <span className="text-muted-foreground mt-0.5 block text-xs text-pretty">{l.blurb}</span>
-            </Link>
-          ))}
-        </div>
-
-        {/*
-          The reference facts, one line, at the bottom — the page used to give
-          rate limiting a card of its own between the keys and nothing at all,
-          which put a paragraph about 429s in front of everyone who came here
-          to copy a key.
-        */}
-        <p className="text-muted-foreground mt-4 text-xs">
-          Base URL <code className="font-mono">{API_ORIGIN}/v1</code> · authenticate with the{" "}
-          <code className="font-mono">x-api-key</code> header · requests are limited per key,{" "}
-          <Link href="/docs/rate-limits" className="underline underline-offset-2">
-            see rate limits
-          </Link>
-          .
-        </p>
-      </section>
+                    <Trash2 className="size-3.5" /> Revoke key
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* ── create ─────────────────────────────────────────────────────── */}
       <Dialog
@@ -459,6 +566,7 @@ export default function ApiKeysPage() {
           setOpen(o);
           if (!o) {
             setCreated(null);
+            setRevealCreated(false);
             setFormError(null);
           }
         }}
@@ -472,8 +580,21 @@ export default function ApiKeysPage() {
                   This is the only time it is shown. We store a hash, so we cannot show it again.
                 </DialogDescription>
               </DialogHeader>
+              {/* Hidden by default: the moment a key is minted is also the
+                  moment it is most likely on a shared screen or a recording. */}
               <div className="bg-muted flex items-center gap-2 rounded-lg p-3">
-                <code className="min-w-0 flex-1 break-all font-mono text-xs">{created.key}</code>
+                <code className="min-w-0 flex-1 break-all font-mono text-xs">
+                  {revealCreated ? created.key : "•".repeat(Math.min(created.key.length, 44))}
+                </code>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={revealCreated ? "Hide key" : "Show key"}
+                  onClick={() => setRevealCreated((s) => !s)}
+                >
+                  {revealCreated ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                </Button>
                 <CopyButton value={created.key} toastMessage="Key copied" variant="outline" size="sm" />
               </div>
               {!isPublishable(created.keyType) && (
@@ -483,9 +604,16 @@ export default function ApiKeysPage() {
                   the key is readable by everyone who loaded the page.
                 </p>
               )}
-              <Button className="rounded-full" onClick={() => setOpen(false)}>
-                Done
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button className="flex-1 rounded-full" onClick={() => setOpen(false)}>
+                  Done
+                </Button>
+                <Button variant="outline" className="rounded-full" asChild>
+                  <a href="/docs/quickstart" target="_blank" rel="noreferrer">
+                    <BookOpen className="size-4" /> Docs
+                  </a>
+                </Button>
+              </div>
             </>
           ) : (
             <>
@@ -523,8 +651,7 @@ export default function ApiKeysPage() {
                       className="border-input bg-background w-full rounded-lg border px-3 py-2 font-mono text-xs"
                     />
                     <p className="text-muted-foreground text-xs">
-                      Required. A publishable key with no allowlist is not publishable, it is just public — so the
-                      API refuses to create one.
+                      Required — a publishable key with no allowlist is just public.
                     </p>
                   </div>
                 ) : (
@@ -554,8 +681,15 @@ export default function ApiKeysPage() {
                       )}
                     </div>
                     <p className="text-muted-foreground text-xs">
-                      Give a key the least it needs. No key can mint another key or change your plan, whatever is
-                      selected here.
+                      Give a key the least it needs.{" "}
+                      <a
+                        href="/docs/scopes"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline underline-offset-2"
+                      >
+                        Scope reference
+                      </a>
                     </p>
                   </div>
                 )}
