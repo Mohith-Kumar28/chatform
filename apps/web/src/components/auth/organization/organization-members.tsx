@@ -280,7 +280,17 @@ export function OrganizationMembers({
   const removeMembers = useRemoveMember(authClient)
   const roleFacetRows = table.getColumn("role")?.getFacetedRowModel().flatRows
   const selectedMembers = table.getSelectedRowModel().rows
-  const showSelection = canDeleteMembers.data?.success === true
+  /*
+    Checkboxes only when one of them could do something.
+
+    `enableRowSelection` already refuses the rows you cannot act on — yourself,
+    and the last owner — so a workspace of one rendered a select-all and a dead
+    checkbox beside the only person in it. Permission to remove members is not
+    the same as having anyone removable.
+  */
+  const showSelection =
+    canDeleteMembers.data?.success === true &&
+    table.getRowModel().rows.some((row) => row.getCanSelect())
 
   async function removeSelectedMembers() {
     if (!activeOrganization) return
@@ -335,24 +345,26 @@ export function OrganizationMembers({
   const atMembershipLimit =
     atSeatLimit || (membershipLimit !== undefined && total >= membershipLimit)
 
+  /**
+   * Chrome appears when it is needed, not always.
+   *
+   * A search box, a role filter, a column picker and a pager, all stacked above
+   * a single row, is four controls for a list you can read at a glance — and it
+   * was most of what made this screen feel busy. None of them does anything a
+   * single page does not already show, so they wait until there is a second one.
+   */
+  const showTableChrome = total > (validatedPageSize ?? ORGANIZATION_TABLE_PAGE_SIZE)
+
   return (
     <div className={cn("flex flex-col gap-3", className)} {...props}>
-      <div className="flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold">
-            {organizationLocalization.members}
-          </h3>
-          {/* The seat count sits with the control it constrains. It was a
-              full-width meter card in the hand-built version of this screen,
-              which was a lot of chrome around one number — and it then repeated
-              the "every seat is taken" sentence the invite button already
-              carries. */}
-          {seatLimit !== null && (
-            <p className="text-muted-foreground text-micro tabular mt-0.5">
-              {seatsUsed} of {seatLimit} {seatLimit === 1 ? "seat" : "seats"} used
-            </p>
-          )}
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        {/* No "Members" heading: the section is already called People, and a
+            table of people under a heading reading Members is the same word
+            twice. The seat count is the only thing the left side owes — it is
+            what the buttons opposite are constrained by. */}
+        <p className="text-muted-foreground text-caption tabular min-w-0">
+          {seatLimit !== null ? `${seatsUsed}/${seatLimit} seats` : null}
+        </p>
 
         {(canInvite.isPending || canInvite.data?.success) && (
           <div className="flex shrink-0 items-center gap-2">
@@ -379,6 +391,7 @@ export function OrganizationMembers({
       </div>
 
       <div className="flex flex-col gap-4">
+        {showTableChrome && (
         <div className="flex flex-wrap items-center gap-3">
           {/* list-members has no search parameter, so a search box would
               only ever filter the page in front of you. */}
@@ -465,6 +478,7 @@ export function OrganizationMembers({
             />
           </div>
         </div>
+        )}
 
         {roleFilter !== "all" && (
           <Badge variant="secondary" className="w-fit gap-1">
@@ -542,7 +556,7 @@ export function OrganizationMembers({
                 )}
 
                 <TableHead className="text-end">
-                  {organizationLocalization.actions}
+                  <span className="sr-only">{organizationLocalization.actions}</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -574,6 +588,7 @@ export function OrganizationMembers({
           </Table>
         </Card>
 
+        {showTableChrome && (
         <OrganizationTablePagination
           canNextPage={table.getCanNextPage()}
           canPreviousPage={table.getCanPreviousPage()}
@@ -590,6 +605,7 @@ export function OrganizationMembers({
           rowCount={table.getRowCount()}
           visibleRowCount={table.getRowModel().rows.length}
         />
+        )}
       </div>
 
       {canInvite.data?.success && (

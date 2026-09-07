@@ -11,10 +11,7 @@ import { SettingsSectionHeader } from "@/components/settings/settings-section-he
 export default function WorkspacesSettingsPage() {
   return (
     <>
-      <SettingsSectionHeader
-        title="Workspaces"
-        description="Everywhere you have access, and any invitations waiting for you."
-      />
+      <SettingsSectionHeader title="Workspaces" />
       <OrganizationsSettings />
     </>
   );

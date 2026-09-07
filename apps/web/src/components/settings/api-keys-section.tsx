@@ -270,7 +270,6 @@ export function ApiKeysSection() {
     <>
       <SettingsSectionHeader
         title="API keys"
-        description="Drive chatform from your own code."
         readOnly={!canCreate}
         actions={
           <>

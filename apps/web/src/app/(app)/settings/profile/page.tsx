@@ -13,7 +13,7 @@ import { SettingsSectionHeader } from "@/components/settings/settings-section-he
 export default function ProfileSettingsPage() {
   return (
     <>
-      <SettingsSectionHeader title="Profile" description="How you appear, and the address we reach you at." />
+      <SettingsSectionHeader title="Profile" />
       <AccountSettings />
     </>
   );

@@ -93,10 +93,7 @@ export function PeopleSection() {
       {/* The workspace's name is not repeated here — the rail beside this pane
           is headed with it, and saying it twice on one screen is the duplication
           this consolidation exists to remove. */}
-      <SettingsSectionHeader
-        title="People"
-        description="Everyone with access to this workspace, and anyone on the way in."
-      />
+      <SettingsSectionHeader title="People" />
 
       <div className="flex flex-col gap-8">
         <OrganizationMembers />

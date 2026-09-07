@@ -168,6 +168,22 @@ export function OrganizationInvitations({
 
   const [inviteOpen, setInviteOpen] = useState(false)
 
+  const invitationCount = invitations?.length ?? 0
+
+  /**
+   * Nothing at all when nobody has been invited.
+   *
+   * This rendered a heading, a search box, two filters, a column picker, a table
+   * header, an illustration, a title and a sentence — nine pieces of chrome to
+   * report the absence of rows, on the screen where a workspace of one spends
+   * most of its life. There is no empty state worth that; the invite button is
+   * already in the row above and it is the only thing anyone could act on here.
+   */
+  if (!isPending && invitationCount === 0) return null
+
+  /** One page of invitations needs neither a search box nor a pager. */
+  const showTableChrome = invitationCount > pagination.pageSize
+
   return (
     <div className={cn("flex flex-col gap-3", className)} {...props}>
       <h3 className="truncate text-sm font-semibold">
@@ -175,6 +191,7 @@ export function OrganizationInvitations({
       </h3>
 
       <div className="flex flex-col gap-4">
+        {showTableChrome && (
         <div className="flex flex-wrap items-center gap-3">
           <InputGroup className="min-w-0 sm:w-[220px]">
             <InputGroupInput
@@ -294,6 +311,7 @@ export function OrganizationInvitations({
             />
           </div>
         </div>
+        )}
 
         {(roleFilter !== "all" || statusFilter !== "all") && (
           <div className="flex flex-wrap gap-2">
@@ -447,6 +465,7 @@ export function OrganizationInvitations({
           </Table>
         </Card>
 
+        {showTableChrome && (
         <OrganizationTablePagination
           canNextPage={table.getCanNextPage()}
           canPreviousPage={table.getCanPreviousPage()}
@@ -463,6 +482,7 @@ export function OrganizationInvitations({
           rowCount={table.getRowCount()}
           visibleRowCount={table.getRowModel().rows.length}
         />
+        )}
       </div>
 
       {canInvite.data?.success && (

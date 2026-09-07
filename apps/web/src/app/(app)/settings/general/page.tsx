@@ -47,7 +47,7 @@ export default function GeneralSettingsPage() {
 
   return (
     <>
-      <SettingsSectionHeader title="General" description="What this workspace is called, and how to leave it." />
+      <SettingsSectionHeader title="General" />
       <OrganizationSettings organizationId={org.id} organizationSlug={org.slug ?? undefined} />
     </>
   );
