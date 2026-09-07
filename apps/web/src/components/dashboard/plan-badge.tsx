@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Crown, TriangleAlert } from "lucide-react";
 import { useEntitlements } from "@/hooks/use-entitlements";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -81,17 +82,11 @@ export function PlanBadge() {
       on a page we control.
     */
     return (
-      <Link
-        href="/billing"
-        title="See the paid plans and what they add."
-        className={cn(
-          "hidden items-center rounded-full px-3 py-1 text-xs font-semibold md:inline-flex",
-          "bg-brand-violet-soft text-brand-violet-soft-foreground",
-          "hover:bg-brand-violet-soft/70 transition-colors duration-[var(--duration-micro)]",
-        )}
-      >
-        Upgrade
-      </Link>
+      <Button asChild variant="gradient" size="sm" shape="pill" className="hidden md:inline-flex">
+        <Link href="/billing" title="See the paid plans and what they add.">
+          Upgrade
+        </Link>
+      </Button>
     );
   }
 
