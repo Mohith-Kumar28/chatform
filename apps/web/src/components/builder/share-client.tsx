@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Blocks, Mail, QrCode, TriangleAlert } from "lucide-react";
+import { Blocks, FileDown, Link2, Mail, QrCode, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,8 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { qrSvg } from "@/lib/qr";
 import { cn } from "@/lib/utils";
 import { CustomDomainField } from "@/components/billing/custom-domain-field";
+import { useBuilderStore } from "@/stores/builder-store";
+import { printForm } from "@/lib/form-print";
 
 type Mode = "link" | "website" | "email";
 
@@ -37,6 +39,8 @@ export function ShareClient({
 }) {
   const [mode, setMode] = useState<Mode>("link");
   const [showQr, setShowQr] = useState(false);
+  // For the printable sheet — the questions, as they stand in the editor.
+  const doc = useBuilderStore((s) => s.doc);
 
   const liveUrl = `${appOrigin}/f/${slug}`;
   const unpublished = status !== undefined && status !== "published";
@@ -68,9 +72,14 @@ export function ShareClient({
 
         {mode === "link" && (
           <div className="space-y-4">
-            <div className="flex gap-2">
-              <Input readOnly value={liveUrl} className="font-mono text-sm" />
-              <CopyButton value={liveUrl} label="Copy" variant="default" />
+            <div className="space-y-1.5">
+              <div className="flex gap-2">
+                <Input readOnly value={liveUrl} className="font-mono text-sm" />
+                <CopyButton value={liveUrl} label="Copy" variant="default" />
+              </div>
+              <p className="text-muted-foreground text-caption text-center">
+                Make sure your form is published before you share it with the world.
+              </p>
             </div>
 
             <div className="flex items-center justify-center gap-1">
@@ -107,9 +116,44 @@ export function ShareClient({
               >
                 <QrCode className="size-4" />
               </Button>
+              {/*
+                The form on paper. A conversational form has no printable state
+                of its own, so this renders every question at once and hands it
+                to the print dialog, where "Save as PDF" lives on every platform.
+              */}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Download the questions as a PDF"
+                disabled={!doc}
+                onClick={() => doc && printForm(doc)}
+              >
+                <FileDown className="size-4" />
+              </Button>
             </div>
 
             {showQr && <QrPanel url={liveUrl} slug={slug} />}
+
+            {/*
+              Link settings sit behind a card rather than on this screen: what a
+              link looks like when it is posted is a thing you set once, and the
+              screen for it needs room for a live preview card beside the fields.
+            */}
+            <div className="bg-muted/40 flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Link settings</p>
+                <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                  The title, description, share image and favicon that appear when this link
+                  is opened or shared.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" shape="pill" asChild className="shrink-0">
+                <Link href={`/forms/${formId}/settings/link`}>
+                  <Link2 className="size-3.5" />
+                  Open link settings
+                </Link>
+              </Button>
+            </div>
 
             <CustomDomainField slug={slug} />
           </div>

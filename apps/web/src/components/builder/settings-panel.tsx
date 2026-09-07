@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,22 +56,25 @@ export function SettingsPanel({
   onVariablesChange,
   slug,
 }: SettingsPanelProps) {
-  const params = useParams<{ id: string }>();
+  const params = useParams<{ id: string; section?: string[] }>();
+
   /**
-   * `?section=` opens a section directly, which is how Share links to link
-   * settings. Read once as the initial value rather than synced: after the
-   * first paint the sub-nav owns the choice, and a URL that kept overriding it
-   * would fight every click.
+   * The section is the URL, not component state.
+   *
+   * The route has always been `/settings/[[...section]]` and the segment was
+   * always thrown away, so every section was the same address: Share could not
+   * link to link settings, the back button could not leave one, and reloading
+   * put you back in General. It reads the segment now and the sub-nav is real
+   * links — the builder layout persists, so it costs nothing.
    */
-  const search = useSearchParams();
-  const requested = search.get("section");
-  const [section, setSection] = useState<SectionId>(
-    SECTIONS.some((s) => s.id === requested) ? (requested as SectionId) : "general",
-  );
+  const requested = params.section?.[0];
+  const section: SectionId = SECTIONS.some((s) => s.id === requested)
+    ? (requested as SectionId)
+    : "general";
   const patch = (p: Partial<FormDoc["settings"]>) => onChange({ ...settings, ...p });
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-8">
+    <div className="mx-auto w-full max-w-6xl px-6 py-8">
       <h1 className="font-display mb-6 text-xl font-semibold">
         Settings{formTitle ? <span className="text-muted-foreground font-normal"> for {formTitle}</span> : null}
       </h1>
@@ -79,15 +82,17 @@ export function SettingsPanel({
         {/* sub-nav */}
         <nav className="bg-muted/30 w-56 shrink-0 space-y-0.5 p-3">
           {SECTIONS.map((s) => (
-            <button
+            <Link
               key={s.id}
-              onClick={() => setSection(s.id)}
-              className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+              href={`/forms/${params.id}/settings/${s.id}`}
+              scroll={false}
+              aria-current={section === s.id ? "page" : undefined}
+              className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                 section === s.id ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent/50"
               }`}
             >
               {s.label}
-            </button>
+            </Link>
           ))}
 
           {/* The interviewer settings used to live here as a cramped section.
