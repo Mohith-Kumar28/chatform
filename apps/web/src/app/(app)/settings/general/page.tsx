@@ -49,13 +49,12 @@ export default function GeneralSettingsPage() {
   return (
     <>
       <SettingsSectionHeader title="General" />
-      <OrganizationSettings organizationId={org.id} organizationSlug={org.slug ?? undefined} />
-      <div className="mt-4">
+      <OrganizationSettings organizationId={org.id} organizationSlug={org.slug ?? undefined}>
         <PostalAddressCard
           organizationId={org.id}
           initialValue={(org as { postalAddress?: string | null }).postalAddress ?? null}
         />
-      </div>
+      </OrganizationSettings>
     </>
   );
 }

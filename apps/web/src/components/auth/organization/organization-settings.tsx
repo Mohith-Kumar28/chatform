@@ -15,12 +15,18 @@ export type OrganizationSettingsProps = {
 
 /**
  * Organization settings UI: profile card, plugin-contributed cards
- * (`organizationCards`), then danger zone.
+ * (`organizationCards`), our own cards, then danger zone.
+ *
+ * `children` land before the danger zone rather than after it, because the
+ * danger zone is a floor: everything above it is settings you edit, and
+ * anything below reads as an afterthought bolted on past the point where the
+ * page said "here be dragons".
  */
 export function OrganizationSettings({
   className,
   organizationId,
   organizationSlug,
+  children,
   ...props
 }: OrganizationSettingsProps & ComponentProps<"div">) {
   const { plugins } = useAuth()
@@ -38,6 +44,8 @@ export function OrganizationSettings({
           />
         ))
       )}
+
+      {children}
 
       <OrganizationDangerZone />
     </div>

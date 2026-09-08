@@ -65,11 +65,8 @@ export function PostalAddressCard({
     <div className="space-y-3 rounded-xl border p-5">
       <div>
         <h3 className="text-sm font-medium">Business address</h3>
-        <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-          Shown at the bottom of follow-up reminders. Anti-spam law requires a real postal
-          address on email that asks someone to come back and finish something, so
-          follow-ups stay switched off until this is filled in. It is never shown to people
-          answering your forms.
+        <p className="text-muted-foreground mt-1 text-xs">
+          Required by law at the bottom of follow-up emails.
         </p>
       </div>
       <Textarea

@@ -150,8 +150,18 @@ export const SettingsDoc = z.object({
         )
         .max(3)
         .default([
-          { delayHours: 4, subject: "You're {{remaining}} questions from finishing", bodyMd: "" },
-          { delayHours: 24, subject: "Your {{form.title}} is still open", bodyMd: "" },
+          {
+            delayHours: 4,
+            subject: "You're {{remaining}} questions from finishing",
+            bodyMd:
+              "Everything you answered is saved — picking up where you left off takes about a minute.",
+          },
+          {
+            delayHours: 24,
+            subject: "Your {{form.title}} is still open",
+            bodyMd:
+              "Just a nudge in case it slipped — your answers are still here whenever you're ready.",
+          },
         ]),
       /**
        * Lead with how far they got. This is the one piece of the usual
@@ -315,16 +325,31 @@ export type SettingsInput = z.input<typeof SettingsDoc>;
  * is still a `.default()`, so this changes new forms only; a saved theme has
  * its own hexes and does not move.
  *
- * Both ink values were `#ffffff`, at 2.8:1 on the orange — the same failure the
- * app tokens document at `--primary-foreground`, shipped to respondents rather
- * than to us. `#201a16` is that token's value in hex and clears 6.1:1 on the
- * orange and 4.7:1 on the violet.
+ * That violet used to be a mid-tone `#9D6EE4`. Mid-tone is the one lightness a
+ * fill behind body copy cannot be: no ink clears 7:1 on it, dark or light, so
+ * the bubble read as a smudge with the answer buried in it. A respondent's
+ * bubble is a passage of text, not a button — it wants to behave like tinted
+ * paper. `#C9AEEE` is the same violet lifted until dark ink sits at 9.3:1 on
+ * it while it still stands 1.8:1 clear of the page.
+ *
+ * The action keeps its saturation. Lightening a bubble helps reading;
+ * lightening the one thing you press only makes it easier to miss.
  */
 const BRAND_ORANGE = "#FD6F29";
-/** The nudged violet, not the logo's `#9769DC`: bubble copy is body text, and
- *  the logo value measures 4.4:1 against the ink where this clears 4.7:1. */
-const BRAND_VIOLET = "#9D6EE4";
-const BRAND_INK = "#201a16";
+/** The lifted violet plate — a tint to read on, not the logo's `#9769DC` fill. */
+const BRAND_VIOLET = "#C9AEEE";
+
+/**
+ * The ink `accentText` and `userBubbleText` default to.
+ *
+ * It is a sentinel as much as a colour. The runtime derives readable ink from
+ * whatever fill it lands on (`readableInk` in `apps/web/src/lib/chat-theme.ts`),
+ * and treats a stored value still equal to this one as "nobody chose this" —
+ * so every form built before the derivation existed gets the fix without a
+ * migration, and a hand-picked ink that reads fine is still honoured.
+ */
+export const THEME_DEFAULT_INK = "#201a16";
+const BRAND_INK = THEME_DEFAULT_INK;
 
 export const ThemeDoc = z.object({
   colorScheme: z.enum(["light", "dark", "auto"]).default("light"),

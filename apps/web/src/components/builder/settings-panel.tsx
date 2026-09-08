@@ -389,8 +389,8 @@ export function SettingsPanel({
           {section === "followup" && (
             <SettingSection title="Follow-ups">
               <p className="text-muted-foreground -mt-1 text-sm">
-                Most people who leave a form part-way never come back on their own. If they
-                gave you an email before they went, this asks them to finish.
+                Email people who started your form and left, with a link back to where they
+                stopped.
               </p>
               <LockedControl feature="followup_email">
                 <FollowUpPanel
