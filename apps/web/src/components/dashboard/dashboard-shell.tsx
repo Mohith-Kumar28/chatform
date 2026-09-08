@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Search } from "lucide-react";
+import { Menu, Search, Settings as SettingsIcon } from "lucide-react";
 import { AuthGuard } from "./auth-guard";
 import { APP_NAV } from "./app-nav";
 import { AppMark } from "./app-mark";
@@ -67,10 +67,18 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 rarely, and what it opens (members, plan, workspaces, API keys)
                 is the organization, not the account.
 
-                `UserMenu` still carries its own Settings item, so the phone —
-                where this trigger is hidden — keeps a door to the same place. */}
-            <div className="hidden items-center md:flex">
+                The gear stays visible beside the name rather than moving inside
+                the menu. What it opens is the organization — members, plan,
+                workspaces, API keys — so it belongs next to the organization,
+                and one click beats two for the screen people go to when
+                something needs changing. */}
+            <div className="hidden items-center gap-0.5 md:flex">
               <OrganizationSwitcher />
+              <Button variant="ghost" size="icon-sm" asChild aria-label="Organization settings">
+                <Link href="/settings">
+                  <SettingsIcon className="size-4" strokeWidth={1.75} />
+                </Link>
+              </Button>
             </div>
 
             {/*
@@ -132,8 +140,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 on every phone. The trigger now shows wherever it is placed and
                 the header gates it instead, so the drawer gets the real control
                 and the gear travels inside its menu like everywhere else. */}
-            <div className="flex items-center p-4">
+            <div className="flex items-center gap-0.5 p-4">
               <OrganizationSwitcher />
+              <Button variant="ghost" size="icon-sm" asChild aria-label="Organization settings">
+                <Link href="/settings" onClick={() => setNavOpen(false)}>
+                  <SettingsIcon className="size-4" strokeWidth={1.75} />
+                </Link>
+              </Button>
             </div>
             <nav className="space-y-0.5 px-2 pb-4" aria-label="Main">
               {APP_NAV.map((item) => {

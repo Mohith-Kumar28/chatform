@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Building2, ChevronsUpDown, Loader2, Plus, Settings as SettingsIcon } from "lucide-react";
+import { Building2, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { authClient, useListOrganizations } from "@/lib/auth/auth-client";
 import { useActiveOrg } from "@/hooks/use-active-org";
@@ -137,28 +137,6 @@ export function OrganizationSwitcher() {
                 {roleTitle(myRole)}
               </Badge>
             )}
-            {/*
-              The gear belongs to the organization it opens.
-
-              It spent a while as a standalone button in the header, first on
-              the right beside the avatar — where it read as an account control,
-              though what it opens is members, plan, workspaces and API keys —
-              and then immediately left of this trigger, which is closer but
-              still spends a permanent header slot on a destination most people
-              visit rarely. Here it is attached to the name it configures, on
-              the line that already says which organization you are in.
-            */}
-            <Link
-              href="/settings"
-              onClick={() => setOpen(false)}
-              aria-label={`Settings for ${current?.name ?? "this organization"}`}
-              className={cn(
-                "text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 rounded-md p-1",
-                "focus-visible:ring-ring/50 outline-none transition-colors focus-visible:ring-2",
-              )}
-            >
-              <SettingsIcon className="size-3.5" strokeWidth={1.75} />
-            </Link>
           </div>
           {others.length > 0 && (
             <>
