@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -191,7 +192,7 @@ export function BuilderShell({
                 description="It may have been deleted, or you may not have access to it."
                 action={
                   <Button asChild shape="pill">
-                    <a href="/dashboard">Back to forms</a>
+                    <Link href="/dashboard">Back to forms</Link>
                   </Button>
                 }
               />
