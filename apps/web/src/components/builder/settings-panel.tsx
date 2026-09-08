@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Keyboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { Input } from "@/components/ui/input";
@@ -112,13 +111,17 @@ export function SettingsPanel({
             one way in: knowing to press `?`, or finding it inside the command
             palette you already had to know a shortcut to open. Discovering
             keyboard shortcuts should not itself require a keyboard shortcut.
+
+            Styled as a row like every other item rather than a dashed box. It
+            is one more thing you can open from this list, and the dashed border
+            made it read as a placeholder — an empty slot waiting for content
+            rather than the control it is.
           */}
           <button
             type="button"
             onClick={showShortcuts}
-            className="text-muted-foreground hover:bg-accent/50 mt-2 flex w-full items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-left text-sm transition-colors"
+            className="text-muted-foreground hover:bg-accent/50 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors"
           >
-            <Keyboard className="size-3.5 shrink-0" />
             <span className="min-w-0 flex-1">Keyboard shortcuts</span>
             <Kbd>?</Kbd>
           </button>
