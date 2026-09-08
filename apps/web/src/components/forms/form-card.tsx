@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { readableInk } from "@/lib/chat-theme";
+import { isDarkColor, readableInk } from "@/lib/chat-theme";
 
 export interface FormRow {
   id: string;
@@ -223,28 +223,63 @@ export function FormCard({
 
   const selectable = Boolean(onSelectedChange);
 
+  /**
+   * Controls that sit on the thumbnail take their surface from the thumbnail.
+   *
+   * They used to use `bg-card`, which is the *app's* surface — so in dark mode
+   * a near-black pill sat on a form whose own background is cream, and the
+   * corner of every card grew a grey blob. The card's chrome and the form's
+   * artwork are two different surfaces, and only one of them is under these
+   * buttons.
+   *
+   * `null` means the form has no colours of its own and the thumbnail is the
+   * brand band, which is mixed toward `--background` and so already follows the
+   * app theme — there the app tokens are the right answer.
+   */
+  const thumbIsDark = form.theme ? isDarkColor(form.theme.background) : null;
+  const onThumb =
+    thumbIsDark === null
+      ? "bg-card/80 text-foreground"
+      : thumbIsDark
+        ? "bg-black/45 text-white"
+        : "bg-white/85 text-stone-900";
+
   /*
-   * Two elements, and the outer one never moves.
+   * Nothing on this card moves, and nothing on it changes size.
    *
-   * The card lifts 2px on hover (DESIGN.md §4.4). When the lift was on the
-   * same element that owned `:hover`, the bottom 2px of every cell became a
-   * trap: the pointer enters, the card lifts away from it, the pointer is now
-   * outside, it un-hovers, the card drops back under the pointer, and it
-   * hovers again — a flicker for as long as you rest there, which reads as the
-   * layout shifting under the cursor.
+   * It used to lift 2px on hover (DESIGN.md §4.4). That put the lift on the
+   * element that owned `:hover`, so the bottom 2px of every grid cell
+   * oscillated — pointer enters, card lifts away from it, un-hovers, drops back
+   * under it, hovers again. Splitting the card into a static hover target and a
+   * moving inner one fixed the oscillation but kept the movement, and the
+   * movement was the complaint: a card that jumps when the cursor crosses it
+   * reads as the page reflowing, whatever is actually causing it.
    *
-   * So the outer element is the hover target and holds still, and the inner
-   * one is the card you can see. `group-hover` drives the lift, the hit area
-   * stays exactly the size of the grid cell, and the movement is now purely
-   * something you watch rather than something you interact with.
+   * So hover is an `outline` and a shadow. An outline is painted outside the
+   * border box and takes part in no layout at all — which a border cannot
+   * claim, since growing one by a pixel reflows everything inside it. Selection
+   * is the same outline in the accent colour, so ticking a card changes what
+   * colour its edge is and nothing else.
    *
-   * One card, not two, in the other sense: there used to be a `list` variant
-   * behind a grid/list toggle on the dashboard toolbar. The toggle is gone,
-   * and a second layout nobody could reach was a second layout to keep
-   * working.
+   * That also collapses this back to one element: the static wrapper existed
+   * only to hold still while something inside it moved.
    */
   return (
-    <div className="group relative h-full">
+    <div
+      className={cn(
+        "bg-card border-border group relative flex h-full flex-col overflow-hidden rounded-2xl border",
+        "shadow-xs transition-[box-shadow,outline-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
+        // Always present, transparent until it has something to say, so the
+        // only thing that ever animates is its colour. Inset, because an
+        // outline outside a rounded border sits proud of the corner radius.
+        "outline-2 -outline-offset-2 outline-transparent",
+        "hover:shadow-md hover:outline-border",
+        // Scoped to the link rather than `focus-within`, which the checkbox
+        // satisfies too — ticking a box lit the whole card up as if focused.
+        "has-[a:focus-visible]:outline-ring/60",
+        selected && "outline-primary hover:outline-primary shadow-md",
+      )}
+    >
       {/*
         The tick box.
 
@@ -253,12 +288,17 @@ export function FormCard({
         in on hover like the actions do — but the moment anything in the grid is
         ticked, every box is visible, because a selection you extend by
         remembering where invisible targets are is not a selection you can use.
+
+        The padding here is the touch target and nothing else. It used to carry
+        a `bg-card/80` blur tile to lift the box off the thumbnail, which in
+        dark mode read as a grey blob stuck to the corner. The box carries its
+        own surface instead, so what you see is a checkbox rather than a
+        checkbox inside a container.
       */}
       {selectable && (
         <div
           className={cn(
-            "absolute top-2 left-2 z-10 rounded-md p-1",
-            "bg-card/80 backdrop-blur-sm",
+            "absolute top-2 left-2 z-10 p-1.5",
             "transition-opacity duration-[var(--duration-micro)]",
             selected || anySelected
               ? "opacity-100"
@@ -269,79 +309,83 @@ export function FormCard({
             checked={selected}
             onCheckedChange={(next) => onSelectedChange?.(next === true)}
             aria-label={`Select ${form.title}`}
+            className={cn(
+              "size-[18px] shadow-sm",
+              /*
+               * Unchecked it has to be legible on the artwork; checked it is
+               * the accent, which carries its own contrast either way.
+               *
+               * The `dark:` halves are not redundant. `Checkbox` ships
+               * `dark:bg-input/30`, and a dark variant beats a plain utility of
+               * the same specificity on source order — so a white box asked for
+               * here came out as a dark translucent square the moment the app
+               * was in dark mode, whatever the thumbnail under it was doing.
+               * These say the same thing twice so the variant has nothing left
+               * to win.
+               */
+              thumbIsDark === null
+                ? "bg-card border-border/80"
+                : thumbIsDark
+                  ? "border-white/50 bg-white/20 dark:bg-white/20"
+                  : "border-stone-400/70 bg-white dark:bg-white",
+            )}
           />
         </div>
       )}
 
-      <div
-        className={cn(
-          "bg-card border-border relative flex h-full flex-col overflow-hidden rounded-2xl border",
-          "shadow-xs transition-[box-shadow,transform,border-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
-          // Cards lift; buttons don't (DESIGN.md §4.4). Driven from the static
-          // wrapper, so the thing that moves is not the thing being hovered.
-          "group-hover:-translate-y-0.5 group-hover:shadow-md motion-reduce:group-hover:translate-y-0",
-          "group-focus-within:ring-ring/40 group-focus-within:ring-2",
-          // A ring rather than a thicker border: a border that changes width
-          // reflows the card's contents, which is the shift this whole
-          // arrangement exists to avoid.
-          selected && "ring-primary/60 border-primary/60 ring-2",
-        )}
+      <Link
+        href={`/forms/${form.id}/build`}
+        className="flex min-w-0 flex-1 flex-col"
       >
-        <Link
-          href={`/forms/${form.id}/build`}
-          className="flex min-w-0 flex-1 flex-col"
-        >
-          <ChatThumb
-            opener={opener}
-            answer={asks[0]}
-            theme={form.theme}
-            logoAlt={form.title}
-          />
+        <ChatThumb
+          opener={opener}
+          answer={asks[0]}
+          theme={form.theme}
+          logoAlt={form.title}
+        />
 
-          {/*
+        {/*
           Title and status, and nothing else.
           The questions used to run underneath as a dot-joined subtitle — but
           the thumbnail above is already the form's own opening line, so the
           subtitle repeated what the picture said, in worse form and at two
           lines a card. A grid is for recognising, not reading.
         */}
-          <div className="flex flex-1 flex-col p-4">
-            <h3 className="font-display truncate font-semibold">
-              {form.title}
-            </h3>
-            <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-3">
-              {meta}
-            </div>
+        <div className="flex flex-1 flex-col p-4">
+          <h3 className="font-display truncate font-semibold">{form.title}</h3>
+          <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-3">
+            {meta}
           </div>
-        </Link>
-
-        {/* Quick actions sit above the card link. Revealed on hover, but always
-          present for keyboard focus and on touch, where there is no hover. */}
-        <div
-          className={cn(
-            "absolute top-2 right-2 flex items-center gap-0.5 rounded-full",
-            "bg-card/80 p-0.5 backdrop-blur-sm",
-            "opacity-0 transition-opacity duration-[var(--duration-micro)]",
-            "group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100",
-          )}
-        >
-          {published && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Copy public link"
-              onClick={copyLink}
-            >
-              <Link2 className="size-3.5" />
-            </Button>
-          )}
-          <Button variant="ghost" size="icon-sm" aria-label="Results" asChild>
-            <Link href={`/forms/${form.id}/results`}>
-              <BarChart3 className="size-3.5" />
-            </Link>
-          </Button>
-          {actions}
         </div>
+      </Link>
+
+      {/* Quick actions sit above the card link. Revealed on hover, but always
+          present for keyboard focus and on touch, where there is no hover. */}
+      <div
+        className={cn(
+          "absolute top-2 right-2 flex items-center gap-0.5 rounded-full",
+          "p-0.5 backdrop-blur-sm",
+          onThumb,
+          "opacity-0 transition-opacity duration-[var(--duration-micro)]",
+          "group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100",
+        )}
+      >
+        {published && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Copy public link"
+            onClick={copyLink}
+          >
+            <Link2 className="size-3.5" />
+          </Button>
+        )}
+        <Button variant="ghost" size="icon-sm" aria-label="Results" asChild>
+          <Link href={`/forms/${form.id}/results`}>
+            <BarChart3 className="size-3.5" />
+          </Link>
+        </Button>
+        {actions}
       </div>
     </div>
   );
@@ -498,29 +542,46 @@ function ThumbBubbles({
   answerStyle: CSSProperties;
   answerClassName: string;
 }) {
+  /*
+   * The clamp is on an inner span, and it has to be.
+   *
+   * `line-clamp` was on the bubble itself, which also carries `py-1.5`. Those
+   * two clip to different boxes: the clamp ends the text after N lines at the
+   * *content* edge, while `overflow: hidden` cuts at the *padding* edge — so
+   * the line after the last one rendered into the bubble's bottom padding and
+   * was sliced through the middle of its letters. Every long question showed an
+   * ellipsis and then half a line of the words the ellipsis was standing in
+   * for.
+   *
+   * Padding stays on the bubble, clamping moves inside it, and the two now
+   * agree on where the text stops.
+   */
   return (
     <>
       <div className="flex items-start gap-1.5">
         <span className="mt-0.5 shrink-0">{avatar}</span>
         <p
           className={cn(
-            "line-clamp-2 max-w-[85%] rounded-xl rounded-bl-sm px-2.5 py-1.5 text-[0.6875rem] leading-snug",
+            "max-w-[85%] rounded-xl rounded-bl-sm px-2.5 py-1.5 text-[0.6875rem] leading-snug",
             botClassName,
           )}
           style={botStyle}
         >
-          {opener}
+          <span className="line-clamp-2">{opener}</span>
         </p>
       </div>
       {answer && (
         <p
           className={cn(
-            "mt-2 ml-auto line-clamp-1 w-fit max-w-[75%] rounded-xl rounded-br-sm px-2.5 py-1.5 text-[0.6875rem] leading-snug",
+            "mt-2 ml-auto w-fit max-w-[75%] rounded-xl rounded-br-sm px-2.5 py-1.5 text-[0.6875rem] leading-snug",
             answerClassName,
           )}
           style={answerStyle}
         >
-          {answer}
+          {/* One line, and `truncate` rather than a clamp: with nothing to wrap
+              to there is no second line to leak, and it ellipses on the same
+              line it cuts. */}
+          <span className="block truncate">{answer}</span>
         </p>
       )}
     </>
