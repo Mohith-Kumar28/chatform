@@ -11,47 +11,48 @@ import { LogoMark } from "@/components/brand/logo";
  * hard swap of the entire viewport reads as a bug even when it is correct.
  *
  * So this holds the frame instead. It is deliberately the same shape as what
- * follows — a bubble arriving into a thread — so the transition is a
- * continuation rather than a replacement, and it uses the form's own accent so
- * the first thing anyone sees already belongs to the brand they signed up for.
+ * follows — a mark, then the thread — so the transition is a continuation
+ * rather than a replacement.
+ *
+ * It is also the first thing a stranger sees of somebody's brand, which is why
+ * it is now so quiet. It used to ping two accent rings out of the logo to
+ * 2.1x while three accent dots hopped underneath: expanding geometry, moving
+ * geometry and the loudest colour on the page, all at once, on a screen whose
+ * entire job is to wait. The mark holds still now and the dots only fade. The
+ * motion budget of a loading screen is very close to zero.
  *
  * No progress bar and no percentage: it does not know how long this takes, and
  * a bar that lies is worse than a shape that waits.
  */
 export function ChatBoot({ title, logoUrl }: { title?: string; logoUrl?: string | null }) {
   return (
-    <div className="flex h-full min-h-0 flex-col items-center justify-center gap-5 px-6">
-      <div className="relative grid place-items-center">
-        {/*
-          Two rings breathing out of the mark on a long, offset cycle. Slow
-          enough to read as calm rather than busy, and `motion-reduce` drops
-          them entirely — a waiting screen is the last place to force motion on
-          someone who asked for none.
-        */}
-        <span className="chat-boot-ring motion-reduce:hidden" />
-        <span className="chat-boot-ring chat-boot-ring-delayed motion-reduce:hidden" />
-        {logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt={title ?? ""} className="relative size-12 rounded-2xl object-contain" />
-        ) : (
-          <span
-            className="relative grid size-12 place-items-center rounded-2xl bg-[var(--cf-surface)] ring-1 ring-black/5"
-            role="img"
-            aria-label={title ?? "chatform"}
-          >
-            <LogoMark className="size-7" />
-          </span>
-        )}
-      </div>
+    <div className="flex h-full min-h-0 flex-col items-center justify-center px-6">
+      {logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={logoUrl} alt={title ?? ""} className="size-12 rounded-2xl object-contain" />
+      ) : (
+        <span
+          className="grid size-12 place-items-center rounded-2xl bg-[var(--cf-surface)] ring-1 ring-[var(--cf-bot-bubble-border)]"
+          role="img"
+          aria-label={title ?? "chatform"}
+        >
+          <LogoMark className="size-7" />
+        </span>
+      )}
 
-      <div className="flex items-center gap-1.5" aria-hidden="true">
+      {/*
+        Uneven on purpose. The dots belong to the mark — they are the thing
+        telling you it is working — while the sentence is a caption underneath
+        the pair, so it sits closer to them than they do to the logo.
+      */}
+      <div className="mt-6 flex items-center gap-1.5" aria-hidden="true">
         <span className="chat-boot-dot" />
         <span className="chat-boot-dot chat-boot-dot-2" />
         <span className="chat-boot-dot chat-boot-dot-3" />
       </div>
 
       {/* The only text, and it is a status rather than a promise of speed. */}
-      <p className="text-sm opacity-55" role="status">
+      <p className="mt-3.5 text-sm opacity-50" role="status">
         Getting the conversation ready…
       </p>
     </div>

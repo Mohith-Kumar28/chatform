@@ -5,7 +5,6 @@ import {
   Check,
   ArrowDown,
   CheckCheck,
-  MoreHorizontal,
   PartyPopper,
   Pencil,
   RotateCcw,
@@ -13,12 +12,6 @@ import {
   SkipForward,
   TriangleAlert,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
@@ -467,22 +460,7 @@ function ChatHeader({
           )}
         </div>
 
-        {onStartOver && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="Form options"
-              className="shrink-0 rounded-full p-1.5 opacity-50 transition-opacity hover:opacity-100"
-            >
-              <MoreHorizontal className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem variant="destructive" onSelect={onStartOver}>
-                <RotateCcw className="size-3.5" />
-                Start over
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        {onStartOver && <StartOverButton onConfirm={onStartOver} />}
       </div>
 
       {/* An actual bar. `progressBar` supported percent/steps/none and only the
@@ -534,15 +512,16 @@ const Bubble = memo(function Bubble({
   const isUser = message.role === "user";
   return (
     <div className={cn("group flex animate-message-in items-center gap-1.5", isUser ? "justify-end" : "justify-start")}>
-      {/* Change-your-mind affordance, revealed on hover so it never competes
-          with the conversation itself. */}
+      {/* Change-your-mind affordance. Revealed on hover where there is a
+          pointer to hover with, and always visible where there is not — see
+          `.chat-edit-affordance`. */}
       {isUser && canEdit && message.answeredRef && (
         <button
           type="button"
           onClick={() => onEdit(message.answeredRef!)}
           aria-label="Change this answer"
           title="Change this answer"
-          className="order-first shrink-0 rounded-full p-1.5 opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 focus-visible:opacity-100"
+          className="chat-edit-affordance order-first shrink-0 rounded-full p-1.5"
         >
           <Pencil className="size-3.5" />
         </button>
@@ -771,22 +750,40 @@ function ReviewCard({
 
   return (
     <div className="animate-message-in space-y-3 rounded-2xl bg-[var(--cf-chip-bg)] p-4">
-      <p className="text-sm font-medium">That&apos;s everything — have a look before you send it.</p>
+      {/*
+        The instruction is the point.
+        This said "have a look before you send it" above a list whose edit
+        controls were invisible until hovered — so on a phone, where nothing
+        hovers, there was no way to change an answer at all and no hint that
+        there should be. Saying what to tap costs one word and is the only part
+        of this card a hurried respondent reads.
+      */}
+      <p className="text-sm font-medium">
+        That&apos;s everything — tap any answer to change it before you send.
+      </p>
 
-      <ul className="space-y-1.5">
+      <ul className="space-y-0.5">
         {review.answers.map((a) => (
-          <li key={a.ref} className="group flex items-start gap-2 text-sm">
-            <span className="min-w-0 flex-1">
-              <span className="block text-xs opacity-55">{a.title}</span>
-              <span className="block break-words">{a.display || "—"}</span>
-            </span>
+          <li key={a.ref}>
+            {/*
+              The whole row is the target, not a 14px pencil.
+              A hover-revealed icon is a desktop-only affordance wearing a
+              mobile-sized hit area; a full-width button is reachable with a
+              thumb and still reads as a list.
+            */}
             <button
               type="button"
               onClick={() => onEdit(a.ref)}
               aria-label={`Change your answer to ${a.title}`}
-              className="mt-3.5 shrink-0 rounded-full p-1 opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 focus-visible:opacity-100"
+              className="group -mx-2 flex w-[calc(100%+1rem)] items-start gap-2 rounded-xl px-2 py-1.5 text-left text-sm transition-colors hover:bg-[var(--cf-chip-border)]/25 focus-visible:bg-[var(--cf-chip-border)]/25"
             >
-              <Pencil className="size-3.5" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs opacity-55">{a.title}</span>
+                <span className="block break-words">{a.display || "—"}</span>
+              </span>
+              {/* Always visible, never hover-gated — it is the thing that says
+                  this row can be changed. */}
+              <Pencil className="mt-3.5 size-3.5 shrink-0 opacity-35 transition-opacity group-hover:opacity-80 group-focus-visible:opacity-80" />
             </button>
           </li>
         ))}
@@ -823,6 +820,63 @@ function Kbd({ children }: { children: React.ReactNode }) {
     >
       {children}
     </kbd>
+  );
+}
+
+/**
+ * "Start over", in the header rather than behind a menu.
+ *
+ * It used to be the only item in a `…` dropdown, which is two clicks and a
+ * guess to reach a control that is genuinely useful mid-form: somebody who
+ * mistyped three answers ago wants to restart, and hunting for it in an
+ * overflow menu is how they instead abandon the form. A menu holding exactly
+ * one thing is not a menu.
+ *
+ * It arms rather than firing, because it throws away every answer and the
+ * session with them, and a header button is easy to hit by accident on a
+ * phone. Two deliberate taps, no modal — a dialog for this would be heavier
+ * than the thing it guards. The armed state disarms itself after a few seconds
+ * so it cannot sit there waiting to be triggered by a stray tap much later.
+ */
+function StartOverButton({ onConfirm }: { onConfirm: () => void }) {
+  const [armed, setArmed] = useState(false);
+
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 4000);
+    return () => clearTimeout(t);
+  }, [armed]);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (armed) {
+          setArmed(false);
+          onConfirm();
+        } else {
+          setArmed(true);
+        }
+      }}
+      onBlur={() => setArmed(false)}
+      aria-label={armed ? "Confirm starting over — this clears your answers" : "Start over"}
+      className={cn(
+        "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-opacity",
+        armed
+          ? "text-[var(--destructive)] opacity-100"
+          : "opacity-45 hover:opacity-90 focus-visible:opacity-90",
+      )}
+    >
+      <RotateCcw className="size-3.5 shrink-0" />
+      {/*
+        The label is what makes this discoverable, and discoverability was the
+        entire problem with the menu — so it is never dropped, not even on a
+        phone. It costs about 66px against a title that truncates anyway, and a
+        bare rotate glyph on a phone is only marginally better than the "…" it
+        replaced.
+      */}
+      <span>{armed ? "Tap again to clear" : "Start over"}</span>
+    </button>
   );
 }
 
