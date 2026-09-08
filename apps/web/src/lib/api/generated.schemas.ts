@@ -165,6 +165,29 @@ export type GetApiAuthProviders200 = {
   google: boolean;
 };
 
+export type GetApiInvitationPreview200State = typeof GetApiInvitationPreview200State[keyof typeof GetApiInvitationPreview200State];
+
+
+export const GetApiInvitationPreview200State = {
+  pending: 'pending',
+  expired: 'expired',
+  accepted: 'accepted',
+  rejected: 'rejected',
+  canceled: 'canceled',
+  not_found: 'not_found',
+} as const;
+
+export type GetApiInvitationPreview200 = {
+  state: GetApiInvitationPreview200State;
+  email: string | null;
+  role: string | null;
+  organizationName: string | null;
+  inviterName: string | null;
+  inviterEmail: string | null;
+  expiresAt: number | null;
+  recipientHasAccount: boolean;
+};
+
 export type GetApiAuthOk200 = {
   ok: boolean;
 };
@@ -389,6 +412,7 @@ export type PostApiAiEditFormBody = {
 export type PostApiAiEditForm200 = {
   doc: unknown;
   added: number;
+  updated: number;
   removed: number;
   rules: number;
   rewired: number;
@@ -429,6 +453,7 @@ export type PostApiAiAddBlocksBody = {
 export type PostApiAiAddBlocks200 = {
   doc: unknown;
   added: number;
+  updated: number;
   removed: number;
   rules: number;
   rewired: number;
@@ -1279,6 +1304,8 @@ export type GetApiBillingEntitlements200Limits = {[key: string]: number | null};
 
 export type GetApiBillingEntitlements200Usage = {[key: string]: number};
 
+export type GetApiBillingEntitlements200PreviousUsage = {[key: string]: number} | null;
+
 export type GetApiBillingEntitlements200Gauges = {[key: string]: number};
 
 export type GetApiBillingEntitlements200Permissions = {[key: string]: string[]};
@@ -1296,6 +1323,7 @@ export type GetApiBillingEntitlements200 = {
   features: GetApiBillingEntitlements200Features;
   limits: GetApiBillingEntitlements200Limits;
   usage: GetApiBillingEntitlements200Usage;
+  previousUsage: GetApiBillingEntitlements200PreviousUsage;
   gauges: GetApiBillingEntitlements200Gauges;
   periodResetsAt: number;
   role: string;

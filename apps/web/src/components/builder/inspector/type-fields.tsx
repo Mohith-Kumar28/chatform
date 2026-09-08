@@ -71,34 +71,46 @@ export function TypeFields({
             />
           </div>
           {block.type === "short_text" && (
-            <TextField
-              label="Pattern"
-              value={block.pattern ?? ""}
-              onChange={(v) => patch({ pattern: v || undefined } as Partial<Block>, key("pattern"))}
-            />
+            <>
+              <TextField
+                label="Pattern"
+                value={block.pattern ?? ""}
+                onChange={(v) => patch({ pattern: v || undefined } as Partial<Block>, key("pattern"))}
+              />
+              <UniqueField checked={block.unique} patch={patch} />
+            </>
           )}
         </>
       );
 
     case "email":
       return (
-        <SwitchField
-          label="Business emails only"
-          checked={block.businessOnly}
-          onChange={(v) => patch({ businessOnly: v } as Partial<Block>)}
-        />
+        <>
+          <SwitchField
+            label="Business emails only"
+            checked={block.businessOnly}
+            onChange={(v) => patch({ businessOnly: v } as Partial<Block>)}
+          />
+          <UniqueField checked={block.unique} patch={patch} />
+        </>
       );
+
+    case "url":
+      return <UniqueField checked={block.unique} patch={patch} />;
 
     case "phone":
       return (
-        <TextField
-          label="Country hint"
-          value={block.countryHint ?? ""}
-          onChange={(v) =>
-            patch({ countryHint: v.toUpperCase().slice(0, 2) || undefined } as Partial<Block>, key("countryHint"))
-          }
-          maxLength={2}
-        />
+        <>
+          <TextField
+            label="Country hint"
+            value={block.countryHint ?? ""}
+            onChange={(v) =>
+              patch({ countryHint: v.toUpperCase().slice(0, 2) || undefined } as Partial<Block>, key("countryHint"))
+            }
+            maxLength={2}
+          />
+          <UniqueField checked={block.unique} patch={patch} />
+        </>
       );
 
     case "number":
@@ -131,6 +143,7 @@ export function TypeFields({
             }
             maxLength={3}
           />
+          <UniqueField checked={block.unique} patch={patch} />
         </>
       );
 
@@ -584,4 +597,30 @@ export function TypeFields({
     default:
       return null;
   }
+}
+
+/**
+ * "No two people can give the same answer."
+ *
+ * One control rather than five copies, because the sentence an author needs to
+ * read is the same on all of them and it is not the obvious one: the check is
+ * against everybody else's answers to THIS question on THIS form, so the hint
+ * says so. Without that, "unique" reads as "unique in this response", which is
+ * trivially true and would make the switch look broken.
+ */
+function UniqueField({
+  checked,
+  patch,
+}: {
+  checked: boolean;
+  patch: (p: Partial<Block>, coalesceKey?: string) => void;
+}) {
+  return (
+    <SwitchField
+      label="No duplicate answers"
+      hint="Refuses a value another respondent has already given to this question"
+      checked={checked}
+      onChange={(v) => patch({ unique: v } as Partial<Block>)}
+    />
+  );
 }

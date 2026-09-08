@@ -38,14 +38,23 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
   welcome: { summary: "The opening greeting. Always the first block, never used again." },
   statement: { summary: "Says something and moves on. Collects no answer." },
 
-  short_text: { summary: "One line of free text — a name, a job title, a company." },
+  short_text: {
+    summary: "One line of free text — a name, a job title, a company.",
+    config: "unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
+  },
   long_text: { summary: "A paragraph. Only when you genuinely want prose." },
-  email: { summary: "An email address, validated as one." },
-  phone: { summary: "A phone number, validated as one." },
-  url: { summary: "A web address." },
+  email: {
+    summary: "An email address, validated as one.",
+    config: "businessOnly=true to refuse gmail and the other free providers; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
+  },
+  phone: {
+    summary: "A phone number, validated as one.",
+    config: "country=<2-letter code> to assume a dialling code; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
+  },
+  url: { summary: "A web address.", config: "unique=true to refuse a value another respondent already gave — a team name, a username, a seat number" },
   number: {
     summary: "A quantity — how many guests, how many seats, a budget.",
-    config: "min, max, integerOnly=true, currency=<3-letter code> when it is money",
+    config: "min, max, integerOnly=true, currency=<3-letter code> when it is money; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
   },
   date: {
     summary:

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, Check, GitBranch, Loader2, Minus, Shuffle, Sparkles } from "lucide-react";
+import { ArrowUp, Check, GitBranch, Loader2, Minus, Shuffle, SlidersHorizontal, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { FormDoc as FormDocSchema } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
@@ -15,9 +15,10 @@ import { KEY } from "./use-builder-shortcuts";
 import { cn } from "@/lib/utils";
 
 /** Plain words for an edit whose summary came back empty. */
-function describeEdit(added: number, removed: number, rules: number): string {
+function describeEdit(added: number, updated: number, removed: number, rules: number): string {
   const parts: string[] = [];
   if (added) parts.push(`${added} new question${added > 1 ? "s" : ""}`);
+  if (updated) parts.push(`${updated} question${updated > 1 ? "s" : ""} changed`);
   if (removed) parts.push(`${removed} removed`);
   if (rules) parts.push(`${rules} branching rule${rules > 1 ? "s" : ""}`);
   return parts.length ? `Here is the change: ${parts.join(", ")}.` : "Here is the change.";
@@ -111,6 +112,7 @@ export function AiBar() {
         doc: unknown;
         rules?: number;
         rewired?: number;
+        updatedRefs?: string[];
         removedRefs?: string[];
         summary?: string;
       }>("/api/ai/edit-form", {
@@ -127,6 +129,7 @@ export function AiBar() {
       const existing = new Set(doc.blocks.map((b) => b.ref));
       const added = proposed.data.blocks.filter((b) => !existing.has(b.ref));
       const removed = res.removedRefs ?? [];
+      const updated = res.updatedRefs ?? [];
       const rules = res.rules ?? 0;
 
       /**
@@ -143,9 +146,10 @@ export function AiBar() {
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: res.summary?.trim() || describeEdit(added.length, removed.length, rules),
+          text: res.summary?.trim() || describeEdit(added.length, updated.length, removed.length, rules),
           blocks: added,
           removed,
+          updated,
           rules,
           rewired: res.rewired ?? 0,
           doc: proposed.data,
@@ -296,12 +300,13 @@ function Message({
 
   const added = turn.blocks ?? [];
   const removed = turn.removed ?? [];
+  const updated = turn.updated ?? [];
   const rules = turn.rules ?? 0;
   const rewired = turn.rewired ?? 0;
   // An assistant turn is a proposal when it carries one, in any of its forms —
-  // questions, removals, or nothing but new wiring.
+  // questions, removals, changed settings, or nothing but new wiring.
   const isProposal =
-    turn.blocks !== undefined || removed.length > 0 || rules > 0 || rewired > 0;
+    turn.blocks !== undefined || removed.length > 0 || updated.length > 0 || rules > 0 || rewired > 0;
 
   return (
     <div className="space-y-1.5">
@@ -338,6 +343,12 @@ function Message({
                 </li>
               ))}
             </ul>
+          )}
+          {updated.length > 0 && (
+            <p className="text-muted-foreground flex items-center gap-1 px-1 text-xs">
+              <SlidersHorizontal className="size-3 shrink-0" />
+              Changes settings on {updated.length === 1 ? updated[0] : `${updated.length} questions`}
+            </p>
           )}
           {rewired > 0 && (
             <p className="text-muted-foreground flex items-center gap-1 px-1 text-xs">

@@ -43,10 +43,31 @@ export const VALIDATION_CODES = [
   "payment_pending",
   "incomplete",
   "consent_required",
+  /**
+   * Someone else already gave this answer to a question marked `unique`.
+   *
+   * The only code here that is not a property of the answer alone: it is
+   * decided against what is already in the database, so `validateAnswer`
+   * cannot emit it. The writers do, immediately after validation passes —
+   * see `findDuplicateAnswer`.
+   */
+  "duplicate",
   "unsupported",
 ] as const;
 
 export type ValidationCode = (typeof VALIDATION_CODES)[number];
+
+/**
+ * What a respondent is told when a `unique` question has already had this
+ * answer from somebody else.
+ *
+ * Here rather than beside the database query that decides it, because it is the
+ * one hint `validateAnswer` cannot produce and three things need the same
+ * wording: the conversation, the API's 422, and the generated block reference,
+ * which documents every message by running the validator and has nothing to run
+ * for this one.
+ */
+export const DUPLICATE_HINT = "Someone has already used that — please try a different one.";
 
 export interface ValidationResult {
   ok: boolean;

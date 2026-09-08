@@ -288,6 +288,31 @@ export const EditDraft = z.object({
       }),
     )
     .max(12),
+  /**
+   * Settings changed on questions that are already in the form.
+   *
+   * The half of an edit that used to have nowhere to go. `addBlocks` could
+   * express any documented setting on a NEW question and nothing at all about
+   * an existing one, so "the team name has to be unique" — which is a sentence
+   * about a question the author is looking at — could only be answered by
+   * adding a second team-name question with the flag on. The model was not
+   * wrong to do that; it was the only move the schema allowed.
+   *
+   * `config` is the same flat `key=value` string every other draft uses, read
+   * back by `applyBlockConfig`, and only the keys written are touched. So an
+   * edit can say `unique=true` about one question without restating the six
+   * settings beside it.
+   */
+  updateBlocks: z
+    .array(
+      z.object({
+        /** Ref of a question already in the form. */
+        ref: z.string(),
+        /** `key=value; key=value`, using the keys the type documents. */
+        config: z.string(),
+      }),
+    )
+    .max(12),
   /** Refs of questions the request asks to be taken out. Usually empty. */
   removeRefs: z.array(z.string()).max(12),
   /**

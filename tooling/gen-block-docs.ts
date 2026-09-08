@@ -28,6 +28,7 @@ import {
   Block,
   toPublicBlock,
   validateAnswer,
+  DUPLICATE_HINT,
   DETERMINISTIC_TYPES,
   OUT_OF_BAND_TYPES,
   type BlockType,
@@ -106,12 +107,23 @@ function errorTable(type: BlockType): string {
      */
     const probe = example ? example.value : code === "required" ? "" : undefined;
     const result = probe === undefined ? null : validateAnswer(parsed, probe);
-    const message = result && !result.ok ? (result.hint ?? "") : "";
+    /**
+     * `duplicate` is the one row here that is written rather than run.
+     *
+     * Every other code is a property of the answer, so the validator can be
+     * handed a value and asked. This one is decided against answers already in
+     * the database — there is no value that produces it and nothing to run — so
+     * the message comes from the constant all three surfaces share.
+     */
+    const message =
+      code === "duplicate" ? DUPLICATE_HINT : result && !result.ok ? (result.hint ?? "") : "";
     const when = example
       ? `\`${cell(JSON.stringify(example.value))}\`${example.note ? ` — ${cell(example.note)}` : ""}`
       : code === "required"
         ? "an empty answer on a required block"
-        : "—";
+        : code === "duplicate"
+          ? "`unique` is on and another response already gave this answer"
+          : "—";
     rows.push(`| \`${code}\` | ${when} | ${cell(message)} |`);
   }
   return rows.join("\n");

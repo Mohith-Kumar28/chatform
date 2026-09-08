@@ -42,6 +42,7 @@ import type {
   GetApiFormsByIdVersionsByVersion200,
   GetApiFormsByIdVersionsByVersion404,
   GetApiFormsByIdVersionsByVersionParams,
+  GetApiInvitationPreview200,
   GetApiKeys200Item,
   GetApiTemplates200Item,
   GetApiTemplatesBySlug200,
@@ -178,6 +179,94 @@ export function useGetApiAuthProviders<TData = Awaited<ReturnType<typeof getApiA
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetApiAuthProvidersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiInvitationPreviewResponse200 = {
+  data: GetApiInvitationPreview200
+  status: 200
+}
+
+export type getApiInvitationPreviewResponseSuccess = (getApiInvitationPreviewResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiInvitationPreviewResponse = (getApiInvitationPreviewResponseSuccess)
+
+export const getGetApiInvitationPreviewUrl = () => {
+
+
+
+
+  return `/api/invitation-preview`
+}
+
+/**
+ * @summary Public summary of an invitation link
+ */
+export const getApiInvitationPreview = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiInvitationPreviewResponse> => {
+
+  return customFetch<getApiInvitationPreviewResponse>(getGetApiInvitationPreviewUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiInvitationPreviewQueryKey = () => {
+    return [
+    `/api/invitation-preview`
+    ] as const;
+    }
+
+
+export const getGetApiInvitationPreviewQueryOptions = <TData = Awaited<ReturnType<typeof getApiInvitationPreview>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiInvitationPreview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiInvitationPreviewQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiInvitationPreview>>> = ({ signal }) => getApiInvitationPreview({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiInvitationPreview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiInvitationPreviewQueryResult = NonNullable<Awaited<ReturnType<typeof getApiInvitationPreview>>>
+export type GetApiInvitationPreviewQueryError = unknown
+
+
+/**
+ * @summary Public summary of an invitation link
+ */
+
+export function useGetApiInvitationPreview<TData = Awaited<ReturnType<typeof getApiInvitationPreview>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiInvitationPreview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiInvitationPreviewQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -1061,7 +1150,7 @@ export const getPostApiAiEditFormUrl = () => {
 
 /**
  * Returns the proposed document without saving it. An edit may add no questions at all — most requests about a working form change the routing.
- * @summary AI-edit an existing form: add or remove questions, and rewire the flow
+ * @summary AI-edit an existing form: add, change or remove questions, and rewire the flow
  */
 export const postApiAiEditForm = async (postApiAiEditFormBody: PostApiAiEditFormBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAiEditFormResponse> => {
 
@@ -1117,7 +1206,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiAiEditFormMutationVariables = {data: PostApiAiEditFormBody}
 
     /**
- * @summary AI-edit an existing form: add or remove questions, and rewire the flow
+ * @summary AI-edit an existing form: add, change or remove questions, and rewire the flow
  */
 export const usePostApiAiEditForm = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiEditForm>>, TError,PostApiAiEditFormMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}

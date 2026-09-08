@@ -29,6 +29,10 @@ Fields specific to `phone`. The [fields every block has](/docs/blocks/common-fie
       "type": "string",
       "const": "phone"
     },
+    "unique": {
+      "default": false,
+      "type": "boolean"
+    },
     "countryHint": {
       "type": "string",
       "minLength": 2,
@@ -191,6 +195,8 @@ Fields specific to `phone`. The [fields every block has](/docs/blocks/common-fie
 }
 ```
 
+In a generated draft these arrive as `config` pairs: `country=<2-letter code> to assume a dialling code; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number`.
+
 ## What you receive
 
 `GET /v1/forms/{id}` and every "next question" projects blocks through `toPublicBlock`. For the example above:
@@ -269,3 +275,4 @@ The value is normalised before it is saved, so what you read back is not always 
 | `required` | an empty answer on a required block | This question needs an answer. |
 | `type` | `9812345678` | Please enter a phone number. |
 | `invalid_phone` | `"not a phone"` | Please enter a valid phone number with country code. |
+| `duplicate` | `unique` is on and another response already gave this answer | Someone has already used that — please try a different one. |

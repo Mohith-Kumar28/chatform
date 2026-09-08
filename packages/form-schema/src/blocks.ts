@@ -106,6 +106,20 @@ export type Option = z.infer<typeof Option>;
 const MatrixColumn = z.object({ id: NanoId, label: z.string().min(1).max(300) });
 const MatrixRow = z.object({ id: NanoId, label: z.string().min(1).max(300) });
 
+/**
+ * Refuse an answer another respondent has already given.
+ *
+ * A team name, a username, a referral code, a seat number: answers that are
+ * only useful when no two responses carry the same one. Checked against every
+ * answer already recorded for this question on this form, at the moment it is
+ * given — see `findDuplicateAnswer` — because "already taken" is a fact about a
+ * form, and because deduplicating afterwards is work somebody does by hand.
+ *
+ * Only on the types where sameness is well defined. A paragraph, a rating or a
+ * choice from a list of five has no useful notion of "taken".
+ */
+const Unique = z.boolean().default(false);
+
 export const ContactField = z.enum(["first_name", "last_name", "email", "phone"]);
 export const AddressField = z.enum(["street", "city", "state", "postal", "country"]);
 
@@ -115,6 +129,7 @@ export const Block = z.discriminatedUnion("type", [
   z.object({
     ...BlockBase,
     type: z.literal("short_text"),
+    unique: Unique,
     minLength: z.number().int().min(0).max(500).default(0),
     maxLength: z.number().int().min(1).max(500).default(500),
     pattern: z.string().max(500).optional(),
@@ -131,17 +146,20 @@ export const Block = z.discriminatedUnion("type", [
   z.object({
     ...BlockBase,
     type: z.literal("email"),
+    unique: Unique,
     businessOnly: z.boolean().default(false),
   }),
   z.object({
     ...BlockBase,
     type: z.literal("phone"),
+    unique: Unique,
     countryHint: z.string().length(2).optional(),
   }),
-  z.object({ ...BlockBase, type: z.literal("url") }),
+  z.object({ ...BlockBase, type: z.literal("url"), unique: Unique }),
   z.object({
     ...BlockBase,
     type: z.literal("number"),
+    unique: Unique,
     min: z.number().optional(),
     max: z.number().optional(),
     integerOnly: z.boolean().default(false),
@@ -298,3 +316,23 @@ export const Block = z.discriminatedUnion("type", [
 export type Block = z.output<typeof Block>;
 /** Input shape (fields with defaults are optional on input). */
 export type BlockInput = z.input<typeof Block>;
+
+/**
+ * The types that can carry `unique`, and the one place that list is written.
+ *
+ * The builder's toggle, the AI editor's `config` key and the runtime check all
+ * read this, so a type gaining or losing the flag cannot leave one of the three
+ * behind — the same reason `BLOCK_CATALOG` exists.
+ */
+export const UNIQUE_CAPABLE_TYPES = new Set<BlockType>([
+  "short_text",
+  "email",
+  "phone",
+  "url",
+  "number",
+]);
+
+/** True when this block refuses an answer another response already gave. */
+export function enforcesUnique(block: Block): boolean {
+  return "unique" in block && block.unique === true;
+}

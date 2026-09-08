@@ -28,6 +28,10 @@ Fields specific to `url`. The [fields every block has](/docs/blocks/common-field
     "type": {
       "type": "string",
       "const": "url"
+    },
+    "unique": {
+      "default": false,
+      "type": "boolean"
     }
   },
   "required": [
@@ -186,6 +190,8 @@ Fields specific to `url`. The [fields every block has](/docs/blocks/common-field
 }
 ```
 
+In a generated draft these arrive as `config` pairs: `unique=true to refuse a value another respondent already gave — a team name, a username, a seat number`.
+
 ## What you receive
 
 `GET /v1/forms/{id}` and every "next question" projects blocks through `toPublicBlock`. For the example above:
@@ -263,3 +269,4 @@ The value is normalised before it is saved, so what you read back is not always 
 | `required` | an empty answer on a required block | This question needs an answer. |
 | `type` | `5` | Please enter a URL. |
 | `invalid_url` | `"not a url"` | That doesn't look like a valid URL. |
+| `duplicate` | `unique` is on and another response already gave this answer | Someone has already used that — please try a different one. |

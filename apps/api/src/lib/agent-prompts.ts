@@ -1,4 +1,4 @@
-import { ADDABLE_BLOCK_TYPES, renderBlockCatalog, type Block, type FormDoc } from "@repo/form-schema";
+import { ADDABLE_BLOCK_TYPES, enforcesUnique, renderBlockCatalog, type Block, type FormDoc } from "@repo/form-schema";
 
 /**
  * The interview agent's prompts.
@@ -451,7 +451,10 @@ export function buildEditPrompt(
         : "";
       const routed = reachedBy.get(b.ref);
       const reach = routed?.length ? `  ← reached by: ${routed.join("; ")}` : "";
-      return `  ${i + 1}. ${b.ref} (${b.type}${b.required ? ", required" : ""}): "${b.title}"${options}${reach}`;
+      // Shown so a request to make a question unique that already is comes back
+      // as "it already is" rather than as a second copy of the question.
+      const unique = enforcesUnique(b) ? ", unique" : "";
+      return `  ${i + 1}. ${b.ref} (${b.type}${b.required ? ", required" : ""}${unique}): "${b.title}"${options}${reach}`;
     })
     .join("\n");
 
@@ -497,18 +500,21 @@ WORK OUT WHAT KIND OF EDIT THIS IS FIRST. Most requests about a working form cha
 - "rewireRefs": the refs of questions whose routing this edit changes. List them, then state their branches below.
 - "branches": every branch this edit asserts. Each one REPLACES the existing rule for that same question and the same answer, and leaves every other route untouched. So restate the routes you are changing, in full — including an answer whose destination stays the same but whose neighbours are moving. A route you do not mention keeps working exactly as it does now.
 - If a question has three options and you are changing where one of them goes, you may state just that one. But if the change means the other two should go somewhere different too, state those as well — they will not move on their own.
+- "updateBlocks": settings changed on questions that are ALREADY in the form — the answer to most requests that are neither a new question nor a route. "the team name has to be unique", "make the email required", "cap that number at 50", "work emails only". Each entry is { "ref": "<existing ref>", "config": "key=value; key=value" }, using the same keys the type documents below, and only the keys you write are changed. Never add a second copy of a question to carry a setting the original could have had.
 - "removeRefs": only when the request actually asks for a question to go.
 
 Rules for "branches": [{ "whenRef": "<question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains>", "value": "<for a choice question, the option's LABEL exactly as listed above; otherwise the literal value>", "then": "<question ref or ending ref>" }].
 
 Where a branch can point: a question BELOW the deciding one, or an ending. A branch pointing at a question above it would loop, and is dropped. So if the request needs a question asked only for some answers, that question has to sit below the one that decides it — say so by adding it with "insertAfter", or by rewiring around where it already is.
 
+The manifest above marks a question "unique" when it already refuses answers another respondent gave. If the request asks for something that is already true, change nothing and say so in the summary.
+
 If a new question is needed, "type" MUST be one of exactly these:
 ${renderBlockCatalog(ADDABLE_BLOCK_TYPES)}
 
 Pick the type that actually collects the thing. A price, a fee, a ticket or a UPI id is "payment", not a text question asking them to confirm they paid. A time or a date is "date". A booking link of the builder's own is "scheduling". Reaching for short_text because it is simpler produces a question that collects nothing.
 
-"config" carries the setup for the types that need it, as "key=value; key=value" with exactly the keys listed above — "method=upi; upi=acme@okhdfcbank; amount=499; currency=INR" — and "" for the types that need none. If the request gives you an amount, an id or a URL, it goes in "config", not into the title.
+"config" carries the setup for the types that need it, as "key=value; key=value" with exactly the keys listed above — "method=upi; upi=acme@okhdfcbank; amount=499; currency=INR" — and "" for the types that need none. If the request gives you an amount, an id or a URL, it goes in "config", not into the title. The same keys, and one more — "required=true" or "required=false" — are what "updateBlocks" writes about a question that already exists.
 
 "options" are plain labels as the respondent reads them — ["Android", "iPhone"] — and [] when the type is not a choice. "insertAfter" is the ref it goes directly after, "" for the end; a question only asked in some cases MUST sit immediately below the question that decides it.
 

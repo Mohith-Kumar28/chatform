@@ -132,6 +132,76 @@ export async function recordAnswerRow(o: ResponseOwner, a: RecordAnswerArgs): Pr
   ]);
 }
 
+/**
+ * "Has anybody already given this answer?"
+ *
+ * The one rule that cannot live in `validateAnswer`. Everything else that
+ * refuses an answer is a property of the answer itself — a length, a pattern, a
+ * range — and is decided from the block and the value alone, which is what
+ * makes that function pure, synchronous and shared with the SDK. Uniqueness is
+ * a fact about the rest of the database, so it is decided here, by the module
+ * that already owns every read and write of `submission_answers`, and both
+ * writers call it in the same place: immediately after validation passes and
+ * before the answer is accepted.
+ *
+ * What counts as taken:
+ * - The same question on the same form. Not the same value anywhere else — two
+ *   forms asking for a team name are two competitions.
+ * - Case- and whitespace-insensitively. `validateAnswer` has already trimmed
+ *   and canonicalized (emails are lowercased there), and `COLLATE NOCASE`
+ *   handles the rest; the index in `0011_unique_answers.sql` carries the same
+ *   collation so this is a seek.
+ * - Not by an abandoned response. Somebody who typed a name and wandered off
+ *   should not hold it forever, and a form whose names are exhausted by
+ *   drop-offs is worse than one that very occasionally frees a name early.
+ * - Not across the test/live boundary. A `*_test_` key writing "Team Alpha"
+ *   must not stop a real respondent from claiming it, and testing the rule with
+ *   a test key still has to work — so each side only ever sees its own rows.
+ *
+ * The race is real and deliberately unguarded: two people can pass this check
+ * within the same millisecond and both be written. Closing it needs a unique
+ * constraint, and there is nowhere to put one — the flag is per question, and
+ * this table holds every answer to every question in the account. The window is
+ * the round trip between this SELECT and the INSERT that follows it, against a
+ * respondent typing; a rare collision that an author resolves in the results
+ * table is a better trade than the schema it would take to make it impossible.
+ */
+export async function findDuplicateAnswer(
+  o: ResponseOwner,
+  a: { blockRef: string; value: unknown; excludeResponseId: string | null },
+): Promise<boolean> {
+  // A preview writes nothing, so it has nothing to collide with — and telling a
+  // builder testing their own form that their team name is taken, by a row that
+  // does not exist, is the worst possible first impression of the feature.
+  if (isPreview(o)) return false;
+  const row = await o.env.DB.prepare(
+    `SELECT 1
+       FROM submission_answers a
+       JOIN submissions s ON s.id = a.submission_id
+      WHERE a.form_id = ?1
+        AND a.block_ref = ?2
+        AND a.value_json = ?3 COLLATE NOCASE
+        AND a.submission_id <> ?4
+        AND s.status <> 'abandoned'
+        AND s.is_test = ?5
+      LIMIT 1`,
+  )
+    .bind(
+      o.formId,
+      a.blockRef,
+      // The stored form, not the raw one: `recordAnswerRow` writes
+      // `JSON.stringify(value)`, so anything else here compares against a shape
+      // that is not in the column.
+      JSON.stringify(a.value),
+      // No response row yet means nothing of this respondent's is stored, so
+      // there is nothing to exclude — but the parameter still has to bind.
+      a.excludeResponseId ?? "",
+      o.isTest ? 1 : 0,
+    )
+    .first<{ 1: number }>();
+  return row !== null;
+}
+
 /** Remove a retracted answer. Later answers are deliberately kept, as the chat `edit` action does. */
 export async function deleteAnswerRow(o: ResponseOwner, responseId: string, ref: string): Promise<void> {
   if (isPreview(o)) return;

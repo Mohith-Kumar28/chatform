@@ -6,6 +6,8 @@ import {
   toPublicBlock,
   toPublicEnding,
   validateAnswer,
+  enforcesUnique,
+  DUPLICATE_HINT,
   replayState,
   unsatisfiedRequired,
   answerability,
@@ -22,6 +24,7 @@ import {
   openResponse,
   recordAnswerRow,
   deleteAnswerRow,
+  findDuplicateAnswer,
   finalizeResponse,
   newResponseId,
   type ResponseOwner,
@@ -279,6 +282,38 @@ function validateBatch(
   return { ok: true, accepted };
 }
 
+/**
+ * The second gate: answers to questions marked `unique` that somebody else has
+ * already given.
+ *
+ * Separate from `validateBatch` because it is the one rule that needs the
+ * database, and `validateBatch` is deliberately synchronous and pure — it is
+ * also what the SDK runs client-side. Same all-or-nothing contract, same issue
+ * shape, and the same code the conversation emits, so a caller branching on
+ * `duplicate` gets it from either surface.
+ *
+ * Run before the response row is opened, so a batch rejected on its first
+ * answer does not leave an empty response behind.
+ */
+async function duplicateIssues(
+  owner: ResponseOwner,
+  doc: FormDoc,
+  accepted: { ref: string; type: string; value: unknown }[],
+  excludeResponseId: string | null,
+): Promise<{ ref: string; code: string; message: string }[]> {
+  const checkable = accepted.filter((a) => {
+    const block = doc.blocks.find((b) => b.ref === a.ref);
+    return block !== undefined && enforcesUnique(block) && a.value !== undefined;
+  });
+  if (checkable.length === 0) return [];
+  const taken = await Promise.all(
+    checkable.map((a) => findDuplicateAnswer(owner, { blockRef: a.ref, value: a.value, excludeResponseId })),
+  );
+  return checkable
+    .filter((_, i) => taken[i])
+    .map((a) => ({ ref: a.ref, code: "duplicate", message: DUPLICATE_HINT }));
+}
+
 responsesRouter.post(
   "/forms/:id/responses",
   requireScope("response", "write"),
@@ -317,6 +352,14 @@ responsesRouter.post(
     if (!validated.ok) {
       return c.json(
         { error: { code: "invalid_answer", message: "One or more answers were rejected", issues: validated.issues } },
+        422,
+      );
+    }
+    // Nothing of this response exists yet, so there is nothing to exclude.
+    const dupes = await duplicateIssues(owner, form.doc, validated.accepted, null);
+    if (dupes.length > 0) {
+      return c.json(
+        { error: { code: "invalid_answer", message: "One or more answers were rejected", issues: dupes } },
         422,
       );
     }
@@ -428,6 +471,15 @@ responsesRouter.post(
     }
 
     const owner = ownerOf(c.env, form, row);
+    // Excluding this response, so re-sending an answer it already holds — which
+    // is how a caller corrects one — is not a collision with itself.
+    const dupes = await duplicateIssues(owner, form.doc, validated.accepted, row.id);
+    if (dupes.length > 0) {
+      return c.json(
+        { error: { code: "invalid_answer", message: "One or more answers were rejected", issues: dupes } },
+        422,
+      );
+    }
     for (const answer of validated.accepted) {
       /**
        * Awaited, unlike the conversation path, which hands this to `waitUntil`

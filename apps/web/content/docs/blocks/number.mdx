@@ -29,6 +29,10 @@ Fields specific to `number`. The [fields every block has](/docs/blocks/common-fi
       "type": "string",
       "const": "number"
     },
+    "unique": {
+      "default": false,
+      "type": "boolean"
+    },
     "min": {
       "type": "number"
     },
@@ -201,7 +205,7 @@ Fields specific to `number`. The [fields every block has](/docs/blocks/common-fi
 }
 ```
 
-In a generated draft these arrive as `config` pairs: `min, max, integerOnly=true, currency=<3-letter code> when it is money`.
+In a generated draft these arrive as `config` pairs: `min, max, integerOnly=true, currency=<3-letter code> when it is money; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number`.
 
 ## What you receive
 
@@ -286,3 +290,4 @@ The value is normalised before it is saved, so what you read back is not always 
 | `not_integer` | `1.5` | Please enter a whole number. |
 | `too_small` | `0` | Please enter a number ≥ 1. |
 | `too_large` | `501` | Please enter a number ≤ 500. |
+| `duplicate` | `unique` is on and another response already gave this answer | Someone has already used that — please try a different one. |

@@ -384,6 +384,17 @@ export const submissionAnswers = sqliteTable(
   (t) => [
     uniqueIndex("uq_answers_sub_ref").on(t.submissionId, t.blockRef),
     index("idx_answers_form_ref").on(t.formId, t.blockRef),
+    /**
+     * Backs the `unique` block flag: "has anybody already given this answer?"
+     *
+     * Declared `COLLATE NOCASE` in the migration, which is what lets the lookup
+     * seek rather than read every answer this question has ever collected —
+     * "Team Alpha" and "team alpha" are the same name, and a `lower()` in the
+     * predicate would rule the index out. Drizzle has no collation on an index
+     * column, so `0011_unique_answers.sql` is the authority for this one; the
+     * entry here exists so `drizzle-kit` does not propose dropping it.
+     */
+    index("idx_answers_unique_lookup").on(t.formId, t.blockRef, t.valueJson),
   ],
 );
 

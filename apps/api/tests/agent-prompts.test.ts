@@ -175,3 +175,42 @@ describe("the generator sizes the form", () => {
     expect(buildFlowGeneratorPrompt("A waitlist", undefined, null)).not.toContain("ANTI-PATTERNS");
   });
 });
+
+/**
+ * "Make the team name unique" is a sentence about a question that already
+ * exists, and the editor has to be able to hear it as one.
+ */
+describe("changing a question that is already in the form", () => {
+  const doc = FormDoc.parse({
+    schemaVersion: 1,
+    title: "Hackathon",
+    blocks: [
+      { id: "blk_uq000001", ref: "q_welcome", type: "welcome", title: "Sign your team up" },
+      { id: "blk_uq000002", ref: "q_team", type: "short_text", title: "Team name?" },
+      { id: "blk_uq000003", ref: "q_lead", type: "email", title: "Captain's email?", unique: true },
+    ],
+    endings: [{ id: "end_uq000001", ref: "end_thanks", title: "You're in" }],
+    logic: [],
+    endingRules: [],
+    variables: [],
+    hiddenFields: [],
+    settings: {},
+    theme: {},
+  });
+  const prompt = buildEditPrompt(doc, "the team name has to be unique");
+
+  it("offers updateBlocks as the way to say it", () => {
+    // Without this the model's only legal move is `addBlocks`, and it answers
+    // by adding a second team-name question with the flag on.
+    expect(prompt).toContain("updateBlocks");
+    expect(prompt).toContain("unique=true");
+  });
+
+  it("marks the questions that already refuse duplicates", () => {
+    // So a request for something already true comes back as "it already is",
+    // rather than as a change.
+    expect(prompt).toContain("q_lead (email, unique)");
+    expect(prompt).not.toContain("q_team (short_text, unique)");
+  });
+});
+

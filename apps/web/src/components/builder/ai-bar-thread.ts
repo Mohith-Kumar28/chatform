@@ -8,6 +8,8 @@ export interface Turn {
   blocks?: Block[];
   /** Refs of questions the proposal takes out. */
   removed?: string[];
+  /** Refs of questions whose settings the proposal changes — unique, required, bounds. */
+  updated?: string[];
   /** How many branching rules the proposal adds. */
   rules?: number;
   /** How many questions had their routing replaced. */

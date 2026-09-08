@@ -8,7 +8,7 @@ import { requirePermission, requireQuota, requireGauge, type AuthzVars } from ".
 import { meter } from "../lib/entitlements.js";
 import { generateFormDraft, generateEdit, streamFormDraft, researchBrief, type GenerationDraft } from "../lib/ai.js";
 import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, type BuilderTurn } from "../lib/agent-prompts.js";
-import { draftToDoc, normalizeEditBlocks, resolveBranches } from "../lib/draft-normalize.js";
+import { applyBlockConfig, draftToDoc, normalizeEditBlocks, resolveBranches } from "../lib/draft-normalize.js";
 import { extractUrls, readSites } from "../lib/research.js";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
 
@@ -439,7 +439,7 @@ for (const path of ["/ai/edit-form", "/ai/add-blocks"] as const) {
       tags: ["dashboard"],
       summary:
         path === "/ai/edit-form"
-          ? "AI-edit an existing form: add or remove questions, and rewire the flow"
+          ? "AI-edit an existing form: add, change or remove questions, and rewire the flow"
           : "Deprecated alias of /ai/edit-form, for bundles loaded before the rename",
       deprecated: path !== "/ai/edit-form",
       description:
@@ -453,6 +453,7 @@ for (const path of ["/ai/edit-form", "/ai/add-blocks"] as const) {
                 z.object({
                   doc: z.unknown(),
                   added: z.number(),
+                  updated: z.number(),
                   removed: z.number(),
                   rules: z.number(),
                   rewired: z.number(),
@@ -517,6 +518,29 @@ for (const path of ["/ai/edit-form", "/ai/add-blocks"] as const) {
         doc.logic = doc.logic.filter(
           (r) => !(r.action_kind === "goto" && ((r.from && gone.has(r.from)) || ((r.targetKind ?? "block") === "block" && gone.has(r.target)))),
         );
+      }
+
+      /**
+       * ─── settings changed on questions that are already here ───
+       *
+       * Before removals would be wrong (a question on its way out has no
+       * settings worth changing) and after additions would be ambiguous, since
+       * a new block's ref may collide with one of these. Between the two, every
+       * ref in `updateBlocks` names a question that was in the form when the
+       * model read it, which is the only thing it can honestly be talking about.
+       */
+      const updated: string[] = [];
+      for (const u of draft.updateBlocks ?? []) {
+        const at = doc.blocks.findIndex((b) => b.ref === u.ref);
+        if (at < 0) continue;
+        const next = applyBlockConfig(doc.blocks[at]!, u.config);
+        // Null means the config named nothing this type reads, or asked for what
+        // is already true. Either way it is not a change, and counting it as one
+        // would let an edit that does nothing pass the "must change something"
+        // check below.
+        if (!next) continue;
+        doc.blocks[at] = next;
+        updated.push(u.ref);
       }
 
       // ─── additions, each where the model asked for it ───
@@ -594,7 +618,7 @@ for (const path of ["/ai/edit-form", "/ai/add-blocks"] as const) {
       // rejection, which is what forced the model to invent one: a routing-only
       // edit is now a complete answer, and only an edit that touches nothing at
       // all is worth telling the builder about.
-      if (added.length === 0 && removed.length === 0 && newRules.length === 0) {
+      if (added.length === 0 && removed.length === 0 && updated.length === 0 && newRules.length === 0) {
         return c.json(
           {
             error: {
@@ -622,6 +646,8 @@ for (const path of ["/ai/edit-form", "/ai/add-blocks"] as const) {
         doc,
         added: added.length,
         addedRefs: added.map((b) => b.ref),
+        updated: updated.length,
+        updatedRefs: updated,
         removed: removed.length,
         removedRefs: removed,
         rules: newRules.length,

@@ -87,7 +87,7 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
       { value: 42, code: "type" },
       { value: "", code: "required" },
     ],
-    codes: ["required", "type", "too_short", "too_long", "pattern"],
+    codes: ["required", "type", "too_short", "too_long", "pattern", "duplicate"],
   },
   long_text: {
     shape: "A paragraph, trimmed.",
@@ -118,7 +118,7 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
       { value: 1, code: "type" },
       { value: "", code: "required" },
     ],
-    codes: ["required", "type", "invalid_email", "freemail"],
+    codes: ["required", "type", "invalid_email", "freemail", "duplicate"],
   },
   phone: {
     shape: "A phone number in E.164 (`+<country><number>`).",
@@ -135,7 +135,7 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
       { value: "not a phone", code: "invalid_phone" },
       { value: 9812345678, code: "type" },
     ],
-    codes: ["required", "type", "invalid_phone"],
+    codes: ["required", "type", "invalid_phone", "duplicate"],
   },
   url: {
     shape: "A web address. `https://` is added when the scheme is missing.",
@@ -146,7 +146,7 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
       { value: "not a url", code: "invalid_url" },
       { value: 5, code: "type" },
     ],
-    codes: ["required", "type", "invalid_url"],
+    codes: ["required", "type", "invalid_url", "duplicate"],
   },
   number: {
     shape: "A number, within the block's bounds.",
@@ -165,7 +165,7 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
       { value: 1.5, code: "not_integer" },
       { value: "twelve", code: "type" },
     ],
-    codes: ["required", "type", "not_integer", "too_small", "too_large"],
+    codes: ["required", "type", "not_integer", "too_small", "too_large", "duplicate"],
   },
   date: {
     shape: "A date as `YYYY-MM-DD`, or `YYYY-MM-DDTHH:mm` when the block includes a time.",

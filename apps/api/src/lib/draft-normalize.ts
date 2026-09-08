@@ -144,6 +144,25 @@ const num = (v: string | undefined): number | undefined => {
   return Number.isFinite(n) ? n : undefined;
 };
 
+/**
+ * A documented boolean config key.
+ *
+ * Models write "true", "yes" and "1" for the same thing, and a strict
+ * `=== "true"` turned two of the three into silence — the author asked for a
+ * unique team name, the model said `unique=yes`, and the setting did not
+ * appear.
+ */
+function flag(config: Map<string, string>, key: string): boolean {
+  const v = config.get(key)?.trim().toLowerCase();
+  return v === "true" || v === "yes" || v === "1" || v === "on";
+}
+
+/** `country=IN` → the two-letter hint the phone validator dials with. */
+function countryHintOf(config: Map<string, string>): string | undefined {
+  const raw = (config.get("country") ?? config.get("countryhint") ?? "").trim();
+  return /^[a-z]{2}$/i.test(raw) ? raw.toUpperCase() : undefined;
+}
+
 /** A 3-letter code, or the currency implied by a symbol the model kept. */
 function currencyOf(config: Map<string, string>): string | undefined {
   const raw = config.get("currency");
@@ -280,12 +299,31 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
       case "statement":
         return done(BlockSchema.parse({ ...base, type: "statement", buttonLabel: "Continue" }));
       case "short_text":
-        return done(BlockSchema.parse({ ...base, type: "short_text", minLength: 0, maxLength: 300 }));
+        return done(
+          BlockSchema.parse({ ...base, type: "short_text", minLength: 0, maxLength: 300, unique: flag(config, "unique") }),
+        );
       case "long_text":
         return done(BlockSchema.parse({ ...base, type: "long_text", minLength: 0, maxLength: 1500 }));
       case "email":
+        return done(
+          BlockSchema.parse({
+            ...base,
+            type,
+            unique: flag(config, "unique"),
+            businessOnly: flag(config, "businessonly"),
+          }),
+        );
       case "phone":
+        return done(
+          BlockSchema.parse({
+            ...base,
+            type,
+            unique: flag(config, "unique"),
+            countryHint: countryHintOf(config),
+          }),
+        );
       case "url":
+        return done(BlockSchema.parse({ ...base, type, unique: flag(config, "unique") }));
       case "nps":
       case "signature":
         return done(BlockSchema.parse({ ...base, type }));
@@ -298,9 +336,10 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
           BlockSchema.parse({
             ...base,
             type,
+            unique: flag(config, "unique"),
             min: num(config.get("min")),
             max: num(config.get("max")),
-            integerOnly: config.get("integeronly") === "true",
+            integerOnly: flag(config, "integeronly"),
             currency: currencyOf(config),
           }),
         );
@@ -451,6 +490,139 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
     } catch {
       return null;
     }
+  }
+}
+
+/**
+ * Apply a `key=value` config string to a question that already exists.
+ *
+ * The counterpart to `normalizeBlock`'s config handling, for the other half of
+ * an edit. Until this existed the AI bar could add a question with any setting
+ * the catalog documents and change nothing whatsoever about a question already
+ * in the form — so "the team name has to be unique", far and away the more
+ * common way that request arrives, had no expressible answer. The model's only
+ * legal move was to add a second team-name question with the flag on, which is
+ * the wrong answer delivered confidently.
+ *
+ * Only the keys the caller actually wrote are applied. A config of
+ * `unique=true` on a number question must not quietly reset the bounds beside
+ * it, and a model restating one setting is not asserting anything about the
+ * others.
+ *
+ * Returns null when nothing changed, so the route can tell an edit that did
+ * something from one that did not. A patch the schema refuses is dropped whole
+ * rather than half-applied — same reasoning as `normalizeBlock`'s catch.
+ */
+export function applyBlockConfig(block: Block, raw: string | undefined): Block | null {
+  const config = parseBlockConfig(raw);
+  if (config.size === 0) return null;
+
+  const patch: Record<string, unknown> = {};
+  /** Copy `key` across under `field`, only when it was written. */
+  const set = (key: string, field: string, read: (v: string) => unknown) => {
+    const v = config.get(key);
+    if (v === undefined) return;
+    const parsed = read(v);
+    if (parsed !== undefined) patch[field] = parsed;
+  };
+  const bool = (key: string, field: string) => {
+    if (config.has(key)) patch[field] = flag(config, key);
+  };
+
+  // `required` is not type-specific and is the other thing an author says in
+  // the same breath as "and it has to be unique".
+  bool("required", "required");
+
+  switch (block.type) {
+    case "short_text":
+      bool("unique", "unique");
+      set("minlength", "minLength", (v) => num(v));
+      set("maxlength", "maxLength", (v) => num(v));
+      set("pattern", "pattern", (v) => v);
+      break;
+    case "long_text":
+      set("minlength", "minLength", (v) => num(v));
+      set("maxlength", "maxLength", (v) => num(v));
+      break;
+    case "email":
+      bool("unique", "unique");
+      bool("businessonly", "businessOnly");
+      break;
+    case "phone":
+      bool("unique", "unique");
+      if (config.has("country") || config.has("countryhint")) patch.countryHint = countryHintOf(config);
+      break;
+    case "url":
+      bool("unique", "unique");
+      break;
+    case "number":
+      bool("unique", "unique");
+      bool("integeronly", "integerOnly");
+      set("min", "min", (v) => num(v));
+      set("max", "max", (v) => num(v));
+      if (config.has("currency")) patch.currency = currencyOf(config);
+      break;
+    case "date":
+      bool("disablepast", "disablePast");
+      break;
+    case "yes_no":
+      set("yes", "yesLabel", (v) => v);
+      set("no", "noLabel", (v) => v);
+      break;
+    case "rating":
+      set("scale", "scale", (v) => clampScale(num(v), 1, 10, block.scale));
+      break;
+    case "opinion_scale":
+      set("scale", "steps", (v) => clampScale(num(v), 2, 11, block.steps));
+      break;
+    case "matrix": {
+      const rows = labelled(config.get("rows"));
+      if (rows.length > 0) patch.rows = rows.slice(0, 20);
+      bool("multipleperrow", "multiplePerRow");
+      break;
+    }
+    case "file_upload":
+      set("accept", "accept", (v) => {
+        const list = v.split(/[|,]/).map((a) => a.trim()).filter(Boolean);
+        return list.length > 0 ? list.slice(0, 20) : undefined;
+      });
+      set("maxfiles", "maxFiles", (v) => num(v));
+      set("maxsizemb", "maxSizeMB", (v) => num(v));
+      break;
+    case "payment": {
+      const upi = config.get("upi") ?? config.get("upiid") ?? config.get("vpa");
+      const url = config.get("url") ?? config.get("link");
+      const method = config.get("method")?.toLowerCase();
+      if (method === "upi" || method === "link") patch.method = method;
+      else if (upi && !url) patch.method = "upi";
+      if (upi !== undefined) patch.upiId = upi;
+      if (config.has("payee")) patch.upiPayeeName = config.get("payee");
+      if (url !== undefined && /^https?:\/\//.test(url)) patch.url = url;
+      set("amount", "amount", (v) => num(v));
+      if (config.has("currency")) patch.currency = currencyOf(config);
+      break;
+    }
+    case "scheduling": {
+      const url = config.get("url") ?? config.get("link");
+      if (url !== undefined && /^https?:\/\//.test(url)) patch.url = url;
+      break;
+    }
+    case "contact_info":
+      if (config.has("fields")) patch.fields = pickFields(config.get("fields"), CONTACT_FIELDS);
+      break;
+    case "address":
+      if (config.has("fields")) patch.fields = pickFields(config.get("fields"), ADDRESS_FIELDS);
+      break;
+    default:
+      break;
+  }
+
+  if (Object.keys(patch).length === 0) return null;
+  try {
+    const next = BlockSchema.parse({ ...block, ...patch });
+    return JSON.stringify(next) === JSON.stringify(block) ? null : next;
+  } catch {
+    return null;
   }
 }
 

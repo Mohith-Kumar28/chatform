@@ -29,6 +29,10 @@ Fields specific to `short_text`. The [fields every block has](/docs/blocks/commo
       "type": "string",
       "const": "short_text"
     },
+    "unique": {
+      "default": false,
+      "type": "boolean"
+    },
     "minLength": {
       "default": 0,
       "type": "integer",
@@ -206,6 +210,8 @@ Fields specific to `short_text`. The [fields every block has](/docs/blocks/commo
 }
 ```
 
+In a generated draft these arrive as `config` pairs: `unique=true to refuse a value another respondent already gave — a team name, a username, a seat number`.
+
 ## What you receive
 
 `GET /v1/forms/{id}` and every "next question" projects blocks through `toPublicBlock`. For the example above:
@@ -286,3 +292,4 @@ The value is normalised before it is saved, so what you read back is not always 
 | `too_short` | `"N"` | Answer must be at least 2 characters. |
 | `too_long` | `"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"` | Answer must be at most 40 characters. |
 | `pattern` | — |  |
+| `duplicate` | `unique` is on and another response already gave this answer | Someone has already used that — please try a different one. |

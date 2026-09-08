@@ -3,6 +3,8 @@ import {
   FormDoc,
   resolveNext,
   validateAnswer,
+  enforcesUnique,
+  DUPLICATE_HINT,
   toPublicBlock,
   toPublicEnding,
   type AnswerMap,
@@ -43,6 +45,7 @@ import {
   recordAnswerRow,
   deleteAnswerRow,
   finalizeResponse,
+  findDuplicateAnswer,
   type ResponseOwner,
 } from "../lib/submissions.js";
 import type { RespondentIdentity, RespondentAuthMethod } from "@repo/form-schema";
@@ -1124,7 +1127,26 @@ export class SessionDO extends DurableObject<Bindings> {
 
   private async record(block: Block, raw: unknown): Promise<{ accepted: boolean; error?: string }> {
     const result = validateAnswer(block, raw);
-    if (!result.ok) {
+
+    /**
+     * Uniqueness, checked here rather than inside `validateAnswer`.
+     *
+     * It is the one rule that cannot be decided from the block and the value —
+     * it needs the rest of the database — so it is a second gate rather than a
+     * branch of the first. Everything downstream then treats it as an ordinary
+     * refusal: the same echo, the same `validation_error`, the same escalation
+     * count, and the same agentic retry that will phrase "that name's taken"
+     * in the form's own voice and fold in the author's `retryHint`.
+     *
+     * The check only runs once the answer is otherwise valid, so a malformed
+     * one never costs a database round trip on the respondent's clock.
+     */
+    const duplicate =
+      result.ok && result.value !== undefined && enforcesUnique(block)
+        ? await this.isTaken(block, result.value)
+        : false;
+
+    if (!result.ok || duplicate) {
       /**
        * A refused answer is still something the respondent said.
        *
@@ -1141,6 +1163,7 @@ export class SessionDO extends DurableObject<Bindings> {
         await this.emit("user_message", { messageId: echoId, text: attempt, blockRef: block.ref });
       }
       this.pendingUserTextPersisted = false;
+      if (duplicate) return this.recordInvalid(block, "duplicate", DUPLICATE_HINT);
       return this.recordInvalid(block, result.code ?? "invalid", result.hint ?? "That answer doesn't look right.");
     }
     if (result.value !== undefined) {
@@ -1856,6 +1879,34 @@ export class SessionDO extends DurableObject<Bindings> {
     });
     await this.ctx.storage.put("submission_id", id);
     return id;
+  }
+
+  /**
+   * Whether another response has already claimed this answer.
+   *
+   * The respondent's own row is excluded by id, so correcting an answer and
+   * putting the same value back is not a collision with themselves. Reading the
+   * stored id rather than calling `ensureSubmissionRow` keeps this a pure read:
+   * a question that refuses the answer must not be what creates the response
+   * row, or a rejected first answer would leave an empty response behind.
+   *
+   * A failure here lets the answer through. The alternative is a form that
+   * stops accepting answers whenever D1 hiccups, which is a far worse failure
+   * than a duplicate the author sorts out in the results table.
+   */
+  private async isTaken(block: Block, value: unknown): Promise<boolean> {
+    try {
+      if (!this.meta || this.meta.formVersionId === "preview") return false;
+      const submissionId = (await this.ctx.storage.get<string>("submission_id")) ?? null;
+      return await findDuplicateAnswer(this.owner(), {
+        blockRef: block.ref,
+        value,
+        excludeResponseId: submissionId,
+      });
+    } catch (err) {
+      console.error("unique_check_failed", err);
+      return false;
+    }
   }
 
   private async projectAnswer(block: Block, value: unknown): Promise<void> {

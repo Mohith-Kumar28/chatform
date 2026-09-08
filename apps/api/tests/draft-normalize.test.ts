@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { draftToDoc, resolveBranches, normalizeEditBlocks } from "../src/lib/draft-normalize.js";
+import { applyBlockConfig, draftToDoc, resolveBranches, normalizeEditBlocks } from "../src/lib/draft-normalize.js";
 import { extractUrls, htmlToText } from "../src/lib/research.js";
+import { Block } from "@repo/form-schema";
 import type { GenerationDraft, EditDraft } from "../src/lib/ai.js";
 
 const block = (over: Partial<GenerationDraft["blocks"][number]>): GenerationDraft["blocks"][number] => ({
@@ -407,5 +408,100 @@ describe("block types that need setup", () => {
     const addr = doc.blocks.find((b) => b.ref === "q_addr");
     if (addr?.type !== "address") throw new Error("not an address block");
     expect(addr.fields).toEqual(["city", "country"]);
+  });
+});
+
+/**
+ * The half of an edit that changes a question already in the form.
+ *
+ * Until `applyBlockConfig` existed the AI bar could set any documented setting
+ * on a NEW question and nothing at all on an existing one — so "the team name
+ * has to be unique", which is a sentence about a question the author is looking
+ * at, could only be answered by adding a second team-name question with the
+ * flag on.
+ */
+describe("applyBlockConfig", () => {
+  const short = Block.parse({
+    id: "blk_apply001", ref: "q_team", type: "short_text", title: "Team name?",
+    required: false, minLength: 0, maxLength: 80,
+  });
+
+  it("turns on a flag the request asked for", () => {
+    const next = applyBlockConfig(short, "unique=true");
+    if (next?.type !== "short_text") throw new Error("not a short_text block");
+    expect(next.unique).toBe(true);
+    expect(next.ref).toBe("q_team");
+  });
+
+  it("accepts the other words a model writes for true", () => {
+    // A strict `=== "true"` turned `unique=yes` into silence: the author asked
+    // for it, the model agreed, and the setting did not appear.
+    for (const raw of ["unique=yes", "unique=1", "unique=on", "unique=TRUE"]) {
+      const next = applyBlockConfig(short, raw);
+      expect(next?.type === "short_text" && next.unique, raw).toBe(true);
+    }
+  });
+
+  it("leaves every setting the config did not mention alone", () => {
+    const next = applyBlockConfig({ ...short, maxLength: 40, pattern: "^[A-Z]" }, "unique=true");
+    if (next?.type !== "short_text") throw new Error("not a short_text block");
+    expect(next.maxLength).toBe(40);
+    expect(next.pattern).toBe("^[A-Z]");
+  });
+
+  it("reports no change when the setting is already what was asked for", () => {
+    // The route counts this as nothing happening, which is what lets an edit
+    // that does nothing be refused rather than applied as a no-op.
+    expect(applyBlockConfig({ ...short, unique: true }, "unique=true")).toBeNull();
+    expect(applyBlockConfig(short, "")).toBeNull();
+  });
+
+  it("ignores a key the type does not read", () => {
+    // `unique` is not offered on a paragraph, so a model reaching for it there
+    // should cost the author nothing rather than corrupt the block.
+    const long = Block.parse({
+      id: "blk_apply002", ref: "q_why", type: "long_text", title: "Why?",
+      required: false, minLength: 0, maxLength: 500,
+    });
+    expect(applyBlockConfig(long, "unique=true")).toBeNull();
+  });
+
+  it("changes required, which is what authors say in the same breath", () => {
+    const next = applyBlockConfig(short, "required=true; unique=true");
+    if (next?.type !== "short_text") throw new Error("not a short_text block");
+    expect(next.required).toBe(true);
+    expect(next.unique).toBe(true);
+  });
+
+  it("carries the per-type keys the catalog documents", () => {
+    const email = Block.parse({ id: "blk_apply003", ref: "q_email", type: "email", title: "Email?", required: true });
+    const next = applyBlockConfig(email, "businessonly=true; unique=true");
+    if (next?.type !== "email") throw new Error("not an email block");
+    expect(next.businessOnly).toBe(true);
+    expect(next.unique).toBe(true);
+
+    const number = Block.parse({ id: "blk_apply004", ref: "q_seats", type: "number", title: "Seats?", required: true });
+    const capped = applyBlockConfig(number, "max=50");
+    if (capped?.type !== "number") throw new Error("not a number block");
+    expect(capped.max).toBe(50);
+  });
+});
+
+describe("unique on a newly added question", () => {
+  it("is set from the config the model wrote", () => {
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome" }),
+          block({ ref: "q_team", type: "short_text", config: "unique=true" }),
+          block({ ref: "q_city", type: "short_text" }),
+        ],
+      }),
+    );
+    const team = doc.blocks.find((b) => b.ref === "q_team");
+    const city = doc.blocks.find((b) => b.ref === "q_city");
+    expect(team?.type === "short_text" && team.unique).toBe(true);
+    // Off unless asked for. Every existing question keeps the behaviour it had.
+    expect(city?.type === "short_text" && city.unique).toBe(false);
   });
 });

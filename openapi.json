@@ -873,6 +873,118 @@
         ]
       }
     },
+    "/api/invitation-preview": {
+      "get": {
+        "operationId": "getApiInvitationPreview",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Public summary of an invitation link",
+        "responses": {
+          "200": {
+            "description": "Invitation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "expired",
+                        "accepted",
+                        "rejected",
+                        "canceled",
+                        "not_found"
+                      ]
+                    },
+                    "email": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "role": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "organizationName": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "inviterName": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "inviterEmail": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "expiresAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "recipientHasAccount": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "email",
+                    "role",
+                    "organizationName",
+                    "inviterName",
+                    "inviterEmail",
+                    "expiresAt",
+                    "recipientHasAccount"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/auth/ok": {
       "get": {
         "operationId": "getApiAuthOk",
@@ -1779,7 +1891,7 @@
         "tags": [
           "dashboard"
         ],
-        "summary": "AI-edit an existing form: add or remove questions, and rewire the flow",
+        "summary": "AI-edit an existing form: add, change or remove questions, and rewire the flow",
         "deprecated": false,
         "description": "Returns the proposed document without saving it. An edit may add no questions at all — most requests about a working form change the routing.",
         "responses": {
@@ -1792,6 +1904,9 @@
                   "properties": {
                     "doc": {},
                     "added": {
+                      "type": "number"
+                    },
+                    "updated": {
                       "type": "number"
                     },
                     "removed": {
@@ -1813,6 +1928,7 @@
                   "required": [
                     "doc",
                     "added",
+                    "updated",
                     "removed",
                     "rules",
                     "rewired",
@@ -1915,6 +2031,9 @@
                     "added": {
                       "type": "number"
                     },
+                    "updated": {
+                      "type": "number"
+                    },
                     "removed": {
                       "type": "number"
                     },
@@ -1934,6 +2053,7 @@
                   "required": [
                     "doc",
                     "added",
+                    "updated",
                     "removed",
                     "rules",
                     "rewired",
@@ -6868,6 +6988,22 @@
                         "type": "number"
                       }
                     },
+                    "previousUsage": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "number"
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "gauges": {
                       "type": "object",
                       "propertyNames": {
@@ -6912,6 +7048,7 @@
                     "features",
                     "limits",
                     "usage",
+                    "previousUsage",
                     "gauges",
                     "periodResetsAt",
                     "role",

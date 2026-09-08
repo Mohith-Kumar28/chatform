@@ -29,6 +29,10 @@ Fields specific to `email`. The [fields every block has](/docs/blocks/common-fie
       "type": "string",
       "const": "email"
     },
+    "unique": {
+      "default": false,
+      "type": "boolean"
+    },
     "businessOnly": {
       "default": false,
       "type": "boolean"
@@ -190,6 +194,8 @@ Fields specific to `email`. The [fields every block has](/docs/blocks/common-fie
 }
 ```
 
+In a generated draft these arrive as `config` pairs: `businessOnly=true to refuse gmail and the other free providers; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number`.
+
 ## What you receive
 
 `GET /v1/forms/{id}` and every "next question" projects blocks through `toPublicBlock`. For the example above:
@@ -268,3 +274,4 @@ The value is normalised before it is saved, so what you read back is not always 
 | `type` | `1` | Please enter an email address. |
 | `invalid_email` | `"maya"` | That doesn't look like a valid email address. |
 | `freemail` | `"maya@gmail.com"` — businessOnly rejects free providers | Please use your work email address. |
+| `duplicate` | `unique` is on and another response already gave this answer | Someone has already used that — please try a different one. |
