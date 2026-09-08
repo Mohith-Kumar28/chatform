@@ -18,6 +18,9 @@ import {
   extractionGuidance,
   resolveEnding,
   displayAnswer as summarizeAnswer,
+  isRequirementUnmet,
+  defaultEnding,
+  type ConditionGroup,
   type PublicBlock,
   type PublicEnding,
 } from "@repo/form-schema";
@@ -59,7 +62,13 @@ interface DoSessionMeta {
   slug: string;
   brandingHidden: boolean;
   respondentToken: string;
-  status: "active" | "completed" | "abandoned" | "blocked";
+  /**
+   * `disqualified` is terminal like `completed` and is NOT a completion: the
+   * conversation reached a `screen_out` ending, so the respondent was turned
+   * away rather than having submitted. Everything that closes a session treats
+   * the two the same; everything that counts submissions must not.
+   */
+  status: "active" | "completed" | "disqualified" | "abandoned" | "blocked";
   currentRef: string | null;
   startedAt: number;
   hiddenFields: Record<string, string>;
@@ -829,7 +838,9 @@ export class SessionDO extends DurableObject<Bindings> {
         case "end": {
           const ending =
             (effect.endingRef && this.doc.endings.find((e) => e.ref === effect.endingRef)) ||
-            this.doc.endings[0];
+            // Not `endings[0]`: an agent that finished the conversation without
+            // naming an outcome has not refused anybody.
+            defaultEnding(this.doc);
           if (ending) await this.advanceTo({ kind: "ending", ending }, this.meta.currentRef ?? "");
           break;
         }
@@ -1328,7 +1339,15 @@ export class SessionDO extends DurableObject<Bindings> {
      * feel like a decision, and because it is the natural moment to show
      * someone everything they said and let them fix one thing.
      */
-    if (this.doc.settings.onComplete.requireSubmit && this.meta.status === "active") {
+    /**
+     * Nothing to confirm when the answer is no.
+     *
+     * "Review your answers and submit" in front of a screen-out is a button
+     * that promises something the form has already decided against, and the
+     * respondent presses it and is refused. A screen-out is announced
+     * immediately.
+     */
+    if (this.doc.settings.onComplete.requireSubmit && this.meta.status === "active" && ending.kind !== "screen_out") {
       // Already parked here — do not announce it twice. Terminal-ish events
       // reach the headless /v1 contract too, where a duplicate reads as a
       // second state transition that never happened.
@@ -1343,11 +1362,28 @@ export class SessionDO extends DurableObject<Bindings> {
     await this.completeWith(ending);
   }
 
+  /**
+   * Which requirements on a screen-out ending this response actually missed.
+   *
+   * Evaluated here, against the answers this session holds, rather than shipped
+   * as conditions for the browser to work out: the client has no evaluator, and
+   * a requirement's condition can read a variable or a hidden field the
+   * respondent was never shown.
+   */
+  private readonly isRequirementUnmet = (when: ConditionGroup): boolean =>
+    isRequirementUnmet(when, this.state);
+
+  /** The ending as the respondent sees it, with its requirements narrowed. */
+  private projectEnding(ending: Ending): PublicEnding {
+    return toPublicEnding(ending, this.doc!.settings.onComplete, this.isRequirementUnmet);
+  }
+
   /** Finalize against an ending and tell the client. */
   private async completeWith(ending: Ending): Promise<void> {
     if (!this.meta || !this.doc) return;
+    const screenedOut = ending.kind === "screen_out";
     this.meta.currentRef = null;
-    this.meta.status = "completed";
+    this.meta.status = screenedOut ? "disqualified" : "completed";
     this.meta.completedAt = Date.now();
     // Recorded before `pendingEndingRef` is cleared: without it a headless
     // caller can see that a conversation finished but never learn where.
@@ -1357,8 +1393,14 @@ export class SessionDO extends DurableObject<Bindings> {
     // Project rather than emitting the stored ending: the raw object carries
     // internal ids, and only the projection applies the form-level redirect
     // default that `settings.onComplete` is supposed to provide.
-    await this.emit("ending", { ending: toPublicEnding(ending, this.doc.settings.onComplete) });
-    const submissionId = await this.finalize("completed", ending.ref);
+    await this.emit("ending", { ending: this.projectEnding(ending) });
+    const submissionId = await this.finalize(screenedOut ? "disqualified" : "completed", ending.ref);
+    /**
+     * `complete` fires either way, because the conversation is over either way
+     * and a client that only listens for it must not hang. What it means is
+     * "no more turns", not "you got a response" — the `ending` event's `kind`
+     * is what says which happened.
+     */
     await this.emit("complete", { submissionId, durationMs: Date.now() - this.meta.startedAt });
     await this.persistMeta();
   }
@@ -1512,10 +1554,10 @@ export class SessionDO extends DurableObject<Bindings> {
       question: block ? toPublicBlock(block) : null,
       // The projection, not the raw ending: the stored object carries internal
       // ids and skips the form-level redirect default.
-      ending: ending && this.doc ? toPublicEnding(ending, this.doc.settings.onComplete) : null,
+      ending: ending && this.doc ? this.projectEnding(ending) : null,
       validation,
       assistantMessages,
-      complete: this.meta?.status === "completed",
+      complete: this.meta?.status === "completed" || this.meta?.status === "disqualified",
       awaitingSubmit: this.pendingEndingRef !== null,
     };
   }
@@ -1611,12 +1653,15 @@ export class SessionDO extends DurableObject<Bindings> {
     const loaded = await this.ensureLoaded();
     if (!loaded || !this.meta || !this.doc) return { ok: false };
 
-    if (this.meta.status === "completed") {
+    // A screen-out is just as finished as a completion, and a reload has to
+    // land back on the screen that explains it — not on the question the
+    // respondent had already answered.
+    if (this.meta.status === "completed" || this.meta.status === "disqualified") {
       const ending =
         (this.meta.endingRef && this.doc.endings.find((e) => e.ref === this.meta!.endingRef)) ||
-        this.doc.endings[0];
+        defaultEnding(this.doc);
       if (ending) {
-        await this.emit("ending", { ending: toPublicEnding(ending, this.doc.settings.onComplete) });
+        await this.emit("ending", { ending: this.projectEnding(ending) });
       }
       return { ok: true };
     }
@@ -1810,7 +1855,10 @@ export class SessionDO extends DurableObject<Bindings> {
       variables: this.state.variables,
       summary: this.answerSummary(),
       awaitingSubmit: this.pendingEndingRef !== null,
-      completedAt: this.meta.status === "completed" ? (this.meta.completedAt ?? null) : null,
+      completedAt:
+        this.meta.status === "completed" || this.meta.status === "disqualified"
+          ? (this.meta.completedAt ?? null)
+          : null,
       auth: this.doc?.settings.requireAuth.enabled
         ? {
             methods: this.doc.settings.requireAuth.methods,
@@ -1866,19 +1914,48 @@ export class SessionDO extends DurableObject<Bindings> {
     };
   }
 
-  private async ensureSubmissionRow(): Promise<string> {
+  /**
+   * In flight, so two callers in one turn cannot open two rows.
+   *
+   * The storage key alone was not enough, and the gap is not theoretical: the
+   * answer is projected with `ctx.waitUntil(this.projectAnswer(...))`, which
+   * runs alongside the rest of the turn on purpose, and every turn that
+   * finishes the form calls this from `finalize` as well. Both read the key,
+   * both miss, both insert — so ONE response produced two rows: an
+   * `in_progress` one holding the answers, and a terminal one holding none.
+   *
+   * That was every single-question form and the last answer of every longer
+   * one: the results table showed an empty completed response beside a partial
+   * that had everything in it. Now the second caller awaits the first's insert.
+   */
+  private openingRow: Promise<string> | null = null;
+
+  private ensureSubmissionRow(): Promise<string> {
     if (!this.meta) throw new Error("no meta");
-    const existing = await this.ctx.storage.get<string>("submission_id");
-    if (existing) return existing;
-    const id = await openResponse(this.owner(), {
-      hiddenFields: this.meta.hiddenFields,
-      variables: this.state.variables,
-      userAgent: this.meta.userAgent,
-      country: this.meta.country,
-      startedAt: this.meta.startedAt,
+    if (this.openingRow) return this.openingRow;
+    this.openingRow = (async () => {
+      const existing = await this.ctx.storage.get<string>("submission_id");
+      if (existing) return existing;
+      const id = await openResponse(this.owner(), {
+        hiddenFields: this.meta!.hiddenFields,
+        variables: this.state.variables,
+        userAgent: this.meta!.userAgent,
+        country: this.meta!.country,
+        startedAt: this.meta!.startedAt,
+      });
+      await this.ctx.storage.put("submission_id", id);
+      return id;
+    })();
+    /*
+     * A failed insert must not be remembered as the answer, or one D1 hiccup
+     * would leave the session unable to record anything for as long as the
+     * isolate lives. Cleared on rejection only — the resolved promise is the
+     * memo.
+     */
+    return this.openingRow.catch((err) => {
+      this.openingRow = null;
+      throw err;
     });
-    await this.ctx.storage.put("submission_id", id);
-    return id;
   }
 
   /**
@@ -1953,7 +2030,11 @@ export class SessionDO extends DurableObject<Bindings> {
     }
   }
 
-  private async finalize(status: "completed" | "abandoned", endingRef: string | null, reason?: string): Promise<string> {
+  private async finalize(
+    status: "completed" | "disqualified" | "abandoned",
+    endingRef: string | null,
+    reason?: string,
+  ): Promise<string> {
     if (!this.meta) throw new Error("no meta");
     if (this.meta.formVersionId === "preview") {
       // preview sessions never touch D1: no submissions, usage, webhooks, or analytics

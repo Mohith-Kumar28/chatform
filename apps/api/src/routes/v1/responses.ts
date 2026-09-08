@@ -8,6 +8,7 @@ import {
   validateAnswer,
   enforcesUnique,
   DUPLICATE_HINT,
+  isRequirementUnmet,
   replayState,
   unsatisfiedRequired,
   answerability,
@@ -176,7 +177,16 @@ function projectResponse(row: ResponseRow, doc: FormDoc, answers: AnswerMap, inc
       row.status === "in_progress"
         ? cursor.kind === "block"
           ? { kind: "block" as const, block: toPublicBlock(cursor.block) }
-          : { kind: "ending" as const, ending: toPublicEnding(cursor.ending, doc.settings.onComplete) }
+          : {
+              kind: "ending" as const,
+              // Narrowed against what this response has actually answered, the
+              // same way the conversation narrows it — otherwise the headless
+              // caller is handed every requirement on the ending and has to
+              // work out which apply, which is the job this does.
+              ending: toPublicEnding(cursor.ending, doc.settings.onComplete, (when) =>
+                isRequirementUnmet(when, state),
+              ),
+            }
         : null,
     complete_ready: row.status === "in_progress" && missing.length === 0,
     missing_required: missing,
@@ -590,9 +600,18 @@ responsesRouter.post(
       ending = explicit;
     }
 
+    /**
+     * The ending decides the status, not the endpoint.
+     *
+     * One event contract, two transports: a response driven over the API that
+     * lands on a `screen_out` ending has been refused exactly as one driven
+     * through the conversation has, and recording it `completed` here would put
+     * the two surfaces into disagreement — and fire `response.completed` for a
+     * respondent the form turned away.
+     */
     const { changed } = await finalizeResponse(ownerOf(c.env, form, row), {
       responseId: row.id,
-      status: "completed",
+      status: ending.kind === "screen_out" ? "disqualified" : "completed",
       endingRef: ending.ref,
       answers,
       variables: state.variables,
@@ -606,7 +625,9 @@ responsesRouter.post(
     const fresh = (await loadResponse(c.env, row.id, orgId))!;
     return c.json({
       ...projectResponse(fresh, form.doc, answers, new Set(["answers"])),
-      ending: toPublicEnding(ending, form.doc.settings.onComplete),
+      ending: toPublicEnding(ending, form.doc.settings.onComplete, (when) =>
+        isRequirementUnmet(when, state),
+      ),
     });
   },
 );
@@ -750,7 +771,12 @@ responsesRouter.get(
      * interceptor already understands.
      */
     const requested = (q.status ?? "completed").split(",").map((s) => s.trim()).filter(Boolean);
-    const wantsPartials = requested.some((s) => s === "in_progress" || s === "abandoned" || s === "all");
+    // `disqualified` sits with the partials behind the gate for the reason the
+    // dashboard puts it there: the Free tier's line is "the responses you got
+    // are yours", and somebody the form turned away did not arrive.
+    const wantsPartials = requested.some(
+      (s) => s === "in_progress" || s === "abandoned" || s === "disqualified" || s === "all",
+    );
     if (wantsPartials) {
       const ent = await entitlementsFor(c as never);
       if (!ent.features.partial_responses) {

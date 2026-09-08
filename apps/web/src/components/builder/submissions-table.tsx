@@ -10,6 +10,7 @@ import {
   Link2,
   Maximize2,
   Minimize2,
+  ShieldAlert,
   ShieldCheck,
   Trash2,
   X,
@@ -425,7 +426,11 @@ function SubmissionDialog({
         <div className="flex items-start gap-3 border-b px-5 py-4">
           <div className="min-w-0 flex-1">
             <DialogTitle className="text-h3">
-              {row.status === "completed" ? "Response" : "Partial response"}
+              {row.status === "completed"
+                ? "Response"
+                : row.status === "disqualified"
+                  ? "Screened out"
+                  : "Partial response"}
             </DialogTitle>
             <p className="text-muted-foreground text-caption mt-0.5 truncate">
               {formatDateTime(row.completedAt ?? row.startedAt)}
@@ -485,16 +490,33 @@ function SubmissionDialog({
 
         <DialogBody className="space-y-6 px-5 py-4">
           <div className="text-caption flex flex-wrap items-center gap-2">
+            {/*
+              Three states, not two.
+              A screened-out response is terminal — the form reached an ending
+              and refused it — so reading it as "Didn't finish" tells the author
+              the opposite of what happened: these people answered everything
+              asked of them and were turned away on purpose.
+            */}
             <span
               className={cn(
                 "inline-flex items-center gap-1 rounded-full px-2 py-0.5",
                 row.status === "completed"
                   ? "bg-[var(--success-soft,var(--primary-soft))] text-[var(--success)]"
-                  : "bg-muted text-muted-foreground",
+                  : row.status === "disqualified"
+                    ? // `soft` paired with `soft-foreground`, which is the pairing
+                      // that reads in both themes — see the status tokens in
+                      // globals.css for what pairing it with `--warning` does.
+                      "bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)]"
+                    : "bg-muted text-muted-foreground",
               )}
             >
               {row.status === "completed" && <Check className="size-3" />}
-              {row.status === "completed" ? "Completed" : "Didn't finish"}
+              {row.status === "disqualified" && <ShieldAlert className="size-3" />}
+              {row.status === "completed"
+                ? "Completed"
+                : row.status === "disqualified"
+                  ? "Screened out"
+                  : "Didn't finish"}
             </span>
             <span className="text-muted-foreground">
               {answered} of {columns.length} answered

@@ -8,7 +8,14 @@
  * value rather than a compile error.
  */
 
-export type ResponseStatus = "in_progress" | "completed" | "abandoned";
+/**
+ * `disqualified` is a response the form itself refused: it reached an ending
+ * whose `kind` is `"screen_out"`. Terminal like `completed` — it has a
+ * `completed_at` and no `next` — and never a completion: it does not fire
+ * `response.completed`, and it is not in the completion rate. Handle it
+ * wherever you handle `completed`, and count it separately.
+ */
+export type ResponseStatus = "in_progress" | "completed" | "disqualified" | "abandoned";
 export type ResponseSource = "chat" | "embed" | "api";
 export type Mode = "live" | "test";
 
@@ -30,6 +37,13 @@ export interface PublicEnding {
   title: string;
   bodyMd?: string;
   redirectUrl?: string | null;
+  /**
+   * `"screen_out"` means the respondent was turned away rather than accepted.
+   * Absent on an ending stored before endings had a kind, which is a success.
+   */
+  kind?: "success" | "screen_out";
+  /** On a screen-out, the requirements this response did not meet. */
+  requirements?: string[];
   [key: string]: unknown;
 }
 

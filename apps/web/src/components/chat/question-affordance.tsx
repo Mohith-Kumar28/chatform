@@ -116,7 +116,12 @@ function choicesFor(block: PublicBlock): Choice[] {
     case "multi_select":
       return numbered(block.options ?? []);
     case "legal_consent":
-      return [{ id: "agree", label: "I agree", value: true, key: "1" }];
+      return block.allowDecline
+        ? [
+            { id: "agree", label: block.agreeLabel ?? "I agree", value: true, key: "1" },
+            { id: "decline", label: block.declineLabel ?? "I do not agree", value: false, key: "2" },
+          ]
+        : [{ id: "agree", label: block.agreeLabel ?? "I agree", value: true, key: "1" }];
     case "rating":
       return scale(1, block.scale ?? 5);
     case "nps":
@@ -402,7 +407,9 @@ function AffordanceControls({
     case "address":
       return <FieldsComposer fields={block.fields ?? []} required={block.required} onSubmit={onStructured} />;
 
-    case "legal_consent":
+    case "legal_consent": {
+      const agree = block.agreeLabel ?? "I agree";
+      const decline = block.declineLabel ?? "I do not agree";
       return (
         <div className="space-y-2">
           {block.consentText && (
@@ -411,12 +418,25 @@ function AffordanceControls({
             </p>
           )}
           <Affordance>
-            <Chip shortcut={1} disabled={disabled} onClick={() => onStructured(true, "I agree")}>
-              I agree
+            <Chip shortcut={1} disabled={disabled} onClick={() => onStructured(true, agree)}>
+              {agree}
             </Chip>
+            {/*
+              Same weight as agreeing, deliberately.
+              A refusal styled as the quiet secondary option is a nudge, and
+              this is the one control in the product where nudging is not a
+              product decision but a consent one. The form's own routing
+              decides what happens next.
+            */}
+            {block.allowDecline && (
+              <Chip shortcut={2} disabled={disabled} onClick={() => onStructured(false, decline)}>
+                {decline}
+              </Chip>
+            )}
           </Affordance>
         </div>
       );
+    }
 
     case "signature":
       return (

@@ -477,8 +477,9 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
     codes: ["required", "type", "incomplete"],
   },
   legal_consent: {
-    shape: "`true`. The stored answer records what was agreed to, and when.",
-    tsType: "true",
+    shape:
+      "`true`. The stored answer records what was agreed to, and when. A block with `allowDecline` also accepts `false` — a recorded refusal, which a branch can route on; without it `false` is rejected.",
+    tsType: "boolean",
     block: {
       id: "blk_legal001", ref: "q_consent", type: "legal_consent", title: "One last thing", required: true,
       consentText: CONSENT_TEXT,
@@ -490,7 +491,7 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
       },
     ],
     counterExamples: [
-      { value: false, code: "consent_required" },
+      { value: false, code: "consent_required", note: "this block does not offer a refusal; one with `allowDecline` stores it as `accepted: false`" },
       { value: "sure", code: "consent_required" },
     ],
     codes: ["required", "consent_required"],

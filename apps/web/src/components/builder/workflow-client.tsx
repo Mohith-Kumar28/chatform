@@ -51,7 +51,7 @@ import {
   Plus,
   ChevronLeft, ChevronRight, Flag,
   GitBranch, GripVertical, Play,
-  Sparkles, Trash2, X,
+  ShieldAlert, Sparkles, Trash2, X,
 } from "lucide-react";
 
 const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
@@ -416,6 +416,8 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
         imageUrl: null,
         redirectDelaySec: 5,
         showSummary: false,
+        kind: "success",
+        requirements: [],
       };
       onChange({ ...doc, endings: [...doc.endings, e], layout: { ...doc.layout, [e.ref]: position } });
       setSelectedNodeId(e.ref);
@@ -1172,7 +1174,7 @@ function deriveGraph(
       id: e.ref,
       type: "ending",
       position: doc.layout[e.ref] ?? { x: 0, y: 0 },
-      data: { title: e.title, problem: problems.get(e.ref) },
+      data: { title: e.title, kind: e.kind, problem: problems.get(e.ref) },
       deletable: doc.endings.length > 1,
     });
   });
@@ -1288,22 +1290,49 @@ function shortProblem(message: string): string {
 }
 
 function EndingNode({ id, data, selected, deletable }: NodeProps) {
-  const { title, problem } = data as { title: string; problem?: NodeProblem };
+  const { title, kind, problem } = data as { title: string; kind?: FormDoc["endings"][number]["kind"]; problem?: NodeProblem };
+  /*
+   * A refusal has to be findable at a glance.
+   *
+   * Every ending drew as the same dashed accent flag, which is precisely how
+   * you end up pointing a failing answer at the wrong one — on a canvas of
+   * identical nodes the only way to tell "You're registered" from "You can't
+   * submit" is to read both titles. A muted node with a shield reads as an exit
+   * rather than a goal, and stays legible next to the red a lint problem paints.
+   */
+  const screenOut = kind === "screen_out";
+  const Icon = screenOut ? ShieldAlert : Flag;
   return (
     <NodeMenu id={id} kind="ending" deletable={deletable !== false}>
       <div
         className={cn(
           "w-44 rounded-xl border-2 border-dashed px-3 py-2.5 shadow-sm",
-          selected ? "border-primary ring-2 ring-primary/30" : "border-primary/60",
+          screenOut
+            ? selected
+              ? "border-foreground/70 ring-foreground/25 ring-2"
+              : "border-muted-foreground/50"
+            : selected
+              ? "border-primary ring-primary/30 ring-2"
+              : "border-primary/60",
           problem && "!border-[var(--destructive)] ring-2 ring-[var(--destructive)]",
         )}
-        style={{ background: "var(--accent)" }}
+        style={{ background: screenOut ? "var(--muted)" : "var(--accent)" }}
       >
-        <Handle type="target" position={Position.Left} className="!bg-primary" />
+        <Handle type="target" position={Position.Left} className={screenOut ? "!bg-muted-foreground" : "!bg-primary"} />
         <div className="flex items-center gap-2">
-          <Flag className={cn("size-3.5 shrink-0", problem ? "text-destructive" : "text-primary")} />
+          <Icon
+            className={cn(
+              "size-3.5 shrink-0",
+              problem ? "text-destructive" : screenOut ? "text-muted-foreground" : "text-primary",
+            )}
+          />
           <span className="truncate text-xs font-semibold">{title}</span>
         </div>
+        {screenOut && (
+          <p className="text-muted-foreground mt-0.5 text-[10px] font-medium tracking-wide uppercase">
+            Can&apos;t submit
+          </p>
+        )}
         {problem && <ProblemNote problem={problem} />}
       </div>
     </NodeMenu>
@@ -1578,7 +1607,6 @@ function BranchCaseRow({
 }) {
   const cond = condOf(rule);
   const op = (cond?.op ?? "is_not_empty") as Op;
-  const options = sourceBlock && "options" in sourceBlock ? sourceBlock.options : undefined;
 
   return (
     <div className="bg-muted/40 space-y-2 rounded-xl p-2.5">
@@ -1606,27 +1634,25 @@ function BranchCaseRow({
             </SelectItem>
           ))}
         </Picker>
-        {opsValueNeeded(op) &&
-          (options?.length ? (
-            <Picker
-              value={String(cond?.value ?? "")}
-              onValueChange={(v) => onPatch(rule.id, { value: v, makeConditional: true })}
-              placeholder="Choose…"
-              className="min-w-0 flex-1"
-            >
-              {options.map((o) => (
-                <SelectItem key={o.id} value={o.id}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </Picker>
-          ) : (
-            <Input
-              className="h-7 min-w-0 flex-1 text-xs"
-              value={String(cond?.value ?? "")}
-              onChange={(e) => onPatch(rule.id, { value: e.target.value, makeConditional: true })}
+        {/*
+          The shared value editor, rather than the options-or-free-text pair
+          this row used to carry.
+          Its fallback was a bare text box for every type without `options`, so
+          routing a yes/no meant knowing to type the literal word "true" — and
+          a consent, whose answer is not a scalar at all, was unroutable by any
+          text a person would think to type. Both are pickers here, and every
+          other type keeps the number or text input it had.
+        */}
+        {opsValueNeeded(op) && (
+          <div className="min-w-0 flex-1">
+            <ConditionValueInput
+              compact
+              block={sourceBlock}
+              value={cond?.value}
+              onChange={(v) => onPatch(rule.id, { value: v, makeConditional: true })}
             />
-          ))}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-1.5">
@@ -1798,27 +1824,119 @@ function EndingInspector({
   doc: FormDoc;
   onChange: (d: FormDoc) => void;
 }) {
+  const screenOut = ending.kind === "screen_out";
+  const patch = (fields: Partial<FormDoc["endings"][number]>) =>
+    onChange({
+      ...doc,
+      endings: doc.endings.map((x) => (x.ref === ending.ref ? { ...x, ...fields } : x)),
+    });
+
+  /**
+   * The last success ending cannot become a screen-out.
+   *
+   * `lintFormDoc` catches it and blocks publishing, but discovering that from
+   * the publish button — two panels away from the toggle that caused it —
+   * leaves the author looking for the mistake. A form where every outcome
+   * refuses is never what somebody meant, so the control that would do it is
+   * simply not available.
+   */
+  const otherSuccess = doc.endings.some((x) => x.ref !== ending.ref && x.kind !== "screen_out");
+
+  const requirements = ending.requirements;
+  const setRequirements = (next: FormDoc["endings"][number]["requirements"]) => patch({ requirements: next });
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-1.5">
-        <Flag className="text-primary size-4" />
+        {screenOut ? (
+          <ShieldAlert className="text-muted-foreground size-4" />
+        ) : (
+          <Flag className="text-primary size-4" />
+        )}
         <p className="text-sm font-semibold">Ending</p>
       </div>
+
+      <div className="space-y-1.5">
+        <Label>Outcome</Label>
+        <Picker
+          value={ending.kind}
+          onValueChange={(v) => {
+            const kind = v as FormDoc["endings"][number]["kind"];
+            patch({
+              kind,
+              // Turning a refusal back into a thank-you leaves its requirement
+              // list behind rather than deleting it, so flipping the picker by
+              // accident is not destructive; it simply stops rendering.
+              ...(kind === "screen_out" && ending.title === "Thank you!"
+                ? { title: "You can't submit this form" }
+                : {}),
+            });
+          }}
+        >
+          <SelectItem value="success">Response accepted</SelectItem>
+          <SelectItem value="screen_out" disabled={!otherSuccess}>
+            Can&apos;t submit — turn them away
+          </SelectItem>
+        </Picker>
+        <p className="text-muted-foreground text-xs">
+          {screenOut
+            ? "Nothing is submitted. The response is kept as screened out, and no completion webhook or email fires."
+            : otherSuccess
+              ? "The response is submitted and counts as a completion."
+              : "This is the only ending that accepts a response, so it cannot turn people away."}
+        </p>
+      </div>
+
       <div className="space-y-1.5">
         <Label>Title</Label>
-        <Input
-          value={ending.title}
-          onChange={(e) => onChange({ ...doc, endings: doc.endings.map((x) => (x.ref === ending.ref ? { ...x, title: e.target.value } : x)) })}
-        />
+        <Input value={ending.title} onChange={(e) => patch({ title: e.target.value })} />
       </div>
       <div className="space-y-1.5">
-        <Label>Message</Label>
-        <Textarea
-          rows={3}
-          value={ending.bodyMd}
-          onChange={(e) => onChange({ ...doc, endings: doc.endings.map((x) => (x.ref === ending.ref ? { ...x, bodyMd: e.target.value } : x)) })}
-        />
+        <Label>{screenOut ? "What they can do about it" : "Message"}</Label>
+        <Textarea rows={3} value={ending.bodyMd} onChange={(e) => patch({ bodyMd: e.target.value })} />
       </div>
+
+      {screenOut && (
+        <div className="space-y-1.5">
+          <Label>Requirements they didn&apos;t meet</Label>
+          <p className="text-muted-foreground text-xs">
+            Listed on the screen so they know what to fix. Write each as the requirement — &ldquo;A team of 2 to
+            5 people&rdquo; — not as the failure.
+          </p>
+          <div className="space-y-1.5">
+            {requirements.map((r, i) => (
+              <div key={r.id} className="flex gap-1.5">
+                <Input
+                  className="h-8 min-w-0 flex-1 text-xs"
+                  value={r.label}
+                  placeholder="A team of 2 to 5 people"
+                  onChange={(e) =>
+                    setRequirements(requirements.map((x) => (x.id === r.id ? { ...x, label: e.target.value } : x)))
+                  }
+                />
+                <button
+                  type="button"
+                  aria-label={`Remove requirement ${i + 1}`}
+                  onClick={() => setRequirements(requirements.filter((x) => x.id !== r.id))}
+                  className="text-muted-foreground hover:text-destructive shrink-0 px-1"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() =>
+              setRequirements([...requirements, { id: uid("req"), label: "", when: null }])
+            }
+          >
+            <Plus className="size-3.5" /> Add a requirement
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1896,17 +2014,36 @@ function ConditionValueInput({
   block,
   value,
   onChange,
+  /** The branch row is denser than the panel below it; its inputs match its pickers. */
+  compact = false,
 }: {
   block: Block | null;
   value: unknown;
   onChange: (v: string | number | boolean) => void;
+  compact?: boolean;
 }) {
+  const inputClass = compact ? "h-7 text-xs" : undefined;
   if (!block) return null;
   if (block.type === "yes_no") {
     return (
       <Picker value={String(value ?? "")} onValueChange={(v) => onChange(v === "true")} placeholder="Pick…">
         <SelectItem value="true">{block.yesLabel ?? "Yes"}</SelectItem>
         <SelectItem value="false">{block.noLabel ?? "No"}</SelectItem>
+      </Picker>
+    );
+  }
+  /*
+   * A consent routes on its two buttons, like a yes/no.
+   *
+   * The stored answer is an object — the wording's hash and a timestamp make it
+   * an audit record — and the engine compares it on its `accepted` flag, so a
+   * boolean here is exactly what the rule needs.
+   */
+  if (block.type === "legal_consent") {
+    return (
+      <Picker value={String(value ?? "")} onValueChange={(v) => onChange(v === "true")} placeholder="Pick…">
+        <SelectItem value="true">{block.agreeLabel || "I agree"}</SelectItem>
+        <SelectItem value="false">{block.declineLabel || "I do not agree"}</SelectItem>
       </Picker>
     );
   }
@@ -1922,9 +2059,24 @@ function ConditionValueInput({
     );
   }
   if (["rating", "nps", "opinion_scale", "number"].includes(block.type)) {
-    return <Input type="number" value={String(value ?? "")} onChange={(e) => onChange(Number(e.target.value))} placeholder="number" />;
+    return (
+      <Input
+        type="number"
+        className={inputClass}
+        value={String(value ?? "")}
+        onChange={(e) => onChange(Number(e.target.value))}
+        placeholder="number"
+      />
+    );
   }
-  return <Input value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} placeholder="value" />;
+  return (
+    <Input
+      className={inputClass}
+      value={String(value ?? "")}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="value"
+    />
+  );
 }
 
 // ────────────────────────── helpers ──────────────────────────
@@ -1937,6 +2089,9 @@ function conditionText(cond: { op: string; value?: unknown }): string {
 function edgeLabel(block: Block | null, cond: { op: string; value?: unknown }): string {
   if (block?.type === "yes_no" && (cond.value === true || cond.value === false)) {
     return cond.value === true ? (block.yesLabel ?? "Yes") : (block.noLabel ?? "No");
+  }
+  if (block?.type === "legal_consent" && (cond.value === true || cond.value === false)) {
+    return cond.value === true ? (block.agreeLabel || "Agreed") : (block.declineLabel || "Declined");
   }
   if (block && "options" in block && block.options && typeof cond.value === "string") {
     const opt = block.options.find((o) => o.id === cond.value);

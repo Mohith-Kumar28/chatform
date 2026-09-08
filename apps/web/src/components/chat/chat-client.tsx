@@ -9,6 +9,7 @@ import {
   PartyPopper,
   Pencil,
   RotateCcw,
+  ShieldAlert,
   SkipForward,
   TriangleAlert,
 } from "lucide-react";
@@ -832,6 +833,13 @@ function Kbd({ children }: { children: React.ReactNode }) {
  * something, and it used to be a small grey card. Now it lands: a burst of
  * confetti in the form's own colours, a big thank-you, and the CTA if there is
  * one. Confetti is skipped under reduced-motion.
+ *
+ * A `screen_out` ending is the same screen with everything celebratory taken
+ * out. It has to be the same component: the alternative is a second card that
+ * drifts — one of them gets the redirect handling, the other keeps the logo —
+ * and the two screens are structurally identical anyway. What differs is that
+ * there is no confetti, no party icon, no "submit another response", and a list
+ * of what they did not meet where a thank-you would have been.
  */
 function EndingCard({
   ending,
@@ -844,14 +852,26 @@ function EndingCard({
   allowRepeat: boolean;
   onRestart: () => void;
 }) {
+  const screenedOut = ending.kind === "screen_out";
+  const requirements = ending.requirements ?? [];
   return (
     <>
-      <Confetti colors={[theme.accent, theme.userBubble, "#ffffff", theme.text]} />
+      {!screenedOut && <Confetti colors={[theme.accent, theme.userBubble, "#ffffff", theme.text]} />}
 
       <div className="animate-message-in flex flex-col items-center px-6 py-10 text-center">
+        {/*
+          The brand mark stays on a refusal — being turned away by an unbranded
+          grey page reads as an error, and this is not an error. Only the icon
+          that stands in for it changes, because a party popper over "you can't
+          submit this" is the tonal failure this whole ending kind exists to fix.
+        */}
         {theme.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={theme.logoUrl} alt={theme.brandName ?? ""} className="mb-5 h-12 object-contain" />
+        ) : screenedOut ? (
+          <div className="mb-5 grid size-16 place-items-center rounded-full border border-current/15 bg-current/8 opacity-70">
+            <ShieldAlert className="size-8" strokeWidth={1.75} />
+          </div>
         ) : (
           <div
             className="mb-5 grid size-16 place-items-center rounded-full"
@@ -873,6 +893,30 @@ function EndingCard({
             <Markdown remarkPlugins={[remarkGfm]} allowedElements={SAFE_ELEMENTS} unwrapDisallowed>
               {ending.bodyMd}
             </Markdown>
+          </div>
+        )}
+
+        {/*
+          What they did not meet.
+          Left-aligned inside a centred card on purpose: this is the one part of
+          the screen somebody actually reads item by item, and centred list items
+          with ragged left edges are the standard way to make a short list hard
+          to scan. Already narrowed server-side to the requirements that apply to
+          this response.
+        */}
+        {screenedOut && requirements.length > 0 && (
+          <div className="mt-6 w-full max-w-sm rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-4 py-3.5 text-left">
+            <p className="text-xs font-semibold tracking-wide uppercase opacity-55">
+              {requirements.length === 1 ? "What's missing" : "What's missing so far"}
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {requirements.map((r) => (
+                <li key={r} className="flex gap-2.5 text-[0.9375rem] leading-snug">
+                  <TriangleAlert className="mt-[0.2rem] size-3.5 shrink-0 opacity-50" strokeWidth={2} />
+                  <span>{r}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -906,7 +950,14 @@ function EndingCard({
             onClick={onRestart}
             className="mt-6 text-sm underline opacity-55 transition-opacity hover:opacity-100"
           >
-            Submit another response
+            {/*
+              "Submit another response" is wrong on a refusal in both halves:
+              nothing was submitted, and the offer sounds like an invitation to
+              file a duplicate. Someone screened out is usually here because of
+              one answer, sometimes a mis-tap, so starting over is exactly the
+              right escape hatch — it just has to be named honestly.
+            */}
+            {screenedOut ? "Start over" : "Submit another response"}
           </button>
         )}
       </div>

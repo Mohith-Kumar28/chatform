@@ -306,10 +306,29 @@ export const Block = z.discriminatedUnion("type", [
     fields: z.array(AddressField).min(1),
     countryWhitelist: z.array(z.string().length(2)).optional(),
   }),
+  /**
+   * Terms, waivers, a code of conduct: wording shown verbatim, and a record of
+   * who accepted which version of it.
+   *
+   * `allowDecline` is what makes it a question rather than a turnstile. With it
+   * off — the default, and how this shipped — the only answer the validator
+   * accepts is `true`, so a respondent who does not agree has nowhere to go but
+   * away: no answer is recorded, no rule can fire, and the form simply refuses
+   * to advance. That is right for a consent that is genuinely non-negotiable.
+   * It is wrong for every form that wants to say something about a "no", which
+   * is most of them — an eligibility gate, a waiver a minor cannot sign, a
+   * policy that routes the refusal somewhere useful. With it on, "I do not
+   * agree" is a real answer, stored as `accepted: false`, and a branch can read
+   * it like any other.
+   */
   z.object({
     ...BlockBase,
     type: z.literal("legal_consent"),
     consentText: z.string().min(1).max(10000),
+    /** Offer an explicit refusal, so declining is an answer and not a dead end. */
+    allowDecline: z.boolean().default(false),
+    agreeLabel: z.string().max(60).default("I agree"),
+    declineLabel: z.string().max(60).default("I do not agree"),
   }),
 ]);
 

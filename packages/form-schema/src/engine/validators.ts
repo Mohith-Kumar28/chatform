@@ -383,12 +383,34 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
     }
 
     case "legal_consent": {
-      if (raw !== true && raw !== "true") return fail("consent_required", "Please accept to continue.");
-      return ok({
-        accepted: true,
+      const stamp = (accepted: boolean) => ({
+        accepted,
+        // Of the exact wording shown, so consent stays provable after the text
+        // changes — recorded for a refusal too, which is the version they read
+        // and refused.
         textSha256: sha256Hex(block.consentText),
         ts: Date.now(),
       });
+      const declined = raw === false || raw === "false";
+      /**
+       * A refusal is only an answer when the block offers one.
+       *
+       * Without `allowDecline` this stays a turnstile, and it has to: a form
+       * whose consent is genuinely non-negotiable must not record a `false` and
+       * carry on past it. With it, "I do not agree" is stored like any other
+       * answer and the flow decides what happens next.
+       */
+      if (declined) {
+        if (!block.allowDecline) return fail("consent_required", "Please accept to continue.");
+        return ok(stamp(false));
+      }
+      if (raw !== true && raw !== "true") {
+        return fail(
+          "consent_required",
+          block.allowDecline ? "Please choose whether you agree." : "Please accept to continue.",
+        );
+      }
+      return ok(stamp(true));
     }
 
     default:

@@ -73,7 +73,7 @@ export const BLOCK_LIBRARY: BlockMeta[] = [
   { type: "signature", label: "Signature", group: "Advanced", icon: PenTool, tone: "advanced", description: "Draw or type a signature." },
   { type: "payment", label: "Payment", group: "Advanced", icon: CreditCard, tone: "advanced", description: "Send them to your payment link, or a UPI QR." },
   { type: "scheduling", label: "Scheduling", group: "Advanced", icon: CalendarClock, tone: "advanced", description: "Hand off to your booking or meeting link." },
-  { type: "legal_consent", label: "Consent", group: "Advanced", icon: ScrollText, tone: "advanced", description: "Terms acceptance with an audit trail." },
+  { type: "legal_consent", label: "Consent", group: "Advanced", icon: ScrollText, tone: "advanced", description: "Terms acceptance with an audit trail. Can offer a refusal to branch on." },
 ];
 
 const BY_TYPE = new Map(BLOCK_LIBRARY.map((b) => [b.type, b]));

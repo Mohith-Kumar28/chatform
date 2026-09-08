@@ -68,6 +68,15 @@ export function choicesFor(block: Block): { value: string; label: string }[] {
       { value: "false", label: block.noLabel ?? "No" },
     ];
   }
+  // A consent decides on its two buttons. Offered even when the block does not
+  // currently allow declining, because "only ask this if they agreed" is a real
+  // rule on a turnstile too.
+  if (block.type === "legal_consent") {
+    return [
+      { value: "true", label: block.agreeLabel || "I agree" },
+      { value: "false", label: block.declineLabel || "I do not agree" },
+    ];
+  }
   return [];
 }
 
@@ -92,7 +101,7 @@ export function deciderFor(blocks: Block[], index: number): Block | null {
 
 /** Coerce the picked value to what the deciding question stores. */
 function typedValue(decider: Block, condition: DraftCondition): string | number | boolean {
-  if (decider.type === "yes_no") return condition.value === "true";
+  if (decider.type === "yes_no" || decider.type === "legal_consent") return condition.value === "true";
   if (
     decider.type === "number" ||
     decider.type === "nps" ||

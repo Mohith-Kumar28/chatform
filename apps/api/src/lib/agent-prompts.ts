@@ -131,8 +131,21 @@ export function affordanceNote(block: Block): string | null {
   }
   switch (block.type) {
     case "yes_no":
-    case "legal_consent":
       return "Its buttons are ALREADY on screen under your message. Ask the question and stop — do not spell out the choices or tell them to reply yes or no.";
+    /**
+     * Whether a refusal is on the table changes what the agent may promise.
+     *
+     * Both halves of this have been wrong in practice. Told nothing, a model
+     * nudges — "just tap I agree and we're done" — which is pressure applied
+     * to a legal agreement, and it is worse when declining is a real option the
+     * form has a path for. And on a turnstile, a respondent who says "no" gets
+     * cheerfully re-asked forever, because the agent does not know that no is
+     * not an answer here and cannot say so.
+     */
+    case "legal_consent":
+      return block.allowDecline
+        ? "Both buttons are ALREADY on screen under your message — agreeing and declining are equally real answers, and the form knows what to do with either. Present the wording neutrally and stop. Never push them towards agreeing, never imply declining ends badly, and do not spell the buttons out."
+        : "Its button is ALREADY on screen under your message. Ask and stop — do not spell it out. This form cannot continue without their agreement: if they say no, say so plainly and without pressure, and do not keep re-asking as though they had not answered.";
     case "rating":
     case "nps":
     case "opinion_scale":
@@ -276,6 +289,25 @@ ANTI-PATTERNS — every one of these has shipped to a real author, and each is w
 - Follow-ups scattered through the form. An arm whose questions are interleaved with another arm's cannot be drawn, cannot be read, and routes people into the middle of somebody else's path.
 - Asking a question whose answer you already routed on. If the branch is on \`q_platform\` = Android, the Android arm does not open by asking which platform they are on.
 
+OUTCOMES — AND THE ONE THE FORMS KEPT GETTING WRONG
+
+A form has as many endings as it has outcomes, and they are not all thank-yous. Two kinds exist:
+
+- A SUCCESS ending accepts the response. "Thanks — we'll be in touch." Every form needs at least one.
+- A SCREEN-OUT ending refuses it. The respondent has told you something that means they cannot submit: they do not meet a mandatory requirement, they are outside the eligible group, they declined a consent the form cannot proceed without. It says so, and it lists what they did not meet.
+
+Reach for a screen-out whenever the request describes a condition on WHO MAY SUBMIT, not merely on what gets asked. These are the words that mean it: eligible, ineligible, must, mandatory, requirement, qualify, minimum, only open to, cannot, not accepted, disqualif-. "Teams must have 2-5 members", "you must be 18 or over", "only current customers", "agreeing to the code of conduct is mandatory" — each of those has two outcomes, and one of them is a refusal.
+
+What went wrong before this existed, on a real form: a registration asked "does your team meet the mandatory requirements?", branched correctly on "no" — and had nowhere to send it but the thank-you, so a team that had just declared itself ineligible was shown "Registration Submitted Successfully". The flow was right and the last screen lied. A screen-out is the missing node, and pointing a failing answer at a success ending is now a mistake, not a limitation.
+
+How to write one:
+- \`kind\`: "screen_out". Its \`title\` says they cannot submit, plainly and without apology — "You're not eligible for this round", not "Thank you for your interest!".
+- \`requirements\`: what they had to meet, one per line, stated as the REQUIREMENT and not as their failure: "A team of 2-5 people", not "your team is too big". This is the list the respondent reads to find out what to fix, so it must be specific enough to act on.
+- \`body\`: what they can do about it, if anything — come back next round, write to someone, check a page. Leave it "" when there is genuinely nothing.
+- Point every failing answer at it with a branch, exactly as you would at a question.
+
+A screen-out never replaces the success ending: a form whose only ending refuses is a form nobody can finish. And do not invent one — a feedback survey has no requirements to fail, and inventing eligibility the request never mentioned turns people away for no reason.
+
 WRITING THE QUESTIONS
 
 - One thing per question. "What's your name and company?" is two questions in one box.
@@ -343,7 +375,9 @@ ${renderBlockCatalog()}
 - refs: lowercase snake_case, unique, prefixed by topic (e.g. q_email, q_role, q_rating)
 - "options": the choices as the respondent reads them — ["Android", "iPhone", "Chrome extension"]. Plain labels, no ids, no prefixes. Use [] for every type that is not a choice.
 - Every block MUST include: description (use "" if none), options (use [] when not a choice) and scale (5 for rating, 10 otherwise)
-- "endings": one entry per distinct outcome, each { "ref": "end_<slug>", "title": <warm title>, "body": "" }. Most forms need exactly one (ref "end_thanks"). Add more when different answers deserve different sign-offs — a sales hand-off versus a self-serve trial, an accepted application versus a "not this time". Never invent outcomes the request did not ask for.
+- "endings": one entry per distinct outcome, each { "ref": "end_<slug>", "title": <title>, "body": "", "kind": "success" | "screen_out", "requirements": "" }. Most forms need exactly one success ending (ref "end_thanks"). Add more when different answers deserve different sign-offs — a sales hand-off versus a self-serve trial, an accepted application versus a "not this time". Never invent outcomes the request did not ask for.
+  - "kind": "success" accepts the response; "screen_out" refuses it and is what a failing answer must point at. Follow the outcome doctrine you were given. If the request states a condition on who may submit — must, mandatory, requirement, eligible, only open to, minimum — there is a screen-out in this form, and at least one branch aimed at it.
+  - "requirements": on a screen_out only, what they had to meet, separated by " | " and stated as requirements rather than as failures: "A team of 2-5 people | At least one member over 18 | Agreement to the code of conduct". Leave "" on a success ending.
 
 BRANCHING — write it as "branches", and follow the doctrine you were given:
   [{ "whenRef": "<the ref of the question that decides it>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains>", "value": "<the option's LABEL, exactly as you wrote it in options, or a number>", "then": "<the ref of the question or ending to jump to>" }]
@@ -382,6 +416,24 @@ Second example — when some answers need no follow-up, say where they go:
     { "whenRef": "q_role", "op": "eq", "value": "Something else", "then": "q_why" }
 
 The last two look redundant and are the most important ones: two answers naming q_why is what says q_why is where the arms meet again. Leave them out and the engineer's arm has no way to know where it stops.
+
+Third example — a requirement on who may submit at all, which is where the screen-out goes:
+
+  q_team_size   number       "How many people are on your team?"
+  q_conduct     legal_consent  config "decline=true"   ← agreeing is mandatory
+  q_project     long_text    (everyone who is eligible)
+
+  endings:
+    { "ref": "end_thanks",     "title": "You're registered", "body": "…", "kind": "success",    "requirements": "" }
+    { "ref": "end_ineligible", "title": "You can't submit this registration", "body": "Sort the points below out and start again — the form stays open until Friday.", "kind": "screen_out",
+      "requirements": "A team of 2 to 5 people | Agreement to the code of conduct" }
+
+  branches:
+    { "whenRef": "q_team_size", "op": "gt",  "value": "5",     "then": "end_ineligible" }
+    { "whenRef": "q_team_size", "op": "lt",  "value": "2",     "then": "end_ineligible" }
+    { "whenRef": "q_conduct",   "op": "eq",  "value": "declined", "then": "end_ineligible" }
+
+Note the consent: it carries \`decline=true\` because the form has to be able to route a refusal, and a branch reads it as "agreed" or "declined". Without that flag the question is a turnstile — the respondent simply cannot move past it — which is right only when the form genuinely has nothing to say about a no. Note also that the eligible path is not branched at all: it falls through, as always.
 
 Return "branches": [] only when the form is genuinely linear for everyone.`;
 }
@@ -458,6 +510,26 @@ export function buildEditPrompt(
     })
     .join("\n");
 
+  /**
+   * The outcomes, with what kind each one is.
+   *
+   * A bare list of refs was enough while every ending was a thank-you. It is
+   * not now: asked to stop ineligible teams from submitting, a model shown only
+   * "end_thanks, end_sales" has no way to tell whether a screen-out already
+   * exists, so it either adds a second one beside the one that is there or
+   * points the failing answer at a success ending — the exact bug this exists
+   * to fix.
+   */
+  const endings = doc.endings
+    .map((e) => {
+      const kind = e.kind === "screen_out" ? "SCREEN-OUT — refuses the respondent" : "success";
+      const reqs = e.requirements.length
+        ? `\n     requirements listed: ${e.requirements.map((r) => `"${r.label}"`).join(", ")}`
+        : "";
+      return `  ${e.ref} (${kind}): "${e.title}"${reqs}`;
+    })
+    .join("\n");
+
   const rules = gotos.length
     ? gotos
         .map((r) => {
@@ -486,7 +558,8 @@ FORM: "${doc.title}"
 QUESTIONS, in the order they are asked:
 ${blocks}
 
-ENDINGS: ${doc.endings.map((e) => e.ref).join(", ")}
+OUTCOMES:
+${endings}
 
 EXISTING BRANCHING RULES:
 ${rules}
@@ -502,10 +575,15 @@ WORK OUT WHAT KIND OF EDIT THIS IS FIRST. Most requests about a working form cha
 - If a question has three options and you are changing where one of them goes, you may state just that one. But if the change means the other two should go somewhere different too, state those as well — they will not move on their own.
 - "updateBlocks": settings changed on questions that are ALREADY in the form — the answer to most requests that are neither a new question nor a route. "the team name has to be unique", "make the email required", "cap that number at 50", "work emails only". Each entry is { "ref": "<existing ref>", "config": "key=value; key=value" }, using the same keys the type documents below, and only the keys you write are changed. Never add a second copy of a question to carry a setting the original could have had.
 - "removeRefs": only when the request actually asks for a question to go.
+- "endings": the outcomes this edit adds or changes, each { "ref", "title", "body", "kind": "success" | "screen_out", "requirements" }. A ref already in the list above is CHANGED in place; any other ref adds a new outcome. Leave it [] unless the request is about what happens at the end.
+  This is the answer to a whole family of requests, and the one the form could not express before: "if they say no, don't let them submit", "they shouldn't be able to submit if they don't meet the requirements", "tell them why they can't apply", "what happens if they don't agree?". Each of those needs a "screen_out" ending, with "requirements" listing what they had to meet as " | "-separated lines — and a branch in the same edit pointing the failing answer at its ref. Do not point a failing answer at a success ending; that is what makes a form say "Submitted Successfully" to somebody it has just turned away.
+  A form must keep at least one success ending. Never convert its only ending to a screen_out.
 
 Rules for "branches": [{ "whenRef": "<question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains>", "value": "<for a choice question, the option's LABEL exactly as listed above; otherwise the literal value>", "then": "<question ref or ending ref>" }].
 
 Where a branch can point: a question BELOW the deciding one, or an ending. A branch pointing at a question above it would loop, and is dropped. So if the request needs a question asked only for some answers, that question has to sit below the one that decides it — say so by adding it with "insertAfter", or by rewiring around where it already is.
+
+A \`legal_consent\` question only accepts "yes" unless it carries \`decline=true\`. So "what if they don't agree?" is two changes together: \`updateBlocks\` with "decline=true" on that question, and a branch from it — value "declined" — pointing at a screen_out ending. Without the flag the question is a turnstile and no route off it can ever fire.
 
 The manifest above marks a question "unique" when it already refuses answers another respondent gave. If the request asks for something that is already true, change nothing and say so in the summary.
 

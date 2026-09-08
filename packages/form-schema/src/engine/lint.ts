@@ -124,6 +124,41 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
     issues.push({ level: "error", code: "no_ending", message: "Form needs at least one ending" });
   }
 
+  /**
+   * A screen-out has to be the exception, and it has to say why.
+   *
+   * Both of these are the mistake the feature invites. A form whose every
+   * ending refuses is a form nobody can finish, which is never what was meant
+   * and is invisible on the canvas — the nodes look identical to a working
+   * form's. And a screen-out with no requirements and no message is the
+   * "Registration Submitted Successfully" problem with the words changed: the
+   * respondent is stopped and told nothing, so they retry, or they email.
+   */
+  const screenOuts = doc.endings.filter((e) => e.kind === "screen_out");
+  if (screenOuts.length > 0 && screenOuts.length === doc.endings.length) {
+    issues.push({
+      level: "error",
+      code: "no_success_ending",
+      message:
+        "Every ending on this form turns the respondent away, so there is no way to finish it. Add an ending that accepts the response.",
+      refs: doc.endings.map((e) => e.ref),
+    });
+  }
+  for (const e of screenOuts) {
+    if (e.requirements.length === 0 && e.bodyMd.trim() === "") {
+      issues.push({
+        level: "warning",
+        code: "screen_out_unexplained",
+        message: `"${e.title}" turns the respondent away without saying why. List what they did not meet, or write a message.`,
+        path: `endings.${e.id}`,
+        refs: [e.ref],
+      });
+    }
+    e.requirements.forEach((r, i) => {
+      if (r.when) checkGroup(r.when, `endings.${e.id}.requirements[${i}].when`);
+    });
+  }
+
   // Reachability: BFS from the first block over each block's own outgoing edges.
   //
   // This used to pool every conditional goto target in the document into every

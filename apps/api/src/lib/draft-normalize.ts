@@ -3,12 +3,14 @@ import {
   Block as BlockSchema,
   BLOCK_TYPES,
   ContactField,
+  Ending as EndingSchema,
   FormDoc,
   lintFormDoc,
   buildFlowRules,
   orderBlocksForBranches,
   type Block,
   type DraftBranch,
+  type Ending,
   type FormDocInput,
 } from "@repo/form-schema";
 import type { GenerationDraft, EditDraft } from "./ai.js";
@@ -369,7 +371,17 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
           }),
         );
       case "legal_consent":
-        return done(BlockSchema.parse({ ...base, type, required: true, consentText: draft.description || draft.title }));
+        return done(
+          BlockSchema.parse({
+            ...base,
+            type,
+            required: true,
+            consentText: draft.description || draft.title,
+            allowDecline: flag(config, "decline") || flag(config, "allowdecline"),
+            ...(config.get("agree") ? { agreeLabel: config.get("agree") } : {}),
+            ...(config.get("declinelabel") ? { declineLabel: config.get("declinelabel") } : {}),
+          }),
+        );
       case "file_upload":
         return done(BlockSchema.parse({ ...base, type, accept: ["image/*", "application/pdf"], maxFiles: 1, maxSizeMB: 10 }));
       case "single_select":
@@ -569,6 +581,16 @@ export function applyBlockConfig(block: Block, raw: string | undefined): Block |
       set("yes", "yesLabel", (v) => v);
       set("no", "noLabel", (v) => v);
       break;
+    case "legal_consent":
+      // `decline` is the one that matters; the labels are a nicety. Read under
+      // two names because a model that has just written `declineLabel=…` for
+      // the wording tends to write `allowDecline=true` for the flag.
+      if (config.has("decline") || config.has("allowdecline")) {
+        patch.allowDecline = flag(config, "decline") || flag(config, "allowdecline");
+      }
+      set("agree", "agreeLabel", (v) => v);
+      set("declinelabel", "declineLabel", (v) => v);
+      break;
     case "rating":
       set("scale", "scale", (v) => clampScale(num(v), 1, 10, block.scale));
       break;
@@ -627,6 +649,102 @@ export function applyBlockConfig(block: Block, raw: string | undefined): Block |
 }
 
 /** A flat draft branch, as both draft schemas now express one. */
+/** An ending as a draft carries it: flat, with its requirements pipe-separated. */
+export interface LooseEnding {
+  ref?: string;
+  title: string;
+  body: string;
+  kind?: "success" | "screen_out";
+  requirements?: string;
+}
+
+/** `end_thanks`, from whatever the model wrote, unique within `taken`. */
+function endingRef(raw: string | undefined, index: number, taken: Set<string>): string {
+  let ref =
+    (raw ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, "_")
+      .slice(0, 34) || `end_${index + 1}`;
+  if (!ref.startsWith("end_")) ref = `end_${ref}`.slice(0, 34);
+  let candidate = ref;
+  let n = 2;
+  while (taken.has(candidate)) candidate = `${ref}_${n++}`.slice(0, 34);
+  taken.add(candidate);
+  return candidate;
+}
+
+/**
+ * `"Be 18 or over | Have a team of 2-5"` → requirement lines.
+ *
+ * Unconditional (`when: null`), and that is the honest default: the model knows
+ * which requirements a screen-out is about, but it does not write conditions —
+ * it writes branches, and the branch that routed here is the condition. Showing
+ * every line beats guessing which one fired and getting it wrong, and the
+ * builder can narrow any line to a condition in the flow inspector.
+ */
+function requirementLines(raw: string | undefined): { id: string; label: string; when: null }[] {
+  return (raw ?? "")
+    .split(/[|\n]+/)
+    .map((l) => l.trim().replace(/^[-*\u2022]\s*/, ""))
+    .filter((l) => l.length > 0)
+    .slice(0, 20)
+    .map((label) => ({ id: uid("req"), label: label.slice(0, 300), when: null }));
+}
+
+/**
+ * Draft endings → stored endings.
+ *
+ * Shared by generation and editing so a screen-out written either way comes out
+ * identical. `existing` is passed on an edit: a draft ending whose ref is
+ * already in the form patches that one in place rather than adding a second
+ * ending with the same name, which is what "make the ineligible ending say why"
+ * would otherwise produce.
+ */
+export function normalizeDraftEndings(
+  drafts: LooseEnding[],
+  existing: Ending[] = [],
+): Ending[] {
+  const byRef = new Map(existing.map((e) => [e.ref, e]));
+  const taken = new Set(existing.map((e) => e.ref));
+  const out: Ending[] = [];
+
+  for (const [i, e] of drafts.entries()) {
+    const wanted = (e.ref ?? "").trim().toLowerCase();
+    const prior = byRef.get(wanted);
+    const kind = e.kind === "screen_out" ? "screen_out" : "success";
+    const requirements = kind === "screen_out" ? requirementLines(e.requirements) : [];
+    if (prior) {
+      out.push(
+        EndingSchema.parse({
+          ...prior,
+          title: e.title || prior.title,
+          bodyMd: e.body || prior.bodyMd,
+          kind,
+          // A screen-out that came back with no requirements keeps the ones it
+          // had: "reword the ineligible screen" must not silently empty the list.
+          requirements: requirements.length > 0 ? requirements : kind === "screen_out" ? prior.requirements : [],
+        }),
+      );
+      continue;
+    }
+    out.push(
+      EndingSchema.parse({
+        id: uid("end"),
+        ref: endingRef(e.ref, i, taken),
+        title: e.title,
+        bodyMd: e.body,
+        redirectDelaySec: 5,
+        showSummary: false,
+        kind,
+        requirements,
+      }),
+    );
+  }
+
+  return out;
+}
+
 export interface LooseBranch {
   whenRef: string;
   op: DraftBranch["when"]["op"];
@@ -691,8 +809,16 @@ export function resolveBranches(
         opts.find((o) => o.label.toLowerCase() === raw.toLowerCase()) ??
         opts.find((o) => o.label.toLowerCase().includes(raw.toLowerCase()) && raw.length > 2);
       value = hit ? hit.id : raw;
-    } else if (block.type === "yes_no") {
-      value = /^(y|yes|true|1)$/i.test(raw) ? true : /^(n|no|false|0)$/i.test(raw) ? false : raw;
+    } else if (block.type === "yes_no" || block.type === "legal_consent") {
+      // A consent answer is stored as an object and compared on its `accepted`
+      // flag (see `answerOperand`), so a branch on one reads as a boolean here
+      // exactly like a yes/no. "agree", "declined" and "I do not agree" are all
+      // things a model writes for it.
+      value = /^(y|yes|true|1|agree|agreed|accept|accepted)$/i.test(raw)
+        ? true
+        : /^(n|no|false|0|decline|declined|reject|rejected|do ?not ?agree|i do not agree|disagree)$/i.test(raw)
+          ? false
+          : raw;
     } else if (block.type === "number" || block.type === "nps" || block.type === "rating" || block.type === "opinion_scale") {
       const n = Number(raw);
       value = Number.isFinite(n) ? n : raw;
@@ -737,28 +863,7 @@ export function draftToDoc(draft: GenerationDraft): NormalizedDraft {
 
   if (blocks.length < 2) throw new Error("draft had fewer than two usable blocks");
 
-  const takenEndingRefs = new Set<string>();
-  const endings = draft.endings.map((e, i) => {
-    let ref =
-      (e.ref ?? "")
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9_]+/g, "_")
-        .slice(0, 34) || `end_${i + 1}`;
-    if (!ref.startsWith("end_")) ref = `end_${ref}`.slice(0, 34);
-    let candidate = ref;
-    let n = 2;
-    while (takenEndingRefs.has(candidate)) candidate = `${ref}_${n++}`.slice(0, 34);
-    takenEndingRefs.add(candidate);
-    return {
-      id: uid("end"),
-      ref: candidate,
-      title: e.title,
-      bodyMd: e.body,
-      redirectDelaySec: 5,
-      showSummary: false,
-    };
-  });
+  const endings = normalizeDraftEndings(draft.endings);
 
   const branches = resolveBranches(draft.branches ?? [], blocks, optionIdsByRef);
   // A branch pointing at a question above the one that decides it is discarded

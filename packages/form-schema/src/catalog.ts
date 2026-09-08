@@ -114,7 +114,9 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
     config: "fields=<street|city|state|postal|country>",
   },
   legal_consent: {
-    summary: "A tickbox agreeing to terms. Put the wording in `description`.",
+    summary:
+      "Agreeing to terms, a waiver, a code of conduct. Put the wording in `description`. By default the only answer is yes; add decline=true when a refusal has to be a real answer you can route on — an eligibility gate, a policy someone may decline.",
+    config: "decline=true to offer an explicit refusal; agree=<label>, declineLabel=<label> to relabel the two buttons",
   },
 };
 

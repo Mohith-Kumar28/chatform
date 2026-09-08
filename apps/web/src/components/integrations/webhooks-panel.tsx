@@ -26,6 +26,7 @@ import { formatDateTime } from "@/lib/format";
 
 const EVENTS: { name: string; blurb: string }[] = [
   { name: "response.completed", blurb: "Someone finished the whole conversation." },
+  { name: "response.disqualified", blurb: "Someone was turned away — the form reached a “can’t submit” ending." },
   { name: "response.partial", blurb: "Someone stopped part-way, with answers worth keeping." },
   { name: "response.abandoned", blurb: "A session timed out with nothing more coming." },
   { name: "response.answer_recorded", blurb: "Each individual answer, as it lands." },

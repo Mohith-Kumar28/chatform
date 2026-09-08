@@ -214,3 +214,111 @@ describe("changing a question that is already in the form", () => {
   });
 });
 
+
+describe("outcomes that refuse the respondent", () => {
+  it("teaches the designer what a screen-out is for, in the system prompt", () => {
+    // In the system prompt rather than the request, so it is cached across
+    // every generation and every edit — the same reason the branching doctrine
+    // lives there.
+    expect(FORM_DESIGNER_SYSTEM).toContain("SCREEN-OUT");
+    expect(FORM_DESIGNER_SYSTEM).toContain("Registration Submitted Successfully");
+    // The words that should make a model reach for one.
+    for (const cue of ["mandatory", "requirement", "eligible", "only open to"]) {
+      expect(FORM_DESIGNER_SYSTEM).toContain(cue);
+    }
+    // And the guard against the opposite failure.
+    expect(FORM_DESIGNER_SYSTEM).toContain("a form whose only ending refuses is a form nobody can finish");
+  });
+
+  it("gives the generator the shape to express one", () => {
+    const prompt = buildFlowGeneratorPrompt("a hackathon registration; teams must have 2-5 people", undefined);
+    expect(prompt).toContain('"kind": "success" | "screen_out"');
+    expect(prompt).toContain('"requirements"');
+    // The worked example, which is what a model actually copies.
+    expect(prompt).toContain("end_ineligible");
+    expect(prompt).toContain("decline=true");
+  });
+
+  it("tells the generator that consent needs a flag before a refusal can route", () => {
+    const prompt = buildFlowGeneratorPrompt("registration; agreeing to the code of conduct is mandatory", undefined);
+    expect(prompt).toContain("decline=true to offer an explicit refusal");
+  });
+
+  const doc = FormDoc.parse({
+    schemaVersion: 1,
+    title: "Hackathon",
+    blocks: [
+      { id: "blk_so000001", ref: "q_welcome", type: "welcome", title: "Sign up" },
+      { id: "blk_so000002", ref: "q_size", type: "number", title: "Team size?" },
+    ],
+    endings: [
+      { id: "end_so000001", ref: "end_thanks", title: "You're in" },
+      {
+        id: "end_so000002",
+        ref: "end_ineligible",
+        title: "You can't submit this",
+        kind: "screen_out",
+        requirements: [{ id: "req_so000001", label: "A team of 2 to 5 people" }],
+      },
+    ],
+    logic: [],
+    endingRules: [],
+    variables: [],
+    hiddenFields: [],
+    settings: {},
+    theme: {},
+  });
+
+  it("shows the editor which outcomes already refuse, and what they list", () => {
+    // A bare list of refs was enough while every ending was a thank-you. Shown
+    // only refs, a model asked to stop ineligible teams either adds a second
+    // screen-out beside the one that is there, or aims the failing answer at a
+    // success ending.
+    const prompt = buildEditPrompt(doc, "stop teams bigger than five from submitting");
+    expect(prompt).toContain("end_ineligible (SCREEN-OUT — refuses the respondent)");
+    expect(prompt).toContain("end_thanks (success)");
+    expect(prompt).toContain('requirements listed: "A team of 2 to 5 people"');
+  });
+
+  it("offers the editor endings as something an edit may change", () => {
+    const prompt = buildEditPrompt(doc, "if they don't agree, don't let them submit");
+    expect(prompt).toContain('"endings"');
+    expect(prompt).toContain("if they say no, don't let them submit");
+    expect(prompt).toContain("Never convert its only ending to a screen_out");
+  });
+});
+
+describe("a consent the agent may be told about", () => {
+  const consentDoc = (allowDecline: boolean) =>
+    FormDoc.parse({
+      ...base,
+      blocks: [
+        ...base.blocks,
+        {
+          id: "blk_cn000001",
+          ref: "q_conduct",
+          type: "legal_consent",
+          title: "Code of conduct",
+          consentText: "I agree.",
+          allowDecline,
+        },
+      ],
+      settings: {},
+    });
+
+  it("is told not to push, when declining is a real answer", () => {
+    const doc = consentDoc(true);
+    const suffix = buildTurnSuffix(doc, doc.blocks[2]!, 1);
+    expect(suffix).toContain("equally real answers");
+    expect(suffix).toContain("Never push them towards agreeing");
+  });
+
+  it("is told the form cannot continue, when it cannot", () => {
+    // Otherwise a respondent who says no is cheerfully re-asked forever,
+    // because the agent has no idea that no is not an answer here.
+    const doc = consentDoc(false);
+    const suffix = buildTurnSuffix(doc, doc.blocks[2]!, 1);
+    expect(suffix).toContain("cannot continue without their agreement");
+    expect(suffix).not.toContain("equally real answers");
+  });
+});

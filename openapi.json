@@ -2195,6 +2195,7 @@
               "enum": [
                 "all",
                 "completed",
+                "disqualified",
                 "abandoned",
                 "in_progress"
               ]
@@ -6496,6 +6497,7 @@
                         "submission.completed",
                         "response.abandoned",
                         "submission.abandoned",
+                        "response.disqualified",
                         "response.partial",
                         "response.answer_recorded",
                         "session.started",

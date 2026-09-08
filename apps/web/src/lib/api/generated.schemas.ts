@@ -476,6 +476,7 @@ export type GetApiFormsByIdSubmissionsStatus = typeof GetApiFormsByIdSubmissions
 export const GetApiFormsByIdSubmissionsStatus = {
   all: 'all',
   completed: 'completed',
+  disqualified: 'disqualified',
   abandoned: 'abandoned',
   in_progress: 'in_progress',
 } as const;
@@ -1242,6 +1243,7 @@ export const PostApiWebhooksBodyEventsItem = {
   submissioncompleted: 'submission.completed',
   responseabandoned: 'response.abandoned',
   submissionabandoned: 'submission.abandoned',
+  responsedisqualified: 'response.disqualified',
   responsepartial: 'response.partial',
   responseanswer_recorded: 'response.answer_recorded',
   sessionstarted: 'session.started',

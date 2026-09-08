@@ -585,13 +585,37 @@ export function TypeFields({
 
     case "legal_consent":
       return (
-        <TextField
-          label="Consent text"
-          value={block.consentText}
-          onChange={(v) => patch({ consentText: v } as Partial<Block>, key("consent"))}
-          multiline
-          maxLength={10000}
-        />
+        <>
+          <TextField
+            label="Consent text"
+            value={block.consentText}
+            onChange={(v) => patch({ consentText: v } as Partial<Block>, key("consent"))}
+            multiline
+            maxLength={10000}
+          />
+          <SwitchField
+            label="Let them decline"
+            hint="Adds an “I do not agree” button. Declining becomes a real answer you can branch on — point it at an ending that turns them away. Off, the form simply won’t continue without agreement."
+            checked={block.allowDecline}
+            onChange={(v) => patch({ allowDecline: v } as Partial<Block>, key("decline"))}
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <TextField
+              label="Agree label"
+              value={block.agreeLabel}
+              onChange={(v) => patch({ agreeLabel: v } as Partial<Block>, key("agreelabel"))}
+              maxLength={40}
+            />
+            {/* Shown regardless, so the wording can be set before the switch is
+                flipped — and so the pair reads as a pair. */}
+            <TextField
+              label="Decline label"
+              value={block.declineLabel}
+              onChange={(v) => patch({ declineLabel: v } as Partial<Block>, key("declinelabel"))}
+              maxLength={40}
+            />
+          </div>
+        </>
       );
 
     default:

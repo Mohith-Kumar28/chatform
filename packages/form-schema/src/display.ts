@@ -69,8 +69,20 @@ export function displayAnswer(block: Block, value: unknown): string {
       return sched.slotIso ? `Booked for ${sched.slotIso}` : "Booked";
     }
 
-    case "legal_consent":
-      return "Agreed";
+    case "legal_consent": {
+      /*
+       * "Agreed" unconditionally was safe while a refusal could not be
+       * recorded. Now it can, and reading a row of declined consents as
+       * "Agreed" is the one summary that must never be wrong — it is the
+       * audit trail.
+       */
+      const consent = value as { accepted?: unknown };
+      const accepted =
+        typeof consent === "object" && consent !== null && "accepted" in consent
+          ? consent.accepted !== false
+          : value !== false;
+      return accepted ? (block.agreeLabel ?? "Agreed") : (block.declineLabel ?? "Did not agree");
+    }
 
     case "date": {
       if (typeof value !== "string") break;

@@ -25,6 +25,9 @@ const AUTO_DISABLE_AFTER = 20;
 export const EVENT_ALIASES: Record<string, readonly string[]> = {
   "response.completed": ["response.completed", "submission.completed"],
   "response.abandoned": ["response.abandoned", "submission.abandoned"],
+  // New, so it has no `submission.*` twin to keep working — nothing was ever
+  // subscribed to one.
+  "response.disqualified": ["response.disqualified"],
   "response.partial": ["response.partial"],
   "response.answer_recorded": ["response.answer_recorded"],
   "session.started": ["session.started"],
@@ -39,6 +42,7 @@ export function eventNames(event: string): readonly string[] {
 export type WebhookEventName =
   | "response.completed"
   | "response.abandoned"
+  | "response.disqualified"
   | "response.partial"
   | "response.answer_recorded"
   | "session.started"

@@ -216,6 +216,27 @@ export const GenerationDraft = z.object({
         ref: z.string(),
         title: z.string().min(1),
         body: z.string(),
+        /**
+         * `screen_out` is an outcome that REFUSES the respondent.
+         *
+         * Without it every ending was a thank-you, so a branch that had worked
+         * out somebody was ineligible had nothing to point at but a screen
+         * congratulating them on submitting — and the models did exactly that,
+         * because it was the only ending on offer. A qualification form would
+         * route "we don't meet the requirements" to "Registration Submitted
+         * Successfully" and be, as far as the flow was concerned, correct.
+         */
+        kind: z.enum(["success", "screen_out"]),
+        /**
+         * On a `screen_out`, what they failed to meet — one flat string, "a | b
+         * | c", the way `config` and the matrix `rows` key are flat.
+         *
+         * Nested here would be the third thing multiplying into the schema
+         * budget described above, and this is a list of short sentences: an
+         * array of objects buys nothing and risks the whole generation being
+         * rejected before the model is reached. Empty on a `success` ending.
+         */
+        requirements: z.string(),
       }),
     )
     .min(1)
@@ -313,6 +334,32 @@ export const EditDraft = z.object({
       }),
     )
     .max(12),
+  /**
+   * Endings this edit adds or changes.
+   *
+   * Usually empty, and load-bearing when it is not: an edit could previously
+   * touch questions and wiring but never outcomes, so the single most common
+   * request about a working qualification form — "if they say no, don't let
+   * them submit" — had no way to be answered. The model could write the branch
+   * and had nowhere to aim it, so it aimed at the thank-you.
+   *
+   * A `ref` that already exists is changed in place; anything else is added. A
+   * branch in the same edit may point at either.
+   */
+  endings: z
+    .array(
+      z.object({
+        /** An existing ending's ref to change, or a new `end_<slug>`. */
+        ref: z.string(),
+        title: z.string().min(1),
+        body: z.string(),
+        /** `screen_out` refuses the respondent. See `GenerationDraft`. */
+        kind: z.enum(["success", "screen_out"]),
+        /** `screen_out` only: what they did not meet, as "a | b | c". */
+        requirements: z.string(),
+      }),
+    )
+    .max(5),
   /** Refs of questions the request asks to be taken out. Usually empty. */
   removeRefs: z.array(z.string()).max(12),
   /**

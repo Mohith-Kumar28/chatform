@@ -92,6 +92,11 @@ function conditionPhrase(
     const yes = op === "eq" ? value === true : value === false;
     return `if ${subject} is ${yes ? (source.yesLabel ?? "Yes") : (source.noLabel ?? "No")}`;
   }
+  if (source?.type === "legal_consent" && (op === "eq" || op === "neq")) {
+    // "if consent is true" is not a sentence anybody wants to read on a canvas.
+    const agreed = op === "eq" ? value === true : value === false;
+    return `if they ${agreed ? "agree" : "do not agree"}`;
+  }
   const v = valueWords(source, value);
   switch (op) {
     case "eq":

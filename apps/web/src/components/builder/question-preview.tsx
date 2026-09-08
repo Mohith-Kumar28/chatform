@@ -357,7 +357,12 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
           <p className="rounded-xl border px-3 py-2.5 text-sm opacity-70" style={chipStyle}>
             {block.consentText || "Your consent text"}
           </p>
-          <span className={chip} style={chipStyle}>I agree</span>
+          <div className="flex flex-wrap gap-2">
+            <span className={chip} style={chipStyle}>{block.agreeLabel || "I agree"}</span>
+            {block.allowDecline && (
+              <span className={chip} style={chipStyle}>{block.declineLabel || "I do not agree"}</span>
+            )}
+          </div>
         </div>
       );
 

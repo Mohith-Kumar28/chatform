@@ -13,10 +13,35 @@ export interface EvalState {
 
 type Primitive = string | number | boolean | string[] | undefined | null;
 
+/**
+ * The scalar a condition should compare against, for the answers that are
+ * stored as objects.
+ *
+ * A `legal_consent` answer is `{ accepted, textSha256, ts }` — the hash and the
+ * timestamp are what make it an audit record — and a condition resolving to
+ * that object could never match anything. `is_checked` tests `left === true`,
+ * `eq true` normalizes the object to itself: so every route hanging off a
+ * consent question was dead, and had been since consent existed. Nobody
+ * noticed because there was also no way to answer one with "no".
+ *
+ * Only consent is unwrapped. `payment` is deliberately left as its object: its
+ * `status` is the respondent's own word for having paid with nothing verifying
+ * it, and quietly making that routable would turn a self-report into a gate.
+ * `signature` and `scheduling` have no scalar worth comparing — the emptiness
+ * operators already work on them as objects.
+ */
+function answerOperand(raw: unknown): Primitive {
+  if (raw !== null && typeof raw === "object" && !Array.isArray(raw) && "accepted" in raw) {
+    const accepted = (raw as { accepted: unknown }).accepted;
+    if (typeof accepted === "boolean") return accepted;
+  }
+  return raw as Primitive;
+}
+
 export function resolveOperand(operand: Condition["left"], state: EvalState): Primitive {
   switch (operand.kind) {
     case "ref":
-      return state.answers[operand.ref] as Primitive;
+      return answerOperand(state.answers[operand.ref]);
     case "variable":
       return state.variables[operand.name] as Primitive;
     case "hidden":
@@ -115,6 +140,40 @@ function isEmpty(v: Primitive): boolean {
   if (Array.isArray(v)) return v.length === 0;
   if (typeof v === "string") return v.trim() === "";
   return false;
+}
+
+/** Every block ref a condition group reads, at any depth. */
+export function conditionGroupRefs(group: ConditionGroup): string[] {
+  const out: string[] = [];
+  const walk = (g: ConditionGroup) => {
+    for (const c of g.conditions) if (c.left.kind === "ref") out.push(c.left.ref);
+    for (const sub of g.groups) walk(sub);
+  };
+  walk(group);
+  return out;
+}
+
+/**
+ * Did this response actually fail this requirement?
+ *
+ * Not the same question as "does the condition evaluate true", and the
+ * difference is what a respondent reads on a screen-out. Several of the
+ * operators are true of an answer that was never given — `is_not_checked` on an
+ * unanswered consent, `is_empty` on anything — so a requirement list built the
+ * obvious way tells somebody screened out at the FIRST gate that they also
+ * failed to agree to a code of conduct they were never shown. Which is both
+ * false and, on a form that turns people away, the kind of false that gets
+ * argued about over email.
+ *
+ * So a requirement whose condition reads only questions this respondent never
+ * answered is not shown. It cannot have been failed: nobody asked. A condition
+ * over a variable or a hidden field has no ref to check and is evaluated
+ * normally, as is one that mixes an answered question with an unanswered one.
+ */
+export function isRequirementUnmet(when: ConditionGroup, state: EvalState): boolean {
+  const refs = conditionGroupRefs(when);
+  if (refs.length > 0 && refs.every((ref) => state.answers[ref] === undefined)) return false;
+  return evalGroup(when, state);
 }
 
 export function evalGroup(group: ConditionGroup | null | undefined, state: EvalState): boolean {
@@ -223,14 +282,32 @@ export function firstVisibleBlock(doc: FormDoc, state: EvalState): Block | null 
   return nextVisibleBlock(doc, null, state);
 }
 
-/** Evaluate ending rules after the final block; first matching goto(ending) wins, else endings[0]. */
+/**
+ * Evaluate ending rules after the final block; the first matching goto(ending)
+ * wins, and otherwise the form's default outcome.
+ *
+ * The default is the first ending that ACCEPTS the response, not simply the
+ * first ending. Reaching here means nothing decided to refuse this respondent —
+ * no rule matched, they answered everything asked of them — so accepting is the
+ * only defensible fallback. A plain `endings[0]` turned the order of the array
+ * into a policy: an author who dragged their screen-out onto the canvas first,
+ * or a generator that listed the refusal above the thank-you, would screen out
+ * every respondent who took the ordinary path, with nothing on the canvas
+ * showing why. `endings[0]` remains the last resort for a document that has no
+ * success ending at all, which `lintFormDoc` refuses to publish.
+ */
 export function resolveEnding(doc: FormDoc, state: EvalState): Ending {
   const result = applyLogicRules(doc.endingRules, state);
   if (result.gotoKind === "ending" && result.gotoRef) {
     const e = doc.endings.find((x) => x.ref === result.gotoRef);
     if (e) return e;
   }
-  return doc.endings[0]!;
+  return defaultEnding(doc);
+}
+
+/** Where a respondent lands when no rule sends them anywhere. */
+export function defaultEnding(doc: FormDoc): Ending {
+  return doc.endings.find((e) => e.kind !== "screen_out") ?? doc.endings[0]!;
 }
 
 /**

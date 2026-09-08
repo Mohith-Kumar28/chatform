@@ -182,7 +182,11 @@ export async function findDuplicateAnswer(
         AND a.block_ref = ?2
         AND a.value_json = ?3 COLLATE NOCASE
         AND a.submission_id <> ?4
-        AND s.status <> 'abandoned'
+        -- A response that was abandoned or refused is not one you keep, so it
+        -- must not keep a team name, username or seat number reserved either.
+        -- Somebody screened out at the last question would otherwise hold the
+        -- name they picked forever, against a registration that never happened.
+        AND s.status NOT IN ('abandoned', 'disqualified')
         AND s.is_test = ?5
       LIMIT 1`,
   )
@@ -222,7 +226,13 @@ export function buildSearchText(answers: AnswerMap): string {
 
 export interface FinalizeArgs {
   responseId: string;
-  status: "completed" | "abandoned";
+  /**
+   * `disqualified` is a response that reached a `screen_out` ending — the form
+   * refused it. Terminal and kept, like a completion; not a completion, like an
+   * abandonment. So it gets a `completed_at` (it ended at a definite moment)
+   * but never the completion webhook and never the submission email.
+   */
+  status: "completed" | "disqualified" | "abandoned";
   endingRef: string | null;
   abandonReason?: string;
   answers: AnswerMap;
@@ -267,7 +277,7 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
         WHERE id = ?14 AND status = 'in_progress'`,
     ).bind(
       a.status,
-      a.status === "completed" ? now : null,
+      a.status === "abandoned" ? null : now,
       now,
       durationMs,
       buildSearchText(a.answers),
@@ -306,7 +316,19 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
   if (!changed) return { changed: false, durationMs };
 
   await o.env.Q_WEBHOOKS.send({
-    event: a.status === "completed" ? "response.completed" : "response.abandoned",
+    /**
+     * A screen-out gets its own event rather than borrowing either neighbour.
+     * `response.completed` on a refused respondent is the damaging one — it is
+     * the event wired to "add them to the CRM", "send the welcome sequence",
+     * "create the ticket" — and `response.abandoned` would file them with the
+     * people who closed the tab, which is a different thing to know.
+     */
+    event:
+      a.status === "completed"
+        ? "response.completed"
+        : a.status === "disqualified"
+          ? "response.disqualified"
+          : "response.abandoned",
     organizationId: o.organizationId,
     formId: o.formId,
     submissionId: a.responseId,

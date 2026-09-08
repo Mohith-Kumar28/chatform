@@ -8,7 +8,7 @@ import { requirePermission, requireQuota, requireGauge, type AuthzVars } from ".
 import { meter } from "../lib/entitlements.js";
 import { generateFormDraft, generateEdit, streamFormDraft, researchBrief, type GenerationDraft } from "../lib/ai.js";
 import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, type BuilderTurn } from "../lib/agent-prompts.js";
-import { applyBlockConfig, draftToDoc, normalizeEditBlocks, resolveBranches } from "../lib/draft-normalize.js";
+import { applyBlockConfig, draftToDoc, normalizeDraftEndings, normalizeEditBlocks, resolveBranches } from "../lib/draft-normalize.js";
 import { extractUrls, readSites } from "../lib/research.js";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
 
@@ -571,6 +571,33 @@ for (const path of ["/ai/edit-form", "/ai/add-blocks"] as const) {
         }
       }
 
+      /**
+       * ─── outcomes, before the wiring that points at them ───
+       *
+       * Order is the whole reason this sits here: a branch in the same edit
+       * routinely names the ending the same edit is adding ("if they don't meet
+       * the requirements, tell them they can't submit"), and `buildFlowRules`
+       * only accepts an ending ref it is given. Added after, the branch would
+       * be dropped as dangling and the edit would land as questions with no
+       * route to the outcome it just created.
+       */
+      const endingEdits = normalizeDraftEndings(draft.endings ?? [], doc.endings);
+      const endingChanges: string[] = [];
+      for (const e of endingEdits) {
+        const at = doc.endings.findIndex((x) => x.ref === e.ref);
+        if (at >= 0) {
+          // Only count it when something actually differs, for the same reason
+          // `applyBlockConfig` returns null: an edit has to change something.
+          if (JSON.stringify(doc.endings[at]) !== JSON.stringify(e)) {
+            doc.endings[at] = e;
+            endingChanges.push(e.ref);
+          }
+        } else if (doc.endings.length < 20) {
+          doc.endings.push(e);
+          endingChanges.push(e.ref);
+        }
+      }
+
       const branches = resolveBranches(
         draft.branches.map((br) => ({
           ...br,
@@ -618,7 +645,13 @@ for (const path of ["/ai/edit-form", "/ai/add-blocks"] as const) {
       // rejection, which is what forced the model to invent one: a routing-only
       // edit is now a complete answer, and only an edit that touches nothing at
       // all is worth telling the builder about.
-      if (added.length === 0 && removed.length === 0 && updated.length === 0 && newRules.length === 0) {
+      if (
+        added.length === 0 &&
+        removed.length === 0 &&
+        updated.length === 0 &&
+        newRules.length === 0 &&
+        endingChanges.length === 0
+      ) {
         return c.json(
           {
             error: {
@@ -652,6 +685,8 @@ for (const path of ["/ai/edit-form", "/ai/add-blocks"] as const) {
         removedRefs: removed,
         rules: newRules.length,
         rewired,
+        endings: endingChanges.length,
+        endingRefs: endingChanges,
         summary: draft.summary,
         tokens,
         issues,

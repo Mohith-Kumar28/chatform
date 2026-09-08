@@ -135,7 +135,7 @@ resultsRouter.get(
   validator(
     "query",
     z.object({
-      status: z.enum(["all", "completed", "abandoned", "in_progress"]).default("all"),
+      status: z.enum(["all", "completed", "disqualified", "abandoned", "in_progress"]).default("all"),
       limit: z.coerce.number().int().min(1).max(200).default(50),
     }),
   ),
@@ -159,8 +159,16 @@ resultsRouter.get(
      * than refusing; the results page must still render. Asking for the partials
      * explicitly gets a 402 carrying the count.
      */
+    /**
+     * A screened-out response is gated with the unfinished ones.
+     *
+     * Not because it is unfinished — it is as terminal as a completion — but
+     * because it is not a response the author asked for, and the Free tier's
+     * line is "the responses you got are yours; the ones that did not arrive
+     * are Pro". Somebody the form turned away did not arrive.
+     */
     let effectiveStatus: typeof status = status;
-    if (status === "abandoned" || status === "in_progress" || status === "all") {
+    if (status === "abandoned" || status === "in_progress" || status === "disqualified" || status === "all") {
       const roleDenied = await assertPermission(c, "submission", "read_partial");
       // A viewer is not trusted with unfinished responses whatever the plan, but `all`
       // still degrades rather than erroring, for the same reason.
@@ -171,7 +179,7 @@ resultsRouter.get(
           effectiveStatus = "completed";
         } else {
           const partials = await c.env.DB.prepare(
-            `SELECT COUNT(*) AS n FROM submissions WHERE form_id = ? AND status IN ('abandoned','in_progress')`,
+            `SELECT COUNT(*) AS n FROM submissions WHERE form_id = ? AND status IN ('abandoned','in_progress','disqualified')`,
           )
             .bind(id)
             .first<{ n: number }>();

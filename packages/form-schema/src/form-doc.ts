@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { RespondentAuthMethod } from "./respondent";
 import { AnswerMap } from "./answers";
 import { Block, type BlockMedia } from "./blocks";
+import type { ConditionGroup } from "./conditions";
 import { Ending, HiddenField, LogicRule, Variable } from "./logic";
 import { SettingsDoc, ThemeDoc } from "./settings";
 import { buildUpiUri } from "./payment-link";
@@ -55,6 +56,10 @@ export interface PublicBlock {
   maxSizeMB?: number;
   fields?: string[];
   consentText?: string;
+  /** legal_consent: whether an explicit refusal is offered, and the two labels. */
+  allowDecline?: boolean;
+  agreeLabel?: string;
+  declineLabel?: string;
   buttonLabel?: string;
   currency?: string;
   amount?: number;
@@ -186,6 +191,9 @@ export function toPublicBlock(b: Block): PublicBlock {
       break;
     case "legal_consent":
       pub.consentText = b.consentText;
+      pub.allowDecline = b.allowDecline;
+      pub.agreeLabel = b.agreeLabel;
+      pub.declineLabel = b.declineLabel;
       break;
     case "payment": {
       pub.currency = b.currency;
@@ -226,6 +234,10 @@ export interface PublicEnding {
   redirectUrl?: string;
   redirectDelaySec: number;
   showSummary: boolean;
+  /** `screen_out` means the form refused them; the client renders it as such. */
+  kind: Ending["kind"];
+  /** The requirements to show, already narrowed to the ones this response missed. */
+  requirements: string[];
 }
 
 /**
@@ -235,7 +247,20 @@ export interface PublicEnding {
  * redirect — so setting it did nothing. A per-ending value still wins; this is
  * the default beneath it.
  */
-export function toPublicEnding(e: Ending, fallback?: { redirectUrl?: string; delaySec: number }): PublicEnding {
+export function toPublicEnding(
+  e: Ending,
+  fallback?: { redirectUrl?: string; delaySec: number },
+  /**
+   * Decides whether a conditional requirement is unmet for THIS response.
+   *
+   * Passed by the session, which holds the answers; omitted by
+   * `toPublicConfig`, which is the form's shape and not anybody's run through
+   * it. Without it every requirement is listed — the full "here is what this
+   * form asks of you" set, which is the only honest answer when there are no
+   * answers to test.
+   */
+  isUnmet?: (when: ConditionGroup) => boolean,
+): PublicEnding {
   return {
     ref: e.ref,
     title: e.title,
@@ -245,6 +270,10 @@ export function toPublicEnding(e: Ending, fallback?: { redirectUrl?: string; del
     redirectUrl: e.redirectUrl ?? fallback?.redirectUrl,
     redirectDelaySec: e.redirectUrl ? e.redirectDelaySec : (fallback?.delaySec ?? e.redirectDelaySec),
     showSummary: e.showSummary,
+    kind: e.kind,
+    requirements: e.requirements
+      .filter((r) => r.when === null || !isUnmet || isUnmet(r.when))
+      .map((r) => r.label),
   };
 }
 

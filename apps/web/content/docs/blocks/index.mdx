@@ -39,7 +39,7 @@ against, so if a page says a value is valid, it is.
 | [Scheduling](/docs/blocks/scheduling) `scheduling` | Advanced | arrives out of band (an upload, a payment, or a booking) | `{ provider: string; url: string; slotIso?: string; confirmedAt?: number }` |
 | [Contact info](/docs/blocks/contact_info) `contact_info` | Contact | extracted from free text by the agent, then re-validated | `Record<'first_name' \| 'last_name' \| 'email' \| 'phone', string>` |
 | [Address](/docs/blocks/address) `address` | Contact | extracted from free text by the agent, then re-validated | `Record<'street' \| 'city' \| 'state' \| 'postal' \| 'country', string>` |
-| [Consent](/docs/blocks/legal_consent) `legal_consent` | Advanced | matched exactly — never sent to a model | `true` |
+| [Consent](/docs/blocks/legal_consent) `legal_consent` | Advanced | matched exactly — never sent to a model | `boolean` |
 
 The same information is available as JSON at `GET /v1/blocks`, which is the right
 source if you are building a UI that renders every type.

@@ -50,6 +50,16 @@ export interface EndingState {
   ctaUrl?: string;
   redirectUrl?: string;
   redirectDelaySec?: number;
+  /**
+   * `screen_out` means the form refused this response.
+   *
+   * Optional because the event is also replayed from sessions that finished
+   * before endings had a kind, and a stored ending read back without one is a
+   * success — the only reading that was ever possible then.
+   */
+  kind?: "success" | "screen_out";
+  /** On a screen-out, the requirements this response missed. Already narrowed server-side. */
+  requirements?: string[];
 }
 
 export type ConnectionStatus = "connecting" | "ready" | "reconnecting" | "ended" | "error";

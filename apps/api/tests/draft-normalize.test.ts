@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyBlockConfig, draftToDoc, resolveBranches, normalizeEditBlocks } from "../src/lib/draft-normalize.js";
+import { applyBlockConfig, draftToDoc, normalizeDraftEndings, resolveBranches, normalizeEditBlocks } from "../src/lib/draft-normalize.js";
 import { extractUrls, htmlToText } from "../src/lib/research.js";
 import { Block } from "@repo/form-schema";
 import type { GenerationDraft, EditDraft } from "../src/lib/ai.js";
@@ -20,8 +20,17 @@ const draft = (over: Partial<GenerationDraft>): GenerationDraft => ({
   title: "A form",
   description: "",
   blocks: [block({ ref: "welcome", type: "welcome", title: "Hi" }), block({ ref: "q_email", type: "email" })],
-  endings: [{ ref: "end_thanks", title: "Thanks", body: "" }],
+  endings: [{ ref: "end_thanks", title: "Thanks", body: "", kind: "success", requirements: "" }],
   branches: [],
+  ...over,
+});
+
+const ending = (over: Partial<GenerationDraft["endings"][number]>): GenerationDraft["endings"][number] => ({
+  ref: "end_thanks",
+  title: "Thanks",
+  body: "",
+  kind: "success",
+  requirements: "",
   ...over,
 });
 
@@ -503,5 +512,198 @@ describe("unique on a newly added question", () => {
     expect(team?.type === "short_text" && team.unique).toBe(true);
     // Off unless asked for. Every existing question keeps the behaviour it had.
     expect(city?.type === "short_text" && city.unique).toBe(false);
+  });
+});
+
+describe("screen-out endings from a draft", () => {
+  it("carries the kind through to the stored ending", () => {
+    const { doc } = draftToDoc(
+      draft({
+        endings: [
+          ending({}),
+          ending({
+            ref: "end_ineligible",
+            title: "You can't submit this",
+            kind: "screen_out",
+            requirements: "A team of 2 to 5 people | Agreement to the code of conduct",
+          }),
+        ],
+      }),
+    );
+    const out = doc.endings.find((e) => e.ref === "end_ineligible")!;
+    expect(out.kind).toBe("screen_out");
+    expect(out.requirements.map((r) => r.label)).toEqual([
+      "A team of 2 to 5 people",
+      "Agreement to the code of conduct",
+    ]);
+    // Unconditional: the model writes branches, not conditions, and the branch
+    // that routed here is the condition.
+    expect(out.requirements.every((r) => r.when === null)).toBe(true);
+  });
+
+  it("strips the bullets a model puts in front of a list", () => {
+    const { doc } = draftToDoc(
+      draft({
+        endings: [
+          ending({}),
+          ending({ ref: "end_no", title: "No", kind: "screen_out", requirements: "- Be 18 or over\n• Live in the EU" }),
+        ],
+      }),
+    );
+    expect(doc.endings[1]!.requirements.map((r) => r.label)).toEqual(["Be 18 or over", "Live in the EU"]);
+  });
+
+  it("ignores requirements written on a success ending", () => {
+    const { doc } = draftToDoc(draft({ endings: [ending({ requirements: "Something | Else" })] }));
+    expect(doc.endings[0]!.requirements).toEqual([]);
+  });
+
+  it("lets a branch point at the screen-out it was drafted with", () => {
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome", title: "Hi" }),
+          block({ ref: "q_size", type: "number", title: "Team size?" }),
+          block({ ref: "q_why", type: "long_text", title: "Why?" }),
+        ],
+        endings: [ending({}), ending({ ref: "end_ineligible", title: "No", kind: "screen_out", requirements: "2 to 5 people" })],
+        branches: [{ whenRef: "q_size", op: "gt", value: "5", then: "end_ineligible" }],
+      }),
+    );
+    const rule = doc.logic.find((r) => r.action_kind === "goto" && r.target === "end_ineligible");
+    expect(rule).toBeDefined();
+    expect(rule && rule.action_kind === "goto" && rule.targetKind).toBe("ending");
+  });
+});
+
+describe("a consent that can be declined", () => {
+  it("reads decline=true off the draft config", () => {
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome", title: "Hi" }),
+          block({
+            ref: "q_conduct",
+            type: "legal_consent",
+            title: "Code of conduct",
+            description: "I agree to the code of conduct.",
+            config: "decline=true; declineLabel=I do not agree",
+          }),
+        ],
+      }),
+    );
+    const consent = doc.blocks.find((b) => b.ref === "q_conduct")!;
+    expect(consent.type).toBe("legal_consent");
+    expect(consent.type === "legal_consent" && consent.allowDecline).toBe(true);
+    expect(consent.type === "legal_consent" && consent.declineLabel).toBe("I do not agree");
+  });
+
+  it("stays a turnstile when the config says nothing", () => {
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome", title: "Hi" }),
+          block({ ref: "q_terms", type: "legal_consent", title: "Terms", description: "I agree." }),
+        ],
+      }),
+    );
+    const consent = doc.blocks.find((b) => b.ref === "q_terms")!;
+    expect(consent.type === "legal_consent" && consent.allowDecline).toBe(false);
+  });
+
+  it("also accepts allowDecline, which is what a model tends to write", () => {
+    const patched = applyBlockConfig(
+      Block.parse({
+        id: "blk_c0000001",
+        ref: "q_terms",
+        type: "legal_consent",
+        title: "Terms",
+        consentText: "I agree.",
+      }),
+      "allowDecline=yes",
+    );
+    expect(patched && patched.type === "legal_consent" && patched.allowDecline).toBe(true);
+  });
+
+  it("turns the words a model uses for a refusal into a boolean condition", () => {
+    const consent = Block.parse({
+      id: "blk_c0000002",
+      ref: "q_conduct",
+      type: "legal_consent",
+      title: "Code of conduct",
+      consentText: "I agree.",
+      allowDecline: true,
+    });
+    const branches = resolveBranches(
+      [
+        { whenRef: "q_conduct", op: "eq", value: "declined", then: "end_no" },
+        { whenRef: "q_conduct", op: "eq", value: "I do not agree", then: "end_no" },
+        { whenRef: "q_conduct", op: "eq", value: "agreed", then: "q_next" },
+      ],
+      [consent],
+      new Map(),
+    );
+    expect(branches.map((b) => b.when.value)).toEqual([false, false, true]);
+  });
+});
+
+describe("editing the outcomes", () => {
+  it("changes an ending that is already in the form rather than adding a second", () => {
+    const existing = [
+      { id: "end_00000001", ref: "end_thanks", title: "Thanks", bodyMd: "", imageUrl: null, redirectDelaySec: 5, showSummary: false, kind: "success" as const, requirements: [] },
+    ];
+    const out = normalizeDraftEndings(
+      [{ ref: "end_thanks", title: "You're in", body: "See you Friday.", kind: "success", requirements: "" }],
+      existing,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]!.ref).toBe("end_thanks");
+    expect(out[0]!.id).toBe("end_00000001");
+    expect(out[0]!.title).toBe("You're in");
+  });
+
+  it("adds a screen-out beside the endings that are there", () => {
+    const existing = [
+      { id: "end_00000001", ref: "end_thanks", title: "Thanks", bodyMd: "", imageUrl: null, redirectDelaySec: 5, showSummary: false, kind: "success" as const, requirements: [] },
+    ];
+    const out = normalizeDraftEndings(
+      [{ ref: "end_ineligible", title: "You can't submit", body: "", kind: "screen_out", requirements: "Be 18 or over" }],
+      existing,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]!.ref).toBe("end_ineligible");
+    expect(out[0]!.kind).toBe("screen_out");
+  });
+
+  it("keeps the requirements a reword did not restate", () => {
+    const existing = [
+      {
+        id: "end_00000002",
+        ref: "end_no",
+        title: "No",
+        bodyMd: "",
+        imageUrl: null,
+        redirectDelaySec: 5,
+        showSummary: false,
+        kind: "screen_out" as const,
+        requirements: [{ id: "req_00000001", label: "A team of 2 to 5 people", when: null }],
+      },
+    ];
+    const out = normalizeDraftEndings(
+      [{ ref: "end_no", title: "You're not eligible this round", body: "", kind: "screen_out", requirements: "" }],
+      existing,
+    );
+    expect(out[0]!.title).toBe("You're not eligible this round");
+    expect(out[0]!.requirements.map((r) => r.label)).toEqual(["A team of 2 to 5 people"]);
+  });
+
+  it("does not collide a new ending's ref with one already taken", () => {
+    const existing = [
+      { id: "end_00000001", ref: "end_thanks", title: "Thanks", bodyMd: "", imageUrl: null, redirectDelaySec: 5, showSummary: false, kind: "success" as const, requirements: [] },
+    ];
+    // Same ref, different case — a model reaching for the obvious slug again.
+    const out = normalizeDraftEndings([{ ref: "END_THANKS ", title: "Second", body: "", kind: "success", requirements: "" }], existing);
+    expect(out[0]!.ref).toBe("end_thanks");
+    expect(out[0]!.id).toBe("end_00000001");
   });
 });
