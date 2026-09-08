@@ -24,6 +24,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { readableInk } from "@/lib/chat-theme";
 
@@ -69,9 +70,25 @@ export function FormCard({
   workspaces = [],
   currentWorkspaceId,
   onMove,
+  selected = false,
+  onSelectedChange,
+  anySelected = false,
 }: {
   form: FormRow;
   onDelete: () => void;
+  /** Ticked. Only meaningful when `onSelectedChange` is supplied. */
+  selected?: boolean;
+  /**
+   * Omitted entirely on a grid that does not do bulk actions, which is what
+   * keeps the checkbox from appearing where nothing could consume it.
+   */
+  onSelectedChange?: (next: boolean) => void;
+  /**
+   * Whether anything in the grid is ticked. Once something is, every card
+   * shows its box — hunting for a hover target you cannot see is not a way to
+   * build a selection.
+   */
+  anySelected?: boolean;
   /**
    * Where this form could go. Empty — the common case, one workspace — hides
    * the move submenu entirely rather than showing a menu with nothing in it.
@@ -81,7 +98,10 @@ export function FormCard({
   onMove?: (workspaceId: string) => void;
 }) {
   const published = form.status === "published";
-  const publicUrl = typeof window !== "undefined" ? `${window.location.origin}/f/${form.slug}` : "";
+  const publicUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/f/${form.slug}`
+      : "";
   const preview = form.preview ?? [];
   // The greeting opens the card; the questions describe it. A form with no
   // greeting leads with its first question instead, which is what a
@@ -103,7 +123,12 @@ export function FormCard({
           published ? "bg-[var(--success)]" : "bg-muted-foreground/40",
         )}
       />
-      <span className={cn("text-xs", published ? "text-[var(--success)]" : "text-muted-foreground")}>
+      <span
+        className={cn(
+          "text-xs",
+          published ? "text-[var(--success)]" : "text-muted-foreground",
+        )}
+      >
         {published ? "Live" : "Draft"}
       </span>
     </span>
@@ -120,7 +145,9 @@ export function FormCard({
       <span className="text-muted-foreground tabular text-xs">
         {form.responses} response{form.responses === 1 ? "" : "s"}
       </span>
-      <span className="text-muted-foreground text-xs">{relativeTime(form.updatedAt)}</span>
+      <span className="text-muted-foreground text-xs">
+        {relativeTime(form.updatedAt)}
+      </span>
     </>
   );
 
@@ -161,26 +188,30 @@ export function FormCard({
             this is how one ends up somewhere else. Without it a second
             workspace is a place new forms can be made and nothing can be moved
             into, which is a fork rather than a folder. */}
-        {onMove && workspaces.filter((w) => w.id !== currentWorkspaceId).length > 0 && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <FolderInput className="size-3.5" />
-                Move to
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                {workspaces
-                  .filter((w) => w.id !== currentWorkspaceId)
-                  .map((w) => (
-                    <DropdownMenuItem key={w.id} onSelect={() => onMove(w.id)}>
-                      <span className="min-w-0 truncate">{w.name}</span>
-                    </DropdownMenuItem>
-                  ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          </>
-        )}
+        {onMove &&
+          workspaces.filter((w) => w.id !== currentWorkspaceId).length > 0 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <FolderInput className="size-3.5" />
+                  Move to
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {workspaces
+                    .filter((w) => w.id !== currentWorkspaceId)
+                    .map((w) => (
+                      <DropdownMenuItem
+                        key={w.id}
+                        onSelect={() => onMove(w.id)}
+                      >
+                        <span className="min-w-0 truncate">{w.name}</span>
+                      </DropdownMenuItem>
+                    ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </>
+          )}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onSelect={onDelete}>
           <Trash2 className="size-3.5" />
@@ -190,61 +221,127 @@ export function FormCard({
     </DropdownMenu>
   );
 
+  const selectable = Boolean(onSelectedChange);
+
   /*
-   * One card, not two.
+   * Two elements, and the outer one never moves.
    *
-   * There used to be a `list` variant behind a grid/list toggle on the
-   * dashboard toolbar. The toggle is gone — a row of controls should be the
-   * ones that change *which* forms you see, not how tall they are — and a
-   * second layout nobody could reach was a second layout to keep working.
+   * The card lifts 2px on hover (DESIGN.md §4.4). When the lift was on the
+   * same element that owned `:hover`, the bottom 2px of every cell became a
+   * trap: the pointer enters, the card lifts away from it, the pointer is now
+   * outside, it un-hovers, the card drops back under the pointer, and it
+   * hovers again — a flicker for as long as you rest there, which reads as the
+   * layout shifting under the cursor.
+   *
+   * So the outer element is the hover target and holds still, and the inner
+   * one is the card you can see. `group-hover` drives the lift, the hit area
+   * stays exactly the size of the grid cell, and the movement is now purely
+   * something you watch rather than something you interact with.
+   *
+   * One card, not two, in the other sense: there used to be a `list` variant
+   * behind a grid/list toggle on the dashboard toolbar. The toggle is gone,
+   * and a second layout nobody could reach was a second layout to keep
+   * working.
    */
   return (
-    <div
-      className={cn(
-        "bg-card border-border group relative flex h-full flex-col overflow-hidden rounded-2xl border",
-        "shadow-xs transition-[box-shadow,transform] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
-        // Cards lift; buttons don't (DESIGN.md §4.4).
-        "hover:-translate-y-0.5 hover:shadow-md motion-reduce:hover:translate-y-0",
-        "focus-within:ring-ring/40 focus-within:ring-2",
-      )}
-    >
-      <Link href={`/forms/${form.id}/build`} className="flex min-w-0 flex-1 flex-col">
-        <ChatThumb opener={opener} answer={asks[0]} theme={form.theme} logoAlt={form.title} />
+    <div className="group relative h-full">
+      {/*
+        The tick box.
 
-        {/*
+        Top-left, opposite the quick actions, and outside the `<Link>` so
+        choosing a form is never one mis-aimed pixel from opening it. It fades
+        in on hover like the actions do — but the moment anything in the grid is
+        ticked, every box is visible, because a selection you extend by
+        remembering where invisible targets are is not a selection you can use.
+      */}
+      {selectable && (
+        <div
+          className={cn(
+            "absolute top-2 left-2 z-10 rounded-md p-1",
+            "bg-card/80 backdrop-blur-sm",
+            "transition-opacity duration-[var(--duration-micro)]",
+            selected || anySelected
+              ? "opacity-100"
+              : "opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100",
+          )}
+        >
+          <Checkbox
+            checked={selected}
+            onCheckedChange={(next) => onSelectedChange?.(next === true)}
+            aria-label={`Select ${form.title}`}
+          />
+        </div>
+      )}
+
+      <div
+        className={cn(
+          "bg-card border-border relative flex h-full flex-col overflow-hidden rounded-2xl border",
+          "shadow-xs transition-[box-shadow,transform,border-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
+          // Cards lift; buttons don't (DESIGN.md §4.4). Driven from the static
+          // wrapper, so the thing that moves is not the thing being hovered.
+          "group-hover:-translate-y-0.5 group-hover:shadow-md motion-reduce:group-hover:translate-y-0",
+          "group-focus-within:ring-ring/40 group-focus-within:ring-2",
+          // A ring rather than a thicker border: a border that changes width
+          // reflows the card's contents, which is the shift this whole
+          // arrangement exists to avoid.
+          selected && "ring-primary/60 border-primary/60 ring-2",
+        )}
+      >
+        <Link
+          href={`/forms/${form.id}/build`}
+          className="flex min-w-0 flex-1 flex-col"
+        >
+          <ChatThumb
+            opener={opener}
+            answer={asks[0]}
+            theme={form.theme}
+            logoAlt={form.title}
+          />
+
+          {/*
           Title and status, and nothing else.
           The questions used to run underneath as a dot-joined subtitle — but
           the thumbnail above is already the form's own opening line, so the
           subtitle repeated what the picture said, in worse form and at two
           lines a card. A grid is for recognising, not reading.
         */}
-        <div className="flex flex-1 flex-col p-4">
-          <h3 className="font-display truncate font-semibold">{form.title}</h3>
-          <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-3">{meta}</div>
-        </div>
-      </Link>
+          <div className="flex flex-1 flex-col p-4">
+            <h3 className="font-display truncate font-semibold">
+              {form.title}
+            </h3>
+            <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-3">
+              {meta}
+            </div>
+          </div>
+        </Link>
 
-      {/* Quick actions sit above the card link. Revealed on hover, but always
+        {/* Quick actions sit above the card link. Revealed on hover, but always
           present for keyboard focus and on touch, where there is no hover. */}
-      <div
-        className={cn(
-          "absolute top-2 right-2 flex items-center gap-0.5 rounded-full",
-          "bg-card/80 p-0.5 backdrop-blur-sm",
-          "opacity-0 transition-opacity duration-[var(--duration-micro)]",
-          "group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100",
-        )}
-      >
-        {published && (
-          <Button variant="ghost" size="icon-sm" aria-label="Copy public link" onClick={copyLink}>
-            <Link2 className="size-3.5" />
+        <div
+          className={cn(
+            "absolute top-2 right-2 flex items-center gap-0.5 rounded-full",
+            "bg-card/80 p-0.5 backdrop-blur-sm",
+            "opacity-0 transition-opacity duration-[var(--duration-micro)]",
+            "group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100",
+          )}
+        >
+          {published && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Copy public link"
+              onClick={copyLink}
+            >
+              <Link2 className="size-3.5" />
+            </Button>
+          )}
+          <Button variant="ghost" size="icon-sm" aria-label="Results" asChild>
+            <Link href={`/forms/${form.id}/results`}>
+              <BarChart3 className="size-3.5" />
+            </Link>
           </Button>
-        )}
-        <Button variant="ghost" size="icon-sm" aria-label="Results" asChild>
-          <Link href={`/forms/${form.id}/results`}>
-            <BarChart3 className="size-3.5" />
-          </Link>
-        </Button>
-        {actions}
+          {actions}
+        </div>
       </div>
     </div>
   );
@@ -346,13 +443,19 @@ function ChatThumb({
           ) : (
             <span
               className="grid size-5 shrink-0 place-items-center rounded-full"
-              style={{ backgroundColor: theme.accent, color: readableInk(theme.accent) }}
+              style={{
+                backgroundColor: theme.accent,
+                color: readableInk(theme.accent),
+              }}
             >
               <MessageSquare className="size-2.5" strokeWidth={2} />
             </span>
           )
         }
-        botStyle={{ backgroundColor: theme.botBubble, color: readableInk(theme.botBubble) }}
+        botStyle={{
+          backgroundColor: theme.botBubble,
+          color: readableInk(theme.botBubble),
+        }}
         botClassName="shadow-xs"
         answerStyle={{
           backgroundColor: theme.userBubble,
@@ -364,7 +467,13 @@ function ChatThumb({
   );
 }
 
-function ThumbFrame({ style, children }: { style: CSSProperties; children: React.ReactNode }) {
+function ThumbFrame({
+  style,
+  children,
+}: {
+  style: CSSProperties;
+  children: React.ReactNode;
+}) {
   return (
     <div className="relative h-28 shrink-0 overflow-hidden p-3" style={style}>
       {children}
@@ -427,5 +536,8 @@ export function relativeTime(ts: number): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.round(hours / 24);
   if (days < 30) return `${days}d ago`;
-  return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return new Date(ts).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
