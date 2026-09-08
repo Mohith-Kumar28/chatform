@@ -73,3 +73,35 @@ last step is a purchase decision.
 `apps/web/public/brand/avatar.png` is the same artwork as a 512px raster, for
 the places that want a square image rather than BIMI — Gravatar, a Google
 Business profile, an app directory listing.
+
+## 3. Square rasters, and which one is which
+
+Three files in `apps/web/public/brand/` look interchangeable and are not. Picking the
+wrong one is easy — it happened when setting the Dodo Payments brand logo, where the
+mono-on-orange tile went in and had to be replaced.
+
+| File | Artwork | Use it for |
+|---|---|---|
+| `email-mark.png` | duo mark, transparent, 96px | the lockup inside an email (§1) |
+| `bimi.svg` | **mono silhouette on solid `#FD6F29`** | BIMI only (§2) |
+| `avatar.png` | same mono-on-orange, 512px raster | Gravatar, Google Business, anywhere rendered small on a **white** ground |
+| `mark-duo-512.png` | duo mark, transparent, 512px | every other square slot — Dodo's brand logo, app directories, OAuth consent screens |
+
+The mono-on-orange pair exists for one reason, and it is not "the logo on a background":
+BIMI renders at ~26px inside a circle on a white inbox row, where the duo mark's white
+seam disappears and the shape reads as a blob. **On a dark surface that logic inverts** —
+Dodo's checkout panel is near-black, the seam shows through, and the two-plate mark is the
+right and only choice.
+
+Regenerating `mark-duo-512.png` from `public/logo.svg`:
+
+```sh
+sed 's/width="32" height="32"/width="512" height="512"/' apps/web/public/logo.svg > /tmp/mark-duo.svg
+magick -background none -density 1200 /tmp/mark-duo.svg -resize 512x512 \
+  -depth 8 -define png:color-type=6 -strip apps/web/public/brand/mark-duo-512.png
+```
+
+No padding is added on purpose. The mark's furthest point from centre is a tail tip at
+`(21.6, 3.9)` — a radius of 13.33 in a 16-unit half-box, so it already sits at 0.83 of a
+circular mask and cannot clip. Padding it "to be safe" is what made the first upload
+render visibly undersized next to the wordmark.
