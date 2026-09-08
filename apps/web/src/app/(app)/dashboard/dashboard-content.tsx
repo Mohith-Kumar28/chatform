@@ -3,15 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowUpDown,
-  LayoutGrid,
-  MessageSquarePlus,
-  Plus,
-  Rows3,
-  Search,
-  Sparkles,
-} from "lucide-react";
+import { ArrowUpDown, MessageSquarePlus, Plus, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import {
   getGetApiFormsQueryKey,
@@ -31,11 +23,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { NEW_FORM_EVENT } from "@/components/dashboard/use-app-shortcuts";
+import { WorkspaceSwitcher } from "@/components/dashboard/workspace-switcher";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterChips } from "@/components/ui/filter-chips";
-import { PageHeader } from "@/components/ui/page-header";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Select,
@@ -44,7 +35,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 import { AiCapBanner } from "@/components/billing/ai-cap-banner";
 import { CreateFormDialog } from "@/components/forms/create-form-dialog";
 import { FormCard, type FormRow } from "@/components/forms/form-card";
@@ -97,19 +87,9 @@ export function DashboardContent() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("newest");
   const [status, setStatus] = useState<StatusFilter>("all");
-  const [layout, setLayout] = useState<"grid" | "list">("grid");
   // ?new=1 lets the command palette open the create dialog.
   const [createOpen, setCreateOpen] = useState(searchParams.get("new") === "1");
   const [pendingDelete, setPendingDelete] = useState<FormRow | null>(null);
-
-  const liveCount = useMemo(
-    () => allForms.filter((f) => f.status === "published").length,
-    [allForms],
-  );
-  const totalResponses = useMemo(
-    () => allForms.reduce((sum, f) => sum + f.responses, 0),
-    [allForms],
-  );
 
   const forms = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -165,14 +145,66 @@ export function DashboardContent() {
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
-      <PageHeader
-        title="Forms"
-        description={
-          allForms.length > 0
-            ? `${allForms.length} form${allForms.length === 1 ? "" : "s"} · ${liveCount} live · ${totalResponses.toLocaleString()} response${totalResponses === 1 ? "" : "s"}`
-            : "Conversations that collect what you need."
-        }
-        actions={
+      {/*
+        No page title.
+
+        "Forms" sat above a grid of forms, in the one place the product only
+        ever shows forms, under a logo that links here. It named what was
+        already on screen. What replaced it is the workspace — the only label on
+        this page that says something the grid does not, because the grid looks
+        identical whichever folder you are in.
+
+        One row, and it is the row: what you are looking at on the left, how you
+        narrow it and what you make in the middle and right.
+      */}
+      <div className="flex flex-wrap items-center gap-2">
+        <WorkspaceSwitcher />
+
+        {allForms.length > 0 && (
+          <div className="relative min-w-0 flex-1 sm:max-w-xs">
+            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search forms…"
+              className="h-9 rounded-full pl-8"
+            />
+          </div>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+          {allForms.length > 0 && (
+            <>
+              {/* Counts dropped from the labels. Three chips reading
+                  "All 12 / Live 3 / Drafts 9" is six numbers to hold in your
+                  head to choose between three buttons. */}
+              <FilterChips
+                ariaLabel="Status"
+                value={status}
+                onChange={setStatus}
+                options={[
+                  { value: "all", label: "All" },
+                  { value: "live", label: "Live" },
+                  { value: "draft", label: "Drafts" },
+                ]}
+                className="hidden pb-0 sm:flex"
+              />
+
+              <Select value={sort} onValueChange={(v) => setSort(v as Sort)}>
+                <SelectTrigger className="h-9 w-auto gap-1.5 rounded-full">
+                  <ArrowUpDown className="size-3.5 opacity-60" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Recently updated</SelectItem>
+                  <SelectItem value="oldest">Oldest first</SelectItem>
+                  <SelectItem value="responses">Most responses</SelectItem>
+                  <SelectItem value="alpha">Name A–Z</SelectItem>
+                </SelectContent>
+              </Select>
+            </>
+          )}
+
           <TooltipProvider delayDuration={400}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -186,8 +218,8 @@ export function DashboardContent() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-        }
-      />
+        </div>
+      </div>
 
       {/* Only renders past 80% of the AI cap, and only for someone with forms — the rule is
           never to sell before there is data. */}
@@ -197,60 +229,9 @@ export function DashboardContent() {
         </div>
       )}
 
-      {allForms.length > 0 && (
-        <div className="mt-6 flex flex-wrap items-center gap-2">
-          <div className="relative min-w-0 flex-1 sm:max-w-xs">
-            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search forms and questions…"
-              className="h-9 rounded-full pl-8"
-            />
-          </div>
-
-          <FilterChips
-            ariaLabel="Status"
-            value={status}
-            onChange={setStatus}
-            options={[
-              { value: "all", label: "All", count: allForms.length },
-              { value: "live", label: "Live", count: liveCount },
-              { value: "draft", label: "Drafts", count: allForms.length - liveCount },
-            ]}
-            className="pb-0"
-          />
-
-          <Select value={sort} onValueChange={(v) => setSort(v as Sort)}>
-            <SelectTrigger className="h-9 w-auto gap-1.5 rounded-full">
-              <ArrowUpDown className="size-3.5 opacity-60" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="newest">Recently updated</SelectItem>
-              <SelectItem value="oldest">Oldest first</SelectItem>
-              <SelectItem value="responses">Most responses</SelectItem>
-              <SelectItem value="alpha">Name A–Z</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <SegmentedControl
-            size="sm"
-            ariaLabel="Layout"
-            options={[
-              { value: "grid", label: "", icon: LayoutGrid },
-              { value: "list", label: "", icon: Rows3 },
-            ]}
-            value={layout}
-            onChange={setLayout}
-            className="ml-auto hidden sm:inline-flex"
-          />
-        </div>
-      )}
-
       <div className="mt-6">
         {isLoading ? (
-          <div className={cn(layout === "grid" ? GRID : "space-y-2")}>
+          <div className={GRID}>
             {[0, 1, 2].map((i) => (
               <div key={i} className="shimmer h-64 rounded-2xl" />
             ))}
@@ -292,12 +273,11 @@ export function DashboardContent() {
             }
           />
         ) : (
-          <ul className={cn(layout === "grid" ? GRID : "space-y-2")} data-tour="form-grid">
+          <ul className={GRID} data-tour="form-grid">
             {forms.map((form) => (
               <li key={form.id}>
                 <FormCard
                   form={form}
-                  layout={layout}
                   onDelete={() => setPendingDelete(form)}
                   workspaces={workspaces}
                   currentWorkspaceId={currentWorkspaceId}

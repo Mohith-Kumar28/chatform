@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { ThemeDoc } from "@repo/form-schema";
+import { THEME_DEFAULT_INK, type ThemeDoc } from "@repo/form-schema";
 
 /**
  * Maps a form's ThemeDoc onto the scoped `--cf-*` variables the chat surface
@@ -39,6 +39,15 @@ export function isDarkColor(hex: string): boolean {
   return luminance(hex) < 0.45;
 }
 
+/** WCAG contrast ratio between two hex colors, 1–21. */
+export function contrast(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** The ratio body copy has to clear against the surface behind it (WCAG AA). */
+const AA_BODY = 4.5;
+
 /** Blend a hex color toward white or black by `amount` (0–1). */
 function shift(hex: string, amount: number, toward: "light" | "dark"): string {
   const h = hex.replace("#", "");
@@ -54,6 +63,34 @@ function shift(hex: string, amount: number, toward: "light" | "dark"): string {
     })
     .join("");
   return `#${out}`;
+}
+
+/**
+ * The most readable ink for a given fill: the fill itself taken almost to
+ * black, or almost to white, whichever wins.
+ *
+ * Both candidates are the *fill* shifted rather than flat `#000`/`#fff`, so the
+ * ink carries a trace of the bubble's hue and reads as part of the palette
+ * instead of stamped on top of it.
+ */
+export function readableInk(fill: string): string {
+  const dark = shift(fill, 0.88, "dark");
+  const light = shift(fill, 0.96, "light");
+  return contrast(fill, dark) >= contrast(fill, light) ? dark : light;
+}
+
+/**
+ * Ink for a fill, honouring a deliberate choice and rescuing everything else.
+ *
+ * A stored value still equal to the schema default means nobody picked it, so
+ * it derives — which is what fixes forms saved before this existed, with no
+ * migration and no re-save. A value someone did pick survives if it is legible
+ * on the fill it now sits on, and is overridden if it is not: a theme cannot be
+ * edited into a state where the answer is unreadable.
+ */
+function inkFor(fill: string, stored: string): string {
+  if (stored.trim().toLowerCase() === THEME_DEFAULT_INK.toLowerCase()) return readableInk(fill);
+  return contrast(fill, stored) >= AA_BODY ? stored : readableInk(fill);
 }
 
 export function chatThemeVars(theme: ThemeDoc): CSSProperties {
@@ -73,12 +110,12 @@ export function chatThemeVars(theme: ThemeDoc): CSSProperties {
     "--cf-text": theme.text,
     "--cf-muted": shift(theme.text, 0.4, darkSurface ? "dark" : "light"),
     "--cf-accent": theme.accent,
-    "--cf-accent-text": theme.accentText,
+    "--cf-accent-text": inkFor(theme.accent, theme.accentText),
     "--cf-bot-bubble": theme.botBubble,
-    "--cf-bot-bubble-text": theme.text,
+    "--cf-bot-bubble-text": contrast(theme.botBubble, theme.text) >= AA_BODY ? theme.text : readableInk(theme.botBubble),
     "--cf-bot-bubble-border": botBorder,
     "--cf-user-bubble": theme.userBubble,
-    "--cf-user-bubble-text": theme.userBubbleText,
+    "--cf-user-bubble-text": inkFor(theme.userBubble, theme.userBubbleText),
     "--cf-composer-bg": theme.surface,
     "--cf-chip-bg": theme.surface,
     "--cf-chip-border": shift(theme.text, 0.82, darkSurface ? "dark" : "light"),

@@ -55,16 +55,20 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <span className="font-display hidden font-semibold sm:inline">chatform</span>
             </Link>
 
-            {/* The organization only. Workspace moved down onto the forms
-                toolbar, where the list it scopes actually is: the header is
-                every screen, and a folder of forms means nothing on Settings or
-                Templates. Two nested switchers side by side also read as one
-                two-part control, which is what made picking the wrong one easy. */}
-            {/* The gear sits with the organization, because that is what it
-                opens: members, workspaces, plan, API keys. On the right it read
-                as an account control — next to the avatar, which is the one
-                menu in the header that is genuinely about you rather than about
-                the organization you are in. */}
+            {/* The organization, and the gear that configures it.
+
+                The gear sits here because that is what it opens: members,
+                workspaces, plan, API keys. On the right it read as an account
+                control — next to the avatar, which is the one menu in the
+                header that is genuinely about you rather than about the
+                organization you are in.
+
+                The workspace switcher used to sit between them and has moved
+                down onto the forms toolbar, where the list it scopes actually
+                is: the header is every screen, and a folder of forms means
+                nothing on Settings or Templates. Two nested switchers side by
+                side also read as one two-part control, which is what made
+                picking the wrong one easy. */}
             <div className="hidden items-center gap-0.5 md:flex">
               <OrganizationSwitcher />
               <Button variant="ghost" size="icon-sm" asChild aria-label="Organization settings">

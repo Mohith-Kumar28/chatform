@@ -62,7 +62,7 @@ interface Workspace {
   createdAt: number;
 }
 
-export function WorkspaceSwitcher() {
+export function WorkspaceSwitcher({ className }: { className?: string } = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -135,14 +135,24 @@ export function WorkspaceSwitcher() {
   return (
     <>
       <DropdownMenu>
+        {/*
+          A bordered control, and visible at every width.
+
+          It used to be a bare ghost pill hidden below `md`, because it lived in
+          the app header among other ghost pills. It now sits on the forms
+          toolbar as the label for the list underneath it — the one control on
+          that row that says what you are looking at rather than how it is
+          filtered — so it reads as a control, and a phone gets it too.
+        */}
         <DropdownMenuTrigger
           className={cn(
-            "hover:bg-muted text-muted-foreground hover:text-foreground hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-sm md:inline-flex",
+            "border-border bg-card hover:bg-muted inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm",
             "focus-visible:ring-ring/50 outline-none transition-colors focus-visible:ring-2",
+            className,
           )}
         >
-          <Folder className="size-3.5" strokeWidth={1.75} />
-          <span className="max-w-32 truncate">{current?.name ?? "Workspace"}</span>
+          <Folder className="size-3.5 opacity-60" strokeWidth={1.75} />
+          <span className="max-w-32 truncate font-medium">{current?.name ?? "Workspace"}</span>
           <ChevronsUpDown className="size-3 opacity-50" />
         </DropdownMenuTrigger>
 

@@ -50,14 +50,12 @@ export interface FormRow {
  */
 export function FormCard({
   form,
-  layout,
   onDelete,
   workspaces = [],
   currentWorkspaceId,
   onMove,
 }: {
   form: FormRow;
-  layout: "grid" | "list";
   onDelete: () => void;
   /**
    * Where this form could go. Empty — the common case, one workspace — hides
@@ -178,19 +176,14 @@ export function FormCard({
     </DropdownMenu>
   );
 
-  if (layout === "list") {
-    return (
-      <div className="bg-card border-border hover:bg-muted/40 flex items-center gap-4 rounded-xl border px-4 py-3 transition-colors duration-[var(--duration-micro)]">
-        <Link href={`/forms/${form.id}/build`} className="min-w-0 flex-1">
-          <p className="truncate font-medium">{form.title}</p>
-          <p className="text-muted-foreground mt-0.5 truncate text-xs">{description}</p>
-        </Link>
-        <div className="hidden items-center gap-3 sm:flex">{meta}</div>
-        {actions}
-      </div>
-    );
-  }
-
+  /*
+   * One card, not two.
+   *
+   * There used to be a `list` variant behind a grid/list toggle on the
+   * dashboard toolbar. The toggle is gone — a row of controls should be the
+   * ones that change *which* forms you see, not how tall they are — and a
+   * second layout nobody could reach was a second layout to keep working.
+   */
   return (
     <div
       className={cn(

@@ -10,45 +10,63 @@ import { LockedControl } from "@/components/billing/gate";
 
 type Theme = FormDoc["theme"];
 
+/**
+ * Five fills, and no ink.
+ *
+ * "Their text" used to sit here as a sixth swatch, which put the one decision
+ * with a right answer in the hands of whoever was clicking. The runtime now
+ * derives ink from the fill behind it (`readableInk`), so the panel offers only
+ * the choices that are actually taste.
+ */
 const COLOR_FIELDS: { key: keyof Theme; label: string }[] = [
   { key: "background", label: "Background" },
   { key: "text", label: "Text" },
   { key: "accent", label: "Accent" },
   { key: "botBubble", label: "Agent bubble" },
   { key: "userBubble", label: "Their bubble" },
-  { key: "userBubbleText", label: "Their text" },
 ];
 
 /**
- * `Chatform` is the product's own palette and the schema's defaults, so the
- * first preset is the form you already have rather than a fifth thing to try.
- * It is the only two-hue preset: accent orange for what you press, violet for
- * the respondent's own words — the mark's two plates, in the mark's roles.
+ * A preset moves the accent and the respondent's bubble together, and it puts
+ * them at different lightnesses on purpose.
  *
- * The others stay single-hue on purpose. A preset is a starting point someone
- * then edits one field of, and a two-colour scheme with one field changed is
- * how a form ends up with a palette nobody chose.
+ * The accent is the thing you press, so it stays saturated — a pale button is
+ * a button people miss. The respondent's bubble is a passage of their own
+ * writing, so it is a tint: light enough that dark ink sits above 9:1 on it,
+ * dark enough to stand clear of the page. The old presets had the bubble at
+ * full strength, which is the one lightness that serves neither job — nothing
+ * reads well on a mid-tone, and a form that picked violet still sent in orange
+ * because the accent had not moved with it.
+ *
+ * `Chatform` is the only preset that keeps two hues: the mark's orange for the
+ * action, the mark's violet for the respondent. That reads as a palette now
+ * that the violet is a tint under the orange rather than a second fill
+ * competing with it.
  */
 const PRESETS: { name: string; theme: Partial<Theme> }[] = [
   {
     name: "Chatform",
-    theme: { background: "#faf7f2", accent: "#FD6F29", botBubble: "#ffffff", userBubble: "#9D6EE4", text: "#1c1917" },
+    theme: { background: "#faf7f2", accent: "#FD6F29", botBubble: "#ffffff", userBubble: "#C9AEEE", text: "#1c1917" },
+  },
+  {
+    name: "Violet",
+    theme: { background: "#f8f5fd", accent: "#6D3FC7", botBubble: "#ffffff", userBubble: "#C9AEEE", text: "#1e1b26" },
   },
   {
     name: "Warm",
-    theme: { background: "#faf7f2", accent: "#FD6F29", botBubble: "#ffffff", userBubble: "#FD6F29", text: "#1c1917" },
-  },
-  {
-    name: "Midnight",
-    theme: { background: "#0c0a09", accent: "#B48DF4", botBubble: "#1c1917", userBubble: "#B48DF4", text: "#fafaf9" },
+    theme: { background: "#faf7f2", accent: "#FD6F29", botBubble: "#ffffff", userBubble: "#FFCBAA", text: "#1c1917" },
   },
   {
     name: "Ocean",
-    theme: { background: "#f0f9ff", accent: "#0ea5e9", botBubble: "#ffffff", userBubble: "#0ea5e9", text: "#0c4a6e" },
+    theme: { background: "#f4f9fd", accent: "#0369A1", botBubble: "#ffffff", userBubble: "#B9DCF6", text: "#0c2f47" },
   },
   {
     name: "Forest",
-    theme: { background: "#f7fee7", accent: "#16a34a", botBubble: "#ffffff", userBubble: "#16a34a", text: "#14532d" },
+    theme: { background: "#f5faf6", accent: "#166534", botBubble: "#ffffff", userBubble: "#B9E4C8", text: "#14321f" },
+  },
+  {
+    name: "Midnight",
+    theme: { background: "#14111c", accent: "#B48DF4", botBubble: "#221d30", userBubble: "#453862", text: "#f5f3f8" },
   },
 ];
 
@@ -125,6 +143,10 @@ export function ThemePanel({
             );
           })}
         </div>
+        <p className="text-muted-foreground text-xs">
+          Text on the accent and on their bubble is chosen for you, so an answer stays readable
+          whatever colour you pick.
+        </p>
       </Section>
 
       <Section title="Shape">
