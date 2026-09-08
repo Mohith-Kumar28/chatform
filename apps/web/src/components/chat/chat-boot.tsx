@@ -1,5 +1,7 @@
 "use client";
 
+import { LogoMark } from "@/components/brand/logo";
+
 /**
  * What fills the screen while we work out which screen this is.
  *
@@ -30,13 +32,15 @@ export function ChatBoot({ title, logoUrl }: { title?: string; logoUrl?: string 
         <span className="chat-boot-ring chat-boot-ring-delayed motion-reduce:hidden" />
         {logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt="" className="relative size-12 rounded-2xl object-contain" />
+          <img src={logoUrl} alt={title ?? ""} className="relative size-12 rounded-2xl object-contain" />
         ) : (
           <span
-            className="relative grid size-12 place-items-center rounded-2xl text-lg font-semibold"
+            className="relative grid size-12 place-items-center rounded-2xl"
             style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+            role="img"
+            aria-label={title ?? "chatform"}
           >
-            {(title ?? "").trim().charAt(0).toUpperCase() || "?"}
+            <LogoMark variant="mono" className="size-6" />
           </span>
         )}
       </div>

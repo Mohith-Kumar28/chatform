@@ -6,6 +6,8 @@ import type { Block, ThemeDoc } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { isOverlay, type EmbedConfig } from "@/lib/embed-snippet";
 import { cn } from "@/lib/utils";
+import { LogoMark } from "@/components/brand/logo";
+import { useEntitlements } from "@/hooks/use-entitlements";
 
 /**
  * What the embed looks like on somebody else's page.
@@ -353,14 +355,21 @@ function MockConversation({
 }) {
   const script = useMemo(() => conversationScript(blocks), [blocks]);
   const pad = compact ? "px-4" : "px-5";
+  const { can } = useEntitlements();
+  const logoUrl = can("brand_logo") ? theme.logoUrl : null;
 
   return (
     <div className="chat-surface flex h-full flex-col overflow-hidden" style={chatThemeVars(theme)}>
       <header className="shrink-0">
         <div className={cn("flex items-center gap-3 py-3", pad)}>
-          <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-[var(--cf-accent)] text-sm font-semibold text-[var(--cf-accent-text)]">
-            {(theme.brandName || title || "F").charAt(0).toUpperCase()}
-          </div>
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl} alt="" className="size-8 shrink-0 rounded-xl object-contain" />
+          ) : (
+            <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-[var(--cf-accent)] text-[var(--cf-accent-text)]">
+              <LogoMark variant="mono" className="size-4" />
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{title}</p>
             <p className="text-xs opacity-60">Question 2 of {Math.max(script.total, 2)}</p>

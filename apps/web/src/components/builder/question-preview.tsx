@@ -8,6 +8,8 @@ import { PaymentAffordance } from "@/components/chat/payment-affordance";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { cn } from "@/lib/utils";
 import { API_ORIGIN } from "@/lib/api/mutator";
+import { LogoMark } from "@/components/brand/logo";
+import { useEntitlements } from "@/hooks/use-entitlements";
 
 
 /**
@@ -26,24 +28,33 @@ export function QuestionPreview({ doc, block }: { doc: FormDoc; block: Block }) 
   const pub = useMemo(() => toPublicBlock(block), [block]);
   const agentName = doc.settings.agent.displayName || doc.title;
 
+  // Brand logo/name are a Pro feature (`brand_logo`) — publish strips them for
+  // a plan that doesn't include it, so a free-plan preview must show the same
+  // chatform-branded chrome a respondent will actually get, not the logo that
+  // is sitting in the draft waiting for an upgrade.
+  const { can } = useEntitlements();
+  const branded = can("brand_logo");
+  const logoUrl = branded ? doc.theme.logoUrl : null;
+  const brandName = branded ? doc.theme.brandName : undefined;
+
   return (
     <div
       className="chat-surface shadow-md flex max-h-full flex-col overflow-hidden rounded-2xl"
       style={themeVars}
     >
       <header className="flex items-center gap-2.5 px-4 py-3">
-        {doc.theme.logoUrl ? (
+        {logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={doc.theme.logoUrl} alt="" className="size-7 shrink-0 rounded-lg object-contain" />
+          <img src={logoUrl} alt="" className="size-7 shrink-0 rounded-lg object-contain" />
         ) : (
-          <div className="grid size-7 shrink-0 place-items-center rounded-lg bg-[var(--cf-accent)] text-xs font-semibold text-[var(--cf-accent-text)]">
-            {agentName.charAt(0).toUpperCase()}
+          <div className="grid size-7 shrink-0 place-items-center rounded-lg bg-[var(--cf-accent)] text-[var(--cf-accent-text)]">
+            <LogoMark variant="mono" className="size-3.5" />
           </div>
         )}
         <p className="min-w-0 truncate text-sm font-medium">
           {agentName}
-          {doc.theme.brandName && (
-            <span className="ml-1.5 font-normal opacity-50">· {doc.theme.brandName}</span>
+          {brandName && (
+            <span className="ml-1.5 font-normal opacity-50">· {brandName}</span>
           )}
         </p>
       </header>

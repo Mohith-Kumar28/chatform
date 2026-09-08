@@ -22,6 +22,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
+import { LogoMark } from "@/components/brand/logo";
 import { AuthCard } from "./auth-card";
 import { useChat, type ChatMessage } from "./use-chat";
 import { SendRow, TextInput } from "./composers/primitives";
@@ -432,7 +433,7 @@ function ChatHeader({
     <header className="sticky top-0 z-10 bg-[var(--cf-bg)]/95 backdrop-blur">
       <div className="mx-auto flex w-full max-w-2xl items-center gap-3 px-4 py-3">
         {/* The brand logo takes the avatar slot when there is one; otherwise
-            the form's initial, so an unbranded form still looks deliberate. */}
+            the chatform mark, so an unbranded form still looks deliberate. */}
         {logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -441,8 +442,12 @@ function ChatHeader({
             className="size-8 shrink-0 rounded-xl object-contain"
           />
         ) : (
-          <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-[var(--cf-accent)] text-sm font-semibold text-[var(--cf-accent-text)]">
-            {title.charAt(0).toUpperCase()}
+          <div
+            className="grid size-8 shrink-0 place-items-center rounded-xl bg-[var(--cf-accent)] text-[var(--cf-accent-text)]"
+            role="img"
+            aria-label={title}
+          >
+            <LogoMark variant="mono" className="size-4" />
           </div>
         )}
         <div className="min-w-0 flex-1">

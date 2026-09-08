@@ -73,13 +73,9 @@ export function ThemePanel({
   return (
     <div className="w-full space-y-6">
       <Section title="Brand">
-        {/*
-          Left fully usable in the builder on purpose: they upload their logo and see their
-          form wearing it. Publish strips the reference and says so. That is the highest-
-          intent moment in the product, and the alternative — a padlock over an empty
-          uploader — sells nothing because they never see what they are missing.
-        */}
-        <BrandField theme={theme} onChange={patch} />
+        <LockedControl feature="brand_logo">
+          <BrandField theme={theme} onChange={patch} />
+        </LockedControl>
       </Section>
 
       <Section title="Presets">

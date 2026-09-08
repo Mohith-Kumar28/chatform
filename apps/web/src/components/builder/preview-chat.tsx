@@ -6,6 +6,7 @@ import { FormDoc, toPublicConfig } from "@repo/form-schema";
 import { ChatClient } from "@/components/chat/chat-client";
 import { Button } from "@/components/ui/button";
 import { API_ORIGIN } from "@/lib/api/mutator";
+import { useEntitlements } from "@/hooks/use-entitlements";
 
 
 /**
@@ -70,14 +71,23 @@ export function PreviewChat({
     });
   }, [start, structureKey, nonce]);
 
-  const config = useMemo(
-    () =>
-      toPublicConfig(doc, {
-        slug: doc.title.toLowerCase().replace(/\s+/g, "-"),
-        brandingHidden: true,
-      }),
-    [doc],
-  );
+  // `toPublicConfig` here runs on the working draft, not a published version,
+  // so nothing has stripped a Pro-only brand logo/name yet the way publish
+  // does (see `stripForPublish`). Mirror that here so this preview shows the
+  // chrome a respondent will actually get rather than what publish would undo.
+  const { can } = useEntitlements();
+  const branded = can("brand_logo");
+  const config = useMemo(() => {
+    const c = toPublicConfig(doc, {
+      slug: doc.title.toLowerCase().replace(/\s+/g, "-"),
+      brandingHidden: true,
+    });
+    if (!branded) {
+      c.theme.logoUrl = null;
+      c.theme.brandName = undefined;
+    }
+    return c;
+  }, [doc, branded]);
 
   return (
     <div className="flex h-full w-full flex-col">
