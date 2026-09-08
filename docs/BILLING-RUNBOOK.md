@@ -108,9 +108,22 @@ means this environment can actually take money.
 
 ### 1.6 Switch on the free revenue
 
-Dashboard → Settings: enable **subscription payment retries**, **dunning emails** and
+Dashboard → Settings → **Recovery**: enable **payment retries**, **dunning** and
 **abandoned cart recovery**. All three are switches, not integrations, and all three recover
 money we would otherwise lose.
+
+**They are per-mode.** Switching them on in test does nothing for live, and they default to
+off — so a freshly live business silently has none of them until someone goes and looks.
+All three are on in live as of 2026-09-08. "Give customers a discount code" under abandoned
+cart is deliberately off: it discounts people who would have paid full price anyway.
+
+**The retry window and our grace window are not the same number.** Dodo's *Recovery window*
+defaults to **13 days**; `subscription.on_hold` opens a **7-day** grace here (§6). Days 8–13
+a customer reads as Free while Dodo is still retrying their card. It self-heals — a
+successful retry sends `subscription.active` and the plan comes straight back — so this is a
+presentation gap, not a data one. Closing it means either dropping Dodo's window to 7 (less
+recovered revenue) or widening `grace_until` to 13 (access extended on an unpaid invoice).
+Left at 13/7 until a real failed renewal says which is worse.
 
 ---
 
@@ -318,17 +331,35 @@ endpoint on its second run, and therefore duplicate deliveries of every event. I
 | R2 | `chatform-uploads` |
 | Queues | `q-submissions` (+dlq) · `q-webhooks` (+dlq) · `q-exports` |
 | Cron | `*/5 * * * *` |
-| Dodo mode | **test** |
-| Dodo webhook endpoint | `ep_3IUCJQrmhTL5MssQsTxNu8jKR4z` |
-| Dodo product collection | `pdc_0NmHTirlIydWZHZ1OW3P8` |
+| Dodo mode | **live — real money** (since 2026-09-08) |
+| Dodo webhook endpoint | `ep_3IzRqJmHxaSRU5Oc8a9IB5iI8Vd` |
+| Dodo product collection | `pdc_0Nn4KsmmETgQqrYkfc2HO` |
 
-Test-mode product ids:
+Live product ids — what `plans` is linked to:
+
+| Plan | Monthly | Yearly |
+|---|---|---|
+| Pro | `pdt_0Nn4KGcrS5d4iD9eiA0IB` | `pdt_0Nn4KGZpLCUKGSUmbIDmx` |
+| Business | `pdt_0Nn4KGWKVfzZ3VQYnyGB1` | `pdt_0Nn4KGTVzrxr6gR7CWHEP` |
+| Extra seat | `pdt_0Nn4KGQgj1lkYKUranm8a` | `pdt_0Nn4KGNj9rxr3PYQJy9qZ` |
+
+Test-mode ids, kept because a `signature_mismatch` or a 404 on a subscription id is
+usually one of these turning up where a live one was expected:
 
 | Plan | Monthly | Yearly |
 |---|---|---|
 | Pro | `pdt_0NmHTTaWTtrASRA1M25Y5` | `pdt_0NmHTTc5x2DkD86HlMs0B` |
 | Business | `pdt_0NmHTTdrTzJ7AbZaoXpXh` | `pdt_0NmHTTgFZ3u00c4cDafet` |
 | Extra seat | `pdt_0NmHTTiGzGCwEF2cSwDmR` | `pdt_0NmHTTjrDGluqztWXEZLn` |
+
+Test-mode webhook endpoint `ep_3IUCJQrmhTL5MssQsTxNu8jKR4z` and collection
+`pdc_0NmHTirlIydWZHZ1OW3P8` still exist in test mode and are unaffected.
+
+**The worker is live; `apps/api/.dev.vars` is deliberately still test.** Local dev runs
+against the sandbox, so a checkout started on localhost cannot charge a real card. The
+live key and signing secret live in `.prod.vars` and on the worker, nowhere else. If you
+ever put the live key into `.dev.vars` to re-run the provisioner, put the test one back
+afterwards.
 
 Secrets on the worker: `BETTER_AUTH_SECRET`, `SIGNING_SALT`, and whatever
 `--push-secrets` has uploaded. Check with
@@ -345,8 +376,9 @@ same thing:
 | `APP_ORIGIN` | where **this API** answers. Better Auth's `baseURL`. |
 | `WEB_ORIGINS` | comma-separated list of **browser app** origins allowed to drive it. First entry is the default redirect target. |
 
-Currently `WEB_ORIGINS` is
-`https://chatform.in,http://localhost:3000,https://chatform-web.mohithkumar808.workers.dev`.
+Currently `WEB_ORIGINS` is `https://chatform.in,http://localhost:3000` — two, not the three
+this file used to claim; the `chatform-web.*.workers.dev` entry is no longer listed.
+`GET /api/billing/config-check` reports the live list, so check there rather than here.
 
 All three are listed on purpose: `returnOrigin()` (see `lib/origins.ts`) picks whichever
 listed origin the request actually came from, so one deployed API serves local dev and
@@ -357,6 +389,13 @@ real domain leads.
 `localhost:3000` in a production list is a deliberate trade: it lets a local frontend work
 against the deployed API, at the cost of the production API accepting credentialed requests
 from anything on a developer's own port 3000. Drop it if that stops being worth it.
+
+**That trade got more expensive in live mode.** A local frontend pointed at the deployed API
+now starts checkouts that charge real cards, and `returnOrigin()` will happily send the
+customer back to `localhost:3000` afterwards. Nothing is broken by it — the entry is only
+reachable by someone already signed in on this machine — but the reason to keep it (local
+dev against production) is now the reason to remove it. Drop it from `.prod.vars` and
+`pnpm secrets:push` when you no longer develop that way.
 
 An unlisted origin is never reflected: doing so would hand anyone who can reach the
 endpoint control of where checkout redirects.

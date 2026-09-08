@@ -35,6 +35,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEV_VARS = REPO_ROOT / "apps" / "api" / ".dev.vars"
+PROD_VARS = REPO_ROOT / "apps" / "api" / ".prod.vars"
 
 TEST_BASE = "https://test.dodopayments.com"
 LIVE_BASE = "https://live.dodopayments.com"
@@ -69,6 +70,17 @@ PRODUCTS = [
 
 COLLECTION_NAME = "chatform plans"
 
+# The plan-change defaults, set to match what `lib/dodo.ts` asks for on our own
+# change-plan calls. Kept in one place because they are reconciled onto a collection that
+# already exists as well as sent when creating one: Dodo accepted them at creation and
+# persisted only `on_payment_failure`, so a collection created by an earlier run can sit
+# there with both `effective_at_*` fields null and nothing to show it.
+COLLECTION_SETTINGS = {
+    "effective_at_on_upgrade": "immediately",
+    "effective_at_on_downgrade": "next_billing_date",
+    "on_payment_failure": "prevent_change",
+}
+
 # Dodo sits behind Cloudflare, whose bot protection rejects the default `Python-urllib/3.x`
 # User-Agent with a plain-text "error code: 1010" and HTTP 403 — which reads exactly like a
 # rejected API key and is not one. Any ordinary UA gets through.
@@ -96,16 +108,20 @@ def read_dev_var(name: str) -> str | None:
     return None
 
 
-def write_dev_var(name: str, value: str) -> None:
+def write_var(path: Path, name: str, value: str) -> None:
     """Set or replace one variable, leaving the rest of the file untouched."""
-    lines = DEV_VARS.read_text().splitlines() if DEV_VARS.exists() else []
+    lines = path.read_text().splitlines() if path.exists() else []
     for i, line in enumerate(lines):
         if line.startswith(f"{name}="):
             lines[i] = f"{name}={value}"
             break
     else:
         lines.append(f"{name}={value}")
-    DEV_VARS.write_text("\n".join(lines) + "\n")
+    path.write_text("\n".join(lines) + "\n")
+
+
+def write_dev_var(name: str, value: str) -> None:
+    write_var(DEV_VARS, name, value)
 
 
 # ───────────────────────────────── the API ─────────────────────────────────────
@@ -288,6 +304,8 @@ def ensure_collection(dodo: Dodo, product_ids: dict[str, str]) -> str | None:
         if (c.get("name") or "") == COLLECTION_NAME:
             cid = c.get("id") or c.get("product_collection_id") or ""
             say(f"  = product collection → {cid}")
+            if cid:
+                reconcile_collection(dodo, cid)
             return cid or None
 
     plan_products = [
@@ -311,9 +329,7 @@ def ensure_collection(dodo: Dodo, product_ids: dict[str, str]) -> str | None:
                     "products": [{"product_id": pid} for pid in plan_products],
                 }
             ],
-            "effective_at_on_upgrade": "immediately",
-            "effective_at_on_downgrade": "next_billing_date",
-            "on_payment_failure": "prevent_change",
+            **COLLECTION_SETTINGS,
         },
     )
     if status not in (200, 201) or not isinstance(body, dict):
@@ -323,6 +339,34 @@ def ensure_collection(dodo: Dodo, product_ids: dict[str, str]) -> str | None:
     cid = body.get("id") or body.get("product_collection_id") or ""
     say(f"  + product collection → {cid} ({len(plan_products)} plans)")
     return cid or None
+
+
+def reconcile_collection(dodo: Dodo, cid: str) -> None:
+    """
+    Put the plan-change defaults back on a collection that already exists.
+
+    Finding the collection by name and returning is not enough. What matters is not that a
+    collection exists but that a downgrade taken in the customer portal waits for the
+    period boundary — unset, it applies immediately and revokes access someone already paid
+    for. That is invisible until the first customer downgrades, so it is checked every run.
+
+    Non-fatal, like everything else about the collection.
+    """
+    status, body = dodo.call("GET", f"/product-collections/{cid}")
+    if status != 200 or not isinstance(body, dict):
+        say(f"    ! could not read the collection back (HTTP {status}), settings unchecked")
+        return
+
+    drift = {k: v for k, v in COLLECTION_SETTINGS.items() if body.get(k) != v}
+    if not drift:
+        return
+
+    status, _ = dodo.call("PATCH", f"/product-collections/{cid}", drift)
+    if status in (200, 201, 204):
+        say(f"    ✓ plan-change settings corrected: {', '.join(sorted(drift))}")
+    else:
+        say(f"    ! {', '.join(sorted(drift))} could not be set (HTTP {status})")
+        say("      a portal downgrade may apply immediately — set them in the dashboard")
 
 
 def ensure_webhook(dodo: Dodo, webhook_url: str) -> None:
@@ -461,6 +505,20 @@ def main() -> None:
             say("  ! DODO_WEBHOOK_SECRET not in .dev.vars — run with --webhook-url first")
         if push_worker_secret("DODO_ENVIRONMENT", mode):
             say(f"  ✓ DODO_ENVIRONMENT={mode}")
+
+        # `.prod.vars` is the source of truth for the worker's configuration, and
+        # `pnpm secrets:push` re-uploads all of it. Uploading here without mirroring the
+        # three values into that file leaves the two disagreeing, and the next unrelated
+        # `secrets:push` would quietly put the worker back on the old key and mode — a
+        # live business reverting to test on someone else's deploy.
+        if PROD_VARS.exists():
+            write_var(PROD_VARS, "DODO_API_KEY", key)
+            write_var(PROD_VARS, "DODO_ENVIRONMENT", mode)
+            if hook_secret:
+                write_var(PROD_VARS, "DODO_WEBHOOK_SECRET", hook_secret)
+            say("  ✓ mirrored into apps/api/.prod.vars (not printed)")
+        else:
+            say("  ! apps/api/.prod.vars does not exist — nothing to keep in sync")
 
     say("")
     say("Done. Next:")
