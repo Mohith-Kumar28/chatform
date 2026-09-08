@@ -310,25 +310,37 @@ export function FormCard({
             onCheckedChange={(next) => onSelectedChange?.(next === true)}
             aria-label={`Select ${form.title}`}
             className={cn(
-              // Bigger, and outlined in the accent.
-              //
-              // At 18px with a hairline border it disappeared into whatever
-              // artwork was behind it — a pale box on a pale thumbnail, which
-              // is most of them. The accent edge is the one colour on the card
-              // guaranteed to be neither the thumbnail nor the page, so the box
-              // reads as a control at a glance instead of as a smudge, and the
-              // shadow lifts it off the picture rather than sitting flat in it.
+              /*
+               * Bigger, outlined in the accent, and filled *against* the
+               * artwork rather than with it.
+               *
+               * At 18px with a hairline border it disappeared into whatever was
+               * behind it. Going up to 22px with an accent edge helped, but the
+               * fill was still white — and a form's own background is pale on
+               * most themes, so a white box on a near-white thumbnail was a
+               * bright shape on a bright ground with only the border doing any
+               * work.
+               *
+               * The fill now opposes the thumbnail: dark on light artwork,
+               * light on dark. That is the one rule that cannot fail, because
+               * it is derived from the surface rather than guessed. Checked, it
+               * becomes the accent with `--primary-foreground` ink, which is
+               * dark and clears AA on the orange — so the tick reads on the one
+               * fill this does not choose.
+               *
+               * The `dark:` halves are not redundant: `Checkbox` ships
+               * `dark:bg-input/30`, and a dark variant beats a plain utility of
+               * the same specificity on source order, so a fill set here comes
+               * out as that instead the moment the app is in dark mode.
+               */
               "size-[22px] border-2 shadow-md",
               "border-primary data-[state=checked]:border-primary",
-              // The fill still follows the thumbnail, so the tick has something
-              // to be legible against. `dark:` spelled out because `Checkbox`
-              // ships `dark:bg-input/30`, and a dark variant beats a plain
-              // utility of the same specificity on source order.
               thumbIsDark === null
-                ? "bg-card"
+                ? // The brand band follows `--background`, so oppose the app.
+                  "bg-stone-800 dark:bg-stone-100"
                 : thumbIsDark
-                  ? "bg-stone-900 dark:bg-stone-900"
-                  : "bg-white dark:bg-white",
+                  ? "bg-stone-100 dark:bg-stone-100"
+                  : "bg-stone-800 dark:bg-stone-800",
             )}
           />
         </div>
