@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Search, Settings as SettingsIcon } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { AuthGuard } from "./auth-guard";
 import { APP_NAV } from "./app-nav";
 import { AppMark } from "./app-mark";
@@ -77,30 +77,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 rarely, and what it opens (members, plan, workspaces, API keys)
                 is the organization, not the account.
 
-                The gear sits beside the name, visible without opening
-                anything. It went inside the menu for a while on the argument
-                that a rarely-opened page should not hold a permanent header
-                slot — but a settings control you have to open a switcher to
-                find is a settings control people stop finding, and one click
-                beats two for the screen you go to when something needs
-                changing. It is not in both places: on a desktop header that
-                would be the same destination twice within a centimetre.
-
-                A separate button rather than something inside the trigger,
-                because a button nested in a button is neither valid nor
-                operable — it reads as beside the name, which is the point. */}
-            <div className="hidden items-center gap-0.5 md:flex">
+                The gear rides inside that control now — same bordered pill,
+                right of the name — so this slot holds one thing rather than a
+                switcher and a button that merely sit next to each other. */}
+            <div className="hidden items-center md:flex">
               <OrganizationSwitcher />
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                asChild
-                aria-label="Organization settings"
-              >
-                <Link href="/settings">
-                  <SettingsIcon className="size-4" strokeWidth={1.75} />
-                </Link>
-              </Button>
             </div>
 
             {/*
@@ -161,19 +142,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 rendering a lone settings button next to an invisible switcher
                 on every phone. The trigger now shows wherever it is placed and
                 the header gates it instead, so the drawer gets the real control
-                and the gear travels inside its menu like everywhere else. */}
-            <div className="flex items-center gap-0.5 p-4">
+                and the gear rides inside the switcher, as it does in the
+                header. */}
+            <div className="flex items-center p-4">
               <OrganizationSwitcher />
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                asChild
-                aria-label="Organization settings"
-              >
-                <Link href="/settings" onClick={() => setNavOpen(false)}>
-                  <SettingsIcon className="size-4" strokeWidth={1.75} />
-                </Link>
-              </Button>
             </div>
             <nav className="space-y-0.5 px-2 pb-4" aria-label="Main">
               {APP_NAV.map((item) => {

@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, ChevronsUpDown, Loader2, Plus } from "lucide-react";
+import Link from "next/link";
+import {
+  Building2,
+  ChevronsUpDown,
+  Loader2,
+  Plus,
+  Settings as SettingsIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { authClient, useListOrganizations } from "@/lib/auth/auth-client";
 import { useActiveOrg } from "@/hooks/use-active-org";
@@ -102,19 +109,57 @@ export function OrganizationSwitcher() {
 
   return (
     <>
+      {/*
+        One control with two halves: pick the organization, or configure it.
+
+        The gear has been in four places — the right-hand cluster beside the
+        avatar, loose on the header line, inside the menu, loose again — and the
+        thing that kept being wrong was never which page it opened, it was that
+        it read as a separate control that happened to sit nearby. Inside the
+        same bordered pill it reads as part of the organization control, which
+        is what it is.
+
+        Two siblings in a bordered wrapper rather than a gear inside the
+        trigger: a `<button>` cannot contain a `<button>`, and a link inside the
+        trigger would open the menu on its way to navigating. Each half keeps
+        its own hover and focus ring so it is still obvious there are two things
+        to press.
+      */}
       <DropdownMenu>
-        <DropdownMenuTrigger
+        <div
           className={cn(
-            "hover:bg-muted text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm",
-            "focus-visible:ring-ring/50 outline-none transition-colors focus-visible:ring-2",
+            "border-border/80 bg-card inline-flex items-center rounded-full border",
+            "text-muted-foreground text-sm",
           )}
         >
-          <Building2 className="size-3.5" strokeWidth={1.75} />
-          <span className="max-w-32 truncate">
-            {current?.name ?? "Organization"}
-          </span>
-          <ChevronsUpDown className="size-3 opacity-50" />
-        </DropdownMenuTrigger>
+          <DropdownMenuTrigger
+            className={cn(
+              "hover:bg-muted hover:text-foreground inline-flex items-center gap-1.5 rounded-l-full py-1 pr-2 pl-2.5",
+              "focus-visible:ring-ring/50 outline-none transition-colors focus-visible:ring-2",
+            )}
+          >
+            <Building2 className="size-3.5" strokeWidth={1.75} />
+            <span className="max-w-32 truncate">
+              {current?.name ?? "Organization"}
+            </span>
+            <ChevronsUpDown className="size-3 opacity-50" />
+          </DropdownMenuTrigger>
+
+          {/* Hairline, so the two halves are visibly separate targets rather
+              than one wide button that does different things at each end. */}
+          <span aria-hidden className="bg-border/80 h-4 w-px shrink-0" />
+
+          <Link
+            href="/settings"
+            aria-label={`Settings for ${current?.name ?? "this organization"}`}
+            className={cn(
+              "hover:bg-muted hover:text-foreground rounded-r-full px-2 py-1.5",
+              "focus-visible:ring-ring/50 outline-none transition-colors focus-visible:ring-2",
+            )}
+          >
+            <SettingsIcon className="size-3.5" strokeWidth={1.75} />
+          </Link>
+        </div>
 
         <DropdownMenuContent align="start" className="w-64">
           <div className="flex items-center gap-2 px-2 py-1.5">
