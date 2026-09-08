@@ -1,5 +1,6 @@
 import { source } from "@/lib/source";
 import { COMPARISONS } from "@/content/compare";
+import { USE_CASES } from "@/content/use-cases";
 import { posts } from "@/lib/blog-source";
 import { SITE_ORIGIN } from "@/lib/seo";
 
@@ -39,6 +40,12 @@ export function GET() {
     `- [For AI assistants](${SITE_ORIGIN}/ai-info): What chatform is, what it costs, and the things it genuinely cannot do.`,
     `- [Why conversation works](${SITE_ORIGIN}/why-conversation-works): The peer-reviewed research on conversational data collection, with DOIs — and what it does not show.`,
     `- [Pricing](${SITE_ORIGIN}/pricing): Plans, limits and the full feature matrix.`,
+    "",
+    "## Guides, by what you are trying to do",
+    "",
+    ...USE_CASES.map(
+      (entry) => `- [${entry.name}](${SITE_ORIGIN}${entry.path}): ${entry.description}`,
+    ),
     "",
     "## Comparisons",
     "",

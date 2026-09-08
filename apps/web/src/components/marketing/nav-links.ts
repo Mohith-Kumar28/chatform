@@ -15,6 +15,6 @@
 export const MARKETING_LINKS = [
   { href: "/why-conversation-works", label: "Why chat?" },
   { href: "/compare", label: "Compare" },
-  { href: "/docs", label: "Docs" },
   { href: "/pricing", label: "Pricing" },
+  { href: "/docs", label: "Docs" },
 ] as const;

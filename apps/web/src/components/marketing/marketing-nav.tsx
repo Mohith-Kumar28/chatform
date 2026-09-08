@@ -17,6 +17,8 @@ import {
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { useSession } from "@/lib/auth/auth-client";
 import { Logo } from "@/components/brand/logo";
+import { UseCasesMenu } from "./use-cases-menu";
+import { USE_CASE_GROUPS } from "@/content/use-cases";
 import { cn } from "@/lib/utils";
 
 /**
@@ -28,11 +30,14 @@ import { cn } from "@/lib/utils";
  */
 
 /**
- * Four links, not five. `/#question-types` is gone because the section it
- * pointed at is gone — the 26-tile grid moved to `/pricing#question-types`,
- * and `/#compare` moved with it. A nav link to an anchor that no longer
- * exists scrolls nowhere and says nothing, which is exactly the bug the
- * removed `/templates` link had.
+ * Four flat links, plus the one that opens.
+ *
+ * `Use cases` is a menu rather than a link because the answer to "can it do
+ * the thing I need?" is a list, and a list of twelve specific jobs is more
+ * persuasive at a glance than any single page about them. It sits first: most
+ * people arriving here are not shopping for a form builder in the abstract,
+ * they have one thing they need to ask people, and the nav should show them
+ * their thing before it shows them ours.
  */
 // Shared with the docs shell so both navigate the same way.
 const LINKS = MARKETING_LINKS;
@@ -96,6 +101,7 @@ export function MarketingNav() {
         </Link>
 
         <ul className="hidden flex-1 items-center gap-1 lg:flex">
+          <UseCasesMenu onWash={overWash && !scrolled} />
           {LINKS.map((link) => (
             <li key={link.href}>
               <Link
@@ -152,20 +158,43 @@ export function MarketingNav() {
                   <Logo />
                 </SheetTitle>
               </SheetHeader>
-              <ul className="flex flex-col gap-1 px-4">
-                {LINKS.map((link) => (
-                  <li key={link.href}>
-                    <SheetClose asChild>
-                      <Link
-                        href={link.href}
-                        className="text-body-lg hover:bg-accent/60 block rounded-lg px-3 py-2.5"
-                      >
-                        {link.label}
-                      </Link>
-                    </SheetClose>
-                  </li>
-                ))}
-              </ul>
+              {/* On a phone there is no hover, so the menu is flattened into
+                  the sheet rather than reproduced as a nested disclosure
+                  somebody has to open with a thumb. */}
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+                <ul className="flex flex-col gap-1">
+                  {LINKS.map((link) => (
+                    <li key={link.href}>
+                      <SheetClose asChild>
+                        <Link
+                          href={link.href}
+                          className="text-body-lg hover:bg-accent/60 block rounded-lg px-3 py-2.5"
+                        >
+                          {link.label}
+                        </Link>
+                      </SheetClose>
+                    </li>
+                  ))}
+                </ul>
+
+                <p className="text-micro text-muted-foreground mt-5 px-3 font-semibold tracking-[0.12em] uppercase">
+                  Use cases
+                </p>
+                <ul className="mt-1.5 flex flex-col gap-0.5">
+                  {USE_CASE_GROUPS.flatMap((group) => group.items).map((item) => (
+                    <li key={item.slug}>
+                      <SheetClose asChild>
+                        <Link
+                          href={item.path}
+                          className="text-body hover:bg-accent/60 block rounded-lg px-3 py-2"
+                        >
+                          {item.name}
+                        </Link>
+                      </SheetClose>
+                    </li>
+                  ))}
+                </ul>
+              </div>
               <div className="mt-auto flex flex-col gap-2 p-4">
                 {isPending ? (
                   <div className="shimmer h-9 rounded-full" aria-hidden />

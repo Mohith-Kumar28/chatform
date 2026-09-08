@@ -32,7 +32,15 @@ const POINTS = [
   },
 ] as const;
 
-const FACTS = ["4 ways to embed", "330+ Cloudflare cities", "2–5s typical turn"] as const;
+/*
+ * "330+ Cloudflare cities" was the middle fact. It named our hosting provider
+ * to an audience that is either a developer — who will read the docs and find
+ * out properly — or, far more often, a salon owner who has no idea what that
+ * sentence means and now feels this product is not for them. What both of them
+ * actually want to know is whether it will be quick for the person filling the
+ * form in, so that is what it says.
+ */
+const FACTS = ["4 ways to embed", "Fast from 330+ cities", "2–5s typical turn"] as const;
 
 export function Developers() {
   return (
@@ -40,9 +48,17 @@ export function Developers() {
       <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-center lg:gap-16">
         <div>
           <BandTitle>Every form is an API.</BandTitle>
+          {/*
+            The lede's first job is to give most readers permission to leave.
+            This band sits on a dark ground in the middle of a page written for
+            people who run salons and coaching centres, and to them an
+            unannounced section about backends reads as "this product is not
+            for you". One sentence fixes that, and costs the developers who
+            *are* the audience nothing at all.
+          */}
           <BandLede tone="ink">
-            Drive the conversation from your own backend, or drop it in with one script
-            tag. Same runtime either way.
+            If you have a developer, this bit is for them. If you do not, you will never
+            need any of it — skip straight to the pricing.
           </BandLede>
 
           <ul className="mt-9 flex flex-col gap-5">

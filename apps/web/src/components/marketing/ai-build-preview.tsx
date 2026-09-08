@@ -14,7 +14,33 @@ import { ArrowUp, Check, Link2, Sparkles } from "lucide-react";
  * email, a team size, a budget band. Nothing here claims a question type the
  * builder does not have — every `tone` below is a real family and every label
  * is a question you can actually make.
+ *
+ * It takes props now, with the landing page's values as the defaults. The
+ * use-case guides each show *their own* form being drafted — a booking form on
+ * the booking page, a testimonial form on the testimonial page — because a
+ * reader who came looking for one specific thing should see that thing, not a
+ * design agency's onboarding. Same component, same rules: every `tone` must be
+ * a real family and every question must be one the builder can actually make.
  */
+
+/** A family key, so the tint matches what the builder would draw. */
+export type DraftedTone = "content" | "text" | "contact" | "number" | "choice" | "scale" | "advanced";
+
+export interface DraftedQuestion {
+  label: string;
+  /** The type as the builder names it — "Short text", "Rating", "Date". */
+  type: string;
+  tone: DraftedTone;
+}
+
+export interface AiBuildPreviewProps {
+  /** What was typed into the prompt bar. */
+  prompt?: string;
+  /** The page it read first, if the story includes one. Omit to hide the row. */
+  readUrl?: string;
+  readPages?: number;
+  questions?: readonly DraftedQuestion[];
+}
 
 /** Real families, so the tinting matches what the builder would draw. */
 const DRAFTED = [
@@ -24,15 +50,25 @@ const DRAFTED = [
   { label: "Rough budget?", type: "Single select", tone: "choice" },
 ] as const;
 
-export function AiBuildPreview() {
+export function AiBuildPreview({
+  prompt = "Onboarding for a design agency",
+  /**
+   * No default. It used to be `"northwind.co"`, which meant every use-case
+   * guide that did not mention reading a website inherited one anyway — the
+   * hair salon guide claimed the builder had read six pages of a design
+   * agency's site. A default that is wrong wherever it is not overridden is a
+   * default that should not exist.
+   */
+  readUrl,
+  readPages = 6,
+  questions = DRAFTED,
+}: AiBuildPreviewProps = {}) {
   return (
     <div className="border-border/70 bg-background text-foreground overflow-hidden rounded-xl border shadow-sm">
       {/* The prompt bar, in the state just after you hit send. */}
       <div className="border-border/60 flex items-center gap-2 border-b px-3 py-2.5">
         <Sparkles className="text-primary size-3.5 shrink-0" strokeWidth={2} />
-        <p className="text-caption min-w-0 flex-1 truncate">
-          Onboarding for a design agency
-        </p>
+        <p className="text-caption min-w-0 flex-1 truncate">{prompt}</p>
         <span className="bg-primary text-primary-foreground grid size-6 shrink-0 place-items-center rounded-md">
           <ArrowUp className="size-3.5" strokeWidth={2.5} />
         </span>
@@ -40,20 +76,23 @@ export function AiBuildPreview() {
 
       {/* The URL it read before drafting. This is the step people do not
           expect, so it gets its own line rather than being folded into the
-          prompt. */}
-      <div className="border-border/60 text-muted-foreground flex items-center gap-2 border-b px-3 py-2">
-        <Link2 className="size-3 shrink-0" strokeWidth={2} />
-        <p className="text-micro min-w-0 flex-1 truncate font-mono">
-          read northwind.co — 6 pages
-        </p>
-        <Check className="text-[var(--success)] size-3 shrink-0" strokeWidth={3} />
-      </div>
+          prompt. Hidden entirely when the story does not involve a site — a
+          row saying "read nothing" would be worse than no row. */}
+      {readUrl && (
+        <div className="border-border/60 text-muted-foreground flex items-center gap-2 border-b px-3 py-2">
+          <Link2 className="size-3 shrink-0" strokeWidth={2} />
+          <p className="text-micro min-w-0 flex-1 truncate font-mono">
+            read {readUrl} — {readPages} pages
+          </p>
+          <Check className="text-[var(--success)] size-3 shrink-0" strokeWidth={3} />
+        </div>
+      )}
 
       <div className="flex flex-col gap-1.5 p-3">
         <p className="text-micro text-muted-foreground mb-0.5 font-semibold tracking-[0.1em] uppercase">
-          Drafted 4 questions
+          Drafted {questions.length} questions
         </p>
-        {DRAFTED.map((q) => (
+        {questions.map((q) => (
           <div
             key={q.label}
             className="flex items-center gap-2.5 rounded-lg px-2.5 py-2"

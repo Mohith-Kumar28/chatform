@@ -16,6 +16,7 @@ const COLUMNS = [
   {
     title: "Product",
     links: [
+      { href: "/use-cases", label: "What people use it for" },
       { href: "/#the-moment", label: "How it answers back" },
       { href: "/#product", label: "How it works" },
       { href: "/pricing#question-types", label: "Question types" },
@@ -42,13 +43,33 @@ const COLUMNS = [
     ],
   },
   {
-    title: "Resources",
+    title: "Learn",
     links: [
+      { href: "/use-cases", label: "Guides by use case" },
       { href: "/why-conversation-works", label: "Why conversation works" },
       { href: "/blog", label: "Writing" },
-      { href: "/docs", label: "Documentation" },
-      { href: "/docs/headless", label: "Headless API" },
       { href: "/ai-info", label: "For AI assistants" },
+    ],
+  },
+  {
+    /*
+     * Developer material, in one place, behind its own heading.
+     *
+     * It used to be mixed into a general "Resources" column beside the
+     * research page and the blog, which put "Headless API" two lines under
+     * something written for a salon owner. Most people arriving here are not
+     * developers and have no idea what a headless API is; the ones who are
+     * will find this column in a second because it is labelled with their
+     * word. Separating them costs one column and stops the footer reading as
+     * though the product is for engineers.
+     */
+    title: "Developers",
+    links: [
+      { href: "/docs", label: "Documentation" },
+      { href: "/docs/quickstart", label: "Quickstart" },
+      { href: "/docs/embed", label: "Embed on your site" },
+      { href: "/docs/headless", label: "Headless API" },
+      { href: "/docs/webhooks", label: "Webhooks" },
     ],
   },
   {
@@ -64,7 +85,7 @@ const COLUMNS = [
 export function MarketingFooter() {
   return (
     <footer className="border-border/60 border-t px-6 py-14">
-      <div className="mx-auto grid max-w-6xl gap-10 sm:grid-cols-2 lg:grid-cols-[1.3fr_repeat(4,1fr)]">
+      <div className="mx-auto grid max-w-6xl gap-10 sm:grid-cols-2 lg:grid-cols-[1.2fr_repeat(5,1fr)]">
         <div>
           <Logo />
           {/* The one place on the page that names the category outright. A
@@ -80,8 +101,8 @@ export function MarketingFooter() {
               crowding out the only sentence on the page that says what the
               product is. */}
           <p className="text-body text-muted-foreground mt-3 max-w-xs">
-            AI chat forms. They read what people write, ask again when an answer is too thin,
-            and answer questions back.
+            Forms that ask like a person. They read what someone writes, ask again when the
+            answer is too thin to use, and answer questions back.
           </p>
           <div className="mt-4">
             <ThemeToggle />
@@ -109,7 +130,16 @@ export function MarketingFooter() {
 
       <div className="border-border/60 text-micro text-muted-foreground mx-auto mt-12 flex max-w-6xl flex-col gap-2 border-t pt-6 sm:flex-row sm:items-center sm:justify-between">
         <p>© {new Date().getFullYear()} chatform</p>
-        <p>Built on Cloudflare Workers · D1 · Durable Objects · R2</p>
+        {/*
+          This said "Built on Cloudflare Workers · D1 · Durable Objects · R2".
+          Four proper nouns, at the very bottom of the page, aimed at nobody
+          who was still reading. The person who has scrolled a whole marketing
+          site runs a salon or a studio or a small agency; they do not know
+          what a Durable Object is and there is no version of this sentence
+          that makes them want the product more. A developer who cares reads
+          the docs, where it is written down properly.
+        */}
+        <p>Made with care, for people who have to ask other people things.</p>
       </div>
     </footer>
   );

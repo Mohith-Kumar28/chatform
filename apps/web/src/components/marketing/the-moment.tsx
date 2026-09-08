@@ -28,7 +28,7 @@ const CALLOUTS = [
   {
     icon: CornerDownLeft,
     title: "Never loses its place",
-    body: "The state machine still owns the form. Nothing gets skipped or reordered.",
+    body: "Your form is still in charge. Nothing gets skipped, nothing gets asked twice.",
   },
   {
     icon: Zap,

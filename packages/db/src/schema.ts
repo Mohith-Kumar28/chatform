@@ -345,6 +345,17 @@ export const submissions = sqliteTable(
     startedAt: ts("started_at").notNull().$defaultFn(() => new Date()),
     completedAt: ts("completed_at"),
     durationMs: integer("duration_ms"),
+    /**
+     * Answering time, accumulated across sittings.
+     *
+     * `duration_ms` is `now - started_at`, which was right while a response
+     * could only be finished in one go. A follow-up can bring someone back
+     * three days later, and wall clock would then report a three-day
+     * completion — in the completion-time analytics a customer pays to read.
+     * This carries the time actually spent in the conversation so the
+     * abandonment gap can be excluded.
+     */
+    activeMs: integer("active_ms").notNull().default(0),
   },
   (t) => [
     index("idx_submissions_form_status").on(t.formId, t.status, t.startedAt),

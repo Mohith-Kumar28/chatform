@@ -71,6 +71,13 @@
       "when": 1788797156194,
       "tag": "0009_grandfather_verified_emails",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788883556194,
+      "tag": "0010_followups",
+      "breakpoints": true
     }
   ]
 }

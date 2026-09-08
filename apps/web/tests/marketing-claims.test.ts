@@ -4,6 +4,7 @@ import { QUESTION_TYPE_COUNT } from "@/components/marketing/question-types";
 import { COMPARISONS } from "@/content/compare";
 import { STUDIES } from "@/content/research";
 import { VENDORS, ROWS } from "@/components/marketing/comparison-data";
+import { USE_CASES, USE_CASE_GROUPS, getUseCase } from "@/content/use-cases";
 
 /**
  * The marketing copy makes countable claims. This is what stops them rotting.
@@ -88,5 +89,60 @@ describe("research citations", () => {
   it("names no study twice", () => {
     const ids = STUDIES.map((entry) => entry.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+/**
+ * The use-case guides are the largest body of authored content on the site and
+ * the one most likely to rot quietly: a `related` slug that no longer exists
+ * renders as a missing card, and a guide with no group vanishes from the nav
+ * menu without anything failing.
+ */
+describe("use-case guides", () => {
+  it("every related link points at a guide that exists", () => {
+    for (const entry of USE_CASES) {
+      for (const slug of entry.related) {
+        expect(getUseCase(slug), `${entry.slug} → ${slug}`).toBeDefined();
+      }
+      expect(entry.related, entry.slug).not.toContain(entry.slug);
+    }
+  });
+
+  it("every guide appears in exactly one nav group", () => {
+    const grouped = USE_CASE_GROUPS.flatMap((group) => group.items);
+    expect(grouped).toHaveLength(USE_CASES.length);
+    for (const entry of USE_CASES) {
+      expect(grouped.filter((item) => item.slug === entry.slug), entry.slug).toHaveLength(1);
+    }
+  });
+
+  it("uses a unique slug and a unique sample response reference", () => {
+    const slugs = USE_CASES.map((entry) => entry.slug);
+    expect(new Set(slugs).size).toBe(slugs.length);
+    const refs = USE_CASES.map((entry) => entry.responseReference);
+    expect(new Set(refs).size).toBe(refs.length);
+  });
+
+  it("gives every step a body and every figure something to draw", () => {
+    for (const entry of USE_CASES) {
+      for (const step of entry.steps) {
+        expect(step.body.length, `${entry.slug} / ${step.title}`).toBeGreaterThan(40);
+      }
+      // The prompt has to be shown somewhere, or there is nothing to copy.
+      expect(entry.steps.some((step) => step.figure === "prompt"), entry.slug).toBe(true);
+    }
+  });
+
+  it("shows three extracted fields beside the sample transcript", () => {
+    for (const entry of USE_CASES) {
+      expect(entry.resultFields.length, entry.slug).toBe(3);
+    }
+  });
+
+  it("does not collide with a comparison slug or a real route", () => {
+    const comparisonSlugs = new Set(COMPARISONS.map((entry) => entry.slug));
+    for (const entry of USE_CASES) {
+      expect(comparisonSlugs.has(entry.slug), entry.slug).toBe(false);
+    }
   });
 });

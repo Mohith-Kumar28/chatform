@@ -198,6 +198,42 @@ export function articleLd(article: LdArticle): LdNode {
   };
 }
 
+export interface LdHowToStep {
+  name: string;
+  text: string;
+}
+
+/**
+ * `HowTo`, for the use-case guides.
+ *
+ * These pages are literally instructions — "here is how to set up a booking
+ * form" — and `HowTo` is the one schema type that says so. It is also the type
+ * most likely to be quoted back by an assistant answering "how do I take
+ * bookings without a website", which is exactly the question those pages are
+ * written to win.
+ */
+export function howToLd({
+  name,
+  description,
+  steps,
+}: {
+  name: string;
+  description: string;
+  steps: readonly LdHowToStep[];
+}): LdNode {
+  return {
+    "@type": "HowTo",
+    name,
+    description,
+    step: steps.map((step, index) => ({
+      "@type": "HowToStep",
+      position: index + 1,
+      name: step.name,
+      text: step.text,
+    })),
+  };
+}
+
 export function itemListLd(items: readonly { name: string; path: string }[]): LdNode {
   return {
     "@type": "ItemList",

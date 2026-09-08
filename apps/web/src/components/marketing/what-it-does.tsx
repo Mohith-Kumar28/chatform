@@ -53,29 +53,39 @@ const BUILD_WAYS = [
   },
 ] as const;
 
-/** The last tile: everything that is genuinely a one-liner, kept as one. */
+/**
+ * The last tile: everything that is genuinely a one-liner, kept as one.
+ *
+ * Written for whoever is reading, which on this band is everybody. Two of
+ * these used to be spec sheet — "Signed webhooks / HMAC-SHA256, delivery log,
+ * queued retries" and "Branch-aware analytics" — sitting in a list that is
+ * otherwise about not losing people's answers. Nobody who needs an HMAC
+ * signature is finding out about it from a landing page tile; they are reading
+ * the webhook documentation. Anyone else was being shown four words of
+ * cryptography in the middle of a sentence about their own form.
+ */
 const REST = [
   {
     tone: "contact",
-    label: "Verified respondents",
-    detail: "Google or a six-digit SMS code, one response each",
+    label: "Know who answered",
+    detail: "Sign-in or a texted code, one response each",
   },
   {
     tone: "choice",
     label: "Leave and come back",
-    detail: "Answers persist; any earlier one can be changed",
+    detail: "Answers are kept; any earlier one can be changed",
   },
   {
     tone: "advanced",
-    label: "Signed webhooks",
-    detail: "HMAC-SHA256, delivery log, queued retries",
+    label: "Tell your other tools",
+    detail: "New answers can be pushed anywhere you like",
   },
   {
     tone: "scale",
-    label: "Branch-aware analytics",
+    label: "See where people stop",
     detail: "Drop-off along the path each person actually took",
   },
-  { tone: "number", label: "CSV export", detail: "One column per question" },
+  { tone: "number", label: "Download it all", detail: "A spreadsheet, one column per question" },
   {
     tone: "content",
     label: "Your brand, not ours",
@@ -136,7 +146,7 @@ export function WhatItDoes() {
           </div>
 
           <div className="mt-6 lg:mt-0 lg:self-center">
-            <AiBuildPreview />
+            <AiBuildPreview readUrl="northwind.co" readPages={6} />
             {/* One pen mark in this band, on the line people do not believe
                 until they see it. In normal flow rather than absolutely
                 positioned: the first attempt floated it over the panel's
