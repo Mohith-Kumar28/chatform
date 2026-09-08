@@ -31,6 +31,22 @@ export interface TemplateSummary {
   usageCount?: number;
 }
 
+/**
+ * One template with its document, as `GET /api/templates/{slug}` returns it.
+ *
+ * The document is `unknown` here rather than `FormDoc`: typing it as the schema
+ * would be a promise this file cannot keep — nothing in the browser validates
+ * it — and the endpoint has already parsed it, so the detail page casts once,
+ * where it can say why.
+ */
+export interface TemplateDetailPayload extends TemplateSummary {
+  blurb: string;
+  tags: string[];
+  blockCount: number;
+  estMinutes: number;
+  doc: unknown;
+}
+
 /** How many of the most-used templates the "Popular" filter shows. */
 export const POPULAR_COUNT = 8;
 

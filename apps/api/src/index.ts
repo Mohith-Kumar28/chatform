@@ -12,6 +12,7 @@ import {
   sweepExpiredResponses,
   sweepExpiredSessions,
   sweepPartialNotifications,
+  sweepFollowUps,
   pruneTestData,
   pruneIdempotencyKeys,
 } from "./lib/sweeps.js";
@@ -96,6 +97,13 @@ export default {
       await sweepExpiredResponses(env).catch((err) => console.error("response_sweep_failed", err));
       await sweepExpiredSessions(env).catch((err) => console.error("session_sweep_failed", err));
       await sweepPartialNotifications(env).catch((err) => console.error("partial_sweep_failed", err));
+      /**
+       * Nudges for responses somebody walked away from. The five-minute cron is
+       * the resolution of the whole feature: a delay configured in hours does
+       * not need better than that, and a row that comes due between ticks is
+       * simply picked up on the next one.
+       */
+      await sweepFollowUps(env).catch((err) => console.error("followup_sweep_failed", err));
       await pruneIdempotencyKeys(env).catch((err) => console.error("idempotency_prune_failed", err));
       await pruneTestData(env).catch((err) => console.error("test_data_prune_failed", err));
       /**

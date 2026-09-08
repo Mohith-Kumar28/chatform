@@ -60,6 +60,7 @@ const FREE: Plan = {
     ai_generations_per_month: 10,
     api_requests_per_month: 0,
     emails_per_month: 500,
+    followups_shared_domain_per_month: 0,
 
     forms_count: 100,
     workspaces_count: 1,
@@ -100,6 +101,7 @@ const PRO: Plan = {
     "form_metadata",
     "completion_redirect",
     "auto_reply_email",
+    "followup_email",
     "custom_domain",
     "refill_link",
     "tracking_pixels",
@@ -117,6 +119,7 @@ const PRO: Plan = {
     ai_generations_per_month: 200,
     api_requests_per_month: 50_000,
     emails_per_month: 10_000,
+    followups_shared_domain_per_month: 500,
 
     forms_count: 1_000,
     workspaces_count: 10,
@@ -160,6 +163,7 @@ const BUSINESS: Plan = {
     ai_generations_per_month: 1_000,
     api_requests_per_month: 250_000,
     emails_per_month: 50_000,
+    followups_shared_domain_per_month: 2_000,
 
     forms_count: 1_000,
     workspaces_count: 25,

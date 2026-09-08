@@ -29,7 +29,7 @@ import { roleWithArticle } from "@/lib/roles";
  *
  *   not pending        revoked, already used, or genuinely past its date — and
  *                      the three are not the same sentence.
- *   no session         name the workspace and the address it was sent to, then
+ *   no session         name the organization and the address it was sent to, then
  *                      hand that address to sign-in so nobody retypes it or
  *                      creates an account under the wrong one.
  *   wrong account      somebody with two addresses, signed in as the other one.
@@ -61,7 +61,7 @@ const DEAD_END: Record<Exclude<InvitationState, "pending">, { title: string; des
   },
   accepted: {
     title: "This invitation was already used",
-    description: "Somebody has already joined with this link. Sign in to reach the workspace.",
+    description: "Somebody has already joined with this link. Sign in to reach the organization.",
   },
   rejected: {
     title: "This invitation was declined",
@@ -135,7 +135,7 @@ function AcceptInvitation() {
       if (res.error) throw new Error(res.error.message ?? "Could not accept this invitation.");
       // A full navigation: accepting changes the active organization on the
       // session, and a client transition would render the dashboard against the
-      // workspace they were in a moment ago.
+      // organization they were in a moment ago.
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/dashboard");
     } catch (err) {
@@ -195,7 +195,7 @@ function AcceptInvitation() {
     );
   }
 
-  const org = preview.organizationName ?? "a workspace";
+  const org = preview.organizationName ?? "an organization";
   /**
    * "a teammate" when the invitation names no role — rare, but the sentence has
    * to finish. Everything else goes through `lib/roles.ts`, which is also where

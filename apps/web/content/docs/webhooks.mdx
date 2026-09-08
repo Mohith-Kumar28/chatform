@@ -13,6 +13,8 @@ your whole organization.
 | `response.completed` | Someone finished |
 | `response.abandoned` | A response was given up on or timed out |
 | `response.partial` | A response has stalled part-way, with answers in it |
+| `response.resumed` | Someone came back to a response they had abandoned |
+| `followup.sent` | A follow-up reminder went out |
 | `session.started` | A conversation opened |
 | `form.published` | A new version went live |
 
@@ -20,6 +22,15 @@ your whole organization.
 was invisible until it timed out — which is exactly as long as it was worth
 following up on. It fires once a response has stopped changing for a minute, and
 again only if more answers arrive.
+
+<Callout type="warn">
+**`response.abandoned` is no longer terminal.** With [follow-ups](/docs/follow-ups)
+switched on, a respondent can return days later through the link in a reminder —
+so you will see `response.abandoned`, then `response.resumed`, then
+`response.completed`, all carrying the same `submissionId`. If your handler
+treats an abandonment as the end of that record — closing the lead, deleting the
+draft, marking it lost — subscribe to `response.resumed` and undo it there.
+</Callout>
 
 <Callout>
 Subscriptions written against the old `submission.completed` and

@@ -63,11 +63,15 @@ export function LinkSettings({
    * The card the crawler will actually fetch, drawn from the fields as they are
    * now. Deferred by half a second so typing a title is not a request per
    * keystroke.
+   *
+   * The fallback description is deliberately not sent: the card draws only a
+   * description the author wrote, and the scheduled close from Settings goes on
+   * in its place. Same parameters `/f/[slug]` builds, so this is the card.
    */
-  const defaultImageUrl = useDebounced(
-    `/og/form?title=${encodeURIComponent(title)}&description=${encodeURIComponent(description)}`,
-    400,
-  );
+  const cardParams = new URLSearchParams({ title });
+  if (meta.ogDescription?.trim()) cardParams.set("description", meta.ogDescription.trim());
+  if (settings.closeRules.closeAt) cardParams.set("closeAt", settings.closeRules.closeAt);
+  const defaultImageUrl = useDebounced(`/og/form?${cardParams}`, 400);
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">

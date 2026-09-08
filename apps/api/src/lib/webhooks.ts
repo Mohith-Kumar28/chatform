@@ -31,6 +31,15 @@ export const EVENT_ALIASES: Record<string, readonly string[]> = {
   "response.partial": ["response.partial"],
   "response.answer_recorded": ["response.answer_recorded"],
   "session.started": ["session.started"],
+  /**
+   * A respondent came back through a follow-up link and the response is live
+   * again. Worth its own event rather than left to be inferred: an integrator
+   * will now legitimately see `response.abandoned` followed hours later by
+   * `response.completed` for the same submission, and anything treating
+   * abandonment as terminal needs a way to know that changed.
+   */
+  "response.resumed": ["response.resumed"],
+  "followup.sent": ["followup.sent"],
   "form.published": ["form.published"],
 };
 
@@ -46,6 +55,8 @@ export type WebhookEventName =
   | "response.partial"
   | "response.answer_recorded"
   | "session.started"
+  | "response.resumed"
+  | "followup.sent"
   | "form.published";
 
 export interface WebhookEvent {

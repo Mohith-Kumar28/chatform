@@ -24,40 +24,83 @@ const SIZES: Record<string, { width: number; height: number }> = {
 const DEFAULT_SIZE = { width: 210, height: 56 };
 
 /**
+ * A branch node's own geometry, as the markup lays it out.
+ *
+ * Named rather than inlined because two things depend on them agreeing: dagre
+ * has to reserve the height the node actually occupies, and the read-only
+ * diagram has to start each case's wire level with the row it leaves from.
+ */
+/** The title bar above the rows. */
+export const BRANCH_HEADER = 34;
+/** One case, or the "otherwise" line. */
+export const BRANCH_ROW = 22;
+/** 2px border plus 2px of padding, top and bottom alike. */
+export const BRANCH_EDGE = 4;
+
+/**
  * A branch node grows a row per case, so dagre has to be told how tall it is.
  *
- * This has to track the markup: 2px border top and bottom, a ~34px header, a
- * 22px row per case, one more for "otherwise", and 4px of bottom padding.
  * Under-counting it — the first version forgot the otherwise row — makes dagre
  * reserve less space than the node occupies, and the wires below it run
  * straight through the card.
  */
 export function branchNodeHeight(cases: number, exhaustive = false): number {
   const rows = cases + (exhaustive ? 0 : 1);
-  return 4 + 34 + rows * 22 + 4;
+  return BRANCH_EDGE + BRANCH_HEADER + rows * BRANCH_ROW + BRANCH_EDGE;
 }
 
-export function layoutGraph(nodes: Node[], edges: Edge[]): Map<string, { x: number; y: number }> {
+/**
+ * The box a node occupies — what dagre reserves, and what a wire has to aim at.
+ *
+ * The canvas gets its anchors from React Flow's own handles, so this used to be
+ * needed only here. The read-only diagram on the template page has no React
+ * Flow to ask, and a wire drawn to a box of the wrong size is a wire that
+ * misses the node it points at.
+ */
+export function nodeSize(node: Pick<Node, "type" | "data">): { width: number; height: number } {
+  const size = SIZES[node.type ?? ""] ?? DEFAULT_SIZE;
+  const data = node.data as { cases?: unknown[]; exhaustive?: boolean };
+  return {
+    width: size.width,
+    height:
+      node.type === "branch"
+        ? branchNodeHeight((data.cases ?? []).length, data.exhaustive)
+        : size.height,
+  };
+}
+
+/**
+ * Which way the flow runs.
+ *
+ * The canvas reads left to right, the way a form is answered, and it has a
+ * whole viewport to do it in. A read-only diagram in a column beside something
+ * else does not: nine questions in a row is 2,400px of graph, and fitting that
+ * into a 600px pane scales the type down to nothing. Top to bottom costs the
+ * pane only the width of one node, so it stays readable at full size and
+ * scrolls, which is what a column is for.
+ */
+export type Rankdir = "LR" | "TB";
+
+export function layoutGraph(
+  nodes: Node[],
+  edges: Edge[],
+  rankdir: Rankdir = "LR",
+): Map<string, { x: number; y: number }> {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({
-    rankdir: "LR",
+    rankdir,
     // Generous separation: the wires carry labels, and tight ranks put those
-    // labels on top of each other.
-    ranksep: 110,
+    // labels on top of each other. Vertically a rank is a node's height rather
+    // than its width, so the same air needs a smaller number.
+    ranksep: rankdir === "LR" ? 110 : 56,
     nodesep: 36,
     edgesep: 24,
     marginx: 40,
     marginy: 40,
   });
 
-  for (const node of nodes) {
-    const size = SIZES[node.type ?? ""] ?? DEFAULT_SIZE;
-    const data = node.data as { cases?: unknown[]; exhaustive?: boolean };
-    const height =
-      node.type === "branch" ? branchNodeHeight((data.cases ?? []).length, data.exhaustive) : size.height;
-    g.setNode(node.id, { width: size.width, height });
-  }
+  for (const node of nodes) g.setNode(node.id, nodeSize(node));
   for (const edge of edges) {
     if (g.hasNode(edge.source) && g.hasNode(edge.target)) g.setEdge(edge.source, edge.target);
   }
@@ -71,7 +114,7 @@ export function layoutGraph(nodes: Node[], edges: Edge[]): Map<string, { x: numb
     // dagre centres its boxes; React Flow positions by the top-left corner.
     out.set(node.id, { x: placed.x - placed.width / 2, y: placed.y - placed.height / 2 });
   }
-  alignArmsWithTheirRows(nodes, edges, out, g);
+  alignArmsWithTheirRows(nodes, edges, out, g, rankdir);
   return out;
 }
 
@@ -92,16 +135,28 @@ export function layoutGraph(nodes: Node[], edges: Edge[]): Map<string, { x: numb
  * dagre chose — so the spacing, the ranks and the rest of the layout are
  * exactly what they were. Only which box sits in which slot changes.
  *
- * Restricted to arms of equal height sharing a rank, which is the case that
+ * Restricted to arms of equal size sharing a rank, which is the case that
  * matters (a run of question nodes) and the only one where swapping two boxes
  * cannot make them overlap.
+ *
+ * "Down the page" and "across the page" swap with the direction: laid out
+ * left to right the arms are stacked vertically and it is their `y` that is
+ * permuted; top to bottom they sit side by side and it is their `x`. The
+ * argument is the same either way, so the axis is a variable rather than a
+ * second copy of the function.
  */
 function alignArmsWithTheirRows(
   nodes: Node[],
   edges: Edge[],
   out: Map<string, { x: number; y: number }>,
   g: InstanceType<typeof dagre.graphlib.Graph>,
+  rankdir: Rankdir,
 ): void {
+  /** The axis arms are spread along, and the one that says which rank they landed in. */
+  const along = rankdir === "LR" ? "y" : "x";
+  const rank = rankdir === "LR" ? "x" : "y";
+  const extent = rankdir === "LR" ? "height" : "width";
+
   /** How many wires arrive at each node — an arm two questions share is not this branch's to move. */
   const incoming = new Map<string, number>();
   for (const edge of edges) incoming.set(edge.target, (incoming.get(edge.target) ?? 0) + 1);
@@ -116,9 +171,9 @@ function alignArmsWithTheirRows(
     const slots = new Map<string, { ref: string; at: { x: number; y: number } }[]>();
     for (const ref of wanted) {
       const at = out.get(ref);
-      const box = g.node(ref) as { height?: number } | undefined;
-      if (!at || box?.height === undefined || (incoming.get(ref) ?? 0) !== 1) continue;
-      const key = `${Math.round(at.x)} ${Math.round(box.height)}`;
+      const box = g.node(ref) as { height?: number; width?: number } | undefined;
+      if (!at || box?.[extent] === undefined || (incoming.get(ref) ?? 0) !== 1) continue;
+      const key = `${Math.round(at[rank])} ${Math.round(box[extent]!)}`;
       const group = slots.get(key);
       if (group) group.push({ ref, at });
       else slots.set(key, [{ ref, at }]);
@@ -126,10 +181,10 @@ function alignArmsWithTheirRows(
 
     for (const group of slots.values()) {
       if (group.length < 2) continue;
-      // The slots, top to bottom, handed back out in row order — `group` is
+      // The slots, in reading order, handed back out in row order — `group` is
       // already in row order, because `wanted` is.
-      const ys = group.map((m) => m.at.y).sort((a, b) => a - b);
-      group.forEach((member, i) => out.set(member.ref, { x: member.at.x, y: ys[i]! }));
+      const places = group.map((m) => m.at[along]).sort((a, b) => a - b);
+      group.forEach((member, i) => out.set(member.ref, { ...member.at, [along]: places[i]! }));
     }
   }
 }
@@ -156,11 +211,15 @@ export function placeNodes(
   nodes: Node[],
   edges: Edge[],
   saved: Record<string, { x: number; y: number }>,
+  rankdir: Rankdir = "LR",
 ): Map<string, { x: number; y: number }> {
-  if (nodes.every((node) => saved[node.id])) {
+  // A layout saved from the canvas is a layout in the canvas's own direction,
+  // so it says nothing about where these nodes go when the flow runs the other
+  // way. The read-only view asks for its own.
+  if (rankdir === "LR" && nodes.every((node) => saved[node.id])) {
     const kept = new Map<string, { x: number; y: number }>();
     for (const node of nodes) kept.set(node.id, saved[node.id]!);
     return kept;
   }
-  return layoutGraph(nodes, edges);
+  return layoutGraph(nodes, edges, rankdir);
 }

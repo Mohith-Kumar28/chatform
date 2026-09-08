@@ -85,6 +85,20 @@
       "when": 1788969956194,
       "tag": "0011_unique_answers",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1788973556194,
+      "tag": "0012_followup_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1789059956194,
+      "tag": "0013_name_default_workspaces",
+      "breakpoints": true
     }
   ]
 }

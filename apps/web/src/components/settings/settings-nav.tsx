@@ -41,17 +41,19 @@ export function SettingsNav() {
         {SETTINGS_GROUPS.map((group) => (
           <div key={group.id}>
             <div className="px-3 pb-1.5">
-              {/* The first group is named after the workspace itself, which is what
-                  makes "General" and "People" unambiguously *this* workspace's. */}
+              {/* The first group is named after the organization itself, which
+                  is what makes "General" and "People" unambiguously *this*
+                  organization's — and "Workspaces" under it the folders it
+                  holds, not the accounts you belong to. */}
               {group.label === null ? (
                 isPending ? (
                   <Skeleton className="h-4 w-24" />
                 ) : (
                   <>
                     <p className="text-caption truncate font-medium" title={org?.name ?? undefined}>
-                      {org?.name ?? "No workspace"}
+                      {org?.name ?? "No organization"}
                     </p>
-                    <p className="text-muted-foreground text-micro">Workspace</p>
+                    <p className="text-muted-foreground text-micro">Organization</p>
                   </>
                 )
               ) : (

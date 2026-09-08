@@ -114,6 +114,31 @@ describe("GET /v1/me", () => {
     expect(body.key.mode).toBe("test");
     expect(body.key.type).toBe("sk_test");
   });
+
+  /**
+   * A publishable key ships inside a page, so everything this route tells one is
+   * readable by every visitor. Which plan the organization pays for, and what its
+   * limits are, is not theirs to know — the identity half still is, because that
+   * is how a browser client confirms which scopes it holds.
+   */
+  it("withholds the plan and its limits from a publishable key", async () => {
+    const pk = (
+      await seedKey(t, "v1metapk", {
+        type: "pk_live",
+        origins: ["https://shop.example.com"],
+        scopes: { form: ["read"], session: ["create", "write", "read"] },
+      })
+    ).raw;
+    const res = await fetchApi("/v1/me", {
+      headers: { "x-api-key": pk, origin: "https://shop.example.com" },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown> & { key: { type: string } };
+    expect(body.key.type).toBe("pk_live");
+    expect(body.organization_id).toBe(t.orgId);
+    expect(body).not.toHaveProperty("plan");
+    expect(body).not.toHaveProperty("limits");
+  });
 });
 
 describe("GET /v1/events", () => {

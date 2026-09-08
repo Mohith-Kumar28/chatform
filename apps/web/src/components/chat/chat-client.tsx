@@ -283,6 +283,8 @@ export function ChatClient({
                 respondentToken={respondentToken}
                 onStructured={onStructured}
                 onSkip={onSkip}
+                followUpEnabled={config.followUpEnabled}
+                onDeclineFollowUps={chat.declineFollowUps}
               />
             </div>
           )}

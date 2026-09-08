@@ -10,6 +10,7 @@ import { AppMark } from "./app-mark";
 import { PlanBadge } from "./plan-badge";
 import { UserMenu } from "./user-menu";
 import { UsagePill } from "./usage-pill";
+import { OrganizationSwitcher } from "./organization-switcher";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { CommandPalette, openCommandPalette } from "./command-palette";
 import { useAppShortcuts } from "./use-app-shortcuts";
@@ -55,7 +56,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <span className="font-display hidden font-semibold sm:inline">chatform</span>
             </Link>
 
-            <div className="hidden md:block">
+            {/* Organization then workspace, left to right, widest scope first —
+                the same order they nest in. `WorkspaceSwitcher` renders nothing
+                for an account that has one workspace and cannot make another,
+                so most headers still show a single control here. */}
+            <div className="hidden items-center gap-1 md:flex">
+              <OrganizationSwitcher />
               <WorkspaceSwitcher />
             </div>
 
@@ -119,7 +125,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <SheetHeader className="border-border border-b p-4 text-left">
               <SheetTitle className="font-display">chatform</SheetTitle>
             </SheetHeader>
-            <div className="p-4">
+            <div className="flex flex-col items-start gap-1 p-4">
+              <OrganizationSwitcher />
               <WorkspaceSwitcher />
             </div>
             <nav className="space-y-0.5 px-2 pb-4" aria-label="Main">

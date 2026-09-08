@@ -74,6 +74,16 @@ export const organizations = sqliteTable("organizations", {
   slug: text("slug").notNull().unique(),
   logo: text("logo"),
   metadata: text("metadata"),
+  /**
+   * The sender's physical postal address, for the footer of marketing mail.
+   *
+   * Required by CAN-SPAM on any commercial message, which is what a follow-up
+   * to somebody who abandoned a form is — the transactional exemption is a
+   * closed list and none of it covers a transaction the recipient never agreed
+   * to enter into. Null until the customer fills it in, and the follow-up
+   * feature will not turn on without it.
+   */
+  postalAddress: text("postal_address"),
   createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
 });
 
@@ -455,6 +465,14 @@ export const chatSessions = sqliteTable(
     isTest: bool("is_test").notNull().default(false),
     /** Last respondent-token rotation, for the audit trail. */
     tokenRotatedAt: ts("token_rotated_at"),
+    /**
+     * The respondent declined follow-up emails when we asked for their address.
+     *
+     * Lives on the session rather than the response because the offer is made
+     * as the address question is shown, which can be before a response row
+     * exists — answers create it lazily.
+     */
+    followupOptOut: bool("followup_opt_out").notNull().default(false),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
     lastActivityAt: ts("last_activity_at").notNull().$defaultFn(() => new Date()),
     expiresAt: ts("expires_at"),
@@ -902,5 +920,95 @@ export const exports = sqliteTable(
   (t) => [
     index("idx_exports_org_created").on(t.organizationId, t.createdAt),
     index("idx_exports_expiry").on(t.status, t.expiresAt),
+  ],
+);
+
+/**
+ * Scheduled nudges for a response somebody walked away from.
+ *
+ * One row per nudge, written the moment a response is abandoned and picked up
+ * by the cron that already runs every five minutes. A row rather than a delayed
+ * queue message because Cloudflare Queues caps `delaySeconds` at twelve hours
+ * and this cadence runs to days — and because a row can be cancelled when the
+ * respondent comes back, shown in the results table, and re-checked at send
+ * time against settings that changed after it was scheduled. An in-flight
+ * message can do none of those.
+ */
+export const followups = sqliteTable(
+  "followups",
+  {
+    id: text("id").primaryKey(),
+    submissionId: text("submission_id").notNull().references(() => submissions.id, { onDelete: "cascade" }),
+    formId: text("form_id").notNull(),
+    organizationId: text("organization_id").notNull(),
+    /**
+     * `email` today. The column exists so WhatsApp and SMS are additive rather
+     * than a migration — neither is built, and both are blocked on approvals
+     * outside this codebase.
+     */
+    channel: text("channel").notNull().default("email"),
+    /**
+     * Snapshotted when the nudge is scheduled, never re-resolved at send time.
+     * Editing the form hours later must not be able to redirect mail that is
+     * already queued at somebody's address.
+     */
+    address: text("address").notNull(),
+    /** `identity` | `answer` | `contact_info` | `hidden` — for the audit trail. */
+    addressSource: text("address_source").notNull(),
+    /** 1-based position in the configured sequence. */
+    step: integer("step").notNull(),
+    /** `scheduled` | `sent` | `skipped` | `cancelled` | `failed` | `holdout` */
+    status: text("status").notNull().default("scheduled"),
+    /** Why it was skipped or cancelled, in words the results table can show. */
+    reason: text("reason"),
+    scheduledAt: ts("scheduled_at").notNull(),
+    sentAt: ts("sent_at"),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [
+    /**
+     * Scheduling is idempotent. `INSERT … ON CONFLICT DO NOTHING` against this
+     * is what makes `scheduleFollowUps` safe to call twice — the same defence
+     * `openResponse` already uses for the submission row itself.
+     */
+    uniqueIndex("uq_followups_submission_step").on(t.submissionId, t.step),
+    /** The sweep's only query. */
+    index("idx_followups_due").on(t.status, t.scheduledAt),
+    /** Cancelling on completion or resume, and the results table's badge. */
+    index("idx_followups_submission").on(t.submissionId),
+  ],
+);
+
+/**
+ * Addresses that must not be mailed.
+ *
+ * `organizationId` null means global, and that nullability is the whole design:
+ * a hard bounce or a spam complaint is a fact about an address and applies
+ * everywhere, while somebody opting out of one customer's nudges has said
+ * nothing about anybody else's. Collapsing the two would either leak one
+ * customer's unsubscribes into another's list or keep mailing an address that
+ * is actively burning our sending reputation.
+ *
+ * Transactional mail deliberately does not consult this table. Someone who
+ * opted out of a customer's follow-ups must still be able to reset their
+ * password.
+ */
+export const emailSuppressions = sqliteTable(
+  "email_suppressions",
+  {
+    organizationId: text("organization_id"),
+    /** Lowercased by the writer; comparisons here are exact. */
+    address: text("address").notNull(),
+    /** `unsubscribe` | `bounce` | `complaint` | `manual` | `at_capture` */
+    reason: text("reason").notNull(),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [
+    /**
+     * SQLite treats NULLs as distinct in a unique index, so this does not
+     * deduplicate the global rows — those go through a guarded insert instead.
+     */
+    uniqueIndex("uq_suppressions_org_address").on(t.organizationId, t.address),
+    index("idx_suppressions_address").on(t.address),
   ],
 );

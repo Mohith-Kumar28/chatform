@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { FormDoc } from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
 import { LinkSettings } from "./link-settings";
+import { FollowUpPanel } from "./followup-panel";
 import { showShortcuts } from "./use-builder-shortcuts";
 
 interface SettingsPanelProps {
@@ -44,6 +45,7 @@ const SECTIONS = [
   { id: "hidden", label: "Hidden fields & variables" },
   { id: "link", label: "Link & social" },
   { id: "completion", label: "On completion" },
+  { id: "followup", label: "Follow-ups" },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -381,6 +383,22 @@ export function SettingsPanel({
               </SettingRow>
               </LockedControl>
               </SettingGroup>
+            </SettingSection>
+          )}
+
+          {section === "followup" && (
+            <SettingSection title="Follow-ups">
+              <p className="text-muted-foreground -mt-1 text-sm">
+                Most people who leave a form part-way never come back on their own. If they
+                gave you an email before they went, this asks them to finish.
+              </p>
+              <LockedControl feature="followup_email">
+                <FollowUpPanel
+                  settings={settings}
+                  hiddenFields={hiddenFields}
+                  onChange={onChange}
+                />
+              </LockedControl>
             </SettingSection>
           )}
         </div>

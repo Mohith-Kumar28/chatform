@@ -46,6 +46,7 @@ const INK = "#26221E";
 const MUTED = "#6F6861";
 const ORANGE = "#FD6F29";
 const VIOLET = "#9769DC";
+const LINE = "#E3DDD1";
 
 const PLATE_ASK =
   "M19.7 25 L18.8 25 L10.4 28.1 L11.6 25 L11 25 A6 6 0 0 1 5 19 L5 13 A6 6 0 0 1 11 7 L11.3 7 Z";
@@ -132,8 +133,25 @@ export function renderShareCard({ headline, kicker }: ShareCardInput = {}) {
  * Rendered on request rather than stored, so it always matches the current
  * title and costs nothing when nobody shares the link. Same rule as above about
  * fonts and the mark: no network on this path.
+ *
+ * `description` is the author's own share description and nothing else. The
+ * generic "Answer a few questions — it only takes a minute" that used to fill
+ * the line said nothing a reader could not see from the button, so the card
+ * spent a third of its height telling people what a form is. Absent a real
+ * description the title simply gets the room.
+ *
+ * `deadline` is already formatted for display — the card cannot know a viewer's
+ * timezone, so whoever passes it decides how the date reads.
  */
-export function renderFormCard({ title, description }: { title: string; description?: string }) {
+export function renderFormCard({
+  title,
+  description,
+  deadline,
+}: {
+  title: string;
+  description?: string;
+  deadline?: string;
+}) {
   // Long titles step down rather than wrap into the description.
   const size = title.length > 74 ? 58 : title.length > 44 ? 70 : title.length > 24 ? 84 : 96;
 
@@ -180,21 +198,43 @@ export function renderFormCard({ title, description }: { title: string; descript
               {description}
             </div>
           ) : null}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6 }}>
+          {/* The button is the card's call to action and was smaller than the
+              description above it, which read as a caption rather than a thing
+              to click. It carries the row on its own now. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 8 }}>
             <div
               style={{
                 display: "flex",
                 background: ORANGE,
                 color: "#201A16",
-                fontSize: 24,
-                fontWeight: 600,
-                padding: "10px 22px",
+                fontSize: 32,
+                fontWeight: 700,
+                letterSpacing: -0.6,
+                padding: "18px 38px",
                 borderRadius: 999,
               }}
             >
               Answer in a chat
             </div>
-            <div style={{ display: "flex", fontSize: 24, color: MUTED }}>takes about a minute</div>
+            {/* A deadline is the one fact that makes someone open the link now
+                rather than later, and it was only discoverable by starting the
+                form. */}
+            {deadline ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  fontSize: 26,
+                  fontWeight: 500,
+                  color: MUTED,
+                  border: `2px solid ${LINE}`,
+                  padding: "14px 28px",
+                  borderRadius: 999,
+                }}
+              >
+                Closes {deadline}
+              </div>
+            ) : null}
           </div>
         </div>
 

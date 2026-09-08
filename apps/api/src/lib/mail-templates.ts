@@ -167,7 +167,7 @@ export function invitationEmail(a: {
 
   const body = [
     h1(`Join ${a.organizationName} on chatform`),
-    p(`<strong>${escapeHtml(who)}</strong> invited you to the <strong>${org}</strong> workspace as ${escapeHtml(roleLabel)}.`),
+    p(`<strong>${escapeHtml(who)}</strong> invited you to the <strong>${org}</strong> organization as ${escapeHtml(roleLabel)}.`),
     button(a.acceptUrl, "Accept invitation"),
     expiry ? p(`<span style="color:${MUTED};font-size:13px;">This invitation ${escapeHtml(expiry)}.</span>`) : "",
     fallbackLink(a.acceptUrl),
@@ -181,7 +181,7 @@ export function invitationEmail(a: {
       footer: "You received this because someone entered your address when inviting a teammate. If you weren't expecting it, you can ignore this email.",
     }),
     text: [
-      `${who} invited you to the ${a.organizationName} workspace on chatform as ${roleLabel}.`,
+      `${who} invited you to the ${a.organizationName} organization on chatform as ${roleLabel}.`,
       ``,
       `Accept: ${a.acceptUrl}`,
       expiry ? `\nThis invitation ${expiry}.` : ``,
@@ -404,4 +404,125 @@ export function autoReplyEmail(a: {
     }),
     text: `${a.bodyText}\n\n—\nIn reply to your response to ${a.formTitle}.`,
   };
+}
+
+// ─────────────────────────── follow-up nudge ───────────────────────────
+
+/**
+ * A nudge to somebody who started answering and left.
+ *
+ * Three things separate this from every other message in this file, and each is
+ * a legal or deliverability requirement rather than a stylistic choice:
+ *
+ * **One link.** The resume button, and the plain-text copy of it that
+ * `fallbackLink` exists for. No footer navigation, no "browse our other forms".
+ * A second link is a second thing to decide about, and the whole message has one
+ * job.
+ *
+ * **A postal address and an ad disclosure.** This is commercial mail under
+ * CAN-SPAM — the transactional exemption is a closed list of five and none of
+ * them covers "a transaction the recipient never agreed to enter into" — so the
+ * sender's physical address is mandatory, not decorative.
+ *
+ * **An unsubscribe that works in one click**, mirrored in the `List-Unsubscribe`
+ * headers the caller sets. Not a preference centre, not a login.
+ *
+ * The progress line leads because it is the one piece of the usual psychology
+ * story that survives scrutiny: the Zeigarnik effect does not replicate, but
+ * endowed progress — framing a task as already begun — roughly doubled
+ * completion in Nunes & Dreze (2005).
+ */
+export function followUpEmail(a: {
+  subject: string;
+  /** Rendered from the author's markdown, already escaped. Empty when unset. */
+  bodyHtml: string;
+  bodyText: string;
+  formTitle: string;
+  resumeUrl: string;
+  unsubscribeUrl: string;
+  /** Omitted when the author turned the progress line off, or nothing is known. */
+  progress?: { answered: number; total: number };
+  /** From a contact block, when the form collected one. */
+  firstName?: string;
+  /** The sender's physical address. Required by CAN-SPAM; see above. */
+  postalAddress?: string;
+  /** False when the form's owner has paid to remove our name. */
+  showPoweredBy: boolean;
+}): Omit<MailMessage, "to"> {
+  const greeting = a.firstName ? `${escapeHtml(a.firstName)}, y` : "Y";
+  const remaining = a.progress ? Math.max(a.progress.total - a.progress.answered, 0) : 0;
+
+  const progressLine = a.progress
+    ? p(
+        `${greeting}ou answered <strong>${a.progress.answered} of ${a.progress.total}</strong> questions in ` +
+          `<strong>${escapeHtml(a.formTitle)}</strong>` +
+          (remaining > 0
+            ? ` — ${remaining} to go, about ${estimateMinutes(remaining)}.`
+            : ` and were nearly done.`),
+      )
+    : p(
+        `${greeting}ou started <strong>${escapeHtml(a.formTitle)}</strong> and did not finish. ` +
+          `Your answers are still there.`,
+      );
+
+  const body = [
+    h1(a.subject),
+    progressLine,
+    a.bodyHtml,
+    button(a.resumeUrl, "Pick up where you left off"),
+    fallbackLink(a.resumeUrl),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  /**
+   * The footer carries the compliance furniture. It is deliberately plain and
+   * deliberately not hidden behind a colour that disappears against the card:
+   * an unsubscribe somebody cannot find is the same as one that does not exist,
+   * and it is the cheapest possible alternative to a spam complaint.
+   */
+  const footerParts = [
+    `You are receiving this because you started filling in ${escapeHtml(a.formTitle)}.`,
+    `<a href="${escapeHtml(a.unsubscribeUrl)}" style="color:${MUTED};text-decoration:underline;">Unsubscribe</a>`,
+  ];
+  if (a.postalAddress) footerParts.push(escapeHtml(a.postalAddress));
+  if (a.showPoweredBy) footerParts.push("Powered by chatform.");
+
+  const textParts = [
+    a.progress
+      ? `You answered ${a.progress.answered} of ${a.progress.total} questions in ${a.formTitle}.`
+      : `You started ${a.formTitle} and did not finish. Your answers are still there.`,
+    a.bodyText,
+    `Pick up where you left off: ${a.resumeUrl}`,
+    "—",
+    `You are receiving this because you started filling in ${a.formTitle}.`,
+    `Unsubscribe: ${a.unsubscribeUrl}`,
+    a.postalAddress ?? "",
+  ].filter(Boolean);
+
+  return {
+    subject: a.subject,
+    html: layout({
+      preheader: a.progress
+        ? `${a.progress.answered} of ${a.progress.total} answered — ${remaining} to go.`
+        : `Your answers to ${a.formTitle} are still saved.`,
+      body,
+      brand: a.showPoweredBy,
+      footer: footerParts.join("<br>"),
+    }),
+    text: textParts.join("\n\n"),
+  };
+}
+
+/**
+ * How long the rest will take, in words.
+ *
+ * Naming the remaining cost is what makes "you're nearly done" actionable
+ * rather than a claim. Fifteen seconds a question is the rough middle of what
+ * conversational forms actually measure; it is rounded hard because a precise
+ * estimate would be a false one.
+ */
+function estimateMinutes(remaining: number): string {
+  const mins = Math.max(1, Math.round((remaining * 15) / 60));
+  return mins === 1 ? "a minute" : `${mins} minutes`;
 }

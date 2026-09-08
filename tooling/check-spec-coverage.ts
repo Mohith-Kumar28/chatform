@@ -90,4 +90,73 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-console.log(`spec coverage ok — every /v1 path in the docs exists (${known.size} paths in the spec)`);
+const METHODS = ["get", "post", "put", "patch", "delete"];
+type Operation = { "x-internal"?: boolean; "x-required-scope"?: string };
+const operations = Object.entries(spec.paths as Record<string, Record<string, Operation>>).flatMap(
+  ([path, item]) =>
+    Object.entries(item)
+      .filter(([method]) => METHODS.includes(method))
+      .map(([method, op]) => ({ path, method, op })),
+);
+
+/**
+ * The reference must not publish an endpoint a developer cannot call.
+ *
+ * This is the check that was missing when 47 session-authenticated dashboard
+ * operations shipped as developer documentation. It reads the generated pages
+ * rather than the generator's intent, so deleting the filter and regenerating
+ * fails here instead of on someone's integration.
+ */
+const REFERENCE = join(DOCS, "api");
+const internalPaths = new Set(operations.filter(({ op }) => op["x-internal"]).map(({ path }) => path));
+const published: string[] = [];
+for (const file of mdxFiles(REFERENCE)) {
+  const text = readFileSync(file, "utf8");
+  for (const match of text.matchAll(/"path":\s*"([^"]+)"/g)) {
+    if (internalPaths.has(match[1]!)) published.push(`${relative(ROOT, file)}  ${match[1]}`);
+  }
+  if (!/^llmsExclude: true$/m.test(text)) {
+    published.push(`${relative(ROOT, file)}  missing llmsExclude — it would be inlined into llms-full.txt`);
+  }
+}
+
+/**
+ * The scope table in `scopes.mdx` must list exactly the scopes that gate an
+ * endpoint.
+ *
+ * It listed two that gate nothing (`response:read_partial`, `response:delete`)
+ * for long enough that the doc invited developers to request permissions with no
+ * effect. Now the spec carries `x-required-scope` per operation, so the table has
+ * a source of truth to be checked against.
+ */
+const enforced = new Set(operations.map(({ op }) => op["x-required-scope"]).filter(Boolean) as string[]);
+const scopeDoc = readFileSync(join(DOCS, "scopes.mdx"), "utf8");
+const documented = new Set<string>();
+for (const row of scopeDoc.matchAll(/^\|\s*`(\w+)`\s*\|([^|]+)\|/gm)) {
+  for (const action of row[2]!.matchAll(/`(\w+)`/g)) documented.add(`${row[1]}:${action[1]}`);
+}
+const scopeProblems = [
+  ...[...enforced].filter((s) => !documented.has(s)).map((s) => `${s} gates an endpoint but scopes.mdx omits it`),
+  ...[...documented].filter((s) => !enforced.has(s)).map((s) => `${s} is in the scopes.mdx table but gates nothing`),
+];
+
+if (published.length > 0 || scopeProblems.length > 0) {
+  if (published.length > 0) {
+    console.error(`\n${published.length} problem(s) in the generated reference:\n`);
+    for (const p of published) console.error(`  ${p}`);
+    console.error("\nRun `pnpm gen:api-docs` to regenerate it from the spec.\n");
+  }
+  if (scopeProblems.length > 0) {
+    console.error(`\n${scopeProblems.length} scope documentation problem(s):\n`);
+    for (const p of scopeProblems) console.error(`  ${p}`);
+    console.error("");
+  }
+  process.exit(1);
+}
+
+const internalCount = operations.filter(({ op }) => op["x-internal"]).length;
+console.log(
+  `spec coverage ok — every /v1 path in the docs exists (${known.size} paths in the spec), ` +
+    `${internalCount} internal operations withheld from the reference, ` +
+    `${enforced.size} scopes documented and enforced`,
+);

@@ -15,8 +15,8 @@ import { createDb, schema } from "@repo/db";
 import type { Bindings } from "../env.js";
 import { ac, roles } from "./permissions.js";
 import { apiKeyPlugin } from "./apikey-config.js";
-import { getEntitlements, countSeats, workspaceAllowance } from "./entitlements.js";
-import { seatLimit, limitReached } from "@repo/entitlements";
+import { getEntitlements, countSeats } from "./entitlements.js";
+import { seatLimit } from "@repo/entitlements";
 import { APIError } from "better-auth/api";
 import { webOrigins, returnOrigin, needsCrossSiteCookies, isSecureOrigin } from "./origins.js";
 import { enqueueMail } from "./mail.js";
@@ -54,7 +54,7 @@ async function createDefaultOrg(env: Bindings, user: { id: string; name?: string
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
-      .slice(0, 24) || "workspace";
+      .slice(0, 24) || "org";
 
   // Retried rather than assumed: a collision leaves the user with no organization at all,
   // which is a broken dashboard, and the INSERT is the only place the race is visible.
@@ -64,7 +64,7 @@ async function createDefaultOrg(env: Bindings, user: { id: string; name?: string
       await env.DB.batch([
         env.DB.prepare(`INSERT INTO organizations (id, name, slug, created_at) VALUES (?, ?, ?, ?)`).bind(
           orgId,
-          user.name?.trim() || "My Workspace",
+          user.name?.trim() || "My Organization",
           `${base}-${rand(6)}`,
           now,
         ),
@@ -395,46 +395,28 @@ export function createAuth(env: Bindings) {
             expiresAt: data.invitation.expiresAt ? new Date(data.invitation.expiresAt).getTime() : null,
           });
         },
-        /**
-         * Seat limit, enforced where invitations are actually created.
-         *
-         * Better Auth owns the invite endpoint, so this cannot be a Hono middleware —
-         * hooking the plugin is the only place that sees every path into `invitations`,
-         * including the client SDK calling it directly.
-         *
-         * Pending invitations count against the total: without that, three simultaneous
-         * invites all pass on a one-seat plan and the org quietly ends up over.
-         */
         organizationHooks: {
           /**
-           * The workspace limit, enforced where workspaces are actually created.
+           * Seat limit, enforced where invitations are actually created.
            *
-           * It was sold and never checked. `workspaces_count` is advertised on the
-           * pricing page at 1 / 10 / 25, declared `mode: "hard"` in the limits
-           * table, and had no call site anywhere — so a free account could create
-           * as many workspaces as it liked from the switcher, while the usage page
-           * showed "1 of 1" because the gauge was counting a different, internal
-           * table that only ever holds one row per organization.
+           * Better Auth owns the invite endpoint, so this cannot be a Hono
+           * middleware — hooking the plugin is the only place that sees every
+           * path into `invitations`, including the client SDK calling it
+           * directly.
            *
-           * Same shape as the seat gate below, and for the same reason: Better
-           * Auth owns the create endpoint, so a Hono middleware would not see the
-           * client SDK calling it directly.
+           * Pending invitations count against the total: without that, three
+           * simultaneous invites all pass on a one-seat plan and the org
+           * quietly ends up over.
            *
-           * Enforced on create only, never retroactively. An account already over
-           * the line keeps everything it has — clamping downward would lock people
-           * out of their own data over a limit we were not applying yesterday.
+           * Creating an *organization* is deliberately not gated here any more.
+           * It used to be, against `workspaces_count` — which read the plan of
+           * whichever organization the person already owned and refused them a
+           * second one. That only made sense while "workspace" was the name the
+           * UI gave an organization. Workspaces are their own table now, and
+           * `POST /workspaces` gates them against the plan of the organization
+           * that actually pays. An organization is an account; a person may
+           * have more than one, and each brings its own subscription.
            */
-          beforeCreateOrganization: async ({ user }) => {
-            const { owned, limit, planId } = await workspaceAllowance(env, user.id);
-            if (limit == null || owned < limit) return;
-            const body = limitReached({
-              limitKey: "workspaces_count",
-              plan: planId,
-              used: owned,
-              limit,
-            });
-            throw new APIError("PAYMENT_REQUIRED", body as unknown as Record<string, unknown>);
-          },
           beforeCreateInvitation: async ({ invitation }) => {
             const orgId = invitation.organizationId;
             if (!orgId) return;

@@ -13,6 +13,23 @@ export function greeting(doc: FormDoc): string {
   return `Hi! I'll walk you through "${doc.title}" — it only takes a minute.`;
 }
 
+/**
+ * What the agent says to somebody who came back through a follow-up link.
+ *
+ * It names what they already did, because the research on unfinished tasks is
+ * clear that people do *not* remember them — the Zeigarnik effect does not
+ * replicate — while the disposition to resume one, once reminded, is real. So
+ * this rebuilds the context instead of assuming it: it says how many questions
+ * they got through and that the answers were kept, which is the thing they will
+ * actually be wondering.
+ */
+export function resumeGreeting(doc: FormDoc, answered: number): string {
+  const title = doc.title;
+  if (answered <= 0) return `Let's pick up "${title}" where you left off.`;
+  const n = answered === 1 ? "the first question" : `${answered} questions`;
+  return `Welcome back — you'd already answered ${n} of "${title}". I've kept them, so let's carry on from here.`;
+}
+
 export function questionText(block: Block): string {
   return [block.title, block.description].filter(Boolean).join("\n\n");
 }

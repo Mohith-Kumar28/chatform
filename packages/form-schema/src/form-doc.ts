@@ -311,6 +311,13 @@ export interface PublicFormConfig {
   closed?: boolean;
   closedMessage?: string;
   /**
+   * When the form stops accepting responses, ISO, when the author scheduled a
+   * close. Projected so the hosted page can say so before someone starts —
+   * the share card puts it on the unfurl, which is the only place a deadline
+   * reaches someone who has not opened the link yet.
+   */
+  closeAt?: string;
+  /**
    * Social/SEO metadata. `settings.meta` existed but was never projected, so
    * the hosted form had no OG tags and every share preview was blank.
    */
@@ -327,6 +334,15 @@ export interface PublicFormConfig {
   duplicates: "none" | "ip_daily" | "field";
   /** Whether the form asks for an explicit submit once everything is answered. */
   requireSubmit: boolean;
+  /**
+   * The form will email people who leave part-way through.
+   *
+   * Projected so the runtime can offer an opt-out beside the question that
+   * collects the address. That placement is the requirement, not a nicety: on a
+   * form somebody abandons, the moment we ask for their email is the only
+   * moment they are still there to decline.
+   */
+  followUpEnabled: boolean;
 }
 
 export function toPublicConfig(
@@ -354,6 +370,7 @@ export function toPublicConfig(
     agentName: doc.settings.agent.displayName,
     duplicates: doc.settings.duplicates.strategy,
     requireSubmit: doc.settings.onComplete.requireSubmit,
+    followUpEnabled: doc.settings.followUp.enabled,
     slug: opts.slug,
     title: doc.title,
     description: doc.description,
@@ -373,6 +390,7 @@ export function toPublicConfig(
     embed: { allowedOrigins: doc.settings.embed?.allowedOrigins ?? [] },
     closed: opts.closed,
     closedMessage: opts.closedMessage,
+    closeAt: doc.settings.closeRules.closeAt,
   };
 }
 

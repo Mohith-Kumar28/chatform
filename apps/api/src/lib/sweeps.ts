@@ -147,6 +147,117 @@ export async function sweepPartialNotifications(env: Bindings, limit = 200): Pro
   return n;
 }
 
+/**
+ * Send the follow-ups that have come due.
+ *
+ * Every precondition is re-checked here rather than trusted from scheduling
+ * time, because hours or days have passed and any of them may have changed: the
+ * respondent may have finished, the form may have closed, the plan may have
+ * lapsed, the address may have unsubscribed, the month's quota may be spent.
+ * Scheduling decided this nudge was a good idea once; this decides whether it
+ * still is.
+ *
+ * The actual send is enqueued rather than performed inline, so the cron stays
+ * fast and each message inherits the queue's retries and dead-letter handling.
+ */
+export async function sweepFollowUps(env: Bindings, limit = 100): Promise<number> {
+  const now = Date.now();
+  const due = await env.DB.prepare(
+    `SELECT f.id, f.submission_id, f.organization_id, f.address, f.step,
+            s.status AS sub_status
+       FROM followups f
+       JOIN submissions s ON s.id = f.submission_id
+      WHERE f.status = 'scheduled' AND f.scheduled_at < ?
+      LIMIT ?`,
+  )
+    .bind(now, limit)
+    .all<{
+      id: string;
+      submission_id: string;
+      organization_id: string;
+      address: string;
+      step: number;
+      sub_status: string;
+    }>();
+
+  const rows = due.results ?? [];
+  if (rows.length === 0) return 0;
+
+  const { isSuppressed } = await import("./followups.js");
+  const { getEntitlements, checkQuota } = await import("./entitlements.js");
+  const { can } = await import("@repo/entitlements");
+
+  let sent = 0;
+  for (const row of rows) {
+    const skip = async (reason: string) => {
+      await env.DB.prepare(`UPDATE followups SET status = 'skipped', reason = ?2 WHERE id = ?1`)
+        .bind(row.id, reason)
+        .run();
+    };
+
+    /**
+     * The race this exists for: the respondent finished, or was screened out,
+     * in the window between scheduling and now. `cancelFollowUps` already runs
+     * on that path, but a cancel that lost a race is not a reason to mail
+     * somebody who has already completed the form.
+     */
+    if (row.sub_status !== "abandoned" && row.sub_status !== "in_progress") {
+      await skip("response_settled");
+      continue;
+    }
+
+    if (await isSuppressed(env, row.organization_id, row.address)) {
+      await skip("suppressed");
+      continue;
+    }
+
+    const ent = await getEntitlements(env, row.organization_id);
+    if (!can(ent, "followup_email")) {
+      await skip("not_entitled");
+      continue;
+    }
+
+    const quota = await checkQuota(env, row.organization_id, "emails_sent", ent);
+    if (!quota.ok) {
+      await skip("email_quota");
+      continue;
+    }
+
+    /**
+     * The shared-domain cap. It only applies while the customer is sending
+     * from our domain — once they have verified their own, their volume is
+     * their own reputation to spend.
+     */
+    if (!(await hasVerifiedSendingDomain(env, row.organization_id))) {
+      const shared = await checkQuota(env, row.organization_id, "followups_shared_domain", ent);
+      if (!shared.ok) {
+        await skip("shared_domain_cap");
+        continue;
+      }
+    }
+
+    await env.Q_EMAIL.send({ kind: "followup", followupId: row.id });
+    await env.DB.prepare(`UPDATE followups SET status = 'sent', sent_at = ?2 WHERE id = ?1`)
+      .bind(row.id, now)
+      .run();
+    sent++;
+  }
+  return sent;
+}
+
+/**
+ * Has this organization verified a sending domain of its own?
+ *
+ * A stub with a real signature, because `custom_domain` is priced but not yet
+ * built. Everything downstream is written against the answer rather than the
+ * mechanism, so the day domain verification ships this becomes a lookup and
+ * nothing else moves. Answering `false` for everyone today is also the safe
+ * answer: it keeps every tenant under the shared-domain cap.
+ */
+async function hasVerifiedSendingDomain(_env: Bindings, _orgId: string): Promise<boolean> {
+  return false;
+}
+
 /** Test data is real data, and it is not kept. */
 const TEST_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 

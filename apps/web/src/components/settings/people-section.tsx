@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
- * Who is in this workspace, and inviting more of them.
+ * Who is in this organization, and inviting more of them.
  *
  * ## Why this is the library's table and not our own
  *
@@ -20,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
  * unaware of each other. The hand-written one won the first cut on the strength
  * of what it knew about *seats*; that was the wrong comparison. It was a plain
  * `<ul>` with no search, no sorting, no pagination and no bulk actions, judged
- * against a workspace containing one person. Business sells twenty-five.
+ * against an organization containing one person. Business sells twenty-five.
  *
  * The library's version pages against the server, filters and sorts roles
  * server-side, searches, selects in bulk, and gets the ownership rules right in
@@ -81,7 +81,7 @@ export function PeopleSection() {
         <SettingsSectionHeader title="People" />
         <EmptyState
           icon={Building2}
-          title="You're not in a workspace yet"
+          title="You're not in an organization yet"
           description="Create one from the switcher in the header, and the people in it will appear here."
         />
       </>
@@ -90,7 +90,7 @@ export function PeopleSection() {
 
   return (
     <>
-      {/* The workspace's name is not repeated here — the rail beside this pane
+      {/* The organization's name is not repeated here — the rail beside this pane
           is headed with it, and saying it twice on one screen is the duplication
           this consolidation exists to remove. */}
       <SettingsSectionHeader title="People" />

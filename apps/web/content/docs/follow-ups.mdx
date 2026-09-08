@@ -1,0 +1,109 @@
+---
+title: Follow-ups
+description: Email people who started answering and left, with a link back to where they stopped.
+---
+
+Most people who abandon a form never come back on their own. If they gave you an
+email address before they went, follow-ups ask them to finish — and the link in
+that email drops them back into the same conversation, on the question they
+stopped on, with every answer they already gave still there.
+
+That last part is the bit worth knowing. The answers live on our side, keyed to
+the response, not in the browser that started it. So the link works on a phone
+when the form was started on a laptop, in a different browser, after clearing
+cookies, or three weeks later.
+
+## Turning it on
+
+**Settings → Follow-ups.** Pro plan and above.
+
+The default sequence is two emails: one four hours after they leave, one a day
+later. You can add a third, and three is the maximum.
+
+<Callout>
+The delays start from the moment the response is marked abandoned, which is
+thirty minutes after the respondent's last activity — not from when they opened
+the form.
+</Callout>
+
+## Where the address comes from
+
+The first of these that yields an address wins:
+
+1. **A verified respondent.** If the form requires sign-in, we already have an
+   address they proved they control.
+2. **An `email` question**, or the email field of a `contact_info` question, in
+   the order they appear in the form.
+3. **A hidden field**, if you name one under *Address from a hidden field*. This
+   is for the case where you already knew their email and put it in the link.
+
+If none of them yields anything, nothing is scheduled. A form that never asks for
+an email cannot follow anybody up, and switching the feature on will not change
+that.
+
+## What gets sent
+
+One screen, one link, and the progress they made:
+
+> You answered **3 of 7** questions in Get a quote — 4 to go, about a minute.
+
+You can add your own text above the button, and use `{{ref}}` to pull in answers
+they already gave — the same syntax the auto-reply uses. `{{remaining}}` is the
+number of questions left, which is what makes a subject line like *"You're 3
+questions from finishing"* work.
+
+## When a follow-up is not sent
+
+Every reminder is re-checked at the moment it is due, not when it was scheduled.
+It is dropped if:
+
+- the respondent finished, or was screened out, in the meantime
+- the form closed, or would be closed by the time the email lands
+- the address unsubscribed, bounced, or opted out on the form itself
+- the plan lapsed, or the monthly email allowance is spent
+- the response was made in test mode
+
+## Consent, and why the form asks
+
+A reminder to somebody who did not finish is **marketing email**, not a service
+message — in the US, the UK, the EU and Canada alike. Two consequences you will
+see in the product:
+
+- **Respondents are offered an opt-out beside the question that asks for their
+  address.** It has to be there rather than at the end, because the whole
+  premise is that they never reach the end.
+- **Every reminder carries an unsubscribe link and your postal address.** Both
+  are legal requirements, and the unsubscribe works in one click with no login.
+
+Use follow-ups for forms people fill in to get something from you — a quote, a
+demo, a trial, a booking. Not for surveys, job applications, feedback forms or
+event RSVPs: those are not sales negotiations, and a reminder about one is
+marketing to somebody who never entered into anything.
+
+## Measuring whether it worked
+
+Under *Options* you can hold back a share of abandoners and send them nothing.
+The results table marks those **Held back**, and the ones who were nudged and
+then finished **Recovered**.
+
+This is worth switching on. Published recovery rates for this kind of email are
+almost always the share of recipients who converted, with no control group — so
+they count everybody who was coming back anyway. A holdout is the only way to
+know what the reminders actually added.
+
+## Webhooks
+
+Two events, both documented in [webhooks](/docs/webhooks): `followup.sent` when a
+reminder goes out, and `response.resumed` when somebody comes back through one.
+
+<Callout type="warn">
+`response.abandoned` stops being the last word on a response once this is on. The
+same `submissionId` can complete days later.
+</Callout>
+
+## Other channels
+
+WhatsApp and SMS are listed in the channel picker and disabled. Both are blocked
+on approvals outside this product — WhatsApp does not deliver marketing templates
+to US numbers at all at present, and US SMS needs per-sender 10DLC registration —
+so neither has a date attached to it.

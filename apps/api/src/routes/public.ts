@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
@@ -12,6 +12,9 @@ import { openSession, type FormRow } from "../lib/open-session.js";
 import { mountRespondentAuth } from "./respondent-auth.js";
 import { getEntitlements, meter, checkQuota } from "../lib/entitlements.js";
 import { brandingHiddenFor, clampForRuntime } from "../lib/doc-entitlements.js";
+import { verifyEmailToken } from "../lib/signed-url.js";
+import { cancelFollowUps, cancelFollowUpsForAddress, suppress } from "../lib/followups.js";
+import type { RespondentIdentity } from "@repo/form-schema";
 
 const sessionsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -20,6 +23,12 @@ const createSessionSchema = z.object({
   password: z.string().max(200).optional(),
   hiddenFields: z.record(z.string(), z.string()).optional(),
   embed: z.object({ origin: z.string().optional() }).optional(),
+  /**
+   * The signed token from a follow-up email. Continues the response it names
+   * rather than starting a new one — see `resumeSubmissionId` in `openSession`
+   * for which gates that relaxes and which it does not.
+   */
+  resumeToken: z.string().max(300).optional(),
 });
 
 const messageSchema = z.discriminatedUnion("type", [
@@ -152,6 +161,16 @@ sessionsRouter.post(
     }
 
     /**
+     * A follow-up link, verified before anything is created.
+     *
+     * An invalid or expired token is not an error the respondent can act on —
+     * they clicked a link in an email — so it degrades to a fresh session
+     * rather than a dead end. They lose their previous answers, which is sad,
+     * but a working form is better than a page saying "invalid token".
+     */
+    const resume = await loadResumable(c.env, formRow.id, body.resumeToken);
+
+    /**
      * Every gate now lives in `openSession`, shared with the headless API.
      *
      * They used to live inline here, which is exactly why `/v1` had none of
@@ -179,8 +198,36 @@ sessionsRouter.post(
        * an allowed one.
        */
       embedOrigin: c.req.header("origin") ?? null,
+      ...(resume ? { resumeSubmissionId: resume.submissionId } : {}),
     });
     if (!opened.ok) return c.json(opened.body, opened.status);
+
+    /**
+     * Put the response back in progress *after* the gates passed.
+     *
+     * `finalizeResponse` guards on `status = 'in_progress'`, so this is what
+     * makes a second, real completion possible for a row that was already
+     * finalised as abandoned. Doing it before the gates would leave a response
+     * reopened for a session that was then refused.
+     */
+    if (resume) {
+      await c.env.DB.prepare(
+        `UPDATE submissions SET status = 'in_progress', completed_at = NULL, updated_at = ?2
+          WHERE id = ?1 AND status = 'abandoned'`,
+      )
+        .bind(resume.submissionId, Date.now())
+        .run();
+      await cancelFollowUps(c.env, resume.submissionId, "resumed");
+      await c.env.Q_WEBHOOKS.send({
+        event: "response.resumed",
+        organizationId: formRow.organization_id,
+        formId: formRow.id,
+        submissionId: resume.submissionId,
+        sessionId: opened.sessionId,
+        source: "chat",
+        isTest: false,
+      }).catch((err: unknown) => console.error("resume_webhook_failed", resume.submissionId, err));
+    }
 
     const result = await stub(c.env, opened.sessionId).init({
       sessionId: opened.sessionId,
@@ -197,6 +244,9 @@ sessionsRouter.post(
       country: c.req.header("cf-ipcountry") ?? null,
       userAgent: c.req.header("user-agent") ?? null,
       source: body.embed?.origin ? "embed" : "chat",
+      ...(resume
+        ? { resume: { submissionId: resume.submissionId, answers: resume.answers, identity: resume.identity } }
+        : {}),
     });
 
     if (!result.ok) {
@@ -210,6 +260,88 @@ sessionsRouter.post(
     });
   },
 );
+
+interface Resumable {
+  submissionId: string;
+  answers: Record<string, unknown>;
+  identity: RespondentIdentity | null;
+}
+
+/**
+ * Verify a follow-up link and load what it points at.
+ *
+ * Returns null for anything that does not check out, and the caller then opens
+ * an ordinary session — a respondent who clicked a link in an email cannot do
+ * anything with "invalid token", so the graceful failure is a working form.
+ *
+ * The token is scoped to a submission, and the submission is re-checked against
+ * the form in the URL. Without that, a token minted for one form would resume a
+ * response inside another one belonging to a different customer.
+ */
+async function loadResumable(
+  env: Bindings,
+  formId: string,
+  token: string | undefined,
+): Promise<Resumable | null> {
+  if (!token) return null;
+  const { verdict, id } = await verifyEmailToken(env, "resume", token);
+  if (verdict !== "ok" || !id) return null;
+
+  const sub = await env.DB.prepare(
+    `SELECT id, form_id, status, is_test, respondent_provider, respondent_subject,
+            respondent_email, respondent_phone, respondent_name
+       FROM submissions WHERE id = ?`,
+  )
+    .bind(id)
+    .first<{
+      id: string;
+      form_id: string;
+      status: string;
+      is_test: number;
+      respondent_provider: string | null;
+      respondent_subject: string | null;
+      respondent_email: string | null;
+      respondent_phone: string | null;
+      respondent_name: string | null;
+    }>();
+  if (!sub || sub.form_id !== formId || sub.is_test === 1) return null;
+  // A completed response is not resumable: coming back to a form you finished
+  // should not quietly reopen it and let a second submission overwrite the first.
+  if (sub.status !== "abandoned" && sub.status !== "in_progress") return null;
+
+  const rows = await env.DB.prepare(
+    `SELECT block_ref, value_json FROM submission_answers WHERE submission_id = ?`,
+  )
+    .bind(id)
+    .all<{ block_ref: string; value_json: string }>();
+
+  const answers: Record<string, unknown> = {};
+  for (const r of rows.results ?? []) {
+    try {
+      answers[r.block_ref] = JSON.parse(r.value_json);
+    } catch {
+      // one unreadable answer must not cost them the rest
+    }
+  }
+
+  /**
+   * Carried forward so a form behind a sign-in gate does not ask somebody to
+   * verify themselves twice. The identity was already proved once for this
+   * response and denormalised onto it precisely because sessions get pruned.
+   */
+  const identity: RespondentIdentity | null =
+    sub.respondent_provider && sub.respondent_subject
+      ? ({
+          provider: sub.respondent_provider,
+          subject: sub.respondent_subject,
+          email: sub.respondent_email,
+          phone: sub.respondent_phone,
+          name: sub.respondent_name,
+        } as RespondentIdentity)
+      : null;
+
+  return { submissionId: sub.id, answers, identity };
+}
 
 async function requireRespondent(c: RespondentCtx): Promise<string | null> {
   const sessionId = c.req.param("id");
@@ -275,6 +407,91 @@ sessionsRouter.get("/sessions/:id", async (c) => {
   if (!status) return c.json({ error: { code: "not_found", message: "Session not found" } }, 404);
   return c.json(status);
 });
+
+/**
+ * "Don't email me about this" — offered beside the address question itself.
+ *
+ * This is the one respondent-facing piece of the follow-up feature, and it is
+ * required rather than courteous: the opt-out has to be available when the
+ * contact details are collected, and on a form somebody abandons, that is the
+ * *only* moment it can be. An opt-out in the footer of the reminder, or on a
+ * final step they never reach, arrives after the thing it was supposed to
+ * prevent.
+ *
+ * Recorded on the session, because the response row is created lazily by the
+ * first answer and may not exist when the question is still on screen.
+ */
+sessionsRouter.post("/sessions/:id/followup-optout", async (c) => {
+  const sessionId = await requireRespondent(c);
+  if (!sessionId) return c.json({ error: { code: "unauthorized", message: "Invalid token" } }, 401);
+  await c.env.DB.prepare(`UPDATE chat_sessions SET followup_opt_out = 1 WHERE id = ?`)
+    .bind(sessionId)
+    .run();
+  return c.json({ ok: true });
+});
+
+/**
+ * One-click unsubscribe from a customer's follow-up emails.
+ *
+ * `GET` and `POST` both work, and neither requires a login or a confirmation
+ * step. That is not laziness — it is the requirement. RFC 8058 one-click, which
+ * Gmail and Yahoo surface as an unsubscribe control next to the sender's name,
+ * sends a bare `POST` with no cookies; and an opt-out somebody has to hunt for
+ * is one they report as spam instead, which costs the sending domain far more
+ * than the recipient was ever worth.
+ *
+ * The suppression is scoped to the organization the token names. A respondent
+ * declining one customer's nudges has said nothing about anybody else's, and
+ * this table is never consulted for transactional mail — someone who opts out
+ * here must still be able to reset their password.
+ */
+const unsubscribeHandler = async (c: Context<{ Bindings: Bindings }>) => {
+  const { verdict, id } = await verifyEmailToken(c.env, "unsub", c.req.param("token"));
+  /**
+   * A bad token still renders as success.
+   *
+   * The alternative tells whoever is holding it whether it was ever real, and
+   * there is nothing the recipient could do about the answer anyway. Nothing is
+   * written, so this leaks no state; it just refuses to be an oracle.
+   */
+  if (verdict === "ok" && id) {
+    // `orgId:address` — the address is snapshotted into the token so this works
+    // even after the response it came from has been deleted.
+    const sep = id.indexOf(":");
+    if (sep > 0) {
+      const orgId = id.slice(0, sep);
+      const address = id.slice(sep + 1);
+      await suppress(c.env, orgId, address, "unsubscribe");
+      await cancelFollowUpsForAddress(c.env, orgId, address);
+    }
+  }
+  return c.html(UNSUBSCRIBED_PAGE);
+};
+
+sessionsRouter.get("/unsubscribe/:token", unsubscribeHandler);
+sessionsRouter.post("/unsubscribe/:token", unsubscribeHandler);
+
+/** Deliberately dependency-free: this page must render from a cold worker. */
+const UNSUBSCRIBED_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unsubscribed</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center;
+         font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+         background:#faf8f4; color:#3b3530; padding:24px; }
+  main { max-width:32rem; text-align:center; }
+  h1 { font-size:20px; margin:0 0 8px; letter-spacing:-0.015em; }
+  p { margin:0; color:#7b736c; }
+  @media (prefers-color-scheme: dark) {
+    body { background:#1c1917; color:#e8e3da; } p { color:#a49c94; }
+  }
+</style></head>
+<body><main>
+  <h1>You're unsubscribed</h1>
+  <p>You won't get any more reminders about this form. Any answers you already gave are untouched.</p>
+</main></body></html>`;
 
 mountRespondentAuth(sessionsRouter, {
   base: "/sessions/:id",

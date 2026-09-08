@@ -33,6 +33,7 @@ formsRouter.post("/forms", requirePermission("form", "create"), requireGauge("fo
 formsRouter.put("/forms/:id/doc", requirePermission("form", "update"));
 formsRouter.post("/forms/:id/publish", requirePermission("form", "publish"));
 formsRouter.delete("/forms/:id", requirePermission("form", "delete"));
+formsRouter.patch("/forms/:id/workspace", requirePermission("form", "update"));
 
 const FormSummary = z.object({
   id: z.string(),
@@ -140,9 +141,14 @@ function defaultDoc(title: string): string {
 
 formsRouter.get(
   "/forms",
-  describeRoute({ tags: ["dashboard"], summary: "List forms in the active workspace", responses: { 200: { description: "Forms", content: { "application/json": { schema: resolver(z.array(FormListItem)) } } } } }),
+  describeRoute({ tags: ["dashboard"], summary: "List forms in a workspace", responses: { 200: { description: "Forms", content: { "application/json": { schema: resolver(z.array(FormListItem)) } } } } }),
+  validator("query", z.object({ ws: z.string().optional() })),
   async (c) => {
-    const ws = await requireWorkspace(c);
+    // `?ws=` names the workspace being viewed — a slug from the switcher, or an
+    // id. Absent, `requireWorkspace` falls back to the organization's oldest,
+    // which is what every link written before workspaces were selectable means.
+    const ws = await requireWorkspace(c, c.req.query("ws"));
+    if (ws === undefined) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
     if (!ws) return c.json([]);
     // `working_schema` joins the select so the card can describe the form.
     // It is the one wide column here; a workspace holds tens of forms, not
@@ -180,6 +186,7 @@ formsRouter.post(
   async (c) => {
     const body = c.req.valid("json");
     const ws = await requireWorkspace(c, body.workspaceId);
+    if (ws === undefined) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
     if (!ws) return c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
     const userId = c.get("userId") as string;
     let workingSchema: string;
@@ -221,6 +228,40 @@ formsRouter.delete(
     const form = c.get("form")!;
     await c.env.DB.prepare(`UPDATE forms SET deleted_at = ?, status = 'archived' WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`)
       .bind(Date.now(), form.id, form.organization_id)
+      .run();
+    return c.json({ ok: true });
+  },
+);
+
+/**
+ * Move a form between workspaces.
+ *
+ * Without this a second workspace is somewhere new forms can be made and
+ * nothing can be moved into, which is not a feature so much as a fork.
+ *
+ * `requireFormAccess` has already proved the form is this organization's, and
+ * the target is resolved inside the same organization — so a move cannot cross
+ * a tenant boundary in either direction. `organization_id` is deliberately left
+ * alone: it is the same organization, and rewriting a denormalised column that
+ * is not changing is how it drifts.
+ */
+formsRouter.patch(
+  "/forms/:id/workspace",
+  validator("json", z.object({ workspaceId: z.string() })),
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Move a form to another workspace",
+    responses: {
+      200: { description: "Moved", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } },
+      404: { description: "No such workspace", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
+    },
+  }),
+  async (c) => {
+    const form = c.get("form")!;
+    const target = await requireWorkspace(c, c.req.valid("json").workspaceId);
+    if (!target) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
+    await c.env.DB.prepare(`UPDATE forms SET workspace_id = ?, updated_at = ? WHERE id = ? AND organization_id = ?`)
+      .bind(target.wsId, Date.now(), form.id, form.organization_id)
       .run();
     return c.json({ ok: true });
   },

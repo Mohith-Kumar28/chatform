@@ -47,6 +47,9 @@ export const QuestionAffordance = memo(function QuestionAffordance(props: {
   respondentToken: string | null;
   onStructured: (value: unknown, display: string) => void;
   onSkip: () => void;
+  /** The form emails people who leave part-way. Shows the opt-out. */
+  followUpEnabled?: boolean;
+  onDeclineFollowUps?: () => void;
 }) {
   return (
     <div
@@ -64,9 +67,51 @@ export const QuestionAffordance = memo(function QuestionAffordance(props: {
           projected all the way to the client, and then rendered nowhere. */}
       <QuestionMedia media={props.block.media} imageKey={props.block.imageKey} />
       <AffordanceControls {...props} />
+      {props.followUpEnabled && collectsAddress(props.block) && props.onDeclineFollowUps && (
+        <FollowUpOptOut onDecline={props.onDeclineFollowUps} />
+      )}
     </div>
   );
 });
+
+/** The block types the follow-up address resolver reads. Kept in step with `respondent-address.ts`. */
+function collectsAddress(block: PublicBlock): boolean {
+  return block.type === "email" || block.type === "contact_info";
+}
+
+/**
+ * "Don't email me about this", beside the question that asks for the address.
+ *
+ * Here rather than in a footer or on a final step because this is a form people
+ * abandon — that is the entire premise of the feature — so the moment we ask
+ * for their address is the last moment they are reliably still present to
+ * decline. An opt-out offered only in the reminder arrives after the thing it
+ * exists to prevent, and one on a step they never reach is not offered at all.
+ *
+ * Deliberately a quiet checkbox rather than a prominent one. It has to be
+ * genuinely findable and genuinely work; it does not have to compete with the
+ * question for attention.
+ */
+function FollowUpOptOut({ onDecline }: { onDecline: () => void }) {
+  const [declined, setDeclined] = useState(false);
+  return (
+    <label className="text-muted-foreground flex cursor-pointer items-center gap-2 pt-1 pl-0.5 text-xs select-none">
+      <input
+        type="checkbox"
+        checked={declined}
+        className="size-3.5 cursor-pointer rounded-sm border-current accent-current"
+        onChange={(e) => {
+          setDeclined(e.target.checked);
+          // Only ever sent on the way *in* to declining. Unticking the box is
+          // rare enough, and re-subscribing somebody automatically is a worse
+          // failure than leaving them opted out.
+          if (e.target.checked) onDecline();
+        }}
+      />
+      Don’t email me reminders about this form
+    </label>
+  );
+}
 
 /**
  * The numbered choices a question offers, in the order the chips show them.

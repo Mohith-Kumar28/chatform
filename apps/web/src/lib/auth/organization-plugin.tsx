@@ -11,52 +11,33 @@ import { uploadAuthImage } from "@/lib/auth/upload-image"
 import { ROLE_LABELS } from "@/lib/roles"
 
 /**
- * "Workspace", everywhere a person can read it.
+ * The words Better Auth UI uses, kept — with one clarification.
  *
- * Better Auth calls this an organization and so does its UI; the product has
- * called it a workspace since before either was installed — the switcher in
- * the header, `/team`, the empty states. Left alone, the create dialog opened
- * from a menu item that says "New workspace" and titled itself "Create
- * organization", which reads as two different features.
+ * This map used to rename every "organization" string to "workspace", because
+ * the product called a Better Auth organization a workspace: the switcher, the
+ * empty states, `/team`. That was the wrong noun in the wrong place. There has
+ * always been a `workspaces` table with `forms.workspace_id` pointing at it;
+ * it just had no UI, so the name was free to be borrowed. Now that workspaces
+ * are real folders you can create and switch between, the two levels are:
  *
- * Only the strings a user sees are changed. `organization` stays the name of
- * the plugin, the endpoints, the tables and the role scope — renaming a noun
- * in the copy is not a reason to rename it in the code.
+ *   organization   the account — subscription, seats, members, roles
+ *   workspace      a folder of forms inside it
+ *
+ * and the library's own vocabulary is simply correct. What is left here is the
+ * one thing it cannot know: that an invitation is to an *organization*, and so
+ * grants a role and consumes a seat, rather than to any one folder.
  */
-const workspaceLocalization = {
-  createOrganization: "Create workspace",
-  deleteOrganization: "Delete workspace",
-  deleteOrganizationDescription:
-    "Permanently delete this workspace and all of its data. All members will lose access and this cannot be undone.",
-  leaveOrganization: "Leave workspace",
-  leaveOrganizationDescription:
-    "Leave this workspace and lose access to its data and resources. You'll need a new invitation to rejoin.",
-  leftOrganization: "You left the workspace",
-  namePlaceholder: "Acme Inc",
-  noOrganizations: "No workspaces",
-  organization: "Workspace",
-  organizationDeleted: "Workspace deleted",
-  organizationLimitReached: "You have reached the workspace limit.",
-  organizationProfile: "Workspace profile",
-  organizationUpdatedSuccess: "Workspace updated",
-  organizations: "Workspaces",
+const orgLocalization = {
   organizationsDescription:
-    "A workspace is where your forms, responses and teammates live.",
-  acceptInvitationTitle: "Workspace invitation",
-  changeMemberRoleDescription:
-    "Choose the roles this member should have in the workspace.",
+    "An organization is an account: it holds your plan, your teammates and the workspaces your forms live in.",
   inviteMemberDescription:
-    "We'll email them a link to join this workspace. Choose the role they'll have once they accept.",
-  membershipLimitReached: "This workspace has reached its member limit.",
+    "We'll email them a link to join this organization. Choose the role they'll have once they accept — it applies across every workspace in it.",
+  changeMemberRoleDescription:
+    "Choose the role this member should have. Roles are set per organization, not per workspace.",
   organizationInvitationsEmptyDescription:
-    "Invite a teammate to collaborate in this workspace.",
-  removeMemberWarning:
-    "Are you sure you want to remove this member from the workspace? They will lose access immediately.",
-  removeSelectedMembersDescription:
-    "Remove the selected members from this workspace? They will lose access immediately.",
-  slugPlaceholder: "workspace-slug",
+    "Invite a teammate to collaborate across this organization.",
   userInvitationsEmptyDescription:
-    "Invitations to join a workspace will show up here."
+    "Invitations to join an organization will show up here."
 } satisfies Partial<OrganizationLocalization>
 
 export const organizationPlugin = createAuthPlugin(
@@ -111,17 +92,22 @@ export const organizationPlugin = createAuthPlugin(
        *
        * Set here rather than at the provider because `organizationPlugin()` is
        * called bare in more than one place and each call reads its own
-       * `viewPaths` — a default is the only way every call site agrees. The
-       * library's own words are "organizations" and "settings"; ours are
-       * "workspaces" and "general", and these are the URLs the rail links to,
-       * so a mismatch shows up as a section that navigates to a 404.
+       * `viewPaths` — a default is the only way every call site agrees. These
+       * are the URLs the rail links to, so a mismatch shows up as a section
+       * that navigates to a 404.
+       *
+       * `organizations` pointed at "workspaces" while the two words meant the
+       * same thing. `/settings/workspaces` is now the folders inside an
+       * organization, and this list of organizations moved to its own segment —
+       * so the old value would have sent this rail to the wrong page rather
+       * than to no page, which is the harder kind of wrong to notice.
        */
       viewPaths: {
         ...options.viewPaths,
-        settings: { organizations: "workspaces", ...options.viewPaths?.settings },
+        settings: { organizations: "organizations", ...options.viewPaths?.settings },
         organization: { settings: "general", ...options.viewPaths?.organization },
       },
-      localization: { ...workspaceLocalization, ...options.localization }
+      localization: { ...orgLocalization, ...options.localization }
     })
 
     return {

@@ -20,6 +20,23 @@ import type { Bindings } from "../env.js";
  * cannot break delivery and a change of provider cannot change a message.
  */
 
+/**
+ * Which kind of mail this is, and therefore which pipe it may leave through.
+ *
+ * Not a label — a routing decision. Cloudflare documents Email Service as
+ * transactional-only ("Email Service is intended only for transactional
+ * emails"), and Postmark draws the same line for the same reason: mixing
+ * broadcast and transactional traffic on one reputation means the day a growth
+ * feature annoys people is the day password resets stop arriving.
+ *
+ * So a `marketing` message never touches the `EMAIL` binding, and never
+ * silently falls back onto it. It goes out over Resend on the marketing
+ * subdomain or it fails loudly. Defaulting to `transactional` keeps every
+ * existing caller — invitations, OTPs, resets, submission notifications —
+ * exactly where it already was.
+ */
+export type MailClass = "transactional" | "marketing";
+
 export interface MailMessage {
   to: string;
   subject: string;
@@ -31,6 +48,14 @@ export interface MailMessage {
    */
   text: string;
   replyTo?: string;
+  /** Defaults to `transactional`. See `MailClass`. */
+  class?: MailClass;
+  /**
+   * Extra headers, for the one-click unsubscribe a marketing message is
+   * required to carry. Only the Resend path can set these; the binding has no
+   * parameter for them, which is one more reason marketing mail does not use it.
+   */
+  headers?: Record<string, string>;
 }
 
 /** What actually carried the message, for the log line. */
@@ -63,6 +88,28 @@ export function mailFrom(env: Bindings): string {
 }
 
 /**
+ * The From address for marketing mail.
+ *
+ * A different subdomain from transactional on purpose, so the two reputations
+ * are separable at the receiving end: a run of complaints about follow-ups
+ * should cost us follow-up delivery, not password resets. `EMAIL_FROM_MARKETING`
+ * when set; otherwise `hello@mail.<apex>`, which is the shape a recipient
+ * expects to be able to reply to.
+ */
+export function marketingFrom(env: Bindings): string {
+  if (env.EMAIL_FROM_MARKETING?.trim()) return env.EMAIL_FROM_MARKETING.trim();
+  let host: string;
+  try {
+    host = new URL(env.APP_ORIGIN).hostname;
+  } catch {
+    return "chatform <hello@mail.chatform.in>";
+  }
+  const labels = host.split(".");
+  const apex = labels.length > 2 ? labels.slice(-2).join(".") : host;
+  return `chatform <hello@mail.${apex}>`;
+}
+
+/**
  * Send one message.
  *
  * Throws on failure — every caller is a queue consumer, and a thrown error is
@@ -70,8 +117,31 @@ export function mailFrom(env: Bindings): string {
  * would turn "the invite never arrived" into a silent event.
  */
 export async function sendMail(env: Bindings, msg: MailMessage): Promise<MailResult> {
-  const from = mailFrom(env);
+  const marketing = msg.class === "marketing";
+  const from = marketing ? marketingFrom(env) : mailFrom(env);
   const replyTo = msg.replyTo ?? env.EMAIL_REPLY_TO;
+
+  /**
+   * Marketing mail takes the Resend path or no path at all.
+   *
+   * Deliberately not a fallback: falling back onto the binding is precisely the
+   * failure this split exists to prevent, and it would happen silently, on the
+   * day someone forgot to set the key, to every nudge at once. A queue retry
+   * and a DLQ entry are the right outcome — they are visible.
+   */
+  if (marketing) {
+    if (!env.RESEND_API_KEY) {
+      if (env.ENVIRONMENT !== "production") {
+        console.log(
+          "mail_marketing_not_configured",
+          JSON.stringify({ to: msg.to, subject: msg.subject }),
+        );
+        return { transport: "noop", messageId: null };
+      }
+      throw new Error("marketing_transport_unconfigured: RESEND_API_KEY is required for marketing mail");
+    }
+    return sendViaResend(env, msg, from, replyTo);
+  }
 
   if (env.EMAIL) {
     // The binding's builder overload — not the `EmailMessage` overload, which is
@@ -88,27 +158,7 @@ export async function sendMail(env: Bindings, msg: MailMessage): Promise<MailRes
   }
 
   if (env.RESEND_API_KEY) {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${env.RESEND_API_KEY}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        from,
-        to: [msg.to],
-        subject: msg.subject,
-        html: msg.html,
-        text: msg.text,
-        ...(replyTo ? { reply_to: replyTo } : {}),
-      }),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      throw new Error(`resend_send_failed ${res.status} ${detail.slice(0, 300)}`);
-    }
-    const body = (await res.json().catch(() => ({}))) as { id?: string };
-    return { transport: "resend", messageId: body.id ?? null };
+    return sendViaResend(env, msg, from, replyTo);
   }
 
   /**
@@ -118,6 +168,36 @@ export async function sendMail(env: Bindings, msg: MailMessage): Promise<MailRes
    */
   console.log("mail_not_configured", JSON.stringify({ to: msg.to, subject: msg.subject }));
   return { transport: "noop", messageId: null };
+}
+
+async function sendViaResend(
+  env: Bindings,
+  msg: MailMessage,
+  from: string,
+  replyTo: string | undefined,
+): Promise<MailResult> {
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.RESEND_API_KEY}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [msg.to],
+      subject: msg.subject,
+      html: msg.html,
+      text: msg.text,
+      ...(replyTo ? { reply_to: replyTo } : {}),
+      ...(msg.headers && Object.keys(msg.headers).length > 0 ? { headers: msg.headers } : {}),
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`resend_send_failed ${res.status} ${detail.slice(0, 300)}`);
+  }
+  const body = (await res.json().catch(() => ({}))) as { id?: string };
+  return { transport: "resend", messageId: body.id ?? null };
 }
 
 /**
@@ -180,6 +260,19 @@ export type MailJob =
       responseId: string;
       /** Skipped entirely for a `*_test_` key's response — see `enqueueMail`. */
       isTest: boolean;
+    }
+  | {
+      /**
+       * One nudge for a response somebody abandoned.
+       *
+       * Carries only the row id, for the same reason `submission` carries only
+       * identifiers: the consumer reads the response, the published document
+       * and the schedule row itself, which is the only place they are
+       * guaranteed to agree. It also means a template edited between scheduling
+       * and sending takes effect, which is what an author expects.
+       */
+      kind: "followup";
+      followupId: string;
     };
 
 /**

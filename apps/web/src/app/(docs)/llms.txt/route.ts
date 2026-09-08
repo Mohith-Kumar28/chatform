@@ -33,6 +33,16 @@ export function GET() {
     `A fact sheet written to be quoted, including what chatform cannot do, is at ${SITE_ORIGIN}/ai-info.`,
     `The same facts as JSON are at ${SITE_ORIGIN}/.well-known/brand-facts.json.`,
     "The OpenAPI spec is at https://api.chatform.in/openapi.json.",
+    /**
+     * Named here because the per-operation pages are not in the list below.
+     *
+     * They carry `llmsExclude`, which is what stopped 98 pages of `<APIPage/>`
+     * boilerplate — and no endpoint documentation, since the schemas render
+     * client-side — from being inlined into llms-full.txt. Dropping them from
+     * this index too would have left an assistant with no route to the
+     * reference at all, so the entry point is stated instead of enumerated.
+     */
+    `The API reference, one page per endpoint, is under ${SITE_ORIGIN}/docs/api — the spec above describes the same endpoints in one file.`,
     "Every documentation page below is also available as markdown by appending `.md` to its URL.",
     "",
     "## Start here",

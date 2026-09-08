@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { describeRoute, resolver } from "hono-openapi";
+import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import { FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
@@ -154,6 +154,7 @@ templatesRouter.get(
 
 templatesRouter.post(
   "/templates/:slug/use",
+  validator("query", z.object({ ws: z.string().optional() })),
   describeRoute({
     tags: ["dashboard"],
     summary: "Create a form from a template",
@@ -177,7 +178,10 @@ templatesRouter.post(
       return c.json({ error: { code: "invalid_template", message: "This template is out of date" } }, 404);
     }
 
-    const ws = await requireWorkspace(c);
+    // Same rule as `POST /forms`: the workspace being viewed, or the
+    // organization's first when the caller names none.
+    const ws = await requireWorkspace(c, c.req.query("ws"));
+    if (ws === undefined) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
     if (!ws) return c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
 
     const userId = c.get("userId")!;

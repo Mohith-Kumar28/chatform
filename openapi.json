@@ -226,6 +226,7 @@
             }
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -307,6 +308,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "respondentToken": []
@@ -397,6 +399,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "respondentToken": []
@@ -591,6 +594,10 @@
                         "type": "string"
                       }
                     }
+                  },
+                  "resumeToken": {
+                    "type": "string",
+                    "maxLength": 300
                   }
                 }
               }
@@ -607,6 +614,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "respondentToken": []
@@ -697,6 +705,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "respondentToken": []
@@ -770,6 +779,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "respondentToken": []
@@ -828,6 +838,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "respondentToken": []
@@ -866,6 +877,7 @@
             }
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -978,6 +990,7 @@
             }
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -1012,6 +1025,7 @@
             }
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -1025,7 +1039,7 @@
         "tags": [
           "dashboard"
         ],
-        "summary": "List forms in the active workspace",
+        "summary": "List forms in a workspace",
         "responses": {
           "200": {
             "description": "Forms",
@@ -1080,6 +1094,16 @@
             }
           }
         },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ws",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -1245,6 +1269,7 @@
             }
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -1289,6 +1314,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -1440,6 +1466,131 @@
             "required": true
           }
         ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/forms/{id}/workspace": {
+      "patch": {
+        "operationId": "patchApiFormsByIdWorkspace",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "workspaceId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "workspaceId"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Move a form to another workspace",
+        "responses": {
+          "200": {
+            "description": "Moved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -1507,6 +1658,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -1704,6 +1856,245 @@
             "required": true
           }
         ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/workspaces": {
+      "get": {
+        "operationId": "getApiWorkspaces",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "List workspaces in the active organization",
+        "responses": {
+          "200": {
+            "description": "Workspaces",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "slug": {
+                        "type": "string"
+                      },
+                      "formCount": {
+                        "type": "number"
+                      },
+                      "createdAt": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "slug",
+                      "formCount",
+                      "createdAt"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postApiWorkspaces",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Create a workspace",
+        "responses": {
+          "200": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "formCount": {
+                      "type": "number"
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "formCount",
+                    "createdAt"
+                  ]
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Limit reached"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/workspaces/{id}": {
+      "patch": {
+        "operationId": "patchApiWorkspacesById",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Rename a workspace",
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "formCount": {
+                      "type": "number"
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "formCount",
+                    "createdAt"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteApiWorkspacesById",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Delete a workspace",
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "409": {
+            "description": "Not empty, or the last one"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -1730,6 +2121,9 @@
                     "type": "integer",
                     "minimum": 2,
                     "maximum": 19
+                  },
+                  "workspaceId": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -1776,6 +2170,7 @@
             "description": "AI not configured"
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -1802,6 +2197,9 @@
                     "type": "integer",
                     "minimum": 2,
                     "maximum": 19
+                  },
+                  "workspaceId": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -1824,6 +2222,7 @@
             "description": "AI not configured"
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -1949,6 +2348,7 @@
             "description": "AI not configured"
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -2074,6 +2474,7 @@
             "description": "AI not configured"
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -2220,6 +2621,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -2288,6 +2690,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -2327,6 +2730,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -2359,6 +2763,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -2823,6 +3228,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -2922,12 +3328,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "response:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -3062,12 +3466,10 @@
             "description": "Form not found"
           }
         },
+        "x-required-scope": "response:read",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -3156,12 +3558,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "response:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -3202,12 +3602,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "response:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -3261,12 +3659,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "response:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -3315,12 +3711,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "response:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -3353,12 +3747,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "response:read",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -3391,12 +3783,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "response:read",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -3565,6 +3955,7 @@
             "description": "Malformed cursor"
           }
         },
+        "x-required-scope": "form:read",
         "security": [
           {
             "secretKey": []
@@ -3612,12 +4003,10 @@
             "description": "The document is invalid"
           }
         },
+        "x-required-scope": "form:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -3650,6 +4039,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "form:read",
         "security": [
           {
             "secretKey": []
@@ -3686,12 +4076,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "form:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -3743,12 +4131,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "form:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -3787,12 +4173,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "form:publish",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -3828,12 +4212,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "analytics:read",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -3909,12 +4291,10 @@
             }
           }
         },
+        "x-required-scope": "webhook:read",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -3971,12 +4351,10 @@
             "description": "Unknown event name"
           }
         },
+        "x-required-scope": "webhook:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -4009,12 +4387,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "webhook:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -4047,12 +4423,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "webhook:read",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -4096,12 +4470,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "webhook:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -4306,12 +4678,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "response:export",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -4468,12 +4838,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "response:export",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -4513,12 +4881,10 @@
             "description": "Exports, newest first"
           }
         },
+        "x-required-scope": "response:export",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -4618,12 +4984,10 @@
             "required": true
           }
         ],
+        "x-required-scope": "file:read",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -4714,6 +5078,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "file:write",
         "security": [
           {
             "secretKey": []
@@ -4793,6 +5158,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "file:write",
         "security": [
           {
             "secretKey": []
@@ -4857,6 +5223,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "file:write",
         "security": [
           {
             "secretKey": []
@@ -4993,6 +5360,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "session:create",
         "security": [
           {
             "secretKey": []
@@ -5129,6 +5497,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "session:create",
         "security": [
           {
             "secretKey": []
@@ -5217,6 +5586,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "session:write",
         "security": [
           {
             "secretKey": []
@@ -5286,6 +5656,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "session:write",
         "security": [
           {
             "secretKey": []
@@ -5324,6 +5695,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "session:read",
         "security": [
           {
             "secretKey": []
@@ -5359,6 +5731,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "session:read",
         "security": [
           {
             "secretKey": []
@@ -5397,6 +5770,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "session:write",
         "security": [
           {
             "secretKey": []
@@ -5485,6 +5859,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "session:write",
         "security": [
           {
             "secretKey": []
@@ -5554,6 +5929,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "session:write",
         "security": [
           {
             "secretKey": []
@@ -5592,6 +5968,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "session:read",
         "security": [
           {
             "secretKey": []
@@ -5627,6 +6004,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "session:read",
         "security": [
           {
             "secretKey": []
@@ -5665,6 +6043,7 @@
             "required": true
           }
         ],
+        "x-required-scope": "session:write",
         "security": [
           {
             "secretKey": []
@@ -5878,6 +6257,7 @@
             }
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -6117,6 +6497,7 @@
             "description": "A publishable key needs at least one allowed origin"
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -6335,6 +6716,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -6379,6 +6761,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -6398,6 +6781,7 @@
             "description": "Vocabulary"
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -6468,6 +6852,7 @@
             }
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -6501,6 +6886,8 @@
                         "response.partial",
                         "response.answer_recorded",
                         "session.started",
+                        "response.resumed",
+                        "followup.sent",
                         "form.published"
                       ]
                     }
@@ -6585,6 +6972,7 @@
             }
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -6629,6 +7017,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -6666,6 +7055,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -6714,6 +7104,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -6779,6 +7170,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -6859,6 +7251,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -6886,6 +7279,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -7062,6 +7456,7 @@
             }
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -7142,6 +7537,7 @@
             }
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -7216,6 +7612,7 @@
             "description": "Dodo or the plan is not configured"
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -7253,6 +7650,7 @@
             "description": "No Dodo customer for this organization yet"
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -7272,6 +7670,7 @@
             "description": "Configuration report"
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -7327,6 +7726,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -7407,6 +7807,7 @@
             }
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -7557,6 +7958,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -7567,6 +7969,23 @@
     "/api/templates/{slug}/use": {
       "post": {
         "operationId": "postApiTemplatesBySlugUse",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ws",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "slug",
+            "required": true
+          }
+        ],
         "tags": [
           "dashboard"
         ],
@@ -7698,16 +8117,7 @@
             }
           }
         },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "slug",
-            "required": true
-          }
-        ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -7850,6 +8260,7 @@
             "description": "Activity log is a Business feature"
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -7872,6 +8283,7 @@
             "description": "Activity log is a Business feature"
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -8084,6 +8496,7 @@
             }
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -8173,6 +8586,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -8367,6 +8781,7 @@
             }
           }
         },
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []
@@ -8580,6 +8995,7 @@
             "required": true
           }
         ],
+        "x-internal": true,
         "security": [
           {
             "sessionCookie": []

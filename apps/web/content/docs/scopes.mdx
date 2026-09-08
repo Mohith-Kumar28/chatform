@@ -18,14 +18,28 @@ and a missing one is a 403 naming exactly what was needed:
 
 ## The vocabulary
 
+Every scope below gates at least one endpoint. Which one a given endpoint needs
+is on its reference page, and in the spec as `x-required-scope`.
+
 | Resource | Actions | What it covers |
 | --- | --- | --- |
 | `form` | `read`, `write`, `publish` | Reading forms, editing documents, publishing versions |
-| `response` | `read`, `read_partial`, `write`, `delete`, `export` | Creating and reading responses |
+| `response` | `read`, `write`, `export` | Creating and reading responses, and requesting exports |
 | `session` | `create`, `write`, `read` | Conversations |
 | `webhook` | `read`, `write` | Delivery endpoints |
 | `file` | `read`, `write` | Uploads and downloads |
 | `analytics` | `read` | Aggregates |
+
+Two more names exist in the vocabulary that `GET /api/keys/scopes` reports, and
+no endpoint requires either: `response:read_partial` and `response:delete`.
+Granting them changes nothing. They are there because the dashboard's own roles
+are written in the same vocabulary — a viewer who may read completed responses
+but not unfinished ones is a real distinction inside the product, and it has no
+API surface yet.
+
+Reading unfinished responses is gated by your **plan**, not by a scope:
+`GET /v1/forms/{id}/responses?status=partial` answers 402 on a plan without
+partial responses, whatever the key holds.
 
 ## Defaults
 
@@ -35,6 +49,11 @@ for most integrations, and nothing destructive. Ask for more explicitly.
 Publishable keys have a **ceiling**, not a default: `form:read`, `session:*` and
 `file:write`, and no amount of asking will widen it. That is what makes them safe
 to ship in a page.
+
+Because the ceiling is a hard one, an endpoint guarded by anything outside it is
+secret-key-only in fact — so each reference page lists only the key types that
+can really reach it. Twenty-one of the forty-three `/v1` endpoints accept a
+publishable key; the rest need `sk_`.
 
 ## What no key can do
 

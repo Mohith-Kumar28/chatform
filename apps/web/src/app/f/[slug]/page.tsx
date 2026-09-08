@@ -39,10 +39,17 @@ export async function generateMetadata({ params }: PageProps<"/f/[slug]">): Prom
    * fallback is our own card wearing the form's title, drawn on request at
    * `/og/form`, so the author's link looks deliberate before they have done
    * anything. Their own upload still wins the moment there is one.
+   *
+   * Only the author's own description is drawn — the generic fallback above is
+   * still the page's `<meta description>`, where a search engine wants a
+   * sentence, but on the card it was a line of filler under the title. The
+   * closing date goes on instead when there is one, since that is the part a
+   * reader cannot get from anywhere else in the unfurl.
    */
-  const ogImage =
-    config.meta?.ogImageUrl ??
-    `${SITE_ORIGIN}/og/form?title=${encodeURIComponent(title)}&description=${encodeURIComponent(description)}`;
+  const ogParams = new URLSearchParams({ title });
+  if (config.meta?.ogDescription) ogParams.set("description", config.meta.ogDescription);
+  if (config.closeAt) ogParams.set("closeAt", config.closeAt);
+  const ogImage = config.meta?.ogImageUrl ?? `${SITE_ORIGIN}/og/form?${ogParams}`;
 
   return {
     title,

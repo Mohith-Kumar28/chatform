@@ -12,6 +12,7 @@ import {
   type Ending,
   type EvalState,
   migrateFormDoc,
+  replayState,
   allowedNextRefs,
   needsExtraction,
   extractionSchema,
@@ -26,7 +27,7 @@ import {
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { ServerEvent, SSEEnvelope } from "../lib/events.js";
-import { asideText, clarifyText, closingText, escalateText, greeting, looksLikeQuestion, questionText, transitionAck } from "../lib/phrasing.js";
+import { asideText, clarifyText, closingText, escalateText, greeting, looksLikeQuestion, questionText, resumeGreeting, transitionAck } from "../lib/phrasing.js";
 import {
   chatModel,
   interviewModel,
@@ -206,6 +207,8 @@ export class SessionDO extends DurableObject<Bindings> {
   private turnCount = 0;
   private collectedCount = 0;
   private loaded = false;
+  /** This conversation continues a response somebody abandoned. */
+  private resumed = false;
   private encoder = new TextEncoder();
   /** Every token this session has spent, for the org meter. */
   private sessionTokensUsed = 0;
@@ -270,6 +273,20 @@ export class SessionDO extends DurableObject<Bindings> {
     source?: "chat" | "embed" | "api";
     /** Opened with a test-mode key: real rows, excluded from every count. */
     isTest?: boolean;
+    /**
+     * Continue a response that was abandoned, from a follow-up link.
+     *
+     * The answers come from `submission_answers`, which is the only place they
+     * survive — the session that collected them is long gone and its state
+     * snapshot was cleared when it was finalised. Seeding them here and letting
+     * `replayState` work out where that leaves the conversation is what makes a
+     * resume cross-device: nothing depends on the browser that started it.
+     */
+    resume?: {
+      submissionId: string;
+      answers: Record<string, unknown>;
+      identity?: RespondentIdentity | null;
+    };
   }): Promise<{ ok: true } | { ok: false; code: string }> {
     if (this.loaded) return { ok: true };
 
@@ -306,8 +323,29 @@ export class SessionDO extends DurableObject<Bindings> {
       this.state.variables[v.name] = v.initial;
     }
 
+    /**
+     * A resumed session owns the response that already exists rather than
+     * opening a new one.
+     *
+     * Writing `submission_id` into storage before anything else is what makes
+     * that true: `ensureSubmissionRow` reads it first, so every answer recorded
+     * from here lands on the original row. Without it the respondent would
+     * finish a *second* response and the first would stay abandoned forever —
+     * which is the whole thing this feature exists to prevent.
+     */
+    if (params.resume) {
+      await this.ctx.storage.put("submission_id", params.resume.submissionId);
+      this.state.answers = { ...(params.resume.answers as EvalState["answers"]) };
+      this.collectedCount = Object.keys(params.resume.answers).length;
+      if (params.resume.identity) this.meta.identity = params.resume.identity;
+      this.resumed = true;
+    }
+
     await this.persistMeta();
-    await this.appendMessage("assistant", greeting(this.doc));
+    await this.appendMessage(
+      "assistant",
+      params.resume ? resumeGreeting(this.doc, this.collectedCount) : greeting(this.doc),
+    );
     await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
 
     // Sign-in comes before the first question, not after it. Asking someone to
@@ -326,6 +364,26 @@ export class SessionDO extends DurableObject<Bindings> {
   /** Ask the first question. Split out so the auth gate can defer it. */
   private async beginInterview(): Promise<void> {
     if (!this.doc) return;
+    if (this.resumed) {
+      /**
+       * Where a resumed conversation picks up.
+       *
+       * `replayState` walks the stored answers through the same `resolveNext`
+       * the live conversation uses, applying every `set_variable` and
+       * `add_score` on the way, and reports the block the flow is sitting on.
+       * It exists for the stateless API path, which has no cursor to keep;
+       * a resumed session has the same problem for the same reason — the cursor
+       * it had died with the session that made it — so it gets the same answer.
+       *
+       * The alternative, replaying turns from the transcript, would re-run the
+       * agent over questions already answered and cost a conversation's worth
+       * of tokens to arrive at the same block.
+       */
+      const { state, cursor } = replayState(this.doc, this.state.answers, this.state.hidden);
+      this.state.variables = state.variables;
+      await this.advanceTo(cursor);
+      return;
+    }
     const next = resolveNext(this.doc, null, this.state);
     await this.advanceTo(next);
   }

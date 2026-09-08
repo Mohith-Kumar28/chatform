@@ -28,11 +28,25 @@ const worker = await unstable_startWorker({
 });
 
 try {
-  const res = await worker.fetch("http://local.test/openapi.json");
+  /**
+   * The complete spec, dashboard operations included.
+   *
+   * `GET /openapi.json` serves the developer surface only, because that URL is
+   * what integrators and their assistants read. This file is a build input —
+   * orval generates the web app's own dashboard client from it — so it needs the
+   * internal operations, each carrying `x-internal: true` so the docs pipeline
+   * can drop them again.
+   */
+  const res = await worker.fetch("http://local.test/openapi.json?include=internal");
   if (!res.ok) throw new Error(`spec generation failed: ${res.status} ${await res.text()}`);
-  const spec = (await res.json()) as { paths: Record<string, unknown> };
+  const spec = (await res.json()) as { paths: Record<string, Record<string, unknown>> };
   writeFileSync(OUT, `${JSON.stringify(spec, null, 2)}\n`);
-  console.log(`wrote ${OUT} — ${Object.keys(spec.paths ?? {}).length} paths`);
+  const internal = Object.values(spec.paths ?? {}).flatMap((item) =>
+    Object.values(item).filter((op) => (op as { "x-internal"?: boolean })?.["x-internal"]),
+  ).length;
+  console.log(
+    `wrote ${OUT} — ${Object.keys(spec.paths ?? {}).length} paths, ${internal} internal operations marked`,
+  );
 } finally {
   await worker.dispose();
 }

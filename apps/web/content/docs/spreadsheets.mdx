@@ -8,15 +8,24 @@ only the first is why exported data is always a week old.
 
 ## A file
 
-From **Integrations → Google Sheets & Excel**, or directly:
+From **Integrations → Google Sheets & Excel** in the dashboard. Add
+`?includePartials=true` to include unfinished responses.
+
+Those download links go through the browser session, not a key — there is no
+API key that can call them. From your own code, ask for an export instead and
+poll it:
 
 ```bash
-GET /api/forms/{formId}/submissions/export        # CSV
-GET /api/forms/{formId}/submissions/export.xlsx   # Excel workbook
+curl -X POST https://api.chatform.in/v1/forms/$FORM_ID/exports \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"format": "csv"}'
 ```
 
-Add `?includePartials=true` to include unfinished responses. Both go through the
-browser session, so the download link works from the dashboard with no key.
+The API writes `csv` or `json`; the typed `.xlsx` workbook described below is
+produced by the dashboard only.
+
+[Exports →](/docs/exports)
 
 The workbook is a real `.xlsx`, not a renamed CSV: typed cells, a frozen bold
 header, filters, and columns sized to their contents. It also keeps the leading

@@ -80,6 +80,8 @@ export type PostPFormsBySlugSessionsBody = {
   password?: string;
   hiddenFields?: PostPFormsBySlugSessionsBodyHiddenFields;
   embed?: PostPFormsBySlugSessionsBodyEmbed;
+  /** @maxLength 300 */
+  resumeToken?: string;
 };
 
 export type PostPFormsBySlugSessions200 = {
@@ -192,6 +194,10 @@ export type GetApiAuthOk200 = {
   ok: boolean;
 };
 
+export type GetApiFormsParams = {
+ws?: string;
+};
+
 export type GetApiForms200Item = {
   id: string;
   title: string;
@@ -283,6 +289,34 @@ export type GetApiFormsById404 = {
   error: GetApiFormsById404Error;
 };
 
+export type PatchApiFormsByIdWorkspaceBody = {
+  workspaceId: string;
+};
+
+export type PatchApiFormsByIdWorkspace200 = {
+  ok: boolean;
+};
+
+export type PatchApiFormsByIdWorkspace404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PatchApiFormsByIdWorkspace404Error = {
+  code: string;
+  message: string;
+  issues?: PatchApiFormsByIdWorkspace404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PatchApiFormsByIdWorkspace404 = {
+  error: PatchApiFormsByIdWorkspace404Error;
+};
+
 export type PutApiFormsByIdDocBody = {
   doc: unknown;
   theme?: unknown;
@@ -347,6 +381,46 @@ export type PostApiFormsByIdPublish422 = {
   error: PostApiFormsByIdPublish422Error;
 };
 
+export type GetApiWorkspaces200Item = {
+  id: string;
+  name: string;
+  slug: string;
+  formCount: number;
+  createdAt: number;
+};
+
+export type PostApiWorkspacesBody = {
+  /**
+     * @minLength 1
+     * @maxLength 60
+     */
+  name: string;
+};
+
+export type PostApiWorkspaces200 = {
+  id: string;
+  name: string;
+  slug: string;
+  formCount: number;
+  createdAt: number;
+};
+
+export type PatchApiWorkspacesByIdBody = {
+  /**
+     * @minLength 1
+     * @maxLength 60
+     */
+  name: string;
+};
+
+export type PatchApiWorkspacesById200 = {
+  id: string;
+  name: string;
+  slug: string;
+  formCount: number;
+  createdAt: number;
+};
+
 export type PostApiAiGenerateFormBody = {
   /**
      * @minLength 5
@@ -358,6 +432,7 @@ export type PostApiAiGenerateFormBody = {
      * @maximum 19
      */
   questionCount?: number;
+  workspaceId?: string;
 };
 
 export type PostApiAiGenerateForm200 = {
@@ -377,6 +452,7 @@ export type PostApiAiGenerateFormStreamBody = {
      * @maximum 19
      */
   questionCount?: number;
+  workspaceId?: string;
 };
 
 export type PostApiAiEditFormBodyHistoryItemRole = typeof PostApiAiEditFormBodyHistoryItemRole[keyof typeof PostApiAiEditFormBodyHistoryItemRole];
@@ -1247,6 +1323,8 @@ export const PostApiWebhooksBodyEventsItem = {
   responsepartial: 'response.partial',
   responseanswer_recorded: 'response.answer_recorded',
   sessionstarted: 'session.started',
+  responseresumed: 'response.resumed',
+  followupsent: 'followup.sent',
   formpublished: 'form.published',
 } as const;
 
@@ -1430,6 +1508,10 @@ export type GetApiTemplatesBySlug404Error = {
 
 export type GetApiTemplatesBySlug404 = {
   error: GetApiTemplatesBySlug404Error;
+};
+
+export type PostApiTemplatesBySlugUseParams = {
+ws?: string;
 };
 
 export type PostApiTemplatesBySlugUse403ErrorIssuesItem = {

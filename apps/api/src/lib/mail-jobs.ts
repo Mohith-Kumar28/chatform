@@ -1,9 +1,17 @@
-import { readFormDoc, displayAnswer, type Block, type FormDoc } from "@repo/form-schema";
+import {
+  readFormDoc,
+  displayAnswer,
+  progressOf,
+  type AnswerMap,
+  type Block,
+  type FormDoc,
+} from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { sendMail, type MailJob, type MailMessage } from "./mail.js";
 import {
   autoReplyEmail,
   escapeHtml,
+  followUpEmail,
   invitationEmail,
   otpEmail,
   passwordResetEmail,
@@ -11,6 +19,10 @@ import {
   type AnswerLine,
 } from "./mail-templates.js";
 import { webOrigins } from "./origins.js";
+import { resolveRespondentAddress } from "./respondent-address.js";
+import { mintEmailToken } from "./signed-url.js";
+import { RESUME_TTL_DAYS, UNSUB_TTL_DAYS } from "./followups.js";
+import { meter } from "./entitlements.js";
 
 /**
  * A queued job, turned into the messages it stands for and sent.
@@ -58,6 +70,229 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<number> {
 
     case "submission":
       return runSubmissionJob(env, job);
+
+    case "followup":
+      return runFollowUpJob(env, job);
+  }
+}
+
+interface FollowUpRow {
+  id: string;
+  submission_id: string;
+  form_id: string;
+  organization_id: string;
+  address: string;
+  step: number;
+  status: string;
+  respondent_email: string | null;
+  respondent_name: string | null;
+  hidden_fields: string | null;
+  sub_status: string;
+  form_title: string;
+  schema_json: string;
+}
+
+/**
+ * One nudge, rendered and sent.
+ *
+ * Reads the *published* document for the same reason the auto-reply does: the
+ * settings live when the response came in are the ones that applied to that
+ * respondent. The step's copy is read now rather than snapshotted at scheduling
+ * time, so an author who fixes a typo in the sequence fixes it for mail that
+ * has not gone out yet — which is what they expect.
+ */
+async function runFollowUpJob(
+  env: Bindings,
+  job: Extract<MailJob, { kind: "followup" }>,
+): Promise<number> {
+  const row = await env.DB.prepare(
+    `SELECT fu.id, fu.submission_id, fu.form_id, fu.organization_id, fu.address, fu.step, fu.status,
+            s.respondent_email, s.respondent_name, s.hidden_fields, s.status AS sub_status,
+            f.title AS form_title, fv.schema_json
+       FROM followups fu
+       JOIN submissions s ON s.id = fu.submission_id
+       JOIN forms f ON f.id = fu.form_id
+       JOIN form_versions fv ON fv.id = f.active_version_id
+      WHERE fu.id = ?`,
+  )
+    .bind(job.followupId)
+    .first<FollowUpRow>();
+  // Deleted between the sweep and delivery — a real possibility with a retrying
+  // queue and a customer exercising their delete button. Ack rather than retry.
+  if (!row) return 0;
+
+  /**
+   * The last gate, and the one that matters most.
+   *
+   * The sweep checked all of this before enqueueing, but a queue retry can run
+   * minutes later and the respondent may have finished in between. Mailing
+   * somebody "you didn't finish" after they finished is the single most
+   * embarrassing thing this feature can do, so it is checked twice.
+   */
+  if (row.sub_status !== "abandoned" && row.sub_status !== "in_progress") return 0;
+
+  let doc: FormDoc;
+  try {
+    doc = readFormDoc(JSON.parse(row.schema_json));
+  } catch (err) {
+    console.error("followup_doc_unreadable", row.form_id, err);
+    return 0;
+  }
+
+  const cfg = doc.settings.followUp;
+  const step = cfg?.steps[row.step - 1];
+  // The author shortened the sequence after this was scheduled. Their most
+  // recent intent wins.
+  if (!cfg?.enabled || !step) return 0;
+
+  const answers = await env.DB.prepare(
+    `SELECT block_ref, value_json FROM submission_answers WHERE submission_id = ?`,
+  )
+    .bind(row.submission_id)
+    .all<AnswerRow>();
+  const byRef = new Map<string, unknown>();
+  for (const a of answers.results ?? []) {
+    try {
+      byRef.set(a.block_ref, JSON.parse(a.value_json));
+    } catch {
+      // one unparseable answer must not stop the message
+    }
+  }
+
+  const hidden = parseHiddenFields(row.hidden_fields);
+  /**
+   * `progressOf` replays the stored answers through the same flow resolver the
+   * conversation uses, so "4 of 7" counts the questions this respondent will
+   * actually be asked — branches they skipped are not in the denominator.
+   */
+  const progress = cfg.showProgress
+    ? progressOf(doc, Object.fromEntries(byRef) as AnswerMap, hidden ?? {})
+    : null;
+  const resolved = resolveRespondentAddress(doc, {
+    respondentEmail: row.respondent_email,
+    byRef,
+    hiddenFields: hidden,
+    ...(cfg.addressField ? { addressField: cfg.addressField } : {}),
+  });
+
+  const origin = webOrigins(env)[0]!;
+  const [resumeToken, unsubToken] = await Promise.all([
+    mintEmailToken(env, "resume", row.submission_id, RESUME_TTL_DAYS),
+    mintEmailToken(env, "unsub", `${row.organization_id}:${row.address}`, UNSUB_TTL_DAYS),
+  ]);
+
+  const vars = interpolationVars(doc, byRef, row.form_title, {
+    respondent_name: row.respondent_name,
+    respondent_email: row.respondent_email,
+  });
+  // `{{remaining}}` is the one variable this template adds beyond the shared
+  // set, because "you're N questions from finishing" is the subject line the
+  // evidence actually supports.
+  if (progress) {
+    vars.set("remaining", String(Math.max(progress.totalEstimate - progress.answered, 0)));
+  }
+  const bodyMd = interpolate(step.bodyMd ?? "", vars);
+
+  const org = await env.DB.prepare(`SELECT postal_address FROM organizations WHERE id = ?`)
+    .bind(row.organization_id)
+    .first<{ postal_address: string | null }>()
+    .catch(() => null);
+
+  const msg = followUpEmail({
+    subject: interpolate(step.subject, vars),
+    bodyHtml: bodyMd ? markdownToHtml(bodyMd) : "",
+    bodyText: bodyMd,
+    formTitle: row.form_title,
+    resumeUrl: `${origin}/f/${encodeURIComponent(await slugOf(env, row.form_id))}?resume=${resumeToken}`,
+    unsubscribeUrl: `${origin}/p/unsubscribe/${unsubToken}`,
+    ...(progress ? { progress: { answered: progress.answered, total: progress.totalEstimate } } : {}),
+    ...(resolved?.firstName ? { firstName: resolved.firstName } : {}),
+    ...(org?.postal_address ? { postalAddress: org.postal_address } : {}),
+    showPoweredBy: !doc.settings.branding?.hidePoweredBy,
+  });
+
+  await sendMail(env, {
+    to: row.address,
+    ...msg,
+    // Never the transactional binding. See `MailClass`.
+    class: "marketing",
+    ...(cfg.replyTo ? { replyTo: cfg.replyTo } : {}),
+    /**
+     * RFC 8058 one-click. Gmail and Yahoo surface this as an unsubscribe
+     * control beside the sender's name, which is the difference between
+     * somebody opting out and somebody reporting us.
+     */
+    headers: {
+      "List-Unsubscribe": `<${origin}/p/unsubscribe/${unsubToken}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    },
+  });
+
+  await meterEmail(env, row.organization_id);
+  /**
+   * Counted separately from `emails_sent` because it is a deliverability
+   * control rather than a pricing one — it is what keeps the sum of everybody's
+   * nudges under the bulk-sender threshold that Google applies to our whole
+   * domain. Metered unconditionally so the usage page can show it; only
+   * *enforced* while the customer is still sending from our domain.
+   */
+  try {
+    await meter(env, row.organization_id, "followups_shared_domain");
+  } catch (err) {
+    console.error("followup_meter_failed", row.organization_id, err);
+  }
+
+  // After the send, so an integrator's "we nudged them" record cannot exist for
+  // a message that never left.
+  await env.Q_WEBHOOKS.send({
+    event: "followup.sent",
+    organizationId: row.organization_id,
+    formId: row.form_id,
+    submissionId: row.submission_id,
+    step: row.step,
+    isTest: false,
+  }).catch((err: unknown) => console.error("followup_webhook_failed", row.id, err));
+
+  return 1;
+}
+
+/**
+ * Count one sent message against the org's allowance.
+ *
+ * `emails_per_month` and the `emails_sent` metric have been declared in the
+ * entitlements catalogue since the beginning and nothing ever called `meter()`
+ * for them, so the limit shown on the billing page was decorative. Follow-ups
+ * are the first feature where an unmetered send path is actually dangerous —
+ * it is the one that sends on a schedule, to people who did not ask — so this
+ * is where it gets wired.
+ *
+ * Deliberately not applied to invitations, OTPs or password resets. Nobody
+ * should be locked out of their account because a form was popular.
+ */
+async function meterEmail(env: Bindings, orgId: string, n = 1): Promise<void> {
+  try {
+    await meter(env, orgId, "emails_sent", n);
+  } catch (err) {
+    // The message is already gone. Failing the job here would re-send it.
+    console.error("email_meter_failed", orgId, err);
+  }
+}
+
+/** The form's public slug, for the resume link. */
+async function slugOf(env: Bindings, formId: string): Promise<string> {
+  const row = await env.DB.prepare(`SELECT slug FROM forms WHERE id = ?`)
+    .bind(formId)
+    .first<{ slug: string }>();
+  return row?.slug ?? "";
+}
+
+function parseHiddenFields(raw: string | null): Record<string, string> | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, string>) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -177,7 +412,13 @@ async function runSubmissionJob(
   }
 
   if (autoReply?.enabled) {
-    const to = respondentAddress(sub, doc, byRef);
+    /**
+     * Shared with follow-ups — see `respondent-address.ts`. No address means no
+     * auto-reply, silently: a form that never asks for an email and has
+     * auto-reply switched on is a misconfiguration to surface in the builder,
+     * not a queue failure.
+     */
+    const to = resolveRespondentAddress(doc, { respondentEmail: sub.respondent_email, byRef })?.address;
     if (to) {
       const vars = interpolationVars(doc, byRef, form.form_title, sub);
       const bodyMd = interpolate(autoReply.bodyMd ?? "", vars);
@@ -201,31 +442,8 @@ async function runSubmissionJob(
   }
 
   if (errors.length > 0) throw errors[0];
+  if (sent > 0) await meterEmail(env, job.organizationId, sent);
   return sent;
-}
-
-/**
- * Where an auto-reply goes.
- *
- * The verified respondent identity first — a Google or email sign-in on the
- * form is an address somebody proved they control. Failing that, the first
- * answer to an `email` block, which is unverified but is the address they
- * typed when asked for one. No address means no auto-reply, silently: a form
- * that never asks for an email and has auto-reply switched on is a
- * misconfiguration to surface in the builder, not a queue failure.
- */
-function respondentAddress(
-  sub: SubmissionRow,
-  doc: FormDoc,
-  byRef: Map<string, unknown>,
-): string | null {
-  if (sub.respondent_email) return sub.respondent_email;
-  for (const block of doc.blocks) {
-    if (block.type !== "email") continue;
-    const v = byRef.get(block.ref);
-    if (typeof v === "string" && v.includes("@")) return v;
-  }
-  return null;
 }
 
 /**
@@ -239,7 +457,8 @@ function interpolationVars(
   doc: FormDoc,
   byRef: Map<string, unknown>,
   formTitle: string,
-  sub: SubmissionRow,
+  /** Only the two fields it reads, so a follow-up row fits as well as a submission. */
+  sub: { respondent_name: string | null; respondent_email: string | null },
 ): Map<string, string> {
   const vars = new Map<string, string>();
   vars.set("form.title", formTitle);

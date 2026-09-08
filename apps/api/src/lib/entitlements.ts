@@ -357,59 +357,6 @@ export async function countSeats(env: Bindings, orgId: string): Promise<number> 
 }
 
 /**
- * The workspaces a person owns, and how many they are allowed.
- *
- * ## Why this is per-user when every other limit is per-organization
- *
- * "Workspace" is what the product calls a Better Auth organization — the switcher
- * creates one, `/settings/general` renames one, members and seats belong to one.
- * So `workspaces_count` is really "how many of these may this person have", and
- * that is a question about a *user*, not about any one organization. Asking each
- * org's plan how many orgs its owner may create is circular: the answer would
- * depend on which one you happened to ask from.
- *
- * The resolution is to take the most generous plan the person actually pays for.
- * Someone on Business who also sits in a colleague's Free workspace is not
- * thereby limited to one — they bought the larger allowance and it should follow
- * them. Membership alone does not count: only workspaces they own, since a
- * workspace someone else pays for is not theirs to be limited by.
- *
- * Counts and allowance come back together because they are only ever read
- * together, and reading them apart is how the two drift a query apart.
- */
-export async function workspaceAllowance(
-  env: Bindings,
-  userId: string,
-): Promise<{ owned: number; limit: number | null; planId: PlanId }> {
-  const res = await env.DB.prepare(
-    `SELECT organization_id FROM members WHERE user_id = ? AND role LIKE '%owner%'`,
-  )
-    .bind(userId)
-    .all<{ organization_id: string }>();
-
-  const orgIds = (res.results ?? []).map((r) => r.organization_id);
-  if (orgIds.length === 0) return { owned: 0, limit: null, planId: "free" };
-
-  const plans = await Promise.all(orgIds.map((id) => getEntitlements(env, id)));
-
-  // The plan that set the allowance travels with it: a refusal has to name the
-  // tier the person is actually on, not whichever workspace they clicked from.
-  let limit: number | null = 0;
-  let planId: PlanId = plans[0]!.planId;
-  for (const ent of plans) {
-    const value = ent.limits.workspaces_count;
-    // `null` anywhere means unlimited, and unlimited wins outright.
-    if (value == null) return { owned: orgIds.length, limit: null, planId: ent.planId };
-    if (limit !== null && value > limit) {
-      limit = value;
-      planId = ent.planId;
-    }
-  }
-
-  return { owned: orgIds.length, limit, planId };
-}
-
-/**
  * Confirmed upload bytes. Pending rows are excluded — an intent is not storage yet.
  *
  * Reads `files.organization_id` rather than joining through `forms`: `files.form_id` is

@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowRight, Blocks, Clock, Eye, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Blocks, Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { templateAccent } from "@/lib/category-accent";
 import type { TemplateSummary } from "@/lib/templates";
@@ -13,8 +14,12 @@ import { cn } from "@/lib/utils";
  * `compact` is the same card inside the create dialog, where the gallery is
  * one band of a taller screen and a card has to earn its height.
  *
- * The card is a button, not a link — using a template is a mutation that
- * creates a form, so there is no href to give it.
+ * The card is a LINK to the template, not a button that creates a form from it.
+ * It used to be the latter, and a single click — the most casual gesture there
+ * is, and the one a curious reader makes — created a form and dropped them in
+ * the builder. Nobody browsing a catalogue means "yes, this one, now"; they
+ * mean "what is this?". Creating a form is an explicit act with its own button,
+ * on a page that has told you what you are about to get.
  */
 export function TemplateCard({
   template,
@@ -22,14 +27,16 @@ export function TemplateCard({
   pending = false,
   disabled = false,
   onUse,
-  onPreview,
+  onOpen,
 }: {
   template: TemplateSummary;
   variant?: "full" | "compact";
   pending?: boolean;
   disabled?: boolean;
-  onUse: () => void;
-  onPreview?: () => void;
+  /** Offered as an explicit shortcut for a reader who already knows this one. */
+  onUse?: () => void;
+  /** Fired when the card is followed — the create dialog closes itself on it. */
+  onOpen?: () => void;
 }) {
   const accent = templateAccent(template.category, template.accent, template.icon);
   const Icon = accent.icon;
@@ -52,14 +59,13 @@ export function TemplateCard({
         compact ? "p-3.5" : "p-5",
       )}
     >
-      {/* The whole card opens the template. The stretched link pattern, but
-          for a button: the overlay sits under the explicit actions below, so
-          "Preview" still wins the click where it overlaps. */}
-      <button
-        type="button"
-        onClick={onUse}
-        disabled={disabled || pending}
-        aria-label={`Use the ${template.title} template`}
+      {/* The stretched-link pattern: the whole card follows to the template,
+          and the explicit actions below sit above it so they win the click
+          where they overlap. */}
+      <Link
+        href={`/templates/${template.slug}`}
+        onClick={onOpen}
+        aria-label={`View the ${template.title} template`}
         className="absolute inset-0 z-0 rounded-2xl focus:outline-none"
       />
 
@@ -113,34 +119,44 @@ export function TemplateCard({
         )}
 
         <div className="z-10 ml-auto flex items-center gap-1">
-          {onPreview && !compact && (
-            <Button
-              variant="ghost"
-              size="sm"
-              shape="pill"
-              onClick={onPreview}
-              className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100"
-            >
-              <Eye className="size-3.5" />
-              Preview
-            </Button>
-          )}
           {pending ? (
             <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
               <Loader2 className="size-3.5 animate-spin" />
               Creating…
             </span>
           ) : (
-            <span
-              aria-hidden
-              className={cn(
-                "text-muted-foreground group-hover:text-foreground inline-flex items-center gap-1 text-xs font-medium",
-                "transition-colors duration-[var(--duration-micro)]",
+            <>
+              {/* The shortcut past the detail page, for someone who has been
+                  here before. Revealed on hover so the quiet state of the
+                  gallery stays a gallery, and always visible on touch, where
+                  there is no hover to reveal it with. */}
+              {onUse && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  shape="pill"
+                  onClick={onUse}
+                  aria-label={`Create a form from the ${template.title} template`}
+                  // Outlined, not ghost. It sits beside the card's own "open
+                  // this" hint, and two pieces of small grey text a few pixels
+                  // apart — one of which creates a form — is exactly the
+                  // ambiguity this whole screen was changed to remove.
+                  className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100"
+                >
+                  Use
+                </Button>
               )}
-            >
-              Use
-              <ArrowRight className="size-3.5 transition-transform duration-[var(--duration-micro)] group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0" />
-            </span>
+              <span
+                aria-hidden
+                className={cn(
+                  "text-muted-foreground group-hover:text-foreground inline-flex items-center gap-1 text-xs font-medium",
+                  "transition-colors duration-[var(--duration-micro)]",
+                )}
+              >
+                Preview
+                <ArrowRight className="size-3.5 transition-transform duration-[var(--duration-micro)] group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0" />
+              </span>
+            </>
           )}
         </div>
       </div>

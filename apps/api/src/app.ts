@@ -9,6 +9,7 @@ import { downloadRouter } from "./routes/download.js";
 import { viewsRouter } from "./routes/results.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { formsRouter } from "./routes/forms.js";
+import { workspacesRouter } from "./routes/workspaces.js";
 import { aiRouter } from "./routes/ai.js";
 import { resultsRouter } from "./routes/results.js";
 import { v1Router } from "./routes/v1.js";
@@ -119,6 +120,7 @@ export function createApp() {
   app.route("/p", publicRouter);
   app.route("/api", dashboardRouter);
   app.route("/api", formsRouter);
+  app.route("/api", workspacesRouter);
   app.route("/api", aiRouter);
   app.route("/api", resultsRouter);
   app.route("/v1", v1Router);

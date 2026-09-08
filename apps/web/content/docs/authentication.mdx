@@ -92,9 +92,12 @@ session, and no key of any kind can mint another key or change your plan.
 
 ## Rotation
 
-`POST /api/keys/{id}/rotate` in the dashboard mints a replacement and puts the
-old key on a clock — 24 hours by default. A deploy is not atomic, and "revoke,
-then create" means downtime in between.
+**Settings → API keys → Rotate** mints a replacement and puts the old key on a
+clock — 24 hours by default. A deploy is not atomic, and "revoke, then create"
+means downtime in between.
+
+Rotation is deliberately not something a key can do to itself: minting and
+revoking keys needs a signed-in person, so there is no endpoint for it.
 
 The old key keeps working through the window, then stops.
 

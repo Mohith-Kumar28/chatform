@@ -8,6 +8,7 @@ import {
   Link2,
   MessageSquare,
   MoreHorizontal,
+  FolderInput,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -17,6 +18,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -48,10 +52,20 @@ export function FormCard({
   form,
   layout,
   onDelete,
+  workspaces = [],
+  currentWorkspaceId,
+  onMove,
 }: {
   form: FormRow;
   layout: "grid" | "list";
   onDelete: () => void;
+  /**
+   * Where this form could go. Empty — the common case, one workspace — hides
+   * the move submenu entirely rather than showing a menu with nothing in it.
+   */
+  workspaces?: { id: string; name: string }[];
+  currentWorkspaceId?: string;
+  onMove?: (workspaceId: string) => void;
 }) {
   const published = form.status === "published";
   const publicUrl = typeof window !== "undefined" ? `${window.location.origin}/f/${form.slug}` : "";
@@ -129,6 +143,30 @@ export function FormCard({
                 Open live form
               </a>
             </DropdownMenuItem>
+          </>
+        )}
+        {/* A form is created in whichever workspace you were looking at, so
+            this is how one ends up somewhere else. Without it a second
+            workspace is a place new forms can be made and nothing can be moved
+            into, which is a fork rather than a folder. */}
+        {onMove && workspaces.filter((w) => w.id !== currentWorkspaceId).length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <FolderInput className="size-3.5" />
+                Move to
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {workspaces
+                  .filter((w) => w.id !== currentWorkspaceId)
+                  .map((w) => (
+                    <DropdownMenuItem key={w.id} onSelect={() => onMove(w.id)}>
+                      <span className="min-w-0 truncate">{w.name}</span>
+                    </DropdownMenuItem>
+                  ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
           </>
         )}
         <DropdownMenuSeparator />

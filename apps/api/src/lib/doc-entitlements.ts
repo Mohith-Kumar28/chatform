@@ -105,6 +105,10 @@ export function stripForPublish(input: FormDoc, ent: Entitlements): StripResult 
     s.onComplete.autoReplyEmail.enabled = false;
     note(stripped, "settings.onComplete.autoReplyEmail", "auto_reply_email");
   }
+  if (s.followUp?.enabled && !can(ent, "followup_email")) {
+    s.followUp.enabled = false;
+    note(stripped, "settings.followUp", "followup_email");
+  }
 
   // ── collect ─────────────────────────────────────────────────────────────────
   if (s.duplicates?.strategy && s.duplicates.strategy !== "none" && !can(ent, "duplicate_prevention")) {

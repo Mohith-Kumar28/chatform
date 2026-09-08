@@ -214,6 +214,25 @@ resultsRouter.get(
         respondent_name: string | null;
       }>();
 
+    /**
+     * Follow-up state, for the whole page in one query.
+     *
+     * Per-row would be one more round trip each on a list that already does two
+     * — and this is a summary badge, not a schedule the author edits here.
+     * `sent` counts nudges that actually went out; `holdout` marks the ones we
+     * deliberately kept quiet so the recovery number means something.
+     */
+    const followUps = await c.env.DB.prepare(
+      `SELECT submission_id,
+              SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
+              SUM(CASE WHEN status = 'scheduled' THEN 1 ELSE 0 END) AS scheduled,
+              MAX(CASE WHEN status = 'holdout' THEN 1 ELSE 0 END) AS holdout
+         FROM followups WHERE form_id = ? GROUP BY submission_id`,
+    )
+      .bind(id)
+      .all<{ submission_id: string; sent: number; scheduled: number; holdout: number }>();
+    const byId = new Map(followUps.results?.map((r) => [r.submission_id, r]) ?? []);
+
     const out = [];
     for (const s of subs.results ?? []) {
       const answers = await c.env.DB.prepare(
@@ -252,6 +271,21 @@ resultsRouter.get(
           content: t.content,
           createdAt: t.created_at,
         })),
+        /**
+         * Null when this response was never in a sequence at all, which is the
+         * common case and reads differently from "nudged nobody yet".
+         *
+         * `recovered` is the number the feature is sold on: they were nudged,
+         * and then they finished.
+         */
+        followUp: byId.has(s.id)
+          ? {
+              sent: byId.get(s.id)!.sent,
+              scheduled: byId.get(s.id)!.scheduled,
+              holdout: byId.get(s.id)!.holdout === 1,
+              recovered: byId.get(s.id)!.sent > 0 && s.status === "completed",
+            }
+          : null,
       });
     }
     return c.json(out);

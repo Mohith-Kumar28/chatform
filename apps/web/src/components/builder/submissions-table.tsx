@@ -10,6 +10,7 @@ import {
   Link2,
   Maximize2,
   Minimize2,
+  MailCheck,
   ShieldAlert,
   ShieldCheck,
   Trash2,
@@ -63,6 +64,30 @@ export interface SubmissionRecord {
   transcript: { role: string; content: string; createdAt: number }[];
   /** Only for forms that required sign-in. */
   respondent: { provider: string; label: string; name: string | null } | null;
+  /** Null when this response was never in a follow-up sequence. */
+  followUp?: {
+    sent: number;
+    scheduled: number;
+    holdout: boolean;
+    recovered: boolean;
+  } | null;
+}
+
+/**
+ * What happened after they left, in two or three words.
+ *
+ * Worth a badge of its own rather than a column: it applies to a minority of
+ * responses, and the one state anybody is looking for — they were nudged and
+ * came back — is otherwise invisible without exporting and joining by hand.
+ */
+function followUpLabel(row: SubmissionRecord): { text: string; tone: "good" | "muted" } | null {
+  const f = row.followUp;
+  if (!f) return null;
+  if (f.recovered) return { text: "Recovered", tone: "good" };
+  if (f.holdout) return { text: "Held back", tone: "muted" };
+  if (f.sent > 0) return { text: f.sent === 1 ? "Nudged" : `Nudged ×${f.sent}`, tone: "muted" };
+  if (f.scheduled > 0) return { text: "Reminder queued", tone: "muted" };
+  return null;
 }
 
 export type ResultColumn = Pick<Block, "ref" | "title" | "type">;
@@ -518,6 +543,23 @@ function SubmissionDialog({
                   ? "Screened out"
                   : "Didn't finish"}
             </span>
+            {(() => {
+              const f = followUpLabel(row);
+              if (!f) return null;
+              return (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5",
+                    f.tone === "good"
+                      ? "bg-[var(--success-soft,var(--primary-soft))] text-[var(--success)]"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {f.tone === "good" && <MailCheck className="size-3" />}
+                  {f.text}
+                </span>
+              );
+            })()}
             <span className="text-muted-foreground">
               {answered} of {columns.length} answered
             </span>

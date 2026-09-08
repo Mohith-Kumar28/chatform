@@ -71,6 +71,23 @@ export interface OpenSessionInput {
    * browser sets, which it cannot.
    */
   embedOrigin?: string | null;
+  /**
+   * This session continues a response that was abandoned, opened from the link
+   * in a follow-up email.
+   *
+   * It relaxes exactly two gates, and only those two:
+   *
+   * `duplicates.strategy: "ip_daily"` — which would answer "you have already
+   * answered this form today" to the very person we just invited back, since
+   * they demonstrably have. And `maxSubmissions`, which counts *completed*
+   * responses: a form at its cap should stop taking new respondents, not
+   * refuse the ones already half-way through.
+   *
+   * Everything else still applies. A closed form is closed, and a resume link
+   * is not a way past a password or an embed allowlist — the link proves who
+   * the response belongs to, not that the form is open to them.
+   */
+  resumeSubmissionId?: string;
 }
 
 /** Exact origins, or one leading wildcard label. Matched on the host, never as a substring. */
@@ -190,7 +207,7 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
   }
 
   const cap = settings.closeRules.maxSubmissions;
-  if (cap) {
+  if (cap && !input.resumeSubmissionId) {
     const count = await env.DB.prepare(
       `SELECT COUNT(*) AS n FROM submissions WHERE form_id = ?1 AND status = 'completed'`,
     )
@@ -248,7 +265,7 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
    * a person: an office or a campus shares one, and a permanent block would lock
    * out everyone behind the first respondent.
    */
-  if (settings.duplicates.strategy === "ip_daily" && ipHash) {
+  if (settings.duplicates.strategy === "ip_daily" && ipHash && !input.resumeSubmissionId) {
     const since = Date.now() - 24 * 60 * 60 * 1000;
     const prior = await env.DB.prepare(
       `SELECT 1 FROM chat_sessions WHERE form_id = ?1 AND ip_hash = ?2 AND created_at > ?3 LIMIT 1`,
@@ -276,8 +293,9 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
 
   await env.DB.prepare(
     `INSERT INTO chat_sessions (id, form_id, form_version_id, organization_id, respondent_token_hash, status,
-                                hidden_fields, ip_hash, country, source, is_test, created_at, last_activity_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                hidden_fields, ip_hash, country, source, is_test, submission_id,
+                                created_at, last_activity_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       sessionId,
@@ -290,6 +308,7 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
       input.country,
       input.source,
       input.isTest ? 1 : 0,
+      input.resumeSubmissionId ?? null,
       now,
       now,
       // Written at last. The column has existed since the first migration and

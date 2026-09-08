@@ -17,6 +17,8 @@ import {
   getGetApiFormsQueryKey,
   useDeleteApiFormsById,
   useGetApiForms,
+  useGetApiWorkspaces,
+  usePatchApiFormsByIdWorkspace,
 } from "@/lib/api/dashboard/dashboard";
 import { apiData } from "@/lib/api/payload";
 import { invalidateForms } from "@/lib/query-keys";
@@ -55,8 +57,37 @@ export function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { data, isLoading } = useGetApiForms({
-    query: { queryKey: getGetApiFormsQueryKey() },
+  /**
+   * `?ws=` is the active workspace, and it is a query parameter rather than
+   * session state so switching folders is a client-side push instead of the
+   * page reload switching organizations needs. Absent means the organization's
+   * first workspace, which is what every link written before workspaces were
+   * selectable means.
+   *
+   * It belongs in the query key as well as the request: two workspaces are two
+   * different lists, and sharing a cache entry between them shows the previous
+   * folder's forms under the new folder's name until the refetch lands.
+   */
+  const ws = searchParams.get("ws");
+  const formsParams = useMemo(() => (ws ? { ws } : undefined), [ws]);
+
+  /**
+   * The workspaces this form could be moved to, for the card menu.
+   *
+   * Fetched here rather than per card — a grid of thirty cards asking the same
+   * question thirty times is thirty requests for one answer.
+   */
+  const { data: workspaceData } = useGetApiWorkspaces();
+  const workspaces = useMemo(
+    () => apiData<{ id: string; name: string; slug: string }[]>(workspaceData) ?? [],
+    [workspaceData],
+  );
+  const currentWorkspaceId = (workspaces.find((w) => w.slug === ws) ?? workspaces[0])?.id;
+
+  const moveForm = usePatchApiFormsByIdWorkspace();
+
+  const { data, isLoading } = useGetApiForms(formsParams, {
+    query: { queryKey: getGetApiFormsQueryKey(formsParams) },
   });
   // Memoised so it is not a fresh array on every render — the sort below
   // depends on it, and an unstable dependency re-sorts the whole grid whenever
@@ -264,7 +295,28 @@ export function DashboardContent() {
           <ul className={cn(layout === "grid" ? GRID : "space-y-2")} data-tour="form-grid">
             {forms.map((form) => (
               <li key={form.id}>
-                <FormCard form={form} layout={layout} onDelete={() => setPendingDelete(form)} />
+                <FormCard
+                  form={form}
+                  layout={layout}
+                  onDelete={() => setPendingDelete(form)}
+                  workspaces={workspaces}
+                  currentWorkspaceId={currentWorkspaceId}
+                  onMove={(workspaceId) => {
+                    void (async () => {
+                      try {
+                        await moveForm.mutateAsync({ id: form.id, data: { workspaceId } });
+                        // Both lists change: the form leaves this one and joins
+                        // the other. `invalidateForms` is prefix-keyed, so it
+                        // covers every workspace's cached list at once.
+                        await invalidateForms(queryClient);
+                        const to = workspaces.find((w) => w.id === workspaceId);
+                        toast.success(`Moved to ${to?.name ?? "workspace"}`);
+                      } catch {
+                        toast.error("Couldn't move the form");
+                      }
+                    })();
+                  }}
+                />
               </li>
             ))}
           </ul>

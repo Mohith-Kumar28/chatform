@@ -86,6 +86,28 @@ export const LIMITS = {
     kind: "monthly",
     metric: "emails_sent",
   },
+  /**
+   * Follow-ups sent from the shared sending domain.
+   *
+   * Separate from `emails_per_month` because it is a deliverability control
+   * rather than a pricing lever, and because it stops applying entirely once
+   * the customer verifies a domain of their own — a tenant on their own domain
+   * is not spending our reputation, so there is nothing to ration.
+   *
+   * The number that sets it is Google's: the 5,000/day bulk-sender threshold is
+   * counted per primary domain and aggregates subdomains, so it is a ceiling on
+   * the whole shared domain rather than on any one customer. This keeps the sum
+   * of everyone's nudges well underneath it, and pushes the handful of senders
+   * who outgrow it onto `custom_domain` — which is where they want to be
+   * anyway, since it puts their own brand in the From line.
+   */
+  followups_shared_domain_per_month: {
+    label: "Follow-ups on the shared domain",
+    unit: "count",
+    mode: "hard",
+    kind: "monthly",
+    metric: "followups_shared_domain",
+  },
 
   forms_count: { label: "Forms", unit: "count", mode: "hard", kind: "gauge" },
   workspaces_count: { label: "Workspaces", unit: "count", mode: "hard", kind: "gauge" },
@@ -118,6 +140,7 @@ export const METRICS = [
   "ai_generations",
   "api_requests",
   "emails_sent",
+  "followups_shared_domain",
 ] as const;
 
 export type MetricKey = (typeof METRICS)[number];

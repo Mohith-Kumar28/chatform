@@ -42,12 +42,19 @@ import type {
   GetApiFormsByIdVersionsByVersion200,
   GetApiFormsByIdVersionsByVersion404,
   GetApiFormsByIdVersionsByVersionParams,
+  GetApiFormsParams,
   GetApiInvitationPreview200,
   GetApiKeys200Item,
   GetApiTemplates200Item,
   GetApiTemplatesBySlug200,
   GetApiTemplatesBySlug404,
   GetApiWebhooks200Item,
+  GetApiWorkspaces200Item,
+  PatchApiFormsByIdWorkspace200,
+  PatchApiFormsByIdWorkspace404,
+  PatchApiFormsByIdWorkspaceBody,
+  PatchApiWorkspacesById200,
+  PatchApiWorkspacesByIdBody,
   PostApiAiAddBlocks200,
   PostApiAiAddBlocksBody,
   PostApiAiEditForm200,
@@ -73,9 +80,12 @@ import type {
   PostApiKeysByIdRotateBody,
   PostApiTemplatesBySlugUse403,
   PostApiTemplatesBySlugUse404,
+  PostApiTemplatesBySlugUseParams,
   PostApiWebhooks200,
   PostApiWebhooksBody,
   PostApiWebhooksByIdTest200,
+  PostApiWorkspaces200,
+  PostApiWorkspacesBody,
   PutApiFormsByIdDoc200,
   PutApiFormsByIdDocBody
 } from '../generated.schemas';
@@ -378,20 +388,27 @@ export type getApiFormsResponseSuccess = (getApiFormsResponse200) & {
 
 export type getApiFormsResponse = (getApiFormsResponseSuccess)
 
-export const getGetApiFormsUrl = () => {
+export const getGetApiFormsUrl = (params?: GetApiFormsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/forms`
+  return stringifiedParams.length > 0 ? `/api/forms?${stringifiedParams}` : `/api/forms`
 }
 
 /**
- * @summary List forms in the active workspace
+ * @summary List forms in a workspace
  */
-export const getApiForms = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsResponse> => {
+export const getApiForms = async (params?: GetApiFormsParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsResponse> => {
 
-  return customFetch<getApiFormsResponse>(getGetApiFormsUrl(),
+  return customFetch<getApiFormsResponse>(getGetApiFormsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -404,23 +421,23 @@ export const getApiForms = async ( options?: Parameters<typeof customFetch>[1]):
 
 
 
-export const getGetApiFormsQueryKey = () => {
+export const getGetApiFormsQueryKey = (params?: GetApiFormsParams,) => {
     return [
-    `/api/forms`
+    `/api/forms`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetApiFormsQueryOptions = <TData = Awaited<ReturnType<typeof getApiForms>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiForms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetApiFormsQueryOptions = <TData = Awaited<ReturnType<typeof getApiForms>>, TError = unknown>(params?: GetApiFormsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiForms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiForms>>> = ({ signal }) => getApiForms({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiForms>>> = ({ signal }) => getApiForms(params, { signal, ...requestOptions });
 
 
 
@@ -434,15 +451,15 @@ export type GetApiFormsQueryError = unknown
 
 
 /**
- * @summary List forms in the active workspace
+ * @summary List forms in a workspace
  */
 
 export function useGetApiForms<TData = Awaited<ReturnType<typeof getApiForms>>, TError = unknown>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiForms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: GetApiFormsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiForms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetApiFormsQueryOptions(options)
+  const queryOptions = getGetApiFormsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -728,7 +745,104 @@ export function useGetApiFormsById<TData = Awaited<ReturnType<typeof getApiForms
 
 
 
-export type putApiFormsByIdDocResponse200 = {
+export type patchApiFormsByIdWorkspaceResponse200 = {
+  data: PatchApiFormsByIdWorkspace200
+  status: 200
+}
+
+export type patchApiFormsByIdWorkspaceResponse404 = {
+  data: PatchApiFormsByIdWorkspace404
+  status: 404
+}
+
+export type patchApiFormsByIdWorkspaceResponseSuccess = (patchApiFormsByIdWorkspaceResponse200) & {
+  headers: Headers;
+};
+export type patchApiFormsByIdWorkspaceResponseError = (patchApiFormsByIdWorkspaceResponse404) & {
+  headers: Headers;
+};
+
+export type patchApiFormsByIdWorkspaceResponse = (patchApiFormsByIdWorkspaceResponseSuccess | patchApiFormsByIdWorkspaceResponseError)
+
+export const getPatchApiFormsByIdWorkspaceUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/workspace`
+}
+
+/**
+ * @summary Move a form to another workspace
+ */
+export const patchApiFormsByIdWorkspace = async (id: string,
+    patchApiFormsByIdWorkspaceBody: PatchApiFormsByIdWorkspaceBody, options?: Parameters<typeof customFetch>[1]): Promise<patchApiFormsByIdWorkspaceResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<patchApiFormsByIdWorkspaceResponse>(getPatchApiFormsByIdWorkspaceUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(patchApiFormsByIdWorkspaceBody)
+  }
+);}
+
+
+
+
+
+export const getPatchApiFormsByIdWorkspaceMutationOptions = <TError = PatchApiFormsByIdWorkspace404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiFormsByIdWorkspace>>, TError,PatchApiFormsByIdWorkspaceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiFormsByIdWorkspace>>, TError,PatchApiFormsByIdWorkspaceMutationVariables, TContext> => {
+
+const mutationKey = ['patchApiFormsByIdWorkspace'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiFormsByIdWorkspace>>, PatchApiFormsByIdWorkspaceMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  patchApiFormsByIdWorkspace(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchApiFormsByIdWorkspaceMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiFormsByIdWorkspace>>>
+    export type PatchApiFormsByIdWorkspaceMutationBody = PatchApiFormsByIdWorkspaceBody
+    export type PatchApiFormsByIdWorkspaceMutationError = PatchApiFormsByIdWorkspace404
+    export type PatchApiFormsByIdWorkspaceMutationVariables = {id: string;data: PatchApiFormsByIdWorkspaceBody}
+
+    /**
+ * @summary Move a form to another workspace
+ */
+export const usePatchApiFormsByIdWorkspace = <TError = PatchApiFormsByIdWorkspace404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiFormsByIdWorkspace>>, TError,PatchApiFormsByIdWorkspaceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchApiFormsByIdWorkspace>>,
+        TError,
+        PatchApiFormsByIdWorkspaceMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchApiFormsByIdWorkspaceMutationOptions(options));
+    }
+    export type putApiFormsByIdDocResponse200 = {
   data: PutApiFormsByIdDoc200
   status: 200
 }
@@ -912,6 +1026,370 @@ export const usePostApiFormsByIdPublish = <TError = PostApiFormsByIdPublish402 |
         TContext
       > => {
       return useMutation(getPostApiFormsByIdPublishMutationOptions(options));
+    }
+    export type getApiWorkspacesResponse200 = {
+  data: GetApiWorkspaces200Item[]
+  status: 200
+}
+
+export type getApiWorkspacesResponseSuccess = (getApiWorkspacesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiWorkspacesResponse = (getApiWorkspacesResponseSuccess)
+
+export const getGetApiWorkspacesUrl = () => {
+
+
+
+
+  return `/api/workspaces`
+}
+
+/**
+ * @summary List workspaces in the active organization
+ */
+export const getApiWorkspaces = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiWorkspacesResponse> => {
+
+  return customFetch<getApiWorkspacesResponse>(getGetApiWorkspacesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiWorkspacesQueryKey = () => {
+    return [
+    `/api/workspaces`
+    ] as const;
+    }
+
+
+export const getGetApiWorkspacesQueryOptions = <TData = Awaited<ReturnType<typeof getApiWorkspaces>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiWorkspaces>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiWorkspacesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiWorkspaces>>> = ({ signal }) => getApiWorkspaces({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiWorkspaces>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiWorkspacesQueryResult = NonNullable<Awaited<ReturnType<typeof getApiWorkspaces>>>
+export type GetApiWorkspacesQueryError = unknown
+
+
+/**
+ * @summary List workspaces in the active organization
+ */
+
+export function useGetApiWorkspaces<TData = Awaited<ReturnType<typeof getApiWorkspaces>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiWorkspaces>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiWorkspacesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postApiWorkspacesResponse200 = {
+  data: PostApiWorkspaces200
+  status: 200
+}
+
+export type postApiWorkspacesResponse402 = {
+  data: void
+  status: 402
+}
+
+export type postApiWorkspacesResponseSuccess = (postApiWorkspacesResponse200) & {
+  headers: Headers;
+};
+export type postApiWorkspacesResponseError = (postApiWorkspacesResponse402) & {
+  headers: Headers;
+};
+
+export type postApiWorkspacesResponse = (postApiWorkspacesResponseSuccess | postApiWorkspacesResponseError)
+
+export const getPostApiWorkspacesUrl = () => {
+
+
+
+
+  return `/api/workspaces`
+}
+
+/**
+ * @summary Create a workspace
+ */
+export const postApiWorkspaces = async (postApiWorkspacesBody: PostApiWorkspacesBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiWorkspacesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiWorkspacesResponse>(getPostApiWorkspacesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiWorkspacesBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiWorkspacesMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiWorkspaces>>, TError,PostApiWorkspacesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiWorkspaces>>, TError,PostApiWorkspacesMutationVariables, TContext> => {
+
+const mutationKey = ['postApiWorkspaces'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiWorkspaces>>, PostApiWorkspacesMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiWorkspaces(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiWorkspacesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiWorkspaces>>>
+    export type PostApiWorkspacesMutationBody = PostApiWorkspacesBody
+    export type PostApiWorkspacesMutationError = void
+    export type PostApiWorkspacesMutationVariables = {data: PostApiWorkspacesBody}
+
+    /**
+ * @summary Create a workspace
+ */
+export const usePostApiWorkspaces = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiWorkspaces>>, TError,PostApiWorkspacesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiWorkspaces>>,
+        TError,
+        PostApiWorkspacesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiWorkspacesMutationOptions(options));
+    }
+    export type patchApiWorkspacesByIdResponse200 = {
+  data: PatchApiWorkspacesById200
+  status: 200
+}
+
+export type patchApiWorkspacesByIdResponseSuccess = (patchApiWorkspacesByIdResponse200) & {
+  headers: Headers;
+};
+;
+
+export type patchApiWorkspacesByIdResponse = (patchApiWorkspacesByIdResponseSuccess)
+
+export const getPatchApiWorkspacesByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/workspaces/${id}`
+}
+
+/**
+ * @summary Rename a workspace
+ */
+export const patchApiWorkspacesById = async (id: string,
+    patchApiWorkspacesByIdBody: PatchApiWorkspacesByIdBody, options?: Parameters<typeof customFetch>[1]): Promise<patchApiWorkspacesByIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<patchApiWorkspacesByIdResponse>(getPatchApiWorkspacesByIdUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(patchApiWorkspacesByIdBody)
+  }
+);}
+
+
+
+
+
+export const getPatchApiWorkspacesByIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiWorkspacesById>>, TError,PatchApiWorkspacesByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiWorkspacesById>>, TError,PatchApiWorkspacesByIdMutationVariables, TContext> => {
+
+const mutationKey = ['patchApiWorkspacesById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiWorkspacesById>>, PatchApiWorkspacesByIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  patchApiWorkspacesById(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchApiWorkspacesByIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiWorkspacesById>>>
+    export type PatchApiWorkspacesByIdMutationBody = PatchApiWorkspacesByIdBody
+    export type PatchApiWorkspacesByIdMutationError = unknown
+    export type PatchApiWorkspacesByIdMutationVariables = {id: string;data: PatchApiWorkspacesByIdBody}
+
+    /**
+ * @summary Rename a workspace
+ */
+export const usePatchApiWorkspacesById = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiWorkspacesById>>, TError,PatchApiWorkspacesByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchApiWorkspacesById>>,
+        TError,
+        PatchApiWorkspacesByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchApiWorkspacesByIdMutationOptions(options));
+    }
+    export type deleteApiWorkspacesByIdResponse200 = {
+  data: void
+  status: 200
+}
+
+export type deleteApiWorkspacesByIdResponse409 = {
+  data: void
+  status: 409
+}
+
+export type deleteApiWorkspacesByIdResponseSuccess = (deleteApiWorkspacesByIdResponse200) & {
+  headers: Headers;
+};
+export type deleteApiWorkspacesByIdResponseError = (deleteApiWorkspacesByIdResponse409) & {
+  headers: Headers;
+};
+
+export type deleteApiWorkspacesByIdResponse = (deleteApiWorkspacesByIdResponseSuccess | deleteApiWorkspacesByIdResponseError)
+
+export const getDeleteApiWorkspacesByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/workspaces/${id}`
+}
+
+/**
+ * @summary Delete a workspace
+ */
+export const deleteApiWorkspacesById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteApiWorkspacesByIdResponse> => {
+
+  return customFetch<deleteApiWorkspacesByIdResponse>(getDeleteApiWorkspacesByIdUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiWorkspacesByIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiWorkspacesById>>, TError,DeleteApiWorkspacesByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiWorkspacesById>>, TError,DeleteApiWorkspacesByIdMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiWorkspacesById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiWorkspacesById>>, DeleteApiWorkspacesByIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiWorkspacesById(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiWorkspacesByIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiWorkspacesById>>>
+
+    export type DeleteApiWorkspacesByIdMutationError = void
+    export type DeleteApiWorkspacesByIdMutationVariables = {id: string}
+
+    /**
+ * @summary Delete a workspace
+ */
+export const useDeleteApiWorkspacesById = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiWorkspacesById>>, TError,DeleteApiWorkspacesByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiWorkspacesById>>,
+        TError,
+        DeleteApiWorkspacesByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiWorkspacesByIdMutationOptions(options));
     }
     export type postApiAiGenerateFormResponse200 = {
   data: PostApiAiGenerateForm200
@@ -3243,20 +3721,29 @@ export type postApiTemplatesBySlugUseResponseError = (postApiTemplatesBySlugUseR
 
 export type postApiTemplatesBySlugUseResponse = (postApiTemplatesBySlugUseResponseSuccess | postApiTemplatesBySlugUseResponseError)
 
-export const getPostApiTemplatesBySlugUseUrl = (slug: string,) => {
+export const getPostApiTemplatesBySlugUseUrl = (slug: string,
+    params?: PostApiTemplatesBySlugUseParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/templates/${slug}/use`
+  return stringifiedParams.length > 0 ? `/api/templates/${slug}/use?${stringifiedParams}` : `/api/templates/${slug}/use`
 }
 
 /**
  * @summary Create a form from a template
  */
-export const postApiTemplatesBySlugUse = async (slug: string, options?: Parameters<typeof customFetch>[1]): Promise<postApiTemplatesBySlugUseResponse> => {
+export const postApiTemplatesBySlugUse = async (slug: string,
+    params?: PostApiTemplatesBySlugUseParams, options?: Parameters<typeof customFetch>[1]): Promise<postApiTemplatesBySlugUseResponse> => {
 
-  return customFetch<postApiTemplatesBySlugUseResponse>(getPostApiTemplatesBySlugUseUrl(slug),
+  return customFetch<postApiTemplatesBySlugUseResponse>(getPostApiTemplatesBySlugUseUrl(slug,params),
   {
     ...options,
     method: 'POST'
@@ -3284,9 +3771,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiTemplatesBySlugUse>>, PostApiTemplatesBySlugUseMutationVariables> = (props) => {
-          const {slug} = props ?? {};
+          const {slug,params} = props ?? {};
 
-          return  postApiTemplatesBySlugUse(slug,requestOptions)
+          return  postApiTemplatesBySlugUse(slug,params,requestOptions)
         }
 
 
@@ -3299,7 +3786,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiTemplatesBySlugUseMutationResult = NonNullable<Awaited<ReturnType<typeof postApiTemplatesBySlugUse>>>
 
     export type PostApiTemplatesBySlugUseMutationError = PostApiTemplatesBySlugUse403 | PostApiTemplatesBySlugUse404
-    export type PostApiTemplatesBySlugUseMutationVariables = {slug: string}
+    export type PostApiTemplatesBySlugUseMutationVariables = {slug: string;params?: PostApiTemplatesBySlugUseParams}
 
     /**
  * @summary Create a form from a template

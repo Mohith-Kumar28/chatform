@@ -162,18 +162,29 @@ metaRouter.get(
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
-    const ent = await getEntitlements(c.env, orgId);
-    return c.json({
+    const keyType = c.get("keyType") ?? null;
+    const identity = {
       organization_id: orgId,
       key: {
         id: c.get("keyId") ?? null,
-        type: c.get("keyType") ?? null,
+        type: keyType,
         mode: c.get("environment") ?? "live",
         scopes: c.get("scopes") ?? {},
       },
-      plan: ent.planId,
-      limits: ent.limits,
       scope_vocabulary: SCOPES,
-    });
+    };
+    /**
+     * What is left of the plan is a secret-key answer.
+     *
+     * A publishable key ships inside someone's page, so anything this route
+     * returns to one is readable by every visitor — and which plan the
+     * organization is on, with its limits, is nobody's business but the
+     * organization's. The identity half is still useful to a browser (it is how
+     * a client confirms which scopes it actually holds), so the route answers
+     * rather than refusing.
+     */
+    if (keyType?.startsWith("pk_")) return c.json(identity);
+    const ent = await getEntitlements(c.env, orgId);
+    return c.json({ ...identity, plan: ent.planId, limits: ent.limits });
   },
 );

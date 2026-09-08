@@ -44,6 +44,16 @@ aiRouter.post("/ai/generate-form/stream", requireGauge("forms_count", "forms.cre
 const GenerateBody = z.object({
   prompt: z.string().min(5).max(2000),
   questionCount: z.number().int().min(2).max(19).optional(),
+  /**
+   * The workspace to create into — a slug or an id, resolved inside the
+   * caller's organization. Omitted means the organization's first workspace.
+   *
+   * Every route that creates a form has to take this. Two of the three did not
+   * when workspaces became selectable, so generating from a prompt while
+   * looking at "Marketing" filed the result under whichever workspace happened
+   * to be oldest, and the form appeared to vanish.
+   */
+  workspaceId: z.string().optional(),
 });
 
 /** A generation that produced a valid document, plus what it cost. */
@@ -251,8 +261,11 @@ aiRouter.post(
     if (!c.env.OPENROUTER_API_KEY) {
       return c.json({ error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } }, 503);
     }
-    const { prompt, questionCount } = c.req.valid("json");
-    const ws = await requireWorkspace(c);
+    const { prompt, questionCount, workspaceId } = c.req.valid("json");
+    const ws = await requireWorkspace(c, workspaceId);
+    if (ws === undefined) {
+      return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
+    }
     if (!ws) {
       return c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
     }

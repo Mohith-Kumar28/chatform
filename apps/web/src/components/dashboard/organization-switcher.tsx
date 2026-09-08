@@ -20,7 +20,17 @@ import { cn } from "@/lib/utils";
 import { CreateOrganizationDialog } from "@/components/auth/organization/create-organization-dialog";
 
 /**
- * Organization switcher.
+ * Organization switcher — the top of the two levels.
+ *
+ * An organization is the account: it holds the subscription, the seats, the
+ * members and the role each of them has. What it does *not* hold is forms —
+ * those live in a workspace, and `WorkspaceSwitcher` sits beside this one.
+ *
+ * The two were one control until recently, and the copy said "workspace" while
+ * the code said organization. That reading survives in the git history of every
+ * file this touches; the short version is that `workspaces` has always been a
+ * real table with `forms.workspace_id` pointing at it, and the switcher was
+ * listing the wrong thing.
  *
  * Always a menu, even with one organization — otherwise there is nowhere to
  * create a second, which left people stuck with whatever org signup happened
@@ -31,37 +41,31 @@ import { CreateOrganizationDialog } from "@/components/auth/organization/create-
  *
  * `useActiveOrg` rather than `useActiveOrganization` because this component was
  * hiding the bug it now helps fix: falling back to `list[0]` meant a session
- * with no active organization still showed a workspace name up here, while
- * `/team` — which asks for the active org honestly — said there wasn't one.
- * The fallback stays for the moment the repair is in flight; it is no longer
- * the only thing standing between the user and a blank page.
+ * with no active organization still showed a name up here, while `/team` —
+ * which asks for the active org honestly — said there wasn't one. The fallback
+ * stays for the moment the repair is in flight; it is no longer the only thing
+ * standing between the user and a blank page.
  *
  * The menu opens on the reader's own role, because this is the one control in
- * the product that already names the workspace they are in, and "what can I do
- * here" had no answer anywhere outside `/team` — a page an editor or a viewer
- * has no other reason to open, and which a viewer reads as a roster of other
- * people. Somebody who cannot publish a form should be able to find out why
- * without being told.
+ * the product that already names the organization they are in, and "what can I
+ * do here" had no answer anywhere outside `/settings/people` — a page an editor
+ * or a viewer has no other reason to open, and which a viewer reads as a roster
+ * of other people. Somebody who cannot publish a form should be able to find
+ * out why without being told.
  *
  * It sits above the switch list rather than beside a row, and that is the
  * point: `organization.list` returns organizations without the membership that
- * produced them, so a role per row would be a claim about workspaces this
- * component cannot see into. One label about the workspace it *can* see into is
- * both honest and the question being asked.
+ * produced them, so a role per row would be a claim this component cannot see
+ * into. One label about the organization it *can* see into is both honest and
+ * the question being asked.
  *
- * A pill rather than the sentence it used to be. "You're an owner here" reads
- * as a line of prose in a menu made of names, and it says "here" underneath the
- * name of the place it means — restating in words what its position already
- * says. The pill sits on the same line as the workspace, which is where the
- * relationship between the two is legible without reading.
- *
- * The list below is the workspaces you are NOT in. It used to be all of them,
- * with a tick against the current one, so a two-workspace account saw its own
- * workspace named twice in a menu six lines long — once as the heading and once
- * as a row confirming what the heading said. A switcher only needs to offer the
- * things you can switch to.
+ * The list below is the organizations you are NOT in. It used to be all of
+ * them, with a tick against the current one, so a two-org account saw its own
+ * named twice in a menu six lines long — once as the heading and once as a row
+ * confirming what the heading said. A switcher only needs to offer the things
+ * you can switch to.
  */
-export function WorkspaceSwitcher() {
+export function OrganizationSwitcher() {
   const { data: orgs } = useListOrganizations();
   const { org: active } = useActiveOrg();
   const myRole = useMyRole();
@@ -70,7 +74,7 @@ export function WorkspaceSwitcher() {
 
   const list = orgs ?? [];
   const current = active ?? list[0];
-  // Everything except where you already are. With one workspace this is empty
+  // Everything except where you already are. With one organization this is empty
   // and the whole section disappears, which is correct: there is nowhere to go.
   const others = list.filter((org) => org.id !== current?.id);
 
@@ -81,7 +85,11 @@ export function WorkspaceSwitcher() {
       await authClient.organization.setActive({ organizationId: id });
       // The active org lives in the session cookie and the server reads it on
       // every request, so this has to be a real navigation — a client
-      // transition would show the previous workspace's cached data.
+      // transition would show the previous organization's cached data.
+      //
+      // Note the asymmetry with `WorkspaceSwitcher`, which switches with a
+      // client-side push: the active workspace is a URL parameter precisely so
+      // it does not need this.
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/dashboard");
     } catch (err) {
@@ -102,14 +110,14 @@ export function WorkspaceSwitcher() {
           )}
         >
           <Building2 className="size-3.5" strokeWidth={1.75} />
-          <span className="max-w-32 truncate">{current?.name ?? "Workspace"}</span>
+          <span className="max-w-32 truncate">{current?.name ?? "Organization"}</span>
           <ChevronsUpDown className="size-3 opacity-50" />
         </DropdownMenuTrigger>
 
         <DropdownMenuContent align="start" className="w-64">
           <div className="flex items-center gap-2 px-2 py-1.5">
             <p className="min-w-0 flex-1 truncate text-sm font-medium">
-              {current?.name ?? "Workspace"}
+              {current?.name ?? "Organization"}
             </p>
             {/* Nothing at all while the membership is in flight. It shares a
                 line with the name now, so an absent pill costs no height and
@@ -139,7 +147,7 @@ export function WorkspaceSwitcher() {
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
             <Plus className="size-3.5" />
-            New workspace
+            New organization
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -148,7 +156,7 @@ export function WorkspaceSwitcher() {
           invite step. This component used to carry a second create form of its
           own — including a hand-written copy of the slug-collision retry that
           `useCreateOrganization` already does — so the product had two
-          different "new workspace" experiences depending on whether you came
+          different "new organization" experiences depending on whether you came
           from this menu or from Settings. Now it has one.
 
           `hideSlug` keeps this menu's behaviour: the slug is derived from the
@@ -158,11 +166,11 @@ export function WorkspaceSwitcher() {
         onOpenChange={setCreateOpen}
         hideSlug
         onCompleted={() => {
-          // The new workspace is active in the session cookie — Better Auth's
-          // `organization.create` sets it server-side — and the server reads
-          // that on every request, so this has to be a real navigation. A
-          // client transition would render the previous workspace's cached
-          // dashboard under the new workspace's name.
+          // The new organization is active in the session cookie — Better
+          // Auth's `organization.create` sets it server-side — and the server
+          // reads that on every request, so this has to be a real navigation. A
+          // client transition would render the previous organization's cached
+          // dashboard under the new organization's name.
           // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           window.location.assign("/dashboard");
         }}

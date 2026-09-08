@@ -136,6 +136,25 @@ function scopeDenial<R extends Resource>(c: Ctx, resource: R, action: ActionOf<R
 }
 
 /**
+ * Marks a `requireScope` middleware with the scope it enforces.
+ *
+ * The OpenAPI generator reads this back off Hono's route table to say, per
+ * operation, which scope is required and therefore whether a publishable key
+ * can reach it at all. That derivation replaced a hand-written path → scope
+ * table in `lib/openapi.ts`: a table cannot help drifting from the guards it
+ * claims to describe, and the spec is the one place where being wrong about a
+ * guard is a security claim rather than a typo.
+ */
+export const SCOPE_TAG = Symbol.for("chatform.requiredScope");
+
+/** The scope a middleware enforces, or null when it enforces none. */
+export function scopeOf(handler: unknown): string | null {
+  if (typeof handler !== "function") return null;
+  const tagged = (handler as unknown as Record<symbol, unknown>)[SCOPE_TAG];
+  return typeof tagged === "string" ? tagged : null;
+}
+
+/**
  * Require a scope directly, for routes with no RBAC equivalent.
  *
  * `requirePermission` maps a role permission onto a scope; this is the plain
@@ -143,7 +162,7 @@ function scopeDenial<R extends Resource>(c: Ctx, resource: R, action: ActionOf<R
  * request has no scopes and passes through — RBAC has already judged it.
  */
 export function requireScope(resource: ScopeResource, action: string): Handler {
-  return async (c, next) => {
+  const handler: Handler = async (c, next) => {
     const scopes = c.get("scopes");
     if (!scopes) return next();
     if (!scopeAllows(scopes, resource, action)) {
@@ -161,6 +180,8 @@ export function requireScope(resource: ScopeResource, action: string): Handler {
     }
     await next();
   };
+  Object.defineProperty(handler, SCOPE_TAG, { value: `${resource}:${action}`, enumerable: false });
+  return handler;
 }
 
 /**

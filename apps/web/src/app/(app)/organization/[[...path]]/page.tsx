@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 /**
- * `/organization` is now the workspace half of `/settings`.
+ * `/organization` is now the organization half of `/settings`.
  *
  * `people` matters most here: it was one of the two members screens the product
  * shipped at once, and it is the one that lost. Anyone who bookmarked it gets

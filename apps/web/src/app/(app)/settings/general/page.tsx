@@ -8,14 +8,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
- * This workspace's name, logo and danger zone.
+ * This organization's name, logo and danger zone.
  *
  * `OrganizationSettings` is kept — unlike the `<Settings>`/`<Organization>` tab
  * shells — because it does something beyond routing: it threads plugin-supplied
  * `organizationCards` between the profile form and the danger zone. The ids it
  * needs used to come from the `<Organization>` wrapper; they come from
  * `useActiveOrg()` now, which is the same org source the People section reads,
- * so the whole shell agrees about which workspace it is showing.
+ * so the whole shell agrees about which organization it is showing.
  */
 export default function GeneralSettingsPage() {
   const { org, isPending } = useActiveOrg();
@@ -38,7 +38,7 @@ export default function GeneralSettingsPage() {
         <SettingsSectionHeader title="General" />
         <EmptyState
           icon={Building2}
-          title="You're not in a workspace yet"
+          title="You're not in an organization yet"
           description="Create one from the switcher in the header, and its name, logo and people will appear here."
         />
       </>

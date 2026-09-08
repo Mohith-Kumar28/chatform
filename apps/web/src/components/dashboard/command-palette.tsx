@@ -70,7 +70,10 @@ export function CommandPalette() {
 
   // Both lists are lazy: nothing is fetched until the palette has been opened
   // once, and neither changes often enough to refetch on every open.
-  const { data } = useGetApiForms({
+  // No workspace filter on purpose: ⌘K searches everything the organization
+  // has, because "which folder is it in" is the question the palette exists to
+  // avoid asking. The dashboard grid is the workspace-scoped view.
+  const { data } = useGetApiForms(undefined, {
     query: { queryKey: getGetApiFormsQueryKey(), enabled: open, staleTime: 60_000 },
   });
   const forms = apiData<FormRow[]>(data) ?? [];
@@ -198,7 +201,7 @@ export function CommandPalette() {
                   <CommandItem
                     key={t.slug}
                     value={`${t.title} ${t.category} ${(t.tags ?? []).join(" ")}`}
-                    onSelect={() => go(`/templates?t=${t.slug}`)}
+                    onSelect={() => go(`/templates/${t.slug}`)}
                   >
                     <Icon className="size-3.5 opacity-60" />
                     <span className="min-w-0 flex-1 truncate">{t.title}</span>

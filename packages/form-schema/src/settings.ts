@@ -107,6 +107,79 @@ export const SettingsDoc = z.object({
     })
     .prefault({}),
 
+  /**
+   * Nudge someone who started answering and walked away.
+   *
+   * Turned off by default and gated at Pro, because it sends mail on the
+   * customer's behalf to a person who never finished — which is marketing mail
+   * in every regime that has an opinion, not a service message. The gate, the
+   * suppression list and the at-capture opt-out are what make that defensible;
+   * see `lib/followups.ts` and `docs/follow-ups.mdx`.
+   *
+   * The default cadence is 4h then 24h, and deliberately not the "send within
+   * an hour" advice every vendor blog repeats. Those benchmarks measure
+   * conversion of emails sent, against no control group. The two randomised
+   * trials that measure incremental lift both found messages inside the first
+   * hour performed *worse* than sending nothing — they mostly intercept people
+   * who were coming back anyway and book them as recovered.
+   */
+  followUp: z
+    .object({
+      enabled: z.boolean().default(false),
+      channel: z.literal("email").default("email"),
+      /**
+       * Which hidden field carries the address, when that is where it comes
+       * from. Named rather than matched on a magic `email` key: hidden field
+       * names are author-chosen, so a form using `lead_email` or `contact`
+       * should work without anybody renaming anything.
+       */
+      addressField: z.string().max(60).optional(),
+      /**
+       * At most three. Velocify found more than five *lowers* conversion by
+       * 36%, and Klaviyo's own guidance is two to three. The third step is
+       * off by default rather than absent — it converts well enough
+       * (Barilliance measured 18.2% at 72h) to be one toggle away.
+       */
+      steps: z
+        .array(
+          z.object({
+            delayHours: z.number().int().min(1).max(720),
+            subject: z.string().max(300),
+            bodyMd: z.string().max(10000).default(""),
+          }),
+        )
+        .max(3)
+        .default([
+          { delayHours: 4, subject: "You're {{remaining}} questions from finishing", bodyMd: "" },
+          { delayHours: 24, subject: "Your {{form.title}} is still open", bodyMd: "" },
+        ]),
+      /**
+       * Lead with how far they got. This is the one piece of the usual
+       * psychology story that survives scrutiny: the Zeigarnik effect does not
+       * replicate, but endowed progress (Nunes & Dreze 2006) roughly doubled
+       * completion by reframing a task as already begun.
+       */
+      showProgress: z.boolean().default(true),
+      /**
+       * Hold this share of abandoners back and send them nothing, so the
+       * recovery number means something. Off by default — it withholds mail
+       * the customer asked for — but it is the only way to tell recovery from
+       * people who were returning regardless, and no other form product
+       * measures it at all.
+       */
+      holdoutPercent: z.number().int().min(0).max(20).default(0),
+      /** Where a reply goes. `noreply@` on a nudge is how you get marked spam. */
+      replyTo: z.string().email().optional(),
+      /**
+       * The author confirmed this form is sales-directed and that the postal
+       * address required by CAN-SPAM is set. Stored with who and when, because
+       * CASL puts the burden of proof on the sender.
+       */
+      attestedBy: z.string().max(100).optional(),
+      attestedAt: z.string().optional(),
+    })
+    .prefault({}),
+
   meta: z
     .object({
       ogTitle: z.string().max(120).optional(),

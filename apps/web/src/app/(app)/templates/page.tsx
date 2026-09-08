@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -14,14 +14,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterChips } from "@/components/ui/filter-chips";
 import { PageHeader } from "@/components/ui/page-header";
 import { TemplateCard, TemplateCardSkeleton } from "@/components/templates/template-card";
-import { TemplatePreview } from "@/components/templates/template-preview";
-import {
-  filterTemplates,
-  POPULAR_COUNT,
-  templateCategories,
-  useTemplates,
-  type TemplateSummary,
-} from "@/lib/templates";
+import { filterTemplates, POPULAR_COUNT, templateCategories, useTemplates } from "@/lib/templates";
 
 /**
  * The template gallery.
@@ -31,35 +24,19 @@ import {
  * see what a template asked before creating a form from it, and nothing to
  * browse once you had read all four titles.
  *
- * With a real catalogue behind it the screen has a job: help someone find the
- * one that fits, and let them look before they commit.
+ * With a real catalogue behind it the screen has one job: help someone find
+ * the one that fits. Deciding happens on the template's own page — a card here
+ * opens it, and nothing on this screen creates a form except the explicit
+ * shortcut on a card you already know you want.
  */
 export default function TemplatesPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
 
   const { templates, isLoading } = useTemplates();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
-  const [preview, setPreview] = useState<TemplateSummary | null>(null);
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
-
-  /**
-   * `?t=nps-survey` opens that template's preview — the link the command
-   * palette hands out, so picking a template there lands on the template
-   * rather than on the gallery with the reader left to find it again.
-   *
-   * Derived rather than copied into state: the param is the source of truth
-   * until someone opens a different card, and `preview` takes over from there.
-   */
-  const linked = searchParams.get("t");
-  const shownPreview = preview ?? (linked ? (templates.find((t) => t.slug === linked) ?? null) : null);
-
-  const closePreview = () => {
-    setPreview(null);
-    if (linked) router.replace("/templates");
-  };
 
   const categories = useMemo(() => templateCategories(templates), [templates]);
   const shown = useMemo(
@@ -186,21 +163,12 @@ export default function TemplatesPage() {
                   pending={pendingSlug === t.slug}
                   disabled={use.isPending && pendingSlug !== t.slug}
                   onUse={() => startFrom(t.slug)}
-                  onPreview={() => setPreview(t)}
                 />
               </li>
             ))}
           </ul>
         )}
       </div>
-
-      <TemplatePreview
-        template={shownPreview}
-        open={shownPreview !== null}
-        onOpenChange={(open) => !open && closePreview()}
-        onUse={startFrom}
-        pending={pendingSlug === shownPreview?.slug}
-      />
     </div>
   );
 }

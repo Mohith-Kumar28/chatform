@@ -91,3 +91,67 @@ export async function verifyDownload(
   if (exp * 1000 < Date.now()) return "expired";
   return "ok";
 }
+
+// ─────────────────────────── links that live in email ───────────────────────────
+
+/**
+ * Tokens for links we mail to a respondent.
+ *
+ * Separate from `signDownload` above, which produces a `/d/<kind>/<id>` path
+ * with the signature in the query string. That shape is right for a browser the
+ * dashboard just handed a URL to; it is wrong for a link that has to survive
+ * being pasted, forwarded, and rewritten by three security products on the way
+ * to somebody's phone. This is one opaque string, so callers can hang it off
+ * whatever route reads best — `/f/<slug>?resume=…`, `/p/unsubscribe/<token>`.
+ *
+ * The two differences from the download tokens are deliberate and both matter:
+ *
+ * **These are multi-use.** Proofpoint, Mimecast and Microsoft Safe Links fetch
+ * the URLs in a message before the human ever sees it. A single-use token would
+ * be spent by a scanner and the recipient would click a dead link — which is
+ * the exact failure that makes people give up on a magic-link flow.
+ *
+ * **These are long-lived**, measured in days rather than minutes. A follow-up is
+ * read whenever somebody next opens their inbox, and a resume link that expires
+ * before the sequence finishes is worse than not sending the last nudge at all.
+ */
+export type EmailTokenKind = "resume" | "unsub";
+
+/** Days, because every caller thinks in days. */
+export async function mintEmailToken(
+  env: Bindings,
+  kind: EmailTokenKind,
+  id: string,
+  ttlDays: number,
+): Promise<string> {
+  const exp = Math.floor(Date.now() / 1000) + Math.round(ttlDays * 86_400);
+  const sig = truncate(await hmacHex(secretOf(env), `${kind}.${id}.${exp}`));
+  // `.` is not produced by any id generator here and survives a URL untouched,
+  // so the token needs no encoding and splits unambiguously.
+  return `${id}.${exp}.${sig}`;
+}
+
+export interface EmailTokenResult {
+  verdict: SignatureVerdict;
+  /** Only set when the verdict is `ok`. */
+  id?: string;
+}
+
+export async function verifyEmailToken(
+  env: Bindings,
+  kind: EmailTokenKind,
+  token: string | undefined,
+): Promise<EmailTokenResult> {
+  if (!token) return { verdict: "invalid" };
+  const parts = token.split(".");
+  if (parts.length !== 3) return { verdict: "invalid" };
+  const [id, expRaw, sig] = parts as [string, string, string];
+  const exp = Number(expRaw);
+  if (!id || !Number.isFinite(exp)) return { verdict: "invalid" };
+  const expected = truncate(await hmacHex(secretOf(env), `${kind}.${id}.${exp}`));
+  // Signature before expiry, for the reason `verifyDownload` gives: telling an
+  // unsigned guess that it is merely "expired" confirms the id exists.
+  if (!sameSignature(expected, sig)) return { verdict: "invalid" };
+  if (exp * 1000 < Date.now()) return { verdict: "expired" };
+  return { verdict: "ok", id };
+}

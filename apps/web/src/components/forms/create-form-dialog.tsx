@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Plus, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -55,6 +55,7 @@ export function CreateFormDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const generation = useFormGeneration();
 
@@ -66,6 +67,20 @@ export function CreateFormDialog({
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
+
+  /**
+   * The workspace the new form lands in — whichever one the dashboard behind
+   * this dialog is showing.
+   *
+   * All three creation paths below have to carry it. They did not when
+   * workspaces became selectable, and the failure is quiet in the worst way:
+   * the form is created successfully, in a folder the user is not looking at,
+   * so it reads as a form that was never made.
+   *
+   * A slug, not an id — `requireWorkspace` resolves either, inside the caller's
+   * organization and nowhere else.
+   */
+  const ws = searchParams.get("ws") ?? undefined;
 
   const { templates, isLoading: templatesLoading } = useTemplates();
   const categories = useMemo(() => templateCategories(templates), [templates]);
@@ -109,7 +124,7 @@ export function CreateFormDialog({
   const generate = () => {
     const brief = prompt.trim().slice(0, PROMPT_MAX);
     void generation.start(
-      { prompt: brief },
+      { prompt: brief, workspaceId: ws },
       (result) => {
         void invalidateForms(queryClient);
         // The brief starts the builder's AI thread, so the first message about
@@ -202,7 +217,9 @@ export function CreateFormDialog({
                   setTitle={setTitle}
                   pending={createBlank.isPending}
                   onCreate={() =>
-                    createBlank.mutate({ data: { title: title.trim() || "Untitled form" } })
+                    createBlank.mutate({
+                      data: { title: title.trim() || "Untitled form", workspaceId: ws },
+                    })
                   }
                 />
               </div>
@@ -261,8 +278,12 @@ export function CreateFormDialog({
                         disabled={busy && pendingSlug !== t.slug}
                         onUse={() => {
                           setPendingSlug(t.slug);
-                          useTemplate.mutate({ slug: t.slug });
+                          useTemplate.mutate({ slug: t.slug, params: ws ? { ws } : undefined });
                         }}
+                        // The card leads to the template's own page, so this
+                        // dialog gets out of the way rather than sitting over
+                        // the route it just sent you to.
+                        onOpen={() => onOpenChange(false)}
                       />
                     ))}
                   </div>

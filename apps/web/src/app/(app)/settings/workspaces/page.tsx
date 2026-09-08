@@ -1,18 +1,14 @@
 "use client";
 
-import { OrganizationsSettings } from "@/components/auth/organization/organizations-settings";
-import { SettingsSectionHeader } from "@/components/settings/settings-section-header";
+import { WorkspacesSection } from "@/components/settings/workspaces-section";
 
 /**
- * The plural one: every workspace you belong to, and the invitations waiting for
- * you. Distinct from "General", which is the single workspace you are in right
- * now — the rail keeps them apart by naming that group after the workspace itself.
+ * The folders inside the organization you are in.
+ *
+ * This URL used to render the list of organizations you belong to, back when an
+ * organization was called a workspace. That list now lives at
+ * `/settings/organizations`.
  */
 export default function WorkspacesSettingsPage() {
-  return (
-    <>
-      <SettingsSectionHeader title="Workspaces" />
-      <OrganizationsSettings />
-    </>
-  );
+  return <WorkspacesSection />;
 }

@@ -1,4 +1,4 @@
-import { Briefcase, Building2, Gauge, KeyRound, ShieldCheck, User, Users } from "lucide-react";
+import { Briefcase, Building2, FolderOpen, Gauge, KeyRound, ShieldCheck, User, Users } from "lucide-react";
 
 /**
  * Every settings destination, in one place.
@@ -7,18 +7,26 @@ import { Briefcase, Building2, Gauge, KeyRound, ShieldCheck, User, Users } from 
  * palette all read this array, so a label or an href cannot drift between the
  * three places a person might meet it.
  *
- * ## Why two groups, and why the first one has no fixed name
+ * ## Why the first group has no fixed name
  *
- * "This workspace" and "the workspaces you belong to" are different things, and
- * the old arrangement had them one click apart wearing the same noun. Naming the
- * first group after the *active workspace itself* — the rail renders the
- * organization's real name here — settles it: the first three sections are
- * plainly scoped to Acme Inc, and the plural "Workspaces" under Account is
- * plainly the list of places you belong to.
+ * It is named after the *active organization* — the rail renders its real name
+ * here — so the sections under it are plainly scoped to Acme Inc rather than to
+ * some general idea of settings.
  *
- * That also keeps the product's vocabulary honest. There is a `workspaces` table
- * in the database that means something else entirely and has no UI; nothing in
- * this rail refers to it.
+ * ## Organization and workspace are now two different words
+ *
+ * This file used to say "workspace" for both, and admitted as much: the note
+ * that stood here observed that `workspaces` was "a table in the database that
+ * means something else entirely and has no UI". It has a UI now. The two levels
+ * are:
+ *
+ *   organization   the account — subscription, seats, members, roles
+ *   workspace      a folder of forms inside it
+ *
+ * So "Organizations" under Account is the list of accounts you belong to, and
+ * "Workspaces" in the first group is the folders inside the one you are in.
+ * They are one letter apart in a rail and worlds apart in meaning, which is why
+ * they sit in different groups.
  */
 export interface SettingsSection {
   id: string;
@@ -30,7 +38,7 @@ export interface SettingsSection {
 }
 
 export interface SettingsGroup {
-  id: "workspace" | "account";
+  id: "organization" | "account";
   /** `null` means "render the active workspace's own name here". */
   label: string | null;
   sections: SettingsSection[];
@@ -38,7 +46,7 @@ export interface SettingsGroup {
 
 export const SETTINGS_GROUPS: SettingsGroup[] = [
   {
-    id: "workspace",
+    id: "organization",
     label: null,
     sections: [
       {
@@ -46,7 +54,14 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         label: "General",
         href: "/settings/general",
         icon: Building2,
-        keywords: "general workspace organization name slug logo rename delete workspace leave",
+        keywords: "general organization name slug logo rename delete organization leave",
+      },
+      {
+        id: "workspaces",
+        label: "Workspaces",
+        href: "/settings/workspaces",
+        icon: FolderOpen,
+        keywords: "workspaces folders create rename delete move forms organize",
       },
       {
         id: "people",
@@ -90,11 +105,11 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         keywords: "security password sessions devices google linked accounts delete account",
       },
       {
-        id: "workspaces",
-        label: "Workspaces",
-        href: "/settings/workspaces",
+        id: "organizations",
+        label: "Organizations",
+        href: "/settings/organizations",
         icon: Briefcase,
-        keywords: "workspaces organizations switch join invitations pending leave",
+        keywords: "organizations accounts switch join invitations pending leave",
       },
     ],
   },

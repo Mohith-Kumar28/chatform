@@ -1,6 +1,7 @@
 import type { Bindings } from "../env.js";
 import type { AnswerMap, RespondentIdentity } from "@repo/form-schema";
 import { enqueueMail } from "./mail.js";
+import { cancelFollowUps, scheduleFollowUps } from "./followups.js";
 
 /**
  * Every write to `submissions` and `submission_answers`, in one place.
@@ -268,8 +269,25 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
   const id = a.identity ?? null;
   const stmts = [
     o.env.DB.prepare(
+      /**
+       * `active_ms` accumulates rather than overwrites, and `duration_ms` is
+       * read from it.
+       *
+       * A response can now be resumed days after it was abandoned, and
+       * `now - started_at` would report the whole gap as time spent answering —
+       * landing a three-day "completion time" in the analytics a customer pays
+       * to read. Adding this sitting's elapsed time to what previous sittings
+       * banked keeps the number meaning what it always meant.
+       *
+       * `abandonReason` is cleared on anything that is not an abandonment,
+       * because `json_set` only ever writes and a recovered response would
+       * otherwise read as completed *and* abandoned-for-idle-timeout.
+       */
       `UPDATE submissions
-          SET status = ?1, completed_at = ?2, updated_at = ?3, duration_ms = ?4, search_text = ?5,
+          SET status = ?1, completed_at = ?2, updated_at = ?3,
+              active_ms = active_ms + ?4,
+              duration_ms = active_ms + ?4,
+              search_text = ?5,
               meta = json_set(coalesce(meta,'{}'), '$.endingRef', ?6, '$.abandonReason', ?7,
                               '$.variables', json(?8)),
               respondent_provider = ?9, respondent_subject = ?10,
@@ -282,7 +300,7 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
       durationMs,
       buildSearchText(a.answers),
       a.endingRef,
-      a.abandonReason ?? null,
+      a.status === "abandoned" ? (a.abandonReason ?? null) : null,
       JSON.stringify(a.variables ?? {}),
       // The verified respondent is copied onto the response rather than joined
       // from the session: sessions get pruned, and a response has to stay
@@ -348,6 +366,10 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
    *
    * The job carries identifiers and nothing else; the consumer reads the
    * answers and the published settings itself. See `lib/mail-jobs.ts`.
+   *
+   * Only completions — an abandoned response is not something to mail the
+   * *owner* about. It is now something we may mail the *respondent* about, and
+   * that is the branch below.
    */
   if (a.status === "completed") {
     await enqueueMail(o.env, {
@@ -357,6 +379,32 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
       responseId: a.responseId,
       isTest: o.isTest === true,
     });
+  }
+
+  /**
+   * Follow-ups: schedule on abandonment, stop on anything terminal.
+   *
+   * Here for the same reason the mail above is here — this is where the chat
+   * path and the API path meet, and the `changed` guard has already made it
+   * exactly once. Both calls swallow their own errors: a response that was
+   * correctly recorded must not fail because we could not arrange to nag
+   * someone about it later.
+   *
+   * A screen-out is deliberately not followed up. The form refused that
+   * respondent; inviting them back to finish would be the rudest possible
+   * misreading of what just happened.
+   */
+  if (a.status === "abandoned") {
+    await scheduleFollowUps({
+      env: o.env,
+      submissionId: a.responseId,
+      formId: o.formId,
+      organizationId: o.organizationId,
+      abandonedAt: now,
+      ...(o.isTest === true ? { isTest: true } : {}),
+    });
+  } else {
+    await cancelFollowUps(o.env, a.responseId, a.status === "completed" ? "completed" : "disqualified");
   }
 
   o.env.ANALYTICS.writeDataPoint({

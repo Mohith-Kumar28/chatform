@@ -63,6 +63,14 @@ export interface Bindings {
   EMAIL_FROM?: string;
   /** Where replies land. Absent, replies go to the From address. */
   EMAIL_REPLY_TO?: string;
+  /**
+   * The From address for marketing mail — follow-ups, and nothing else yet.
+   *
+   * A separate subdomain from the transactional sender so the two reputations
+   * can be judged separately by receivers. See `MailClass` in `lib/mail.ts` for
+   * why the two never share a pipe.
+   */
+  EMAIL_FROM_MARKETING?: string;
 
   BETTER_AUTH_SECRET: string;
   OPENROUTER_API_KEY?: string;

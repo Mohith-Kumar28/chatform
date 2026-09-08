@@ -24,7 +24,7 @@ import {
   getUsageForPeriod,
   countForms,
   countSeats,
-  workspaceAllowance,
+  countWorkspaces,
   storageBytes,
   loadPlanCatalogue,
   verifyCatalogue,
@@ -236,16 +236,7 @@ billingRouter.get(
     const [forms, seats, workspaces, bytes] = await Promise.all([
       countForms(c.env, orgId),
       countSeats(c.env, orgId),
-      /*
-        The workspaces the reader actually has, not the rows in the internal table.
-
-        `countWorkspaces` counts `workspaces`, which is a grouping column on forms
-        that auto-creates exactly one 'Default' row per organization and has no UI —
-        so the meter read "1 of 1" on every account forever while the switcher above
-        it listed several things it also called workspaces. It is the organizations
-        this person owns that the plan sells and the gate now enforces.
-      */
-      workspaceAllowance(c.env, userId),
+      countWorkspaces(c.env, orgId),
       storageBytes(c.env, orgId),
     ]);
 
@@ -268,7 +259,7 @@ billingRouter.get(
       gauges: {
         forms_count: forms,
         seats,
-        workspaces_count: workspaces.owned,
+        workspaces_count: workspaces,
         file_storage_mb: Math.ceil(bytes / (1024 * 1024)),
         file_storage_bytes: bytes,
       },
