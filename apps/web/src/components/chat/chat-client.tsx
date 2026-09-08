@@ -906,9 +906,8 @@ function EndingCard({
         */}
         {screenedOut && requirements.length > 0 && (
           <div className="mt-6 w-full max-w-sm rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-4 py-3.5 text-left">
-            <p className="text-xs font-semibold tracking-wide uppercase opacity-55">
-              {requirements.length === 1 ? "What's missing" : "What's missing so far"}
-            </p>
+            {/* Not "so far": this screen is the end of the road, not a step in it. */}
+            <p className="text-xs font-semibold tracking-wide uppercase opacity-55">What&apos;s missing</p>
             <ul className="mt-2 space-y-1.5">
               {requirements.map((r) => (
                 <li key={r} className="flex gap-2.5 text-[0.9375rem] leading-snug">
