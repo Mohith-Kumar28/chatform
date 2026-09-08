@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Building2, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { authClient, useListOrganizations } from "@/lib/auth/auth-client";
@@ -72,13 +71,6 @@ export function OrganizationSwitcher() {
   const myRole = useMyRole();
   const [createOpen, setCreateOpen] = useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
-  /**
-   * Controlled so the gear below can close the menu on its way out.
-   *
-   * It is a `Link`, not a `DropdownMenuItem`, so Radix does not see a selection
-   * and would leave the menu hanging open over the page it just navigated to.
-   */
-  const [open, setOpen] = useState(false);
 
   const list = orgs ?? [];
   const current = active ?? list[0];
@@ -110,7 +102,7 @@ export function OrganizationSwitcher() {
 
   return (
     <>
-      <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenu>
         <DropdownMenuTrigger
           className={cn(
             "hover:bg-muted text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm",
