@@ -457,7 +457,7 @@ export function followUpEmail(a: {
         `${greeting}ou answered <strong>${a.progress.answered} of ${a.progress.total}</strong> questions in ` +
           `<strong>${escapeHtml(a.formTitle)}</strong>` +
           (remaining > 0
-            ? ` — ${remaining} to go, about ${estimateMinutes(remaining)}.`
+            ? `, ${remaining} to go, about ${estimateMinutes(remaining)}.`
             : ` and were nearly done.`),
       )
     : p(

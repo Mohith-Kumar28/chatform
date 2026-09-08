@@ -382,6 +382,7 @@ export function SettingsPanel({
                 <FollowUpPanel
                   settings={settings}
                   hiddenFields={hiddenFields}
+                  formTitle={formTitle ?? "your form"}
                   onChange={onChange}
                 />
               </LockedControl>

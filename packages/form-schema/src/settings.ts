@@ -154,13 +154,13 @@ export const SettingsDoc = z.object({
             delayHours: 4,
             subject: "You're {{remaining}} questions from finishing",
             bodyMd:
-              "Everything you answered is saved — picking up where you left off takes about a minute.",
+              "Everything you answered is saved, and picking up where you left off takes about a minute.",
           },
           {
             delayHours: 24,
             subject: "Your {{form.title}} is still open",
             bodyMd:
-              "Just a nudge in case it slipped — your answers are still here whenever you're ready.",
+              "Just a nudge in case it slipped. Your answers are still here whenever you're ready.",
           },
         ]),
       /**

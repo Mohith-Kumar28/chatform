@@ -16,6 +16,7 @@ import {
 import { useActiveOrg } from "@/hooks/use-active-org";
 import { cn } from "@/lib/utils";
 import { FollowUpAddressDialog } from "./followup-address-dialog";
+import { FollowUpEmailPreview } from "./followup-email-preview";
 
 type FollowUp = FormDoc["settings"]["followUp"];
 type Step = FollowUp["steps"][number];
@@ -46,8 +47,8 @@ const DELAY_CHOICES = [
  * is the one most likely to earn one.
  */
 const DEFAULT_BODIES = [
-  "Everything you answered is saved — picking up where you left off takes about a minute.",
-  "Just a nudge in case it slipped — your answers are still here whenever you're ready.",
+  "Everything you answered is saved, and picking up where you left off takes about a minute.",
+  "Just a nudge in case it slipped. Your answers are still here whenever you're ready.",
   "This is the last one we'll send. Your answers are saved if you'd still like to finish.",
 ];
 
@@ -60,10 +61,13 @@ const THIRD_STEP: Step = {
 export function FollowUpPanel({
   settings,
   hiddenFields,
+  formTitle,
   onChange,
 }: {
   settings: FormDoc["settings"];
   hiddenFields: FormDoc["hiddenFields"];
+  /** Resolves `{{form.title}}` in the preview, so it reads as a sentence. */
+  formTitle: string;
   onChange: (next: FormDoc["settings"]) => void;
 }) {
   const followUp = settings.followUp;
@@ -176,7 +180,7 @@ export function FollowUpPanel({
 
       {followUp.enabled && hasAddress && (
         <>
-          <div className="divide-border/60 divide-y rounded-xl border">
+          <div className="rounded-xl border">
             {followUp.steps.map((step, i) => (
               <div key={i}>
                 <div className="flex items-center gap-2 px-3 py-2.5">
@@ -226,12 +230,19 @@ export function FollowUpPanel({
                   )}
                 </div>
                 {expanded === i && (
-                  <div className="px-3 pb-3">
+                  <div className="space-y-2 px-3 pb-3 sm:pl-[10.25rem]">
                     <Textarea
                       className="min-h-16 text-sm"
                       value={step.bodyMd}
                       placeholder="Message"
                       onChange={(e) => setStep(i, { bodyMd: e.target.value })}
+                    />
+                    <FollowUpEmailPreview
+                      subject={step.subject}
+                      body={step.bodyMd}
+                      formTitle={formTitle}
+                      showProgress={followUp.showProgress}
+                      postalAddress={stored}
                     />
                   </div>
                 )}
