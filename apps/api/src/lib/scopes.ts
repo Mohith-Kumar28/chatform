@@ -44,6 +44,41 @@ export const SECRET_SCOPES: Scopes = {
 };
 
 /**
+ * What a key driving the MCP server needs.
+ *
+ * A named bundle rather than a wider `SECRET_SCOPES`, and that distinction is the
+ * point. The default is narrow on purpose, so widening it to make MCP work would
+ * hand write authority to every key anyone mints for any reason. Instead this is
+ * offered as a preset at creation time: the same least-privilege model, with one
+ * well-labelled shortcut for the case that needs more.
+ *
+ * `response:delete` and `response:read_partial` are deliberately absent — no
+ * endpoint requires either (see `scopes.mdx`), and the MCP server refuses deletes
+ * regardless of what a key holds.
+ */
+export const MCP_SCOPES: Scopes = {
+  form: ["read", "write", "publish"],
+  response: ["read", "write", "export"],
+  session: ["create", "write", "read"],
+  webhook: ["read", "write"],
+  file: ["read"],
+  analytics: ["read"],
+};
+
+/**
+ * The presets the key-creation dialog offers.
+ *
+ * Served from `GET /api/keys/scopes` alongside the vocabulary, so the dashboard
+ * renders what the API actually grants rather than keeping its own copy — the
+ * existing scope grid already reads the vocabulary from there for the same reason.
+ */
+export const SCOPE_PRESETS: Record<string, Scopes> = {
+  read_only: { form: ["read"], response: ["read"], analytics: ["read"] },
+  default: SECRET_SCOPES,
+  agent: MCP_SCOPES,
+};
+
+/**
  * The hard ceiling for a publishable key, not merely its default.
  *
  * A `pk_` key ships inside someone's page, so treat it as public: it may open a

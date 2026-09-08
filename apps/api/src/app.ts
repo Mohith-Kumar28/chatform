@@ -13,6 +13,8 @@ import { workspacesRouter } from "./routes/workspaces.js";
 import { aiRouter } from "./routes/ai.js";
 import { resultsRouter } from "./routes/results.js";
 import { v1Router } from "./routes/v1.js";
+import { mcpRouter } from "./routes/mcp.js";
+import { setDispatchTarget } from "./mcp/dispatch.js";
 import { keysRouter } from "./routes/keys.js";
 import { webhooksRouter } from "./routes/webhook-admin.js";
 import { integrationsRouter, feedRouter } from "./routes/integrations.js";
@@ -88,6 +90,32 @@ export function createApp() {
     }),
   );
 
+  /**
+   * `/mcp` mirrors `/v1`'s CORS, plus the two headers the MCP transport needs.
+   *
+   * Kept even though `/mcp` is a secret-key surface and a browser has no business
+   * presenting one: a preflight carries no key, so refusing it here would only
+   * turn a clear 403 from `requireApiKey` into an opaque network error. The
+   * per-key checks remain the boundary, exactly as on `/v1`.
+   */
+  app.use(
+    "/mcp",
+    cors({
+      origin: (origin) => origin ?? "*",
+      allowHeaders: [
+        "content-type",
+        "authorization",
+        "x-api-key",
+        "mcp-session-id",
+        "mcp-protocol-version",
+        "last-event-id",
+      ],
+      allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+      exposeHeaders: ["mcp-session-id", "retry-after", "x-request-id", "ratelimit-remaining", "ratelimit-reset"],
+      maxAge: 86400,
+    }),
+  );
+
   /** Every `/v1` error body leaves with a request id and a link to its docs. */
   app.use("/v1/*", async (c, next) => {
     await next();
@@ -124,6 +152,7 @@ export function createApp() {
   app.route("/api", aiRouter);
   app.route("/api", resultsRouter);
   app.route("/v1", v1Router);
+  app.route("/mcp", mcpRouter);
   /**
    * Signed downloads sit outside every auth chain on purpose: the signature is
    * the credential. See `lib/signed-url.ts`.
@@ -142,6 +171,15 @@ export function createApp() {
   // OpenAPI spec + Scalar docs
   mountOpenApiSpec(app);
   app.get("/docs", Scalar({ url: "/openapi.json" }));
+
+  /**
+   * MCP tools reach the API by re-entering this app, so they need a handle on it.
+   *
+   * Set last, after every route is mounted, and after `mountOpenApiSpec` in
+   * particular — the passthrough tools index `/openapi.json`, which does not exist
+   * as a route until that call has run.
+   */
+  setDispatchTarget(app as unknown as Parameters<typeof setDispatchTarget>[0]);
 
   return app;
 }

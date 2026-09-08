@@ -12,6 +12,7 @@
     "exports",
     "spreadsheets",
     "headless",
+    "mcp",
     "files",
     "blocks",
     "follow-ups",

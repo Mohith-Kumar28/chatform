@@ -13,7 +13,7 @@ import {
   storedConfigId,
   type KeyType,
 } from "../lib/apikey-config.js";
-import { clampScopes, SCOPES, type Scopes } from "../lib/scopes.js";
+import { clampScopes, SCOPES, SCOPE_PRESETS, type Scopes } from "../lib/scopes.js";
 import { requirePermission, requireFeature, type AuthzVars } from "../lib/authorize.js";
 import { audit } from "../lib/gate-log.js";
 
@@ -368,13 +368,26 @@ keysRouter.delete(
   },
 );
 
-/** The scope vocabulary, so the dashboard never hardcodes a copy of it. */
+/**
+ * The scope vocabulary, so the dashboard never hardcodes a copy of it.
+ *
+ * `presets` is served for the same reason. A key minted with the defaults cannot
+ * publish a form, read analytics or export — which is correct for most integrations
+ * and wrong for the one driving the MCP server, so `agent` exists to be picked
+ * deliberately rather than to widen the default for everybody.
+ */
 keysRouter.get(
   "/keys/scopes",
   describeRoute({
     tags: ["dashboard"],
-    summary: "Available API key scopes and key types",
+    summary: "Available API key scopes, key types and scope presets",
     responses: { 200: { description: "Vocabulary" } },
   }),
-  (c) => c.json({ scopes: SCOPES, keyTypes: KEY_TYPES, rateLimitDefaults: RATE_LIMIT_DEFAULTS }),
+  (c) =>
+    c.json({
+      scopes: SCOPES,
+      keyTypes: KEY_TYPES,
+      rateLimitDefaults: RATE_LIMIT_DEFAULTS,
+      presets: SCOPE_PRESETS,
+    }),
 );

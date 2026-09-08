@@ -1,0 +1,248 @@
+---
+title: MCP server
+description: Connect Claude, ChatGPT or Cursor to your forms and let them read, analyse and build.
+---
+
+Chatform runs a Model Context Protocol server at:
+
+```
+https://api.chatform.in/mcp
+```
+
+Point an AI assistant at it with an API key and it can list your forms, read
+responses, analyse completion rates, author a new form from a description, publish
+it, and reach the rest of the API when it needs something the named tools do not
+cover.
+
+It is the same worker, the same keys and the same scopes as `/v1`. Nothing here can
+do anything your key could not already do over HTTP — with one deliberate
+subtraction: **nothing can delete.**
+
+## Get a key
+
+MCP needs more than a new key is given by default. A default secret key can read
+forms and responses; it cannot publish, read analytics or export, so an assistant
+using one fails with `insufficient_scope` on the first interesting request.
+
+In **Settings → API keys**, create a secret key with these scopes:
+
+| Scope | Why |
+| --- | --- |
+| `form:read`, `form:write`, `form:publish` | Read, edit and publish forms |
+| `response:read`, `response:write` | Read responses, and submit them |
+| `response:export` | Start exports |
+| `analytics:read` | Completion rates and per-question funnels |
+| `webhook:read`, `webhook:write` | Inspect and register webhooks |
+
+`GET /api/keys/scopes` returns this set as the `agent` preset if you are building
+your own key UI.
+
+<Callout type="warn">
+This is a **secret** key, so it belongs on a machine, not in a page. `/mcp` refuses
+publishable (`pk_`) keys outright — their ceiling excludes reading responses and
+analytics, so almost nothing would work anyway. Treat the key like a password: an
+assistant that holds it can read every response you have collected.
+</Callout>
+
+## Install
+
+<Tabs items={["Claude Code", "Cursor", "VS Code", "Codex CLI", "Other"]}>
+<Tab value="Claude Code">
+
+```bash
+claude mcp add --transport http chatform https://api.chatform.in/mcp \
+  --header "Authorization: Bearer $CHATFORM_SECRET_KEY"
+```
+
+</Tab>
+<Tab value="Cursor">
+
+In `~/.cursor/mcp.json`, or `.cursor/mcp.json` for one project:
+
+```json
+{
+  "mcpServers": {
+    "chatform": {
+      "url": "https://api.chatform.in/mcp",
+      "headers": { "Authorization": "Bearer sk_live_…" }
+    }
+  }
+}
+```
+
+</Tab>
+<Tab value="VS Code">
+
+In `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "chatform": {
+      "type": "http",
+      "url": "https://api.chatform.in/mcp",
+      "headers": { "Authorization": "Bearer sk_live_…" }
+    }
+  }
+}
+```
+
+</Tab>
+<Tab value="Codex CLI">
+
+In `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.chatform]
+url = "https://api.chatform.in/mcp"
+bearer_token_env_var = "CHATFORM_SECRET_KEY"
+```
+
+</Tab>
+<Tab value="Other">
+
+MCP is an open protocol. Use `https://api.chatform.in/mcp` as the server URL with
+Streamable HTTP transport, and send your key as `Authorization: Bearer sk_live_…`
+or `x-api-key: sk_live_…`.
+
+For a client that only speaks stdio, bridge it:
+
+```json
+{
+  "mcpServers": {
+    "chatform": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://api.chatform.in/mcp",
+               "--header", "Authorization: Bearer sk_live_…"]
+    }
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+Connecting from **claude.ai** or **ChatGPT** as a consumer connector needs OAuth,
+which is not built yet — see [What is not here](#what-is-not-here).
+
+## The tools
+
+Nineteen of them, which is a budget rather than an accident: clients cap how many
+tools they will load — Cursor at forty — and that ceiling is shared with every
+other server you have connected.
+
+### Forms
+
+| Tool | Scope | |
+| --- | --- | --- |
+| `list_forms` | `form:read` | Your forms, newest first |
+| `get_form` | `form:read` | One form. Defaults to the editable document, which is what to change |
+| `list_blocks` | — | Every question type, its config schema and answer contract |
+| `create_form` | `form:write` | Create a form, empty or fully authored |
+| `update_form` | `form:write` | Replace the working document |
+| `publish_form` | `form:publish` | Make the working document live |
+
+### Responses
+
+| Tool | Scope | |
+| --- | --- | --- |
+| `list_responses` | `response:read` | A page of responses; answers are opt-in |
+| `search_responses` | `response:read` | Find responses containing a piece of text |
+| `get_response` | `response:read` | One response with all its answers |
+| `submit_response` | `response:write` | Record a response — for imports, or answering on someone's behalf |
+| `get_form_analytics` | `analytics:read` | Views, completion rate, per-question funnel, distributions |
+| `export_responses` | `response:export` | Start a CSV or JSON export |
+| `check_export` | `response:export` | Poll an export and get its download link |
+
+### Webhooks
+
+| Tool | Scope | |
+| --- | --- | --- |
+| `list_webhooks` | `webhook:read` | Registered endpoints and their events |
+| `create_webhook` | `webhook:write` | Register one. The signing secret is shown once |
+
+### Everything else
+
+Four tools reach the whole developer API without putting forty more schemas in
+front of the model:
+
+| Tool | |
+| --- | --- |
+| `chatform_api_search` | Find an endpoint by keyword; returns its path and required scope |
+| `chatform_api_details` | That endpoint's parameters and response schema |
+| `chatform_api_read` | `GET` any documented endpoint |
+| `chatform_api_write` | `POST`, `PUT` or `PATCH` any documented endpoint |
+
+They are bounded by the spec: only the 45 operations published at
+`https://api.chatform.in/openapi.json` are reachable. The dashboard's own `/api/*`
+routes and the respondent `/p/*` channel are not part of that document and cannot
+be called with a key, so an assistant cannot reach them however it asks.
+
+## Building a form
+
+There is no "generate a form" tool, and that is on purpose — your assistant is
+already the model. It reads `list_blocks` for the question-type contract, writes the
+document itself, and calls `create_form`. Chatform spends nothing on inference, and
+you are not paying twice for the same sentence.
+
+> Build me a 5-question customer onboarding form, publish it, and show me the
+> completion rate once people start answering.
+
+That runs `list_blocks` → `create_form` → `publish_form` → `get_form_analytics`.
+
+When editing an existing form, the assistant must read the document first:
+`update_form` **replaces** the whole draft, so a partial document silently removes
+every question missing from it.
+
+## What is not here
+
+- **Deletes.** No tool deletes a form, a response, an answer or a webhook, and
+  `chatform_api_write` refuses the `DELETE` method outright — whatever scopes the
+  key holds. Respondent free text is attacker-controlled input, and an assistant
+  reading it should not be one confused tool call away from destroying data. Delete
+  from the dashboard.
+- **Key and plan management.** No key can mint keys or change a plan; see
+  [Scopes](/docs/scopes).
+- **OAuth**, so claude.ai's and ChatGPT's connector dialogs — which want it rather
+  than a static header — cannot install this yet. Bearer keys work in Claude Code,
+  Cursor, VS Code and Codex today.
+- **`.xlsx`.** The API exports `csv` and `json`; the typed workbook is
+  dashboard-only. See [Spreadsheets](/docs/spreadsheets).
+
+## Plan and usage
+
+`/mcp` is part of the developer API, so it needs a plan that includes API access,
+and every tool call that reaches an endpoint counts as one request against your
+monthly quota. Listing the tools is free, which is why an assistant can connect and
+show you what it could do before the plan refuses the first call — and the refusal
+says which plan lifts it.
+
+Per-question analytics needs a plan with advanced analytics. Below that,
+`get_form_analytics` returns the headline numbers and says which sections the plan
+withheld, so an assistant will not report an empty funnel as "no data".
+
+## Things to know
+
+- **`search_responses` is a substring match**, not semantic search, and results are
+  not ranked. Searching `unhappy` will not find `dissatisfied`. To find themes, page
+  through `list_responses` with answers included and read them.
+- **Results are paginated small** — ten rows by default — and long answers are
+  truncated with a `truncated` flag rather than silently cut.
+- **Exports are never inlined.** `export_responses` returns an id; `check_export`
+  returns a short-lived signed link, re-minted on each read.
+- **Keys pinned to specific forms** still are. A restricted key sees 404 for
+  anything outside its list, through MCP as over HTTP.
+
+## Troubleshooting
+
+| What you see | What it means |
+| --- | --- |
+| `unauthorized` on connect | No key, or the header is not reaching the server |
+| `secret_key_required` | You used a `pk_` key. `/mcp` needs `sk_` |
+| `secret_key_in_browser` | A secret key arrived with an `Origin` header. `/mcp` is server-to-server |
+| `insufficient_scope` | The key is missing the scope named in the message — mint one with the scopes above |
+| `feature_locked` | The plan does not include API access; the message carries the upgrade link |
+| `limit_reached` | The monthly request quota is spent; the message says when it resets |
+| `not a documented Chatform endpoint` | A passthrough tool was pointed at something outside the developer API |
+
+Every error carries a `request_id`. Quote it if you contact support.

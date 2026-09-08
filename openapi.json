@@ -6775,7 +6775,7 @@
         "tags": [
           "dashboard"
         ],
-        "summary": "Available API key scopes and key types",
+        "summary": "Available API key scopes, key types and scope presets",
         "responses": {
           "200": {
             "description": "Vocabulary"

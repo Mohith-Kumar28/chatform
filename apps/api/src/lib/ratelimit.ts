@@ -2,6 +2,7 @@ import type { MiddlewareHandler } from "hono";
 import type { Bindings } from "../env.js";
 import { readPresentedKey, hashApiKey } from "./apikeys.js";
 import type { GuardVars } from "./guards.js";
+import { isInternalCall } from "./internal-call.js";
 
 /**
  * Burst protection, ahead of verification.
@@ -40,6 +41,14 @@ export const burstLimit: MiddlewareHandler<{
   Bindings: Bindings;
   Variables: Partial<GuardVars>;
 }> = async (c, next) => {
+  /**
+   * An MCP tool call re-enters this worker to reach `/v1`, and it was already
+   * counted on the way in at `/mcp`. Counting it twice would halve the limit a
+   * customer is entitled to. The marker is a per-isolate UUID that never leaves
+   * the worker, so it cannot be presented from outside.
+   */
+  if (isInternalCall(c)) return next();
+
   const presented = readPresentedKey(c);
   if (!presented) return next(); // no key: `requireApiKey` answers with a 401
 
