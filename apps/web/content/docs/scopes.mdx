@@ -29,6 +29,13 @@ is on its reference page, and in the spec as `x-required-scope`.
 | `webhook` | `read`, `write` | Delivery endpoints |
 | `file` | `read`, `write` | Uploads and downloads |
 | `analytics` | `read` | Aggregates |
+| `ai` | `generate` | Generating or editing a document with a model |
+
+`ai:generate` is the only scope that costs money to use. A generation spends your
+plan's `ai_generations` allowance and the tokens it takes, so it is a separate
+resource rather than part of `form:write`: a key that writes documents your own code
+composed should not also be able to start spending your model budget. It is not in
+the agent preset for the same reason — ask for it deliberately.
 
 Two more names exist in the vocabulary that `GET /api/keys/scopes` reports, and
 no endpoint requires either: `response:read_partial` and `response:delete`.

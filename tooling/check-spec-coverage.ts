@@ -154,6 +154,103 @@ if (published.length > 0 || scopeProblems.length > 0) {
   process.exit(1);
 }
 
+/**
+ * A dashboard capability must also reach `/v1`, or be listed here as deliberate.
+ *
+ * This is the check that was missing. `/v1` was built in one pass in September and
+ * covered everything that existed then; templates predated it and were overlooked,
+ * and integrations and version history shipped the day and the third day *after* —
+ * each session-only because the builder was the only caller, and nothing noticed.
+ * The same pass had already fixed this exact shape of bug for webhooks, where the
+ * SDK promised `webhooks.*` against a session-guarded route.
+ *
+ * Matching is by resource word rather than by path, because the two surfaces spell
+ * things differently on purpose (`?ws=` became `?workspace=`, `POST` became `PUT`
+ * where the operation is idempotent). A dashboard path is satisfied when some `/v1`
+ * operation shares its distinctive segment.
+ */
+const DASHBOARD_ONLY: Record<string, string> = {
+  "/api/keys": "minting and revoking keys needs a signed-in person — no key may widen its own authority",
+  "/api/keys/scopes": "vocabulary for the key-creation dialog",
+  "/api/keys/{id}": "see /api/keys",
+  "/api/keys/{id}/rotate": "see /api/keys",
+  "/api/billing/checkout": "changing a plan needs a person, not a key",
+  "/api/billing/portal": "see /api/billing/checkout",
+  "/api/billing/plans": "public pricing catalogue for the marketing site",
+  "/api/billing/usage": "reachable per-key through GET /v1/me",
+  "/api/billing/entitlements": "reachable per-key through GET /v1/me",
+  "/api/billing/config-check": "deployment diagnostics",
+  "/api/audit-logs": "the Business-tier activity log, read by an admin",
+  "/api/audit-logs/export": "see /api/audit-logs",
+  "/api/auth/ok": "session probe",
+  "/api/auth-providers": "which sign-in buttons to render",
+  "/api/invitation-preview": "unauthenticated invite landing page",
+  "/api/ai/generate-form/stream": "server-sent events for the builder's progress UI; /v1/ai/generate-form is the API form",
+  "/api/ai/add-blocks": "deprecated alias of /api/ai/edit-form",
+  "/api/forms/{id}/preview/sessions": "opens a session against the *draft*, for the builder's preview pane",
+  "/api/forms/{id}/submissions/export": "browser download; /v1/forms/{id}/exports is the API form",
+  "/api/forms/{id}/submissions/export.xlsx": "browser download of a typed workbook the API does not produce",
+  "/api/forms/{id}/history": "the builder's activity feed; /v1/forms/{id}/versions is the API form",
+  "/api/workspaces": "workspaces are an organization-management concern, not a form one",
+  "/api/workspaces/{id}": "see /api/workspaces",
+
+  /**
+   * Covered under a different noun.
+   *
+   * The dashboard says "submissions" and the developer API says "responses" — the
+   * rename was deliberate (a conversation produces a response, not a submission) and
+   * the word match cannot see through it.
+   */
+  "/api/forms/{id}/submissions": "GET /v1/forms/{id}/responses is the same capability, renamed",
+
+  /**
+   * Known gaps, listed rather than hidden. Each is a decision waiting to be made, not
+   * a capability anyone concluded should stay off the API.
+   */
+  "/api/forms/{id}/submissions#delete":
+    "TODO: no /v1 equivalent for deleting responses in bulk. It would give the declared-but-unused " +
+    "`response:delete` scope its first endpoint. Left out deliberately for now: irreversible bulk " +
+    "deletion of respondent data over an API key wants a deliberate product decision, not a symmetry fix.",
+  "/api/webhooks/{id}/test":
+    "TODO: no /v1 equivalent. `POST /v1/webhooks/{id}/deliveries/{id}/replay` covers debugging a delivery " +
+    "that happened; firing a synthetic one to check a new endpoint is not reachable by key yet.",
+  "/api/forms/{id}/workspace":
+    "TODO: moving a form between workspaces has no /v1 equivalent. Owned by the workspace/organization " +
+    "separation work — decide there rather than here.",
+};
+
+/** The distinctive part of a dashboard path — what a `/v1` equivalent would share. */
+function resourceWords(path: string): string[] {
+  return path
+    .split("/")
+    .filter((seg) => seg !== "" && seg !== "api" && !seg.startsWith("{"))
+    .map((seg) => seg.toLowerCase());
+}
+
+const v1Paths = operations.filter(({ path }) => path.startsWith("/v1/")).map(({ path }) => path.toLowerCase());
+const uncovered: string[] = [];
+for (const { path, method, op } of operations) {
+  if (!path.startsWith("/api/") || !op["x-internal"]) continue;
+  // A `#method` suffix lets one path be waived for one verb only — `GET` on a
+  // form's submissions is covered by `/v1`, `DELETE` on it is not.
+  if (path in DASHBOARD_ONLY || `${path}#${method}` in DASHBOARD_ONLY) continue;
+  const words = resourceWords(path);
+  const reached = words.length > 0 && words.every((w) => v1Paths.some((p) => p.includes(w)));
+  if (!reached) uncovered.push(`${method.toUpperCase()} ${path}`);
+}
+
+if (uncovered.length > 0) {
+  console.error(`\n${uncovered.length} dashboard capability(ies) have no /v1 equivalent:\n`);
+  for (const p of uncovered) console.error(`  ${p}`);
+  console.error(
+    "\nEither build the /v1 route so an integrator can do this too, or add the path to\n" +
+      "DASHBOARD_ONLY in tooling/check-spec-coverage.ts with the reason it is not for keys.\n" +
+      "This check exists because templates, integrations and version history were each\n" +
+      "session-only for no reason anyone chose.\n",
+  );
+  process.exit(1);
+}
+
 const internalCount = operations.filter(({ op }) => op["x-internal"]).length;
 console.log(
   `spec coverage ok — every /v1 path in the docs exists (${known.size} paths in the spec), ` +

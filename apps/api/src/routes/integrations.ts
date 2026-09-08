@@ -6,6 +6,7 @@ import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 import { assertPermission, assertFeature, type AuthzVars } from "../lib/authorize.js";
 import { buildResponseTable, toCsv } from "../lib/response-table.js";
+import { FEED_PROVIDER, readFeed, upsertFeed, deleteFeed, projectFeed, feedUrl, publicOrigin, type FeedConfig } from "../lib/feed-service.js";
 
 /**
  * Integrations that are not webhooks.
@@ -31,8 +32,6 @@ export const integrationsRouter = new Hono<{
 integrationsRouter.use("/forms/:id/integrations", requireSession, requireOrg, requireFormAccess);
 integrationsRouter.use("/forms/:id/integrations/*", requireSession, requireOrg, requireFormAccess);
 
-const FEED_PROVIDER = "spreadsheet_feed";
-
 /** Rows the feed serves. Lower than an export's, because it is refetched forever. */
 const FEED_ROW_CAP = 5_000;
 
@@ -45,47 +44,6 @@ const IntegrationRow = z.object({
   feedUrl: z.string().optional(),
   includePartials: z.boolean().optional(),
 });
-
-interface FeedConfig {
-  /**
-   * The token, in the clear.
-   *
-   * `secret_hash` is what the feed is looked up by; this copy exists so the URL
-   * can be shown again. A feed URL that could only be read once would be a
-   * worse secret, not a better one — it would live in the first place someone
-   * pasted it and nowhere they could check.
-   */
-  token: string;
-  includePartials: boolean;
-}
-
-function feedUrl(origin: string, token: string): string {
-  return `${origin}/p/feed/${token}.csv`;
-}
-
-/** The public origin this API answers on, for building the feed's own URL. */
-function publicOrigin(url: string): string {
-  return new URL(url).origin;
-}
-
-function newToken(): string {
-  const bytes = new Uint8Array(24);
-  crypto.getRandomValues(bytes);
-  // `cff_` for "chatform feed" — greppable in a server log, and obviously ours
-  // when someone finds it in a spreadsheet cell two years from now.
-  return `cff_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
-}
-
-async function readFeed(env: Bindings, formId: string) {
-  const row = await env.DB.prepare(
-    `SELECT id, config_json, status, created_at FROM integrations
-      WHERE form_id = ? AND provider = ? LIMIT 1`,
-  )
-    .bind(formId, FEED_PROVIDER)
-    .first<{ id: string; config_json: string; status: string; created_at: number }>();
-  if (!row) return null;
-  return { ...row, config: JSON.parse(row.config_json) as FeedConfig };
-}
 
 integrationsRouter.get(
   "/forms/:id/integrations",
@@ -106,16 +64,7 @@ integrationsRouter.get(
 
     const feed = await readFeed(c.env, form.id);
     if (!feed) return c.json([]);
-    return c.json([
-      {
-        id: feed.id,
-        provider: FEED_PROVIDER,
-        status: feed.status,
-        createdAt: feed.created_at,
-        feedUrl: feedUrl(publicOrigin(c.req.url), feed.config.token),
-        includePartials: feed.config.includePartials,
-      },
-    ]);
+    return c.json([projectFeed(feed, publicOrigin(c.req.url))]);
   },
 );
 
@@ -157,47 +106,8 @@ integrationsRouter.post(
       if (locked) return locked;
     }
 
-    const existing = await readFeed(c.env, form.id);
-    const token = existing && !rotate ? existing.config.token : newToken();
-    const config: FeedConfig = { token, includePartials };
-    const hash = sha256Hex(token);
-    const now = Date.now();
-
-    if (existing) {
-      await c.env.DB.prepare(
-        `UPDATE integrations SET config_json = ?, secret_hash = ?, status = 'connected',
-            last_error = NULL, updated_at = ? WHERE id = ?`,
-      )
-        .bind(JSON.stringify(config), hash, now, existing.id)
-        .run();
-    } else {
-      await c.env.DB.prepare(
-        `INSERT INTO integrations
-           (id, organization_id, form_id, provider, config_json, status, secret_hash, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'connected', ?, ?, ?)`,
-      )
-        .bind(
-          crypto.randomUUID(),
-          form.organization_id,
-          form.id,
-          FEED_PROVIDER,
-          JSON.stringify(config),
-          hash,
-          now,
-          now,
-        )
-        .run();
-    }
-
-    const saved = await readFeed(c.env, form.id);
-    return c.json({
-      id: saved!.id,
-      provider: FEED_PROVIDER,
-      status: saved!.status,
-      createdAt: saved!.created_at,
-      feedUrl: feedUrl(publicOrigin(c.req.url), token),
-      includePartials,
-    });
+    const saved = await upsertFeed(c.env, form, { includePartials, rotate });
+    return c.json(projectFeed(saved, publicOrigin(c.req.url)));
   },
 );
 
@@ -212,9 +122,7 @@ integrationsRouter.delete(
     const form = c.get("form")!;
     const denied = await assertPermission(c, "submission", "export");
     if (denied) return denied;
-    await c.env.DB.prepare(`DELETE FROM integrations WHERE form_id = ? AND provider = ?`)
-      .bind(form.id, FEED_PROVIDER)
-      .run();
+    await deleteFeed(c.env, form.id);
     return c.json({ ok: true });
   },
 );

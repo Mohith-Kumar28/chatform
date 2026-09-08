@@ -28,11 +28,17 @@ In **Settings → API keys**, create a secret key with these scopes:
 
 | Scope | Why |
 | --- | --- |
-| `form:read`, `form:write`, `form:publish` | Read, edit and publish forms |
+| `form:read`, `form:write`, `form:publish` | Read, edit and publish forms, and use templates |
 | `response:read`, `response:write` | Read responses, and submit them |
 | `response:export` | Start exports |
 | `analytics:read` | Completion rates and per-question funnels |
 | `webhook:read`, `webhook:write` | Inspect and register webhooks |
+| `file:read` | Resolve file-upload answers |
+
+`ai:generate` is deliberately **not** in that list. It is the one scope that spends
+money — a generation bills your plan's AI allowance — and an assistant can author a
+form for free by reading `list_blocks` and calling `create_form`. Add it only if you
+specifically want Chatform's own designer model available to the agent.
 
 `GET /api/keys/scopes` returns this set as the `agent` preset if you are building
 your own key UI.
@@ -127,7 +133,7 @@ which is not built yet — see [What is not here](#what-is-not-here).
 
 ## The tools
 
-Twenty-four, which is a budget rather than an accident: clients cap how many tools
+Thirty, which is a budget rather than an accident: clients cap how many tools
 they will load — Cursor at forty — and that ceiling is shared with every other
 server you have connected.
 
@@ -147,6 +153,11 @@ server you have connected.
 | `create_form` | `form:write` | Create a form, empty or fully authored |
 | `update_form` | `form:write` | Replace the working document |
 | `publish_form` | `form:publish` | Make the working document live |
+| `list_templates` | `form:read` | The official template catalogue, or one template's document |
+| `use_template` | `form:write` | Start a draft from a template |
+| `list_form_versions` | `form:read` | Published versions, with the responses behind each, and diffs |
+| `restore_form_version` | `form:write` | Roll the draft back to a published version |
+| `generate_form_with_ai` | `ai:generate` | Draft a document with Chatform's own model — **costs money** |
 
 ### Responses
 
@@ -160,6 +171,7 @@ server you have connected.
 | `export_responses` | `response:export` | Start a CSV or JSON export |
 | `check_export` | `response:export` | Poll an export and get its download link |
 | `get_file` | `file:read` | Resolve a file-upload answer's `fileId` to a name and a download link |
+| `create_spreadsheet_feed` | `response:export` | A live CSV URL Sheets or Excel can re-read on a schedule |
 
 ### Webhooks
 
@@ -191,14 +203,14 @@ be called with a key, so an assistant cannot reach them however it asks.
 Two areas are reachable **only** this way, on purpose:
 
 - **Driving a live conversation** — opening a chat session and exchanging messages
-  turn by turn (`/v1/sessions/*`, `/v1/chat/*`, and session uploads). Fifteen
-  operations, and a niche job for an assistant: `submit_response` records answers
-  directly without pretending to be a respondent. If you want named tools for
-  testing a form conversationally, that is a reasonable ask.
+  turn by turn, plus session uploads. Fifteen operations, and a niche job for an
+  assistant: `submit_response` records answers directly without pretending to be a
+  respondent. If you want named tools for testing a form conversationally, that is a
+  reasonable ask.
 - **Incremental response building** — recording answers one at a time, then
-  completing or abandoning (`/v1/responses/{id}/answers`, `/complete`, `/abandon`,
-  `/next`). `submit_response` does the one-shot version, which is what an import or
-  an agent filling a form actually needs.
+  completing or abandoning `GET /v1/responses/{id}/next` and its siblings.
+  `submit_response` does the one-shot version, which is what an import or an agent
+  filling a form actually needs.
 
 ## Building a form
 
@@ -230,6 +242,10 @@ every question missing from it.
   Cursor, VS Code and Codex today.
 - **`.xlsx`.** The API exports `csv` and `json`; the typed workbook is
   dashboard-only. See [Spreadsheets](/docs/spreadsheets).
+- **Deleting responses in bulk**, sending a synthetic webhook test, and moving a form
+  between workspaces. Each has a dashboard route and no API one yet — tracked in
+  `tooling/check-spec-coverage.ts`, which now fails the build if a new dashboard
+  capability appears without either a `/v1` equivalent or a written reason.
 
 ## Plan and usage
 

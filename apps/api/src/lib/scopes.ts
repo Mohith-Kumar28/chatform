@@ -19,6 +19,16 @@ export const SCOPES = {
   webhook: ["read", "write"],
   file: ["read", "write"],
   analytics: ["read"],
+  /**
+   * Generating or editing a form document with a model.
+   *
+   * The one scope that spends money on every use — a generation bills the
+   * organization's `ai_generations` and `ai_tokens` allowance — which is why it is
+   * its own resource rather than folded into `form:write`. A key that authors forms
+   * from documents it built itself should not silently be able to run the model
+   * instead, and a caller who wants that should have to say so.
+   */
+  ai: ["generate"],
 } as const;
 
 export type ScopeResource = keyof typeof SCOPES;
@@ -129,8 +139,14 @@ export function clampScopes(keyType: string, requested: Scopes | undefined): Sco
  * API key, which is why `apikey.*`, `billing.*`, `workspace.*`, `domain.*`,
  * `audit.*` and the organization plugin's own statements are deliberately
  * absent. A key must not be able to mint keys or change a plan.
+ *
+ * `ai.generate` is mapped, and was not: that absence is the whole reason AI form
+ * generation was unreachable with a key. It was never a decision that the API
+ * should not offer it — deny-by-default simply caught a capability nobody had got
+ * round to deciding about, and the dashboard was the only caller.
  */
 export const PERMISSION_TO_SCOPE: Record<string, [ScopeResource, string]> = {
+  "ai.generate": ["ai", "generate"],
   "form.read": ["form", "read"],
   "form.create": ["form", "write"],
   "form.update": ["form", "write"],

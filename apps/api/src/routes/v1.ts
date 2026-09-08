@@ -18,6 +18,10 @@ import { chatRouter } from "./v1/chat.js";
 import { formsV1Router } from "./v1/forms.js";
 import { webhooksV1Router } from "./v1/webhooks.js";
 import { exportsV1Router } from "./v1/exports.js";
+import { templatesV1Router } from "./v1/templates.js";
+import { versionsV1Router } from "./v1/versions.js";
+import { aiV1Router } from "./v1/ai.js";
+import { integrationsV1Router } from "./v1/integrations.js";
 import { uploadsV1Router } from "./uploads.js";
 
 /**
@@ -119,6 +123,39 @@ v1Router.route("/", metaRouter);
 
 /** Forms, programmatically: list, read, create, edit, publish, delete. */
 v1Router.route("/", formsV1Router);
+
+/**
+ * The template catalogue, and starting a form from one.
+ *
+ * Dashboard-only until now for no reason anyone chose: templates predate `/v1` by
+ * eleven days and were missed by the pass that built it. Both surfaces call
+ * `lib/templates-service.ts` now, so the next change reaches both.
+ */
+v1Router.route("/", templatesV1Router);
+
+/**
+ * Version history and rollback.
+ *
+ * `/v1` could publish a form but never read back what it had published, so an
+ * integration that shipped a bad document had no programmatic way to undo it.
+ */
+v1Router.route("/", versionsV1Router);
+
+/**
+ * Generating and editing a document with a model.
+ *
+ * Behind its own `ai:generate` scope, which the agent key preset deliberately omits —
+ * this is the one capability on `/v1` that spends money per call.
+ */
+v1Router.route("/", aiV1Router);
+
+/**
+ * The spreadsheet feed.
+ *
+ * `response:export` guards it, because what a feed hands out is respondent data on a
+ * schedule — the same rows an export produces, over a URL that is its own credential.
+ */
+v1Router.route("/", integrationsV1Router);
 
 /**
  * Webhook endpoints.

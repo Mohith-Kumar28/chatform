@@ -352,6 +352,68 @@ export function registerReadTools(server: McpServer, ctx: () => McpCtx): void {
    * a way to read the catalogue the agent has to guess, so this is less a feature
    * than the missing half of a tool that already exists.
    */
+  /**
+   * Cheaper and better than authoring from nothing.
+   *
+   * An agent asked for "an onboarding form" will write a plausible one; a template is
+   * one somebody designed, with the flow already wired. Listing them first is almost
+   * always the right opening move.
+   */
+  server.registerTool(
+    "list_templates",
+    {
+      title: "List form templates",
+      description:
+        "The official template catalogue, most used first. Starting from one of these is usually better than " +
+        "authoring a form from scratch — the questions and the branching are already designed. Pass a slug to " +
+        "get that template's full document instead of the list.",
+      inputSchema: {
+        slug: z
+          .string()
+          .optional()
+          .describe("A template slug. Given, returns that one template including its full document."),
+      },
+      annotations: READ_ONLY,
+    },
+    async ({ slug }) => {
+      const path = slug ? `/v1/templates/${encodeURIComponent(slug)}` : "/v1/templates";
+      const res = await callApi(ctx(), "GET", path);
+      if (res.status !== 200) return errorResult(describeFailure(res));
+      return jsonResult(res.body);
+    },
+  );
+
+  server.registerTool(
+    "list_form_versions",
+    {
+      title: "List a form's published versions",
+      description:
+        "Every published version of a form, newest first, each with the number of completed responses recorded " +
+        "against it — that count is what decides whether rolling back is a tidy-up or a decision with " +
+        "consequences. Pass a version number to read that version's document, and compare_to to diff two.",
+      inputSchema: {
+        form_id: z.string().describe("The form id."),
+        version: z.number().int().min(1).optional().describe("Read one version's document instead of the list."),
+        compare_to: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe("With version, returns the list of changes between the two."),
+      },
+      annotations: READ_ONLY,
+    },
+    async ({ form_id, version, compare_to }) => {
+      const base = `/v1/forms/${encodeURIComponent(form_id)}/versions`;
+      const res =
+        version === undefined
+          ? await callApi(ctx(), "GET", base)
+          : await callApi(ctx(), "GET", `${base}/${version}`, { query: { compare: compare_to } });
+      if (res.status !== 200) return errorResult(describeFailure(res));
+      return jsonResult(res.body);
+    },
+  );
+
   server.registerTool(
     "list_events",
     {

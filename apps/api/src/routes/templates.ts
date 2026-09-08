@@ -7,6 +7,7 @@ import { ErrorEnvelope } from "../lib/openapi.js";
 import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
 import { requirePermission, requireGauge, type AuthzVars } from "../lib/authorize.js";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
+import { listTemplates, getTemplate, createFormFromTemplate } from "../lib/templates-service.js";
 
 export const templatesRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
@@ -45,49 +46,6 @@ const TemplateSummary = z.object({
 
 const TemplateDetail = TemplateSummary.extend({ doc: z.unknown() });
 
-interface TemplateRow {
-  slug: string;
-  title: string;
-  category: string;
-  description: string | null;
-  blurb: string | null;
-  tags: string | null;
-  icon: string | null;
-  accent: string | null;
-  block_count: number | null;
-  est_minutes: number | null;
-  usage_count: number;
-  schema_json: string;
-}
-
-const COLUMNS = `slug, title, category, description, blurb, tags, icon, accent, block_count, est_minutes, usage_count`;
-
-/** `tags` is a JSON array in a text column; a malformed one is no tags, not a 500. */
-function parseTags(raw: string | null): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function toSummary(r: Omit<TemplateRow, "schema_json">) {
-  return {
-    slug: r.slug,
-    title: r.title,
-    category: r.category,
-    description: r.description ?? "",
-    blurb: r.blurb ?? r.description ?? "",
-    tags: parseTags(r.tags),
-    icon: r.icon ?? "",
-    accent: r.accent ?? "",
-    blockCount: r.block_count ?? 0,
-    estMinutes: r.est_minutes ?? 1,
-    usageCount: r.usage_count,
-  };
-}
 
 /**
  * The official catalogue, most-used first.
@@ -109,12 +67,7 @@ templatesRouter.get(
       200: { description: "Templates", content: { "application/json": { schema: resolver(z.array(TemplateSummary)) } } },
     },
   }),
-  async (c) => {
-    const rows = await c.env.DB.prepare(
-      `SELECT ${COLUMNS} FROM form_templates WHERE official = 1 ORDER BY usage_count DESC, category, title`,
-    ).all<Omit<TemplateRow, "schema_json">>();
-    return c.json((rows.results ?? []).map(toSummary));
-  },
+  async (c) => c.json(await listTemplates(c.env)),
 );
 
 /**
@@ -134,21 +87,12 @@ templatesRouter.get(
     },
   }),
   async (c) => {
-    const row = await c.env.DB.prepare(
-      `SELECT ${COLUMNS}, schema_json FROM form_templates WHERE slug = ? AND official = 1`,
-    )
-      .bind(c.req.param("slug"))
-      .first<TemplateRow>();
-    if (!row) return c.json({ error: { code: "not_found", message: "Template not found" } }, 404);
-
-    // Parsed rather than passed through: the column is text, and a document
-    // that no longer satisfies the schema should fail here, where it can be
-    // reported, rather than in a builder that has already opened it.
-    const parsed = FormDoc.safeParse(JSON.parse(row.schema_json));
-    if (!parsed.success) {
+    const found = await getTemplate(c.env, c.req.param("slug"));
+    if (found === null) return c.json({ error: { code: "not_found", message: "Template not found" } }, 404);
+    if (found === "stale") {
       return c.json({ error: { code: "invalid_template", message: "This template is out of date" } }, 404);
     }
-    return c.json({ ...toSummary(row), doc: parsed.data });
+    return c.json(found);
   },
 );
 
@@ -165,51 +109,23 @@ templatesRouter.post(
     },
   }),
   async (c) => {
-    const slug = c.req.param("slug");
-    const row = await c.env.DB.prepare(
-      `SELECT title, schema_json FROM form_templates WHERE slug = ? AND official = 1`,
-    )
-      .bind(slug)
-      .first<{ title: string; schema_json: string }>();
-    if (!row) return c.json({ error: { code: "not_found", message: "Template not found" } }, 404);
-
-    const parsed = FormDoc.safeParse(JSON.parse(row.schema_json));
-    if (!parsed.success) {
-      return c.json({ error: { code: "invalid_template", message: "This template is out of date" } }, 404);
-    }
-
     // Same rule as `POST /forms`: the workspace being viewed, or the
     // organization's first when the caller names none.
     const ws = await requireWorkspace(c, c.req.query("ws"));
     if (ws === undefined) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
     if (!ws) return c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
 
-    const userId = c.get("userId")!;
-    const id = `frm_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
-    const outSlug = formSlug(row.title);
-    const now = Date.now();
-
-    await c.env.DB.batch([
-      c.env.DB.prepare(
-        `INSERT INTO forms (id, organization_id, workspace_id, created_by, title, slug, status, working_schema, fingerprint_salt, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
-      ).bind(
-        id,
-        ws.orgId,
-        ws.wsId,
-        userId,
-        row.title,
-        outSlug,
-        JSON.stringify(parsed.data),
-        crypto.randomUUID().slice(0, 16),
-        now,
-        now,
-      ),
-      // What makes "Popular" mean anything. Batched with the insert so the
-      // count cannot advance for a form that was never created.
-      c.env.DB.prepare(`UPDATE form_templates SET usage_count = usage_count + 1 WHERE slug = ?`).bind(slug),
-    ]);
-
-    return c.json({ id, slug: outSlug, title: row.title });
+    const created = await createFormFromTemplate(c.env, {
+      slug: c.req.param("slug"),
+      orgId: ws.orgId,
+      workspaceId: ws.wsId,
+      userId: c.get("userId")!,
+      formSlug,
+    });
+    if (created === null) return c.json({ error: { code: "not_found", message: "Template not found" } }, 404);
+    if (created === "stale") {
+      return c.json({ error: { code: "invalid_template", message: "This template is out of date" } }, 404);
+    }
+    return c.json(created);
   },
 );

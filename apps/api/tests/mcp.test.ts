@@ -218,23 +218,29 @@ describe("tools/list", () => {
         "chatform_api_write",
         "check_export",
         "create_form",
+        "create_spreadsheet_feed",
         "create_webhook",
         "export_responses",
+        "generate_form_with_ai",
         "get_file",
         "get_form",
         "get_form_analytics",
         "get_response",
         "list_blocks",
         "list_events",
+        "list_form_versions",
         "list_forms",
         "list_responses",
+        "list_templates",
         "list_webhook_deliveries",
         "list_webhooks",
         "publish_form",
         "replay_webhook_delivery",
+        "restore_form_version",
         "search_responses",
         "submit_response",
         "update_form",
+        "use_template",
         "whoami",
       ].sort(),
     );
@@ -452,6 +458,129 @@ describe("write tools", () => {
     const out = await callTool("create_form", { title: "nope" }, readOnly);
     expect(out.isError).toBe(true);
     expect(out.text).toContain("form:write");
+  });
+});
+
+/**
+ * The four capabilities that were dashboard-only until now.
+ *
+ * None of them was excluded on purpose: templates predate `/v1`, integrations and
+ * version history shipped after it, and AI generation was refused by
+ * deny-by-default because `PERMISSION_TO_SCOPE` had no `ai.generate` entry. These
+ * assert the reach, and that the guards came with it.
+ */
+describe("capabilities that used to be dashboard-only", () => {
+  it("lists templates and starts a form from one", async () => {
+    const listed = await callTool("list_templates", {});
+    expect(listed.isError).toBe(false);
+
+    const catalogue = JSON.parse(listed.text) as { slug: string }[];
+    if (catalogue.length === 0) return; // no seeded templates in this environment
+
+    const slug = catalogue[0]!.slug;
+    const one = await callTool("list_templates", { slug });
+    expect(one.isError).toBe(false);
+    expect(JSON.parse(one.text)).toHaveProperty("doc");
+
+    const used = await callTool("use_template", { slug });
+    expect(used.isError).toBe(false);
+    expect(JSON.parse(used.text).id).toMatch(/^frm_/);
+  });
+
+  it("lists versions and rolls the draft back to one", async () => {
+    const created = await callTool("create_form", {
+      title: "Rollback subject",
+      doc: {
+        schemaVersion: 1,
+        title: "Rollback subject",
+        blocks: [{ id: "blk_v1", ref: "q_one", type: "email", title: "First email?", required: false }],
+        endings: [{ id: "end_rollback", ref: "end_thanks", title: "Thanks", bodyMd: "" }],
+        logic: [],
+        endingRules: [],
+        variables: [],
+        hiddenFields: [],
+        layout: {},
+        settings: {},
+        theme: {},
+      },
+    });
+    const formId = JSON.parse(created.text).id as string;
+    expect((await callTool("publish_form", { form_id: formId })).isError).toBe(false);
+
+    const versions = await callTool("list_form_versions", { form_id: formId });
+    expect(versions.isError).toBe(false);
+    const list = JSON.parse(versions.text) as { version: number; responses: number }[];
+    expect(list.length).toBeGreaterThan(0);
+    // The response count is what makes a rollback a decision rather than a tidy-up.
+    expect(list[0]).toHaveProperty("responses");
+
+    // Change the draft, then put version 1 back over it.
+    await callTool("update_form", {
+      form_id: formId,
+      doc: {
+        schemaVersion: 1,
+        title: "Rollback subject",
+        blocks: [{ id: "blk_v2", ref: "q_two", type: "email", title: "Replaced email?", required: false }],
+        endings: [{ id: "end_rollback", ref: "end_thanks", title: "Thanks", bodyMd: "" }],
+        logic: [],
+        endingRules: [],
+        variables: [],
+        hiddenFields: [],
+        layout: {},
+        settings: {},
+        theme: {},
+      },
+    });
+
+    const restored = await callTool("restore_form_version", { form_id: formId, version: list[0]!.version });
+    expect(restored.isError).toBe(false);
+    // Restoring writes the draft, never the live form — the tool has to say so, or
+    // an agent will report the rollback as live when respondents still see the old one.
+    expect(restored.text).toContain("publish_form");
+    const back = await callTool("get_form", { form_id: formId });
+    expect(back.text).toContain("q_one");
+  });
+
+  it("creates a spreadsheet feed and rotates it", async () => {
+    const first = await callTool("create_spreadsheet_feed", { form_id: t.formId });
+    expect(first.isError).toBe(false);
+    const url = JSON.parse(first.text).feedUrl as string;
+    expect(url).toContain("/p/feed/cff_");
+
+    const rotated = await callTool("create_spreadsheet_feed", { form_id: t.formId, rotate: true });
+    expect(JSON.parse(rotated.text).feedUrl).not.toBe(url);
+
+    const listed = await callTool("chatform_api_read", { path: `/v1/forms/${t.formId}/integrations` });
+    expect(listed.text).toContain("spreadsheet_feed");
+  });
+
+  it("refuses a feed to a key without response:export", async () => {
+    const narrow = (await seedKey(t, "mcpnofeed", { scopes: { form: ["read", "write"] } })).raw;
+    const out = await callTool("create_spreadsheet_feed", { form_id: t.formId }, narrow);
+    expect(out.isError).toBe(true);
+    expect(out.text).toContain("response:export");
+  });
+
+  /**
+   * AI generation is now reachable by a key, but only one that asked for it. The
+   * agent preset omits `ai:generate` because it is the one scope that spends money,
+   * so the default outcome for an MCP key is this refusal plus the free alternative.
+   */
+  it("refuses AI generation without ai:generate, and points at the free path", async () => {
+    const out = await callTool("generate_form_with_ai", { prompt: "a customer onboarding form" });
+    expect(out.isError).toBe(true);
+    expect(out.text).toContain("ai:generate");
+    expect(out.text).toContain("create_form");
+  });
+
+  it("warns in the tool description that generation costs money", async () => {
+    const res = await rpc("tools/list", {});
+    const gen = (res.body.result.tools as { name: string; description: string }[]).find(
+      (x) => x.name === "generate_form_with_ai",
+    );
+    expect(gen?.description).toContain("COSTS MONEY");
+    // And that there is a free way to do the same thing.
+    expect(gen?.description).toMatch(/create_form/);
   });
 });
 
