@@ -3,8 +3,14 @@ import { Logo } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 /**
- * Every link here resolves. Nothing is listed that does not exist yet — no
- * blog, no careers page, no changelog, because none of those are built.
+ * Every link here resolves. Nothing is listed that does not exist yet.
+ *
+ * The Developers column used to be three separate labels pointing at the same
+ * `/#developers` anchor, which is a column that looks like navigation and is
+ * one link wearing three hats. It now points at the pages that actually answer
+ * each of those words. `/docs` was in the top nav and missing from the footer
+ * entirely, which is backwards: the footer is where somebody looks after
+ * scrolling a whole page without finding what they came for.
  */
 const COLUMNS = [
   {
@@ -13,16 +19,36 @@ const COLUMNS = [
       { href: "/#the-moment", label: "How it answers back" },
       { href: "/#product", label: "How it works" },
       { href: "/pricing#question-types", label: "Question types" },
-      { href: "/pricing#compare", label: "Compare" },
       { href: "/pricing", label: "Pricing" },
     ],
   },
   {
-    title: "Developers",
+    /*
+     * Named the way somebody scanning a footer would name it to themselves.
+     * This column read "Compare / All comparisons / Typeform alternative …",
+     * which is the site's own filing system showing through: "alternative" is
+     * the word in the URL because it is the word people type into Google, and
+     * "all comparisons" is a description of a directory. Nobody scans a footer
+     * looking for a directory. They are looking for the one line that says
+     * whether this beats the thing they already pay for.
+     */
+    title: "How we compare",
     links: [
-      { href: "/#developers", label: "Headless API" },
-      { href: "/#developers", label: "Embed" },
-      { href: "/#developers", label: "Webhooks" },
+      { href: "/typeform-alternative", label: "chatform vs Typeform" },
+      { href: "/google-forms-alternative", label: "chatform vs Google Forms" },
+      { href: "/jotform-alternative", label: "chatform vs Jotform" },
+      { href: "/tally-alternative", label: "chatform vs Tally" },
+      { href: "/compare", label: "See them side by side" },
+    ],
+  },
+  {
+    title: "Resources",
+    links: [
+      { href: "/why-conversation-works", label: "Why conversation works" },
+      { href: "/blog", label: "Writing" },
+      { href: "/docs", label: "Documentation" },
+      { href: "/docs/headless", label: "Headless API" },
+      { href: "/ai-info", label: "For AI assistants" },
     ],
   },
   {
@@ -38,7 +64,7 @@ const COLUMNS = [
 export function MarketingFooter() {
   return (
     <footer className="border-border/60 border-t px-6 py-14">
-      <div className="mx-auto grid max-w-6xl gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_repeat(3,1fr)]">
+      <div className="mx-auto grid max-w-6xl gap-10 sm:grid-cols-2 lg:grid-cols-[1.3fr_repeat(4,1fr)]">
         <div>
           <Logo />
           {/* The one place on the page that names the category outright. A
@@ -54,8 +80,8 @@ export function MarketingFooter() {
               crowding out the only sentence on the page that says what the
               product is. */}
           <p className="text-body text-muted-foreground mt-3 max-w-xs">
-            AI chat forms. One question at a time, in plain conversation — and it answers
-            questions back.
+            AI chat forms. They read what people write, ask again when an answer is too thin,
+            and answer questions back.
           </p>
           <div className="mt-4">
             <ThemeToggle />

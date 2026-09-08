@@ -1,4 +1,4 @@
-import { defineDocs, defineConfig, frontmatterSchema } from "fumadocs-mdx/config";
+import { defineCollections, defineDocs, defineConfig, frontmatterSchema } from "fumadocs-mdx/config";
 import { z } from "zod";
 
 /**
@@ -22,6 +22,30 @@ export const docs = defineDocs({
       llmsExclude: z.boolean().default(false),
     }),
   },
+});
+
+/**
+ * The blog, as a second collection rather than a second docs tree.
+ *
+ * It deliberately does not go through `defineDocs`: docs get a page tree, a
+ * sidebar and `meta.json` ordering, and a blog has none of those — it is a
+ * reverse-chronological list, and the ordering key is the `date` below. Sharing
+ * the docs collection would also put marketing posts in the docs sidebar and in
+ * `llms.txt`'s Documentation section, which are two places they do not belong.
+ *
+ * `date` is a string rather than a `z.date()` because MDX frontmatter is YAML
+ * and a bare `2026-09-08` parses to a Date in one YAML dialect and a string in
+ * another. Pinning it to an ISO string keeps the value the author typed, and
+ * `Article`'s `datePublished` wants that string anyway.
+ */
+export const blog = defineCollections({
+  type: "doc",
+  dir: "content/blog",
+  schema: frontmatterSchema.extend({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use an ISO date: YYYY-MM-DD"),
+    author: z.string().default("chatform"),
+    tags: z.array(z.string()).default([]),
+  }),
 });
 
 export default defineConfig();

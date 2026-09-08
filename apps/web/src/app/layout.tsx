@@ -4,6 +4,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { ApiProvider } from "@/lib/api/api-provider";
 import { AuthUIProvider } from "@/components/auth/auth-ui-provider";
+import { JsonLd } from "@/components/seo/json-ld";
+import { SITE_ORIGIN, organizationLd, webSiteLd } from "@/lib/seo";
 import "./globals.css";
 
 const inter = Inter({
@@ -51,7 +53,7 @@ export const metadata: Metadata = {
    * Same env var and same default as `sitemap.ts`, which already had to solve
    * this for absolute URLs.
    */
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_ORIGIN ?? "https://chatform.in"),
+  metadataBase: new URL(SITE_ORIGIN),
   /**
    * Two vocabularies, doing two different jobs.
    *
@@ -77,7 +79,7 @@ export const metadata: Metadata = {
     template: "%s · chatform",
   },
   description:
-    "Turn any form into a chat. AI asks one question at a time, understands what people write, and answers their questions too — so more people finish.",
+    "Long forms lose people. chatform turns yours into a conversation that reads what people write, follows up when an answer is too thin to use, and answers their questions too — so more of them finish.",
 };
 
 export const viewport: Viewport = {
@@ -97,6 +99,17 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       className={`${inter.variable} ${bricolage.variable} ${caveat.variable} ${jetbrains.variable}`}
     >
       <body className="min-h-svh font-sans">
+        {/*
+          Who this is, once, for the whole site.
+
+          It sits in the root layout rather than on the landing page because
+          every other JSON-LD block on the site references the organisation by
+          `@id` — the FAQ on /pricing, the Article on a blog post, the
+          comparison pages — and a reference to an `@id` that is not present
+          on the same page is a dangling pointer. Emitting it everywhere is a
+          few hundred bytes and removes the whole class of problem.
+        */}
+        <JsonLd nodes={[organizationLd(), webSiteLd()]} />
         <ThemeProvider>
           {/*
             Inside ApiProvider on purpose: Better Auth UI reads and writes

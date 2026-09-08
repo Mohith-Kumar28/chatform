@@ -45,7 +45,7 @@ export function CtaBand() {
 
       <div className="relative mx-auto max-w-4xl">
         <h2 className="text-display-2xl max-w-[20ch] font-bold tracking-[-0.045em] text-balance">
-          Ask better questions. Get better answers.
+          Ask like a person. Watch them finish.
         </h2>
 
         {/* These two were hand-rolled here first. They are now `on-brand` and

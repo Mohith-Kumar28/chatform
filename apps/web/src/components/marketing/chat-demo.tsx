@@ -388,7 +388,7 @@ export function ChatDemo({
         {script.map((turn, i) => (
           <li key={i}>
             {turn.role === "bot"
-              ? "Interviewer"
+              ? "chatform"
               : turn.role === "user"
                 ? "Respondent"
                 : turn.role === "end"

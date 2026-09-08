@@ -74,7 +74,13 @@ export function ComparisonTable() {
   );
 }
 
-function CellView({ cell, emphasis }: { cell: Cell; emphasis: boolean }) {
+/**
+ * Shared with the head-to-head table on the comparison pages, which needs the
+ * same six renderings of the same `Cell` union. Two implementations of "what a
+ * `{ partial }` cell looks like" is how the seven-column table and the
+ * two-column one start disagreeing about the same fact.
+ */
+export function CellView({ cell, emphasis }: { cell: Cell; emphasis: boolean }) {
   if (cell === true) {
     return (
       <>

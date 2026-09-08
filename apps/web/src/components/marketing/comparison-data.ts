@@ -100,14 +100,32 @@ export const ROWS: readonly ComparisonRow[] = [
     cells: ["200", false, false, false, "100", false, false],
   },
   {
-    label: "Cheapest paid plan",
+    /*
+     * "Most affordable", never "cheapest".
+     *
+     * They point at the same number and they do not mean the same thing.
+     * Cheap is a claim about what a thing is worth; affordable is a claim about
+     * what it costs you — and this row sits directly under four rows about
+     * capability, where inviting the reader to think "cheap" about the column
+     * we want them to choose works against everything above it.
+     */
+    label: "Most affordable plan",
     hint: "Billed yearly, per month, in USD.",
-    cells: ["$16", "$25", "$20", "~$20", "$34", "$15", "$7 per user"],
+    cells: [
+      "$16",
+      "$25",
+      "$20",
+      "~$20",
+      "$34",
+      "$15",
+      { unknown: "Workspace, priced per user by region" },
+    ],
   },
 ];
 
 export const FOOTNOTES: readonly string[] = [
   `Competitor pricing and capabilities were read from each vendor's own public pricing, features and documentation pages in ${VERIFIED_ON}. Prices are the annual-billed per-month figure in USD. Tally and Fillout do not print a monthly-equivalent annual price; those are derived from the annual total.`,
+  "Google Forms itself is free with any Google account; its paid tier is Google Workspace, which is billed per user and served in local currency at prices that differ by region. There is no single USD figure to put in that cell, so it does not carry one.",
   "Typeform's conversational AI product is Formless, sold separately from typeform.com plans and starting at $59/mo for 250 AI conversations. typeform.com itself offers AI follow-ups on an open-text answer, not a conversational interview.",
   "Jotform's AI Agents are a genuine conversational form-filler with a trainable knowledge base, available from its free tier. It is the closest thing to this product on the list.",
   "“Not documented” means we could not find the capability on the vendor's public pages — not that it is confirmed absent.",

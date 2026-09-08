@@ -3,7 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatDemo } from "./chat-demo";
 import { HERO_SCRIPT } from "./chat-demo-scripts";
-import { ArrowMark, CircleMark, HandNote } from "./annotate";
+import { CircleMark } from "./annotate";
 
 /**
  * `NEXT_PUBLIC_DEMO_FORM_SLUG` replaces the hardcoded `/f/test-waitlist` the
@@ -75,50 +75,73 @@ export function Hero() {
         className="relative mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-[1.1fr_1fr] lg:gap-14"
       >
         <div>
-          {/* Plain words, and that is the whole brief.
-              This said "An interviewer, not a form." — a line that reads well
-              and communicates nothing to the one person it is for: someone one
-              second into the page who does not yet know what this is. Everyone
-              knows what a form is and what a chat is, so the headline is built
-              from those two words and nothing else.
-              "chat" is ringed by hand and annotated, which does two jobs at
-              once. It puts the emphasis on the word the whole product turns
-              on, and it does it without colour — the ground behind this is the
-              brand's two hues at full strength, where coloured type is the one
-              thing guaranteed to disappear. */}
-          <h1 className="text-display-2xl font-bold tracking-[-0.045em] max-w-[13ch] text-balance">
+          {/* The outcome, not the mechanism.
+              Three headlines have stood here. "An interviewer, not a form."
+              read well and communicated nothing. "Turn any form into a chat."
+              fixed that — plain words, no metaphor to decode — but it still
+              described what the product *is*, and left the visitor to work out
+              on their own why a chat should be better than a form. Nobody
+              arrives wanting a chat. They arrive because a form is losing
+              them.
+              So the line names the loss. "Question four" is deliberately a low
+              number and deliberately not a statistic: it is the shape of the
+              problem, not a measurement, and there is no cross-customer
+              completion data in this product to make a measurement from. The
+              claim with real evidence behind it lives one band down, with its
+              citations, at /why-conversation-works.
+              "four." is ringed by hand rather than coloured, because the ground
+              here is the brand's two hues at full strength — the one place
+              where coloured type is guaranteed to disappear. */}
+          {/*
+            Sized here rather than by `text-display-2xl`, and this is the one
+            place on the site allowed to do that.
+
+            The shared utility tops out at 4.5rem, which was right for "Turn any
+            form into a chat." at 26 characters. This headline is 36, and at
+            72px "Stop losing people" measures 621px inside a 574px column — so
+            it broke to three lines with "people" orphaned on the middle one.
+            A type scale that cannot respond to the length of the line it is
+            setting is a scale being applied to the wrong thing.
+
+            The clamp is tuned so "Stop losing people" fits one line at every
+            width from the `lg` breakpoint up, which is what puts the ring on
+            "four." at the end of line two instead of stranding it. */}
+          <h1 className="font-display font-bold tracking-[-0.045em] text-balance text-[clamp(2.5rem,1.1rem+3.4vw,4rem)] leading-[1]">
             <span className="word-rise inline-block" style={{ animationDelay: "60ms" }}>
-              Turn any form
+              Stop losing people
             </span>{" "}
             <span className="word-rise inline-block" style={{ animationDelay: "150ms" }}>
-              into a{" "}
+              at question{" "}
               <span className="relative inline-block">
-                chat.
+                four.
                 <CircleMark className="text-[var(--on-band-vivid)] opacity-80" />
               </span>
             </span>
           </h1>
 
-          {/* The note goes in the margin, which is the space to the RIGHT of a
-              13ch headline — not under it, where the first attempt put it and
-              where it landed straight on top of the paragraph. Zero height and
-              absolutely positioned, so it can never push the copy around, and
-              not drawn below `lg` where there is no margin to write in. */}
-          <div className="pointer-events-none relative hidden h-0 lg:block" aria-hidden>
-            <div className="absolute -top-24 left-[27rem] flex items-start gap-0.5">
-              <ArrowMark dir="down-left" className="mt-1 size-12 opacity-65" />
-              <HandNote className="mt-8 whitespace-nowrap opacity-80" tilt={-8}>
-                one question at a time
-              </HandNote>
-            </div>
-          </div>
+          {/*
+            The margin note is gone, and its arrow with it.
+
+            It was `one question at a time`, positioned for a headline that
+            occupied one line at `13ch`. This headline is two, and the note
+            landed directly on the ring around "four." — the annotation
+            obscuring the thing it was annotating.
+
+            It could have been repositioned. It was deleted instead, for two
+            reasons. `annotate.tsx` allows one pen mark per section and this
+            section already has the ring, which is the mark that earns its
+            place: it puts the emphasis on the number the whole headline turns
+            on. And the note said "one question at a time" — the mechanism,
+            written in the margin of a headline that had just been rewritten to
+            stop selling the mechanism.
+          */}
 
           <p
             style={{ color: "var(--on-band-vivid-muted)" }}
             className="text-body-lg mt-6 max-w-md text-balance"
           >
-            Describe what you need and AI writes the whole thing — or paste your website and it
-            reads that instead. Then it runs the conversation and gets you real answers.
+            chatform turns your form into a conversation. It reads what people write, asks again
+            when an answer is too thin to use, and answers their questions too — so they stay.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">

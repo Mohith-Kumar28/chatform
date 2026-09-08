@@ -1,4 +1,5 @@
 import { source } from "@/lib/source";
+import { SITE_ORIGIN } from "@/lib/seo";
 
 /**
  * The whole corpus in one file.
@@ -7,29 +8,30 @@ import { source } from "@/lib/source";
  * excluded, because /openapi.json already says all of that in one machine-
  * readable file and inlining seventy of them would bury the guides in
  * boilerplate.
+ *
+ * It now contains the documents rather than a list of links to them, which is
+ * what the name has always claimed. The previous version emitted a title, a
+ * description and a `Source:` line per page — a table of contents wearing the
+ * name of a corpus, and useless to the one caller it exists for, which is a
+ * model that wanted the text in a single fetch.
+ *
+ * `getText("raw")` is fumadocs-mdx's own accessor for the original file. It
+ * reads from disk, which is why this route stays `force-static`: the reads
+ * happen during `next build`.
  */
 export const dynamic = "force-static";
 
-export function GET() {
-  /**
-   * Titles, descriptions and links rather than full bodies.
-   *
-   * The compiled MDX does not carry its own source, and re-reading every file at
-   * request time is exactly the filesystem access the rest of this pipeline
-   * avoids. Each entry points at the page's own `.md`, which serves the source.
-   */
-  const body = source
-    .getPages()
-    .filter((page) => !page.data.llmsExclude)
-    .map((page) =>
-      [
-        `# ${page.data.title}`,
-        page.data.description ?? "",
-        "",
-        `Source: https://chatform.in${page.url}.md`,
-      ].join("\n"),
-    )
-    .join("\n\n---\n\n");
+export async function GET() {
+  const pages = source.getPages().filter((page) => !page.data.llmsExclude);
 
-  return new Response(body, { headers: { "content-type": "text/plain; charset=utf-8" } });
+  const sections = await Promise.all(
+    pages.map(async (page) => {
+      const raw = await page.data.getText("raw");
+      return [`# ${page.data.title}`, "", `Source: ${SITE_ORIGIN}${page.url}`, "", raw].join("\n");
+    }),
+  );
+
+  return new Response(sections.join("\n\n---\n\n"), {
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  });
 }

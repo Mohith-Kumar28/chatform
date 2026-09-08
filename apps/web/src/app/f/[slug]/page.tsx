@@ -4,13 +4,13 @@ import type { PublicFormConfig } from "@repo/form-schema";
 import { ChatClient } from "@/components/chat/chat-client";
 import { ViewPing } from "@/components/chat/view-ping";
 import { EmbedBridge } from "@/components/chat/embed-bridge";
+// Absolute, because a crawler resolves `og:image` against nothing.
+import { SITE_ORIGIN } from "@/lib/seo";
 
 // Server-side fetch origin. `API_ORIGIN` may differ from the public one when the
 // worker is reachable internally; both default to the deployed API.
 const API_ORIGIN = process.env.API_ORIGIN ?? process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.in";
 const PUBLIC_API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.in";
-// Absolute, because a crawler resolves `og:image` against nothing.
-const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_ORIGIN ?? "https://chatform.in";
 
 async function getConfig(slug: string): Promise<PublicFormConfig | null> {
   try {

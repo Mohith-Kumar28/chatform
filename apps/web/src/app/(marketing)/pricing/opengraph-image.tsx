@@ -1,24 +1,22 @@
 import {
   renderShareCard,
-  shareCardAlt,
   shareCardContentType,
   shareCardSize,
 } from "@/components/brand/share-card";
 
-/**
- * The pricing route declares its own `openGraph` block (in `layout.tsx`, for a
- * pricing-specific title and description), and declaring one stops the parent
- * segment's file-based image from being attached. The result in production was
- * a pricing page with a `twitter:image` — inherited, because `twitter` was not
- * declared — and no `og:image` at all.
- *
- * Rather than depend on which of Next's metadata keys inherit and which
- * replace, the route generates its own card from the same renderer.
- */
-export const alt = shareCardAlt;
+export const alt = "chatform pricing — collect for free, pay to look closer";
 export const size = shareCardSize;
 export const contentType = shareCardContentType;
 
+/**
+ * This file has to exist even though the parent segment has one: declaring
+ * `openGraph` in the route's own metadata stops the parent's file-based image
+ * from attaching. It now carries the pricing page's own words rather than the
+ * landing page's, which is the point of `renderShareCard` taking arguments.
+ */
 export default function Image() {
-  return renderShareCard();
+  return renderShareCard({
+    headline: "Collect for free.",
+    kicker: "Unlimited forms and unlimited responses on every plan, including the free one.",
+  });
 }

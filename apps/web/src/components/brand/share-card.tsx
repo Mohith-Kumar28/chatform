@@ -7,6 +7,13 @@ import { ImageResponse } from "next/og";
  * which is two copies of a brand asset guaranteed to drift the first time one
  * of them is edited. Both now call this.
  *
+ * It takes a headline now, the way `renderFormCard` already did. Every page on
+ * the site was unfurling the same card — a Typeform comparison and the pricing
+ * page were indistinguishable in a Slack thread, which wastes the one piece of
+ * the page a person sees before deciding whether to click. The defaults are
+ * the landing page's own words, so a route that has nothing particular to say
+ * still gets the right card by passing nothing.
+ *
  * Fonts are the platform defaults on purpose: pulling Bricolage over the wire
  * at render time is a network dependency on a path that must never fail, and
  * the mark plus the palette already carry the brand. The mark is inline SVG
@@ -18,7 +25,18 @@ import { ImageResponse } from "next/og";
    cards — a scan position, so it names the category. The drawn headline below
    keeps the claim; a screen reader that got only the metaphor would be the one
    reader who never finds out what this is. */
-export const shareCardAlt = "chatform — AI chat forms people actually finish";
+export const shareCardAlt = "chatform — forms people actually finish";
+
+/** The card's defaults, which are the landing page's own words. */
+const DEFAULT_HEADLINE = "Stop losing people at question 4.";
+const DEFAULT_KICKER = "A form that asks like a person, so more people finish.";
+
+export interface ShareCardInput {
+  /** Two to six words. Anything longer stops fitting at 96px. */
+  headline?: string;
+  /** One line under it. */
+  kicker?: string;
+}
 export const shareCardSize = { width: 1200, height: 630 };
 export const shareCardContentType = "image/png";
 
@@ -45,7 +63,7 @@ const SPECTRUM = [
   { hue: ORANGE, w: 4 },
 ] as const;
 
-export function renderShareCard() {
+export function renderShareCard({ headline, kicker }: ShareCardInput = {}) {
   return new ImageResponse(
     (
       <div
@@ -82,10 +100,10 @@ export function renderShareCard() {
               display: "flex",
             }}
           >
-            Turn any form into a chat.
+            {headline ?? DEFAULT_HEADLINE}
           </div>
           <div style={{ fontSize: 32, color: MUTED, maxWidth: 780, display: "flex" }}>
-            AI asks the questions. People answer like people.
+            {kicker ?? DEFAULT_KICKER}
           </div>
         </div>
 

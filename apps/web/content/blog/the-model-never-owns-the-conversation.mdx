@@ -1,0 +1,69 @@
+---
+title: The model runs the conversation. It never owns it.
+description: How chatform constrains a language model to six verbs, checks every one against a state machine before it takes effect, and keeps collecting answers when the AI budget runs out.
+date: 2026-09-08
+tags:
+  - engineering
+  - ai
+---
+
+The obvious way to build a conversational form is to hand a language model the
+list of questions and let it get on with it. It demos beautifully. It also loses
+answers, asks question seven twice, and skips question nine, and you find out
+from the export.
+
+chatform is built the other way round. The conversation runs inside a Cloudflare
+Durable Object holding a finite state machine, and the state machine is the only
+thing that writes. The model is an actor with six verbs, and every one of them is
+checked before it takes effect.
+
+## The six verbs
+
+- `record_answer` — and only for the block the machine currently considers
+  current. An attempt to answer a different question is rejected and the
+  rejection is returned to the model inside the same turn, so it can correct
+  itself rather than silently failing.
+- `answer_from_knowledge` — a lexical lookup over the knowledge entries the form
+  author wrote. Up to twenty of them, twenty thousand characters in total,
+  inlined into the prompt. No vector store, no retrieval of anything the author
+  did not type.
+- `clarify` — capped per block, because a model that can ask "could you say more?"
+  forever will.
+- `skip_current` — refused outright if the form disallows skipping or the block is
+  required. The model does not get to decide that one.
+- `request_upload`
+- `end_interview`
+
+That is the whole surface. There is no verb for "reorder the questions" or "add a
+question", because those are not things anything should be able to do halfway
+through a conversation somebody is already answering.
+
+## What actually goes to the model
+
+Less than you would guess. Choice, scale, yes/no and consent answers are matched
+exactly, in code, and never sent anywhere. Only free text goes to the extraction
+model, which is asked for a schema-bound `{ value, confident, note }` — and
+whatever comes back is then run through the same validator a typed answer would
+face. A low-confidence read does not become a recorded guess; it becomes a
+follow-up question.
+
+The prompt itself is split in two. A stable prefix carries identity, tone,
+persona, the goal, the knowledge base and the full question manifest — the parts
+that do not change between turns, and can therefore be cached. A volatile suffix
+carries the transcript, the answers so far, and the current objective.
+
+## Running out of AI, without breaking
+
+Every plan meters AI conversations, and eventually somebody hits the meter. The
+interesting design question is what happens then.
+
+What does not happen: the form stopping. Past the cap it stops *rephrasing* and
+asks each question exactly as the author wrote it.
+Comprehension — reading what somebody typed and turning it into a valid answer —
+is kept alive separately, because that is the half a respondent would actually
+notice losing. The conversation gets plainer. It does not get broken, and it
+never stops collecting.
+
+The same fallback catches a model that misuses its tools badly enough to be
+untrustworthy for the rest of the session. Degrading is the failure mode, and it
+was designed before the happy path was finished, which is the correct order.

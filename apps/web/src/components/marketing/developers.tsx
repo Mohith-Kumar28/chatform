@@ -32,7 +32,7 @@ const POINTS = [
   },
 ] as const;
 
-const FACTS = ["4 ways to embed", "330+ Cloudflare cities", "2–5s typical agent turn"] as const;
+const FACTS = ["4 ways to embed", "330+ Cloudflare cities", "2–5s typical turn"] as const;
 
 export function Developers() {
   return (

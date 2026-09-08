@@ -1,0 +1,80 @@
+---
+title: Nineteen operators, and a linter that won't let you publish a dead end
+description: Conditional logic is easy to build and hard to keep correct. Here is the branching model chatform uses, and the check that runs before a form can go live.
+date: 2026-09-08
+tags:
+  - logic
+  - product
+---
+
+Every form builder has conditional logic. Almost none of them will tell you when
+yours is broken.
+
+The failure is always the same shape. You add a branch, then change a question
+above it, and now one arm of the branch can never be reached — or worse, a path
+through the form arrives somewhere with nowhere to go next. Nothing errors. The
+form publishes. You find out when a respondent tells you, or when you notice a
+column in the export that is empty for a third of the rows.
+
+## What the conditions can actually express
+
+A condition in chatform compares an **operand** against a value. The operand can
+be a previous question's answer, a variable you have been accumulating, or a
+hidden field passed in the URL. There are nineteen operators:
+
+`eq` · `neq` · `gt` · `gte` · `lt` · `lte` · `contains` · `not_contains` ·
+`starts_with` · `ends_with` · `matches_regex` · `is_empty` · `is_not_empty` ·
+`is_checked` · `is_not_checked` · `includes` · `not_includes` · `ranked_above` ·
+`ranked_below`
+
+The last two are there because ranking answers are ordered lists, and "did they
+put onboarding above pricing" is a question you cannot ask with `eq`.
+
+Conditions combine into **groups**, and groups nest. `and` and `or` are real
+boolean operators over a tree, not a flat list of rules evaluated top to bottom
+with the first match winning. That distinction matters the first time you need
+"enterprise **and** (Europe **or** APAC)".
+
+## Three things a rule can do
+
+- **`goto`** — jump to a block, or to a specific ending. Endings are targets in
+  their own right, so "you are not a fit for this" and "thanks, we will be in
+  touch" are two different closing screens rather than one screen with an `if` in
+  it.
+- **`set_variable`** — assign, with real arithmetic: `add`, `sub`, `mul`, `div`,
+  `concat`, nested.
+- **`add_score`** — accumulate into a variable. Options carry a `score`, so a
+  quiz or a lead-qualification model is a property of the choices rather than a
+  pile of separate rules.
+
+Separately, every block has a **`visibility`** condition. That is deterministic
+skipping: the block is evaluated and passed over without a rule firing, which
+keeps "this question does not apply to this person" out of your routing logic
+where it would otherwise multiply.
+
+## The part that is unusual: it is checked before publish
+
+The linter walks the graph. Not the rules — the graph. It answers three
+questions:
+
+1. Can every block be reached by at least one path through the form?
+2. Does every path terminate at an ending?
+3. Is any condition always true, or always false, given what can reach it?
+
+That third one catches the change-above-a-branch failure. A condition that can
+never be false is not a branch; it is a `goto` you did not mean to write, and
+the arm underneath it is dead. chatform refuses to publish a document that fails
+these, and says which block is the problem.
+
+The same linter runs in CI over all 35 templates. A template that cannot lint is
+a build failure here, not a support ticket for you.
+
+## What this costs
+
+Honestly: some flexibility. A form that would publish elsewhere will sometimes
+be rejected here, and the fix is occasionally "add an ending you did not think
+you needed". That is the trade — the check has no value if it can be waved
+through, so it cannot be.
+
+If you want to see the shape of it, the flow editor draws the graph the linter
+walks, and it is usually obvious where the dead arm is once it is drawn.

@@ -21,6 +21,24 @@ const nextConfig: NextConfig = {
      */
     staleTimes: { dynamic: 180, static: 300 },
   },
+  /**
+   * The markdown mirror.
+   *
+   * `/docs/quickstart.md` is the URL `llms.txt` advertises and the docs header
+   * copies; `/docs-md/quickstart` is where the route handler that serves it can
+   * actually live, because a Next route segment cannot carry a file extension
+   * and `route.ts` cannot share a segment with the `page.tsx` already serving
+   * `/docs/[[...slug]]`.
+   *
+   * Two entries because `/docs` itself is a page too, and `:path*` needs at
+   * least one segment to match.
+   */
+  async rewrites() {
+    return [
+      { source: "/docs.md", destination: "/docs-md" },
+      { source: "/docs/:path*.md", destination: "/docs-md/:path*" },
+    ];
+  },
   async headers() {
     return [
       {
