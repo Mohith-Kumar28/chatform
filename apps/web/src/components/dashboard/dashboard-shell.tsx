@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Search, Settings as SettingsIcon } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { AuthGuard } from "./auth-guard";
 import { APP_NAV } from "./app-nav";
 import { AppMark } from "./app-mark";
@@ -55,27 +55,22 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <span className="font-display hidden font-semibold sm:inline">chatform</span>
             </Link>
 
-            {/* The organization, and the gear that configures it.
+            {/* One control, not three.
 
-                The gear sits here because that is what it opens: members,
-                workspaces, plan, API keys. On the right it read as an account
-                control — next to the avatar, which is the one menu in the
-                header that is genuinely about you rather than about the
-                organization you are in.
+                This slot used to hold the organization switcher, the workspace
+                switcher and a settings gear. The workspace switcher moved down
+                onto the forms toolbar, where the list it scopes actually is —
+                the header is every screen, and a folder of forms means nothing
+                on Settings or Templates. The gear moved inside this menu, onto
+                the line naming the organization it configures; it was a
+                permanent header slot pointing at a page most people open
+                rarely, and what it opens (members, plan, workspaces, API keys)
+                is the organization, not the account.
 
-                The workspace switcher used to sit between them and has moved
-                down onto the forms toolbar, where the list it scopes actually
-                is: the header is every screen, and a folder of forms means
-                nothing on Settings or Templates. Two nested switchers side by
-                side also read as one two-part control, which is what made
-                picking the wrong one easy. */}
-            <div className="hidden items-center gap-0.5 md:flex">
+                `UserMenu` still carries its own Settings item, so the phone —
+                where this trigger is hidden — keeps a door to the same place. */}
+            <div className="hidden items-center md:flex">
               <OrganizationSwitcher />
-              <Button variant="ghost" size="icon-sm" asChild aria-label="Organization settings">
-                <Link href="/settings">
-                  <SettingsIcon className="size-4" strokeWidth={1.75} />
-                </Link>
-              </Button>
             </div>
 
             {/*
@@ -129,18 +124,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <SheetHeader className="border-border border-b p-4 text-left">
               <SheetTitle className="font-display">chatform</SheetTitle>
             </SheetHeader>
-            {/* Same pairing as the desktop header: the gear belongs with the
-                organization it configures. The drawer's nav holds Forms and
-                Templates and nothing else, so without this the only way to
-                Settings on a phone is the account menu — which is the reading
-                this change exists to correct. */}
-            <div className="flex items-center justify-between gap-2 p-4">
+            {/* The switcher, and the gear inside it.
+
+                A standalone gear sat here until the trigger beside it stopped
+                being `hidden md:inline-flex` — which meant this row had been
+                rendering a lone settings button next to an invisible switcher
+                on every phone. The trigger now shows wherever it is placed and
+                the header gates it instead, so the drawer gets the real control
+                and the gear travels inside its menu like everywhere else. */}
+            <div className="flex items-center p-4">
               <OrganizationSwitcher />
-              <Button variant="ghost" size="icon-sm" asChild aria-label="Organization settings">
-                <Link href="/settings" onClick={() => setNavOpen(false)}>
-                  <SettingsIcon className="size-4" strokeWidth={1.75} />
-                </Link>
-              </Button>
             </div>
             <nav className="space-y-0.5 px-2 pb-4" aria-label="Main">
               {APP_NAV.map((item) => {

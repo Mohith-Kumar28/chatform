@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, ChevronsUpDown, Loader2, Plus } from "lucide-react";
+import Link from "next/link";
+import { Building2, ChevronsUpDown, Loader2, Plus, Settings as SettingsIcon } from "lucide-react";
 import { toast } from "sonner";
 import { authClient, useListOrganizations } from "@/lib/auth/auth-client";
 import { useActiveOrg } from "@/hooks/use-active-org";
@@ -71,6 +72,13 @@ export function OrganizationSwitcher() {
   const myRole = useMyRole();
   const [createOpen, setCreateOpen] = useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
+  /**
+   * Controlled so the gear below can close the menu on its way out.
+   *
+   * It is a `Link`, not a `DropdownMenuItem`, so Radix does not see a selection
+   * and would leave the menu hanging open over the page it just navigated to.
+   */
+  const [open, setOpen] = useState(false);
 
   const list = orgs ?? [];
   const current = active ?? list[0];
@@ -102,10 +110,10 @@ export function OrganizationSwitcher() {
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger
           className={cn(
-            "hover:bg-muted text-muted-foreground hover:text-foreground hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-sm md:inline-flex",
+            "hover:bg-muted text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm",
             "focus-visible:ring-ring/50 outline-none transition-colors focus-visible:ring-2",
           )}
         >
@@ -129,6 +137,28 @@ export function OrganizationSwitcher() {
                 {roleTitle(myRole)}
               </Badge>
             )}
+            {/*
+              The gear belongs to the organization it opens.
+
+              It spent a while as a standalone button in the header, first on
+              the right beside the avatar — where it read as an account control,
+              though what it opens is members, plan, workspaces and API keys —
+              and then immediately left of this trigger, which is closer but
+              still spends a permanent header slot on a destination most people
+              visit rarely. Here it is attached to the name it configures, on
+              the line that already says which organization you are in.
+            */}
+            <Link
+              href="/settings"
+              onClick={() => setOpen(false)}
+              aria-label={`Settings for ${current?.name ?? "this organization"}`}
+              className={cn(
+                "text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 rounded-md p-1",
+                "focus-visible:ring-ring/50 outline-none transition-colors focus-visible:ring-2",
+              )}
+            >
+              <SettingsIcon className="size-3.5" strokeWidth={1.75} />
+            </Link>
           </div>
           {others.length > 0 && (
             <>
