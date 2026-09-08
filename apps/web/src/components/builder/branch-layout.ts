@@ -269,3 +269,65 @@ export function computeQuestionFlow(doc: FormDoc): Map<string, QuestionFlow> {
 
   return out;
 }
+
+/**
+ * The operator vocabulary, and the words for it.
+ *
+ * Here with the labels that read it, rather than inside the 2,000-line canvas
+ * component — `conditionText` and `edgeLabel` both need `opLabel`, and a second
+ * hand-written copy of this list is precisely the drift the block and answer
+ * catalogs exist to prevent.
+ */
+export const OPS = [
+  { value: "eq", label: "equals", inv: "neq" },
+  { value: "neq", label: "not equals", inv: "eq" },
+  { value: "gt", label: "greater than", inv: "lte" },
+  { value: "gte", label: "greater or equal", inv: "lt" },
+  { value: "lt", label: "less than", inv: "gte" },
+  { value: "lte", label: "less or equal", inv: "gt" },
+  { value: "contains", label: "contains", inv: "not_contains" },
+  { value: "not_contains", label: "doesn't contain", inv: "contains" },
+  { value: "is_empty", label: "is empty", inv: "is_not_empty" },
+  { value: "is_not_empty", label: "is not empty", inv: "is_empty" },
+] as const;
+
+export type Op = (typeof OPS)[number]["value"];
+export const opInverse = (op: string): Op | null => OPS.find((o) => o.value === op)?.inv ?? null;
+export const opLabel = (op: string): string => OPS.find((o) => o.value === op)?.label ?? op;
+/** The unary operators test the answer itself, so they take no value. */
+export const opsValueNeeded = (op: string): boolean =>
+  !["is_empty", "is_not_empty", "is_checked", "is_not_checked"].includes(op);
+
+/**
+ * The label a route's wire carries on the canvas.
+ *
+ * Here rather than beside the canvas that draws it, because it is the same job
+ * `conditionPhrase` below does in a different register — one writes a sentence
+ * for the inspector, one writes two words for a wire — and because a label this
+ * easy to get silently wrong needs to be reachable from a test.
+ */
+export function edgeLabel(block: Block | null, cond: { op: string; value?: unknown }): string {
+  const negated = cond.op === "neq";
+  if (block?.type === "yes_no" && (cond.value === true || cond.value === false)) {
+    return (cond.value === true) !== negated ? (block.yesLabel ?? "Yes") : (block.noLabel ?? "No");
+  }
+  if (block?.type === "legal_consent" && (cond.value === true || cond.value === false)) {
+    return (cond.value === true) !== negated
+      ? (block.agreeLabel || "Agreed")
+      : (block.declineLabel || "Declined");
+  }
+  if (block && "options" in block && block.options && typeof cond.value === "string") {
+    const options = block.options;
+    const opt = options.find((o) => o.id === cond.value);
+    if (opt) {
+      if (!negated) return opt.label;
+      const other = options.length === 2 ? options.find((o) => o.id !== opt.id) : undefined;
+      return other ? other.label : `not ${opt.label}`;
+    }
+  }
+  return conditionText(cond);
+}
+
+export function conditionText(cond: { op: string; value?: unknown }): string {
+  return `${opLabel(cond.op)}${cond.value !== undefined && cond.value !== null ? ` ${String(cond.value).slice(0, 14)}` : ""}`;
+}

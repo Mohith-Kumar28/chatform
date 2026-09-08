@@ -357,8 +357,26 @@ export function rulesAreExhaustive(block: Block, rules: GotoRule[]): boolean {
     return options.every((o) => covered.has(o.id));
   }
 
+  /**
+   * A yes/no or a consent answers a boolean, so `eq true` beside `eq false`
+   * leaves nothing over.
+   *
+   * This is the shape a two-armed branch actually takes and it was the one
+   * shape not detected: neither type has an `options` array, so the check above
+   * skipped them, and a Yes/No with BOTH answers explicitly routed was reported
+   * as having a fall-through. The canvas then drew an "otherwise" row under the
+   * two arms — a wire to somewhere no respondent can ever go, on the most
+   * common branch in the product.
+   */
+  if ((block.type === "yes_no" || block.type === "legal_consent") && conds.every((c) => c.op === "eq")) {
+    const covered = new Set(conds.map((c) => String(c.value)));
+    if (covered.has("true") && covered.has("false")) return true;
+  }
+
   const has = (op: string) => conds.find((c) => c.op === op);
   if (has("is_empty") && has("is_not_empty")) return true;
+  // Complements by definition: `left === true` against `left !== true`.
+  if (has("is_checked") && has("is_not_checked")) return true;
   const eq = has("eq");
   const neq = has("neq");
   if (eq && neq && String(eq.value) === String(neq.value)) return true;

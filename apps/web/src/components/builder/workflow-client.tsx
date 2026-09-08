@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspector";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
 import { layoutGraph, placeNodes } from "./flow-layout";
+import { edgeLabel, OPS, opInverse, opsValueNeeded, type Op } from "./branch-layout";
 import { CanvasMenuProvider, NodeMenu, PaneMenu, type CanvasMenuActions } from "./node-menu";
 import { toast } from "sonner";
 import { useBuilderStore } from "@/stores/builder-store";
@@ -58,26 +59,9 @@ const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0
 
 type BlockType = Block["type"];
 
-const OPS = [
-  { value: "eq", label: "equals", inv: "neq" },
-  { value: "neq", label: "not equals", inv: "eq" },
-  { value: "gt", label: "greater than", inv: "lte" },
-  { value: "gte", label: "greater or equal", inv: "lt" },
-  { value: "lt", label: "less than", inv: "gte" },
-  { value: "lte", label: "less or equal", inv: "gt" },
-  { value: "contains", label: "contains", inv: "not_contains" },
-  { value: "not_contains", label: "doesn't contain", inv: "contains" },
-  { value: "is_empty", label: "is empty", inv: "is_not_empty" },
-  { value: "is_not_empty", label: "is not empty", inv: "is_empty" },
-] as const;
-
-type Op = (typeof OPS)[number]["value"];
-const opInverse = (op: string): Op | null => OPS.find((o) => o.value === op)?.inv ?? null;
 /** Shared by the initial fit and the Auto arrange button. */
 const FIT_VIEW = { maxZoom: 0.85, minZoom: 0.65, padding: 0.12 } as const;
 
-const opLabel = (op: string): string => OPS.find((o) => o.value === op)?.label ?? op;
-const opsValueNeeded = (op: string): boolean => !["is_empty", "is_not_empty", "is_checked", "is_not_checked"].includes(op);
 
 interface GotoRule extends Extract<LogicRule, { action_kind: "goto" }> {
   pair?: string;
@@ -340,7 +324,21 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
         targetKind: doc.endings[0] ? "ending" : "block",
         branch: "true",
       };
-      setRules([...doc.logic, rule]);
+      /**
+       * A new case goes BEFORE this block's "otherwise", never after it.
+       *
+       * `applyLogicRules` returns the first matching goto, and an
+       * unconditional rule matches everything — so a case appended after one
+       * can never fire. Appending blindly meant that on any block with a
+       * fallback (aimed by hand, or left behind by cutting a sequence wire) the
+       * next route you added silently did nothing, and the canvas drew it as a
+       * live arm.
+       */
+      const next = [...doc.logic];
+      const elseAt = next.findIndex((r) => isGoto(r) && r.from === fromRef && !condOf(r));
+      if (elseAt >= 0) next.splice(elseAt, 0, rule);
+      else next.push(rule);
+      setRules(next);
     },
     [doc, gotoRules, setRules],
   );
@@ -405,6 +403,45 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
    * right-click for a value nothing renders.
    */
   const menuAt = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  /**
+   * Aim the "everything else" route by hand.
+   *
+   * Opt-in, and that is the whole point of it being a button. An unmatched
+   * answer already goes somewhere — the next question, or the ending — so the
+   * canvas has always drawn that path, marked `auto`, to say where. What it
+   * could not do was let anybody CHANGE it: the only way to redirect the
+   * leftovers was to write out a case for each of them. This writes the
+   * unconditional rule that `applyLogicRules` treats as the default, so the
+   * fall-through becomes a decision instead of a consequence.
+   *
+   * Never offered on a branch that already covers every answer. There is
+   * nothing left to catch, and a control that adds a dead route is worse than
+   * no control.
+   */
+  const addElse = useCallback(
+    (fromRef: string) => {
+      if (doc.logic.some((r) => isGoto(r) && r.from === fromRef && !condOf(r))) return;
+      const sourceIndex = doc.blocks.findIndex((b) => b.ref === fromRef);
+      // Defaults to where the leftovers were already going, so adding the route
+      // changes nothing until it is pointed somewhere else. Adding a control
+      // must not quietly re-route anybody.
+      const current = doc.blocks[sourceIndex + 1]?.ref ?? doc.endings[0]?.ref;
+      if (!current) return;
+      setRules([
+        ...doc.logic,
+        {
+          id: uid("rl"),
+          action_kind: "goto",
+          from: fromRef,
+          when: { op: "and", conditions: [], groups: [] },
+          target: current,
+          targetKind: doc.blocks.some((b) => b.ref === current) ? "block" : "ending",
+        } satisfies GotoRule,
+      ]);
+    },
+    [doc, setRules],
+  );
 
   const addEndingAt = useCallback(
     (position: { x: number; y: number }) => {
@@ -932,6 +969,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
                     answerableBlocks={answerableBlocks}
                     onPatch={patchRule}
                     onAddCase={() => addCase(selBranchRef)}
+                    onAddElse={() => addElse(selBranchRef)}
                     onDeleteCase={(id) => onEdgesDelete([{ id: `case_${id}` } as Edge])}
                     onDelete={() => onNodesDelete([{ id: `branch_${selBranchRef}` } as Node])}
                   />
@@ -1517,6 +1555,7 @@ function BranchInspector({
   answerableBlocks,
   onPatch,
   onAddCase,
+  onAddElse,
   onDeleteCase,
   onDelete,
 }: {
@@ -1526,6 +1565,7 @@ function BranchInspector({
   answerableBlocks: Block[];
   onPatch: (ruleId: string, patch: RulePatch) => void;
   onAddCase: () => void;
+  onAddElse: () => void;
   onDeleteCase: (ruleId: string) => void;
   onDelete: () => void;
 }) {
@@ -1533,6 +1573,7 @@ function BranchInspector({
   const sourceIndex = doc.blocks.findIndex((b) => b.ref === sourceRef);
   const fallthrough = doc.blocks[sourceIndex + 1];
   const explicitElse = doc.logic.find((r): r is GotoRule => isGoto(r) && r.from === sourceRef && !condOf(r));
+  const exhaustive = rulesAreExhaustive(sourceBlock as Block, rules);
   const elseTarget = explicitElse
     ? (doc.blocks.find((b) => b.ref === explicitElse.target)?.title ?? doc.endings.find((e) => e.ref === explicitElse.target)?.title ?? explicitElse.target)
     : (fallthrough?.title ?? "the ending");
@@ -1565,16 +1606,60 @@ function BranchInspector({
         Add a route
       </Button>
 
-      <p className="text-muted-foreground rounded-lg border border-dashed px-3 py-2 text-xs leading-relaxed">
-        {rulesAreExhaustive(sourceBlock as Block, rules) ? (
-          <>Every answer is covered by a route above, so nothing falls through.</>
-        ) : (
-          <>
+      {/*
+        Three states, and the first one is the one that was missing.
+
+        Exhaustive: say so and offer nothing. A Yes/No with both answers routed
+        has no leftovers, so an "otherwise" control here would add a route no
+        respondent can reach — which is exactly the dead row this used to draw
+        on the canvas.
+
+        Leftovers, unaimed: say where they already go, and offer to take it
+        over. Nobody has to; it is what happens anyway.
+
+        Leftovers, aimed: it is a real rule now, so it gets a real row — a
+        target picker and a way to remove it, like every other route.
+      */}
+      {exhaustive ? (
+        <p className="text-muted-foreground rounded-lg border border-dashed px-3 py-2 text-xs leading-relaxed">
+          Every answer is covered by a route above, so nothing falls through.
+        </p>
+      ) : explicitElse ? (
+        <div className="bg-muted/40 space-y-2 rounded-xl p-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+              Otherwise
+            </span>
+            <button
+              type="button"
+              onClick={() => onDeleteCase(explicitElse.id)}
+              aria-label="Remove the otherwise route"
+              className="text-muted-foreground hover:text-destructive shrink-0"
+            >
+              <X className="size-3" />
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">Go to</span>
+            <TargetSelect
+              doc={doc}
+              value={explicitElse.target}
+              onChange={(ref, kind) => onPatch(explicitElse.id, { target: ref, targetKind: kind })}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-muted-foreground rounded-lg border border-dashed px-3 py-2 text-xs leading-relaxed">
             Anything the routes above do not match goes to <span className="font-medium">{elseTarget}</span>. You do
             not have to set this up — it is what happens anyway.
-          </>
-        )}
-      </p>
+          </p>
+          <Button variant="ghost" size="sm" shape="pill" className="w-full" onClick={onAddElse}>
+            <Plus className="size-3.5" />
+            Send everything else somewhere
+          </Button>
+        </div>
+      )}
 
       {answerableBlocks.length === 0 && (
         <p className="text-muted-foreground text-xs">Add a question before wiring conditions.</p>
@@ -2082,23 +2167,7 @@ function ConditionValueInput({
 // ────────────────────────── helpers ──────────────────────────
 
 
-function conditionText(cond: { op: string; value?: unknown }): string {
-  return `${opLabel(cond.op)}${cond.value !== undefined && cond.value !== null ? ` ${String(cond.value).slice(0, 14)}` : ""}`;
-}
 
-function edgeLabel(block: Block | null, cond: { op: string; value?: unknown }): string {
-  if (block?.type === "yes_no" && (cond.value === true || cond.value === false)) {
-    return cond.value === true ? (block.yesLabel ?? "Yes") : (block.noLabel ?? "No");
-  }
-  if (block?.type === "legal_consent" && (cond.value === true || cond.value === false)) {
-    return cond.value === true ? (block.agreeLabel || "Agreed") : (block.declineLabel || "Declined");
-  }
-  if (block && "options" in block && block.options && typeof cond.value === "string") {
-    const opt = block.options.find((o) => o.id === cond.value);
-    if (opt) return opt.label;
-  }
-  return conditionText(cond);
-}
 
 function defaultBlock(type: BlockType): Block {
   const id = uid("blk");
