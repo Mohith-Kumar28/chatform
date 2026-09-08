@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { Building2, ChevronsUpDown, Loader2, Plus, Settings as SettingsIcon } from "lucide-react";
+import { Building2, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { authClient, useListOrganizations } from "@/lib/auth/auth-client";
 import { useActiveOrg } from "@/hooks/use-active-org";
@@ -72,12 +71,6 @@ export function OrganizationSwitcher() {
   const myRole = useMyRole();
   const [createOpen, setCreateOpen] = useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
-  /**
-   * Controlled so the gear can close the menu on its way out: it is a `Link`
-   * rather than a `DropdownMenuItem`, so Radix sees no selection and would
-   * leave the menu open over the page it just navigated to.
-   */
-  const [open, setOpen] = useState(false);
 
   const list = orgs ?? [];
   const current = active ?? list[0];
@@ -109,7 +102,7 @@ export function OrganizationSwitcher() {
 
   return (
     <>
-      <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenu>
         <DropdownMenuTrigger
           className={cn(
             "hover:bg-muted text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm",
@@ -117,7 +110,9 @@ export function OrganizationSwitcher() {
           )}
         >
           <Building2 className="size-3.5" strokeWidth={1.75} />
-          <span className="max-w-32 truncate">{current?.name ?? "Organization"}</span>
+          <span className="max-w-32 truncate">
+            {current?.name ?? "Organization"}
+          </span>
           <ChevronsUpDown className="size-3 opacity-50" />
         </DropdownMenuTrigger>
 
@@ -136,29 +131,6 @@ export function OrganizationSwitcher() {
                 {roleTitle(myRole)}
               </Badge>
             )}
-            {/*
-              The gear belongs to the organization it opens.
-
-              What it opens is members, plan, workspaces and API keys — the
-              organization, not the account — so it sits on the line that
-              already names which organization you are in, rather than spending
-              a permanent header slot beside the trigger.
-
-              This moved out to the header once and came back. Leaving it in
-              both places was the other option and is worse: on a desktop header
-              that is the same destination twice within a centimetre.
-            */}
-            <Link
-              href="/settings"
-              onClick={() => setOpen(false)}
-              aria-label={`Settings for ${current?.name ?? "this organization"}`}
-              className={cn(
-                "text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 rounded-md p-1",
-                "focus-visible:ring-ring/50 outline-none transition-colors focus-visible:ring-2",
-              )}
-            >
-              <SettingsIcon className="size-3.5" strokeWidth={1.75} />
-            </Link>
           </div>
           {others.length > 0 && (
             <>
@@ -167,9 +139,14 @@ export function OrganizationSwitcher() {
                 Switch to
               </DropdownMenuLabel>
               {others.map((org) => (
-                <DropdownMenuItem key={org.id} onSelect={() => void switchTo(org.id)}>
+                <DropdownMenuItem
+                  key={org.id}
+                  onSelect={() => void switchTo(org.id)}
+                >
                   <span className="min-w-0 flex-1 truncate">{org.name}</span>
-                  {switching === org.id && <Loader2 className="size-3.5 shrink-0 animate-spin" />}
+                  {switching === org.id && (
+                    <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                  )}
                 </DropdownMenuItem>
               ))}
             </>

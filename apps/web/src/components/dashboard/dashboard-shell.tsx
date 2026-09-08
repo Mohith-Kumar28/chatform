@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Search } from "lucide-react";
+import { Menu, Search, Settings as SettingsIcon } from "lucide-react";
 import { AuthGuard } from "./auth-guard";
 import { APP_NAV } from "./app-nav";
 import { AppMark } from "./app-mark";
@@ -16,7 +16,12 @@ import { useAppShortcuts } from "./use-app-shortcuts";
 import { ShortcutsDialog } from "@/components/ui/shortcuts-dialog";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { useModLabel } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 
@@ -50,9 +55,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <Menu className="size-4" />
             </Button>
 
-            <Link href="/dashboard" className="flex shrink-0 items-center gap-2">
+            <Link
+              href="/dashboard"
+              className="flex shrink-0 items-center gap-2"
+            >
               <AppMark />
-              <span className="font-display hidden font-semibold sm:inline">chatform</span>
+              <span className="font-display hidden font-semibold sm:inline">
+                chatform
+              </span>
             </Link>
 
             {/* One control, not three.
@@ -67,12 +77,30 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 rarely, and what it opens (members, plan, workspaces, API keys)
                 is the organization, not the account.
 
-                The gear lives inside that menu, on the line naming the
-                organization it configures — not beside the trigger. `UserMenu`
-                carries its own Settings item as well, so there is still a
-                second door from the right-hand cluster. */}
-            <div className="hidden items-center md:flex">
+                The gear sits beside the name, visible without opening
+                anything. It went inside the menu for a while on the argument
+                that a rarely-opened page should not hold a permanent header
+                slot — but a settings control you have to open a switcher to
+                find is a settings control people stop finding, and one click
+                beats two for the screen you go to when something needs
+                changing. It is not in both places: on a desktop header that
+                would be the same destination twice within a centimetre.
+
+                A separate button rather than something inside the trigger,
+                because a button nested in a button is neither valid nor
+                operable — it reads as beside the name, which is the point. */}
+            <div className="hidden items-center gap-0.5 md:flex">
               <OrganizationSwitcher />
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                asChild
+                aria-label="Organization settings"
+              >
+                <Link href="/settings">
+                  <SettingsIcon className="size-4" strokeWidth={1.75} />
+                </Link>
+              </Button>
             </div>
 
             {/*
@@ -134,12 +162,24 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 on every phone. The trigger now shows wherever it is placed and
                 the header gates it instead, so the drawer gets the real control
                 and the gear travels inside its menu like everywhere else. */}
-            <div className="flex items-center p-4">
+            <div className="flex items-center gap-0.5 p-4">
               <OrganizationSwitcher />
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                asChild
+                aria-label="Organization settings"
+              >
+                <Link href="/settings" onClick={() => setNavOpen(false)}>
+                  <SettingsIcon className="size-4" strokeWidth={1.75} />
+                </Link>
+              </Button>
             </div>
             <nav className="space-y-0.5 px-2 pb-4" aria-label="Main">
               {APP_NAV.map((item) => {
-                const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                const active =
+                  pathname === item.href ||
+                  pathname.startsWith(item.href + "/");
                 return (
                   <Link
                     key={item.href}

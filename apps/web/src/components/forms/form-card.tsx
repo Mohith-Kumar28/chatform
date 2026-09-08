@@ -310,24 +310,25 @@ export function FormCard({
             onCheckedChange={(next) => onSelectedChange?.(next === true)}
             aria-label={`Select ${form.title}`}
             className={cn(
-              "size-[18px] shadow-sm",
-              /*
-               * Unchecked it has to be legible on the artwork; checked it is
-               * the accent, which carries its own contrast either way.
-               *
-               * The `dark:` halves are not redundant. `Checkbox` ships
-               * `dark:bg-input/30`, and a dark variant beats a plain utility of
-               * the same specificity on source order — so a white box asked for
-               * here came out as a dark translucent square the moment the app
-               * was in dark mode, whatever the thumbnail under it was doing.
-               * These say the same thing twice so the variant has nothing left
-               * to win.
-               */
+              // Bigger, and outlined in the accent.
+              //
+              // At 18px with a hairline border it disappeared into whatever
+              // artwork was behind it — a pale box on a pale thumbnail, which
+              // is most of them. The accent edge is the one colour on the card
+              // guaranteed to be neither the thumbnail nor the page, so the box
+              // reads as a control at a glance instead of as a smudge, and the
+              // shadow lifts it off the picture rather than sitting flat in it.
+              "size-[22px] border-2 shadow-md",
+              "border-primary data-[state=checked]:border-primary",
+              // The fill still follows the thumbnail, so the tick has something
+              // to be legible against. `dark:` spelled out because `Checkbox`
+              // ships `dark:bg-input/30`, and a dark variant beats a plain
+              // utility of the same specificity on source order.
               thumbIsDark === null
-                ? "bg-card border-border/80"
+                ? "bg-card"
                 : thumbIsDark
-                  ? "border-white/50 bg-white/20 dark:bg-white/20"
-                  : "border-stone-400/70 bg-white dark:bg-white",
+                  ? "bg-stone-900 dark:bg-stone-900"
+                  : "bg-white dark:bg-white",
             )}
           />
         </div>
