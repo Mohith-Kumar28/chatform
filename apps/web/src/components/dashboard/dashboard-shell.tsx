@@ -60,8 +60,18 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 every screen, and a folder of forms means nothing on Settings or
                 Templates. Two nested switchers side by side also read as one
                 two-part control, which is what made picking the wrong one easy. */}
-            <div className="hidden items-center gap-1 md:flex">
+            {/* The gear sits with the organization, because that is what it
+                opens: members, workspaces, plan, API keys. On the right it read
+                as an account control — next to the avatar, which is the one
+                menu in the header that is genuinely about you rather than about
+                the organization you are in. */}
+            <div className="hidden items-center gap-0.5 md:flex">
               <OrganizationSwitcher />
+              <Button variant="ghost" size="icon-sm" asChild aria-label="Organization settings">
+                <Link href="/settings">
+                  <SettingsIcon className="size-4" strokeWidth={1.75} />
+                </Link>
+              </Button>
             </div>
 
             {/*
@@ -102,15 +112,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               </Button>
               <UsagePill />
               <PlanBadge />
-              {/* The gear is here as well as in the account menu, because
-                  Settings absorbed two nav items and a dropdown entry — burying
-                  the only door to all of it one level deep would have made those
-                  screens harder to reach, not easier. */}
-              <Button variant="ghost" size="icon-sm" asChild aria-label="Settings">
-                <Link href="/settings">
-                  <SettingsIcon className="size-4" strokeWidth={1.75} />
-                </Link>
-              </Button>
               {/* Theme moved into the account menu: it is a setting you change
                   once, and it was spending a permanent header slot next to the
                   avatar that opens a menu with room for it. */}
@@ -124,8 +125,18 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <SheetHeader className="border-border border-b p-4 text-left">
               <SheetTitle className="font-display">chatform</SheetTitle>
             </SheetHeader>
-            <div className="flex flex-col items-start gap-1 p-4">
+            {/* Same pairing as the desktop header: the gear belongs with the
+                organization it configures. The drawer's nav holds Forms and
+                Templates and nothing else, so without this the only way to
+                Settings on a phone is the account menu — which is the reading
+                this change exists to correct. */}
+            <div className="flex items-center justify-between gap-2 p-4">
               <OrganizationSwitcher />
+              <Button variant="ghost" size="icon-sm" asChild aria-label="Organization settings">
+                <Link href="/settings" onClick={() => setNavOpen(false)}>
+                  <SettingsIcon className="size-4" strokeWidth={1.75} />
+                </Link>
+              </Button>
             </div>
             <nav className="space-y-0.5 px-2 pb-4" aria-label="Main">
               {APP_NAV.map((item) => {
