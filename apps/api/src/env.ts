@@ -71,6 +71,16 @@ export interface Bindings {
    * why the two never share a pipe.
    */
   EMAIL_FROM_MARKETING?: string;
+  /**
+   * Which transport carries transactional mail: `auto` (default), `resend` or
+   * `cloudflare`.
+   *
+   * A variable rather than a code path because the Cloudflare binding is in
+   * beta with unpublished quotas that scale by reputation — the day that
+   * becomes a problem for password resets, the fix should be one line here.
+   * Marketing mail ignores it and always uses Resend.
+   */
+  MAIL_TRANSPORT?: string;
 
   BETTER_AUTH_SECRET: string;
   OPENROUTER_API_KEY?: string;

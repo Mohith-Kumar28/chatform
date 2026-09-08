@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Mail, MessageCircle, Smartphone } from "lucide-react";
 import type { FormDoc } from "@repo/form-schema";
 import { Input } from "@/components/ui/input";
@@ -260,6 +261,15 @@ export function FollowUpPanel({
               address, and respondents are offered an opt-out at the moment you ask for
               their email. Use it for forms people fill in to get something from you: a
               quote, a demo, a trial. Not for surveys, applications or feedback.
+            </p>
+            <p className="mt-2">
+              <Link
+                href="/settings/general"
+                className="text-foreground underline underline-offset-4"
+              >
+                Add your business address
+              </Link>{" "}
+              before this can send — nothing goes out without it.
             </p>
           </div>
         </>

@@ -52,3 +52,23 @@ DODO_WEBHOOK_SECRET=
 GOOGLE_RESPONDENT_CLIENT_ID=
 GOOGLE_DASHBOARD_CLIENT_ID=
 GOOGLE_DASHBOARD_CLIENT_SECRET=
+
+# ── email ──────────────────────────────────────────────────────────────────
+# Which transport carries transactional mail: auto (default) | resend | cloudflare.
+#
+# `auto` uses the Cloudflare Email binding when it is bound and Resend when it is
+# not. Set `resend` to put everything on one provider — worth doing if the
+# binding's beta quotas ever throttle password resets, since it is a variable
+# rather than a code change.
+#
+# Marketing mail (follow-up reminders) ignores this and always uses Resend:
+# Cloudflare documents Email Service as transactional-only.
+MAIL_TRANSPORT=auto
+
+# Required for follow-up reminders, and for MAIL_TRANSPORT=resend.
+RESEND_API_KEY=
+
+# The From address for reminders. Defaults to hello@mail.<apex> when unset.
+# Keep it on a different subdomain from EMAIL_FROM so the two reputations are
+# judged separately.
+EMAIL_FROM_MARKETING=

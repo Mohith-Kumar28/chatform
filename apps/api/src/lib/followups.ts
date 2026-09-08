@@ -152,6 +152,24 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
   if (!can(ent, "followup_email")) return 0;
 
   /**
+   * No postal address, no reminders.
+   *
+   * CAN-SPAM requires the sender's physical address on every commercial
+   * message, and this is one. Enforced here rather than only in the builder
+   * because the builder can be bypassed — the API publishes documents too — and
+   * because the consequence of getting it wrong lands on the customer, not on
+   * us. Silent rather than an error: the author is not present at abandonment
+   * time, and the settings screen already says the address is required.
+   */
+  const org = await env.DB.prepare(`SELECT postal_address FROM organizations WHERE id = ?`)
+    .bind(organizationId)
+    .first<{ postal_address: string | null }>();
+  if (!org?.postal_address?.trim()) {
+    console.log("followup_skipped_no_postal_address", organizationId);
+    return 0;
+  }
+
+  /**
    * The opt-out the respondent was offered beside the address question.
    *
    * Joined from the session rather than read off the response because that is

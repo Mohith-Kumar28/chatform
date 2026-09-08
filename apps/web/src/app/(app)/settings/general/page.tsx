@@ -3,6 +3,7 @@
 import { Building2 } from "lucide-react";
 import { OrganizationSettings } from "@/components/auth/organization/organization-settings";
 import { SettingsSectionHeader } from "@/components/settings/settings-section-header";
+import { PostalAddressCard } from "@/components/settings/postal-address-card";
 import { useActiveOrg } from "@/hooks/use-active-org";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -49,6 +50,12 @@ export default function GeneralSettingsPage() {
     <>
       <SettingsSectionHeader title="General" />
       <OrganizationSettings organizationId={org.id} organizationSlug={org.slug ?? undefined} />
+      <div className="mt-4">
+        <PostalAddressCard
+          organizationId={org.id}
+          initialValue={(org as { postalAddress?: string | null }).postalAddress ?? null}
+        />
+      </div>
     </>
   );
 }

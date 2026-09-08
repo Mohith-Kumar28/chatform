@@ -120,6 +120,7 @@ export async function sendMail(env: Bindings, msg: MailMessage): Promise<MailRes
   const marketing = msg.class === "marketing";
   const from = marketing ? marketingFrom(env) : mailFrom(env);
   const replyTo = msg.replyTo ?? env.EMAIL_REPLY_TO;
+  const preference = transportPreference(env);
 
   /**
    * Marketing mail takes the Resend path or no path at all.
@@ -143,6 +144,28 @@ export async function sendMail(env: Bindings, msg: MailMessage): Promise<MailRes
     return sendViaResend(env, msg, from, replyTo);
   }
 
+  /**
+   * `MAIL_TRANSPORT=resend` — everything goes over Resend, including auth mail.
+   *
+   * Worth having as a variable rather than a code change because the binding is
+   * in beta with quotas Cloudflare does not publish and scales by sending
+   * reputation. The day that bites, the fix should be one line in `.prod.vars`
+   * and a redeploy, not a refactor under pressure. Loud rather than silent when
+   * the key is missing, for the same reason the marketing path is: a
+   * transactional deployment that quietly sends nothing is worse than one that
+   * fails visibly.
+   */
+  if (preference === "resend") {
+    if (!env.RESEND_API_KEY) {
+      if (env.ENVIRONMENT === "production") {
+        throw new Error("mail_transport_unconfigured: MAIL_TRANSPORT=resend but RESEND_API_KEY is unset");
+      }
+      console.log("mail_not_configured", JSON.stringify({ to: msg.to, subject: msg.subject }));
+      return { transport: "noop", messageId: null };
+    }
+    return sendViaResend(env, msg, from, replyTo);
+  }
+
   if (env.EMAIL) {
     // The binding's builder overload — not the `EmailMessage` overload, which is
     // Email Routing's raw-MIME path and cannot address an arbitrary recipient.
@@ -157,7 +180,11 @@ export async function sendMail(env: Bindings, msg: MailMessage): Promise<MailRes
     return { transport: "cloudflare", messageId: readMessageId(res) };
   }
 
-  if (env.RESEND_API_KEY) {
+  // `auto` (the default) falls through to Resend when the binding is absent —
+  // which is what local dev and a Cloudflare-less deployment both look like.
+  // `cloudflare` stops here rather than falling through: an explicit choice of
+  // transport that silently uses the other one is not a choice.
+  if (env.RESEND_API_KEY && preference !== "cloudflare") {
     return sendViaResend(env, msg, from, replyTo);
   }
 
@@ -168,6 +195,23 @@ export async function sendMail(env: Bindings, msg: MailMessage): Promise<MailRes
    */
   console.log("mail_not_configured", JSON.stringify({ to: msg.to, subject: msg.subject }));
   return { transport: "noop", messageId: null };
+}
+
+/**
+ * Which transport to prefer for transactional mail.
+ *
+ * `auto` — the default, and what every deployment did before this existed:
+ * the Cloudflare binding when it is bound, Resend when it is not.
+ * `resend` — everything over Resend, so one provider carries both classes and
+ * the reputations are separated by *domain* instead of by vendor.
+ * `cloudflare` — the binding only, and no quiet fallback.
+ *
+ * Marketing mail ignores this entirely and always uses Resend. That is not a
+ * preference; Cloudflare documents Email Service as transactional-only.
+ */
+function transportPreference(env: Bindings): "auto" | "resend" | "cloudflare" {
+  const raw = env.MAIL_TRANSPORT?.trim().toLowerCase();
+  return raw === "resend" || raw === "cloudflare" ? raw : "auto";
 }
 
 async function sendViaResend(

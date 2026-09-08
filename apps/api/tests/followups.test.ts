@@ -136,7 +136,15 @@ beforeAll(async () => {
   t = await seedTenant("followup");
   await publish();
   await setPlan("pro");
+  // Nothing schedules without one — see the CAN-SPAM gate in `scheduleInner`.
+  await setPostalAddress("Acme Ltd, MG Road, Bengaluru 560001, India");
 });
+
+async function setPostalAddress(value: string | null): Promise<void> {
+  await env.DB.prepare(`UPDATE organizations SET postal_address = ? WHERE id = ?`)
+    .bind(value, t.orgId)
+    .run();
+}
 
 beforeEach(async () => {
   await env.DB.prepare(`DELETE FROM followups`).run();
@@ -320,6 +328,23 @@ describe("scheduleFollowUps", () => {
     await publish();
   });
 
+  it("does nothing when the org has no postal address", async () => {
+    // Required in the footer of every commercial message. Enforced server-side
+    // because the builder is not the only way a document gets published.
+    await setPostalAddress(null);
+    await seedAbandoned("sbm_nopostal");
+    const n = await scheduleFollowUps({
+      env: env as unknown as Bindings,
+      submissionId: "sbm_nopostal",
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt: Date.now(),
+    });
+    expect(n).toBe(0);
+    expect((await rowsFor("sbm_nopostal")).results).toHaveLength(0);
+    await setPostalAddress("Acme Ltd, MG Road, Bengaluru 560001, India");
+  });
+
   it("does nothing for an org without the feature", async () => {
     await setPlan("free");
     await seedAbandoned("sbm_free");
@@ -445,11 +470,11 @@ describe("cancellation and suppression", () => {
 });
 
 describe("marketing mail never uses the transactional pipe", () => {
-  /** A binding that fails the test if it is ever asked to carry marketing mail. */
+  /** A binding that fails the test if it is ever asked to carry a message. */
   function trapBinding(): SendEmail {
     return {
       send: async () => {
-        throw new Error("marketing mail must not use the Cloudflare binding");
+        throw new Error("this message must not use the Cloudflare binding");
       },
     } as unknown as SendEmail;
   }
@@ -466,7 +491,44 @@ describe("marketing mail never uses the transactional pipe", () => {
     ).rejects.toThrow(/marketing_transport_unconfigured/);
   });
 
-  it("still sends transactional mail over the binding", async () => {
+  it("MAIL_TRANSPORT=resend moves transactional mail off the binding too", async () => {
+    // The escape hatch for the binding's beta quotas: one variable, not a
+    // refactor. The trap binding fails the test if anything reaches it.
+    const e = {
+      ...(env as unknown as Bindings),
+      EMAIL: trapBinding(),
+      RESEND_API_KEY: "re_test",
+      MAIL_TRANSPORT: "resend",
+    } as Bindings;
+    const calls: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: unknown) => {
+      calls.push(String(url));
+      return new Response(JSON.stringify({ id: "msg_1" }), { status: 200 });
+    }) as typeof fetch;
+    try {
+      const res = await sendMail(e, { to: "a@example.com", subject: "s", html: "<p>h</p>", text: "h" });
+      expect(res.transport).toBe("resend");
+      expect(calls[0]).toContain("api.resend.com");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("MAIL_TRANSPORT=resend with no key fails loudly rather than sending nothing", async () => {
+    const e = {
+      ...(env as unknown as Bindings),
+      EMAIL: trapBinding(),
+      RESEND_API_KEY: undefined,
+      MAIL_TRANSPORT: "resend",
+      ENVIRONMENT: "production",
+    } as Bindings;
+    await expect(
+      sendMail(e, { to: "a@example.com", subject: "s", html: "<p>h</p>", text: "h" }),
+    ).rejects.toThrow(/mail_transport_unconfigured/);
+  });
+
+  it("still sends transactional mail over the binding by default", async () => {
     const sent: unknown[] = [];
     const e = {
       ...(env as unknown as Bindings),

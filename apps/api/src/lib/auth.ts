@@ -374,6 +374,23 @@ export function createAuth(env: Bindings) {
         ac,
         roles,
         /**
+         * The sender's postal address, owned by Better Auth's own update
+         * endpoint rather than a route of ours.
+         *
+         * CAN-SPAM requires a physical address in the footer of any commercial
+         * message, which is what a follow-up reminder is. Declaring it here
+         * means `authClient.organization.update()` can write it and the column
+         * stays the single place it lives — no second endpoint, and no copy of
+         * the organization record that can disagree with this one.
+         */
+        schema: {
+          organization: {
+            additionalFields: {
+              postalAddress: { type: "string", required: false, input: true },
+            },
+          },
+        },
+        /**
          * The invitation, mailed.
          *
          * Better Auth deliberately does not build this URL — it stores the
