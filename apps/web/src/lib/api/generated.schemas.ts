@@ -198,6 +198,15 @@ export type GetApiFormsParams = {
 ws?: string;
 };
 
+export type GetApiForms200ItemTheme = {
+  background: string;
+  botBubble: string;
+  userBubble: string;
+  userBubbleText: string;
+  accent: string;
+  logoUrl: string | null;
+} | null;
+
 export type GetApiForms200Item = {
   id: string;
   title: string;
@@ -207,6 +216,7 @@ export type GetApiForms200Item = {
   updatedAt: number;
   questionCount: number;
   preview: string[];
+  theme: GetApiForms200ItemTheme;
 };
 
 export type PostApiFormsBody = {
@@ -829,6 +839,411 @@ export type PostV1FormsBody = {
 
 export type PutV1FormsByIdDocBody = {
   doc: unknown;
+};
+
+export type GetV1Templates200Item = {
+  slug: string;
+  title: string;
+  category: string;
+  description: string;
+  blurb: string;
+  tags: string[];
+  icon: string;
+  accent: string;
+  blockCount: number;
+  estMinutes: number;
+  usageCount: number;
+};
+
+export type GetV1TemplatesBySlug200 = {
+  slug: string;
+  title: string;
+  category: string;
+  description: string;
+  blurb: string;
+  tags: string[];
+  icon: string;
+  accent: string;
+  blockCount: number;
+  estMinutes: number;
+  usageCount: number;
+  doc: unknown;
+};
+
+export type GetV1TemplatesBySlug404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type GetV1TemplatesBySlug404Error = {
+  code: string;
+  message: string;
+  issues?: GetV1TemplatesBySlug404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type GetV1TemplatesBySlug404 = {
+  error: GetV1TemplatesBySlug404Error;
+};
+
+export type PostV1TemplatesBySlugUseParams = {
+workspace?: string;
+};
+
+export type GetV1FormsByIdVersions200Item = {
+  version: number;
+  versionId: string;
+  note: string | null;
+  publishedAt: number;
+  authorLabel: string | null;
+  changeCount: number;
+  isActive: boolean;
+  responses: number;
+};
+
+export type GetV1FormsByIdVersions404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type GetV1FormsByIdVersions404Error = {
+  code: string;
+  message: string;
+  issues?: GetV1FormsByIdVersions404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type GetV1FormsByIdVersions404 = {
+  error: GetV1FormsByIdVersions404Error;
+};
+
+export type GetV1FormsByIdVersionsByVersionParams = {
+/**
+ * @minimum 1
+ * @maximum 9007199254740991
+ */
+compare?: number;
+};
+
+export type GetV1FormsByIdVersionsByVersion404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type GetV1FormsByIdVersionsByVersion404Error = {
+  code: string;
+  message: string;
+  issues?: GetV1FormsByIdVersionsByVersion404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type GetV1FormsByIdVersionsByVersion404 = {
+  error: GetV1FormsByIdVersionsByVersion404Error;
+};
+
+export type PostV1FormsByIdVersionsByVersionRestore404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1FormsByIdVersionsByVersionRestore404Error = {
+  code: string;
+  message: string;
+  issues?: PostV1FormsByIdVersionsByVersionRestore404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1FormsByIdVersionsByVersionRestore404 = {
+  error: PostV1FormsByIdVersionsByVersionRestore404Error;
+};
+
+export type PostV1FormsByIdVersionsByVersionRestore422ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1FormsByIdVersionsByVersionRestore422Error = {
+  code: string;
+  message: string;
+  issues?: PostV1FormsByIdVersionsByVersionRestore422ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1FormsByIdVersionsByVersionRestore422 = {
+  error: PostV1FormsByIdVersionsByVersionRestore422Error;
+};
+
+export type PostV1AiGenerateFormBody = {
+  /**
+     * @minLength 5
+     * @maxLength 2000
+     */
+  prompt: string;
+  /**
+     * @minimum 2
+     * @maximum 19
+     */
+  questionCount?: number;
+  workspaceId?: string;
+};
+
+export type PostV1AiGenerateForm200 = {
+  doc: unknown;
+  issues: unknown[];
+  tokens: number;
+};
+
+export type PostV1AiGenerateForm402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1AiGenerateForm402Error = {
+  code: string;
+  message: string;
+  issues?: PostV1AiGenerateForm402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1AiGenerateForm402 = {
+  error: PostV1AiGenerateForm402Error;
+};
+
+export type PostV1AiGenerateForm403ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1AiGenerateForm403Error = {
+  code: string;
+  message: string;
+  issues?: PostV1AiGenerateForm403ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1AiGenerateForm403 = {
+  error: PostV1AiGenerateForm403Error;
+};
+
+export type PostV1AiEditFormBodyHistoryItemRole = typeof PostV1AiEditFormBodyHistoryItemRole[keyof typeof PostV1AiEditFormBodyHistoryItemRole];
+
+
+export const PostV1AiEditFormBodyHistoryItemRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export type PostV1AiEditFormBodyHistoryItem = {
+  role: PostV1AiEditFormBodyHistoryItemRole;
+  /** @maxLength 2000 */
+  text: string;
+};
+
+export type PostV1AiEditFormBody = {
+  formId: string;
+  /**
+     * @minLength 3
+     * @maxLength 1000
+     */
+  prompt: string;
+  /** @maxItems 20 */
+  history?: PostV1AiEditFormBodyHistoryItem[];
+  /**
+     * @minimum 1
+     * @maximum 10
+     */
+  count?: number;
+};
+
+export type PostV1AiEditForm402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1AiEditForm402Error = {
+  code: string;
+  message: string;
+  issues?: PostV1AiEditForm402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1AiEditForm402 = {
+  error: PostV1AiEditForm402Error;
+};
+
+export type PostV1AiEditForm403ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1AiEditForm403Error = {
+  code: string;
+  message: string;
+  issues?: PostV1AiEditForm403ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1AiEditForm403 = {
+  error: PostV1AiEditForm403Error;
+};
+
+export type PostV1AiEditForm404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1AiEditForm404Error = {
+  code: string;
+  message: string;
+  issues?: PostV1AiEditForm404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1AiEditForm404 = {
+  error: PostV1AiEditForm404Error;
+};
+
+export type GetV1FormsByIdIntegrations200Item = {
+  id: string;
+  provider: string;
+  status: string;
+  createdAt: number;
+  feedUrl?: string;
+  includePartials?: boolean;
+};
+
+export type GetV1FormsByIdIntegrations404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type GetV1FormsByIdIntegrations404Error = {
+  code: string;
+  message: string;
+  issues?: GetV1FormsByIdIntegrations404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type GetV1FormsByIdIntegrations404 = {
+  error: GetV1FormsByIdIntegrations404Error;
+};
+
+export type PutV1FormsByIdIntegrationsSpreadsheetBody = {
+  includePartials?: boolean;
+  rotate?: boolean;
+};
+
+export type PutV1FormsByIdIntegrationsSpreadsheet200 = {
+  id: string;
+  provider: string;
+  status: string;
+  createdAt: number;
+  feedUrl?: string;
+  includePartials?: boolean;
+};
+
+export type PutV1FormsByIdIntegrationsSpreadsheet402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PutV1FormsByIdIntegrationsSpreadsheet402Error = {
+  code: string;
+  message: string;
+  issues?: PutV1FormsByIdIntegrationsSpreadsheet402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PutV1FormsByIdIntegrationsSpreadsheet402 = {
+  error: PutV1FormsByIdIntegrationsSpreadsheet402Error;
+};
+
+export type PutV1FormsByIdIntegrationsSpreadsheet404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PutV1FormsByIdIntegrationsSpreadsheet404Error = {
+  code: string;
+  message: string;
+  issues?: PutV1FormsByIdIntegrationsSpreadsheet404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PutV1FormsByIdIntegrationsSpreadsheet404 = {
+  error: PutV1FormsByIdIntegrationsSpreadsheet404Error;
+};
+
+export type DeleteV1FormsByIdIntegrationsSpreadsheet404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type DeleteV1FormsByIdIntegrationsSpreadsheet404Error = {
+  code: string;
+  message: string;
+  issues?: DeleteV1FormsByIdIntegrationsSpreadsheet404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type DeleteV1FormsByIdIntegrationsSpreadsheet404 = {
+  error: DeleteV1FormsByIdIntegrationsSpreadsheet404Error;
 };
 
 export type GetV1Webhooks200Item = {

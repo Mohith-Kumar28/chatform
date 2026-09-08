@@ -1076,6 +1076,51 @@
                         "items": {
                           "type": "string"
                         }
+                      },
+                      "theme": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "background": {
+                                "type": "string"
+                              },
+                              "botBubble": {
+                                "type": "string"
+                              },
+                              "userBubble": {
+                                "type": "string"
+                              },
+                              "userBubbleText": {
+                                "type": "string"
+                              },
+                              "accent": {
+                                "type": "string"
+                              },
+                              "logoUrl": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "background",
+                              "botBubble",
+                              "userBubble",
+                              "userBubbleText",
+                              "accent",
+                              "logoUrl"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
                     },
                     "required": [
@@ -1086,7 +1131,8 @@
                       "responses",
                       "updatedAt",
                       "questionCount",
-                      "preview"
+                      "preview",
+                      "theme"
                     ]
                   }
                 }

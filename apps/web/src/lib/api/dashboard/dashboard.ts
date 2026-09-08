@@ -2665,7 +2665,7 @@ export const getGetApiKeysScopesUrl = () => {
 }
 
 /**
- * @summary Available API key scopes and key types
+ * @summary Available API key scopes, key types and scope presets
  */
 export const getApiKeysScopes = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiKeysScopesResponse> => {
 
@@ -2712,7 +2712,7 @@ export type GetApiKeysScopesQueryError = unknown
 
 
 /**
- * @summary Available API key scopes and key types
+ * @summary Available API key scopes, key types and scope presets
  */
 
 export function useGetApiKeysScopes<TData = Awaited<ReturnType<typeof getApiKeysScopes>>, TError = unknown>(

@@ -20,12 +20,30 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  DeleteV1FormsByIdIntegrationsSpreadsheet404,
   GetV1ExportsById200,
   GetV1ExportsParams,
   GetV1FilesById200,
+  GetV1FormsByIdIntegrations200Item,
+  GetV1FormsByIdIntegrations404,
   GetV1FormsByIdResponsesParams,
+  GetV1FormsByIdVersions200Item,
+  GetV1FormsByIdVersions404,
+  GetV1FormsByIdVersionsByVersion404,
+  GetV1FormsByIdVersionsByVersionParams,
   GetV1FormsParams,
+  GetV1Templates200Item,
+  GetV1TemplatesBySlug200,
+  GetV1TemplatesBySlug404,
   GetV1Webhooks200Item,
+  PostV1AiEditForm402,
+  PostV1AiEditForm403,
+  PostV1AiEditForm404,
+  PostV1AiEditFormBody,
+  PostV1AiGenerateForm200,
+  PostV1AiGenerateForm402,
+  PostV1AiGenerateForm403,
+  PostV1AiGenerateFormBody,
   PostV1ChatSessionsBySidActionsBody,
   PostV1ChatSessionsBySidMessagesBody,
   PostV1FormsBody,
@@ -36,6 +54,8 @@ import type {
   PostV1FormsByIdResponsesBody,
   PostV1FormsByIdSessions200,
   PostV1FormsByIdSessionsBody,
+  PostV1FormsByIdVersionsByVersionRestore404,
+  PostV1FormsByIdVersionsByVersionRestore422,
   PostV1ResponsesByIdAbandonBody,
   PostV1ResponsesByIdAnswersBody,
   PostV1ResponsesByIdCompleteBody,
@@ -44,8 +64,13 @@ import type {
   PostV1SessionsBySidUploadsByFileIdConfirm200,
   PostV1SessionsBySidUploadsIntent200,
   PostV1SessionsBySidUploadsIntentBody,
+  PostV1TemplatesBySlugUseParams,
   PostV1WebhooksBody,
   PutV1FormsByIdDocBody,
+  PutV1FormsByIdIntegrationsSpreadsheet200,
+  PutV1FormsByIdIntegrationsSpreadsheet402,
+  PutV1FormsByIdIntegrationsSpreadsheet404,
+  PutV1FormsByIdIntegrationsSpreadsheetBody,
   PutV1SessionsBySidUploadsByFileId200
 } from '../generated.schemas';
 
@@ -1927,7 +1952,1122 @@ export function useGetV1FormsByIdAnalytics<TData = Awaited<ReturnType<typeof get
 
 
 
-export type getV1WebhooksResponse200 = {
+export type getV1TemplatesResponse200 = {
+  data: GetV1Templates200Item[]
+  status: 200
+}
+
+export type getV1TemplatesResponseSuccess = (getV1TemplatesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getV1TemplatesResponse = (getV1TemplatesResponseSuccess)
+
+export const getGetV1TemplatesUrl = () => {
+
+
+
+
+  return `/v1/templates`
+}
+
+/**
+ * @summary List the official form templates, most used first
+ */
+export const getV1Templates = async ( options?: Parameters<typeof customFetch>[1]): Promise<getV1TemplatesResponse> => {
+
+  return customFetch<getV1TemplatesResponse>(getGetV1TemplatesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1TemplatesQueryKey = () => {
+    return [
+    `/v1/templates`
+    ] as const;
+    }
+
+
+export const getGetV1TemplatesQueryOptions = <TData = Awaited<ReturnType<typeof getV1Templates>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1Templates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1TemplatesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1Templates>>> = ({ signal }) => getV1Templates({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1Templates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1TemplatesQueryResult = NonNullable<Awaited<ReturnType<typeof getV1Templates>>>
+export type GetV1TemplatesQueryError = unknown
+
+
+/**
+ * @summary List the official form templates, most used first
+ */
+
+export function useGetV1Templates<TData = Awaited<ReturnType<typeof getV1Templates>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1Templates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1TemplatesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getV1TemplatesBySlugResponse200 = {
+  data: GetV1TemplatesBySlug200
+  status: 200
+}
+
+export type getV1TemplatesBySlugResponse404 = {
+  data: GetV1TemplatesBySlug404
+  status: 404
+}
+
+export type getV1TemplatesBySlugResponseSuccess = (getV1TemplatesBySlugResponse200) & {
+  headers: Headers;
+};
+export type getV1TemplatesBySlugResponseError = (getV1TemplatesBySlugResponse404) & {
+  headers: Headers;
+};
+
+export type getV1TemplatesBySlugResponse = (getV1TemplatesBySlugResponseSuccess | getV1TemplatesBySlugResponseError)
+
+export const getGetV1TemplatesBySlugUrl = (slug: string,) => {
+
+
+
+
+  return `/v1/templates/${slug}`
+}
+
+/**
+ * Read this before `POST /v1/templates/{slug}/use` if you want to see or adapt the questions rather than take them as they are.
+ * @summary One template, including the document it would create
+ */
+export const getV1TemplatesBySlug = async (slug: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1TemplatesBySlugResponse> => {
+
+  return customFetch<getV1TemplatesBySlugResponse>(getGetV1TemplatesBySlugUrl(slug),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1TemplatesBySlugQueryKey = (slug: string,) => {
+    return [
+    `/v1/templates/${slug}`
+    ] as const;
+    }
+
+
+export const getGetV1TemplatesBySlugQueryOptions = <TData = Awaited<ReturnType<typeof getV1TemplatesBySlug>>, TError = GetV1TemplatesBySlug404>(slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1TemplatesBySlug>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1TemplatesBySlugQueryKey(slug);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1TemplatesBySlug>>> = ({ signal }) => getV1TemplatesBySlug(slug, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: slug !== null && slug !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1TemplatesBySlug>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1TemplatesBySlugQueryResult = NonNullable<Awaited<ReturnType<typeof getV1TemplatesBySlug>>>
+export type GetV1TemplatesBySlugQueryError = GetV1TemplatesBySlug404
+
+
+/**
+ * @summary One template, including the document it would create
+ */
+
+export function useGetV1TemplatesBySlug<TData = Awaited<ReturnType<typeof getV1TemplatesBySlug>>, TError = GetV1TemplatesBySlug404>(
+ slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1TemplatesBySlug>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1TemplatesBySlugQueryOptions(slug,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postV1TemplatesBySlugUseResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1TemplatesBySlugUseResponse402 = {
+  data: void
+  status: 402
+}
+
+export type postV1TemplatesBySlugUseResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1TemplatesBySlugUseResponseSuccess = (postV1TemplatesBySlugUseResponse200) & {
+  headers: Headers;
+};
+export type postV1TemplatesBySlugUseResponseError = (postV1TemplatesBySlugUseResponse402 | postV1TemplatesBySlugUseResponse404) & {
+  headers: Headers;
+};
+
+export type postV1TemplatesBySlugUseResponse = (postV1TemplatesBySlugUseResponseSuccess | postV1TemplatesBySlugUseResponseError)
+
+export const getPostV1TemplatesBySlugUseUrl = (slug: string,
+    params?: PostV1TemplatesBySlugUseParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/templates/${slug}/use?${stringifiedParams}` : `/v1/templates/${slug}/use`
+}
+
+/**
+ * Creates a draft, exactly as `POST /v1/forms` does — publish it when you are ready. Omit `workspace` to use the organization's first.
+ * @summary Create a draft form from a template
+ */
+export const postV1TemplatesBySlugUse = async (slug: string,
+    params?: PostV1TemplatesBySlugUseParams, options?: Parameters<typeof customFetch>[1]): Promise<postV1TemplatesBySlugUseResponse> => {
+
+  return customFetch<postV1TemplatesBySlugUseResponse>(getPostV1TemplatesBySlugUseUrl(slug,params),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1TemplatesBySlugUseMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1TemplatesBySlugUse>>, TError,PostV1TemplatesBySlugUseMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1TemplatesBySlugUse>>, TError,PostV1TemplatesBySlugUseMutationVariables, TContext> => {
+
+const mutationKey = ['postV1TemplatesBySlugUse'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1TemplatesBySlugUse>>, PostV1TemplatesBySlugUseMutationVariables> = (props) => {
+          const {slug,params} = props ?? {};
+
+          return  postV1TemplatesBySlugUse(slug,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1TemplatesBySlugUseMutationResult = NonNullable<Awaited<ReturnType<typeof postV1TemplatesBySlugUse>>>
+
+    export type PostV1TemplatesBySlugUseMutationError = void
+    export type PostV1TemplatesBySlugUseMutationVariables = {slug: string;params?: PostV1TemplatesBySlugUseParams}
+
+    /**
+ * @summary Create a draft form from a template
+ */
+export const usePostV1TemplatesBySlugUse = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1TemplatesBySlugUse>>, TError,PostV1TemplatesBySlugUseMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1TemplatesBySlugUse>>,
+        TError,
+        PostV1TemplatesBySlugUseMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1TemplatesBySlugUseMutationOptions(options));
+    }
+    export type getV1FormsByIdVersionsResponse200 = {
+  data: GetV1FormsByIdVersions200Item[]
+  status: 200
+}
+
+export type getV1FormsByIdVersionsResponse404 = {
+  data: GetV1FormsByIdVersions404
+  status: 404
+}
+
+export type getV1FormsByIdVersionsResponseSuccess = (getV1FormsByIdVersionsResponse200) & {
+  headers: Headers;
+};
+export type getV1FormsByIdVersionsResponseError = (getV1FormsByIdVersionsResponse404) & {
+  headers: Headers;
+};
+
+export type getV1FormsByIdVersionsResponse = (getV1FormsByIdVersionsResponseSuccess | getV1FormsByIdVersionsResponseError)
+
+export const getGetV1FormsByIdVersionsUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/versions`
+}
+
+/**
+ * Each version carries the number of completed responses recorded against it — a version nobody answered can be replaced freely; one with responses behind it is the schema those answers were recorded against.
+ * @summary Every published version of a form, newest first
+ */
+export const getV1FormsByIdVersions = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1FormsByIdVersionsResponse> => {
+
+  return customFetch<getV1FormsByIdVersionsResponse>(getGetV1FormsByIdVersionsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1FormsByIdVersionsQueryKey = (id: string,) => {
+    return [
+    `/v1/forms/${id}/versions`
+    ] as const;
+    }
+
+
+export const getGetV1FormsByIdVersionsQueryOptions = <TData = Awaited<ReturnType<typeof getV1FormsByIdVersions>>, TError = GetV1FormsByIdVersions404>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1FormsByIdVersionsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1FormsByIdVersions>>> = ({ signal }) => getV1FormsByIdVersions(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdVersions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1FormsByIdVersionsQueryResult = NonNullable<Awaited<ReturnType<typeof getV1FormsByIdVersions>>>
+export type GetV1FormsByIdVersionsQueryError = GetV1FormsByIdVersions404
+
+
+/**
+ * @summary Every published version of a form, newest first
+ */
+
+export function useGetV1FormsByIdVersions<TData = Awaited<ReturnType<typeof getV1FormsByIdVersions>>, TError = GetV1FormsByIdVersions404>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1FormsByIdVersionsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getV1FormsByIdVersionsByVersionResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1FormsByIdVersionsByVersionResponse404 = {
+  data: GetV1FormsByIdVersionsByVersion404
+  status: 404
+}
+
+export type getV1FormsByIdVersionsByVersionResponseSuccess = (getV1FormsByIdVersionsByVersionResponse200) & {
+  headers: Headers;
+};
+export type getV1FormsByIdVersionsByVersionResponseError = (getV1FormsByIdVersionsByVersionResponse404) & {
+  headers: Headers;
+};
+
+export type getV1FormsByIdVersionsByVersionResponse = (getV1FormsByIdVersionsByVersionResponseSuccess | getV1FormsByIdVersionsByVersionResponseError)
+
+export const getGetV1FormsByIdVersionsByVersionUrl = (id: string,
+    version: string,
+    params?: GetV1FormsByIdVersionsByVersionParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/forms/${id}/versions/${version}?${stringifiedParams}` : `/v1/forms/${id}/versions/${version}`
+}
+
+/**
+ * Pass `compare` with another version number to get the list of changes between them.
+ * @summary One published version, optionally diffed against another
+ */
+export const getV1FormsByIdVersionsByVersion = async (id: string,
+    version: string,
+    params?: GetV1FormsByIdVersionsByVersionParams, options?: Parameters<typeof customFetch>[1]): Promise<getV1FormsByIdVersionsByVersionResponse> => {
+
+  return customFetch<getV1FormsByIdVersionsByVersionResponse>(getGetV1FormsByIdVersionsByVersionUrl(id,version,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1FormsByIdVersionsByVersionQueryKey = (id: string,
+    version: string,
+    params?: GetV1FormsByIdVersionsByVersionParams,) => {
+    return [
+    `/v1/forms/${id}/versions/${version}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetV1FormsByIdVersionsByVersionQueryOptions = <TData = Awaited<ReturnType<typeof getV1FormsByIdVersionsByVersion>>, TError = GetV1FormsByIdVersionsByVersion404>(id: string,
+    version: string,
+    params?: GetV1FormsByIdVersionsByVersionParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdVersionsByVersion>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1FormsByIdVersionsByVersionQueryKey(id,version,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1FormsByIdVersionsByVersion>>> = ({ signal }) => getV1FormsByIdVersionsByVersion(id,version,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && version !== null && version !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdVersionsByVersion>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1FormsByIdVersionsByVersionQueryResult = NonNullable<Awaited<ReturnType<typeof getV1FormsByIdVersionsByVersion>>>
+export type GetV1FormsByIdVersionsByVersionQueryError = GetV1FormsByIdVersionsByVersion404
+
+
+/**
+ * @summary One published version, optionally diffed against another
+ */
+
+export function useGetV1FormsByIdVersionsByVersion<TData = Awaited<ReturnType<typeof getV1FormsByIdVersionsByVersion>>, TError = GetV1FormsByIdVersionsByVersion404>(
+ id: string,
+    version: string,
+    params?: GetV1FormsByIdVersionsByVersionParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdVersionsByVersion>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1FormsByIdVersionsByVersionQueryOptions(id,version,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postV1FormsByIdVersionsByVersionRestoreResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1FormsByIdVersionsByVersionRestoreResponse404 = {
+  data: PostV1FormsByIdVersionsByVersionRestore404
+  status: 404
+}
+
+export type postV1FormsByIdVersionsByVersionRestoreResponse422 = {
+  data: PostV1FormsByIdVersionsByVersionRestore422
+  status: 422
+}
+
+export type postV1FormsByIdVersionsByVersionRestoreResponseSuccess = (postV1FormsByIdVersionsByVersionRestoreResponse200) & {
+  headers: Headers;
+};
+export type postV1FormsByIdVersionsByVersionRestoreResponseError = (postV1FormsByIdVersionsByVersionRestoreResponse404 | postV1FormsByIdVersionsByVersionRestoreResponse422) & {
+  headers: Headers;
+};
+
+export type postV1FormsByIdVersionsByVersionRestoreResponse = (postV1FormsByIdVersionsByVersionRestoreResponseSuccess | postV1FormsByIdVersionsByVersionRestoreResponseError)
+
+export const getPostV1FormsByIdVersionsByVersionRestoreUrl = (id: string,
+    version: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/versions/${version}/restore`
+}
+
+/**
+ * Writes the draft, not the live form — respondents see nothing change until you publish. Returns the restored document and what it changed.
+ * @summary Restore a published version into the working document
+ */
+export const postV1FormsByIdVersionsByVersionRestore = async (id: string,
+    version: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1FormsByIdVersionsByVersionRestoreResponse> => {
+
+  return customFetch<postV1FormsByIdVersionsByVersionRestoreResponse>(getPostV1FormsByIdVersionsByVersionRestoreUrl(id,version),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1FormsByIdVersionsByVersionRestoreMutationOptions = <TError = PostV1FormsByIdVersionsByVersionRestore404 | PostV1FormsByIdVersionsByVersionRestore422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdVersionsByVersionRestore>>, TError,PostV1FormsByIdVersionsByVersionRestoreMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdVersionsByVersionRestore>>, TError,PostV1FormsByIdVersionsByVersionRestoreMutationVariables, TContext> => {
+
+const mutationKey = ['postV1FormsByIdVersionsByVersionRestore'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1FormsByIdVersionsByVersionRestore>>, PostV1FormsByIdVersionsByVersionRestoreMutationVariables> = (props) => {
+          const {id,version} = props ?? {};
+
+          return  postV1FormsByIdVersionsByVersionRestore(id,version,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1FormsByIdVersionsByVersionRestoreMutationResult = NonNullable<Awaited<ReturnType<typeof postV1FormsByIdVersionsByVersionRestore>>>
+
+    export type PostV1FormsByIdVersionsByVersionRestoreMutationError = PostV1FormsByIdVersionsByVersionRestore404 | PostV1FormsByIdVersionsByVersionRestore422
+    export type PostV1FormsByIdVersionsByVersionRestoreMutationVariables = {id: string;version: string}
+
+    /**
+ * @summary Restore a published version into the working document
+ */
+export const usePostV1FormsByIdVersionsByVersionRestore = <TError = PostV1FormsByIdVersionsByVersionRestore404 | PostV1FormsByIdVersionsByVersionRestore422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdVersionsByVersionRestore>>, TError,PostV1FormsByIdVersionsByVersionRestoreMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1FormsByIdVersionsByVersionRestore>>,
+        TError,
+        PostV1FormsByIdVersionsByVersionRestoreMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1FormsByIdVersionsByVersionRestoreMutationOptions(options));
+    }
+    export type postV1AiGenerateFormResponse200 = {
+  data: PostV1AiGenerateForm200
+  status: 200
+}
+
+export type postV1AiGenerateFormResponse402 = {
+  data: PostV1AiGenerateForm402
+  status: 402
+}
+
+export type postV1AiGenerateFormResponse403 = {
+  data: PostV1AiGenerateForm403
+  status: 403
+}
+
+export type postV1AiGenerateFormResponse502 = {
+  data: void
+  status: 502
+}
+
+export type postV1AiGenerateFormResponse503 = {
+  data: void
+  status: 503
+}
+
+export type postV1AiGenerateFormResponseSuccess = (postV1AiGenerateFormResponse200) & {
+  headers: Headers;
+};
+export type postV1AiGenerateFormResponseError = (postV1AiGenerateFormResponse402 | postV1AiGenerateFormResponse403 | postV1AiGenerateFormResponse502 | postV1AiGenerateFormResponse503) & {
+  headers: Headers;
+};
+
+export type postV1AiGenerateFormResponse = (postV1AiGenerateFormResponseSuccess | postV1AiGenerateFormResponseError)
+
+export const getPostV1AiGenerateFormUrl = () => {
+
+
+
+
+  return `/v1/ai/generate-form`
+}
+
+/**
+ * Returns a document and its lint issues **without saving anything** — pass the result to `POST /v1/forms` to keep it. Consumes one `ai_generations` unit and the tokens it costs, charged only when a usable document comes back. If you are already driving this from a model of your own, writing the document yourself and posting it to `/v1/forms` costs you nothing here.
+ * @summary Generate a form document from a natural-language prompt
+ */
+export const postV1AiGenerateForm = async (postV1AiGenerateFormBody: PostV1AiGenerateFormBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1AiGenerateFormResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1AiGenerateFormResponse>(getPostV1AiGenerateFormUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1AiGenerateFormBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1AiGenerateFormMutationOptions = <TError = PostV1AiGenerateForm402 | PostV1AiGenerateForm403 | void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1AiGenerateForm>>, TError,PostV1AiGenerateFormMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1AiGenerateForm>>, TError,PostV1AiGenerateFormMutationVariables, TContext> => {
+
+const mutationKey = ['postV1AiGenerateForm'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1AiGenerateForm>>, PostV1AiGenerateFormMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postV1AiGenerateForm(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1AiGenerateFormMutationResult = NonNullable<Awaited<ReturnType<typeof postV1AiGenerateForm>>>
+    export type PostV1AiGenerateFormMutationBody = PostV1AiGenerateFormBody
+    export type PostV1AiGenerateFormMutationError = PostV1AiGenerateForm402 | PostV1AiGenerateForm403 | void
+    export type PostV1AiGenerateFormMutationVariables = {data: PostV1AiGenerateFormBody}
+
+    /**
+ * @summary Generate a form document from a natural-language prompt
+ */
+export const usePostV1AiGenerateForm = <TError = PostV1AiGenerateForm402 | PostV1AiGenerateForm403 | void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1AiGenerateForm>>, TError,PostV1AiGenerateFormMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1AiGenerateForm>>,
+        TError,
+        PostV1AiGenerateFormMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1AiGenerateFormMutationOptions(options));
+    }
+    export type postV1AiEditFormResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1AiEditFormResponse402 = {
+  data: PostV1AiEditForm402
+  status: 402
+}
+
+export type postV1AiEditFormResponse403 = {
+  data: PostV1AiEditForm403
+  status: 403
+}
+
+export type postV1AiEditFormResponse404 = {
+  data: PostV1AiEditForm404
+  status: 404
+}
+
+export type postV1AiEditFormResponse422 = {
+  data: void
+  status: 422
+}
+
+export type postV1AiEditFormResponse502 = {
+  data: void
+  status: 502
+}
+
+export type postV1AiEditFormResponseSuccess = (postV1AiEditFormResponse200) & {
+  headers: Headers;
+};
+export type postV1AiEditFormResponseError = (postV1AiEditFormResponse402 | postV1AiEditFormResponse403 | postV1AiEditFormResponse404 | postV1AiEditFormResponse422 | postV1AiEditFormResponse502) & {
+  headers: Headers;
+};
+
+export type postV1AiEditFormResponse = (postV1AiEditFormResponseSuccess | postV1AiEditFormResponseError)
+
+export const getPostV1AiEditFormUrl = () => {
+
+
+
+
+  return `/v1/ai/edit-form`
+}
+
+/**
+ * Returns the proposed document **without saving it** — send it to `PUT /v1/forms/{id}/doc` to keep it. An edit may add no questions at all: most requests about a working form change the routing rather than the wording. Pass `history` (oldest first) when this is a follow-up, or the model cannot resolve 'also', 'it' or 'instead'.
+ * @summary Ask a model to change an existing form: add, edit or remove questions and rewire the flow
+ */
+export const postV1AiEditForm = async (postV1AiEditFormBody: PostV1AiEditFormBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1AiEditFormResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1AiEditFormResponse>(getPostV1AiEditFormUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1AiEditFormBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1AiEditFormMutationOptions = <TError = PostV1AiEditForm402 | PostV1AiEditForm403 | PostV1AiEditForm404 | void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1AiEditForm>>, TError,PostV1AiEditFormMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1AiEditForm>>, TError,PostV1AiEditFormMutationVariables, TContext> => {
+
+const mutationKey = ['postV1AiEditForm'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1AiEditForm>>, PostV1AiEditFormMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postV1AiEditForm(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1AiEditFormMutationResult = NonNullable<Awaited<ReturnType<typeof postV1AiEditForm>>>
+    export type PostV1AiEditFormMutationBody = PostV1AiEditFormBody
+    export type PostV1AiEditFormMutationError = PostV1AiEditForm402 | PostV1AiEditForm403 | PostV1AiEditForm404 | void
+    export type PostV1AiEditFormMutationVariables = {data: PostV1AiEditFormBody}
+
+    /**
+ * @summary Ask a model to change an existing form: add, edit or remove questions and rewire the flow
+ */
+export const usePostV1AiEditForm = <TError = PostV1AiEditForm402 | PostV1AiEditForm403 | PostV1AiEditForm404 | void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1AiEditForm>>, TError,PostV1AiEditFormMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1AiEditForm>>,
+        TError,
+        PostV1AiEditFormMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1AiEditFormMutationOptions(options));
+    }
+    export type getV1FormsByIdIntegrationsResponse200 = {
+  data: GetV1FormsByIdIntegrations200Item[]
+  status: 200
+}
+
+export type getV1FormsByIdIntegrationsResponse404 = {
+  data: GetV1FormsByIdIntegrations404
+  status: 404
+}
+
+export type getV1FormsByIdIntegrationsResponseSuccess = (getV1FormsByIdIntegrationsResponse200) & {
+  headers: Headers;
+};
+export type getV1FormsByIdIntegrationsResponseError = (getV1FormsByIdIntegrationsResponse404) & {
+  headers: Headers;
+};
+
+export type getV1FormsByIdIntegrationsResponse = (getV1FormsByIdIntegrationsResponseSuccess | getV1FormsByIdIntegrationsResponseError)
+
+export const getGetV1FormsByIdIntegrationsUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/integrations`
+}
+
+/**
+ * Currently just the spreadsheet feed, if one exists. An empty array means no feed has been created.
+ * @summary A form's non-webhook integrations
+ */
+export const getV1FormsByIdIntegrations = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1FormsByIdIntegrationsResponse> => {
+
+  return customFetch<getV1FormsByIdIntegrationsResponse>(getGetV1FormsByIdIntegrationsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1FormsByIdIntegrationsQueryKey = (id: string,) => {
+    return [
+    `/v1/forms/${id}/integrations`
+    ] as const;
+    }
+
+
+export const getGetV1FormsByIdIntegrationsQueryOptions = <TData = Awaited<ReturnType<typeof getV1FormsByIdIntegrations>>, TError = GetV1FormsByIdIntegrations404>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdIntegrations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1FormsByIdIntegrationsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1FormsByIdIntegrations>>> = ({ signal }) => getV1FormsByIdIntegrations(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdIntegrations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1FormsByIdIntegrationsQueryResult = NonNullable<Awaited<ReturnType<typeof getV1FormsByIdIntegrations>>>
+export type GetV1FormsByIdIntegrationsQueryError = GetV1FormsByIdIntegrations404
+
+
+/**
+ * @summary A form's non-webhook integrations
+ */
+
+export function useGetV1FormsByIdIntegrations<TData = Awaited<ReturnType<typeof getV1FormsByIdIntegrations>>, TError = GetV1FormsByIdIntegrations404>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdIntegrations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1FormsByIdIntegrationsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type putV1FormsByIdIntegrationsSpreadsheetResponse200 = {
+  data: PutV1FormsByIdIntegrationsSpreadsheet200
+  status: 200
+}
+
+export type putV1FormsByIdIntegrationsSpreadsheetResponse402 = {
+  data: PutV1FormsByIdIntegrationsSpreadsheet402
+  status: 402
+}
+
+export type putV1FormsByIdIntegrationsSpreadsheetResponse404 = {
+  data: PutV1FormsByIdIntegrationsSpreadsheet404
+  status: 404
+}
+
+export type putV1FormsByIdIntegrationsSpreadsheetResponseSuccess = (putV1FormsByIdIntegrationsSpreadsheetResponse200) & {
+  headers: Headers;
+};
+export type putV1FormsByIdIntegrationsSpreadsheetResponseError = (putV1FormsByIdIntegrationsSpreadsheetResponse402 | putV1FormsByIdIntegrationsSpreadsheetResponse404) & {
+  headers: Headers;
+};
+
+export type putV1FormsByIdIntegrationsSpreadsheetResponse = (putV1FormsByIdIntegrationsSpreadsheetResponseSuccess | putV1FormsByIdIntegrationsSpreadsheetResponseError)
+
+export const getPutV1FormsByIdIntegrationsSpreadsheetUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/integrations/spreadsheet`
+}
+
+/**
+ * Idempotent by nature — one feed per form — which is why this is a PUT. The returned `feedUrl` is a live CSV a spreadsheet can re-read on a schedule; it is unauthenticated, so the URL is the whole credential. Send `rotate: true` to invalidate the previous one.
+ * @summary Create, update or rotate the spreadsheet feed
+ */
+export const putV1FormsByIdIntegrationsSpreadsheet = async (id: string,
+    putV1FormsByIdIntegrationsSpreadsheetBody: PutV1FormsByIdIntegrationsSpreadsheetBody, options?: Parameters<typeof customFetch>[1]): Promise<putV1FormsByIdIntegrationsSpreadsheetResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<putV1FormsByIdIntegrationsSpreadsheetResponse>(getPutV1FormsByIdIntegrationsSpreadsheetUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(putV1FormsByIdIntegrationsSpreadsheetBody)
+  }
+);}
+
+
+
+
+
+export const getPutV1FormsByIdIntegrationsSpreadsheetMutationOptions = <TError = PutV1FormsByIdIntegrationsSpreadsheet402 | PutV1FormsByIdIntegrationsSpreadsheet404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putV1FormsByIdIntegrationsSpreadsheet>>, TError,PutV1FormsByIdIntegrationsSpreadsheetMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof putV1FormsByIdIntegrationsSpreadsheet>>, TError,PutV1FormsByIdIntegrationsSpreadsheetMutationVariables, TContext> => {
+
+const mutationKey = ['putV1FormsByIdIntegrationsSpreadsheet'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putV1FormsByIdIntegrationsSpreadsheet>>, PutV1FormsByIdIntegrationsSpreadsheetMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putV1FormsByIdIntegrationsSpreadsheet(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutV1FormsByIdIntegrationsSpreadsheetMutationResult = NonNullable<Awaited<ReturnType<typeof putV1FormsByIdIntegrationsSpreadsheet>>>
+    export type PutV1FormsByIdIntegrationsSpreadsheetMutationBody = PutV1FormsByIdIntegrationsSpreadsheetBody
+    export type PutV1FormsByIdIntegrationsSpreadsheetMutationError = PutV1FormsByIdIntegrationsSpreadsheet402 | PutV1FormsByIdIntegrationsSpreadsheet404
+    export type PutV1FormsByIdIntegrationsSpreadsheetMutationVariables = {id: string;data: PutV1FormsByIdIntegrationsSpreadsheetBody}
+
+    /**
+ * @summary Create, update or rotate the spreadsheet feed
+ */
+export const usePutV1FormsByIdIntegrationsSpreadsheet = <TError = PutV1FormsByIdIntegrationsSpreadsheet402 | PutV1FormsByIdIntegrationsSpreadsheet404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putV1FormsByIdIntegrationsSpreadsheet>>, TError,PutV1FormsByIdIntegrationsSpreadsheetMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof putV1FormsByIdIntegrationsSpreadsheet>>,
+        TError,
+        PutV1FormsByIdIntegrationsSpreadsheetMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutV1FormsByIdIntegrationsSpreadsheetMutationOptions(options));
+    }
+    export type deleteV1FormsByIdIntegrationsSpreadsheetResponse200 = {
+  data: void
+  status: 200
+}
+
+export type deleteV1FormsByIdIntegrationsSpreadsheetResponse404 = {
+  data: DeleteV1FormsByIdIntegrationsSpreadsheet404
+  status: 404
+}
+
+export type deleteV1FormsByIdIntegrationsSpreadsheetResponseSuccess = (deleteV1FormsByIdIntegrationsSpreadsheetResponse200) & {
+  headers: Headers;
+};
+export type deleteV1FormsByIdIntegrationsSpreadsheetResponseError = (deleteV1FormsByIdIntegrationsSpreadsheetResponse404) & {
+  headers: Headers;
+};
+
+export type deleteV1FormsByIdIntegrationsSpreadsheetResponse = (deleteV1FormsByIdIntegrationsSpreadsheetResponseSuccess | deleteV1FormsByIdIntegrationsSpreadsheetResponseError)
+
+export const getDeleteV1FormsByIdIntegrationsSpreadsheetUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/integrations/spreadsheet`
+}
+
+/**
+ * The URL stops working immediately. Any spreadsheet reading it will start failing to refresh.
+ * @summary Revoke the spreadsheet feed
+ */
+export const deleteV1FormsByIdIntegrationsSpreadsheet = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteV1FormsByIdIntegrationsSpreadsheetResponse> => {
+
+  return customFetch<deleteV1FormsByIdIntegrationsSpreadsheetResponse>(getDeleteV1FormsByIdIntegrationsSpreadsheetUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteV1FormsByIdIntegrationsSpreadsheetMutationOptions = <TError = DeleteV1FormsByIdIntegrationsSpreadsheet404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteV1FormsByIdIntegrationsSpreadsheet>>, TError,DeleteV1FormsByIdIntegrationsSpreadsheetMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteV1FormsByIdIntegrationsSpreadsheet>>, TError,DeleteV1FormsByIdIntegrationsSpreadsheetMutationVariables, TContext> => {
+
+const mutationKey = ['deleteV1FormsByIdIntegrationsSpreadsheet'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteV1FormsByIdIntegrationsSpreadsheet>>, DeleteV1FormsByIdIntegrationsSpreadsheetMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteV1FormsByIdIntegrationsSpreadsheet(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteV1FormsByIdIntegrationsSpreadsheetMutationResult = NonNullable<Awaited<ReturnType<typeof deleteV1FormsByIdIntegrationsSpreadsheet>>>
+
+    export type DeleteV1FormsByIdIntegrationsSpreadsheetMutationError = DeleteV1FormsByIdIntegrationsSpreadsheet404
+    export type DeleteV1FormsByIdIntegrationsSpreadsheetMutationVariables = {id: string}
+
+    /**
+ * @summary Revoke the spreadsheet feed
+ */
+export const useDeleteV1FormsByIdIntegrationsSpreadsheet = <TError = DeleteV1FormsByIdIntegrationsSpreadsheet404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteV1FormsByIdIntegrationsSpreadsheet>>, TError,DeleteV1FormsByIdIntegrationsSpreadsheetMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteV1FormsByIdIntegrationsSpreadsheet>>,
+        TError,
+        DeleteV1FormsByIdIntegrationsSpreadsheetMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteV1FormsByIdIntegrationsSpreadsheetMutationOptions(options));
+    }
+    export type getV1WebhooksResponse200 = {
   data: GetV1Webhooks200Item[]
   status: 200
 }

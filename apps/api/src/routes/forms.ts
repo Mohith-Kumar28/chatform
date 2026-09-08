@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { FormDoc, lintFormDoc, hasErrors, migrateFormDoc } from "@repo/form-schema";
+import { FormDoc, ThemeDoc, lintFormDoc, hasErrors, migrateFormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
 import { hashPassword, isHashedPassword } from "../lib/crypto.js";
@@ -62,9 +62,36 @@ const FormFull = FormSummary.extend({
  * Both of these come out of the document the form already has — no new column,
  * no migration, and nothing that can drift from the form itself.
  */
+/**
+ * The handful of theme values a card needs to look like the form it stands for.
+ *
+ * Not the whole `ThemeDoc`: a list of thirty forms would then carry thirty
+ * copies of fonts, radii and background images that a 120px thumbnail cannot
+ * show. These are the ones that read at that size — the two bubble colours, the
+ * ground behind them, and the logo if there is one.
+ */
+const FormCardTheme = z.object({
+  background: z.string(),
+  botBubble: z.string(),
+  userBubble: z.string(),
+  userBubbleText: z.string(),
+  accent: z.string(),
+  logoUrl: z.string().nullable(),
+});
+
 const FormListItem = FormSummary.extend({
   questionCount: z.number(),
   preview: z.array(z.string()),
+  /**
+   * Null when nobody has designed this form.
+   *
+   * Not "null when `theme_json` is absent": the builder writes a full theme the
+   * first time it saves anything, so absence stops being a useful signal almost
+   * immediately. A theme identical to the defaults is the honest test for
+   * "never touched", and it is what lets the card keep the brand band for those
+   * rather than painting a whole grid in the same default cream.
+   */
+  theme: FormCardTheme.nullable(),
 });
 
 /**
@@ -74,10 +101,38 @@ const FormListItem = FormSummary.extend({
  * A malformed or legacy document returns empty rather than throwing — a card
  * that cannot draw its preview is a worse card, not a failed request.
  */
-function summariseDoc(raw: string | null): { questionCount: number; preview: string[] } {
-  if (!raw) return { questionCount: 0, preview: [] };
+/**
+ * What an undesigned form looks like, read from the schema rather than copied.
+ *
+ * A hardcoded copy was already wrong within a day — the `userBubble` default
+ * moved and this file did not hear about it, which would have made every
+ * default form look "designed" and quietly retired the brand band. Parsing an
+ * empty object gives whatever `ThemeDoc` currently defaults to, so the two
+ * cannot disagree.
+ */
+const THEME_DEFAULTS = ThemeDoc.parse({});
+const DEFAULT_CARD_THEME = {
+  background: THEME_DEFAULTS.background,
+  botBubble: THEME_DEFAULTS.botBubble,
+  userBubble: THEME_DEFAULTS.userBubble,
+  userBubbleText: THEME_DEFAULTS.userBubbleText,
+  accent: THEME_DEFAULTS.accent,
+  logoUrl: null,
+} as const;
+
+type CardTheme = z.infer<typeof FormCardTheme>;
+
+function summariseDoc(raw: string | null): {
+  questionCount: number;
+  preview: string[];
+  theme: CardTheme | null;
+} {
+  if (!raw) return { questionCount: 0, preview: [], theme: null };
   try {
-    const doc = JSON.parse(raw) as { blocks?: { type?: string; title?: string }[] };
+    const doc = JSON.parse(raw) as {
+      blocks?: { type?: string; title?: string }[];
+      theme?: Partial<CardTheme>;
+    };
     const blocks = Array.isArray(doc.blocks) ? doc.blocks : [];
     // A greeting and a statement are said, not asked. Counting them as
     // questions would put this number one or two above the builder's.
@@ -86,13 +141,36 @@ function summariseDoc(raw: string | null): { questionCount: number; preview: str
     const preview: string[] = [];
     const greeting = blocks.find((b) => isPrelude(b.type))?.title;
     if (greeting) preview.push(greeting);
+    // Two, because the card draws exactly two bubbles. It used to gather three
+    // for a subtitle that joined the tail with dots; that line is gone — the
+    // thumbnail already says what the form opens with — so a third entry would
+    // be payload nobody reads.
     for (const q of questions) {
-      if (preview.length >= 3) break;
+      if (preview.length >= 2) break;
       if (q.title) preview.push(q.title);
     }
-    return { questionCount: questions.length, preview };
+    // Field by field rather than a spread of `doc.theme`: a legacy document can
+    // carry nulls where a colour is expected, and a card drawn with
+    // `background: null` is a card drawn with no background at all.
+    const t = doc.theme ?? {};
+    const pick = (v: unknown, fallback: string) =>
+      typeof v === "string" && v.trim() ? v : fallback;
+    const theme: CardTheme = {
+      background: pick(t.background, DEFAULT_CARD_THEME.background),
+      botBubble: pick(t.botBubble, DEFAULT_CARD_THEME.botBubble),
+      userBubble: pick(t.userBubble, DEFAULT_CARD_THEME.userBubble),
+      userBubbleText: pick(t.userBubbleText, DEFAULT_CARD_THEME.userBubbleText),
+      accent: pick(t.accent, DEFAULT_CARD_THEME.accent),
+      logoUrl: typeof t.logoUrl === "string" && t.logoUrl.trim() ? t.logoUrl : null,
+    };
+    const untouched =
+      theme.logoUrl === null &&
+      (Object.keys(DEFAULT_CARD_THEME) as (keyof CardTheme)[]).every(
+        (k) => k === "logoUrl" || theme[k] === DEFAULT_CARD_THEME[k],
+      );
+    return { questionCount: questions.length, preview, theme: untouched ? null : theme };
   } catch {
-    return { questionCount: 0, preview: [] };
+    return { questionCount: 0, preview: [], theme: null };
   }
 }
 
