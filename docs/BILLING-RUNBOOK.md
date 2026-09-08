@@ -114,8 +114,50 @@ money we would otherwise lose.
 
 **They are per-mode.** Switching them on in test does nothing for live, and they default to
 off — so a freshly live business silently has none of them until someone goes and looks.
-All three are on in live as of 2026-09-08. "Give customers a discount code" under abandoned
-cart is deliberately off: it discounts people who would have paid full price anyway.
+All three are on in live as of 2026-09-08.
+
+### 1.6a The abandoned-cart discount: 10%, 7 days
+
+On as of 2026-09-08, at **10% valid for 7 days**. Dodo mints a one-off code per abandoned
+checkout and puts it in the recovery emails; we build and store nothing.
+
+Dodo's own recommendation is 15–25% off the first three months, released only on the third
+email. **We cannot follow it, and that is why the number is lower than theirs.** The UI
+offers exactly two fields — a percentage and a validity window. There is no way to say
+*which* email carries the code, so it goes in the first one too, at the 1-hour mark. That
+email recovers the largest bucket of all (Dodo puts it at 30–50% of recoveries) and those
+people abandoned because they were interrupted, not because of price. Every point of
+discount there is paid to someone who would have converted from a plain reminder, so the
+right move is the smallest number that still moves a price-sensitive buyer, not the biggest
+one the category will bear.
+
+**Our list price is already the discount.** The catalogue is deliberately $5/mo under
+Youform and the annual plans are already 33%/35% off (`plans.ts`). Typeform and Jotform run
+40–50% off annual plans, but those are broad seasonal promos against list prices well above
+ours, and copying that headline into an abandonment trigger compares the wrong two things.
+
+**The unresolved risk is the yearly plans.** Dodo exposes no *subscription cycle limit* on
+the auto-generated code, and no code exists to inspect until the first real abandonment. If
+it turns out to be uncapped, 10% off Business yearly is $66 a year for the life of the
+subscription — survivable. At the 20–25% Dodo suggests it would be $132–165 a year, forever,
+which is why that number was not chosen under uncertainty.
+
+**Check this once, on the first real abandoned cart**, then delete this paragraph:
+
+```bash
+# the code appears here once Dodo mints it
+curl -s https://live.dodopayments.com/discounts \
+  -H "authorization: Bearer $DODO_API_KEY" -H "user-agent: chatform/1.0" | jq '.items[]'
+```
+
+Look at `subscription_cycles`. `1` is ideal, `3` is fine, `null` means the discount never
+expires from the subscription — at which point either drop the percentage or turn the
+feature off for yearly by restricting it, if Dodo has shipped product restrictions on the
+auto-generated code by then.
+
+"Give customers a discount code" also has a sibling setting worth leaving alone: the
+discount is **not** offered in the dunning flow. A customer whose card failed has already
+decided to buy; discounting them is pure margin loss.
 
 **The retry window and our grace window are not the same number.** Dodo's *Recovery window*
 defaults to **13 days**; `subscription.on_hold` opens a **7-day** grace here (§6). Days 8–13
