@@ -35,12 +35,11 @@ export function ChatBoot({ title, logoUrl }: { title?: string; logoUrl?: string 
           <img src={logoUrl} alt={title ?? ""} className="relative size-12 rounded-2xl object-contain" />
         ) : (
           <span
-            className="relative grid size-12 place-items-center rounded-2xl"
-            style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+            className="relative grid size-12 place-items-center rounded-2xl bg-[var(--cf-surface)] ring-1 ring-black/5"
             role="img"
             aria-label={title ?? "chatform"}
           >
-            <LogoMark variant="mono" className="size-6" />
+            <LogoMark className="size-7" />
           </span>
         )}
       </div>

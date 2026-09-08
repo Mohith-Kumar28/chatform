@@ -443,11 +443,11 @@ function ChatHeader({
           />
         ) : (
           <div
-            className="grid size-8 shrink-0 place-items-center rounded-xl bg-[var(--cf-accent)] text-[var(--cf-accent-text)]"
+            className="grid size-8 shrink-0 place-items-center rounded-xl bg-[var(--cf-surface)] ring-1 ring-black/5"
             role="img"
             aria-label={title}
           >
-            <LogoMark variant="mono" className="size-4" />
+            <LogoMark className="size-5" />
           </div>
         )}
         <div className="min-w-0 flex-1">

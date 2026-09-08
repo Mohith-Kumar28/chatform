@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Download, FileText } from "lucide-react";
+import { CornerDownLeft, Download, FileText } from "lucide-react";
 import { schedulingLabel, toPublicBlock, type Block, type FormDoc } from "@repo/form-schema";
 import { DateComposer } from "@/components/chat/composers/date";
 import { PaymentAffordance } from "@/components/chat/payment-affordance";
@@ -47,8 +47,8 @@ export function QuestionPreview({ doc, block }: { doc: FormDoc; block: Block }) 
           // eslint-disable-next-line @next/next/no-img-element
           <img src={logoUrl} alt="" className="size-7 shrink-0 rounded-lg object-contain" />
         ) : (
-          <div className="grid size-7 shrink-0 place-items-center rounded-lg bg-[var(--cf-accent)] text-[var(--cf-accent-text)]">
-            <LogoMark variant="mono" className="size-3.5" />
+          <div className="grid size-7 shrink-0 place-items-center rounded-lg bg-[var(--cf-surface)] ring-1 ring-black/5">
+            <LogoMark className="size-4" />
           </div>
         )}
         <p className="min-w-0 truncate text-sm font-medium">
@@ -368,10 +368,11 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
             {block.placeholder || "Type your answer…"}
           </div>
           <div
-            className="grid h-11 shrink-0 place-items-center rounded-full px-4 text-sm font-medium"
+            className="flex h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium"
             style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
           >
             Send
+            <CornerDownLeft className="hidden size-3.5 opacity-60 sm:block" aria-hidden />
           </div>
         </div>
       );

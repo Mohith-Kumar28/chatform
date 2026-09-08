@@ -1,5 +1,6 @@
 "use client";
 
+import { CornerDownLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -96,13 +97,16 @@ export function SendRow({
         onClick={onSend}
         disabled={disabled}
         className={cn(
-          "h-11 shrink-0 rounded-full px-4 text-sm font-medium",
+          "inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium",
           "bg-[var(--cf-accent)] text-[var(--cf-accent-text)]",
           "transition-transform duration-[var(--duration-micro)] active:scale-[0.97]",
           "motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40",
         )}
       >
         {label}
+        {/* Hints that Enter also sends — hidden on touch-sized screens, which
+            have no physical Enter key to point at. */}
+        <CornerDownLeft className="hidden size-3.5 opacity-60 sm:block" aria-hidden />
       </button>
     </div>
   );

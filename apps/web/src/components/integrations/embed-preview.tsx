@@ -366,8 +366,8 @@ function MockConversation({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoUrl} alt="" className="size-8 shrink-0 rounded-xl object-contain" />
           ) : (
-            <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-[var(--cf-accent)] text-[var(--cf-accent-text)]">
-              <LogoMark variant="mono" className="size-4" />
+            <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-[var(--cf-surface)] ring-1 ring-black/5">
+              <LogoMark className="size-5" />
             </div>
           )}
           <div className="min-w-0 flex-1">
