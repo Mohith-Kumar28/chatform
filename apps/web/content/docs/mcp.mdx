@@ -127,9 +127,15 @@ which is not built yet — see [What is not here](#what-is-not-here).
 
 ## The tools
 
-Nineteen of them, which is a budget rather than an accident: clients cap how many
-tools they will load — Cursor at forty — and that ceiling is shared with every
-other server you have connected.
+Twenty-four, which is a budget rather than an accident: clients cap how many tools
+they will load — Cursor at forty — and that ceiling is shared with every other
+server you have connected.
+
+### Getting oriented
+
+| Tool | Scope | |
+| --- | --- | --- |
+| `whoami` | — | Which org this key is, what it may do, and what it is missing |
 
 ### Forms
 
@@ -153,13 +159,17 @@ other server you have connected.
 | `get_form_analytics` | `analytics:read` | Views, completion rate, per-question funnel, distributions |
 | `export_responses` | `response:export` | Start a CSV or JSON export |
 | `check_export` | `response:export` | Poll an export and get its download link |
+| `get_file` | `file:read` | Resolve a file-upload answer's `fileId` to a name and a download link |
 
 ### Webhooks
 
 | Tool | Scope | |
 | --- | --- | --- |
 | `list_webhooks` | `webhook:read` | Registered endpoints and their events |
+| `list_webhook_deliveries` | `webhook:read` | Recent attempts, statuses and errors — for "why is it quiet" |
+| `list_events` | — | Every event name a webhook can subscribe to |
 | `create_webhook` | `webhook:write` | Register one. The signing secret is shown once |
+| `replay_webhook_delivery` | `webhook:write` | Re-send one failed delivery |
 
 ### Everything else
 
@@ -173,10 +183,22 @@ front of the model:
 | `chatform_api_read` | `GET` any documented endpoint |
 | `chatform_api_write` | `POST`, `PUT` or `PATCH` any documented endpoint |
 
-They are bounded by the spec: only the 45 operations published at
+They are bounded by the spec: only the operations published at
 `https://api.chatform.in/openapi.json` are reachable. The dashboard's own `/api/*`
 routes and the respondent `/p/*` channel are not part of that document and cannot
 be called with a key, so an assistant cannot reach them however it asks.
+
+Two areas are reachable **only** this way, on purpose:
+
+- **Driving a live conversation** — opening a chat session and exchanging messages
+  turn by turn (`/v1/sessions/*`, `/v1/chat/*`, and session uploads). Fifteen
+  operations, and a niche job for an assistant: `submit_response` records answers
+  directly without pretending to be a respondent. If you want named tools for
+  testing a form conversationally, that is a reasonable ask.
+- **Incremental response building** — recording answers one at a time, then
+  completing or abandoning (`/v1/responses/{id}/answers`, `/complete`, `/abandon`,
+  `/next`). `submit_response` does the one-shot version, which is what an import or
+  an agent filling a form actually needs.
 
 ## Building a form
 

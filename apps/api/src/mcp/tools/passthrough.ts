@@ -2,9 +2,9 @@
  * Four tools that reach the whole developer API.
  *
  * The curated tools cover the common jobs; these cover everything else without
- * putting forty-three more schemas in front of the model on every request. Stripe
- * ships the same shape (`api_search`/`api_details`/`api_read`/`api_write`) for ~150
- * endpoints, and Stainless arrived at the same trio independently, which is a good
+ * putting forty-three more schemas in front of the model on every request. The
+ * search/details/read/write shape is the one several other vendors' MCP servers
+ * converged on independently for APIs far larger than this one, which is a good
  * sign it is the pattern rather than a trick.
  *
  * Two invariants live here and nowhere else:

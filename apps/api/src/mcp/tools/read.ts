@@ -16,8 +16,17 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpCtx } from "../dispatch.js";
 import { callApi, describeFailure } from "../dispatch.js";
 import { clampLimit, jsonResult, errorResult, projectResponseRow, capAnswers } from "../shape.js";
+import { MCP_SCOPES } from "../../lib/scopes.js";
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+
+/**
+ * What `whoami` measures a key against.
+ *
+ * Imported rather than restated so the advice it gives cannot drift from the preset
+ * the dashboard offers and the docs describe.
+ */
+const AGENT_SCOPES = MCP_SCOPES;
 
 /** Every list tool takes the same two, and describing them once keeps them honest. */
 const pageArgs = {
@@ -250,6 +259,111 @@ export function registerReadTools(server: McpServer, ctx: () => McpCtx): void {
     },
     async ({ form_id }) => {
       const res = await callApi(ctx(), "GET", "/v1/webhooks", { query: { form_id } });
+      if (res.status !== 200) return errorResult(describeFailure(res));
+      return jsonResult(res.body);
+    },
+  );
+
+  /**
+   * Self-diagnosis, and the reason it earns a named tool.
+   *
+   * The most common failure on this surface is a key minted with the default
+   * scopes, which cannot publish, read analytics or export. Without this the agent
+   * can only report "403" and stop; with it, it can say which scopes the key is
+   * missing and what to do about it.
+   */
+  server.registerTool(
+    "whoami",
+    {
+      title: "What this key can do",
+      description:
+        "Which organization this API key belongs to, which scopes it holds, whether it is live or test mode, " +
+        "and the plan. Call this first whenever a tool fails with a permission or plan error — it says exactly " +
+        "which scope is missing.",
+      inputSchema: {},
+      annotations: READ_ONLY,
+    },
+    async () => {
+      const res = await callApi(ctx(), "GET", "/v1/me");
+      if (res.status !== 200) return errorResult(describeFailure(res));
+      const body = res.body as { key?: { scopes?: Record<string, string[]> } } | null;
+      const held = body?.key?.scopes ?? {};
+      const missing = Object.entries(AGENT_SCOPES)
+        .flatMap(([resource, actions]) => actions.filter((a) => !(held[resource] ?? []).includes(a)).map((a) => `${resource}:${a}`));
+      return jsonResult({
+        ...(body as Record<string, unknown>),
+        ...(missing.length > 0
+          ? {
+              missing_for_full_mcp_use: missing,
+              how_to_fix:
+                "Mint a new secret key in Settings → API keys with the scopes above. " +
+                "See https://chatform.in/docs/mcp#get-a-key",
+            }
+          : {}),
+      });
+    },
+  );
+
+  /**
+   * A file-upload answer is uninterpretable without this.
+   *
+   * `get_response` returns a `fileId` for an upload, which on its own tells an
+   * agent nothing — not the filename, not the type, and no way to look at it. This
+   * resolves one to metadata plus a short-lived signed URL that needs no key.
+   */
+  server.registerTool(
+    "get_file",
+    {
+      title: "Resolve an uploaded file",
+      description:
+        "Resolve the fileId from a file-upload answer to its filename, type, size and a short-lived download " +
+        "URL. The URL needs no API key and expires within minutes, so read this again rather than reusing one.",
+      inputSchema: { file_id: z.string().describe("The fileId from a file-upload answer.") },
+      annotations: READ_ONLY,
+    },
+    async ({ file_id }) => {
+      const res = await callApi(ctx(), "GET", `/v1/files/${encodeURIComponent(file_id)}`);
+      if (res.status !== 200) return errorResult(describeFailure(res));
+      return jsonResult(res.body);
+    },
+  );
+
+  server.registerTool(
+    "list_webhook_deliveries",
+    {
+      title: "Why is a webhook quiet",
+      description:
+        "The 50 most recent delivery attempts for one webhook — event type, attempt number, response status, " +
+        "the last error and when it will retry. This is the tool for 'my webhook is not firing'.",
+      inputSchema: { webhook_id: z.string().describe("The webhook id.") },
+      annotations: READ_ONLY,
+    },
+    async ({ webhook_id }) => {
+      const res = await callApi(ctx(), "GET", `/v1/webhooks/${encodeURIComponent(webhook_id)}/deliveries`);
+      if (res.status !== 200) return errorResult(describeFailure(res));
+      return jsonResult(res.body);
+    },
+  );
+
+  /**
+   * Needed to use `create_webhook` correctly.
+   *
+   * `create_webhook` takes event names and rejects unknown ones with a 422. Without
+   * a way to read the catalogue the agent has to guess, so this is less a feature
+   * than the missing half of a tool that already exists.
+   */
+  server.registerTool(
+    "list_events",
+    {
+      title: "List webhook event types",
+      description:
+        "Every event name a webhook can subscribe to, with the older aliases that still match. Read this " +
+        "before calling create_webhook — an unknown event name is rejected.",
+      inputSchema: {},
+      annotations: READ_ONLY,
+    },
+    async () => {
+      const res = await callApi(ctx(), "GET", "/v1/events");
       if (res.status !== 200) return errorResult(describeFailure(res));
       return jsonResult(res.body);
     },

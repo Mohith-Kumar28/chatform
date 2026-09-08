@@ -212,6 +212,36 @@ export function registerWriteTools(server: McpServer, ctx: () => McpCtx): void {
     },
   );
 
+  /**
+   * The natural next move after `list_webhook_deliveries` shows a failure.
+   *
+   * Not destructive — it re-sends an event that already happened, so the worst case
+   * is a duplicate the receiver should already be deduplicating on delivery id.
+   */
+  server.registerTool(
+    "replay_webhook_delivery",
+    {
+      title: "Replay a failed delivery",
+      description:
+        "Re-send one webhook delivery that failed. Find the delivery id with list_webhook_deliveries. The " +
+        "receiver sees a fresh attempt of the same event, so it should deduplicate on the delivery id.",
+      inputSchema: {
+        webhook_id: z.string().describe("The webhook id."),
+        delivery_id: z.string().describe("The delivery id from list_webhook_deliveries."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ webhook_id, delivery_id }) => {
+      const res = await callApi(
+        ctx(),
+        "POST",
+        `/v1/webhooks/${encodeURIComponent(webhook_id)}/deliveries/${encodeURIComponent(delivery_id)}/replay`,
+      );
+      if (res.status >= 400) return errorResult(describeFailure(res));
+      return jsonResult(res.body);
+    },
+  );
+
   server.registerTool(
     "create_webhook",
     {

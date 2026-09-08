@@ -220,17 +220,22 @@ describe("tools/list", () => {
         "create_form",
         "create_webhook",
         "export_responses",
+        "get_file",
         "get_form",
         "get_form_analytics",
         "get_response",
         "list_blocks",
+        "list_events",
         "list_forms",
         "list_responses",
+        "list_webhook_deliveries",
         "list_webhooks",
         "publish_form",
+        "replay_webhook_delivery",
         "search_responses",
         "submit_response",
         "update_form",
+        "whoami",
       ].sort(),
     );
     expect(names.length).toBeLessThanOrEqual(TOOL_BUDGET);
@@ -308,6 +313,34 @@ describe("curated tools", () => {
     if (published.isError) {
       expect(published.text).toContain("never been published");
     }
+  });
+
+  /**
+   * The self-diagnosis path. A key minted with the defaults cannot publish, read
+   * analytics or export, and this is how an agent finds that out and says something
+   * useful instead of relaying a bare 403.
+   */
+  it("tells an under-scoped key exactly what it is missing", async () => {
+    const narrow = (await seedKey(t, "mcpwhoami", { scopes: { form: ["read"] } })).raw;
+    const out = await callTool("whoami", {}, narrow);
+    expect(out.isError).toBe(false);
+    const parsed = JSON.parse(out.text);
+    expect(parsed.key.type).toBe("sk_live");
+    expect(parsed.missing_for_full_mcp_use).toContain("form:write");
+    expect(parsed.missing_for_full_mcp_use).toContain("analytics:read");
+    expect(parsed.how_to_fix).toContain("/docs/mcp");
+  });
+
+  it("says nothing is missing for a fully scoped key", async () => {
+    const out = await callTool("whoami", {});
+    const parsed = JSON.parse(out.text);
+    expect(parsed.missing_for_full_mcp_use).toBeUndefined();
+  });
+
+  it("lists the webhook events create_webhook will accept", async () => {
+    const out = await callTool("list_events", {});
+    expect(out.isError).toBe(false);
+    expect(out.text).toContain("response.completed");
   });
 
   it("says out loud that response search is a substring match", async () => {
