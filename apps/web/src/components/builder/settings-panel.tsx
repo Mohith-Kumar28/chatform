@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
@@ -21,7 +20,8 @@ import type { FormDoc } from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
 import { LinkSettings } from "./link-settings";
 import { FollowUpPanel } from "./followup-panel";
-import { showShortcuts } from "./use-builder-shortcuts";
+import { ShortcutsList } from "@/components/ui/shortcuts-dialog";
+import { useBuilderStore } from "@/stores/builder-store";
 
 interface SettingsPanelProps {
   settings: FormDoc["settings"];
@@ -45,6 +45,7 @@ const SECTIONS = [
   { id: "link", label: "Link & social" },
   { id: "completion", label: "On completion" },
   { id: "followup", label: "Follow-ups" },
+  { id: "shortcuts", label: "Keyboard shortcuts" },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -75,6 +76,7 @@ export function SettingsPanel({
     ? (requested as SectionId)
     : "general";
   const patch = (p: Partial<FormDoc["settings"]>) => onChange({ ...settings, ...p });
+  const shortcuts = useBuilderStore((s) => s.shortcuts);
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-8">
@@ -97,34 +99,6 @@ export function SettingsPanel({
               {s.label}
             </Link>
           ))}
-
-          {/*
-            This slot used to hold a signpost to the Agent tab.
-            It was left when the interviewer settings moved out of Settings, so
-            that nobody would hunt for them — but Agent has been a top-level tab
-            in the header ever since, one click away and permanently on screen.
-            A link inside one tab's sidebar pointing at a sibling tab is not a
-            signpost, it is a second front door, and it made Settings look like
-            it still owned something it does not.
-
-            The slot is better spent on the shortcut sheet, which had exactly
-            one way in: knowing to press `?`, or finding it inside the command
-            palette you already had to know a shortcut to open. Discovering
-            keyboard shortcuts should not itself require a keyboard shortcut.
-
-            Styled as a row like every other item rather than a dashed box. It
-            is one more thing you can open from this list, and the dashed border
-            made it read as a placeholder — an empty slot waiting for content
-            rather than the control it is.
-          */}
-          <button
-            type="button"
-            onClick={showShortcuts}
-            className="text-muted-foreground hover:bg-accent/50 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors"
-          >
-            <span className="min-w-0 flex-1">Keyboard shortcuts</span>
-            <Kbd>?</Kbd>
-          </button>
         </nav>
 
         {/* content */}
@@ -386,6 +360,15 @@ export function SettingsPanel({
               </SettingRow>
               </LockedControl>
               </SettingGroup>
+            </SettingSection>
+          )}
+
+          {section === "shortcuts" && (
+            <SettingSection title="Keyboard shortcuts">
+              <p className="text-muted-foreground -mt-1 text-sm">
+                These work whenever you are not typing in a field.
+              </p>
+              <ShortcutsList shortcuts={shortcuts} />
             </SettingSection>
           )}
 

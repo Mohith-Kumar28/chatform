@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { Shortcut } from "@/lib/shortcuts";
 import { produce } from "immer";
 import { repairFlow, type Block, type FormDoc, type Ending, type LogicRuleInput } from "@repo/form-schema";
 
@@ -44,6 +45,15 @@ export interface BuilderState {
    */
   pickerIndex: number | null;
   designOpen: boolean;
+  /**
+   * The keyboard shortcut registry, published by the shell that owns it.
+   *
+   * Settings renders the list as one of its sections, and the registry is built
+   * inside `useBuilderShortcuts` together with the handlers it binds — calling
+   * that hook a second time to read it would register every binding twice. So
+   * the shell, which already calls it once, puts the result here.
+   */
+  shortcuts: Shortcut[];
 
   saveState: SaveState;
   saveError: string | null;
@@ -82,6 +92,7 @@ export interface BuilderState {
   /** The draft is now what is live. Called on a successful publish. */
   markPublished: () => void;
   setConflict: (theirs: FormDoc | null) => void;
+  setShortcuts: (shortcuts: Shortcut[]) => void;
   /** Discard local edits and adopt the server's document. */
   acceptTheirs: () => void;
 
@@ -148,6 +159,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   selectedEndingRef: null,
   pickerIndex: null,
   designOpen: false,
+  shortcuts: [],
   saveState: "saved",
   saveError: null,
   lastSavedAt: null,
@@ -263,6 +275,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     set((s) => ({ pickerIndex: index ?? s.doc?.blocks.length ?? 0, designOpen: false })),
   closePicker: () => set({ pickerIndex: null }),
   setDesignOpen: (open) => set({ designOpen: open }),
+
+  setShortcuts: (shortcuts) => set({ shortcuts }),
 
   addBlock: (block, atIndex, rule) => {
     get().edit((d) => {

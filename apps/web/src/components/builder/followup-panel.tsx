@@ -78,8 +78,33 @@ export function FollowUpPanel({
   const hasAddress = Boolean((justSaved ?? stored)?.trim());
 
   const patch = (p: Partial<FollowUp>) => onChange({ ...settings, followUp: { ...followUp, ...p } });
-  const setStep = (i: number, p: Partial<Step>) =>
-    patch({ steps: followUp.steps.map((s, j) => (i === j ? { ...s, ...p } : s)) });
+
+  /**
+   * Reminders are kept in the order they go out.
+   *
+   * Position is not cosmetic here — the scheduler numbers each step by its
+   * index, so "step 2" means the second message a respondent receives. Letting
+   * a one-week reminder sit above a two-hour one would make the list disagree
+   * with what actually happens, and the author would be reading the sequence
+   * backwards while editing it.
+   *
+   * `sort` is stable, so two steps sharing a delay keep the order they were
+   * added in rather than swapping under the cursor.
+   */
+  const sortByDelay = (steps: Step[]) => [...steps].sort((a, b) => a.delayHours - b.delayHours);
+
+  function setStep(i: number, p: Partial<Step>) {
+    const next = followUp.steps.map((s, j) => (i === j ? { ...s, ...p } : s));
+    if (p.delayHours === undefined) return patch({ steps: next });
+
+    // Re-sorting moves the row being edited, so the open message panel has to
+    // move with it — otherwise changing a delay silently expands a different
+    // reminder.
+    const edited = next[i]!;
+    const sorted = sortByDelay(next);
+    if (expanded === i) setExpanded(sorted.indexOf(edited));
+    patch({ steps: sorted });
+  }
 
   /**
    * Turning it on, with the address requirement in the way.
@@ -95,7 +120,9 @@ export function FollowUpPanel({
   function enable() {
     patch({
       enabled: true,
-      steps: followUp.steps.map((s, i) => (s.bodyMd ? s : { ...s, bodyMd: DEFAULT_BODIES[i] ?? "" })),
+      steps: sortByDelay(followUp.steps).map((s, i) =>
+        s.bodyMd ? s : { ...s, bodyMd: DEFAULT_BODIES[i] ?? "" },
+      ),
     });
   }
 
@@ -215,7 +242,7 @@ export function FollowUpPanel({
               <button
                 type="button"
                 className="text-muted-foreground hover:text-foreground w-full px-3 py-2.5 text-left text-sm"
-                onClick={() => patch({ steps: [...followUp.steps, THIRD_STEP] })}
+                onClick={() => patch({ steps: sortByDelay([...followUp.steps, THIRD_STEP]) })}
               >
                 + Add another
               </button>

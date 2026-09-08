@@ -13,20 +13,49 @@ import type { Shortcut } from "@/lib/shortcuts";
  * wrong within a month. Groups come from the registry's own order too, so a new
  * heading needs no edit here.
  */
+/**
+ * Just the list, so the same rendering serves the dialog and the settings pane.
+ *
+ * The builder shows these as a settings section rather than a sheet — a list
+ * you read while working is not a thing to interrupt yourself with — and the
+ * dashboard still opens the dialog. One component, so the two cannot drift.
+ */
+export function ShortcutsList({ shortcuts }: { shortcuts: Shortcut[] }) {
+  const groups = [...new Set(shortcuts.map((s) => s.group))];
+  return (
+    <div className="space-y-4">
+      {groups.map((group) => {
+        const items = shortcuts.filter((s) => s.group === group);
+        if (items.length === 0) return null;
+        return (
+          <div key={group}>
+            <p className="text-muted-foreground text-micro mb-1.5 font-medium tracking-wide uppercase">
+              {group}
+            </p>
+            <ul className="space-y-0.5">
+              {items.map((s) => (
+                <li key={s.keys + s.label} className="flex items-center justify-between gap-4 py-1">
+                  <span className="text-sm">{s.label}</span>
+                  <Kbd>{s.keys}</Kbd>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ShortcutsDialog({
   open,
   onOpenChange,
   shortcuts,
-  footnote,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   shortcuts: Shortcut[];
-  /** The one thing worth saying about what is deliberately *not* bound. */
-  footnote?: string;
 }) {
-  const groups = [...new Set(shortcuts.map((s) => s.group))];
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -37,29 +66,9 @@ export function ShortcutsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[60vh] space-y-4 overflow-y-auto">
-          {groups.map((group) => {
-            const items = shortcuts.filter((s) => s.group === group);
-            if (items.length === 0) return null;
-            return (
-              <div key={group}>
-                <p className="text-muted-foreground text-micro mb-1.5 font-medium tracking-wide uppercase">
-                  {group}
-                </p>
-                <ul className="space-y-0.5">
-                  {items.map((s) => (
-                    <li key={s.keys + s.label} className="flex items-center justify-between gap-4 py-1">
-                      <span className="text-sm">{s.label}</span>
-                      <Kbd>{s.keys}</Kbd>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
+        <div className="max-h-[60vh] overflow-y-auto">
+          <ShortcutsList shortcuts={shortcuts} />
         </div>
-
-        {footnote && <p className="text-muted-foreground text-xs">{footnote}</p>}
       </DialogContent>
     </Dialog>
   );

@@ -128,6 +128,9 @@ export function BuilderShell({
   );
 
   const { shortcuts, helpOpen, setHelpOpen } = useBuilderShortcuts(shortcutActions);
+  // Published for the Settings tab, which renders the same list as a section.
+  const setShortcuts = useBuilderStore((s) => s.setShortcuts);
+  useEffect(() => setShortcuts(shortcuts), [shortcuts, setShortcuts]);
 
   async function onPublish() {
     setPublishing(true);
@@ -224,7 +227,6 @@ export function BuilderShell({
           open={helpOpen}
           onOpenChange={setHelpOpen}
           shortcuts={shortcuts}
-          footnote="Deleting a question has no shortcut on purpose — it takes its wording, its options and every rule that mentions it with it."
         />
 
         {/*
