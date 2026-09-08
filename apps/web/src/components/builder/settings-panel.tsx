@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Bot } from "lucide-react";
+import { Keyboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
@@ -20,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { FormDoc } from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
 import { LinkSettings } from "./link-settings";
+import { showShortcuts } from "./use-builder-shortcuts";
 
 interface SettingsPanelProps {
   settings: FormDoc["settings"];
@@ -95,15 +97,29 @@ export function SettingsPanel({
             </Link>
           ))}
 
-          {/* The interviewer settings used to live here as a cramped section.
-              They have their own tab now — leave a signpost so nobody hunts. */}
-          <Link
-            href={`/forms/${params.id}/agent`}
-            className="text-muted-foreground hover:bg-accent/50 mt-2 flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-sm transition-colors"
+          {/*
+            This slot used to hold a signpost to the Agent tab.
+            It was left when the interviewer settings moved out of Settings, so
+            that nobody would hunt for them — but Agent has been a top-level tab
+            in the header ever since, one click away and permanently on screen.
+            A link inside one tab's sidebar pointing at a sibling tab is not a
+            signpost, it is a second front door, and it made Settings look like
+            it still owned something it does not.
+
+            The slot is better spent on the shortcut sheet, which had exactly
+            one way in: knowing to press `?`, or finding it inside the command
+            palette you already had to know a shortcut to open. Discovering
+            keyboard shortcuts should not itself require a keyboard shortcut.
+          */}
+          <button
+            type="button"
+            onClick={showShortcuts}
+            className="text-muted-foreground hover:bg-accent/50 mt-2 flex w-full items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-left text-sm transition-colors"
           >
-            <Bot className="size-3.5" />
-            AI interviewer →
-          </Link>
+            <Keyboard className="size-3.5 shrink-0" />
+            <span className="min-w-0 flex-1">Keyboard shortcuts</span>
+            <Kbd>?</Kbd>
+          </button>
         </nav>
 
         {/* content */}
