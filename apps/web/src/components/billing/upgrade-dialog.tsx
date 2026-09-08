@@ -210,10 +210,22 @@ export function UpgradeDialog() {
  * behaviour only for a key that is in neither shape.
  */
 function meterNoun(metric: string | null): string {
-  if (!metric) return "allowance";
-  if (metric in LIMITS) return inlineLabel(limitMeta(metric as LimitKey).label);
-  const key = LIMIT_KEYS.find((k) => limitMeta(k).metric === metric);
-  return key ? inlineLabel(limitMeta(key).label) : metric.replaceAll("_", " ");
+  const key = limitKeyFor(metric);
+  if (key) return inlineLabel(limitMeta(key).label);
+  return metric ? metric.replaceAll("_", " ") : "allowance";
+}
+
+/**
+ * The `LimitKey` behind whatever the gate called its metric, or `null`.
+ *
+ * Split out of `meterNoun` because the headline needs the key itself, not just
+ * its label — a monthly allowance and a standing one want different sentences,
+ * and only the key knows which this is.
+ */
+function limitKeyFor(metric: string | null): LimitKey | null {
+  if (!metric) return null;
+  if (metric in LIMITS) return metric as LimitKey;
+  return LIMIT_KEYS.find((k) => limitMeta(k).metric === metric) ?? null;
 }
 
 function headlineFor(
@@ -226,7 +238,23 @@ function headlineFor(
     return `${noun} are waiting for you.`;
   }
   if (code === "limit_reached" && gate.limit !== null) {
-    return `You've used this month's ${meterNoun(gate.metric)}.`;
+    /**
+     * "This month's" only for a limit that actually resets.
+     *
+     * `kind: "gauge"` limits — workspaces, forms, seats, storage — are standing
+     * allowances: nothing is returned to you in a fortnight, and deleting is
+     * the only way back under. Telling somebody they have "used this month's
+     * workspaces" invites them to wait for a reset that never comes, which is
+     * the one thing a paywall must not do. The gauges were always wrong here;
+     * the workspace gate is what made it visible, because until workspaces were
+     * a real thing this refusal came from a Better Auth hook that never reached
+     * this dialog.
+     */
+    const key = limitKeyFor(gate.metric);
+    const standing = key !== null && limitMeta(key).kind !== "monthly";
+    return standing
+      ? `You've used all ${gate.limit} ${meterNoun(gate.metric)}.`
+      : `You've used this month's ${meterNoun(gate.metric)}.`;
   }
   if (code === "ceiling_reached") return "This form has hit its monthly response ceiling.";
   if (code === "seat_limit") return "Bring your team along.";
