@@ -52,6 +52,7 @@ import {
   SelectValue
 } from "@/components/ui/select"
 import { organizationPlugin } from "@/lib/auth/organization-plugin"
+import { ASSIGNABLE_ROLES, DEFAULT_INVITE_ROLE } from "@/lib/roles"
 import { cn } from "@/lib/utils"
 import {
   getAuthAdditionalFieldValidators,
@@ -65,8 +66,17 @@ export type InviteMemberDialogProps = {
   onOpenChange: (open: boolean) => void
 }
 
+/**
+ * The role an invitation lands on before anybody touches the picker.
+ *
+ * Was "member if it is offered, otherwise whatever happens to be last" — a
+ * heuristic that only looked sane while the list was the library's own
+ * owner/admin/member. Against this product's list it would have defaulted every
+ * invitation to the last entry, which is `viewer`: the most restricted role in
+ * the product, silently, for the common case of adding a teammate.
+ */
 const pickDefaultRole = (keys: string[]) =>
-  keys.includes("member") ? "member" : (keys.at(-1) ?? "")
+  keys.includes(DEFAULT_INVITE_ROLE) ? DEFAULT_INVITE_ROLE : (keys.at(0) ?? "")
 
 /**
  * Render a dialog for inviting a member to the organization.
@@ -105,10 +115,29 @@ export function InviteMemberDialog({
       dynamicAccessControl?.enabled === true &&
       canReadRoles.data?.success === true
   })
-  const assignableRoles = useMemo(
-    () => mergeOrganizationRoleLabels(roles, dynamicRoles.data),
-    [dynamicRoles.data, roles]
-  )
+  /**
+   * Which roles an invitation may hand out — not which roles exist.
+   *
+   * The plugin's `roles` map is labels for every role a row can hold, so it
+   * necessarily includes `owner` and the legacy `member`. Offered here, the
+   * first is a privilege escalation dressed as a dropdown item (an organization
+   * has one owner and transferring it is a different operation) and the second
+   * is a second way to spell `editor`. `ASSIGNABLE_ROLES` is the list that
+   * answers this question, and says why.
+   *
+   * Roles created through dynamic access control are kept: those are the
+   * organization's own, and nothing here knows better than it does.
+   */
+  const assignableRoles = useMemo(() => {
+    const all = mergeOrganizationRoleLabels(roles, dynamicRoles.data)
+    const offerable = new Set<string>([
+      ...ASSIGNABLE_ROLES.map((r) => r.value),
+      ...(dynamicRoles.data ?? []).map((r) => r.role)
+    ])
+    return Object.fromEntries(
+      Object.entries(all).filter(([key]) => offerable.has(key))
+    )
+  }, [dynamicRoles.data, roles])
 
   const activeOrganizationId = activeOrganization?.id
   const previousOrganizationId = useRef(activeOrganizationId)

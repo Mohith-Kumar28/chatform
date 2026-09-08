@@ -8,6 +8,7 @@ import { Briefcase } from "lucide-react"
 
 import { OrganizationsSettings } from "@/components/auth/organization/organizations-settings"
 import { uploadAuthImage } from "@/lib/auth/upload-image"
+import { ROLE_LABELS } from "@/lib/roles"
 
 /**
  * "Workspace", everywhere a person can read it.
@@ -76,6 +77,35 @@ export const organizationPlugin = createAuthPlugin(
        * is a broken session rather than a large one.
        */
       logo: { upload: uploadAuthImage, ...options.logo },
+      /**
+       * This product's role vocabulary, not the library's.
+       *
+       * Unset, the plugin labels roles from its own hardcoded trio — Owner,
+       * Admin, Member — which never matched what `permissions.ts` enforces. The
+       * visible cost was in the members table: `editor` and `viewer`, the two
+       * roles most people are meant to hold, had no label and rendered as raw
+       * lowercase column values.
+       *
+       * This map is labels, not permission. It covers every role a row may
+       * hold, including the two that exist but may not be handed out — see
+       * `ROLE_LABELS` — and which of them an invitation may *assign* is a
+       * separate question, answered by `ASSIGNABLE_ROLES` at each picker.
+       */
+      roles: options.roles ?? ROLE_LABELS,
+      /**
+       * A role is one choice, not a set.
+       *
+       * The library defaults this to true, so the picker was a checkbox menu
+       * and an invitation could go out as "Admin, Member" — two roles that are
+       * not alternatives, since `member` *is* `editor` and admin already
+       * contains everything editor can do. Better Auth stores the pair
+       * comma-separated and `roleAllows` unions their permissions, so it
+       * resolved to plain admin: the row said something self-contradictory and
+       * the product did the sensible thing with it, which is the worst place
+       * for a control to be — nothing visibly breaks and the stored data is
+       * nonsense.
+       */
+      allowMultipleRoles: options.allowMultipleRoles ?? false,
       /**
        * The segments the settings rail actually uses.
        *

@@ -5,6 +5,7 @@ import {
   hasMemberRole,
   memberRoleLabels,
   mergeOrganizationRoleLabels,
+  parseMemberRoles,
   type OrganizationAuthClient,
   type OrganizationRolesAuthClient,
   type OrganizationTeamsAuthClient
@@ -23,6 +24,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { organizationPlugin } from "@/lib/auth/organization-plugin"
+import { ASSIGNABLE_ROLES } from "@/lib/roles"
 import { UserView } from "../user/user-view"
 import { EditMemberRolesDialog } from "./edit-member-roles-dialog"
 import { LeaveOrganizationDialog } from "./leave-organization-dialog"
@@ -98,8 +100,27 @@ export function OrganizationMemberRow({
   const roleLabel = memberRoleLabels(member.role, mergedRoles).join(", ")
   const teamNames = memberTeams.data?.map((team) => team.name).join(", ")
 
+  /**
+   * The options the role editor offers for THIS member.
+   *
+   * Two rules, and they pull in opposite directions. `ASSIGNABLE_ROLES` is what
+   * may be handed out, which excludes `owner` and the legacy `member`. But a
+   * single-select whose options exclude the value it is currently showing
+   * renders empty — so the roles this member already holds are always kept,
+   * whatever they are. An owner therefore reads "Owner" rather than a blank
+   * box, and a row still on the legacy `member` reads "Editor", which is what
+   * it has always meant.
+   *
+   * The `creatorRole` rule is unchanged and still outermost: only an owner may
+   * see the owner role at all.
+   */
+  const held = new Set(parseMemberRoles(member.role))
+  const offerable = new Set<string>([
+    ...ASSIGNABLE_ROLES.map((r) => r.value),
+    ...(dynamicRoles.data ?? []).map((r) => r.role)
+  ])
   const assignableRoles = Object.entries(mergedRoles).filter(
-    ([key]) => isOwner || key !== creatorRole
+    ([key]) => (isOwner || key !== creatorRole) && (offerable.has(key) || held.has(key))
   )
 
   const isCurrentUser = session?.user.id === member.userId

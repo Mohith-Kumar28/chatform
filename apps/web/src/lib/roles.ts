@@ -67,6 +67,29 @@ export const ASSIGNABLE_ROLES = [
   { value: "viewer", label: "Viewer", blurb: "Read completed responses and basic analytics." },
 ] as const;
 
+/**
+ * Every role that can appear in the database, spelled for a reader.
+ *
+ * A superset of `ASSIGNABLE_ROLES`, and the distinction is the point: `owner`
+ * cannot be handed out by an invitation but every organization has one, and
+ * `member` cannot be chosen but is still stored for anyone invited before the
+ * role list settled. Both have to be *readable* in the members table even
+ * though neither may be *picked*, and a map that only covered the assignable
+ * three would render them as raw lowercase column values.
+ *
+ * `member` deliberately shares `editor`'s label rather than getting one of its
+ * own, because it is not a different level of access — it is the same one under
+ * Better Auth's old name, which is exactly what `permissions.ts` encodes with
+ * `export const member = editor`.
+ */
+export const ROLE_LABELS: Record<string, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  editor: "Editor",
+  viewer: "Viewer",
+  member: "Editor",
+}
+
 /** One of the roles an invitation may assign. */
 export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number]["value"];
 

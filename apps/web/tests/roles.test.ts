@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { primaryRole, roleLabel, roleTitle, roleWithArticle } from "@/lib/roles";
+import {
+  ASSIGNABLE_ROLES,
+  DEFAULT_INVITE_ROLE,
+  ROLE_LABELS,
+  primaryRole,
+  roleLabel,
+  roleTitle,
+  roleWithArticle,
+} from "@/lib/roles";
 
 /**
  * How a role is spelled to the person who holds it.
@@ -55,5 +63,56 @@ describe("role vocabulary", () => {
     expect(roleWithArticle("admin")).toBe("an admin");
     expect(roleWithArticle("editor")).toBe("an editor");
     expect(roleWithArticle("viewer")).toBe("a viewer");
+  });
+});
+
+/**
+ * Which roles may be handed out, and which may only be read.
+ *
+ * The two lists are different and the difference is load-bearing. Better Auth
+ * UI's organization plugin defaults to its own trio — owner, admin, member —
+ * and until that default was overridden the invite dialog offered `owner` (an
+ * organization has one; transferring it is not an invitation) and `member`
+ * (the legacy spelling of `editor`) while omitting `editor` and `viewer`
+ * entirely — the two roles people are actually invited as.
+ */
+describe("who may be invited", () => {
+  const assignable = ASSIGNABLE_ROLES.map((r) => r.value);
+
+  it("never offers owner or the legacy member", () => {
+    expect(assignable).not.toContain("owner");
+    expect(assignable).not.toContain("member");
+  });
+
+  it("offers the three roles the API actually enforces", () => {
+    // `apps/api/src/lib/permissions.ts` is the enforcement boundary and lists
+    // exactly these as assignable.
+    expect([...assignable].sort()).toEqual(["admin", "editor", "viewer"]);
+  });
+
+  it("starts on editor, not on whichever entry happens to be last", () => {
+    // The dialog's own default was "last key in the map", which against this
+    // list is `viewer` — silently inviting every teammate as the most
+    // restricted role in the product.
+    expect(DEFAULT_INVITE_ROLE).toBe("editor");
+    expect(assignable).toContain(DEFAULT_INVITE_ROLE);
+  });
+
+  it("can label every role a row may hold, including the unassignable ones", () => {
+    // A role with no label renders as its raw lowercase column value. Every
+    // organization has an owner, so that gap was visible on day one.
+    for (const role of ["owner", "admin", "editor", "viewer", "member"]) {
+      expect(ROLE_LABELS[role], role).toBeTruthy();
+    }
+    expect(ROLE_LABELS.owner).toBe("Owner");
+    // `member` is not a different level of access — it is `editor` under Better
+    // Auth's old name, which is what `permissions.ts` encodes.
+    expect(ROLE_LABELS.member).toBe(ROLE_LABELS.editor);
+  });
+
+  it("labels every assignable role consistently with its own list", () => {
+    for (const role of ASSIGNABLE_ROLES) {
+      expect(ROLE_LABELS[role.value], role.value).toBe(role.label);
+    }
   });
 });
