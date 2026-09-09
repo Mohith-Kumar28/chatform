@@ -6,9 +6,14 @@
  * it means no rented number, no Indian DLT registration, and no per-message
  * bill of ours for a step most respondents only ever do once.
  *
- * The cost is that this is a browser flow with a reCAPTCHA in it, so it cannot
- * serve headless `/v1` callers. They keep the server-side OTP in
- * `respondent-auth.ts`, and this module simply does not exist for them.
+ * It carries both phone proofs in the product: who is answering, at the
+ * sign-in gate, and whether the number given as an *answer* is theirs, for a
+ * `verify` phone question. There is no other SMS path.
+ *
+ * The cost is that this is a browser flow with a reCAPTCHA in it. A headless
+ * `/v1` caller runs the same flow in their own page and posts the token to
+ * `auth/phone/token` or `verify/phone-token`; nothing here can be driven from
+ * a server.
  */
 
 import type { Auth, ConfirmationResult } from "firebase/auth";
@@ -22,10 +27,10 @@ const config = {
 /**
  * Whether this deployment can run the Firebase flow at all.
  *
- * Read at module scope so the card knows which phone UI to render on its first
- * paint, with nothing to await. When it is false the card falls back to the
- * server OTP path, which is what keeps local development working without
- * anyone having to create a Firebase project to run the form.
+ * Read at module scope so the card knows what to render on its first paint,
+ * with nothing to await. When it is false there is nothing to fall back to —
+ * no number can be proved — so the card says so instead of drawing a form that
+ * cannot send anything.
  */
 export const firebasePhoneConfigured = Boolean(config.apiKey && config.authDomain && config.projectId);
 
@@ -61,7 +66,7 @@ function getFirebaseAuth(): Promise<Auth> {
  *
  * Learned the hard way: with phone auth enabled but the SMS region policy left
  * at its default empty allow-list, every send failed as a generic "couldn't
- * send that code" and looked exactly like the Twilio outage it had replaced.
+ * send that code", which is indistinguishable from a carrier having a bad day.
  */
 const SETUP_ERRORS = new Set([
   "auth/billing-not-enabled",

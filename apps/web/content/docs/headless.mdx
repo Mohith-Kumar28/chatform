@@ -136,13 +136,17 @@ The stream is the genuinely concurrent reader.
 ## Verified answers
 
 An `email` or `phone` question with `verify` on does not record the answer when
-it is given. A six-digit code goes to the address or number, and the session
-emits `verify_required` — `{ ref, channel, sentTo, sentAt }` — with the same
-thing on `status.pendingVerification` for callers that poll rather than stream.
+it is given. The session emits `verify_required` — `{ ref, channel, sentTo,
+sentAt }` — and carries the same thing on the turn result and on
+`pendingVerification` in the session state, for callers that poll rather than
+stream. `channel` decides what you do next, because the two are proved in
+different places.
 
-Send the code back as an ordinary message. While a challenge is outstanding the
-session reads what arrives as the code and nothing else, so there is no separate
-route and no token to carry:
+### `channel: "email"` — a code we sent
+
+The code is already on its way to `sentTo`. Send it back as an ordinary message:
+while a challenge is outstanding the session reads what arrives as the code and
+nothing else, so there is no separate route and no token to carry.
 
 ```bash
 curl -X POST https://api.chatform.in/v1/sessions/$SESSION_ID/messages \
@@ -151,17 +155,37 @@ curl -X POST https://api.chatform.in/v1/sessions/$SESSION_ID/messages \
   -d '{"type":"text","text":"483920"}'
 ```
 
+### `channel: "sms"` — a number proved by Firebase
+
+Nothing has been sent. Every SMS in this product is Firebase's, exactly as it is
+for phone sign-in: run `signInWithPhoneNumber` in your own page against the
+number in `sentTo`, let Firebase send and check the code, and post the ID token
+it gives you.
+
+```bash
+curl -X POST https://api.chatform.in/v1/sessions/$SESSION_ID/verify/phone-token \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"idToken":"<firebase id token>"}'
+```
+
+The token has to prove the number they answered with. One for any other number
+is refused — it is a valid token that says nothing about this answer.
+`resend_code` does not apply here; ask Firebase for another SMS instead.
+
+### Either way
+
 A wrong, expired or over-tried code comes back as a `validation_error` with code
-`invalid_code`, and the challenge stays open: try again, `resend_code`, or
-`change_answer` to drop it and ask the question afresh. On success the answer is
-recorded exactly as an unverified one would have been, `verify_settled` fires,
-and the conversation moves on.
+`invalid_code`, and the step stays open: try again, or `change_answer` to drop it
+and ask the question afresh. On success the answer is recorded exactly as an
+unverified one would have been, `verify_settled` fires, and the conversation
+moves on.
 
 <Callout>
 A respondent who already signed in is not asked twice. If the gate verified them
 with Google and they type that same address, or verified their number and they
 type that same number, the answer is recorded straight away — a different value
-is a different claim, and gets its own code.
+is a different claim, and is proved on its own.
 </Callout>
 
 ## Rendering the questions

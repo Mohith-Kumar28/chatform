@@ -10,29 +10,21 @@ import { enqueueMail } from "./mail.js";
  * 1. A respondent is not a user. Verifying an identity must not create a
  *    Better Auth account, join an organization, or set a cookie. The result is
  *    an attestation the DO stores on the session.
- * 2. It has to work headlessly. The `/v1` API lets a customer drive the whole
- *    conversation from their own server, so no method may be the *only* way in
- *    while depending on our page being open. Google is verified from an ID
- *    token the caller supplies; phone has two entries that meet at the same
- *    identity shape:
+ * 2. Every proof arrives as something the caller hands us, never as something
+ *    we have to send ourselves. Google is an ID token; a phone number is a
+ *    Firebase ID token minted by a phone sign-in the browser drove.
  *
- *      - `verifyFirebasePhoneToken` — what the hosted form uses. Firebase
- *        sends and checks the SMS, so there is no number to rent and no Indian
- *        DLT registration to sit through, which is the whole reason it is here.
- *        It is a browser SDK flow with a reCAPTCHA step, so it cannot be the
- *        headless path.
- *      - `startPhoneChallenge` / `verifyPhoneChallenge` — our own OTP over
- *        HTTP, which is. It needs an SMS provider configured; without one it
- *        fails closed.
+ *    Firebase carries the SMS — it sends the message and checks the code — so
+ *    there is no number to rent, no Indian DLT registration to sit through and
+ *    no per-message bill of ours. `verifyFirebasePhoneToken` is the whole
+ *    server side of it, and it is the only way a phone number is ever proved
+ *    here: at the sign-in gate, and for a `verify` phone question alike. A
+ *    `/v1` caller drives the same browser flow in their own page and posts the
+ *    token they get back.
  *
- *    Both mint `provider: "phone"` with the E.164 number as the subject, so a
- *    respondent verified either way is the same person to `onePerIdentity`.
- *
- * The OTP half of that also serves a second, smaller question. A `verify` email
- * or phone *question* — see `blocks.ts` — proves one answer rather than a whole
- * respondent, and wants exactly the same code, caps and expiry. So the codes are
- * one implementation scoped by what they prove (`startOtpChallenge`), and the
- * sign-in pair below is a thin wrapper over it that also mints an identity.
+ * Email is the one thing Firebase does not carry for us, so the codes at the
+ * bottom of this file are ours and are email-only. They prove one `verify`
+ * answer — see `blocks.ts` — and mint no identity.
  */
 
 // ───────────────────────────── Google ─────────────────────────────
@@ -277,16 +269,22 @@ export async function verifyFirebasePhoneToken(env: Bindings, idToken: string): 
   };
 }
 
-// ─────────────────────── One-time codes over HTTP ───────────────────────
+// ─────────────────────── Emailed one-time codes ───────────────────────
 
 /**
- * Our own OTP, used for two different questions.
+ * Codes we send ourselves, which means email and only email.
  *
- * The sign-in gate asks "who are you" and mints an identity (`scope: "auth"`).
- * A `verify` email or phone question asks "is this value real" about one answer
- * and mints nothing (`scope: "block:<ref>"`). The mechanics are identical — a
- * six-digit code, hashed, capped, expiring — so they are one implementation
- * with the scope carried on the row, and the two never see each other's codes.
+ * Every SMS in this product is Firebase's — it sends the message, checks the
+ * code, and hands back an ID token this file verifies. There is no second SMS
+ * path and no SMS provider of ours: a number is proved by
+ * `verifyFirebasePhoneToken` above, whether it is proving who is answering or
+ * proving one answer.
+ *
+ * Email has no such service, so these are ours: a six-digit code, hashed,
+ * capped and expiring, sent through the same queue as every other
+ * transactional message. `scope` says what it proves — `block:<ref>` for one
+ * `verify` answer — so two questions on one form cannot consume each other's
+ * codes or spend each other's budget.
  */
 
 const CODE_TTL_MS = 10 * 60 * 1000;
@@ -294,10 +292,8 @@ const MAX_ATTEMPTS = 5;
 const MAX_SENDS_PER_SCOPE = 5;
 const RESEND_COOLDOWN_MS = 30 * 1000;
 
-/** What a code proves. `block:<ref>` is one answer; `auth` is the whole session. */
-export type OtpScope = "auth" | `block:${string}`;
-/** How it travels. Decided by what is being proved, never by the destination. */
-export type OtpChannel = "sms" | "email";
+/** What a code proves. One `verify` answer, named by its block ref. */
+export type OtpScope = `block:${string}`;
 
 const CHALLENGE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -318,40 +314,32 @@ function sixDigitCode(): string {
 }
 
 export type StartResult =
-  | { ok: true; destination: string; channel: OtpChannel; devCode?: string }
+  | { ok: true; destination: string; devCode?: string }
   | { ok: false; code: string; message: string };
 
 export interface ChallengeRequest {
   sessionId: string;
   scope: OtpScope;
-  channel: OtpChannel;
-  /** As the respondent typed it. Normalized here, per channel. */
+  /** As the respondent typed it. Lower-cased and trimmed here. */
   destination: string;
-  /** Dial code to assume for a bare national number. `sms` only. */
-  dialHint?: string;
-  /** Named in the email, so a code arriving out of context still makes sense. */
+  /** Named in the message, so a code arriving out of context still makes sense. */
   formTitle?: string;
 }
 
 /**
  * Send a code, and record what it has to match.
  *
- * The caps are per scope rather than per session: a respondent who spent three
- * sends signing in must not find themselves one send away from being stuck on
- * the delivery-number question. Both are counted from the rows, so they survive
- * an evicted Durable Object and a reconnect.
+ * The caps are per scope rather than per session, so a respondent who spent
+ * three sends on one question is not one send away from being stuck on the
+ * next. Both are counted from the rows, so they survive an evicted Durable
+ * Object and a reconnect.
  */
-export async function startOtpChallenge(env: Bindings, req: ChallengeRequest): Promise<StartResult> {
-  const { sessionId, scope, channel } = req;
+export async function startEmailChallenge(env: Bindings, req: ChallengeRequest): Promise<StartResult> {
+  const { sessionId, scope } = req;
 
-  const destination =
-    channel === "sms"
-      ? normalizeE164(req.destination, req.dialHint)
-      : normalizeChallengeEmail(req.destination);
+  const destination = normalizeChallengeEmail(req.destination);
   if (!destination) {
-    return channel === "sms"
-      ? { ok: false, code: "invalid_phone", message: "Please enter your number with its country code." }
-      : { ok: false, code: "invalid_email", message: "That doesn't look like an email address we can reach." };
+    return { ok: false, code: "invalid_email", message: "That doesn't look like an email address we can reach." };
   }
 
   const recent = await env.DB.prepare(
@@ -372,10 +360,10 @@ export async function startOtpChallenge(env: Bindings, req: ChallengeRequest): P
    * The cooldown is a resend cooldown, and only a resend cooldown.
    *
    * Applying it to a *different* destination punishes the one person it should
-   * help: somebody who mistyped their number, noticed, and corrected it inside
+   * help: somebody who mistyped their address, noticed, and corrected it inside
    * half a minute would be told to wait — with the code they cannot receive
    * still outstanding and no way past it. The send cap above is what limits
-   * spend; this only stops the same message being sent twice in a breath.
+   * volume; this only stops the same message going out twice in a breath.
    */
   if (
     recent?.last &&
@@ -389,13 +377,12 @@ export async function startOtpChallenge(env: Bindings, req: ChallengeRequest): P
   const now = Date.now();
   await env.DB.prepare(
     `INSERT INTO otp_challenges (id, session_id, scope, channel, destination, code_hash, attempts, send_count, expires_at, created_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8, ?9)`,
+     VALUES (?1, ?2, ?3, 'email', ?4, ?5, 0, ?6, ?7, ?8)`,
   )
     .bind(
       `otp_${crypto.randomUUID().slice(0, 16)}`,
       sessionId,
       scope,
-      channel,
       destination,
       await hashCode(sessionId, code),
       (recent?.n ?? 0) + 1,
@@ -404,25 +391,19 @@ export async function startOtpChallenge(env: Bindings, req: ChallengeRequest): P
     )
     .run();
 
-  const sent =
-    channel === "sms"
-      ? await sendSms(env, destination, `${code} is your verification code.`)
-      : await sendCodeEmail(env, destination, code, req.formTitle);
-  if (!sent.ok) {
-    return channel === "sms"
-      ? { ok: false, code: "sms_failed", message: "We couldn't send that code. Please try again." }
-      : { ok: false, code: "email_failed", message: "We couldn't email that code. Please try again." };
-  }
+  /*
+   * Through the queue, like every other transactional message, so it inherits
+   * the provider fallback, the delivery record and the retries. That costs a
+   * second or two, which is the same trade every sign-in code in the product
+   * already makes; sending inline would put an outbound call on the
+   * respondent's turn.
+   */
+  await enqueueMail(env, { kind: "otp", to: destination, code, purpose: "answer-verification", formTitle: req.formTitle });
 
-  // In dev with no SMS provider the code is returned so the flow is testable.
-  // Guarded on ENVIRONMENT, never on "is Twilio missing" — a production deploy
-  // that lost its credentials must fail closed, not start handing out codes.
-  return {
-    ok: true,
-    destination,
-    channel,
-    devCode: env.ENVIRONMENT === "development" ? code : undefined,
-  };
+  // In development the code comes back so the flow is testable without waiting
+  // on a mailbox. Guarded on ENVIRONMENT alone — a production deploy must never
+  // start handing out codes, whatever else is misconfigured.
+  return { ok: true, destination, devCode: env.ENVIRONMENT === "development" ? code : undefined };
 }
 
 /** Lower-cased and trimmed, or null when it is not an address at all. */
@@ -432,24 +413,24 @@ function normalizeChallengeEmail(raw: string): string | null {
 }
 
 export type OtpVerifyResult =
-  | { ok: true; destination: string; channel: OtpChannel }
+  | { ok: true; destination: string }
   | { ok: false; code: string; message: string };
 
 /**
  * Check a code against the newest live challenge in one scope.
  *
  * Consumes every outstanding challenge in that scope on success — not the whole
- * session — so proving a delivery number does not silently retire the sign-in
- * code the respondent is still holding.
+ * session — so proving one answer does not retire a code the respondent is
+ * still holding for another question.
  */
-export async function verifyOtpChallenge(
+export async function verifyEmailChallenge(
   env: Bindings,
   sessionId: string,
   scope: OtpScope,
   code: string,
 ): Promise<OtpVerifyResult> {
   const row = await env.DB.prepare(
-    `SELECT id, destination, channel, code_hash, attempts, expires_at
+    `SELECT id, destination, code_hash, attempts, expires_at
        FROM otp_challenges
       WHERE session_id = ?1 AND scope = ?2 AND consumed_at IS NULL
       ORDER BY created_at DESC
@@ -459,7 +440,6 @@ export async function verifyOtpChallenge(
     .first<{
       id: string;
       destination: string;
-      channel: OtpChannel;
       code_hash: string;
       attempts: number;
       expires_at: number;
@@ -490,100 +470,7 @@ export async function verifyOtpChallenge(
     .bind(sessionId, scope, Date.now())
     .run();
 
-  return { ok: true, destination: row.destination, channel: row.channel };
-}
-
-// ──────────────────────── Phone sign-in, our own OTP ────────────────────────
-
-export async function startPhoneChallenge(
-  env: Bindings,
-  sessionId: string,
-  rawPhone: string,
-  dialHint?: string,
-): Promise<StartResult> {
-  return startOtpChallenge(env, {
-    sessionId,
-    scope: "auth",
-    channel: "sms",
-    destination: rawPhone,
-    dialHint,
-  });
-}
-
-export async function verifyPhoneChallenge(env: Bindings, sessionId: string, code: string): Promise<AuthResult> {
-  const result = await verifyOtpChallenge(env, sessionId, "auth", code);
-  if (!result.ok) return result;
-
-  return {
-    ok: true,
-    identity: {
-      provider: "phone",
-      subject: result.destination,
-      email: null,
-      phone: result.destination,
-      name: null,
-      pictureUrl: null,
-      verifiedAt: Date.now(),
-    },
-  };
-}
-
-/**
- * Email one code.
- *
- * Goes through the same queue as every other transactional message, so it
- * inherits the provider fallback, the delivery record and the retries. That
- * costs a second or two of latency, which is the same trade every sign-in code
- * in the product already makes — and the alternative, sending inline, would
- * put an outbound HTTP call on the respondent's turn.
- */
-async function sendCodeEmail(
-  env: Bindings,
-  to: string,
-  code: string,
-  formTitle?: string,
-): Promise<{ ok: boolean }> {
-  await enqueueMail(env, { kind: "otp", to, code, purpose: "answer-verification", formTitle });
-  return { ok: true };
-}
-
-/**
- * Send an SMS via Twilio when it is configured.
- *
- * Deliberately provider-shaped rather than provider-specific at the call site:
- * swapping Twilio for MessageBird or Vonage is this one function. With no
- * credentials in development the code is logged and the send reports success,
- * so the whole flow is exercisable locally without spending money.
- */
-async function sendSms(env: Bindings, to: string, body: string): Promise<{ ok: boolean }> {
-  const { TWILIO_ACCOUNT_SID: sid, TWILIO_AUTH_TOKEN: token, TWILIO_FROM: from } = env;
-  if (!sid || !token || !from) {
-    if (env.ENVIRONMENT === "development") {
-      console.log(`[otp] would SMS ${to}: ${body}`);
-      return { ok: true };
-    }
-    console.error("sms_not_configured");
-    return { ok: false };
-  }
-
-  try {
-    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${btoa(`${sid}:${token}`)}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ To: to, From: from, Body: body }),
-    });
-    if (!res.ok) {
-      console.error("sms_send_failed", res.status, await res.text());
-      return { ok: false };
-    }
-    return { ok: true };
-  } catch (err) {
-    console.error("sms_send_threw", err);
-    return { ok: false };
-  }
+  return { ok: true, destination: row.destination };
 }
 
 /** Sweep consumed and expired challenges. Called from the existing cron. */

@@ -47,8 +47,9 @@ customise form metadata · **remove Youform branding** · **partial submissions*
 link · **custom domains** · unlimited file uploads (fair use) · up to 3 team members ·
 collect payments (Stripe) · Meta Pixel · Google Tag Manager · **advanced form analytics**.
 
-Gated to **Business**: email verification (OTP) · phone verification (SMS OTP, BYO
-Twilio) · activity log with CSV export · 5 seats included, +$10/mo per extra seat.
+Gated to **Business**: email verification (OTP) · phone verification (SMS OTP, on a
+provider you bring) · activity log with CSV export · 5 seats included, +$10/mo per extra
+seat.
 
 The shape of that list is the whole strategy: **the free tier is generous about input and
 stingy about output.** A user builds a form for free, publishes it for free, collects a

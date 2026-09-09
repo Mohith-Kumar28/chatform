@@ -10,11 +10,13 @@ import type { SessionDO } from "../src/do/session-do.js";
  * the property that matters is the one a caller sees: the answer is *not* in
  * the response until the code comes back, and a wrong code changes nothing.
  *
- * The email channel throughout. It leaves through the mail queue, which is
- * bound in the test runtime — the SMS path would need Twilio credentials and an
- * outbound call to Twilio, which is not a thing a test run should be able to
- * make. The two share one implementation (`startOtpChallenge`), and the scoping
- * that keeps them apart is pinned in `respondent-auth.test.ts`.
+ * The two channels are proved in different places, so they are tested in
+ * different ways. An emailed code is ours: it goes out through the mail
+ * binding, and the code is planted so it can be typed back. A number is
+ * Firebase's — it sends and checks the SMS in the browser — so the token
+ * verification is covered in `respondent-auth.test.ts` and what is exercised
+ * here is the only part this session decides: that the proved number has to be
+ * the number they actually answered with.
  */
 
 let t: Tenant;
@@ -32,6 +34,7 @@ const DOC = {
       required: true,
       verify: true,
     },
+    { id: "blk_vaphone1", ref: "q_phone", type: "phone", title: "Number?", required: true, verify: true },
     { id: "blk_vaname01", ref: "q_name", type: "short_text", title: "Name?", required: false, minLength: 0, maxLength: 80 },
   ],
   endings: [{ id: "end_va00001", ref: "end_thanks", title: "All done!", bodyMd: "Thanks." }],
@@ -174,7 +177,7 @@ describe("a question that verifies its answer", () => {
     expect(types(right)).toContain("verify_settled");
     expect(right.answers.q_email).toBe("maya@northwind.co");
     expect(right.pendingVerification).toBeNull();
-    expect(right.question?.ref).toBe("q_name");
+    expect(right.question?.ref).toBe("q_phone");
   });
 
   it("keeps the code out of the transcript", async () => {
@@ -266,6 +269,75 @@ describe("a question that verifies its answer", () => {
     const other = await answer(sid, "q_email", "someone.else@northwind.co");
     expect(types(other)).toContain("verify_required");
     expect(other.answers.q_email).toBeUndefined();
+  });
+});
+
+describe("a number, proved by Firebase", () => {
+  const stubFor = (sid: string) =>
+    env.SESSION_DO.get(env.SESSION_DO.idFromName(sid)) as unknown as DurableObjectStub<SessionDO>;
+
+  /** Get past the email question so the phone one is current. */
+  async function reachPhone(sid: string): Promise<void> {
+    await answer(sid, "q_email", "onward@northwind.co");
+    await plantCode(sid, "q_email", "606060");
+    await say(sid, "606060");
+  }
+
+  it("sends nothing itself — the page carries the SMS", async () => {
+    const sid = await open();
+    await reachPhone(sid);
+
+    const given = await answer(sid, "q_phone", "+1 (415) 555-0132");
+    expect(types(given)).toContain("verify_required");
+    expect(given.pendingVerification).toMatchObject({ ref: "q_phone", channel: "sms", sentTo: "+14155550132" });
+    expect(given.answers.q_phone).toBeUndefined();
+
+    // No challenge row of ours exists for it. A code we never sent is a code we
+    // must never claim to be holding.
+    const rows = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM otp_challenges WHERE session_id = ?1 AND scope = 'block:q_phone'`,
+    )
+      .bind(sid)
+      .first<{ n: number }>();
+    expect(rows?.n).toBe(0);
+  });
+
+  it("refuses a token that proves some other number", async () => {
+    const sid = await open();
+    await reachPhone(sid);
+    await answer(sid, "q_phone", "+14155550132");
+
+    // A perfectly valid Firebase token for a number they control, offered
+    // against an answer they did not give. It proves nothing about this answer.
+    const wrong = await stubFor(sid).verifyPendingPhone("+14155550199");
+    expect(wrong.accepted).toBe(false);
+    expect(wrong.error).toBe("wrong_number");
+
+    const state = await stubFor(sid).getStatus();
+    expect(state?.answers.q_phone).toBeUndefined();
+    expect(state?.pendingVerification?.ref).toBe("q_phone");
+  });
+
+  it("records the answer once the proved number matches", async () => {
+    const sid = await open();
+    await reachPhone(sid);
+    await answer(sid, "q_phone", "+14155550132");
+
+    // Spelled differently on the way in, as Firebase or a respondent might:
+    // both sides normalize, or one form of the same number would not match.
+    expect(await stubFor(sid).verifyPendingPhone("+1 415 555 0132")).toMatchObject({ accepted: true });
+
+    const state = await stubFor(sid).getStatus();
+    expect(state?.answers.q_phone).toBe("+14155550132");
+    expect(state?.pendingVerification).toBeNull();
+  });
+
+  it("refuses a proof when nothing is waiting on one", async () => {
+    const sid = await open();
+    expect(await stubFor(sid).verifyPendingPhone("+14155550132")).toMatchObject({
+      accepted: false,
+      error: "no_pending_verification",
+    });
   });
 });
 

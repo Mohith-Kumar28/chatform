@@ -21,6 +21,7 @@ import {
   displayAnswer as summarizeAnswer,
   isRequirementUnmet,
   defaultEnding,
+  normalizeE164,
   type ConditionGroup,
   type PublicBlock,
   type PublicEnding,
@@ -54,7 +55,7 @@ import {
   findDuplicateAnswer,
   type ResponseOwner,
 } from "../lib/submissions.js";
-import { startOtpChallenge, verifyOtpChallenge } from "../lib/respondent-auth.js";
+import { startEmailChallenge, verifyEmailChallenge } from "../lib/respondent-auth.js";
 import type { RespondentIdentity, RespondentAuthMethod } from "@repo/form-schema";
 import { streamText, stepCountIs } from "ai";
 
@@ -600,37 +601,50 @@ export class SessionDO extends DurableObject<Bindings> {
     channel: "sms" | "email",
     answerMessageId: string | null,
   ): Promise<{ accepted: boolean; error?: string }> {
-    const started = await startOtpChallenge(this.env, {
-      sessionId: this.meta!.sessionId,
-      scope: `block:${block.ref}`,
-      channel,
-      destination: value,
-      dialHint: block.type === "phone" ? block.countryHint : undefined,
-      formTitle: this.doc!.title,
-    });
+    /*
+     * A number is never texted from here.
+     *
+     * Firebase sends and checks every SMS in this product — at the sign-in gate
+     * and here alike — so for a phone answer there is nothing to send: the
+     * session parks, the page runs the Firebase flow against the number that
+     * was just answered, and the ID token comes back to `verifyPendingPhone`.
+     * Only an emailed code is ours to send.
+     */
+    let sentTo = value;
+    let devCode: string | undefined;
 
-    if (!started.ok) {
-      /*
-       * Nothing was sent, so there is nothing to wait for. This is not a wrong
-       * answer and must not be phrased as one — it is our side failing, or a
-       * cooldown they have to sit out — so it goes out as the refusal it is and
-       * the question is put back, without the agentic retry `recordInvalid`
-       * would run.
-       */
-      await this.emit("validation_error", { ref: block.ref, code: "invalid_code", message: started.message });
-      await this.emitMessage(started.message);
-      await this.appendMessage("assistant", started.message);
-      await this.emitQuestion();
-      return { accepted: true };
+    if (channel === "email") {
+      const started = await startEmailChallenge(this.env, {
+        sessionId: this.meta!.sessionId,
+        scope: `block:${block.ref}`,
+        destination: value,
+        formTitle: this.doc!.title,
+      });
+      if (!started.ok) {
+        /*
+         * Nothing was sent, so there is nothing to wait for. This is not a
+         * wrong answer and must not be phrased as one — it is our side
+         * failing, or a cooldown they have to sit out — so it goes out as the
+         * refusal it is and the question is put back, without the agentic
+         * retry `recordInvalid` would run.
+         */
+        await this.emit("validation_error", { ref: block.ref, code: "invalid_code", message: started.message });
+        await this.emitMessage(started.message);
+        await this.appendMessage("assistant", started.message);
+        await this.emitQuestion();
+        return { accepted: true };
+      }
+      sentTo = started.destination;
+      devCode = started.devCode;
     }
 
     this.meta!.pendingVerify = {
       ref: block.ref,
       channel,
       value,
-      sentTo: started.destination,
+      sentTo,
       sentAt: Date.now(),
-      devCode: started.devCode,
+      devCode,
       messageId: answerMessageId,
     };
     await this.persistMeta();
@@ -680,6 +694,20 @@ export class SessionDO extends DurableObject<Bindings> {
       return { accepted: true };
     }
 
+    /*
+     * A phone number is proved by a Firebase token, not by a code typed in
+     * here — Firebase checked the code itself, in the browser, and this session
+     * never saw it. So anything said during a phone step is a message about the
+     * step rather than the proof, and gets pointed back at the button.
+     */
+    if (pending.channel === "sms") {
+      const nudge = codeExpectedText(pending.channel);
+      await this.emitMessage(nudge);
+      await this.appendMessage("assistant", nudge);
+      await this.emitVerifyRequired(false);
+      return { accepted: true };
+    }
+
     const said = input.type === "text" ? input.text : String(input.value ?? "");
     const code = said.replace(/\D/g, "");
     if (code.length < 4) {
@@ -690,7 +718,7 @@ export class SessionDO extends DurableObject<Bindings> {
       return { accepted: true };
     }
 
-    const result = await verifyOtpChallenge(this.env, this.meta!.sessionId, `block:${block.ref}`, code);
+    const result = await verifyEmailChallenge(this.env, this.meta!.sessionId, `block:${block.ref}`, code);
     if (!result.ok) {
       /*
        * Still pending. A wrong code is a wrong code — they can try again, ask
@@ -703,6 +731,57 @@ export class SessionDO extends DurableObject<Bindings> {
       return { accepted: true };
     }
 
+    return this.settleVerification(block);
+  }
+
+  /**
+   * The number in a Firebase token, offered against a phone answer.
+   *
+   * Called by the route that verified the token's signature, issuer, audience
+   * and sign-in provider. What is left is the question that route cannot
+   * answer: is this the number they actually typed? A token for some *other*
+   * number is a perfectly valid token and proves nothing about this answer, so
+   * it is refused here rather than quietly accepted.
+   */
+  async verifyPendingPhone(
+    phone: string,
+  ): Promise<{ accepted: boolean; error?: string; message?: string }> {
+    const ok = await this.ensureLoaded();
+    if (!ok || !this.meta || !this.doc) return { accepted: false, error: "session_not_found" };
+    if (this.meta.status !== "active") return { accepted: false, error: "session_closed" };
+
+    const pending = this.meta.pendingVerify;
+    if (!pending || pending.channel !== "sms") {
+      return { accepted: false, error: "no_pending_verification", message: "Nothing is waiting to be confirmed." };
+    }
+    const block = this.doc.blocks.find((b) => b.ref === pending.ref);
+    if (!block) {
+      await this.cancelVerification();
+      await this.emitQuestion();
+      return { accepted: false, error: "no_question", message: "That question is no longer being asked." };
+    }
+
+    const proved = normalizeE164(phone ?? "");
+    if (!proved || proved !== pending.value) {
+      const message = "That's a different number from the one you gave. Confirm the number you answered with, or change your answer.";
+      await this.emit("validation_error", { ref: block.ref, code: "invalid_code", message });
+      await this.emitVerifyRequired(false);
+      return { accepted: false, error: "wrong_number", message };
+    }
+
+    await this.settleVerification(block);
+    return { accepted: true };
+  }
+
+  /**
+   * The proof landed, however it was obtained. Record the answer.
+   *
+   * The value is remembered as proved before `record` runs, which is what makes
+   * that call fall straight through instead of starting a second challenge for
+   * the number it just confirmed.
+   */
+  private async settleVerification(block: Block): Promise<{ accepted: boolean; error?: string }> {
+    const pending = this.meta!.pendingVerify!;
     this.meta!.verified = [...(this.meta!.verified ?? []), pending.value];
     this.meta!.pendingVerify = null;
     await this.persistMeta();
@@ -722,13 +801,19 @@ export class SessionDO extends DurableObject<Bindings> {
     return this.record(block, pending.value);
   }
 
-  /** Another code to the same destination. Subject to the same cooldown. */
+  /**
+   * Another code to the same address. Subject to the same cooldown.
+   *
+   * Email only: a phone step has no code of ours to resend — the page asks
+   * Firebase for another SMS itself, which is why `resend_code` is refused for
+   * one rather than silently doing nothing.
+   */
   private async resendVerifyCode(): Promise<{ accepted: boolean; error?: string }> {
     const pending = this.meta!.pendingVerify!;
-    const started = await startOtpChallenge(this.env, {
+    if (pending.channel !== "email") return { accepted: false, error: "not_our_code" };
+    const started = await startEmailChallenge(this.env, {
       sessionId: this.meta!.sessionId,
       scope: `block:${pending.ref}`,
-      channel: pending.channel,
       destination: pending.sentTo,
       formTitle: this.doc!.title,
     });

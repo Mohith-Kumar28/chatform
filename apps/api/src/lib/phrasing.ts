@@ -89,22 +89,27 @@ export function asideText(block: Block): string {
 }
 
 /**
- * What the agent says when a code has just gone out.
+ * What the agent says when an answer has to be confirmed.
  *
  * The destination is repeated back deliberately. It is the last chance to
  * notice a typo before waiting for a message that is never going to arrive,
  * and the number or address they typed is not always the one we normalized.
+ *
+ * The two halves are not symmetric, because the sending is not. An emailed
+ * code has already gone out by the time this is said. An SMS has not: Firebase
+ * sends it from the page, on a tap, so this asks for the tap rather than
+ * announcing a text that nobody has sent yet.
  */
 export function codeSentText(channel: "sms" | "email", destination: string): string {
   return channel === "sms"
-    ? `I've texted a 6-digit code to ${destination} — pop it in below to confirm the number.`
+    ? `Let's confirm ${destination} — tap send below and a 6-digit code will come through by text.`
     : `I've emailed a 6-digit code to ${destination} — pop it in below to confirm the address.`;
 }
 
 /** When they replied to the code step with something that is not a code. */
 export function codeExpectedText(channel: "sms" | "email"): string {
   return channel === "sms"
-    ? "I still need the 6-digit code from that text — or say the word and I'll send another."
+    ? "Use the box below to confirm that number — the code has to go through the verification step, not the chat."
     : "I still need the 6-digit code from that email — or say the word and I'll send another.";
 }
 

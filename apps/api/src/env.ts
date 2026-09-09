@@ -132,21 +132,16 @@ export interface Bindings {
   GOOGLE_DASHBOARD_CLIENT_ID?: string;
   GOOGLE_DASHBOARD_CLIENT_SECRET?: string;
   /**
-   * Firebase project that carries phone sign-in for the HOSTED form. Firebase
-   * sends and checks the SMS itself, which is why there is no number to rent
-   * and no DLT registration here; this worker only verifies the resulting ID
-   * token, so the project id is all it needs and there is no service-account
-   * key to keep. The browser needs the matching `NEXT_PUBLIC_FIREBASE_*` set.
+   * Firebase project that carries every SMS in the product — phone sign-in at
+   * the gate, and the code that confirms a `verify` phone answer. Firebase
+   * sends and checks the message itself, which is why there is no number to
+   * rent, no DLT registration and no SMS provider of ours anywhere; this
+   * worker only verifies the resulting ID token, so the project id is all it
+   * needs and there is no service-account key to keep. The browser needs the
+   * matching `NEXT_PUBLIC_FIREBASE_*` set, and without them no phone number
+   * can be proved at all.
    */
   FIREBASE_PROJECT_ID?: string;
-  /**
-   * SMS for our own phone OTP — the headless `/v1` path, which cannot run a
-   * browser reCAPTCHA and so cannot use Firebase. Absent in dev, where codes
-   * are logged instead of sent; absent in production, phone OTP fails closed.
-   */
-  TWILIO_ACCOUNT_SID?: string;
-  TWILIO_AUTH_TOKEN?: string;
-  TWILIO_FROM?: string;
   SIGNING_SALT: string;
 }
 

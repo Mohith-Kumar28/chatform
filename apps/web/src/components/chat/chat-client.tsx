@@ -380,10 +380,7 @@ export function ChatClient({
               hint={chat.respondentHint}
               onForgetHint={chat.forgetRespondentHint}
               onGoogle={(t) => void chat.signInWithGoogle(t)}
-              onRequestCode={(phone, hint) => void chat.requestPhoneCode(phone, hint)}
-              onVerifyCode={(code) => void chat.verifyPhoneCode(code)}
               onPhoneToken={(t) => void chat.signInWithPhoneToken(t)}
-              onChangeNumber={chat.changePhoneNumber}
             />
           )}
 
@@ -394,7 +391,8 @@ export function ChatClient({
             <VerifyCard
               verify={chat.verify}
               hint={chat.validationHint}
-              onSubmit={(code) => void chat.submitVerifyCode(code)}
+              onSubmitCode={(code) => void chat.submitVerifyCode(code)}
+              onPhoneToken={(t) => void chat.submitVerifyPhoneToken(t)}
               onResend={() => void chat.resendVerifyCode()}
               onChange={() => void chat.changeVerifyAnswer()}
             />

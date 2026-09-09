@@ -96,18 +96,8 @@ export interface SubmittedState {
 export interface AuthState {
   method: "google" | "phone";
   message: string;
-  /** Set once a code has been sent; the card switches to the code step. */
-  phoneSentTo: string | null;
-  /**
-   * When the most recent code went out. Drives the resend cooldown, and is a
-   * timestamp rather than a boolean so that asking again for the *same* number
-   * still restarts the countdown — `phoneSentTo` does not change on a resend.
-   */
-  phoneSentAt: number | null;
   pending: boolean;
   error: string | null;
-  /** Dev convenience: with no SMS provider the API returns the code. */
-  devCode?: string;
 }
 
 /**
@@ -124,7 +114,11 @@ export interface VerifyState {
   /** Restarts the resend countdown on every send, including a resend. */
   sentAt: number;
   pending: boolean;
-  /** Dev convenience: with no SMS provider the API returns the code. */
+  /**
+   * Dev convenience: an emailed code is returned by the API in development,
+   * so the flow is testable without waiting on a mailbox. Never for a number —
+   * that code is Firebase's and this app never sees it.
+   */
   devCode?: string;
 }
 
@@ -671,16 +665,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
         // Replay re-delivers this on every reconnect. Keep whatever step the
         // card had reached — re-mounting it at "enter your number" would throw
         // away a code the respondent is in the middle of typing.
-        setAuth((prev) =>
-          prev ?? {
-            method: data.method,
-            message: data.message,
-            phoneSentTo: null,
-            phoneSentAt: null,
-            pending: false,
-            error: null,
-          },
-        );
+        setAuth((prev) => prev ?? { method: data.method, message: data.message, pending: false, error: null });
         settleTurn();
       });
 
@@ -1129,12 +1114,19 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
    * they need the response body, both to surface a precise failure ("that code
    * didn't match, 3 tries left") and because the code arrives in it in dev.
    */
-  const authPost = useCallback(
+  /**
+   * A POST on this session that expects its answer inline.
+   *
+   * The path is relative to the session — `auth/google`, `verify/phone-token`
+   * — rather than assumed to be under `auth/`, because proving an *answer* is
+   * not a sign-in and does not live there.
+   */
+  const sessionPost = useCallback(
     async (path: string, body: unknown): Promise<{ ok: boolean; data: Record<string, unknown> }> => {
       const session = sessionRef.current;
       if (!session) return { ok: false, data: {} };
       try {
-        const res = await fetch(`${apiOrigin}/p/sessions/${session.sessionId}/auth/${path}`, {
+        const res = await fetch(`${apiOrigin}/p/sessions/${session.sessionId}/${path}`, {
           method: "POST",
           headers: { "content-type": "application/json", "x-respondent-token": session.token },
           body: JSON.stringify(body),
@@ -1203,7 +1195,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     async (idToken: string) => {
       setAuth((a) => (a ? { ...a, pending: true, error: null } : a));
       setThinking(true);
-      const { ok, data } = await authPost("google", { idToken });
+      const { ok, data } = await sessionPost("auth/google", { idToken });
       if (ok) {
         setIdentity(data.identity as VerifiedIdentity);
         setAuth(null);
@@ -1213,47 +1205,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
       if (settledAsAnswered(data)) return;
       setAuth((a) => (a ? { ...a, pending: false, error: authError(data) } : a));
     },
-    [authPost, settledAsAnswered],
-  );
-
-  const requestPhoneCode = useCallback(
-    async (phone: string, dialHint?: string) => {
-      setAuth((a) => (a ? { ...a, pending: true, error: null } : a));
-      const { ok, data } = await authPost("phone/start", { phone, dialHint });
-      setAuth((a) =>
-        a
-          ? ok
-            ? {
-                ...a,
-                pending: false,
-                error: null,
-                phoneSentTo: String(data.destination ?? phone),
-                phoneSentAt: Date.now(),
-                devCode: data.devCode as string | undefined,
-              }
-            : { ...a, pending: false, error: authError(data) }
-          : a,
-      );
-    },
-    [authPost],
-  );
-
-  /** Same ordering as `signInWithGoogle`, for the same reason. */
-  const verifyPhoneCode = useCallback(
-    async (code: string) => {
-      setAuth((a) => (a ? { ...a, pending: true, error: null } : a));
-      setThinking(true);
-      const { ok, data } = await authPost("phone/verify", { code });
-      if (ok) {
-        setIdentity(data.identity as VerifiedIdentity);
-        setAuth(null);
-        return;
-      }
-      setThinking(false);
-      if (settledAsAnswered(data)) return;
-      setAuth((a) => (a ? { ...a, pending: false, error: authError(data) } : a));
-    },
-    [authPost, settledAsAnswered],
+    [sessionPost, settledAsAnswered],
   );
 
   /**
@@ -1265,7 +1217,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     async (idToken: string) => {
       setAuth((a) => (a ? { ...a, pending: true, error: null } : a));
       setThinking(true);
-      const { ok, data } = await authPost("phone/token", { idToken });
+      const { ok, data } = await sessionPost("auth/phone/token", { idToken });
       if (ok) {
         setIdentity(data.identity as VerifiedIdentity);
         setAuth(null);
@@ -1275,7 +1227,31 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
       if (settledAsAnswered(data)) return;
       setAuth((a) => (a ? { ...a, pending: false, error: authError(data) } : a));
     },
-    [authPost, settledAsAnswered],
+    [sessionPost, settledAsAnswered],
+  );
+
+  /**
+   * A number proved by Firebase, offered against the answer that is waiting.
+   *
+   * The token, not a code: Firebase sent the SMS and checked the code in this
+   * browser, so what the server receives is the proof rather than the secret.
+   * It refuses a token for any number other than the one they answered with,
+   * which is what stops "verify some number you control" from passing.
+   */
+  const submitVerifyPhoneToken = useCallback(
+    async (idToken: string) => {
+      setVerify((v) => (v ? { ...v, pending: true } : v));
+      setValidationHint(null);
+      setThinking(true);
+      const { ok, data } = await sessionPost("verify/phone-token", { idToken });
+      if (ok) return;
+      // The turn never ran, so nothing is coming to lower the dots or re-arm
+      // the card; both are put back here.
+      setThinking(false);
+      setVerify((v) => (v ? { ...v, pending: false } : v));
+      setValidationHint(authError(data));
+    },
+    [sessionPost],
   );
 
   /**
@@ -1325,11 +1301,6 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     setRespondentHint(null);
     await startOver();
   }, [startOver]);
-
-  /** Back out of the code step to correct a mistyped number. */
-  const changePhoneNumber = useCallback(() => {
-    setAuth((a) => (a ? { ...a, phoneSentTo: null, phoneSentAt: null, error: null, devCode: undefined } : a));
-  }, []);
 
   const getUploadBase = useCallback(() => {
     const s = sessionRef.current;
@@ -1480,11 +1451,9 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     forgetRespondentHint,
     switchAccount,
     signInWithGoogle,
-    requestPhoneCode,
-    verifyPhoneCode,
     signInWithPhoneToken,
-    changePhoneNumber,
     submitVerifyCode,
+    submitVerifyPhoneToken,
     resendVerifyCode,
     changeVerifyAnswer,
     escalatedRef,

@@ -139,16 +139,10 @@ GOOGLE_DASHBOARD_CLIENT_SECRET=
 # the Firebase console must list the form's domain under
 # Authentication → Settings → Authorized domains.
 #
-# Unset in dev: the form falls back to the server OTP below, which prints the
-# code instead of sending it. That is the intended local setup — running the
-# form does not require a Firebase project.
+# This carries every SMS in the product — phone sign-in at the gate, and the
+# code that confirms a `verify` phone answer. There is no second SMS path and
+# no SMS provider of ours, so with this unset (and the matching
+# NEXT_PUBLIC_FIREBASE_* on the web app) no phone number can be proved at all
+# and the card says so. Email verification is unaffected: those codes are ours
+# and go out over the mail queue.
 FIREBASE_PROJECT_ID=
-
-# ── Phone sign-in, headless /v1 (Twilio) ──────────────────────────────────────
-# Only for /v1 callers, who drive the conversation from their own server and so
-# cannot run Firebase's browser reCAPTCHA. The hosted form does not use this.
-# Absent in dev: phone OTP codes are logged instead of sent. Absent in
-# production: the server OTP path fails closed rather than handing out codes.
-TWILIO_ACCOUNT_SID=
-TWILIO_AUTH_TOKEN=
-TWILIO_FROM=

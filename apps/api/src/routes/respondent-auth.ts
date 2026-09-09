@@ -1,15 +1,11 @@
 import type { Context, Hono } from "hono";
+import { describeRoute } from "hono-openapi";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { readFormDoc, type FormDoc, type RespondentIdentity } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { SessionDO } from "../do/session-do.js";
-import {
-  verifyGoogleIdToken,
-  verifyFirebasePhoneToken,
-  startPhoneChallenge,
-  verifyPhoneChallenge,
-} from "../lib/respondent-auth.js";
+import { verifyGoogleIdToken, verifyFirebasePhoneToken } from "../lib/respondent-auth.js";
 import { findIdentityHistory } from "../lib/respondent-history.js";
 import { clampForRuntime } from "../lib/doc-entitlements.js";
 import { getEntitlements } from "../lib/entitlements.js";
@@ -25,12 +21,6 @@ import { getEntitlements } from "../lib/entitlements.js";
  */
 
 const googleSchema = z.object({ idToken: z.string().min(10).max(8000) });
-const phoneStartSchema = z.object({
-  phone: z.string().min(4).max(24),
-  /** Dial code to assume when the number was typed without one, e.g. "91". */
-  dialHint: z.string().max(4).optional(),
-});
-const phoneVerifySchema = z.object({ code: z.string().min(4).max(10) });
 const phoneTokenSchema = z.object({ idToken: z.string().min(10).max(8000) });
 
 /**
@@ -179,44 +169,90 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
   const unauthorized = (c: Ctx) =>
     c.json({ error: { code: "unauthorized", message: "Invalid session token" } }, 401);
 
-  router.post(`${base}/auth/google`, zValidator("json", googleSchema), async (c) => {
+  router.post(
+    `${base}/auth/google`,
+    describeRoute({
+      tags: ["v1"],
+      summary: "Verify a respondent with a Google ID token",
+      responses: {
+        200: { description: "Verified" },
+        400: { description: "The token did not check out" },
+        409: { description: "This identity has already answered" },
+      },
+    }),
+    zValidator("json", googleSchema),
+    async (c) => {
     const sessionId = await resolve(c);
     if (!sessionId) return unauthorized(c);
     const result = await verifyGoogleIdToken(c.env, c.req.valid("json").idToken);
     if (!result.ok) return c.json({ error: { code: result.code, message: result.message } }, 400);
     return attach(c, result.identity, sessionId);
-  });
+    },
+  );
 
   /**
-   * The hosted form's phone path: Firebase already sent the SMS and checked the
-   * code in the browser, so there is one round trip and it carries the proof.
+   * The phone path, and the only one.
    *
-   * Sits beside `phone/start` + `phone/verify` rather than replacing them —
-   * those two remain the only phone sign-in a headless `/v1` caller can drive,
-   * since this one presupposes a browser that ran a reCAPTCHA.
+   * Firebase sent the SMS and checked the code in the browser, so there is one
+   * round trip and it carries the proof. A `/v1` caller runs the same flow in
+   * their own page — the SDK is a browser SDK, with a reCAPTCHA step — and
+   * posts the token it produces here.
    */
-  router.post(`${base}/auth/phone/token`, zValidator("json", phoneTokenSchema), async (c) => {
-    const sessionId = await resolve(c);
-    if (!sessionId) return unauthorized(c);
-    const result = await verifyFirebasePhoneToken(c.env, c.req.valid("json").idToken);
-    if (!result.ok) return c.json({ error: { code: result.code, message: result.message } }, 400);
-    return attach(c, result.identity, sessionId);
-  });
+  router.post(
+    `${base}/auth/phone/token`,
+    describeRoute({
+      tags: ["v1"],
+      summary: "Verify a respondent with a Firebase phone ID token",
+      responses: {
+        200: { description: "Verified" },
+        400: { description: "The token did not check out" },
+        409: { description: "This identity has already answered" },
+      },
+    }),
+    zValidator("json", phoneTokenSchema),
+    async (c) => {
+      const sessionId = await resolve(c);
+      if (!sessionId) return unauthorized(c);
+      const result = await verifyFirebasePhoneToken(c.env, c.req.valid("json").idToken);
+      if (!result.ok) return c.json({ error: { code: result.code, message: result.message } }, 400);
+      return attach(c, result.identity, sessionId);
+    },
+  );
 
-  router.post(`${base}/auth/phone/start`, zValidator("json", phoneStartSchema), async (c) => {
-    const sessionId = await resolve(c);
-    if (!sessionId) return unauthorized(c);
-    const body = c.req.valid("json");
-    const result = await startPhoneChallenge(c.env, sessionId, body.phone, body.dialHint);
-    if (!result.ok) return c.json({ error: { code: result.code, message: result.message } }, 400);
-    return c.json({ ok: true, destination: result.destination, devCode: result.devCode });
-  });
+  /**
+   * The same proof, for a number given as an *answer* rather than as a sign-in.
+   *
+   * Separate from `auth/phone/token` because the outcomes are different: this
+   * one attaches no identity, files nothing under a respondent, and only says
+   * "the number in this token is the number you typed into that question". The
+   * session decides the rest — including refusing a token for some other
+   * number, which is the whole check.
+   */
+  router.post(
+    `${base}/verify/phone-token`,
+    describeRoute({
+      tags: ["v1"],
+      summary: "Confirm a phone answer with a Firebase phone ID token",
+      responses: {
+        200: { description: "The answer is verified and recorded" },
+        400: { description: "The token did not check out, or proves a different number" },
+      },
+    }),
+    zValidator("json", phoneTokenSchema),
+    async (c) => {
+      const sessionId = await resolve(c);
+      if (!sessionId) return unauthorized(c);
+      const result = await verifyFirebasePhoneToken(c.env, c.req.valid("json").idToken);
+      if (!result.ok) return c.json({ error: { code: result.code, message: result.message } }, 400);
 
-  router.post(`${base}/auth/phone/verify`, zValidator("json", phoneVerifySchema), async (c) => {
-    const sessionId = await resolve(c);
-    if (!sessionId) return unauthorized(c);
-    const result = await verifyPhoneChallenge(c.env, sessionId, c.req.valid("json").code);
-    if (!result.ok) return c.json({ error: { code: result.code, message: result.message } }, 400);
-    return attach(c, result.identity, sessionId);
-  });
+      const settled = await stub(c.env, sessionId).verifyPendingPhone(result.identity.phone ?? "");
+      if (!settled.accepted) {
+        return c.json(
+          { error: { code: settled.error ?? "rejected", message: settled.message ?? "Could not verify." } },
+          400,
+        );
+      }
+      return c.json({ ok: true });
+    },
+  );
 }

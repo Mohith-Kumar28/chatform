@@ -3178,6 +3178,111 @@
         ]
       }
     },
+    "/p/sessions/{id}/auth/google": {
+      "post": {
+        "operationId": "postPSessionsByIdAuthGoogle",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Verify a respondent with a Google ID token",
+        "responses": {
+          "200": {
+            "description": "Verified"
+          },
+          "400": {
+            "description": "The token did not check out"
+          },
+          "409": {
+            "description": "This identity has already answered"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "respondentToken": []
+          }
+        ]
+      }
+    },
+    "/p/sessions/{id}/auth/phone/token": {
+      "post": {
+        "operationId": "postPSessionsByIdAuthPhoneToken",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Verify a respondent with a Firebase phone ID token",
+        "responses": {
+          "200": {
+            "description": "Verified"
+          },
+          "400": {
+            "description": "The token did not check out"
+          },
+          "409": {
+            "description": "This identity has already answered"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "respondentToken": []
+          }
+        ]
+      }
+    },
+    "/p/sessions/{id}/verify/phone-token": {
+      "post": {
+        "operationId": "postPSessionsByIdVerifyPhoneToken",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Confirm a phone answer with a Firebase phone ID token",
+        "responses": {
+          "200": {
+            "description": "The answer is verified and recorded"
+          },
+          "400": {
+            "description": "The token did not check out, or proves a different number"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "respondentToken": []
+          }
+        ]
+      }
+    },
     "/p/sessions/{id}/uploads/intent": {
       "post": {
         "operationId": "postPSessionsByIdUploadsIntent",
@@ -10334,6 +10439,126 @@
         ]
       }
     },
+    "/v1/sessions/{sid}/auth/google": {
+      "post": {
+        "operationId": "postV1SessionsBySidAuthGoogle",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Verify a respondent with a Google ID token",
+        "responses": {
+          "200": {
+            "description": "Verified"
+          },
+          "400": {
+            "description": "The token did not check out"
+          },
+          "409": {
+            "description": "This identity has already answered"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/sessions/{sid}/auth/phone/token": {
+      "post": {
+        "operationId": "postV1SessionsBySidAuthPhoneToken",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Verify a respondent with a Firebase phone ID token",
+        "responses": {
+          "200": {
+            "description": "Verified"
+          },
+          "400": {
+            "description": "The token did not check out"
+          },
+          "409": {
+            "description": "This identity has already answered"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/sessions/{sid}/verify/phone-token": {
+      "post": {
+        "operationId": "postV1SessionsBySidVerifyPhoneToken",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Confirm a phone answer with a Firebase phone ID token",
+        "responses": {
+          "200": {
+            "description": "The answer is verified and recorded"
+          },
+          "400": {
+            "description": "The token did not check out, or proves a different number"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
     "/v1/chat/sessions/{sid}/messages": {
       "post": {
         "operationId": "postV1ChatSessionsBySidMessages",
@@ -10596,6 +10821,126 @@
           }
         ],
         "x-required-scope": "session:write",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/chat/sessions/{sid}/auth/google": {
+      "post": {
+        "operationId": "postV1ChatSessionsBySidAuthGoogle",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Verify a respondent with a Google ID token",
+        "responses": {
+          "200": {
+            "description": "Verified"
+          },
+          "400": {
+            "description": "The token did not check out"
+          },
+          "409": {
+            "description": "This identity has already answered"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/chat/sessions/{sid}/auth/phone/token": {
+      "post": {
+        "operationId": "postV1ChatSessionsBySidAuthPhoneToken",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Verify a respondent with a Firebase phone ID token",
+        "responses": {
+          "200": {
+            "description": "Verified"
+          },
+          "400": {
+            "description": "The token did not check out"
+          },
+          "409": {
+            "description": "This identity has already answered"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/chat/sessions/{sid}/verify/phone-token": {
+      "post": {
+        "operationId": "postV1ChatSessionsBySidVerifyPhoneToken",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Confirm a phone answer with a Firebase phone ID token",
+        "responses": {
+          "200": {
+            "description": "The answer is verified and recorded"
+          },
+          "400": {
+            "description": "The token did not check out, or proves a different number"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          }
+        ],
         "security": [
           {
             "secretKey": []

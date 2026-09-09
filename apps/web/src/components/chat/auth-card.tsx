@@ -76,20 +76,14 @@ export function AuthCard({
   auth,
   hint,
   onGoogle,
-  onRequestCode,
-  onVerifyCode,
   onPhoneToken,
-  onChangeNumber,
   onForgetHint,
 }: {
   auth: AuthState;
   /** Who this device signed in as last time, if this form takes that method. */
   hint: RespondentHint | null;
   onGoogle: (idToken: string) => void;
-  onRequestCode: (phone: string, dialHint?: string) => void;
-  onVerifyCode: (code: string) => void;
   onPhoneToken: (idToken: string) => void;
-  onChangeNumber: () => void;
   onForgetHint: () => void;
 }) {
   const showGoogle = auth.method === "google";
@@ -118,23 +112,15 @@ export function AuthCard({
       )}
 
       {/*
-        Two ways to prove a phone number, picked by what this deployment has
-        configured. Firebase carries the SMS in production; the server-side OTP
-        is the fallback, and is what runs locally where it prints the code
-        instead of sending it — so the form is testable with no Firebase
-        project and no money spent.
+        Firebase carries the SMS — there is no second phone path, so a
+        deployment without it says so plainly instead of drawing a form that
+        cannot send anything.
       */}
       {showPhone &&
         (firebasePhoneConfigured ? (
           <FirebasePhoneFlow auth={auth} hint={phoneHint} onPhoneToken={onPhoneToken} />
         ) : (
-          <PhoneFlow
-            auth={auth}
-            hint={phoneHint}
-            onRequestCode={onRequestCode}
-            onVerifyCode={onVerifyCode}
-            onChangeNumber={onChangeNumber}
-          />
+          <PhoneUnavailable />
         ))}
 
       {auth.error && (
@@ -592,52 +578,28 @@ export function CodeForm({
 }
 
 /**
- * Phone verification against our own OTP endpoints.
+ * Said when this deployment has no Firebase project configured.
  *
- * The step the respondent is on is server state — `auth.phoneSentTo` is set by
- * the reply to `phone/start` — because only the server knows whether an SMS
- * was actually accepted for sending.
+ * Firebase is the only way a number is proved here, so there is nothing to
+ * fall back to and nothing for the respondent to do — the form's author is the
+ * one who can fix it, and the console line is addressed to them.
  */
-function PhoneFlow({
-  auth,
-  hint,
-  onRequestCode,
-  onVerifyCode,
-  onChangeNumber,
-}: {
-  auth: AuthState;
-  hint: RespondentHint | null;
-  onRequestCode: (phone: string, dialHint?: string) => void;
-  onVerifyCode: (code: string) => void;
-  onChangeNumber: () => void;
-}) {
-  const sent = auth.phoneSentTo;
-
-  if (!sent) {
-    return <NumberForm pending={auth.pending} initialPhone={hint?.label} onSubmit={onRequestCode} />;
-  }
-
-  return (
-    <CodeForm
-      sentTo={sent}
-      sentAt={auth.phoneSentAt}
-      pending={auth.pending}
-      devCode={auth.devCode}
-      onSubmit={onVerifyCode}
-      // The server is the one that knows the number, and re-asking for the
-      // same one is exactly what `phone/start` already does.
-      onResend={() => onRequestCode(sent)}
-      onChangeNumber={onChangeNumber}
-    />
-  );
+function PhoneUnavailable() {
+  useEffect(() => {
+    console.error(
+      "[chatform] Phone verification is unavailable: NEXT_PUBLIC_FIREBASE_API_KEY, " +
+        "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN and NEXT_PUBLIC_FIREBASE_PROJECT_ID must all be set.",
+    );
+  }, []);
+  return <p className="text-xs opacity-60">Phone verification isn&apos;t available right now.</p>;
 }
 
 /**
  * Phone verification through Firebase.
  *
- * Everything up to the ID token happens in the browser, so unlike `PhoneFlow`
- * the step and its errors are local state — the server hears about this
- * respondent exactly once, at the end, when there is something proven to say.
+ * Everything up to the ID token happens in the browser, so the step and its
+ * errors are local state — the server hears about this respondent exactly
+ * once, at the end, when there is something proven to say.
  */
 function FirebasePhoneFlow({
   auth,

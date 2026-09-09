@@ -103,23 +103,45 @@ describe("the security block on /v1", () => {
 
   /**
    * A route with no scope guard is reachable by any key including a publishable
-   * one, so each is a deliberate decision rather than an oversight. These four are
-   * static catalogues and the key's own identity; anything else appearing here
-   * wants a guard, not a longer list.
+   * one, so each is a deliberate decision rather than an oversight.
+   *
+   * The first four are static catalogues and the key's own identity. The rest
+   * are the respondent's own proofs — signing in, and confirming a number given
+   * as an answer — which are browser-side by nature: the token comes from
+   * Google or Firebase in the respondent's page, and a publishable key is
+   * exactly what that page holds. They are not unguarded: every one of them
+   * sits behind `assertSessionOwnership`, so a key can only ever reach a
+   * session belonging to its own organization.
+   *
+   * Anything else appearing here wants a guard, not a longer list.
    */
-  it("has only the self-describing routes ungated", () => {
+  const UNGATED = [
+    "/v1/blocks",
+    "/v1/blocks/{type}",
+    "/v1/chat/sessions/{sid}/auth/google",
+    "/v1/chat/sessions/{sid}/auth/phone/token",
+    "/v1/chat/sessions/{sid}/verify/phone-token",
+    "/v1/events",
+    "/v1/me",
+    "/v1/sessions/{sid}/auth/google",
+    "/v1/sessions/{sid}/auth/phone/token",
+    "/v1/sessions/{sid}/verify/phone-token",
+  ];
+
+  it("has only the self-describing and respondent-proof routes ungated", () => {
     const ungated = operations(publicSpec)
       .filter(({ path, op }) => path.startsWith("/v1/") && op["x-required-scope"] === undefined)
       .map(({ path }) => path)
       .sort();
-    expect(ungated).toEqual(["/v1/blocks", "/v1/blocks/{type}", "/v1/events", "/v1/me"]);
+    expect(ungated).toEqual(UNGATED);
   });
 
   it("records the required scope for every guarded route", () => {
     const v1 = operations(publicSpec).filter(({ path }) => path.startsWith("/v1/"));
     const guarded = v1.filter(({ op }) => op["x-required-scope"] !== undefined);
-    // The bulk of the surface is guarded; a regression that stopped reading the
-    // route table would leave the scope absent everywhere and pass the tests above.
-    expect(guarded.length).toBeGreaterThan(v1.length - 6);
+    // Everything that is not on the list above. A regression that stopped
+    // reading the route table would leave the scope absent everywhere and pass
+    // the tests above on their own.
+    expect(guarded.length).toBe(v1.length - UNGATED.length);
   });
 });
