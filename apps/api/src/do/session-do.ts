@@ -44,6 +44,7 @@ import {
 } from "../lib/agent-prompts.js";
 import { buildAgentTools, type ToolOutcome } from "./agent-tools.js";
 import { meter } from "../lib/entitlements.js";
+import { costUsdMicro } from "../lib/ai-pricing.js";
 import {
   openResponse,
   recordAnswerRow,
@@ -947,11 +948,27 @@ export class SessionDO extends DurableObject<Bindings> {
     try {
       await this.env.DB.prepare(
         // model was hardcoded "openrouter/auto" and latency was never recorded,
-        // so per-model cost analysis was impossible.
-        `INSERT INTO ai_generations (id, organization_id, session_id, form_id, kind, provider, model, prompt_tokens, completion_tokens, latency_ms, created_at)
-         VALUES (?, ?, ?, ?, ?, 'openrouter', ?, ?, ?, ?, ?)`,
+        // so per-model cost analysis was impossible. `cost_usd_micro` was the
+        // other half of that: the column existed and every row said zero, so the
+        // platform's largest variable cost was invisible. Priced at write time
+        // from `ai-pricing.ts`, which means a row keeps the cost it was actually
+        // incurred at rather than being re-priced later at today's rates.
+        `INSERT INTO ai_generations (id, organization_id, session_id, form_id, kind, provider, model, prompt_tokens, completion_tokens, cost_usd_micro, latency_ms, created_at)
+         VALUES (?, ?, ?, ?, ?, 'openrouter', ?, ?, ?, ?, ?, ?)`,
       )
-        .bind(`ai_${crypto.randomUUID().slice(0, 16)}`, this.meta.organizationId, this.meta.sessionId, this.meta.formId, kind, model, inputTokens, outputTokens, latencyMs, Date.now())
+        .bind(
+          `ai_${crypto.randomUUID().slice(0, 16)}`,
+          this.meta.organizationId,
+          this.meta.sessionId,
+          this.meta.formId,
+          kind,
+          model,
+          inputTokens,
+          outputTokens,
+          costUsdMicro(model, inputTokens, outputTokens),
+          latencyMs,
+          Date.now(),
+        )
         .run();
     } catch (err) {
       console.error("ai_usage_log_failed", err);

@@ -421,6 +421,25 @@ export const GENERATION_PROVIDER_OPTIONS = {
 } as const;
 
 /**
+ * Input and output tokens, kept apart.
+ *
+ * Every one of these functions used to return a single `tokens` total, which is
+ * the right shape for metering — the plan's `ai_tokens` allowance does not care
+ * which end they came from — and the wrong shape for cost. Output tokens are
+ * roughly eight times the price of input ones, so a total cannot be priced to
+ * better than an order of magnitude. `tokens` stays for the meters; `usage`
+ * carries the split for `ai-pricing.ts`.
+ */
+export interface TokenUsage {
+  input: number;
+  output: number;
+}
+
+export function splitUsage(usage: { inputTokens?: number; outputTokens?: number } | undefined): TokenUsage {
+  return { input: usage?.inputTokens ?? 0, output: usage?.outputTokens ?? 0 };
+}
+
+/**
  * Edit an existing form: questions added or removed, and how the flow rewires.
  *
  * `system` carries the same design doctrine the generator gets. An edit is
@@ -429,7 +448,7 @@ export const GENERATION_PROVIDER_OPTIONS = {
  * about covering every option and keeping arms contiguous matter more here, not
  * less. It used to see none of them.
  */
-export async function generateEdit(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: EditDraft; tokens: number }> {
+export async function generateEdit(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: EditDraft; tokens: number; usage: TokenUsage }> {
   const result = await generateObject({
     model: chatModel(opts.env, MODELS.generation),
     schema: EditDraft,
@@ -437,10 +456,8 @@ export async function generateEdit(opts: { env: Bindings; prompt: string; system
     prompt: opts.prompt,
     providerOptions: GENERATION_PROVIDER_OPTIONS,
   });
-  return {
-    draft: result.object as EditDraft,
-    tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
-  };
+  const usage = splitUsage(result.usage);
+  return { draft: result.object as EditDraft, tokens: usage.input + usage.output, usage };
 }
 
 /**
@@ -450,7 +467,7 @@ export async function generateEdit(opts: { env: Bindings; prompt: string; system
  * the larger half and is byte-identical on every call — sits in front of the
  * provider's prompt cache instead of being billed as fresh input each time.
  */
-export async function generateFormDraft(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: GenerationDraft; tokens: number }> {
+export async function generateFormDraft(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage }> {
   const result = await generateObject({
     model: chatModel(opts.env, MODELS.generation),
     schema: GenerationDraft,
@@ -458,10 +475,8 @@ export async function generateFormDraft(opts: { env: Bindings; prompt: string; s
     prompt: opts.prompt,
     providerOptions: GENERATION_PROVIDER_OPTIONS,
   });
-  return {
-    draft: result.object as GenerationDraft,
-    tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
-  };
+  const usage = splitUsage(result.usage);
+  return { draft: result.object as GenerationDraft, tokens: usage.input + usage.output, usage };
 }
 
 /** A question as it appears mid-stream, before the draft is complete. */
@@ -492,7 +507,7 @@ export async function streamFormDraft(opts: {
   system?: string;
   onBlock?: (block: DraftBlockPreview) => void;
   abortSignal?: AbortSignal;
-}): Promise<{ draft: GenerationDraft; tokens: number }> {
+}): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage }> {
   const result = streamObject({
     model: chatModel(opts.env, MODELS.generation),
     schema: GenerationDraft,
@@ -531,8 +546,8 @@ export async function streamFormDraft(opts: {
     const b = draft.blocks[last]!;
     opts.onBlock({ index: last, ref: b.ref, type: b.type, title: b.title, optionCount: b.options.length });
   }
-  const usage = await result.usage;
-  return { draft, tokens: (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0) };
+  const split = splitUsage(await result.usage);
+  return { draft, tokens: split.input + split.output, usage: split };
 }
 
 /**
@@ -559,7 +574,7 @@ export async function researchBrief(opts: {
   request: string;
   sites: { url: string; title: string | null; text: string }[];
   abortSignal?: AbortSignal;
-}): Promise<{ brief: string; sources: string[]; tokens: number } | null> {
+}): Promise<{ brief: string; sources: string[]; tokens: number; usage: TokenUsage } | null> {
   const pages = opts.sites
     .map((s) => `PAGE ${s.url}${s.title ? ` — ${s.title}` : ""}\n"""${s.text}"""`)
     .join("\n\n");
@@ -597,7 +612,8 @@ Use only what the page content and your search results support. If something is 
           .filter((u): u is string => !!u),
       ),
     ].slice(0, 6);
-    return { brief, sources, tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0) };
+    const usage = splitUsage(result.usage);
+    return { brief, sources, tokens: usage.input + usage.output, usage };
   } catch (err) {
     console.error("research_failed", err);
     return null;

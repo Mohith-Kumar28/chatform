@@ -41,6 +41,665 @@ export type GetApiBillingPlans200 = {
   limits: GetApiBillingPlans200Limits;
 };
 
+export type GetApiAdminMe200 = {
+  email: string;
+  userId: string;
+};
+
+export type GetApiAdminOverviewParams = {
+range?: GetApiAdminOverviewRange;
+};
+
+export type GetApiAdminOverviewRange = typeof GetApiAdminOverviewRange[keyof typeof GetApiAdminOverviewRange];
+
+
+export const GetApiAdminOverviewRange = {
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+  '365d': '365d',
+} as const;
+
+export type GetApiAdminOverview200Kpis = {[key: string]: {
+  value: number;
+  previous: number;
+}};
+
+export type GetApiAdminOverview200Series = {[key: string]: number[]};
+
+export type GetApiAdminOverview200FunnelItem = {
+  key: string;
+  label: string;
+  count: number;
+  rate: number;
+};
+
+export type GetApiAdminOverview200PlanMixItem = {
+  plan: string;
+  orgs: number;
+};
+
+export type GetApiAdminOverview200CohortsItem = {
+  cohort: string;
+  size: number;
+  retention: (number | null)[];
+};
+
+export type GetApiAdminOverview200ActionCounts = {[key: string]: number};
+
+export type GetApiAdminOverview200 = {
+  range: string;
+  days: string[];
+  kpis: GetApiAdminOverview200Kpis;
+  series: GetApiAdminOverview200Series;
+  funnel: GetApiAdminOverview200FunnelItem[];
+  planMix: GetApiAdminOverview200PlanMixItem[];
+  mrrSeries: number[];
+  cohorts: GetApiAdminOverview200CohortsItem[];
+  actionCounts: GetApiAdminOverview200ActionCounts;
+  formStatsAsOf: number | null;
+};
+
+export type GetApiAdminActions200DunningItem = {[key: string]: unknown};
+
+export type GetApiAdminActions200FailedPaymentsItem = {[key: string]: unknown};
+
+export type GetApiAdminActions200FailingWebhooksItem = {[key: string]: unknown};
+
+export type GetApiAdminActions200StuckBillingEventsItem = {[key: string]: unknown};
+
+export type GetApiAdminActions200AtLimitItem = {[key: string]: unknown};
+
+export type GetApiAdminActions200 = {
+  dunning: GetApiAdminActions200DunningItem[];
+  failedPayments: GetApiAdminActions200FailedPaymentsItem[];
+  failingWebhooks: GetApiAdminActions200FailingWebhooksItem[];
+  stuckBillingEvents: GetApiAdminActions200StuckBillingEventsItem[];
+  atLimit: GetApiAdminActions200AtLimitItem[];
+};
+
+export type GetApiAdminAccountsParams = {
+/**
+ * @maxLength 120
+ */
+q?: string;
+plan?: GetApiAdminAccountsPlan;
+cohort?: GetApiAdminAccountsCohort;
+sort?: GetApiAdminAccountsSort;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minimum 0
+ * @maximum 9007199254740991
+ */
+offset?: number;
+};
+
+export type GetApiAdminAccountsPlan = typeof GetApiAdminAccountsPlan[keyof typeof GetApiAdminAccountsPlan];
+
+
+export const GetApiAdminAccountsPlan = {
+  free: 'free',
+  pro: 'pro',
+  business: 'business',
+} as const;
+
+export type GetApiAdminAccountsCohort = typeof GetApiAdminAccountsCohort[keyof typeof GetApiAdminAccountsCohort];
+
+
+export const GetApiAdminAccountsCohort = {
+  created_form: 'created_form',
+  published: 'published',
+  first_response: 'first_response',
+  ten_responses: 'ten_responses',
+  paid: 'paid',
+  no_form: 'no_form',
+  stalled: 'stalled',
+} as const;
+
+export type GetApiAdminAccountsSort = typeof GetApiAdminAccountsSort[keyof typeof GetApiAdminAccountsSort];
+
+
+export const GetApiAdminAccountsSort = {
+  created: 'created',
+  responses: 'responses',
+  forms: 'forms',
+  ai: 'ai',
+  active: 'active',
+  mrr: 'mrr',
+} as const;
+
+export type GetApiAdminAccounts200AccountsItem = {
+  id: string;
+  name: string;
+  slug: string;
+  created_at: number;
+  owner_email: string | null;
+  plan: string;
+  seats: number;
+  forms: number;
+  responses_30d: number;
+  ai_tokens_30d: number;
+  ai_cost_micro_30d: number;
+  last_active_at: number | null;
+  mrr_cents: number;
+};
+
+export type GetApiAdminAccounts200 = {
+  accounts: GetApiAdminAccounts200AccountsItem[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type GetApiAdminAccountsByOrgId200Org = {[key: string]: unknown};
+
+export type GetApiAdminAccountsByOrgId200Plan = {
+  id: string;
+  name: string;
+} | null;
+
+export type GetApiAdminAccountsByOrgId200Limits = {[key: string]: number | null};
+
+export type GetApiAdminAccountsByOrgId200MembersItem = {[key: string]: unknown};
+
+export type GetApiAdminAccountsByOrgId200Subscription = {[key: string]: unknown} | null;
+
+export type GetApiAdminAccountsByOrgId200FormsItem = {[key: string]: unknown};
+
+export type GetApiAdminAccountsByOrgId200UsageItem = {[key: string]: unknown};
+
+export type GetApiAdminAccountsByOrgId200OverridesItem = {[key: string]: unknown};
+
+export type GetApiAdminAccountsByOrgId200AuditItem = {[key: string]: unknown};
+
+export type GetApiAdminAccountsByOrgId200DenialsItem = {[key: string]: unknown};
+
+export type GetApiAdminAccountsByOrgId200 = {
+  org: GetApiAdminAccountsByOrgId200Org;
+  plan: GetApiAdminAccountsByOrgId200Plan;
+  limits: GetApiAdminAccountsByOrgId200Limits;
+  members: GetApiAdminAccountsByOrgId200MembersItem[];
+  subscription: GetApiAdminAccountsByOrgId200Subscription;
+  forms: GetApiAdminAccountsByOrgId200FormsItem[];
+  usage: GetApiAdminAccountsByOrgId200UsageItem[];
+  overrides: GetApiAdminAccountsByOrgId200OverridesItem[];
+  audit: GetApiAdminAccountsByOrgId200AuditItem[];
+  denials: GetApiAdminAccountsByOrgId200DenialsItem[];
+};
+
+export type GetApiAdminProductParams = {
+range?: GetApiAdminProductRange;
+};
+
+export type GetApiAdminProductRange = typeof GetApiAdminProductRange[keyof typeof GetApiAdminProductRange];
+
+
+export const GetApiAdminProductRange = {
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+  '365d': '365d',
+} as const;
+
+export type GetApiAdminProduct200BlockTypesItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminProduct200FormSizesItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminProduct200FormLogicItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminProduct200CreationSourceItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminProduct200ResponseSourceItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminProduct200TemplatesItem = {[key: string]: unknown};
+
+export type GetApiAdminProduct200AdoptionItem = {
+  feature: string;
+  orgs: number;
+  share: number;
+};
+
+export type GetApiAdminProduct200TopQuestionsItem = {[key: string]: unknown};
+
+export type GetApiAdminProduct200Totals = {
+  orgs: number;
+  forms: number;
+  published: number;
+  avgBlocks: number;
+};
+
+export type GetApiAdminProduct200 = {
+  blockTypes: GetApiAdminProduct200BlockTypesItem[];
+  formSizes: GetApiAdminProduct200FormSizesItem[];
+  formLogic: GetApiAdminProduct200FormLogicItem[];
+  creationSource: GetApiAdminProduct200CreationSourceItem[];
+  responseSource: GetApiAdminProduct200ResponseSourceItem[];
+  templates: GetApiAdminProduct200TemplatesItem[];
+  adoption: GetApiAdminProduct200AdoptionItem[];
+  topQuestions: GetApiAdminProduct200TopQuestionsItem[];
+  totals: GetApiAdminProduct200Totals;
+  statsAsOf: number | null;
+};
+
+export type GetApiAdminFormsParams = {
+/**
+ * @maxLength 120
+ */
+q?: string;
+status?: GetApiAdminFormsStatus;
+sort?: GetApiAdminFormsSort;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minimum 0
+ * @maximum 9007199254740991
+ */
+offset?: number;
+};
+
+export type GetApiAdminFormsStatus = typeof GetApiAdminFormsStatus[keyof typeof GetApiAdminFormsStatus];
+
+
+export const GetApiAdminFormsStatus = {
+  draft: 'draft',
+  published: 'published',
+  closed: 'closed',
+} as const;
+
+export type GetApiAdminFormsSort = typeof GetApiAdminFormsSort[keyof typeof GetApiAdminFormsSort];
+
+
+export const GetApiAdminFormsSort = {
+  recent: 'recent',
+  responses: 'responses',
+  starts: 'starts',
+  drop_off: 'drop_off',
+  size: 'size',
+} as const;
+
+export type GetApiAdminForms200FormsItem = {[key: string]: unknown};
+
+export type GetApiAdminForms200 = {
+  forms: GetApiAdminForms200FormsItem[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type GetApiAdminRevenueParams = {
+range?: GetApiAdminRevenueRange;
+};
+
+export type GetApiAdminRevenueRange = typeof GetApiAdminRevenueRange[keyof typeof GetApiAdminRevenueRange];
+
+
+export const GetApiAdminRevenueRange = {
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+  '365d': '365d',
+} as const;
+
+export type GetApiAdminRevenue200MrrByPlanItem = {
+  plan: string;
+  orgs: number;
+  mrrCents: number;
+};
+
+export type GetApiAdminRevenue200Totals = {
+  mrrCents: number;
+  arrCents: number;
+  payingOrgs: number;
+  arpaCents: number;
+  trialing: number;
+  atRiskCents: number;
+  collectedCents: number;
+  failedCents: number;
+  refundedCents: number;
+};
+
+export type GetApiAdminRevenue200PaymentsSeriesItem = {
+  date: string;
+  succeeded: number;
+  failed: number;
+};
+
+export type GetApiAdminRevenue200StatusBoardItem = {
+  status: string;
+  orgs: number;
+  mrrCents: number;
+};
+
+export type GetApiAdminRevenue200UpgradeFunnelItem = {
+  feature: string;
+  orgs: number;
+  denials: number;
+  converted: number;
+  conversion: number;
+  topSurface: string | null;
+};
+
+export type GetApiAdminRevenue200CancellationsItem = {[key: string]: unknown};
+
+export type GetApiAdminRevenue200CompedItem = {[key: string]: unknown};
+
+export type GetApiAdminRevenue200RecentPaymentsItem = {[key: string]: unknown};
+
+export type GetApiAdminRevenue200 = {
+  days: string[];
+  mrrSeries: number[];
+  payingSeries: number[];
+  mrrByPlan: GetApiAdminRevenue200MrrByPlanItem[];
+  totals: GetApiAdminRevenue200Totals;
+  paymentsSeries: GetApiAdminRevenue200PaymentsSeriesItem[];
+  statusBoard: GetApiAdminRevenue200StatusBoardItem[];
+  upgradeFunnel: GetApiAdminRevenue200UpgradeFunnelItem[];
+  cancellations: GetApiAdminRevenue200CancellationsItem[];
+  comped: GetApiAdminRevenue200CompedItem[];
+  recentPayments: GetApiAdminRevenue200RecentPaymentsItem[];
+};
+
+export type GetApiAdminAiParams = {
+range?: GetApiAdminAiRange;
+};
+
+export type GetApiAdminAiRange = typeof GetApiAdminAiRange[keyof typeof GetApiAdminAiRange];
+
+
+export const GetApiAdminAiRange = {
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+  '365d': '365d',
+} as const;
+
+export type GetApiAdminAi200ByModelItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminAi200ByKindItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminAi200Totals = {
+  costMicro: number;
+  tokens: number;
+  calls: number;
+  errors: number;
+  errorRate: number;
+  costPerConversationMicro: number;
+  conversations: number;
+};
+
+export type GetApiAdminAi200LatencyItem = {
+  model: string;
+  calls: number;
+  p50: number;
+  p90: number;
+  errorRate: number;
+};
+
+export type GetApiAdminAi200TopSpendersItem = {[key: string]: unknown};
+
+export type GetApiAdminAi200LossMakersItem = {[key: string]: unknown};
+
+export type GetApiAdminAi200 = {
+  days: string[];
+  costSeries: number[];
+  tokenSeries: number[];
+  callSeries: number[];
+  byModel: GetApiAdminAi200ByModelItem[];
+  byKind: GetApiAdminAi200ByKindItem[];
+  totals: GetApiAdminAi200Totals;
+  latency: GetApiAdminAi200LatencyItem[];
+  topSpenders: GetApiAdminAi200TopSpendersItem[];
+  lossMakers: GetApiAdminAi200LossMakersItem[];
+};
+
+export type GetApiAdminHealthParams = {
+range?: GetApiAdminHealthRange;
+};
+
+export type GetApiAdminHealthRange = typeof GetApiAdminHealthRange[keyof typeof GetApiAdminHealthRange];
+
+
+export const GetApiAdminHealthRange = {
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+  '365d': '365d',
+} as const;
+
+export type GetApiAdminHealth200WebhooksByStatusCodeItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminHealth200WebhooksWorstItem = {[key: string]: unknown};
+
+export type GetApiAdminHealth200Webhooks = {
+  delivered: number;
+  failed: number;
+  pending: number;
+  successRate: number;
+  endpointsFailing: number;
+  byStatusCode: GetApiAdminHealth200WebhooksByStatusCodeItem[];
+  worst: GetApiAdminHealth200WebhooksWorstItem[];
+};
+
+export type GetApiAdminHealth200BillingByStatusItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminHealth200BillingStuckItem = {[key: string]: unknown};
+
+export type GetApiAdminHealth200Billing = {
+  byStatus: GetApiAdminHealth200BillingByStatusItem[];
+  stuck: GetApiAdminHealth200BillingStuckItem[];
+};
+
+export type GetApiAdminHealth200IntegrationsByStatusItem = {[key: string]: unknown};
+
+export type GetApiAdminHealth200IntegrationsFailingItem = {[key: string]: unknown};
+
+export type GetApiAdminHealth200Integrations = {
+  byStatus: GetApiAdminHealth200IntegrationsByStatusItem[];
+  failing: GetApiAdminHealth200IntegrationsFailingItem[];
+};
+
+export type GetApiAdminHealth200EmailFollowupsByStatusItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminHealth200EmailSuppressionsByReasonItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminHealth200Email = {
+  followupsByStatus: GetApiAdminHealth200EmailFollowupsByStatusItem[];
+  suppressionsByReason: GetApiAdminHealth200EmailSuppressionsByReasonItem[];
+  sent: number;
+  complaintRate: number;
+};
+
+export type GetApiAdminHealth200ExportsItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminHealth200SessionsByStatusItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminHealth200Sessions = {
+  byStatus: GetApiAdminHealth200SessionsByStatusItem[];
+  stale: number;
+};
+
+export type GetApiAdminHealth200Storage = {
+  files: number;
+  bytes: number;
+  rejected: number;
+};
+
+export type GetApiAdminHealth200 = {
+  webhooks: GetApiAdminHealth200Webhooks;
+  billing: GetApiAdminHealth200Billing;
+  integrations: GetApiAdminHealth200Integrations;
+  email: GetApiAdminHealth200Email;
+  exports: GetApiAdminHealth200ExportsItem[];
+  sessions: GetApiAdminHealth200Sessions;
+  storage: GetApiAdminHealth200Storage;
+};
+
+export type GetApiAdminUsersParams = {
+/**
+ * @maxLength 120
+ */
+q?: string;
+sort?: GetApiAdminUsersSort;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minimum 0
+ * @maximum 9007199254740991
+ */
+offset?: number;
+};
+
+export type GetApiAdminUsersSort = typeof GetApiAdminUsersSort[keyof typeof GetApiAdminUsersSort];
+
+
+export const GetApiAdminUsersSort = {
+  created: 'created',
+  last_seen: 'last_seen',
+  orgs: 'orgs',
+} as const;
+
+export type GetApiAdminUsers200UsersItem = {[key: string]: unknown};
+
+export type GetApiAdminUsers200 = {
+  users: GetApiAdminUsers200UsersItem[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type PostApiAdminBillingEventsByIdReprocess200 = {
+  ok: boolean;
+  outcome: string;
+};
+
+export type PostApiAdminSubscriptionsByIdGraceBody = {
+  /**
+     * @minimum 1
+     * @maximum 90
+     */
+  days: number;
+  /** @maxLength 300 */
+  reason?: string;
+};
+
+export type PostApiAdminSubscriptionsByIdGrace200 = {
+  ok: boolean;
+  graceUntil: number;
+};
+
+export type PostApiAdminAccountsByOrgIdOverridesBodyKind = typeof PostApiAdminAccountsByOrgIdOverridesBodyKind[keyof typeof PostApiAdminAccountsByOrgIdOverridesBodyKind];
+
+
+export const PostApiAdminAccountsByOrgIdOverridesBodyKind = {
+  feature: 'feature',
+  limit: 'limit',
+} as const;
+
+export type PostApiAdminAccountsByOrgIdOverridesBody = {
+  kind: PostApiAdminAccountsByOrgIdOverridesBodyKind;
+  /**
+     * @minLength 1
+     * @maxLength 60
+     */
+  key: string;
+  /** @maxLength 40 */
+  value: string;
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
+  reason: string;
+  expiresInDays?: number | null;
+};
+
+export type PostApiAdminAccountsByOrgIdOverrides200 = {
+  ok: boolean;
+};
+
+export type DeleteApiAdminAccountsByOrgIdOverridesByKey200 = {
+  ok: boolean;
+};
+
+export type PostApiAdminAccountsByOrgIdRefreshEntitlements200 = {
+  ok: boolean;
+};
+
+export type PostApiAdminImpersonateBody = {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  userId: string;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  orgId?: string;
+  /** @maxLength 300 */
+  reason?: string;
+};
+
+export type PostApiAdminImpersonate200User = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+export type PostApiAdminImpersonate200 = {
+  token: string;
+  expiresAt: number;
+  user: PostApiAdminImpersonate200User;
+};
+
 export type GetHealth200 = {
   ok: boolean;
   env: string;

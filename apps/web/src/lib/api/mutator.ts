@@ -1,5 +1,6 @@
 import { isGateError, type GateError } from "@repo/entitlements";
 import { openPaywall } from "@/stores/paywall-store";
+import { readImpersonation } from "@/lib/impersonation";
 
 /**
  * Orval mutator — every generated hook/fetcher routes through here.
@@ -23,6 +24,16 @@ export const customFetch = async <T>(url: string, options?: RequestInit): Promis
   if (!headers.has("content-type") && serialized !== undefined) {
     headers.set("content-type", "application/json");
   }
+  /**
+   * Acting as a customer, when a platform admin has chosen to.
+   *
+   * Attached here rather than carried as a cookie so it is never sent by
+   * accident: every request that carries it does so because this line ran. The
+   * API re-verifies the signature *and* that the caller is still an allowlisted
+   * admin, so a stale or stolen token buys nothing.
+   */
+  const acting = readImpersonation();
+  if (acting) headers.set("x-chatform-impersonate", acting.token);
   // An absolute URL is honoured as-is; anything relative is resolved against API_ORIGIN.
   // Generated code emits relative paths (see orval.config.ts) precisely so this works.
   const res = await fetch(url.startsWith("http") ? url : `${API_ORIGIN}${url}`, {

@@ -6,7 +6,16 @@ import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, assertFormAccess, keyOwnsForm, type GuardVars } from "../lib/guards.js";
 import { requirePermission, requireQuota, requireGauge, type AuthzVars } from "../lib/authorize.js";
 import { meter } from "../lib/entitlements.js";
-import { generateFormDraft, generateEdit, streamFormDraft, researchBrief, type GenerationDraft } from "../lib/ai.js";
+import {
+  generateFormDraft,
+  generateEdit,
+  streamFormDraft,
+  researchBrief,
+  MODELS,
+  type GenerationDraft,
+  type TokenUsage,
+} from "../lib/ai.js";
+import { logAiGeneration } from "../lib/ai-usage.js";
 import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, type BuilderTurn } from "../lib/agent-prompts.js";
 import { applyBlockConfig, draftToDoc, normalizeDraftEndings, normalizeEditBlocks, resolveBranches } from "../lib/draft-normalize.js";
 import { extractUrls, readSites } from "../lib/research.js";
@@ -79,6 +88,8 @@ interface Generated {
   doc: ReturnType<typeof FormDoc.parse>;
   issues: ReturnType<typeof lintFormDoc>;
   tokens: number;
+  /** The same tokens, split, because only the split can be priced. */
+  usage: TokenUsage;
 }
 
 /**
@@ -97,6 +108,10 @@ async function generateWithRetry(opts: {
 }): Promise<Generated> {
   let lastError = "";
   let tokens = 0;
+  // Accumulated across retries on purpose: a retried draft was really billed
+  // twice, and a cost figure that hides that is a cost figure that will not
+  // show the day a prompt change doubles the retry rate.
+  const usage: TokenUsage = { input: 0, output: 0 };
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const fixNote =
@@ -110,6 +125,8 @@ async function generateWithRetry(opts: {
         : await generateFormDraft({ env: opts.env, system: FORM_DESIGNER_SYSTEM, prompt });
       draft = result.draft;
       tokens += result.tokens;
+      usage.input += result.usage.input;
+      usage.output += result.usage.output;
     } catch (err) {
       // An upstream failure — OpenRouter 5xx, a provider timeout, a schema the
       // provider rejected. Worth one retry; the second is the author's problem
@@ -132,7 +149,7 @@ async function generateWithRetry(opts: {
     }
 
     if (!hasErrors(normalized.issues)) {
-      return { doc: normalized.doc, issues: normalized.issues, tokens };
+      return { doc: normalized.doc, issues: normalized.issues, tokens, usage };
     }
 
     lastError = normalized.issues
@@ -143,7 +160,7 @@ async function generateWithRetry(opts: {
       // Second attempt still has lint errors. The document is structurally
       // valid — it parsed — so the author is better served by a form with a
       // flagged issue in the builder than by nothing at all.
-      return { doc: normalized.doc, issues: normalized.issues, tokens };
+      return { doc: normalized.doc, issues: normalized.issues, tokens, usage };
     }
     opts.onRetry?.("Fixing a problem with the flow");
   }
@@ -182,7 +199,8 @@ export const generateFormHandler = async (c: AiCtx) => {
 
     const research = await researchFor(c.env, prompt);
     try {
-      const { doc, issues, tokens } = await generateWithRetry({
+      const started = Date.now();
+      const { doc, issues, tokens, usage } = await generateWithRetry({
         env: c.env,
         prompt,
         questionCount,
@@ -195,6 +213,27 @@ export const generateFormHandler = async (c: AiCtx) => {
         await meter(c.env, orgId, "ai_generations");
         const total = tokens + research.tokens;
         if (total > 0) await meter(c.env, orgId, "ai_tokens", total);
+        // Metering spends the allowance; this records what it cost us. Research
+        // is logged separately because it runs on its own budget and a cost
+        // chart that cannot separate "reading their website" from "writing the
+        // form" cannot tell you which one to make cheaper.
+        await logAiGeneration(c.env, {
+          organizationId: orgId,
+          userId: c.get("userId"),
+          kind: "generate",
+          model: MODELS.generation,
+          usage,
+          latencyMs: Date.now() - started,
+        });
+        if (research.tokens > 0) {
+          await logAiGeneration(c.env, {
+            organizationId: orgId,
+            userId: c.get("userId"),
+            kind: "research",
+            model: MODELS.research,
+            usage: research.usage,
+          });
+        }
       }
       return c.json({ doc, issues, tokens });
     } catch (err) {
@@ -231,13 +270,19 @@ aiRouter.post(
 async function researchFor(
   env: Bindings,
   prompt: string,
-): Promise<{ brief: { brief: string; sources: string[] } | null; urls: string[]; tokens: number }> {
+): Promise<{ brief: { brief: string; sources: string[] } | null; urls: string[]; tokens: number; usage: TokenUsage }> {
+  const none = { input: 0, output: 0 };
   const urls = extractUrls(prompt);
-  if (urls.length === 0) return { brief: null, urls, tokens: 0 };
+  if (urls.length === 0) return { brief: null, urls, tokens: 0, usage: none };
   const sites = await readSites(urls);
-  if (sites.length === 0) return { brief: null, urls, tokens: 0 };
+  if (sites.length === 0) return { brief: null, urls, tokens: 0, usage: none };
   const brief = await researchBrief({ env, request: prompt, sites });
-  return { brief: brief ? { brief: brief.brief, sources: brief.sources } : null, urls, tokens: brief?.tokens ?? 0 };
+  return {
+    brief: brief ? { brief: brief.brief, sources: brief.sources } : null,
+    urls,
+    tokens: brief?.tokens ?? 0,
+    usage: brief?.usage ?? none,
+  };
 }
 
 // ─── streaming generation ───
@@ -320,9 +365,11 @@ aiRouter.post(
 
     const pipeline = async () => {
       try {
+        const startedAt = Date.now();
         const urls = extractUrls(prompt);
         let research: { brief: string; sources: string[] } | null = null;
         let researchTokens = 0;
+        let researchUsage: TokenUsage = { input: 0, output: 0 };
 
         if (urls.length > 0) {
           await stage("reading", "start", urls.length === 1 ? hostOf(urls[0]!) : `${urls.length} pages`);
@@ -336,6 +383,7 @@ aiRouter.post(
             if (brief) {
               research = { brief: brief.brief, sources: brief.sources };
               researchTokens = brief.tokens;
+              researchUsage = brief.usage;
               if (brief.sources.length > 0) {
                 await send("sources", { searched: brief.sources.map((u) => ({ url: u, title: hostOf(u) })) });
               }
@@ -352,7 +400,7 @@ aiRouter.post(
         }
 
         await stage("drafting", "start");
-        const { doc, issues, tokens } = await generateWithRetry({
+        const { doc, issues, tokens, usage: genUsage } = await generateWithRetry({
           env: c.env,
           prompt,
           questionCount,
@@ -389,6 +437,25 @@ aiRouter.post(
           await meter(c.env, orgId, "ai_generations");
           const total = tokens + researchTokens;
           if (total > 0) await meter(c.env, orgId, "ai_tokens", total);
+          await logAiGeneration(c.env, {
+            organizationId: orgId,
+            userId,
+            formId: id,
+            kind: "generate_stream",
+            model: MODELS.generation,
+            usage: genUsage,
+            latencyMs: Date.now() - startedAt,
+          });
+          if (researchTokens > 0) {
+            await logAiGeneration(c.env, {
+              organizationId: orgId,
+              userId,
+              formId: id,
+              kind: "research",
+              model: MODELS.research,
+              usage: researchUsage,
+            });
+          }
         }
 
         await send("done", {
@@ -509,6 +576,7 @@ export const editFormHandler = async (c: AiCtx) => {
     // "Internal server error" into the thread — which reads as a bug in
     // chatform and tells the author nothing about what to do next.
     let draft, tokens;
+    let usage: TokenUsage = { input: 0, output: 0 };
     try {
       const result = await generateEdit({
         env: c.env,
@@ -517,6 +585,7 @@ export const editFormHandler = async (c: AiCtx) => {
       });
       draft = result.draft;
       tokens = result.tokens;
+      usage = result.usage;
     } catch (err) {
       console.error("edit_form_failed", err);
       const message = err instanceof Error ? err.message : String(err);
@@ -694,6 +763,14 @@ export const editFormHandler = async (c: AiCtx) => {
     if (orgId) {
       await meter(c.env, orgId, "ai_generations");
       if (tokens > 0) await meter(c.env, orgId, "ai_tokens", tokens);
+      await logAiGeneration(c.env, {
+        organizationId: orgId,
+        userId: c.get("userId"),
+        formId: c.get("form")?.id ?? null,
+        kind: "edit",
+        model: MODELS.generation,
+        usage,
+      });
     }
     return c.json({
       doc,

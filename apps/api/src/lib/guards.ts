@@ -13,6 +13,7 @@ import {
 import type { KeyType } from "./apikey-config.js";
 import { LEGACY_SCOPES, type Scopes } from "./scopes.js";
 import { respondentToken } from "../routes/helpers.js";
+import { IMPERSONATION_HEADER, resolveImpersonation } from "./impersonation.js";
 
 /**
  * Authorization guards — the single source of truth for who may touch what.
@@ -35,6 +36,15 @@ export type GuardVars = {
   /** What this key may do. Never empty: a legacy key falls back to LEGACY_SCOPES. */
   scopes: Scopes;
   keyMeta: KeyMeta;
+  /**
+   * Set only while a platform admin is acting as this user.
+   *
+   * `userId` stays the customer, because authorization must behave exactly as it
+   * would for them — same role, same plan, same limits. These two say who is
+   * really at the keyboard, which is what an audit row needs.
+   */
+  impersonatorId: string;
+  impersonatorEmail: string;
 };
 
 export interface FormRow {
@@ -61,11 +71,44 @@ function notFound(c: GuardCtx, what = "Not found") {
   return c.json({ error: { code: "not_found", message: what } }, 404);
 }
 
-/** Resolves the Better Auth session and sets `userId`. */
+/**
+ * Resolves the Better Auth session and sets `userId`.
+ *
+ * Also the one place impersonation is applied, and it has to be here rather than
+ * in the admin router: the point of acting as a customer is to use the *product*
+ * as them — the builder, billing, settings — and every one of those routes
+ * resolves its caller through this middleware. Anywhere else and impersonation
+ * would only work on the console that granted it.
+ *
+ * Both the impersonated and the real identity are set. Downstream authorization
+ * reads `userId` and so behaves exactly as it would for that customer; anything
+ * writing an audit row reads `impersonatorId` and names the admin instead.
+ */
 export const requireSession: MiddlewareHandler<{ Bindings: Bindings; Variables: Partial<GuardVars> }> = async (c, next) => {
   const session = await getAuth(c.env).api.getSession({ headers: c.req.raw.headers });
   if (!session) return unauthorized(c);
-  c.set("userId", session.user.id);
+
+  const acting = await resolveImpersonation(
+    c.env,
+    session.user.email,
+    c.req.header(IMPERSONATION_HEADER),
+  );
+  if (acting) {
+    c.set("userId", acting.userId);
+    c.set("impersonatorId", acting.adminId);
+    c.set("impersonatorEmail", session.user.email);
+    /**
+     * Land in the organization the console was looking at.
+     *
+     * Set here rather than left to `resolveOrgId`, which would otherwise pick
+     * the target's oldest membership — so opening "Sign in as" from one account
+     * and arriving in another of the same person's accounts. Already verified as
+     * a real membership by `resolveImpersonation`.
+     */
+    if (acting.orgId) c.set("orgId", acting.orgId);
+  } else {
+    c.set("userId", session.user.id);
+  }
   await next();
 };
 
@@ -77,7 +120,15 @@ export const requireSession: MiddlewareHandler<{ Bindings: Bindings; Variables: 
 export const requireOrg: MiddlewareHandler<{ Bindings: Bindings; Variables: Partial<GuardVars> }> = async (c, next) => {
   const userId = c.get("userId");
   if (!userId) return unauthorized(c);
-  const orgId = await resolveOrgId(c.env, userId);
+  /**
+   * An org already on the context wins.
+   *
+   * Only `requireSession` sets one, and only while impersonating — where the
+   * console has named which of the person's organizations to open and has
+   * already verified the membership. Re-resolving here would throw that away
+   * and silently pick their oldest account instead.
+   */
+  const orgId = c.get("orgId") ?? (await resolveOrgId(c.env, userId));
   if (!orgId) return c.json({ error: { code: "no_organization", message: "No organization for this user" } }, 403);
   c.set("orgId", orgId);
   await next();

@@ -82,6 +82,19 @@ export interface Bindings {
    */
   MAIL_TRANSPORT?: string;
 
+  /**
+   * Who may open the platform console at `/admin` — a comma-separated list of
+   * email addresses.
+   *
+   * A secret rather than a `users.role` column on purpose. This is the one
+   * capability in the product that crosses every tenant boundary, and a column
+   * would mean a stray `UPDATE`, a compromised row or a mis-scoped admin endpoint
+   * could mint one. A worker secret can only be changed by somebody who can
+   * already deploy. Absent, the console does not exist: `isPlatformAdmin` returns
+   * false for everyone and every `/api/admin` route answers 404.
+   */
+  PLATFORM_ADMIN_EMAILS?: string;
+
   BETTER_AUTH_SECRET: string;
   OPENROUTER_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;

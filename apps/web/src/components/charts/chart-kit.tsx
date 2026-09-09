@@ -240,7 +240,10 @@ export function Donut({
               {item.label}
             </span>
             <span className="text-muted-foreground tabular shrink-0 text-xs">
-              {item.value}
+              {/* `display` for the same reason `BarList` has it: a slice can be
+                  a count, but it can equally be money or bytes, and printing
+                  the raw number then reports 8500 where the answer is $85. */}
+              {item.display ?? item.value}
               <span className="ml-1.5 opacity-70">{Math.round((item.value / denom) * 100)}%</span>
             </span>
           </li>

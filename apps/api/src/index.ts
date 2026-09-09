@@ -16,6 +16,7 @@ import {
   pruneTestData,
   pruneIdempotencyKeys,
 } from "./lib/sweeps.js";
+import { rollupPlatformDaily, rollupFormStructure, backfillPlatformDaily } from "./lib/platform-rollup.js";
 
 export { SessionDO };
 
@@ -116,6 +117,33 @@ export default {
       // An export is a full copy of respondent data sitting in a bucket. It is
       // kept for a day, not forever.
       await pruneExpiredExports(env).catch((err) => console.error("export_prune_failed", err));
+
+      /**
+       * The platform's own numbers, for the super-admin console.
+       *
+       * Today's counters every tick — the work is bounded by one day of traffic,
+       * not by how long the product has been running, so it stays cheap forever.
+       * The form-structure walk parses every document and is not bounded by
+       * anything, so it runs in one quiet UTC hour and pages itself across ticks.
+       */
+      await rollupPlatformDaily(env).catch((err) => console.error("platform_rollup_failed", err));
+      /**
+       * History, a few days per tick, oldest gap first. Also the repair path: a
+       * day the worker was down for has no rows and is simply picked up later.
+       * Does nothing once there are no gaps left.
+       */
+      await backfillPlatformDaily(env).catch((err) => console.error("platform_backfill_failed", err));
+      /**
+       * The form-structure walk, which pages itself across ticks and marks the
+       * day done when it finishes.
+       *
+       * Not pinned to a quiet hour, though the work is heavier. Pinning it means
+       * the Product page shows nothing at all for up to a day after a deploy —
+       * and the "done" sentinel already makes this a no-op for the rest of the
+       * day once the pass completes, so a fixed hour buys nothing that the
+       * cursor does not already give.
+       */
+      await rollupFormStructure(env).catch((err) => console.error("form_structure_rollup_failed", err));
     }
   },
 } satisfies ExportedHandler<Bindings>;

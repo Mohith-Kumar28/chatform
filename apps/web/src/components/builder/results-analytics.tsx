@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import { CheckCircle2, Clock, Eye, Gauge, TrendingDown, Users } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
-import { BarList, ChartCard, ColumnChart, Donut, Legend } from "./chart-kit";
+import { BarList, ChartCard, ColumnChart, Donut, Legend } from "@/components/charts/chart-kit";
 import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 

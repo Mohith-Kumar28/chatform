@@ -11,7 +11,9 @@ import { PlanBadge } from "./plan-badge";
 import { UserMenu } from "./user-menu";
 import { UsagePill } from "./usage-pill";
 import { OrganizationSwitcher } from "./organization-switcher";
+import { InviteTeamButton } from "./invite-team-button";
 import { CommandPalette, openCommandPalette } from "./command-palette";
+import { ImpersonationBanner, useImpersonation } from "@/components/admin/impersonation-banner";
 import { useAppShortcuts } from "./use-app-shortcuts";
 import { ShortcutsDialog } from "@/components/ui/shortcuts-dialog";
 import { Button } from "@/components/ui/button";
@@ -36,10 +38,28 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const kmod = useModLabel();
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
+  /**
+   * While impersonating, two pieces of chrome would show the wrong person.
+   *
+   * The organization switcher and the user menu read from Better Auth's own
+   * client, which talks to `/api/auth/*` and has no idea impersonation is
+   * happening — so they keep rendering the *admin's* organizations and the
+   * admin's avatar over the customer's data. Everything else in the header
+   * (`UsagePill`, `PlanBadge`) goes through `customFetch` and is correctly the
+   * customer's.
+   *
+   * Rather than teach Better Auth about a mode it does not have, the two liars
+   * are hidden and the banner is the identity. Switching organizations mid-
+   * impersonation would desync from the token anyway.
+   */
+  const impersonating = useImpersonation() !== null;
 
   return (
     <AuthGuard>
       <div className="flex min-h-svh flex-col">
+        {/* Above the header, not inside it: the one thing that must be visible
+            before anything else on the page is that this is not your account. */}
+        <ImpersonationBanner />
         <header className="bg-card/95 sticky top-0 z-[var(--z-sticky)] backdrop-blur">
           <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-3 px-4 sm:px-6">
             {/* Below `md` the nav used to collapse to five unlabelled icons
@@ -80,8 +100,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 The gear rides inside that control now — same bordered pill,
                 right of the name — so this slot holds one thing rather than a
                 switcher and a button that merely sit next to each other. */}
-            <div className="hidden items-center md:flex">
-              <OrganizationSwitcher />
+            <div className="hidden items-center gap-1 md:flex">
+              {!impersonating && <OrganizationSwitcher />}
+              {/* Beside the switcher, not inside its pill: the pill is one
+                  control that picks or configures the organization, and this is
+                  a different verb with a dialog behind it. Hidden entirely for
+                  roles that cannot invite. */}
+              {!impersonating && <InviteTeamButton />}
             </div>
 
             {/*
@@ -125,7 +150,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               {/* Theme moved into the account menu: it is a setting you change
                   once, and it was spending a permanent header slot next to the
                   avatar that opens a menu with room for it. */}
-              <UserMenu />
+              {!impersonating && <UserMenu />}
             </div>
           </div>
         </header>
@@ -144,8 +169,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 the header gates it instead, so the drawer gets the real control
                 and the gear rides inside the switcher, as it does in the
                 header. */}
-            <div className="flex items-center p-4">
-              <OrganizationSwitcher />
+            <div className="flex flex-wrap items-center gap-1 p-4">
+              {!impersonating && <OrganizationSwitcher />}
+              {!impersonating && <InviteTeamButton />}
             </div>
             <nav className="space-y-0.5 px-2 pb-4" aria-label="Main">
               {APP_NAV.map((item) => {

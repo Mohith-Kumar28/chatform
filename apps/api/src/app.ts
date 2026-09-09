@@ -23,6 +23,7 @@ import { previewRouter } from "./routes/preview.js";
 import { templatesRouter } from "./routes/templates.js";
 import { auditRouter } from "./routes/audit.js";
 import { formHistoryRouter } from "./routes/form-history.js";
+import { adminRouter } from "./routes/admin/index.js";
 import { mountOpenApiSpec } from "./lib/openapi.js";
 import { requestId, type RequestIdVars } from "./lib/request-id.js";
 import { attachErrorContext } from "./lib/api-error.js";
@@ -51,7 +52,15 @@ export function createApp() {
     "/api/*",
     cors({
       origin: (origin) => origin ?? "*",
-      allowHeaders: ["content-type", "authorization"],
+      /**
+       * `x-chatform-impersonate` is here because a browser will not send a
+       * custom header the preflight did not allow — and it fails *silently*:
+       * the `OPTIONS` succeeds, the real request is simply never made, and the
+       * page renders an empty state as though the account had no data. It works
+       * perfectly from curl, which has no preflight, so this is the one class of
+       * bug that cannot be found without driving a real browser.
+       */
+      allowHeaders: ["content-type", "authorization", "x-chatform-impersonate"],
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       exposeHeaders: ["retry-after"],
       credentials: true,
@@ -139,6 +148,21 @@ export function createApp() {
    * them here means they answer and return before any session middleware runs.
    */
   app.route("/api", billingPublicRouter);
+
+  /**
+   * The platform console, mounted early for exactly the reason above.
+   *
+   * Every other `/api` router declares `.use("*", requireSession)`, which expands
+   * to `/api/*` and therefore runs on requests to routes it does not own. Mounted
+   * last, `/api/admin/*` was answering 401 "Sign in required" from some other
+   * router's middleware before `requirePlatformAdmin` ever ran — which quietly
+   * broke the one property this surface is supposed to have: that it is
+   * indistinguishable from a route that does not exist.
+   *
+   * Its own guard is scoped to `/admin/*` rather than `*`, so mounting it first
+   * costs the other routers nothing.
+   */
+  app.route("/api", adminRouter);
 
   app.route("/health", healthRouter);
   publicRouter.route("/", uploadsRouter);

@@ -195,6 +195,39 @@ const DASHBOARD_ONLY: Record<string, string> = {
   "/api/workspaces/{id}": "see /api/workspaces",
 
   /**
+   * The platform console, and the one group here that must never gain a `/v1`
+   * equivalent.
+   *
+   * Everything else on this list is dashboard-only because a key is the wrong
+   * credential for it. These are different in kind: they read across every
+   * tenant at once, so an API key that could reach them would be a key that
+   * reads other people's organizations. There is no scope that makes that
+   * acceptable, which is why the guard is an email allowlist in a worker secret
+   * rather than a permission — see `apps/api/src/lib/platform-admin.ts`.
+   */
+  "/api/admin/me": "platform console — cross-tenant, never reachable by a key",
+  "/api/admin/overview": "see /api/admin/me",
+  "/api/admin/actions": "see /api/admin/me",
+  "/api/admin/accounts": "see /api/admin/me",
+  "/api/admin/accounts/{orgId}": "see /api/admin/me",
+  "/api/admin/product": "see /api/admin/me",
+  "/api/admin/forms": "see /api/admin/me",
+  "/api/admin/revenue": "see /api/admin/me",
+  "/api/admin/ai": "see /api/admin/me",
+  "/api/admin/health": "see /api/admin/me",
+  "/api/admin/users": "see /api/admin/me",
+  "/api/admin/billing-events/{id}/reprocess": "see /api/admin/me",
+  "/api/admin/subscriptions/{id}/grace": "see /api/admin/me",
+  "/api/admin/accounts/{orgId}/overrides": "see /api/admin/me",
+  "/api/admin/accounts/{orgId}/overrides/{key}": "see /api/admin/me",
+  "/api/admin/accounts/{orgId}/refresh-entitlements": "see /api/admin/me",
+  /**
+   * Emphatically never. A key that could mint an impersonation token would be a
+   * key that can become any user on the platform.
+   */
+  "/api/admin/impersonate": "see /api/admin/me — and a key must never be able to become a person",
+
+  /**
    * Covered under a different noun.
    *
    * The dashboard says "submissions" and the developer API says "responses" — the

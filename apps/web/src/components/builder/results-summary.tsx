@@ -3,7 +3,7 @@
 import { MessageSquare } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { blockMeta, TONE_CLASSES } from "./block-library";
-import { BarList, ChartCard, ColumnChart, Donut, Hero, Heatmap, Legend, seriesColor } from "./chart-kit";
+import { BarList, ChartCard, ColumnChart, Donut, Hero, Heatmap, Legend, seriesColor } from "@/components/charts/chart-kit";
 import { cn } from "@/lib/utils";
 import type { Block } from "@repo/form-schema";
 

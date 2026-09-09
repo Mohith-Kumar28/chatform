@@ -1,0 +1,656 @@
+import { Hono } from "hono";
+import { describeRoute, resolver, validator } from "hono-openapi";
+import { z } from "zod";
+import type { Bindings } from "../../env.js";
+import type { PlatformAdminVars } from "../../lib/platform-admin.js";
+import { FORM_ROLLUP_COMPLETED_KEY, utcDay } from "../../lib/platform-rollup.js";
+import {
+  DAY_MS,
+  HAS_PUBLISHED,
+  OWNER_OF_ORG,
+  OpsRows,
+  PLAN_OF_ORG,
+  RANGES,
+  dayKeys,
+  latestOf,
+  loadMetrics,
+  seriesOf,
+  sumOf,
+  type MetricRow,
+  type RangeKey,
+} from "./shared.js";
+
+/**
+ * Overview, accounts and the action queue — the three screens you open first.
+ *
+ * Guarded by `requirePlatformAdmin` at the mount in `./index.ts`, not here. See
+ * that file for why the whole directory shares one guard.
+ */
+export const coreRouter = new Hono<{ Bindings: Bindings; Variables: Partial<PlatformAdminVars> }>();
+
+// ───────────────────────────────── me ─────────────────────────────────
+
+coreRouter.get(
+  "/admin/me",
+  describeRoute({
+    tags: ["admin"],
+    summary: "Confirm the caller is a platform admin",
+    responses: {
+      200: { description: "Admin", content: { "application/json": { schema: resolver(z.object({ email: z.string(), userId: z.string() })) } } },
+      404: { description: "Not an admin, or not signed in" },
+    },
+  }),
+  (c) => c.json({ email: c.get("platformAdminEmail")!, userId: c.get("userId")! }),
+);
+
+// ─────────────────────────────── overview ───────────────────────────────
+
+const FunnelStep = z.object({ key: z.string(), label: z.string(), count: z.number(), rate: z.number() });
+const OverviewResponse = z.object({
+  range: z.string(),
+  days: z.array(z.string()),
+  kpis: z.record(z.string(), z.object({ value: z.number(), previous: z.number() })),
+  series: z.record(z.string(), z.array(z.number())),
+  funnel: z.array(FunnelStep),
+  planMix: z.array(z.object({ plan: z.string(), orgs: z.number() })),
+  mrrSeries: z.array(z.number()),
+  cohorts: z.array(z.object({ cohort: z.string(), size: z.number(), retention: z.array(z.number().nullable()) })),
+  actionCounts: z.record(z.string(), z.number()),
+  formStatsAsOf: z.number().nullable(),
+});
+
+coreRouter.get(
+  "/admin/overview",
+  validator("query", z.object({ range: z.enum(["7d", "30d", "90d", "365d"]).default("30d") })),
+  describeRoute({
+    tags: ["admin"],
+    summary: "Platform-wide growth, funnel, retention and revenue",
+    responses: {
+      200: { description: "Overview", content: { "application/json": { schema: resolver(OverviewResponse) } } },
+      404: { description: "Not an admin" },
+    },
+  }),
+  async (c) => {
+    const range = c.req.valid("query").range as RangeKey;
+    const days = RANGES[range];
+
+    /**
+     * Cached like entitlements are, and for the same reason: this payload is
+     * eight queries deep and nobody watching a dashboard needs it recomputed per
+     * keystroke. Five minutes also matches the cron, so a fresher answer would
+     * usually be the same answer.
+     */
+    const cacheKey = `admin:overview:${range}`;
+    const cached = await c.env.KV_CONFIG.get(cacheKey);
+    if (cached) return c.json(JSON.parse(cached));
+
+    const now = Date.now();
+    const window = dayKeys(days, now);
+    const previous = dayKeys(days, now - days * DAY_MS);
+    const rows = await loadMetrics(c.env, previous[0]!, window[window.length - 1]!);
+    const windowSet = new Set(window);
+    const previousSet = new Set(previous);
+
+    const kpiFor = (metric: string) => ({
+      value: sumOf(rows, metric, windowSet),
+      previous: sumOf(rows, metric, previousSet),
+    });
+
+    const mrrSeries = seriesOf(rows, "mrr_cents", window);
+    const payingSeries = seriesOf(rows, "paying_orgs", window);
+    const kpis: Record<string, { value: number; previous: number }> = {
+      signups: kpiFor("signups"),
+      orgs_created: kpiFor("orgs_created"),
+      forms_created: kpiFor("forms_created"),
+      responses_completed: kpiFor("responses_completed"),
+      ai_cost_micro: kpiFor("ai_cost_micro"),
+      // Snapshots, not sums: "MRR over the last 30 days" is not a number. The
+      // comparison is where it stood a period ago.
+      mrr_cents: { value: mrrSeries.at(-1) ?? 0, previous: seriesOf(rows, "mrr_cents", previous).at(-1) ?? 0 },
+      paying_orgs: { value: payingSeries.at(-1) ?? 0, previous: seriesOf(rows, "paying_orgs", previous).at(-1) ?? 0 },
+    };
+
+    const series: Record<string, number[]> = {
+      signups: seriesOf(rows, "signups", window),
+      orgs_created: seriesOf(rows, "orgs_created", window),
+      forms_created: seriesOf(rows, "forms_created", window),
+      forms_published: seriesOf(rows, "forms_published", window),
+      responses_started: seriesOf(rows, "responses_started", window),
+      responses_completed: seriesOf(rows, "responses_completed", window),
+      active_orgs: seriesOf(rows, "active_orgs", window),
+      views: seriesOf(rows, "views", window),
+      ai_tokens: seriesOf(rows, "ai_tokens", window),
+      ai_cost_micro: seriesOf(rows, "ai_cost_micro", window),
+    };
+
+    const [funnel, cohorts, actionCounts, formStatsAsOf] = await Promise.all([
+      activationFunnel(c.env, now - days * DAY_MS),
+      retentionCohorts(c.env),
+      actionQueueCounts(c.env),
+      c.env.KV_CONFIG.get(FORM_ROLLUP_COMPLETED_KEY),
+    ]);
+
+    const payload = {
+      range,
+      days: window,
+      kpis,
+      series,
+      funnel,
+      planMix: latestOf(rows, "orgs_by_plan").map((r) => ({ plan: r.dimension, orgs: r.value })),
+      mrrSeries,
+      cohorts,
+      actionCounts,
+      formStatsAsOf: formStatsAsOf ? Number(formStatsAsOf) : null,
+    };
+    await c.env.KV_CONFIG.put(cacheKey, JSON.stringify(payload), { expirationTtl: 300 });
+    return c.json(payload);
+  },
+);
+
+const FUNNEL_STEPS: [key: string, label: string][] = [
+  ["signed_up", "Signed up"],
+  ["created_form", "Created a form"],
+  ["published", "Published it"],
+  ["first_response", "First response"],
+  ["ten_responses", "10 responses"],
+  ["paid", "Paid"],
+];
+
+/**
+ * Signed up → built → published → collected → kept collecting → paid.
+ *
+ * Cohorted on organizations created inside the window, not on all organizations
+ * ever: mixing a two-year-old account with one that signed up this morning makes
+ * every step look worse than it is, and the question this chart answers is
+ * "what happens to the people arriving now".
+ *
+ * Counted as the furthest stage each account reached, then read cumulatively —
+ * not as six independent tests. Independent tests do not make a funnel: they
+ * produced a chart that widened as it descended, because an account can hold a
+ * response with no published version (a preview, an API-created response, a form
+ * unpublished after collecting) and so counted at "first response" while missing
+ * from "published". A step that shows fewer people than the step below it is not
+ * a subtle inaccuracy — it is a picture that cannot be read at all.
+ *
+ * Ranking instead says what a funnel is supposed to say: whoever got to a
+ * response got past building, whatever the publish table happens to record.
+ */
+async function activationFunnel(env: Bindings, since: number) {
+  const row = await env.DB.prepare(
+    `SELECT
+       COUNT(*) AS signed_up,
+       SUM(CASE WHEN stage >= 1 THEN 1 ELSE 0 END) AS created_form,
+       SUM(CASE WHEN stage >= 2 THEN 1 ELSE 0 END) AS published,
+       SUM(CASE WHEN stage >= 3 THEN 1 ELSE 0 END) AS first_response,
+       SUM(CASE WHEN stage >= 4 THEN 1 ELSE 0 END) AS ten_responses,
+       SUM(CASE WHEN stage >= 5 THEN 1 ELSE 0 END) AS paid
+     FROM (
+       SELECT CASE
+         WHEN EXISTS (SELECT 1 FROM subscriptions s WHERE s.organization_id = o.id
+                       AND s.status IN ('active','trialing')
+                       AND s.dodo_subscription_id NOT LIKE 'internal_manual_%') THEN 5
+         WHEN (SELECT COUNT(*) FROM submissions s WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed') >= 10 THEN 4
+         WHEN (SELECT COUNT(*) FROM submissions s WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed') >= 1 THEN 3
+         WHEN ${HAS_PUBLISHED} THEN 2
+         WHEN EXISTS (SELECT 1 FROM forms f WHERE f.organization_id = o.id AND f.deleted_at IS NULL) THEN 1
+         ELSE 0
+       END AS stage
+       FROM organizations o
+      WHERE o.created_at >= ?
+     )`,
+  )
+    .bind(since)
+    .first<Record<string, number>>();
+
+  const top = row?.signed_up ?? 0;
+  return FUNNEL_STEPS.map(([key, label]) => {
+    const count = row?.[key] ?? 0;
+    return { key, label, count, rate: top > 0 ? Math.round((count / top) * 1000) / 10 : 0 };
+  });
+}
+
+const WEEK_MS = 7 * DAY_MS;
+const COHORT_WEEKS = 12;
+
+/**
+ * Weekly retention: of the accounts that signed up in week N, how many were still
+ * doing something in week N+k.
+ *
+ * "Doing something" is collecting a response or editing a form — the same
+ * definition `active_orgs` uses in the rollup, because two definitions of active
+ * is how a retention chart and a growth chart come to disagree in a meeting.
+ *
+ * Bounded to twelve cohorts, so the row count here is organizations-created-in-a-
+ * quarter × weeks-they-were-active, not the whole history.
+ */
+async function retentionCohorts(env: Bindings) {
+  const epoch = Math.floor(Date.now() / WEEK_MS) * WEEK_MS - (COHORT_WEEKS - 1) * WEEK_MS;
+  const res = await env.DB.prepare(
+    `SELECT CAST((o.created_at - ?1) / ?2 AS INTEGER) AS cohort,
+            CAST((act.at - ?1) / ?2 AS INTEGER) AS week,
+            COUNT(DISTINCT o.id) AS n
+       FROM organizations o
+       JOIN (
+         SELECT organization_id, started_at AS at FROM submissions WHERE is_test = 0 AND started_at >= ?1
+         UNION ALL
+         SELECT organization_id, created_at AS at FROM form_activity WHERE created_at >= ?1
+       ) act ON act.organization_id = o.id
+      WHERE o.created_at >= ?1
+      GROUP BY cohort, week`,
+  )
+    .bind(epoch, WEEK_MS)
+    .all<{ cohort: number; week: number; n: number }>();
+
+  const sizes = await env.DB.prepare(
+    `SELECT CAST((created_at - ?1) / ?2 AS INTEGER) AS cohort, COUNT(*) AS n
+       FROM organizations WHERE created_at >= ?1 GROUP BY cohort`,
+  )
+    .bind(epoch, WEEK_MS)
+    .all<{ cohort: number; n: number }>();
+
+  const sizeBy = new Map((sizes.results ?? []).map((r) => [r.cohort, r.n]));
+  const activeBy = new Map((res.results ?? []).map((r) => [`${r.cohort}:${r.week}`, r.n]));
+
+  const out = [];
+  for (let cohort = 0; cohort < COHORT_WEEKS; cohort++) {
+    const size = sizeBy.get(cohort) ?? 0;
+    const retention: (number | null)[] = [];
+    for (let k = 0; cohort + k < COHORT_WEEKS; k++) {
+      const active = activeBy.get(`${cohort}:${cohort + k}`) ?? 0;
+      // null, not 0, for a week that has not happened — an empty cell and a
+      // genuine zero must not look the same.
+      retention.push(size === 0 ? null : Math.round((active / size) * 1000) / 10);
+    }
+    out.push({ cohort: utcDay(epoch + cohort * WEEK_MS), size, retention });
+  }
+  return out;
+}
+
+/** Just the counts, for the badges. `/admin/actions` returns the rows themselves. */
+async function actionQueueCounts(env: Bindings): Promise<Record<string, number>> {
+  const now = Date.now();
+  const [dunning, failedPayments, badWebhooks, stuckEvents] = await Promise.all([
+    env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM subscriptions WHERE status IN ('on_hold', 'past_due') OR (grace_until IS NOT NULL AND grace_until > ?)`,
+    )
+      .bind(now)
+      .first<{ n: number }>(),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM payments WHERE status = 'failed' AND created_at >= ?`)
+      .bind(now - 30 * DAY_MS)
+      .first<{ n: number }>(),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM webhooks WHERE active = 1 AND consecutive_failures >= 3`).first<{ n: number }>(),
+    /**
+     * `status` is the authority, not `error`.
+     *
+     * `dodo_events.error` doubles as a "what did we do about it" note and is
+     * populated for events the handler deliberately ignored, so filtering on it
+     * would flag every unremarkable event as a problem. The three statuses are
+     * `received` (arrived, not yet handled), `processed`, and `failed`.
+     */
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM dodo_events WHERE status != 'processed'`).first<{ n: number }>(),
+  ]);
+  return {
+    dunning: dunning?.n ?? 0,
+    failed_payments: failedPayments?.n ?? 0,
+    failing_webhooks: badWebhooks?.n ?? 0,
+    stuck_billing_events: stuckEvents?.n ?? 0,
+  };
+}
+
+// ─────────────────────────────── actions ───────────────────────────────
+
+const ActionsResponse = z.object({
+  dunning: OpsRows,
+  failedPayments: OpsRows,
+  failingWebhooks: OpsRows,
+  stuckBillingEvents: OpsRows,
+  atLimit: OpsRows,
+});
+
+coreRouter.get(
+  "/admin/actions",
+  describeRoute({
+    tags: ["admin"],
+    summary: "Accounts and systems that need attention today",
+    responses: {
+      200: { description: "Action queue", content: { "application/json": { schema: resolver(ActionsResponse) } } },
+      404: { description: "Not an admin" },
+    },
+  }),
+  async (c) => {
+    const now = Date.now();
+    const [dunning, failedPayments, failingWebhooks, stuckEvents] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT o.id AS org_id, o.name, s.plan_id, s.status, s.grace_until, s.current_period_end,
+                p.price_monthly_cents AS at_risk_cents
+           FROM subscriptions s
+           JOIN organizations o ON o.id = s.organization_id
+           JOIN plans p ON p.id = s.plan_id
+          WHERE s.status IN ('on_hold', 'past_due') OR (s.grace_until IS NOT NULL AND s.grace_until > ?)
+          ORDER BY p.price_monthly_cents DESC LIMIT 50`,
+      )
+        .bind(now)
+        .all(),
+      c.env.DB.prepare(
+        `SELECT p.id, p.organization_id AS org_id, o.name, p.amount_cents, p.currency, p.created_at
+           FROM payments p JOIN organizations o ON o.id = p.organization_id
+          WHERE p.status = 'failed' AND p.created_at >= ?
+          ORDER BY p.created_at DESC LIMIT 50`,
+      )
+        .bind(now - 30 * DAY_MS)
+        .all(),
+      c.env.DB.prepare(
+        `SELECT w.id, w.organization_id AS org_id, o.name, w.url, w.consecutive_failures,
+                (SELECT d.last_error FROM webhook_deliveries d WHERE d.webhook_id = w.id ORDER BY d.created_at DESC LIMIT 1) AS last_error
+           FROM webhooks w JOIN organizations o ON o.id = w.organization_id
+          WHERE w.active = 1 AND w.consecutive_failures >= 3
+          ORDER BY w.consecutive_failures DESC LIMIT 50`,
+      ).all(),
+      c.env.DB.prepare(
+        `SELECT id, dodo_event_id, type, status, error, created_at FROM dodo_events
+          WHERE status != 'processed'
+          ORDER BY created_at DESC LIMIT 50`,
+      ).all(),
+    ]);
+
+    /**
+     * Accounts using more than the plan they are on allows.
+     *
+     * Read from `usage_counters` against `plans.limits_json` rather than
+     * recomputed, so this agrees with what the customer sees on their own usage
+     * page. At 80% it is an upsell; over 100% on a `meter` limit it is revenue
+     * we are not charging for.
+     */
+    /**
+     * Wrapped in a sub-select because SQLite cannot reference a SELECT alias from
+     * WHERE, and `cap` is a `json_extract` over the plan's limits that has no
+     * business being written three times.
+     */
+    const period = new Date().toISOString().slice(0, 7);
+    const atLimit = await c.env.DB.prepare(
+      `SELECT * FROM (
+         SELECT u.organization_id AS org_id, o.name, u.metric, u.used,
+                COALESCE((${PLAN_OF_ORG}), 'free') AS plan,
+                json_extract(p.limits_json, '$.' || u.metric || '_per_month') AS cap
+           FROM usage_counters u
+           JOIN organizations o ON o.id = u.organization_id
+           JOIN plans p ON p.id = COALESCE((${PLAN_OF_ORG}), 'free')
+          WHERE u.period = ?
+       )
+       WHERE cap IS NOT NULL AND cap > 0 AND used >= cap * 0.8
+       ORDER BY (CAST(used AS REAL) / cap) DESC
+       LIMIT 50`,
+    )
+      .bind(period)
+      .all();
+
+    return c.json({
+      dunning: dunning.results ?? [],
+      failedPayments: failedPayments.results ?? [],
+      failingWebhooks: failingWebhooks.results ?? [],
+      stuckBillingEvents: stuckEvents.results ?? [],
+      atLimit: atLimit.results ?? [],
+    });
+  },
+);
+
+// ─────────────────────────────── accounts ───────────────────────────────
+
+const SORTS = {
+  created: "o.created_at DESC",
+  responses: "responses_30d DESC",
+  forms: "forms DESC",
+  ai: "ai_tokens_30d DESC",
+  active: "last_active_at DESC",
+  mrr: "mrr_cents DESC",
+} as const;
+
+coreRouter.get(
+  "/admin/accounts",
+  validator(
+    "query",
+    z.object({
+      q: z.string().max(120).optional(),
+      plan: z.enum(["free", "pro", "business"]).optional(),
+      cohort: z.enum(["created_form", "published", "first_response", "ten_responses", "paid", "no_form", "stalled"]).optional(),
+      sort: z.enum(["created", "responses", "forms", "ai", "active", "mrr"]).default("created"),
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+      offset: z.coerce.number().int().min(0).default(0),
+    }),
+  ),
+  describeRoute({
+    tags: ["admin"],
+    summary: "Every organization, with the numbers that decide what to do about it",
+    responses: {
+      200: {
+        description: "Accounts",
+        content: {
+          "application/json": {
+            schema: resolver(
+              z.object({
+                accounts: z.array(
+                  z.object({
+                    id: z.string(),
+                    name: z.string(),
+                    slug: z.string(),
+                    created_at: z.number(),
+                    owner_email: z.string().nullable(),
+                    plan: z.string(),
+                    seats: z.number(),
+                    forms: z.number(),
+                    responses_30d: z.number(),
+                    ai_tokens_30d: z.number(),
+                    ai_cost_micro_30d: z.number(),
+                    last_active_at: z.number().nullable(),
+                    mrr_cents: z.number(),
+                  }),
+                ),
+                total: z.number(),
+                limit: z.number(),
+                offset: z.number(),
+              }),
+            ),
+          },
+        },
+      },
+      404: { description: "Not an admin" },
+    },
+  }),
+  async (c) => {
+    const { q, plan, cohort, sort, limit, offset } = c.req.valid("query");
+    const since = Date.now() - 30 * DAY_MS;
+
+    /**
+     * Correlated subqueries rather than a pile of GROUP BY joins.
+     *
+     * They are evaluated per output row, which is what makes the default
+     * `created DESC` page cheap: fifty rows, five lookups each, all behind
+     * existing indexes. Sorting by a computed column does force the whole set to
+     * be evaluated — acceptable while the account base is small, and the reason
+     * every such sort is an explicit opt-in rather than the default.
+     */
+    // Numbered parameters throughout: `?1` is the 30-day cut-off and appears in
+    // three subqueries, which `?` placeholders cannot express.
+    const filters: string[] = [];
+    if (q) filters.push(`(o.name LIKE ?2 OR o.slug LIKE ?2 OR EXISTS (SELECT 1 FROM members m JOIN users u ON u.id = m.user_id WHERE m.organization_id = o.id AND u.email LIKE ?2))`);
+    if (plan) filters.push(`COALESCE((${PLAN_OF_ORG}), 'free') = ?3`);
+    if (cohort === "no_form") filters.push(`NOT EXISTS (SELECT 1 FROM forms f WHERE f.organization_id = o.id AND f.deleted_at IS NULL)`);
+    if (cohort === "created_form") filters.push(`EXISTS (SELECT 1 FROM forms f WHERE f.organization_id = o.id AND f.deleted_at IS NULL)`);
+    if (cohort === "published") filters.push(HAS_PUBLISHED);
+    if (cohort === "first_response") filters.push(`EXISTS (SELECT 1 FROM submissions s WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed')`);
+    if (cohort === "ten_responses") filters.push(`(SELECT COUNT(*) FROM submissions s WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed') >= 10`);
+    if (cohort === "paid") filters.push(`EXISTS (SELECT 1 FROM subscriptions s WHERE s.organization_id = o.id AND s.status IN ('active','trialing'))`);
+    // Built something and then stopped: the cohort worth an email.
+    if (cohort === "stalled")
+      filters.push(
+        `EXISTS (SELECT 1 FROM forms f WHERE f.organization_id = o.id AND f.deleted_at IS NULL)
+         AND NOT EXISTS (SELECT 1 FROM submissions s WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed')`,
+      );
+
+    const where = filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
+    const sql = `
+      SELECT o.id, o.name, o.slug, o.created_at,
+             (${OWNER_OF_ORG}) AS owner_email,
+             COALESCE((${PLAN_OF_ORG}), 'free') AS plan,
+             (SELECT COUNT(*) FROM members m WHERE m.organization_id = o.id) AS seats,
+             (SELECT COUNT(*) FROM forms f WHERE f.organization_id = o.id AND f.deleted_at IS NULL) AS forms,
+             (SELECT COUNT(*) FROM submissions s WHERE s.organization_id = o.id AND s.is_test = 0 AND s.started_at >= ?1) AS responses_30d,
+             (SELECT COALESCE(SUM(g.prompt_tokens + g.completion_tokens), 0) FROM ai_generations g WHERE g.organization_id = o.id AND g.created_at >= ?1) AS ai_tokens_30d,
+             (SELECT COALESCE(SUM(g.cost_usd_micro), 0) FROM ai_generations g WHERE g.organization_id = o.id AND g.created_at >= ?1) AS ai_cost_micro_30d,
+             (SELECT MAX(t) FROM (
+                SELECT MAX(s.started_at) AS t FROM submissions s WHERE s.organization_id = o.id
+                UNION ALL SELECT MAX(a.created_at) FROM form_activity a WHERE a.organization_id = o.id
+              )) AS last_active_at,
+             COALESCE((SELECT CASE WHEN s.cycle = 'yearly' THEN p.price_yearly_cents / 12 ELSE p.price_monthly_cents END
+                         FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+                        WHERE s.organization_id = o.id AND s.status IN ('active','trialing')
+                          AND s.dodo_subscription_id NOT LIKE 'internal_manual_%'
+                        ORDER BY s.created_at DESC LIMIT 1), 0) AS mrr_cents
+        FROM organizations o
+        ${where}
+       ORDER BY ${SORTS[sort]}
+       LIMIT ?4 OFFSET ?5`;
+
+    const res = await c.env.DB.prepare(sql)
+      .bind(since, q ? `%${q}%` : null, plan ?? null, limit, offset)
+      .all();
+
+    const total = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM organizations`).first<{ n: number }>();
+    return c.json({ accounts: res.results ?? [], total: total?.n ?? 0, limit, offset });
+  },
+);
+
+coreRouter.get(
+  "/admin/accounts/:orgId",
+  describeRoute({
+    tags: ["admin"],
+    summary: "One organization, in full",
+    responses: {
+      200: {
+        description: "Account",
+        content: {
+          "application/json": {
+            schema: resolver(
+              z.object({
+                org: z.record(z.string(), z.unknown()),
+                plan: z.object({ id: z.string(), name: z.string() }).nullable(),
+                /** The plan's `limits_json`, so usage can be shown against its ceiling. */
+                limits: z.record(z.string(), z.number().nullable()),
+                members: OpsRows,
+                subscription: z.record(z.string(), z.unknown()).nullable(),
+                forms: OpsRows,
+                usage: OpsRows,
+                overrides: OpsRows,
+                audit: OpsRows,
+                denials: OpsRows,
+              }),
+            ),
+          },
+        },
+      },
+      404: { description: "Not an admin, or no such org" },
+    },
+  }),
+  async (c) => {
+    const orgId = c.req.param("orgId");
+    const org = await c.env.DB.prepare(
+      `SELECT o.id, o.name, o.slug, o.logo, o.created_at, o.postal_address FROM organizations o WHERE o.id = ?`,
+    )
+      .bind(orgId)
+      .first();
+    if (!org) return c.json({ error: { code: "not_found", message: "Not found" } }, 404);
+
+    const period = new Date().toISOString().slice(0, 7);
+    /**
+     * The plan's limits, resolved the same way `getEntitlements` resolves them.
+     *
+     * Sent alongside usage because a usage number without its ceiling is not a
+     * usage number — "18 responses" means nothing until you know whether the cap
+     * is 20 or 50,000. Free orgs have no `subscriptions` row, hence the fallback.
+     */
+    const planRow = await c.env.DB.prepare(
+      `SELECT p.id, p.name, p.limits_json
+         FROM plans p
+        WHERE p.id = COALESCE((SELECT s.plan_id FROM subscriptions s
+                                WHERE s.organization_id = ?1
+                                ORDER BY CASE s.status WHEN 'active' THEN 0 WHEN 'trialing' THEN 1 ELSE 2 END,
+                                         s.created_at DESC LIMIT 1), 'free')`,
+    )
+      .bind(orgId)
+      .first<{ id: string; name: string; limits_json: string }>();
+
+    const [members, subscription, forms, usage, overrides, audit, denials] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT u.id, u.email, u.name, u.email_verified, u.created_at, m.role, m.created_at AS joined_at,
+                (SELECT MAX(s.created_at) FROM sessions s WHERE s.user_id = u.id) AS last_session_at
+           FROM members m JOIN users u ON u.id = m.user_id
+          WHERE m.organization_id = ? ORDER BY m.created_at ASC`,
+      )
+        .bind(orgId)
+        .all(),
+      c.env.DB.prepare(
+        `SELECT s.*, p.name AS plan_name, p.price_monthly_cents, p.price_yearly_cents, p.limits_json
+           FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+          WHERE s.organization_id = ?
+          ORDER BY CASE s.status WHEN 'active' THEN 0 WHEN 'trialing' THEN 1 ELSE 2 END, s.created_at DESC LIMIT 1`,
+      )
+        .bind(orgId)
+        .first(),
+      /**
+       * Structure only — title, status, size, how it is doing. Never the
+       * document and never a response: what a customer's respondents typed is
+       * not something this console browses.
+       */
+      c.env.DB.prepare(
+        `SELECT f.id, f.title, f.slug, f.status, f.created_at, f.updated_at,
+                (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id AND s.is_test = 0 AND s.status = 'completed') AS completed,
+                (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id AND s.is_test = 0) AS started,
+                json_array_length(json_extract(COALESCE((SELECT v.schema_json FROM form_versions v WHERE v.id = f.active_version_id), f.working_schema), '$.blocks')) AS blocks
+           FROM forms f WHERE f.organization_id = ? AND f.deleted_at IS NULL
+          ORDER BY f.updated_at DESC LIMIT 200`,
+      )
+        .bind(orgId)
+        .all(),
+      c.env.DB.prepare(`SELECT metric, used, period FROM usage_counters WHERE organization_id = ? AND period = ?`)
+        .bind(orgId, period)
+        .all(),
+      c.env.DB.prepare(`SELECT kind, key, value, reason, expires_at, created_at FROM entitlement_overrides WHERE organization_id = ?`)
+        .bind(orgId)
+        .all(),
+      c.env.DB.prepare(
+        `SELECT id, action, actor_type, actor_label, resource_type, resource_id, created_at
+           FROM audit_logs WHERE organization_id = ? ORDER BY created_at DESC LIMIT 50`,
+      )
+        .bind(orgId)
+        .all(),
+      // Which paywall they keep hitting — the single best signal of what this
+      // particular account would pay for.
+      c.env.DB.prepare(
+        `SELECT feature, surface, denial_count, first_denied_at, last_denied_at, converted_at
+           FROM feature_access_log WHERE organization_id = ? ORDER BY denial_count DESC LIMIT 20`,
+      )
+        .bind(orgId)
+        .all(),
+    ]);
+
+    let limits: Record<string, number | null> = {};
+    try {
+      limits = planRow ? (JSON.parse(planRow.limits_json) as Record<string, number | null>) : {};
+    } catch {
+      // A malformed catalogue row costs the meters their ceilings, not the page.
+    }
+
+    return c.json({
+      org,
+      plan: planRow ? { id: planRow.id, name: planRow.name } : null,
+      limits,
+      members: members.results ?? [],
+      subscription: subscription ?? null,
+      forms: forms.results ?? [],
+      usage: usage.results ?? [],
+      overrides: overrides.results ?? [],
+      audit: audit.results ?? [],
+      denials: denials.results ?? [],
+    });
+  },
+);

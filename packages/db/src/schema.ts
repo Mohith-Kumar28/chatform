@@ -1,4 +1,4 @@
-import { integer, real, sqliteTable, text, uniqueIndex, index } from "drizzle-orm/sqlite-core";
+import { integer, primaryKey, real, sqliteTable, text, uniqueIndex, index } from "drizzle-orm/sqlite-core";
 
 /** epoch-ms timestamp */
 const ts = (name: string) => integer(name, { mode: "timestamp_ms" });
@@ -839,6 +839,61 @@ export const analyticsRollupDaily = sqliteTable(
     perBlockJson: text("per_block_json"),
   },
   (t) => [uniqueIndex("uq_rollup_date_form").on(t.date, t.formId), index("idx_rollup_form_date").on(t.formId, t.date)],
+);
+
+/**
+ * The platform's own numbers, pre-aggregated by the cron — the super-admin console's
+ * read path.
+ *
+ * Deliberately long and narrow: `(date, metric, dimension) → value`. Everything else
+ * in this file names its columns, and that is right for a table someone joins against;
+ * this one exists because the list of things a founder wants to watch changes weekly
+ * and a column per measure would mean a migration per question. `dimension` is `''`
+ * for a plain daily total and carries the breakout otherwise — a plan id, a block
+ * type, a model slug, a response source.
+ *
+ * `WITHOUT ROWID` in `0014_platform_metrics.sql`, which drizzle cannot express: the
+ * whole row is the key plus one number, so the extra rowid indirection is pure cost.
+ */
+export const platformMetricsDaily = sqliteTable(
+  "platform_metrics_daily",
+  {
+    /** `YYYY-MM-DD`, UTC. */
+    date: text("date").notNull(),
+    metric: text("metric").notNull(),
+    dimension: text("dimension").notNull().default(""),
+    value: real("value").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.date, t.metric, t.dimension] }),
+    index("idx_pmd_metric_date").on(t.metric, t.date),
+  ],
+);
+
+/**
+ * What people are actually asking in their forms.
+ *
+ * Questions live inside `forms.working_schema` as a JSON document, so "which question
+ * is most common" cannot be asked in SQL. This is that answer, rebuilt daily by
+ * walking the documents in batches.
+ *
+ * Keyed on the normalised text so "What's your email?" and "what's your email?" are
+ * one row. `org_count` is what makes a row safe to read as a product signal rather
+ * than a peek at one customer's form: a question thirty accounts ask is a pattern.
+ */
+export const platformQuestionStats = sqliteTable(
+  "platform_question_stats",
+  {
+    /** Lowercased, whitespace-collapsed, punctuation-trimmed question title. */
+    normText: text("norm_text").primaryKey(),
+    /** One real casing, so the console renders what somebody wrote. */
+    sampleText: text("sample_text").notNull(),
+    blockType: text("block_type").notNull(),
+    formCount: integer("form_count").notNull().default(0),
+    orgCount: integer("org_count").notNull().default(0),
+    updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [index("idx_pqs_forms").on(t.formCount)],
 );
 
 export const auditLogs = sqliteTable(
