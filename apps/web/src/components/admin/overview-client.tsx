@@ -101,7 +101,7 @@ export function OverviewClient() {
       </div>
 
       {/* Where things stand. Deltas compare to the same length of time before. */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiTile label="Signups" {...kpi("signups")} series={o.series?.signups} />
         <KpiTile label="New accounts" {...kpi("orgs_created")} series={o.series?.orgs_created} />
         <KpiTile label="Forms created" {...kpi("forms_created")} series={o.series?.forms_created} />

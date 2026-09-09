@@ -88,7 +88,7 @@ export function AiClient() {
         <RangePicker />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiTile
           label="Spend"
           value={t.costMicro ?? 0}

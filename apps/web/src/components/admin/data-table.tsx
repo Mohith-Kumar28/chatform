@@ -48,8 +48,18 @@ export function DataTable<T>({
   empty?: React.ReactNode;
   caption?: React.ReactNode;
 }) {
+  /**
+   * An empty table is one quiet line, not a void.
+   *
+   * This used to be `py-6 text-center`, which turned every card with nothing in
+   * it into a ~170px band of empty surface with a sentence floating in the
+   * middle — and because the bar lists next to them said "nothing here" in a
+   * single left-aligned line, two cards reporting the same absence came out
+   * wildly different heights. Same treatment, same height, and a page with
+   * nothing wrong on it stays short.
+   */
   if (rows.length === 0) {
-    return <p className="text-muted-foreground py-6 text-center text-sm">{empty}</p>;
+    return <p className="text-muted-foreground text-sm">{empty}</p>;
   }
 
   return (

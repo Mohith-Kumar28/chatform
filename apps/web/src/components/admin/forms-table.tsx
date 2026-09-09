@@ -101,7 +101,8 @@ export function FormsTable() {
           />
         </form>
 
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-muted-foreground text-caption mr-1">Show</span>
           {STATUSES.map((s) => (
             <Button
               key={s.value || "all"}
@@ -114,7 +115,8 @@ export function FormsTable() {
           ))}
         </div>
 
-        <div className="ml-auto flex flex-wrap gap-1">
+        <div className="ml-auto flex flex-wrap items-center gap-1">
+          <span className="text-muted-foreground text-caption mr-1">Sort</span>
           {SORTS.map((s) => (
             <Button
               key={s.value}

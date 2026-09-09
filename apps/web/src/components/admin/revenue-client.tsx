@@ -93,14 +93,14 @@ export function RevenueClient() {
         <RangePicker />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiTile
           label="MRR"
           value={t.mrrCents ?? 0}
           previous={r.mrrSeries?.[0] ?? 0}
           series={r.mrrSeries}
           format={money}
-          hint="vs start of period"
+          hint="vs period start"
         />
         <KpiTile label="ARR" value={t.arrCents ?? 0} previous={t.arrCents ?? 0} format={money} hint="MRR × 12" />
         <KpiTile
@@ -114,7 +114,7 @@ export function RevenueClient() {
           value={t.arpaCents ?? 0}
           previous={t.arpaCents ?? 0}
           format={money}
-          hint="across paying accounts"
+          hint="per paying account"
         />
         <KpiTile
           label="Collected"

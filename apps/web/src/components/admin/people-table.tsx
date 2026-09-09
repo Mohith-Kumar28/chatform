@@ -87,7 +87,8 @@ export function PeopleTable() {
             aria-label="Search people"
           />
         </form>
-        <div className="ml-auto flex flex-wrap gap-1">
+        <div className="ml-auto flex flex-wrap items-center gap-1">
+          <span className="text-muted-foreground text-caption mr-1">Sort</span>
           {SORTS.map((s) => (
             <Button
               key={s.value}

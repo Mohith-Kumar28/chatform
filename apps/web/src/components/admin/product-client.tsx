@@ -4,14 +4,13 @@ import { useState } from "react";
 import { useGetApiAdminProduct } from "@/lib/api/admin/admin";
 import { BarList, ChartCard, ColumnChart, Donut } from "@/components/charts/chart-kit";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatCard } from "@/components/ui/stat-card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { apiData } from "@/lib/api/payload";
 import { DataTable } from "./data-table";
+import { KpiTile } from "./kpi-tile";
 import { RangePicker, useRange } from "./range-picker";
 import { compact, relativeDay } from "./format";
-import { Blocks, FileStack, Layers, Send } from "lucide-react";
 
 /**
  * What people build — the page that answers "what kind of forms are they
@@ -51,6 +50,9 @@ const SOURCE_LABEL: Record<string, string> = {
   embed: "Embedded",
 };
 
+/** Every block type the schema defines, so "26 in use" has something to be out of. */
+const BLOCK_TYPE_COUNT = 26;
+
 /** `short_text` → `Short text`. The block enum is snake_case; people are not. */
 const humanise = (key: string) => key.charAt(0).toUpperCase() + key.slice(1).replaceAll("_", " ");
 
@@ -82,11 +84,13 @@ export function ProductClient() {
         <RangePicker />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Forms built" value={totals.forms.toLocaleString()} icon={FileStack} />
-        <StatCard label="Ever published" value={totals.published.toLocaleString()} icon={Send} tone="success" />
-        <StatCard label="Questions per form" value={totals.avgBlocks} icon={Blocks} tone="primary" />
-        <StatCard label="Block types in use" value={blockTypes.length} icon={Layers} />
+      {/* The same tile every other page opens with — these are standing totals,
+          so they carry a hint where the others carry a delta. */}
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <KpiTile label="Forms built" value={totals.forms} hint="live, not deleted" />
+        <KpiTile label="Ever published" value={totals.published} hint="reached a real audience" />
+        <KpiTile label="Questions per form" value={totals.avgBlocks} hint="on average" />
+        <KpiTile label="Block types in use" value={blockTypes.length} hint={`of ${BLOCK_TYPE_COUNT} available`} />
       </div>
 
       <div className="grid items-start gap-3 lg:grid-cols-3">
@@ -112,6 +116,7 @@ export function ProductClient() {
               total={creationTotal}
               centerValue={creationTotal.toLocaleString()}
               centerLabel="created"
+              emptyLabel="No forms created in this period."
             />
           </ChartCard>
 

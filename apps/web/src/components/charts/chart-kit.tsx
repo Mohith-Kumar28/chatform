@@ -175,13 +175,26 @@ export function Donut({
   total,
   centerValue,
   centerLabel,
+  emptyLabel = "Nothing to show yet.",
 }: {
   items: BarItem[];
   total: number;
   centerValue?: React.ReactNode;
   centerLabel?: React.ReactNode;
+  emptyLabel?: string;
 }) {
   const gradientId = useId();
+
+  /**
+   * Nothing to divide is a sentence, not a ring.
+   *
+   * With no data the arcs all had zero length and what rendered was the bare
+   * grey track with "0" in the middle — a 130px circle, and a card nearly 300px
+   * tall, drawn to say nothing happened. The bar lists say that in one line.
+   */
+  if (total <= 0 || items.length === 0) {
+    return <p className="text-muted-foreground text-sm">{emptyLabel}</p>;
+  }
   const size = 132;
   const stroke = 18;
   const r = (size - stroke) / 2;

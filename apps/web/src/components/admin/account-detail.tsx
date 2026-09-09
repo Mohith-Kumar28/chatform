@@ -102,7 +102,7 @@ export function AccountDetail({ orgId }: { orgId: string }) {
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid items-start gap-3 lg:grid-cols-3">
         <ChartCard title="Subscription" className="lg:col-span-1">
           {sub ? (
             <dl className="space-y-2 text-sm">
@@ -270,7 +270,7 @@ export function AccountDetail({ orgId }: { orgId: string }) {
         )}
       </ChartCard>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid items-start gap-3 lg:grid-cols-2">
         <ChartCard title="People">
           <ul className="space-y-2">
             {members.map((m, i) => (

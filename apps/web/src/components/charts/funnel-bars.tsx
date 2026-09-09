@@ -51,8 +51,27 @@ export function FunnelBars({ steps, hrefFor }: { steps: FunnelStep[]; hrefFor?: 
 
         const row = (
           <>
-            <div className="mb-1.5 flex items-baseline justify-between gap-3">
-              <span className="text-sm font-medium">{step.label}</span>
+            <div className="mb-1 flex items-baseline justify-between gap-3">
+              <span className="flex min-w-0 items-baseline gap-1.5 text-sm font-medium">
+                <span className="truncate">{step.label}</span>
+                {/*
+                  The affordance rides on the label rather than sitting on a line
+                  of its own.
+
+                  It used to be a "See these accounts" row under every step,
+                  hidden with `opacity-0` — which hides ink, not space. Six steps
+                  reserved roughly 110px of permanently blank page for text
+                  nobody had hovered yet. An arrow that fades in beside the label
+                  says the same thing and occupies a line that already exists.
+                */}
+                {href && (
+                  <ArrowRight
+                    className="text-muted-foreground size-3.5 shrink-0 opacity-0 transition-opacity duration-[var(--duration-micro)] group-hover:opacity-100"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                )}
+              </span>
               <span className="text-muted-foreground tabular shrink-0 text-xs">
                 {step.count.toLocaleString()}
                 <span className="ml-1.5 opacity-70">{step.rate}%</span>
@@ -77,7 +96,7 @@ export function FunnelBars({ steps, hrefFor }: { steps: FunnelStep[]; hrefFor?: 
             {stepRate !== null && (
               <div
                 className={cn(
-                  "text-caption flex items-center gap-1.5 py-1.5 pl-3",
+                  "text-caption flex items-center gap-1.5 py-1 pl-3",
                   isWorst ? "text-[var(--warning)]" : "text-muted-foreground",
                 )}
               >
@@ -91,16 +110,12 @@ export function FunnelBars({ steps, hrefFor }: { steps: FunnelStep[]; hrefFor?: 
             {href ? (
               <Link
                 href={href}
-                className="hover:bg-muted/50 group -mx-2 block rounded-lg px-2 py-1.5 transition-colors duration-[var(--duration-micro)]"
+                className="hover:bg-muted/50 group -mx-2 block rounded-lg px-2 py-1 transition-colors duration-[var(--duration-micro)]"
               >
                 {row}
-                <span className="text-muted-foreground text-micro mt-1 flex items-center gap-1 opacity-0 transition-opacity duration-[var(--duration-micro)] group-hover:opacity-100">
-                  See these accounts
-                  <ArrowRight className="size-3" strokeWidth={2} aria-hidden />
-                </span>
               </Link>
             ) : (
-              <div className="-mx-2 px-2 py-1.5">{row}</div>
+              <div className="-mx-2 px-2 py-1">{row}</div>
             )}
           </li>
         );

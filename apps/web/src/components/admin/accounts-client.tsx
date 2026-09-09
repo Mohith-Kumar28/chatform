@@ -144,7 +144,17 @@ export function AccountsClient() {
       {tab === "forms" && <FormsTable />}
       {tab !== "accounts" ? null : (
       <>
-      <div className="flex flex-wrap items-center gap-2">
+      {/*
+        Two rows, each with one job.
+
+        These were one wrapping row of fourteen identical ghost buttons —
+        eight filters and six sorts — which wrapped into two lines with the
+        sorts stranded on the right of the second. Two kinds of control that
+        look the same and land wherever the wrap puts them cannot be told
+        apart, so the filters get a row and the sort gets a labelled group
+        beside the search.
+      */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <form
           className="relative min-w-56 flex-1 sm:max-w-xs"
           onSubmit={(e) => {
@@ -166,20 +176,8 @@ export function AccountsClient() {
           />
         </form>
 
-        <div className="flex flex-wrap gap-1">
-          {COHORTS.map((c) => (
-            <Button
-              key={c.value || "all"}
-              size="sm"
-              variant={cohort === c.value ? "secondary" : "ghost"}
-              onClick={() => setParam({ cohort: c.value })}
-            >
-              {c.label}
-            </Button>
-          ))}
-        </div>
-
-        <div className="ml-auto flex flex-wrap gap-1">
+        <div className="ml-auto flex flex-wrap items-center gap-1">
+          <span className="text-muted-foreground text-caption mr-1">Sort</span>
           {SORTS.map((s) => (
             <Button
               key={s.value}
@@ -191,6 +189,20 @@ export function AccountsClient() {
             </Button>
           ))}
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="text-muted-foreground text-caption mr-1">Show</span>
+        {COHORTS.map((c) => (
+          <Button
+            key={c.value || "all"}
+            size="sm"
+            variant={cohort === c.value ? "secondary" : "ghost"}
+            onClick={() => setParam({ cohort: c.value })}
+          >
+            {c.label}
+          </Button>
+        ))}
       </div>
 
       {isPending ? (

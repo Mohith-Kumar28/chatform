@@ -107,7 +107,7 @@ export function HealthClient() {
         <RangePicker />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiTile
           label="Webhook success"
           value={wh.successRate ?? 100}
@@ -120,7 +120,7 @@ export function HealthClient() {
           value={wh.endpointsFailing ?? 0}
           previous={wh.endpointsFailing ?? 0}
           lowerIsBetter
-          hint="3+ consecutive failures"
+          hint="3+ fails in a row"
         />
         <KpiTile
           label="Billing events stuck"
@@ -145,7 +145,7 @@ export function HealthClient() {
           value={h.sessions?.stale ?? 0}
           previous={h.sessions?.stale ?? 0}
           lowerIsBetter
-          hint="active but idle 2+ days"
+          hint="idle 2+ days"
         />
         <KpiTile
           label="Stored files"

@@ -100,7 +100,7 @@ export function ActionQueue() {
 
   if (isPending) {
     return (
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 5 }, (_, i) => (
           <Skeleton key={i} className="h-40 rounded-xl" />
         ))}
@@ -116,7 +116,7 @@ export function ActionQueue() {
   const atLimit = q.atLimit ?? [];
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
       <Queue
         title="Payment at risk"
         icon={AlertTriangle}
