@@ -208,67 +208,35 @@ export function Hero() {
           </p>
 
           {/*
-            Two pills, and where there is a demo to point at, the demo is the
-            opaque one.
+            Signing up is the primary action; trying it is the strong second.
 
-            The variants above call this out themselves: opaque for the thing to
-            do, translucent for the thing beside it. Trying the product IS the
-            thing to do. Someone who has answered the demo has used chatform and
-            knows whether they like it; someone who clicked "start free" first
-            has an empty builder and a decision they are not yet equipped to
-            make. So the demo takes the fill and the sign-up takes the tint.
+            Both matter, and the order between them is a judgement about who is
+            reading. Someone ready to build wants the sign-up, and burying it
+            behind a demo costs the visit. Someone not ready yet wants to see
+            the thing work — so the second button has to be genuinely inviting
+            rather than the faint tint a "secondary" usually gets, which is why
+            `on-brand-outline` carries a heavier fill than a hairline outline.
 
-            Not three pills. The pair reads as one decision with a secondary
-            option; a third makes it a menu, and the third would have been an
-            in-page anchor wearing the weight of a real destination. "See how it
-            works" drops to the line below — reading about the product is what
-            you do once you have decided not to try it.
+            Not three pills. "See how it works" drops to the line below —
+            reading about the product is what you do once you have decided not
+            to try it.
 
-            With no demo configured the emphasis goes back: "start free" is the
-            thing to do again, because the alternative is an anchor to a section
-            further down the same page. Gating the *button* on the slug instead
+            The demo button falls back to that anchor when no demo is
+            configured, rather than disappearing: gating the button on the slug
             would leave a one-pill hero in every environment without the env var
-            set — local dev, previews, and production too if the var is ever
-            dropped or the demo unpublished.
+            set — local dev, previews, and production if the demo is ever
+            unpublished.
           */}
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            {DEMO_SLUG ? (
-              <>
-                <Button asChild size="lg" shape="pill" variant="on-brand" className="h-12 px-8">
-                  <Link href={`/f/${DEMO_SLUG}`}>
-                    Try it yourself
-                    <ArrowRight className="size-4" strokeWidth={2.25} />
-                  </Link>
-                </Button>
-                <Button
-                  asChild
-                  size="lg"
-                  shape="pill"
-                  variant="on-brand-outline"
-                  className="h-12 px-7"
-                >
-                  <Link href="/signin">Start free</Link>
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button asChild size="lg" shape="pill" variant="on-brand" className="h-12 px-8">
-                  <Link href="/signin">Start free</Link>
-                </Button>
-                <Button
-                  asChild
-                  size="lg"
-                  shape="pill"
-                  variant="on-brand-outline"
-                  className="h-12 px-7"
-                >
-                  <Link href="#how-it-works">
-                    See how it works
-                    <ArrowRight className="size-4" strokeWidth={2.25} />
-                  </Link>
-                </Button>
-              </>
-            )}
+            <Button asChild size="lg" shape="pill" variant="on-brand" className="h-12 px-8">
+              <Link href="/signin">Start free</Link>
+            </Button>
+            <Button asChild size="lg" shape="pill" variant="on-brand-outline" className="h-12 px-7">
+              <Link href={DEMO_SLUG ? `/f/${DEMO_SLUG}` : "#how-it-works"}>
+                {DEMO_SLUG ? "Try it yourself" : "See how it works"}
+                <ArrowRight className="size-4" strokeWidth={2.25} />
+              </Link>
+            </Button>
           </div>
 
           {/* "200 AI conversations a month" is a metering detail nobody has

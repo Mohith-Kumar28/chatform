@@ -88,10 +88,16 @@ const buttonVariants = cva(
         // the other. The pair now reads as one material at two strengths:
         // opaque for the thing to do, translucent for the thing beside it.
         "on-brand-outline": [
-          "bg-[color-mix(in_oklch,currentColor_9%,transparent)]",
-          "border border-[color-mix(in_oklch,currentColor_18%,transparent)]",
-          "hover:bg-[color-mix(in_oklch,currentColor_17%,transparent)]",
-          "hover:border-[color-mix(in_oklch,currentColor_26%,transparent)]",
+          // Raised from 9%/18%. At a tenth of the ink this was a secondary in
+          // the apologetic sense — technically present, easy to miss, and next
+          // to a solid fill it read as disabled rather than as the other
+          // option. A secondary action still has to look like something you
+          // may press. A fifth of the ink is enough to hold its own edge on the
+          // wash without competing with the opaque button beside it.
+          "bg-[color-mix(in_oklch,currentColor_20%,transparent)]",
+          "border border-[color-mix(in_oklch,currentColor_34%,transparent)]",
+          "hover:bg-[color-mix(in_oklch,currentColor_28%,transparent)]",
+          "hover:border-[color-mix(in_oklch,currentColor_44%,transparent)]",
         ].join(" "),
         link: "text-primary underline-offset-4 hover:underline",
       },
