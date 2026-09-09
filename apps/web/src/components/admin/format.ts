@@ -25,18 +25,30 @@ export function compact(n: number): string {
 }
 
 /**
- * A timestamp as a distance: `today`, `3d ago`, `14 Aug`.
+ * A timestamp as a distance: `today`, `3d ago`, `in 20d`, `14 Aug`.
  *
  * Recent things get a distance because that is how they are reasoned about
- * ("failed yesterday"); anything past a fortnight gets a date, because "47d ago"
- * is a number you have to do arithmetic on.
+ * ("failed yesterday"); anything more than a fortnight away in either direction
+ * gets a date, because "47d ago" is a number you have to do arithmetic on.
+ *
+ * **Both directions**, and that is not a nicety. This started out subtracting
+ * one way and flooring at zero, so every future date rendered as "today" — a
+ * subscription renewing in three weeks read as renewing this morning, a comp
+ * expiring in a month read as expiring now, and a grace period ending on Friday
+ * read as already over. Each of those is a wrong number that prompts the wrong
+ * action, and all three come from the same line.
  */
 export function relativeDay(ms: number | null | undefined): string {
   if (!ms) return "never";
-  const days = Math.floor((Date.now() - ms) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 14) return `${days}d ago`;
+  const diff = ms - Date.now();
+  const days = Math.round(diff / 86_400_000);
+
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days === -1) return "yesterday";
+  if (days > 0 && days < 14) return `in ${days}d`;
+  if (days < 0 && days > -14) return `${-days}d ago`;
+
   const d = new Date(ms);
   const year = d.getFullYear() === new Date().getFullYear() ? "" : ` ${d.getFullYear()}`;
   return `${d.getDate()} ${d.toLocaleString("en", { month: "short" })}${year}`;

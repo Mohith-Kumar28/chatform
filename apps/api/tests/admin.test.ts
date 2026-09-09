@@ -360,6 +360,30 @@ describe("the overview", () => {
     for (const series of Object.values(body.series)) expect(series).toHaveLength(30);
   });
 
+  /**
+   * The bug this locks down: the funnel said "Published it — 3", clicking the
+   * bar listed one account, because the chart counted cumulative stages and the
+   * cohort filter tested a single condition. Both read `STAGE_OF_ORG` now, and
+   * this asserts they keep agreeing — for every step, not just the one that
+   * happened to be wrong.
+   */
+  it("every funnel step counts the same accounts the list it links to shows", async () => {
+    const overview = (await (
+      await fetchApi("/api/admin/overview?range=365d", { headers: { cookie: admin.cookie } })
+    ).json()) as { funnel: { key: string; count: number }[] };
+
+    for (const step of overview.funnel) {
+      if (step.key === "signed_up") continue;
+      const res = await fetchApi(`/api/admin/accounts?cohort=${step.key}&since=365&limit=100`, {
+        headers: { cookie: admin.cookie },
+      });
+      const { accounts, total } = (await res.json()) as { accounts: unknown[]; total: number };
+      expect(accounts.length, `${step.key} rows`).toBe(step.count);
+      // And the pager's total must describe the filter, not the whole table.
+      expect(total, `${step.key} total`).toBe(step.count);
+    }
+  });
+
   it("caps retention cells at 100% and leaves future weeks null", async () => {
     const res = await fetchApi("/api/admin/overview", { headers: { cookie: admin.cookie } });
     const body = (await res.json()) as { cohorts: { cohort: string; size: number; retention: (number | null)[] }[] };

@@ -76,6 +76,45 @@ export const HAS_PUBLISHED = `
                   OR EXISTS (SELECT 1 FROM form_versions v WHERE v.form_id = f.id AND v.published_at IS NOT NULL)))`;
 
 /**
+ * How far an organization got: 0 nothing, 1 built, 2 published, 3 collecting,
+ * 4 collecting properly, 5 paying. Correlates on an outer `o`.
+ *
+ * The single definition behind both the activation funnel and the account
+ * cohorts, and it has to be single or the two disagree in the most damaging
+ * possible way: the funnel said "Published it — 3", clicking it listed one
+ * account, and a chart that contradicts the list it links to is worse than no
+ * chart at all.
+ *
+ * They disagreed because the funnel reads *cumulatively* — whoever reached a
+ * response plainly got past building, whatever the publish table happens to
+ * record — while the cohort filter tested the one condition on its own. Reading
+ * `stage >= n` on both sides makes them agree by construction rather than by
+ * two expressions being kept in step by hand.
+ */
+export const STAGE_OF_ORG = `
+  CASE
+    WHEN EXISTS (SELECT 1 FROM subscriptions s WHERE s.organization_id = o.id
+                  AND s.status IN ('active','trialing') AND ${NOT_COMPED}) THEN 5
+    WHEN (SELECT COUNT(*) FROM submissions s
+           WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed') >= 10 THEN 4
+    WHEN (SELECT COUNT(*) FROM submissions s
+           WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed') >= 1 THEN 3
+    WHEN ${HAS_PUBLISHED} THEN 2
+    WHEN EXISTS (SELECT 1 FROM forms f WHERE f.organization_id = o.id AND f.deleted_at IS NULL) THEN 1
+    ELSE 0
+  END`;
+
+/** The funnel's steps, and the stage each one means. Read cumulatively. */
+export const FUNNEL_STAGES = [
+  ["signed_up", "Signed up", 0],
+  ["created_form", "Created a form", 1],
+  ["published", "Published it", 2],
+  ["first_response", "First response", 3],
+  ["ten_responses", "10 responses", 4],
+  ["paid", "Paid", 5],
+] as const;
+
+/**
  * Operational rows are declared loosely on purpose.
  *
  * These are triage lists read by one human, joined out of tables whose columns

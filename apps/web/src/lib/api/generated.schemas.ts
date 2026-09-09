@@ -125,6 +125,11 @@ export type GetApiAdminAccountsParams = {
 q?: string;
 plan?: GetApiAdminAccountsPlan;
 cohort?: GetApiAdminAccountsCohort;
+/**
+ * @minimum 1
+ * @maximum 3650
+ */
+since?: number;
 sort?: GetApiAdminAccountsSort;
 /**
  * @minimum 1

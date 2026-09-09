@@ -25,6 +25,8 @@ interface Overview {
   formStatsAsOf: number | null;
 }
 
+const RANGE_DAYS: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90, "365d": 365 };
+
 /** Which cohort each funnel step drops you into on the accounts page. */
 const FUNNEL_COHORT: Record<string, string | null> = {
   signed_up: null,
@@ -144,8 +146,14 @@ export function OverviewClient() {
           <FunnelBars
             steps={o.funnel ?? []}
             hrefFor={(step) => {
+              // Carry the period too, so the list is cohorted on the same window
+              // the funnel counted — otherwise a 30-day bar links into an
+              // all-time list and the two numbers differ for no visible reason.
+              const days = RANGE_DAYS[range];
               const cohort = FUNNEL_COHORT[step.key];
-              return cohort ? `/admin/accounts?cohort=${cohort}` : "/admin/accounts";
+              return cohort
+                ? `/admin/accounts?cohort=${cohort}&since=${days}`
+                : `/admin/accounts?since=${days}`;
             }}
           />
         </ChartCard>

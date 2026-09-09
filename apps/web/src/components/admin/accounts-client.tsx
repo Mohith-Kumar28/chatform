@@ -88,6 +88,8 @@ export function AccountsClient() {
   const sort = params.get("sort") ?? "created";
   const q = params.get("q") ?? "";
   const offset = Number(params.get("offset") ?? 0);
+  // Set when the Overview funnel linked here; keeps both cohorted on one window.
+  const since = params.get("since") ?? "";
 
   // The box is local so typing does not refetch on every keystroke; the URL only
   // moves on submit, which is also what makes a filtered view linkable.
@@ -99,8 +101,12 @@ export function AccountsClient() {
       if (v) next.set(k, v);
       else next.delete(k);
     }
-    // Any change to the filters invalidates the page you were on.
-    if (!("offset" in patch)) next.delete("offset");
+    // Any change to the filters invalidates the page you were on — and drops
+    // the window the funnel handed over, which only described the bar clicked.
+    if (!("offset" in patch)) {
+      next.delete("offset");
+      next.delete("since");
+    }
     router.replace(`${pathname}?${next.toString()}`, { scroll: false });
   };
 
@@ -111,6 +117,7 @@ export function AccountsClient() {
     ...(q ? { q } : {}),
     ...(plan ? { plan: plan as "free" } : {}),
     ...(cohort ? { cohort: cohort as "paid" } : {}),
+    ...(since ? { since: Number(since) } : {}),
   });
 
   const body = apiData<{ accounts?: Account[]; total?: number }>(data);

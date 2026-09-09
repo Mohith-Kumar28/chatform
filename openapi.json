@@ -610,6 +610,15 @@
           },
           {
             "in": "query",
+            "name": "since",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3650
+            }
+          },
+          {
+            "in": "query",
             "name": "sort",
             "schema": {
               "default": "created",

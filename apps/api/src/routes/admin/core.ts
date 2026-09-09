@@ -6,11 +6,12 @@ import type { PlatformAdminVars } from "../../lib/platform-admin.js";
 import { FORM_ROLLUP_COMPLETED_KEY, utcDay } from "../../lib/platform-rollup.js";
 import {
   DAY_MS,
-  HAS_PUBLISHED,
+  FUNNEL_STAGES,
   OWNER_OF_ORG,
   OpsRows,
   PLAN_OF_ORG,
   RANGES,
+  STAGE_OF_ORG,
   dayKeys,
   latestOf,
   loadMetrics,
@@ -147,15 +148,6 @@ coreRouter.get(
   },
 );
 
-const FUNNEL_STEPS: [key: string, label: string][] = [
-  ["signed_up", "Signed up"],
-  ["created_form", "Created a form"],
-  ["published", "Published it"],
-  ["first_response", "First response"],
-  ["ten_responses", "10 responses"],
-  ["paid", "Paid"],
-];
-
 /**
  * Signed up → built → published → collected → kept collecting → paid.
  *
@@ -165,45 +157,24 @@ const FUNNEL_STEPS: [key: string, label: string][] = [
  * "what happens to the people arriving now".
  *
  * Counted as the furthest stage each account reached, then read cumulatively —
- * not as six independent tests. Independent tests do not make a funnel: they
- * produced a chart that widened as it descended, because an account can hold a
- * response with no published version (a preview, an API-created response, a form
- * unpublished after collecting) and so counted at "first response" while missing
- * from "published". A step that shows fewer people than the step below it is not
- * a subtle inaccuracy — it is a picture that cannot be read at all.
- *
- * Ranking instead says what a funnel is supposed to say: whoever got to a
- * response got past building, whatever the publish table happens to record.
+ * see `STAGE_OF_ORG`, which the account cohorts read too so the chart and the
+ * list it links into cannot disagree.
  */
 async function activationFunnel(env: Bindings, since: number) {
+  const columns = FUNNEL_STAGES.filter(([, , n]) => n > 0)
+    .map(([key, , n]) => `SUM(CASE WHEN stage >= ${n} THEN 1 ELSE 0 END) AS ${key}`)
+    .join(",\n       ");
+
   const row = await env.DB.prepare(
-    `SELECT
-       COUNT(*) AS signed_up,
-       SUM(CASE WHEN stage >= 1 THEN 1 ELSE 0 END) AS created_form,
-       SUM(CASE WHEN stage >= 2 THEN 1 ELSE 0 END) AS published,
-       SUM(CASE WHEN stage >= 3 THEN 1 ELSE 0 END) AS first_response,
-       SUM(CASE WHEN stage >= 4 THEN 1 ELSE 0 END) AS ten_responses,
-       SUM(CASE WHEN stage >= 5 THEN 1 ELSE 0 END) AS paid
-     FROM (
-       SELECT CASE
-         WHEN EXISTS (SELECT 1 FROM subscriptions s WHERE s.organization_id = o.id
-                       AND s.status IN ('active','trialing')
-                       AND s.dodo_subscription_id NOT LIKE 'internal_manual_%') THEN 5
-         WHEN (SELECT COUNT(*) FROM submissions s WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed') >= 10 THEN 4
-         WHEN (SELECT COUNT(*) FROM submissions s WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed') >= 1 THEN 3
-         WHEN ${HAS_PUBLISHED} THEN 2
-         WHEN EXISTS (SELECT 1 FROM forms f WHERE f.organization_id = o.id AND f.deleted_at IS NULL) THEN 1
-         ELSE 0
-       END AS stage
-       FROM organizations o
-      WHERE o.created_at >= ?
-     )`,
+    `SELECT COUNT(*) AS signed_up,
+       ${columns}
+     FROM (SELECT ${STAGE_OF_ORG} AS stage FROM organizations o WHERE o.created_at >= ?)`,
   )
     .bind(since)
     .first<Record<string, number>>();
 
   const top = row?.signed_up ?? 0;
-  return FUNNEL_STEPS.map(([key, label]) => {
+  return FUNNEL_STAGES.map(([key, label]) => {
     const count = row?.[key] ?? 0;
     return { key, label, count, rate: top > 0 ? Math.round((count / top) * 1000) / 10 : 0 };
   });
@@ -413,6 +384,8 @@ coreRouter.get(
       q: z.string().max(120).optional(),
       plan: z.enum(["free", "pro", "business"]).optional(),
       cohort: z.enum(["created_form", "published", "first_response", "ten_responses", "paid", "no_form", "stalled"]).optional(),
+      /** Bound to accounts created in the last N days, matching the funnel that linked here. */
+      since: z.coerce.number().int().min(1).max(3650).optional(),
       sort: z.enum(["created", "responses", "forms", "ai", "active", "mrr"]).default("created"),
       limit: z.coerce.number().int().min(1).max(100).default(50),
       offset: z.coerce.number().int().min(0).default(0),
@@ -457,7 +430,8 @@ coreRouter.get(
     },
   }),
   async (c) => {
-    const { q, plan, cohort, sort, limit, offset } = c.req.valid("query");
+    const { q, plan, cohort, sort, limit, offset, since: sinceDays } = c.req.valid("query");
+    const since_days = sinceDays ?? null;
     const since = Date.now() - 30 * DAY_MS;
 
     /**
@@ -474,18 +448,27 @@ coreRouter.get(
     const filters: string[] = [];
     if (q) filters.push(`(o.name LIKE ?2 OR o.slug LIKE ?2 OR EXISTS (SELECT 1 FROM members m JOIN users u ON u.id = m.user_id WHERE m.organization_id = o.id AND u.email LIKE ?2))`);
     if (plan) filters.push(`COALESCE((${PLAN_OF_ORG}), 'free') = ?3`);
+    /**
+     * Funnel cohorts read `stage >= n`, exactly as the funnel counts them, so
+     * clicking a bar lands on the same accounts the bar counted. `no_form` and
+     * `stalled` are not funnel steps and stay as their own predicates.
+     */
+    const stage = FUNNEL_STAGES.find(([key]) => key === cohort)?.[2];
+    if (stage !== undefined && stage > 0) filters.push(`(${STAGE_OF_ORG}) >= ${stage}`);
     if (cohort === "no_form") filters.push(`NOT EXISTS (SELECT 1 FROM forms f WHERE f.organization_id = o.id AND f.deleted_at IS NULL)`);
-    if (cohort === "created_form") filters.push(`EXISTS (SELECT 1 FROM forms f WHERE f.organization_id = o.id AND f.deleted_at IS NULL)`);
-    if (cohort === "published") filters.push(HAS_PUBLISHED);
-    if (cohort === "first_response") filters.push(`EXISTS (SELECT 1 FROM submissions s WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed')`);
-    if (cohort === "ten_responses") filters.push(`(SELECT COUNT(*) FROM submissions s WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed') >= 10`);
-    if (cohort === "paid") filters.push(`EXISTS (SELECT 1 FROM subscriptions s WHERE s.organization_id = o.id AND s.status IN ('active','trialing'))`);
     // Built something and then stopped: the cohort worth an email.
-    if (cohort === "stalled")
-      filters.push(
-        `EXISTS (SELECT 1 FROM forms f WHERE f.organization_id = o.id AND f.deleted_at IS NULL)
-         AND NOT EXISTS (SELECT 1 FROM submissions s WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed')`,
-      );
+    if (cohort === "stalled") filters.push(`(${STAGE_OF_ORG}) BETWEEN 1 AND 2`);
+    /**
+     * The same window the funnel was cohorted on, when the caller came from it.
+     * Without it a 30-day funnel links into an all-time list and the counts
+     * differ for a second, subtler reason than the one `STAGE_OF_ORG` fixes.
+     *
+     * Written as an always-present nullable predicate rather than appended
+     * conditionally — the same shape `audit.ts` uses — because SQLite sizes a
+     * statement by its highest `?N`, so a placeholder that comes and goes
+     * changes the parameter count and the bind list stops matching.
+     */
+    filters.push(`(?6 IS NULL OR o.created_at >= ?6)`);
 
     const where = filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
     const sql = `
@@ -512,10 +495,33 @@ coreRouter.get(
        LIMIT ?4 OFFSET ?5`;
 
     const res = await c.env.DB.prepare(sql)
-      .bind(since, q ? `%${q}%` : null, plan ?? null, limit, offset)
+      .bind(
+        since,
+        q ? `%${q}%` : null,
+        plan ?? null,
+        limit,
+        offset,
+        since_days ? Date.now() - since_days * DAY_MS : null,
+      )
       .all();
 
-    const total = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM organizations`).first<{ n: number }>();
+    /**
+     * The count of what this filter matched, not of every organization — a
+     * pager that says "1–50 of 19" because the total ignored the filter is a
+     * pager nobody can use.
+     */
+    const total = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM organizations o ${where}`,
+    )
+      .bind(
+        since,
+        q ? `%${q}%` : null,
+        plan ?? null,
+        limit,
+        offset,
+        since_days ? Date.now() - since_days * DAY_MS : null,
+      )
+      .first<{ n: number }>();
     return c.json({ accounts: res.results ?? [], total: total?.n ?? 0, limit, offset });
   },
 );

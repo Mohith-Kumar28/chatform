@@ -90,7 +90,10 @@ export function ImpersonationBanner() {
   if (!acting) return null;
 
   return (
-    <div className="sticky top-0 z-50 bg-[var(--warning)] text-[color:var(--warning-foreground,#1a1205)]">
+    // `--warning` / `--warning-foreground` are a defined pair in both themes —
+    // dark ink on amber — so this reads correctly light and dark without a
+    // hardcoded fallback pretending the token might be missing.
+    <div className="sticky top-0 z-50 bg-[var(--warning)] text-[var(--warning-foreground)]">
       <div className="mx-auto flex w-full max-w-[110rem] items-center gap-3 px-4 py-2 text-sm sm:px-6">
         <Eye className="size-4 shrink-0" strokeWidth={2} aria-hidden />
         <p className="min-w-0 flex-1 truncate">
