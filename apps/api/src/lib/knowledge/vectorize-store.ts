@@ -137,7 +137,24 @@ export class VectorizeKnowledgeStore implements KnowledgeStore {
     const matches = await this.env.VECTORIZE.query(embedding, {
       topK: CANDIDATE_K,
       namespace: formId,
-      returnMetadata: false,
+      /*
+       * "none", not `false`. Vectorize v1 took a boolean here; v2 takes an
+       * enum — "none" | "indexed" | "all" — and rejects the whole query with
+       * `VECTOR_QUERY_ERROR (code = 40026): Failed to parse the request body
+       * as JSON: returnMetadata: expected value` when handed a boolean.
+       *
+       * It failed silently in the worst way. `answer_from_knowledge` treats a
+       * throwing search as a miss, deliberately, so the respondent never sees
+       * an error — which meant a fully indexed knowledge base (rows `ready`,
+       * vectors present, namespaces correct) produced an agent that improvised
+       * "we haven't announced our final pricing yet" on the public demo. Every
+       * layer looked healthy; only `wrangler tail` showed the parse error.
+       *
+       * The `as never` below is what let it ship: it casts away the very
+       * options type that would have rejected a boolean at compile time.
+       * Narrow it when the installed workers-types has the v2 shape.
+       */
+      returnMetadata: "none",
     } as never);
 
     const ids = (matches?.matches ?? []).map((m) => m.id);
