@@ -56,9 +56,10 @@ export function MarketingNav() {
   const ctaVariant = overWash && !scrolled ? ("on-brand" as const) : ("default" as const);
   /**
    * These pages are static, so the session is only knowable in the browser.
-   * Until the fetch settles the CTAs are a placeholder rather than the
-   * signed-out pair: drawing "Sign in" first and swapping it a moment later is
-   * what made a signed-in user think every refresh had logged them out.
+   * Until the fetch settles the CTA is a placeholder rather than the
+   * signed-out one: drawing "Start free" first and swapping it for "Dashboard"
+   * a moment later is what made a signed-in user think every refresh had
+   * logged them out.
    */
   const { data: session, isPending } = useSession();
 
@@ -121,29 +122,33 @@ export function MarketingNav() {
 
         <div className="ml-auto flex items-center gap-1.5 lg:ml-0">
           <ThemeToggle />
-          {/* `on-brand` while the bar is transparent over the hero wash: the
+          {/* One button, not two.
+
+              It was "Sign in" beside "Start free", which is a choice offered
+              to somebody who has not been given anything to choose between:
+              both links went to `/signin`, the same page, which signs you in
+              or creates the account depending on the address you type. Two
+              controls with one destination cost the visitor a decision and the
+              bar its emphasis — the primary action was sitting next to a
+              same-sized sibling arguing with it.
+
+              "Start free" is the one that survives, because it is the one that
+              says what happens next. A returning user is not stranded by it:
+              this bar shows "Dashboard" once the session resolves, and the
+              page it lands on signs them in either way.
+
+              `on-brand` while the bar is transparent over the hero wash: the
               orange fill would be an orange pill on an orange ground. */}
           {isPending ? (
-            <div className="shimmer hidden h-8 w-28 rounded-full sm:block" aria-hidden />
+            <div className="shimmer hidden h-8 w-24 rounded-full sm:block" aria-hidden />
           ) : session ? (
             <Button asChild size="sm" shape="pill" variant={ctaVariant} className="hidden sm:inline-flex">
               <Link href="/dashboard">Dashboard</Link>
             </Button>
           ) : (
-            <>
-              <Button
-                asChild
-                variant={overWash && !scrolled ? "on-brand-outline" : "ghost"}
-                size="sm"
-                shape="pill"
-                className="hidden sm:inline-flex"
-              >
-                <Link href="/signin">Sign in</Link>
-              </Button>
-              <Button asChild size="sm" shape="pill" variant={ctaVariant} className="hidden sm:inline-flex">
-                <Link href="/signin">Start free</Link>
-              </Button>
-            </>
+            <Button asChild size="sm" shape="pill" variant={ctaVariant} className="hidden sm:inline-flex">
+              <Link href="/signin">Start free</Link>
+            </Button>
           )}
 
           <Sheet>
@@ -205,18 +210,11 @@ export function MarketingNav() {
                     </Button>
                   </SheetClose>
                 ) : (
-                  <>
-                    <SheetClose asChild>
-                      <Button asChild variant="outline" shape="pill">
-                        <Link href="/signin">Sign in</Link>
-                      </Button>
-                    </SheetClose>
-                    <SheetClose asChild>
-                      <Button asChild shape="pill">
-                        <Link href="/signin">Start free</Link>
-                      </Button>
-                    </SheetClose>
-                  </>
+                  <SheetClose asChild>
+                    <Button asChild shape="pill">
+                      <Link href="/signin">Start free</Link>
+                    </Button>
+                  </SheetClose>
                 )}
               </div>
             </SheetContent>
