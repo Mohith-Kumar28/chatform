@@ -1051,6 +1051,83 @@
   }
 }
 
+/* ── the gradient field ─────────────────────────────────────────────────────
+   The drift behind `GradientField` — the brand sweep as a slow lava lamp
+   rather than a fixed plate.
+
+   Five blobs, five different paths, and no two durations that divide evenly
+   into one another: 30 / 20 / 40 / 40 / 20 seconds with two of them reversed
+   and one linear. That is the whole trick. Periods that share a factor
+   re-align on a visible beat, and a background that visibly loops is a
+   background you start watching instead of reading past. These recombine on
+   the order of minutes, so the ground is never quite the shape it was.
+
+   Slow on purpose. The fastest full cycle here is twenty seconds; nothing in
+   this vocabulary is a transition or an entrance, and anything quick enough to
+   catch the eye behind an `h1` is competing with the `h1`.
+
+   `translate3d`/`rotate` only — no width, no background-position, nothing that
+   lands in layout or paint. Each blob is a composited layer the GPU moves, and
+   `will-change` is deliberately NOT set: five permanently-promoted full-bleed
+   layers is a real memory cost on a phone for a decoration.
+
+   The global `prefers-reduced-motion` block collapses all five, and every
+   keyframe below opens and closes on the same frame — so what a visitor who
+   asked for less motion is left holding is the resting composition, not a
+   stalled midpoint. That is why `moveInCircle` runs 0 → 180 → 360 rather than
+   0 → 360: the pause frame has to be the start frame.                        */
+@keyframes cf-field-vertical {
+  0% {
+    transform: translate3d(0, -50%, 0);
+  }
+  50% {
+    transform: translate3d(0, 50%, 0);
+  }
+  100% {
+    transform: translate3d(0, -50%, 0);
+  }
+}
+
+@keyframes cf-field-horizontal {
+  0% {
+    transform: translate3d(-50%, -10%, 0);
+  }
+  50% {
+    transform: translate3d(50%, 10%, 0);
+  }
+  100% {
+    transform: translate3d(-50%, -10%, 0);
+  }
+}
+
+@keyframes cf-field-circle {
+  0% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(180deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@utility field-drift-1 {
+  animation: cf-field-vertical 30s ease-in-out infinite;
+}
+@utility field-drift-2 {
+  animation: cf-field-circle 20s linear infinite reverse;
+}
+@utility field-drift-3 {
+  animation: cf-field-circle 40s linear infinite;
+}
+@utility field-drift-4 {
+  animation: cf-field-horizontal 40s ease-in-out infinite;
+}
+@utility field-drift-5 {
+  animation: cf-field-circle 20s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

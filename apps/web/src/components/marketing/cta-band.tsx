@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { LogoMark } from "@/components/brand/logo";
+import { GradientField } from "@/components/brand/gradient-field";
 import { InView } from "./in-view";
 import { UnderlineMark } from "./annotate";
 
@@ -17,13 +18,19 @@ import { UnderlineMark } from "./annotate";
  * cards immediately above. Repeating it a third time at maximum volume is not
  * emphasis.
  *
- * The ground is `--brand-gradient` — orange at the left, violet at the right,
- * on the mark's diagonal. It was flat orange, and the note here used to say a
- * violet plate on orange is a clash. That is still true of a *plate*: a hard
- * edge between the two at full strength is two posters fighting. A sweep is
- * not a plate. There is no edge to clash on, and it is the only place in the
- * product where both hues run at full strength across the same surface, which
- * is what earns it the last band on the page.
+ * The ground is the brand sweep at full strength — orange at the left, violet
+ * at the right, on the mark's diagonal. It was flat orange, and the note here
+ * used to say a violet plate on orange is a clash. That is still true of a
+ * *plate*: a hard edge between the two at full strength is two posters
+ * fighting. A sweep is not a plate. There is no edge to clash on, and it is
+ * the only place in the product where both hues run at full strength across
+ * the same surface, which is what earns it the last band on the page.
+ *
+ * It is `GradientField` rather than the `bg-brand-gradient` utility, so the
+ * sweep drifts instead of sitting still, and at full `strength` — the hero
+ * runs its field at 0.7 because it has a headline, a lede, two buttons and a
+ * live demo on top of it. This band has one line of type and two buttons, and
+ * it is the last thing on the page. It is allowed to be the loudest.
  *
  * Type is `--on-primary`, not `--primary-foreground` — see the token's note.
  * The gradient is exactly why the violet was nudged a step lighter: this one
@@ -33,9 +40,11 @@ import { UnderlineMark } from "./annotate";
 export function CtaBand() {
   return (
     <section
-      className="bg-brand-gradient relative overflow-hidden px-6 py-24 sm:py-28"
+      className="relative overflow-hidden px-6 py-24 sm:py-28"
       style={{ color: "var(--on-primary)" }}
     >
+      <GradientField tier="full" />
+
       {/* The mark, oversized and bled off the right edge — the same shape the
           hero's wash is split on, closing the page where it opened. Ink at low
           opacity rather than a second hue: the ground is already carrying both

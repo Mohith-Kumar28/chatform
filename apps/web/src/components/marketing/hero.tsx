@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatDemo } from "./chat-demo";
 import { HERO_SCRIPT } from "./chat-demo-scripts";
+import { GradientField } from "@/components/brand/gradient-field";
 import { CircleMark } from "./annotate";
 
 /**
@@ -41,24 +42,26 @@ export function Hero() {
        on the site. The header is `sticky` with its own z-index, so the wash
        passes under it rather than over it. Nothing else in here overflows. */
     <section className="relative px-6 pt-14 pb-16 sm:pt-20 sm:pb-24">
-      <div
-        aria-hidden
-        /* The wash, at strength.
+      {/* The wash, at strength, and moving.
            It used to be the `-band` tokens — 17% of each hue — at opacity 0.70
            behind a radial mask that faded most of what was left. Three
            reductions stacked on one another, and what reached the screen was a
            faint warm smudge that read as a rendering artefact rather than as
            the mark blown up to page scale, which is what it is.
-           Now it is the vivid tier at full opacity, and the mask only softens
-           the bottom edge into the page instead of eating the whole thing. The
-           seam still sits on the mark's diagonal, and the two hues still meet
-           as a sweep rather than a plate — the rule that has always governed
-           these two at full strength. */
-        className="pointer-events-none absolute inset-0 -top-32 [mask-image:linear-gradient(to_bottom,black_0%,black_78%,transparent_100%)]"
-        style={{
-          background:
-            "linear-gradient(115deg, var(--brand-orange-band-vivid) 0%, var(--brand-orange-band-vivid) 30%, var(--brand-violet-band-vivid) 74%, var(--brand-violet-band-vivid) 100%)",
-        }}
+           Then it was the vivid tier at full opacity: the right colour, in the
+           right place, and a flat plate. `GradientField` keeps that exact
+           ground and drifts five blurred lobes of the brand hues across it,
+           with a sixth following the cursor. The seam still sits on the mark's
+           diagonal and the two hues still meet as a sweep rather than a plate —
+           the rule that has always governed these two at full strength.
+           `strength={0.7}`, not 1: this is the one field on the site with a
+           headline, a lede, two buttons and a live chat demo sitting on top of
+           it, and at full strength the lobes start competing with the type they
+           are behind. The mask only softens the bottom edge into the page. */}
+      <GradientField
+        tier="vivid"
+        strength={0.7}
+        className="-top-32 [mask-image:linear-gradient(to_bottom,black_0%,black_78%,transparent_100%)]"
       />
       {/* The dot grid keeps the wash from reading as a flat panel. */}
       <div
@@ -119,17 +122,9 @@ export function Hero() {
             rather than stranding it. */}
           <h1 className="font-display font-bold tracking-[-0.045em] text-balance text-[clamp(2.5rem,1.1rem+3.4vw,4rem)] leading-[1]">
             <span className="word-rise inline-block" style={{ animationDelay: "60ms" }}>
-              AI forms that get
-            </span>{" "}
-            <span className="word-rise inline-block" style={{ animationDelay: "150ms" }}>
-              {/* `me-3` because the ring is drawn `-inset-x-4` — a whole rem
-                  wider than the word on each side, which is what makes it read
-                  as a pen going round something rather than as a border. At
-                  the end of a line that overhang costs nothing; mid-sentence
-                  it lands on the next word, and "more" had its ring resting on
-                  the S of "submissions". The word keeps its normal space and
-                  the mark gets its own. */}
-              <span className="relative me-3 inline-block">
+              Agentic forms that get {" "}
+
+               <span className="relative me-3 inline-block">
                 more
                 {/* Drawn on, and last. The two words rise at 60ms and 150ms; the ring
                     starts once they have both landed, which is the order it would
@@ -144,8 +139,18 @@ export function Hero() {
                   />
                 </span>
               </span>{" "}
-              submissions.
-            </span>
+            </span>{" "}
+           
+              {/* `me-3` because the ring is drawn `-inset-x-4` — a whole rem
+                  wider than the word on each side, which is what makes it read
+                  as a pen going round something rather than as a border. At
+                  the end of a line that overhang costs nothing; mid-sentence
+                  it lands on the next word, and "more" had its ring resting on
+                  the S of "submissions". The word keeps its normal space and
+                  the mark gets its own. */}
+             
+              responses.
+            
           </h1>
 
           {/*
