@@ -97,6 +97,26 @@ describe("the gate", () => {
     expect(isPlatformAdmin(DB(), "nobody@example.com")).toBe(false);
   });
 
+  /**
+   * The exact shape that shipped a console nobody could open: `.dev.vars` is
+   * parsed by wrangler, which strips the quotes, while `push-secrets.py` sends
+   * them through as part of the value. Identical file, two different lists,
+   * and the production one matched nobody.
+   */
+  it("survives a quoted secret, however it was written", () => {
+    for (const raw of [
+      `"founder@example.com,other@example.com"`,
+      `'founder@example.com,other@example.com'`,
+      `"founder@example.com","other@example.com"`,
+      ` founder@example.com , other@example.com `,
+    ]) {
+      setAllowlist(raw);
+      expect(isPlatformAdmin(DB(), "founder@example.com"), raw).toBe(true);
+      expect(isPlatformAdmin(DB(), "other@example.com"), raw).toBe(true);
+      expect(isPlatformAdmin(DB(), "nobody@example.com"), raw).toBe(false);
+    }
+  });
+
   it("does not match a substring of an allowlisted address", () => {
     setAllowlist("founder@example.com");
     expect(isPlatformAdmin(DB(), "ounder@example.com")).toBe(false);

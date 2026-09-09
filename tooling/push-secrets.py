@@ -29,13 +29,32 @@ DEFAULT_FILE = API / ".prod.vars"
 
 
 def read_vars(path: pathlib.Path) -> dict[str, str]:
+    """
+    Parse a `.vars` file the way wrangler parses `.dev.vars`.
+
+    Including the quote stripping, which is the whole point. `.dev.vars` and
+    `.prod.vars` share a format but not a reader: wrangler loads the first and
+    removes surrounding quotes, while this loaded the second and kept them. A
+    quoted line therefore meant one value locally and a different value in
+    production — and nothing anywhere said so, because a secret is write-only
+    once deployed.
+
+    That shipped a `PLATFORM_ADMIN_EMAILS` whose list split into
+    `"first@example.com` and `last@example.com"`, so the platform console worked
+    perfectly on localhost and answered 404 to its own admins in production.
+    """
     out: dict[str, str] = {}
     for line in path.read_text().splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         name, _, value = line.partition("=")
-        out[name.strip()] = value.strip()
+        value = value.strip()
+        # Only a *matching* pair, so a value that legitimately contains a quote
+        # is left alone.
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        out[name.strip()] = value
     return out
 
 

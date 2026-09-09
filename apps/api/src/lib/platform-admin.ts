@@ -19,11 +19,24 @@ import { getAuth } from "./auth-instance.js";
  * only be changed by somebody who can already deploy the worker.
  */
 
-/** Emails from the secret, normalised once per call. Empty when unset. */
+/**
+ * Emails from the secret, normalised once per call. Empty when unset.
+ *
+ * Quotes are stripped, and that is not defensive tidying — it is a real failure
+ * this had. `.dev.vars` and `.prod.vars` share a format, but only one of them is
+ * parsed by wrangler: locally wrangler strips the quotes around a value, while
+ * `tooling/push-secrets.py` does `value.strip()`, which takes whitespace and
+ * leaves them. So a quoted line meant the console worked perfectly on localhost
+ * and answered 404 to its own admins in production, because the list had split
+ * into `"first@example.com` and `last@example.com"` and neither is an address.
+ *
+ * The failure is silent and total, and the value it depends on is invisible
+ * once deployed. A secret's meaning should not turn on quoting style.
+ */
 function allowlist(env: Bindings): string[] {
   return (env.PLATFORM_ADMIN_EMAILS ?? "")
     .split(",")
-    .map((entry) => entry.trim().toLowerCase())
+    .map((entry) => entry.trim().replace(/^['"]|['"]$/g, "").trim().toLowerCase())
     .filter(Boolean);
 }
 
