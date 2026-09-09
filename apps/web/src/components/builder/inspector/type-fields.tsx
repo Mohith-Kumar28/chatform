@@ -1,6 +1,7 @@
 "use client";
 
 import { isValidUpiId, UPI_CURRENCY, type Block } from "@repo/form-schema";
+import { LockedControl } from "@/components/billing/gate";
 import {
   CheckboxGroup,
   ListEditor,
@@ -91,6 +92,12 @@ export function TypeFields({
             checked={block.businessOnly}
             onChange={(v) => patch({ businessOnly: v } as Partial<Block>)}
           />
+          <VerifyField
+            label="Verify with an emailed code"
+            hint="Emails a 6-digit code and keeps the answer only once they type it back"
+            checked={block.verify}
+            patch={patch}
+          />
           <UniqueField checked={block.unique} patch={patch} />
         </>
       );
@@ -108,6 +115,12 @@ export function TypeFields({
               patch({ countryHint: v.toUpperCase().slice(0, 2) || undefined } as Partial<Block>, key("countryHint"))
             }
             maxLength={2}
+          />
+          <VerifyField
+            label="Verify with an SMS code"
+            hint="Texts a 6-digit code and keeps the answer only once they type it back"
+            checked={block.verify}
+            patch={patch}
           />
           <UniqueField checked={block.unique} patch={patch} />
         </>
@@ -632,6 +645,36 @@ export function TypeFields({
  * says so. Without that, "unique" reads as "unique in this response", which is
  * trivially true and would make the switch look broken.
  */
+/**
+ * Make the respondent prove the value they typed.
+ *
+ * Locked rather than hidden below Business, like every other paid control in
+ * the builder: an author should be able to see what the plan holds, and the
+ * publish path strips it if they somehow get it switched on anyway.
+ */
+function VerifyField({
+  label,
+  hint,
+  checked,
+  patch,
+}: {
+  label: string;
+  hint: string;
+  checked: boolean;
+  patch: (p: Partial<Block>, coalesceKey?: string) => void;
+}) {
+  return (
+    <LockedControl feature="verified_answers" chip="inline">
+      <SwitchField
+        label={label}
+        hint={hint}
+        checked={checked}
+        onChange={(v) => patch({ verify: v } as Partial<Block>)}
+      />
+    </LockedControl>
+  );
+}
+
 function UniqueField({
   checked,
   patch,

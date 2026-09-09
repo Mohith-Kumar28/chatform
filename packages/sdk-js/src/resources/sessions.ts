@@ -8,7 +8,16 @@ export interface CreateSessionOptions {
   respondent?: { ipHash?: string; country?: string; userAgent?: string };
 }
 
-export type SessionAction = "skip" | "stop" | "restart" | "edit" | "submit";
+export type SessionAction =
+  | "skip"
+  | "stop"
+  | "restart"
+  | "edit"
+  | "submit"
+  /** Only while `pendingVerification` is set: another code to the same place. */
+  | "resend_code"
+  /** Only while `pendingVerification` is set: drop it and re-ask the question. */
+  | "change_answer";
 
 export class Sessions {
   constructor(private readonly http: HttpClient) {}
@@ -48,10 +57,11 @@ export class Sessions {
   }
 
   /**
-   * Skip, stop, restart, edit or submit.
+   * Skip, stop, restart, edit, submit — or settle a code step.
    *
    * `submit` matters more than it looks: forms show a review step by default, so
-   * without it such a form can never be finished.
+   * without it such a form can never be finished. `resend_code` and
+   * `change_answer` are refused unless the turn before set `pendingVerification`.
    */
   act(sessionId: string, action: SessionAction, ref?: string, request?: RequestOptions) {
     return this.http.post<TurnResult>(`/v1/sessions/${sessionId}/actions`, { action, ref }, request);

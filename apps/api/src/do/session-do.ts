@@ -27,7 +27,7 @@ import {
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { ServerEvent, SSEEnvelope } from "../lib/events.js";
-import { asideText, clarifyText, closingText, escalateText, greeting, looksLikeQuestion, questionText, resumeGreeting, transitionAck } from "../lib/phrasing.js";
+import { asideText, clarifyText, closingText, codeExpectedText, codeSentText, codeVerifiedText, escalateText, greeting, looksLikeQuestion, questionText, resumeGreeting, transitionAck } from "../lib/phrasing.js";
 import {
   chatModel,
   interviewModel,
@@ -54,6 +54,7 @@ import {
   findDuplicateAnswer,
   type ResponseOwner,
 } from "../lib/submissions.js";
+import { startOtpChallenge, verifyOtpChallenge } from "../lib/respondent-auth.js";
 import type { RespondentIdentity, RespondentAuthMethod } from "@repo/form-schema";
 import { streamText, stepCountIs } from "ai";
 
@@ -84,6 +85,35 @@ interface DoSessionMeta {
   completedAt?: number | null;
   /** Set once the sign-in gate is satisfied. Null while it still blocks. */
   identity?: RespondentIdentity | null;
+  /**
+   * A `verify` answer that has been given, had a code sent to it, and is
+   * waiting for that code back.
+   *
+   * On the session rather than in memory because it decides how the *next*
+   * turn is read: while it is set, what the respondent types is a code and not
+   * an answer. An eviction between the two would otherwise hand their code to
+   * the agent as a reply to the question.
+   */
+  pendingVerify?: {
+    ref: string;
+    channel: "sms" | "email";
+    /** The validated answer, held here until the code proves it. */
+    value: string;
+    /** Normalized destination the code actually went to. */
+    sentTo: string;
+    sentAt: number;
+    devCode?: string;
+    /** The bubble the answer was echoed in, so recording it does not draw a second. */
+    messageId: string | null;
+  } | null;
+  /**
+   * Destinations this session has already proved.
+   *
+   * So correcting a later answer, or coming back to the same question with the
+   * pencil, does not send a second code to a number they have already
+   * confirmed — and so a form asking for the same address twice asks once.
+   */
+  verified?: string[];
   /**
    * Which surface opened this session.
    *
@@ -409,7 +439,7 @@ export class SessionDO extends DurableObject<Bindings> {
     // survives replay; the card below it is the event.
     await this.emitMessage(gate.message);
     await this.appendMessage("assistant", gate.message);
-    await this.emit("auth_required", { methods: gate.methods, message: gate.message });
+    await this.emit("auth_required", { method: gate.method, message: gate.message });
   }
 
   /**
@@ -522,6 +552,211 @@ export class SessionDO extends DurableObject<Bindings> {
   async getIdentity(): Promise<RespondentIdentity | null> {
     const ok = await this.ensureLoaded();
     return ok ? (this.meta?.identity ?? null) : null;
+  }
+
+  // ─────────────────────── verifying one answer ───────────────────────
+
+  /**
+   * Whether this answer has to prove itself, and over which channel.
+   *
+   * Null means record it and move on, and there are three ways to get there:
+   * the author never asked for verification, the plan does not include it (by
+   * then `clampForRuntime` has already switched the flag off), or the value is
+   * one this session has *already* proved.
+   *
+   * That last case is the interesting one, and it is why this looks at the
+   * identity as well as the answer. Somebody who signed in with Google has
+   * proved that address to Google's satisfaction; asking them to confirm it a
+   * second time when they type it into an email question is ceremony, and the
+   * kind that makes people abandon a form. Type a different address and it is a
+   * different claim, so the code goes out as normal.
+   */
+  private verificationChannelFor(block: Block, value: unknown): "sms" | "email" | null {
+    if (block.type !== "email" && block.type !== "phone") return null;
+    if (!block.verify || typeof value !== "string" || !value) return null;
+    if (this.meta?.verified?.includes(value)) return null;
+
+    const identity = this.meta?.identity;
+    if (block.type === "email") {
+      if (identity?.provider === "google" && identity.email?.toLowerCase() === value.toLowerCase()) return null;
+      return "email";
+    }
+    if (identity?.provider === "phone" && identity.phone === value) return null;
+    return "sms";
+  }
+
+  /**
+   * Send the code and park the answer.
+   *
+   * The answer is held on the session rather than written and un-written: an
+   * unverified value must never reach the results table, not even for the
+   * minute it takes somebody to read a text message, because a form owner
+   * looking at their responses in that minute would see a number nobody has
+   * confirmed with no way to tell.
+   */
+  private async beginVerification(
+    block: Block,
+    value: string,
+    channel: "sms" | "email",
+    answerMessageId: string | null,
+  ): Promise<{ accepted: boolean; error?: string }> {
+    const started = await startOtpChallenge(this.env, {
+      sessionId: this.meta!.sessionId,
+      scope: `block:${block.ref}`,
+      channel,
+      destination: value,
+      dialHint: block.type === "phone" ? block.countryHint : undefined,
+      formTitle: this.doc!.title,
+    });
+
+    if (!started.ok) {
+      /*
+       * Nothing was sent, so there is nothing to wait for. This is not a wrong
+       * answer and must not be phrased as one — it is our side failing, or a
+       * cooldown they have to sit out — so it goes out as the refusal it is and
+       * the question is put back, without the agentic retry `recordInvalid`
+       * would run.
+       */
+      await this.emit("validation_error", { ref: block.ref, code: "invalid_code", message: started.message });
+      await this.emitMessage(started.message);
+      await this.appendMessage("assistant", started.message);
+      await this.emitQuestion();
+      return { accepted: true };
+    }
+
+    this.meta!.pendingVerify = {
+      ref: block.ref,
+      channel,
+      value,
+      sentTo: started.destination,
+      sentAt: Date.now(),
+      devCode: started.devCode,
+      messageId: answerMessageId,
+    };
+    await this.persistMeta();
+    await this.emitVerifyRequired();
+    return { accepted: true };
+  }
+
+  /** Say a code went out, and arm the client's code step. Also used on replay. */
+  private async emitVerifyRequired(announce = true): Promise<void> {
+    const pending = this.meta?.pendingVerify;
+    if (!pending) return;
+    if (announce) {
+      const said = codeSentText(pending.channel, pending.sentTo);
+      await this.emitMessage(said);
+      await this.appendMessage("assistant", said);
+    }
+    await this.emit("verify_required", {
+      ref: pending.ref,
+      channel: pending.channel,
+      sentTo: pending.sentTo,
+      sentAt: pending.sentAt,
+      devCode: pending.devCode,
+    });
+  }
+
+  /**
+   * A turn taken while a code is outstanding.
+   *
+   * Everything the respondent says here is read as a code and nothing else —
+   * not passed to the agent, and not appended to the transcript. Both matter:
+   * the agent would happily record `483920` as their phone number, and a
+   * one-time code has no business being written into a conversation the form
+   * owner can read back.
+   */
+  private async handlePendingVerify(
+    input: { type: "text"; text: string } | { type: "structured"; ref: string; value: unknown },
+  ): Promise<{ accepted: boolean; error?: string }> {
+    const pending = this.meta!.pendingVerify!;
+    const block = this.doc!.blocks.find((b) => b.ref === pending.ref);
+    if (!block) {
+      // The question went away under them — an edited document, a resumed
+      // session. Drop the challenge rather than trapping the conversation.
+      this.meta!.pendingVerify = null;
+      await this.persistMeta();
+      await this.emit("verify_settled", { ref: pending.ref, verified: false });
+      await this.emitQuestion();
+      return { accepted: true };
+    }
+
+    const said = input.type === "text" ? input.text : String(input.value ?? "");
+    const code = said.replace(/\D/g, "");
+    if (code.length < 4) {
+      const nudge = codeExpectedText(pending.channel);
+      await this.emitMessage(nudge);
+      await this.appendMessage("assistant", nudge);
+      await this.emitVerifyRequired(false);
+      return { accepted: true };
+    }
+
+    const result = await verifyOtpChallenge(this.env, this.meta!.sessionId, `block:${block.ref}`, code);
+    if (!result.ok) {
+      /*
+       * Still pending. A wrong code is a wrong code — they can try again, ask
+       * for another, or change the answer — so the card stays up and the
+       * conversation does not move. `invalid_code` is the published code for
+       * this; see `VALIDATION_CODES`.
+       */
+      await this.emit("validation_error", { ref: block.ref, code: "invalid_code", message: result.message });
+      await this.emitVerifyRequired(false);
+      return { accepted: true };
+    }
+
+    this.meta!.verified = [...(this.meta!.verified ?? []), pending.value];
+    this.meta!.pendingVerify = null;
+    await this.persistMeta();
+    await this.emit("verify_settled", { ref: block.ref, verified: true });
+    await this.appendMessage("system_event", `Verified ${pending.sentTo} by ${pending.channel === "sms" ? "SMS" : "email"}`);
+    const done = codeVerifiedText(pending.channel);
+    await this.emitMessage(done);
+    await this.appendMessage("assistant", done);
+
+    /*
+     * Now record it for real. The answer was echoed when they first gave it, so
+     * `record` must not echo it again — these two flags are how it is told that
+     * the bubble already exists, and which one it is.
+     */
+    this.pendingUserTextPersisted = true;
+    this.pendingUserMessageId = pending.messageId;
+    return this.record(block, pending.value);
+  }
+
+  /** Another code to the same destination. Subject to the same cooldown. */
+  private async resendVerifyCode(): Promise<{ accepted: boolean; error?: string }> {
+    const pending = this.meta!.pendingVerify!;
+    const started = await startOtpChallenge(this.env, {
+      sessionId: this.meta!.sessionId,
+      scope: `block:${pending.ref}`,
+      channel: pending.channel,
+      destination: pending.sentTo,
+      formTitle: this.doc!.title,
+    });
+    if (!started.ok) {
+      await this.emit("validation_error", { ref: pending.ref, code: "invalid_code", message: started.message });
+      await this.emitVerifyRequired(false);
+      return { accepted: true };
+    }
+    this.meta!.pendingVerify = { ...pending, sentAt: Date.now(), devCode: started.devCode };
+    await this.persistMeta();
+    await this.emitVerifyRequired();
+    return { accepted: true };
+  }
+
+  /**
+   * Give up on the code and ask the question again.
+   *
+   * The way out of a mistyped number, and the reason the code step is never a
+   * dead end. The challenge rows are left to expire on their own: they are
+   * scoped to this block and capped, and consuming them here would let somebody
+   * clear the send counter by pressing "change" five times.
+   */
+  private async cancelVerification(): Promise<void> {
+    const pending = this.meta?.pendingVerify;
+    if (!pending) return;
+    this.meta!.pendingVerify = null;
+    await this.persistMeta();
+    await this.emit("verify_settled", { ref: pending.ref, verified: false });
   }
 
   /** Cold hydration after eviction. */
@@ -1117,6 +1352,14 @@ export class SessionDO extends DurableObject<Bindings> {
     this.turnCount += 1;
     await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
 
+    /*
+     * Ahead of the transcript append on purpose. While a code is outstanding
+     * the respondent's message *is* the code, and writing it into the
+     * transcript would leave a one-time code sitting in a conversation the form
+     * owner can read — and hand it to the agent as an answer besides.
+     */
+    if (this.meta.pendingVerify) return this.handlePendingVerify(input);
+
     if (input.type === "text") {
       const msgId = await this.appendMessage("user", input.text);
       await this.emit("user_message", { messageId: msgId, text: input.text });
@@ -1319,6 +1562,28 @@ export class SessionDO extends DurableObject<Bindings> {
       if (duplicate) return this.recordInvalid(block, "duplicate", DUPLICATE_HINT);
       return this.recordInvalid(block, result.code ?? "invalid", result.hint ?? "That answer doesn't look right.");
     }
+
+    /**
+     * A `verify` answer is echoed like any other, and then held.
+     *
+     * The echo comes first because they did say it — the bubble belongs in the
+     * thread whether or not the code ever comes back — and its id is kept so
+     * that recording the answer afterwards reuses the same bubble instead of
+     * drawing the number twice.
+     */
+    const channel = this.verificationChannelFor(block, result.value);
+    if (channel) {
+      let echoId = this.pendingUserMessageId;
+      if (!this.pendingUserTextPersisted) {
+        const attempt = summarizeAnswer(block, result.value);
+        echoId = await this.appendMessage("user", attempt, block.ref);
+        await this.emit("user_message", { messageId: echoId, text: attempt, blockRef: block.ref });
+      }
+      this.pendingUserTextPersisted = false;
+      this.pendingUserMessageId = null;
+      return this.beginVerification(block, String(result.value), channel, echoId);
+    }
+
     if (result.value !== undefined) {
       this.state.answers[block.ref] = result.value;
       this.collectedCount += 1;
@@ -1584,7 +1849,10 @@ export class SessionDO extends DurableObject<Bindings> {
 
   /** The same, for skip / stop / restart / edit / submit. */
   async actionSync(
-    input: { action: "skip" | "stop" | "restart" | "edit" | "submit"; ref?: string },
+    input: {
+      action: "skip" | "stop" | "restart" | "edit" | "submit" | "resend_code" | "change_answer";
+      ref?: string;
+    },
     opts: { deadlineMs?: number } = {},
   ): Promise<SyncTurnResult> {
     return this.runSync(() => this.action(input), opts);
@@ -1813,11 +2081,22 @@ export class SessionDO extends DurableObject<Bindings> {
     // outranks the questions, and the review step outranks the current block.
     if (this.authGateBlocks()) {
       const gate = this.doc.settings.requireAuth;
-      await this.emit("auth_required", { methods: gate.methods, message: gate.message });
+      await this.emit("auth_required", { method: gate.method, message: gate.message });
       return { ok: true };
     }
     if (this.pendingEndingRef !== null) {
       await this.emit("review", { answers: this.answerSummary() });
+      return { ok: true };
+    }
+    /*
+     * A code that is still outstanding outranks the question it belongs to. A
+     * reload must come back to the code step, not to the question — which would
+     * invite them to answer it again while a challenge for the old answer is
+     * still live. Re-armed without re-announcing: the sentence saying a code
+     * went out is already in the transcript being replayed.
+     */
+    if (this.meta.pendingVerify) {
+      await this.emitVerifyRequired(false);
       return { ok: true };
     }
     // `emitQuestion` rebuilds `currentRef` when a dead turn left it empty.
@@ -1826,7 +2105,7 @@ export class SessionDO extends DurableObject<Bindings> {
   }
 
   async action(input: {
-    action: "skip" | "stop" | "restart" | "edit" | "submit";
+    action: "skip" | "stop" | "restart" | "edit" | "submit" | "resend_code" | "change_answer";
     /** For `edit`: the block to go back and re-answer. */
     ref?: string;
   }): Promise<{ accepted: boolean; error?: string }> {
@@ -1842,7 +2121,7 @@ export class SessionDO extends DurableObject<Bindings> {
   }
 
   private async runAction(input: {
-    action: "skip" | "stop" | "restart" | "edit" | "submit";
+    action: "skip" | "stop" | "restart" | "edit" | "submit" | "resend_code" | "change_answer";
     ref?: string;
   }): Promise<{ accepted: boolean; error?: string }> {
     const ok = await this.ensureLoaded();
@@ -1854,6 +2133,30 @@ export class SessionDO extends DurableObject<Bindings> {
       await this.emitAuthRequired();
       return { accepted: false, error: "auth_required" };
     }
+
+    /*
+     * The two actions that only mean anything while a code is outstanding, and
+     * mean nothing at all otherwise — a stale tab pressing "resend" after the
+     * answer went through must not start a challenge nobody is waiting on.
+     */
+    if (input.action === "resend_code") {
+      if (!this.meta.pendingVerify) return { accepted: false, error: "no_pending_verification" };
+      return this.resendVerifyCode();
+    }
+    if (input.action === "change_answer") {
+      if (!this.meta.pendingVerify) return { accepted: false, error: "no_pending_verification" };
+      await this.cancelVerification();
+      await this.emitQuestion();
+      return { accepted: true };
+    }
+
+    /*
+     * Every other way out of the code step abandons it. Leaving `pendingVerify`
+     * set would read the next turn as a code — so skipping the question, going
+     * back to edit another answer, or starting over would each leave the
+     * conversation quietly waiting for six digits nobody is going to type.
+     */
+    if (this.meta.pendingVerify) await this.cancelVerification();
 
     if (input.action === "skip") {
       const block = await this.currentBlock();
@@ -1981,11 +2284,19 @@ export class SessionDO extends DurableObject<Bindings> {
     completedAt: number | null;
     /** Null when the form is open to anyone. */
     auth: {
-      methods: RespondentAuthMethod[];
+      method: RespondentAuthMethod;
       message: string;
       verified: boolean;
       label: string | null;
     } | null;
+    /**
+     * A code the conversation is waiting on, for a caller with no stream.
+     *
+     * Without this a headless caller would send the next answer into a session
+     * that is going to read it as six digits. `sentTo` is where the code went;
+     * the code itself comes back as an ordinary message.
+     */
+    pendingVerification: { ref: string; channel: "sms" | "email"; sentTo: string; sentAt: number } | null;
   } | null> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta) return null;
@@ -2003,12 +2314,20 @@ export class SessionDO extends DurableObject<Bindings> {
           : null,
       auth: this.doc?.settings.requireAuth.enabled
         ? {
-            methods: this.doc.settings.requireAuth.methods,
+            method: this.doc.settings.requireAuth.method,
             message: this.doc.settings.requireAuth.message,
             verified: Boolean(this.meta.identity),
             label: this.meta.identity
               ? (this.meta.identity.email ?? this.meta.identity.phone ?? this.meta.identity.name ?? "Verified")
               : null,
+          }
+        : null,
+      pendingVerification: this.meta.pendingVerify
+        ? {
+            ref: this.meta.pendingVerify.ref,
+            channel: this.meta.pendingVerify.channel,
+            sentTo: this.meta.pendingVerify.sentTo,
+            sentAt: this.meta.pendingVerify.sentAt,
           }
         : null,
     };

@@ -67,7 +67,12 @@ const messageSchema = z.discriminatedUnion("type", [
 ]);
 
 const actionSchema = z.object({
-  action: z.enum(["skip", "stop", "restart", "edit", "submit"]),
+  /**
+   * `resend_code` and `change_answer` only mean anything while a `verify`
+   * question is waiting on a code: send another, or give up on this one and
+   * answer the question again.
+   */
+  action: z.enum(["skip", "stop", "restart", "edit", "submit", "resend_code", "change_answer"]),
   /** Required for `edit`: which question to go back to. */
   ref: z.string().optional(),
 });

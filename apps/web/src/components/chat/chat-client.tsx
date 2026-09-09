@@ -19,6 +19,7 @@ import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { LogoMark } from "@/components/brand/logo";
 import { AuthCard } from "./auth-card";
+import { VerifyCard } from "./verify-card";
 import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
 import { useChat, type ChatMessage } from "./use-chat";
 import { SendRow, TextInput } from "./composers/primitives";
@@ -299,7 +300,7 @@ export function ChatClient({
 
           {chat.messages.map((m) => (
             <div key={m.id}>
-              {m.id === mediaMessageId && !chat.ending && !chat.auth && (
+              {m.id === mediaMessageId && !chat.ending && !chat.auth && !chat.verify && (
                 <div className="mb-2">
                   <QuestionMedia media={media} imageKey={imageKey} />
                 </div>
@@ -345,7 +346,10 @@ export function ChatClient({
           {/* Not while a sign-in gate is up: the server refuses every turn until
               it is cleared, so chips there are a control that cannot work — and
               their number keys would fire under the card. */}
-          {!chat.ending && !chat.auth && chat.question && (
+          {/* Not while a code is outstanding either: the question has been
+              answered, and answering it again is what "Use a different number"
+              is for. */}
+          {!chat.ending && !chat.auth && !chat.verify && chat.question && (
             <div key={chat.question.block.ref} className="animate-message-in pt-0.5 pl-1">
               <QuestionAffordance
                 block={chat.question.block}
@@ -380,6 +384,19 @@ export function ChatClient({
               onVerifyCode={(code) => void chat.verifyPhoneCode(code)}
               onPhoneToken={(t) => void chat.signInWithPhoneToken(t)}
               onChangeNumber={chat.changePhoneNumber}
+            />
+          )}
+
+          {/* One answer proving itself, in the thread under the question that
+              asked for it — the conversation above it stays exactly where it
+              was, which is the whole difference between this and the gate. */}
+          {chat.verify && (
+            <VerifyCard
+              verify={chat.verify}
+              hint={chat.validationHint}
+              onSubmit={(code) => void chat.submitVerifyCode(code)}
+              onResend={() => void chat.resendVerifyCode()}
+              onChange={() => void chat.changeVerifyAnswer()}
             />
           )}
 
@@ -443,7 +460,7 @@ export function ChatClient({
         </div>
       )}
 
-      {!chat.ending && !chat.review && !chat.auth && (
+      {!chat.ending && !chat.review && !chat.auth && !chat.verify && (
         <footer className="sticky bottom-0 bg-[var(--cf-bg)]/95 backdrop-blur">
           <div className="mx-auto w-full max-w-2xl px-4 py-3">
             {/*
@@ -1223,6 +1240,20 @@ const Composer = memo(function Composer({
   return (
     <div className="space-y-2">
       {validationHint && <p className="px-1 text-sm opacity-70">{validationHint}</p>}
+
+      {/*
+        Said before they type, not after. A question that is going to send a
+        code needs a reachable number or address, and the moment to know that
+        is while choosing which one to give — not in the reply that arrives
+        once they have already committed to one.
+      */}
+      {block.verify && (
+        <p className="px-1 text-xs opacity-50">
+          {block.type === "phone"
+            ? "We'll text a 6-digit code to confirm this number."
+            : "We'll email a 6-digit code to confirm this address."}
+        </p>
+      )}
 
       <SendRow onSend={submit} disabled={disabled || !text.trim()}>
         <TextInput

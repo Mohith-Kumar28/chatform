@@ -52,6 +52,16 @@ export const VALIDATION_CODES = [
    * see `findDuplicateAnswer`.
    */
   "duplicate",
+  /**
+   * The six-digit code sent to a `verify` email or phone answer did not match,
+   * or has expired, or has been guessed at too many times.
+   *
+   * Like `duplicate`, this is not a property of the answer alone and so cannot
+   * come from `validateAnswer`: only the challenge row knows. The runtime
+   * emits it — see `SessionDO.verifyPendingCode` — and everything downstream
+   * treats it as an ordinary refusal.
+   */
+  "invalid_code",
   "unsupported",
 ] as const;
 

@@ -4151,7 +4151,9 @@
                       "stop",
                       "restart",
                       "edit",
-                      "submit"
+                      "submit",
+                      "resend_code",
+                      "change_answer"
                     ]
                   },
                   "ref": {
@@ -4168,7 +4170,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "Skip, edit, restart, stop, or submit",
+        "summary": "Skip, edit, restart, stop, submit, or resend a verification code",
         "responses": {
           "200": {
             "description": "The turn's result"
@@ -4424,7 +4426,9 @@
                       "stop",
                       "restart",
                       "edit",
-                      "submit"
+                      "submit",
+                      "resend_code",
+                      "change_answer"
                     ]
                   },
                   "ref": {
@@ -4441,7 +4445,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "Skip, edit, restart, stop, or submit",
+        "summary": "Skip, edit, restart, stop, submit, or resend a verification code",
         "responses": {
           "200": {
             "description": "The turn's result"

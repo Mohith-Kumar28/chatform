@@ -117,27 +117,32 @@ export function stripForPublish(input: FormDoc, ent: Entitlements): StripResult 
   }
   if (s.requireAuth?.enabled) {
     // Respondent verification is per-method: Google and phone are separate features, and
-    // a plan may in principle grant one without the other.
-    const allowed = s.requireAuth.methods.filter((m) =>
-      m === "phone" ? can(ent, "respondent_auth_phone") : can(ent, "respondent_auth_google"),
-    );
-    if (allowed.length === 0) {
-      // Turn the gate off rather than leaving it on with no usable method — a respondent
-      // must never meet a sign-in step the plan cannot actually complete.
+    // a plan may in principle grant one without the other. The gate names one method, so
+    // there is no falling back to the other — a respondent must never meet a sign-in step
+    // the plan cannot actually complete, and switching them to a method the author did not
+    // choose would change who the form collects.
+    const feature: FeatureKey =
+      s.requireAuth.method === "phone" ? "respondent_auth_phone" : "respondent_auth_google";
+    if (!can(ent, feature)) {
       s.requireAuth.enabled = false;
-      note(
-        stripped,
-        "settings.requireAuth.enabled",
-        s.requireAuth.methods.includes("phone") ? "respondent_auth_phone" : "respondent_auth_google",
-      );
-    } else if (allowed.length !== s.requireAuth.methods.length) {
-      s.requireAuth.methods = allowed as typeof s.requireAuth.methods;
-      note(stripped, "settings.requireAuth.methods", "respondent_auth_phone");
+      note(stripped, "settings.requireAuth.enabled", feature);
     }
     if (s.requireAuth.onePerIdentity && !can(ent, "one_response_per_identity")) {
       s.requireAuth.onePerIdentity = false;
       note(stripped, "settings.requireAuth.onePerIdentity", "one_response_per_identity");
     }
+  }
+  // Verified answers, question by question. Reported once however many questions ask for
+  // it: a publish notice listing the same upsell six times is a worse notice.
+  if (!can(ent, "verified_answers")) {
+    let anyVerified = false;
+    for (const b of doc.blocks) {
+      if ((b.type === "email" || b.type === "phone") && b.verify) {
+        b.verify = false;
+        anyVerified = true;
+      }
+    }
+    if (anyVerified) note(stripped, "blocks[].verify", "verified_answers");
   }
   if (s.language && s.language !== "en" && doc.settings.agent?.language && doc.settings.agent.language !== s.language) {
     // A form whose agent speaks a different language than the form chrome is the
@@ -242,12 +247,19 @@ export function clampForRuntime(input: FormDoc, ent: Entitlements): FormDoc {
   // rather than leaving it up.
   const gate = doc.settings.requireAuth;
   if (gate?.enabled) {
-    const allowed = gate.methods.filter((m) =>
-      m === "phone" ? can(ent, "respondent_auth_phone") : can(ent, "respondent_auth_google"),
-    );
-    if (allowed.length === 0) gate.enabled = false;
-    else gate.methods = allowed as typeof gate.methods;
+    const granted = gate.method === "phone" ? can(ent, "respondent_auth_phone") : can(ent, "respondent_auth_google");
+    if (!granted) gate.enabled = false;
     if (gate.onePerIdentity && !can(ent, "one_response_per_identity")) gate.onePerIdentity = false;
+  }
+  /*
+   * Answer verification, re-derived per read for the same reason the gate is: a form
+   * published on Business and then downgraded must stop texting codes rather than start
+   * failing at the send. The answer is simply recorded as given from then on.
+   */
+  if (!can(ent, "verified_answers")) {
+    for (const b of doc.blocks) {
+      if ((b.type === "email" || b.type === "phone") && b.verify) b.verify = false;
+    }
   }
 
   const agent = doc.settings.agent;

@@ -409,19 +409,27 @@ export const submissionAnswers = sqliteTable(
 );
 
 /**
- * One-time codes for phone sign-in.
+ * One-time codes, for a respondent signing in and for an answer proving itself.
  *
  * Codes are stored hashed — a leaked read of this table must not let anyone
  * complete a challenge. Rows are consumed on success and swept by the existing
  * cron; `attempts` caps brute force at a handful of guesses per code, and
- * `sendCount` caps how many SMS one session can make us pay for.
+ * `sendCount` caps how many messages one session can make us pay for.
  */
 export const otpChallenges = sqliteTable(
   "otp_challenges",
   {
     id: text("id").primaryKey(),
     sessionId: text("session_id").notNull(),
-    /** E.164. */
+    /**
+     * What this code proves: `auth` for the sign-in gate, `block:<ref>` for a
+     * `verify` email or phone answer. One session can have a live challenge in
+     * each, and each verifies only against its own — see `0019`.
+     */
+    scope: text("scope").notNull().default("auth"),
+    /** How it was sent. Decides the resend the respondent is offered. */
+    channel: text("channel", { enum: ["sms", "email"] }).notNull().default("sms"),
+    /** E.164 for `sms`, an address for `email`. */
     destination: text("destination").notNull(),
     codeHash: text("code_hash").notNull(),
     attempts: integer("attempts").notNull().default(0),
@@ -432,6 +440,7 @@ export const otpChallenges = sqliteTable(
   },
   (t) => [
     index("idx_otp_session").on(t.sessionId, t.createdAt),
+    index("idx_otp_session_scope").on(t.sessionId, t.scope, t.createdAt),
     index("idx_otp_expires").on(t.expiresAt),
   ],
 );

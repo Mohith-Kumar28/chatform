@@ -27,7 +27,7 @@ export type RespondentAuthMethod = z.infer<typeof RespondentAuthMethod>;
 
 /** What the client needs to render the sign-in card, and nothing more. */
 export interface AuthChallenge {
-  methods: RespondentAuthMethod[];
+  method: RespondentAuthMethod;
   message: string;
   /** Set once a code has been sent, so a reload can resume at the code step. */
   phoneSentTo?: string | null;

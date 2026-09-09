@@ -41,11 +41,40 @@ export type ServerEvent =
   | {
       /** The form wants a verified respondent before the first question. */
       type: "auth_required";
-      data: { methods: RespondentAuthMethod[]; message: string };
+      data: { method: RespondentAuthMethod; message: string };
     }
   | {
       type: "auth_verified";
       data: { provider: RespondentAuthMethod; label: string; name: string | null; pictureUrl: string | null };
+    }
+  | {
+      /**
+       * A code went to the answer just given, and the answer is not recorded
+       * until it comes back.
+       *
+       * Deliberately not an `auth_required` of its own: this is one question
+       * mid-conversation, not a gate on the session, and the client keeps
+       * showing the transcript around it. `sentTo` is the normalized
+       * destination — the E.164 or lower-cased address the code actually went
+       * to, which is not always what they typed.
+       */
+      type: "verify_required";
+      data: {
+        ref: string;
+        channel: "sms" | "email";
+        sentTo: string;
+        sentAt: number;
+        /** Development only, with no SMS provider configured. */
+        devCode?: string;
+      };
+    }
+  | {
+      /**
+       * The pending code step is over — verified, or given up on so the
+       * question can be answered again. `question` follows in the second case.
+       */
+      type: "verify_settled";
+      data: { ref: string; verified: boolean };
     }
   | { type: "ending"; data: { ending: PublicEnding } }
   | { type: "complete"; data: { submissionId: string; durationMs: number } }

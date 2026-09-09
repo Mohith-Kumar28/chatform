@@ -66,6 +66,11 @@ function loadGsi(): Promise<void> {
  * callback here, and phone verification is two steps in the same card. A
  * redirect-based OAuth flow would lose the session mid-form, which is exactly
  * the moment people give up on a form.
+ *
+ * One method is offered, never two. The form names it — see
+ * `settings.requireAuth.method` — because a card with two doors produces two
+ * different identities for the same person, and "one response per person"
+ * cannot mean anything when the second door is right there.
  */
 export function AuthCard({
   auth,
@@ -87,8 +92,8 @@ export function AuthCard({
   onChangeNumber: () => void;
   onForgetHint: () => void;
 }) {
-  const showGoogle = auth.methods.includes("google");
-  const showPhone = auth.methods.includes("phone");
+  const showGoogle = auth.method === "google";
+  const showPhone = auth.method === "phone";
 
   // A hint is only worth showing when this form actually takes that method: a
   // form that asks for a phone number has no use for a remembered Google
@@ -110,14 +115,6 @@ export function AuthCard({
           onUseAnother={onForgetHint}
           disabled={auth.pending}
         />
-      )}
-
-      {showGoogle && showPhone && (
-        <div className="flex items-center gap-3 text-[0.6875rem] opacity-40">
-          <span className="h-px flex-1 bg-current" />
-          or
-          <span className="h-px flex-1 bg-current" />
-        </div>
       )}
 
       {/*
@@ -448,7 +445,7 @@ function NumberForm({
 }
 
 /** Matches the server OTP cooldown, so neither path can outrun the other. */
-const RESEND_COOLDOWN_SECONDS = 30;
+export const RESEND_COOLDOWN_SECONDS = 30;
 
 /**
  * Seconds left before another code may be asked for, ticking to zero.
@@ -485,7 +482,14 @@ function useResendCountdown(sentAt: number | null): number {
   return left;
 }
 
-function CodeForm({
+/**
+ * The code step, shared.
+ *
+ * Exported because proving an *answer* — a `verify` email or phone question —
+ * puts the respondent through exactly this screen. Two identical code boxes
+ * that drifted apart would be worse than one with two callers.
+ */
+export function CodeForm({
   sentTo,
   sentAt,
   pending,
@@ -493,6 +497,7 @@ function CodeForm({
   onSubmit,
   onResend,
   onChangeNumber,
+  changeLabel = "Use a different number",
 }: {
   sentTo: string;
   sentAt: number | null;
@@ -501,6 +506,8 @@ function CodeForm({
   onSubmit: (code: string) => void;
   onResend: () => void;
   onChangeNumber: () => void;
+  /** An emailed code is not a number; the way back has to say so. */
+  changeLabel?: string;
 }) {
   const secondsLeft = useResendCountdown(sentAt);
   const [code, setCode] = useState("");
@@ -576,7 +583,7 @@ function CodeForm({
           </button>
         )}
         <button type="button" onClick={onChangeNumber} className="underline opacity-55 hover:opacity-100">
-          Use a different number
+          {changeLabel}
         </button>
         {devCode && <span className="font-mono opacity-40">dev code: {devCode}</span>}
       </div>

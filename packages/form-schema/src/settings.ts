@@ -36,15 +36,26 @@ export const SettingsDoc = z.object({
    * Make the respondent prove who they are before the first question.
    *
    * This used to be a bare boolean that nothing read. It is an object now
-   * because "require auth" is meaningless without saying which methods are
-   * acceptable, and because the gate message is shown inside the conversation
-   * rather than on an interstitial — the respondent should never leave the
-   * chat to sign in.
+   * because "require auth" is meaningless without saying which method proves
+   * it, and because the gate message is shown inside the conversation rather
+   * than on an interstitial — the respondent should never leave the chat to
+   * sign in.
    */
   requireAuth: z
     .object({
       enabled: z.boolean().default(false),
-      methods: z.array(RespondentAuthMethod).min(1).default(["google"]),
+      /**
+       * One method, not a set of them.
+       *
+       * This was an array, and the builder drew it as a pair of toggles that
+       * could both be on. Nothing was gained by that: a respondent meeting a
+       * card with two ways in has to choose one, and the two produce different
+       * identities — a Google account and a phone number are not the same
+       * person to `onePerIdentity`, so the same human could answer twice by
+       * coming back through the other door. The author is choosing what an
+       * identity *is* on this form, and that is a single decision.
+       */
+      method: RespondentAuthMethod.default("google"),
       /** Said by the agent just above the sign-in card. */
       message: z
         .string()

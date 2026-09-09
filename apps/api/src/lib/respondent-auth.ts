@@ -1,5 +1,6 @@
 import { RespondentIdentity, normalizeE164 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
+import { enqueueMail } from "./mail.js";
 
 /**
  * Respondent sign-in.
@@ -26,6 +27,12 @@ import type { Bindings } from "../env.js";
  *
  *    Both mint `provider: "phone"` with the E.164 number as the subject, so a
  *    respondent verified either way is the same person to `onePerIdentity`.
+ *
+ * The OTP half of that also serves a second, smaller question. A `verify` email
+ * or phone *question* — see `blocks.ts` — proves one answer rather than a whole
+ * respondent, and wants exactly the same code, caps and expiry. So the codes are
+ * one implementation scoped by what they prove (`startOtpChallenge`), and the
+ * sign-in pair below is a thin wrapper over it that also mints an identity.
  */
 
 // ───────────────────────────── Google ─────────────────────────────
@@ -270,12 +277,29 @@ export async function verifyFirebasePhoneToken(env: Bindings, idToken: string): 
   };
 }
 
-// ──────────────────────── Phone, our own OTP ────────────────────────
+// ─────────────────────── One-time codes over HTTP ───────────────────────
+
+/**
+ * Our own OTP, used for two different questions.
+ *
+ * The sign-in gate asks "who are you" and mints an identity (`scope: "auth"`).
+ * A `verify` email or phone question asks "is this value real" about one answer
+ * and mints nothing (`scope: "block:<ref>"`). The mechanics are identical — a
+ * six-digit code, hashed, capped, expiring — so they are one implementation
+ * with the scope carried on the row, and the two never see each other's codes.
+ */
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
-const MAX_SENDS_PER_SESSION = 5;
+const MAX_SENDS_PER_SCOPE = 5;
 const RESEND_COOLDOWN_MS = 30 * 1000;
+
+/** What a code proves. `block:<ref>` is one answer; `auth` is the whole session. */
+export type OtpScope = "auth" | `block:${string}`;
+/** How it travels. Decided by what is being proved, never by the destination. */
+export type OtpChannel = "sms" | "email";
+
+const CHALLENGE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 async function hashCode(sessionId: string, code: string): Promise<string> {
   // Salted with the session id so the same code in two sessions hashes
@@ -294,43 +318,85 @@ function sixDigitCode(): string {
 }
 
 export type StartResult =
-  | { ok: true; destination: string; devCode?: string }
+  | { ok: true; destination: string; channel: OtpChannel; devCode?: string }
   | { ok: false; code: string; message: string };
 
-export async function startPhoneChallenge(
-  env: Bindings,
-  sessionId: string,
-  rawPhone: string,
-  dialHint?: string,
-): Promise<StartResult> {
-  const phone = normalizeE164(rawPhone, dialHint);
-  if (!phone) {
-    return { ok: false, code: "invalid_phone", message: "Please enter your number with its country code." };
+export interface ChallengeRequest {
+  sessionId: string;
+  scope: OtpScope;
+  channel: OtpChannel;
+  /** As the respondent typed it. Normalized here, per channel. */
+  destination: string;
+  /** Dial code to assume for a bare national number. `sms` only. */
+  dialHint?: string;
+  /** Named in the email, so a code arriving out of context still makes sense. */
+  formTitle?: string;
+}
+
+/**
+ * Send a code, and record what it has to match.
+ *
+ * The caps are per scope rather than per session: a respondent who spent three
+ * sends signing in must not find themselves one send away from being stuck on
+ * the delivery-number question. Both are counted from the rows, so they survive
+ * an evicted Durable Object and a reconnect.
+ */
+export async function startOtpChallenge(env: Bindings, req: ChallengeRequest): Promise<StartResult> {
+  const { sessionId, scope, channel } = req;
+
+  const destination =
+    channel === "sms"
+      ? normalizeE164(req.destination, req.dialHint)
+      : normalizeChallengeEmail(req.destination);
+  if (!destination) {
+    return channel === "sms"
+      ? { ok: false, code: "invalid_phone", message: "Please enter your number with its country code." }
+      : { ok: false, code: "invalid_email", message: "That doesn't look like an email address we can reach." };
   }
 
   const recent = await env.DB.prepare(
-    `SELECT COUNT(*) AS n, MAX(created_at) AS last FROM otp_challenges WHERE session_id = ?1`,
+    `SELECT COUNT(*) AS n,
+            MAX(created_at) AS last,
+            (SELECT destination FROM otp_challenges
+              WHERE session_id = ?1 AND scope = ?2
+              ORDER BY created_at DESC LIMIT 1) AS last_destination
+       FROM otp_challenges WHERE session_id = ?1 AND scope = ?2`,
   )
-    .bind(sessionId)
-    .first<{ n: number; last: number | null }>();
+    .bind(sessionId, scope)
+    .first<{ n: number; last: number | null; last_destination: string | null }>();
 
-  if ((recent?.n ?? 0) >= MAX_SENDS_PER_SESSION) {
+  if ((recent?.n ?? 0) >= MAX_SENDS_PER_SCOPE) {
     return { ok: false, code: "too_many_codes", message: "Too many codes requested. Please start over." };
   }
-  if (recent?.last && Date.now() - recent.last < RESEND_COOLDOWN_MS) {
+  /*
+   * The cooldown is a resend cooldown, and only a resend cooldown.
+   *
+   * Applying it to a *different* destination punishes the one person it should
+   * help: somebody who mistyped their number, noticed, and corrected it inside
+   * half a minute would be told to wait — with the code they cannot receive
+   * still outstanding and no way past it. The send cap above is what limits
+   * spend; this only stops the same message being sent twice in a breath.
+   */
+  if (
+    recent?.last &&
+    recent.last_destination === destination &&
+    Date.now() - recent.last < RESEND_COOLDOWN_MS
+  ) {
     return { ok: false, code: "cooldown", message: "Hang on a moment before asking for another code." };
   }
 
   const code = sixDigitCode();
   const now = Date.now();
   await env.DB.prepare(
-    `INSERT INTO otp_challenges (id, session_id, destination, code_hash, attempts, send_count, expires_at, created_at)
-     VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6, ?7)`,
+    `INSERT INTO otp_challenges (id, session_id, scope, channel, destination, code_hash, attempts, send_count, expires_at, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8, ?9)`,
   )
     .bind(
       `otp_${crypto.randomUUID().slice(0, 16)}`,
       sessionId,
-      phone,
+      scope,
+      channel,
+      destination,
       await hashCode(sessionId, code),
       (recent?.n ?? 0) + 1,
       now + CODE_TTL_MS,
@@ -338,25 +404,66 @@ export async function startPhoneChallenge(
     )
     .run();
 
-  const sent = await sendSms(env, phone, `${code} is your verification code.`);
-  if (!sent.ok) return { ok: false, code: "sms_failed", message: "We couldn't send that code. Please try again." };
+  const sent =
+    channel === "sms"
+      ? await sendSms(env, destination, `${code} is your verification code.`)
+      : await sendCodeEmail(env, destination, code, req.formTitle);
+  if (!sent.ok) {
+    return channel === "sms"
+      ? { ok: false, code: "sms_failed", message: "We couldn't send that code. Please try again." }
+      : { ok: false, code: "email_failed", message: "We couldn't email that code. Please try again." };
+  }
 
   // In dev with no SMS provider the code is returned so the flow is testable.
   // Guarded on ENVIRONMENT, never on "is Twilio missing" — a production deploy
   // that lost its credentials must fail closed, not start handing out codes.
-  return { ok: true, destination: phone, devCode: env.ENVIRONMENT === "development" ? code : undefined };
+  return {
+    ok: true,
+    destination,
+    channel,
+    devCode: env.ENVIRONMENT === "development" ? code : undefined,
+  };
 }
 
-export async function verifyPhoneChallenge(env: Bindings, sessionId: string, code: string): Promise<AuthResult> {
+/** Lower-cased and trimmed, or null when it is not an address at all. */
+function normalizeChallengeEmail(raw: string): string | null {
+  const v = raw.trim().toLowerCase();
+  return CHALLENGE_EMAIL_RE.test(v) && v.length <= 320 ? v : null;
+}
+
+export type OtpVerifyResult =
+  | { ok: true; destination: string; channel: OtpChannel }
+  | { ok: false; code: string; message: string };
+
+/**
+ * Check a code against the newest live challenge in one scope.
+ *
+ * Consumes every outstanding challenge in that scope on success — not the whole
+ * session — so proving a delivery number does not silently retire the sign-in
+ * code the respondent is still holding.
+ */
+export async function verifyOtpChallenge(
+  env: Bindings,
+  sessionId: string,
+  scope: OtpScope,
+  code: string,
+): Promise<OtpVerifyResult> {
   const row = await env.DB.prepare(
-    `SELECT id, destination, code_hash, attempts, expires_at
+    `SELECT id, destination, channel, code_hash, attempts, expires_at
        FROM otp_challenges
-      WHERE session_id = ?1 AND consumed_at IS NULL
+      WHERE session_id = ?1 AND scope = ?2 AND consumed_at IS NULL
       ORDER BY created_at DESC
       LIMIT 1`,
   )
-    .bind(sessionId)
-    .first<{ id: string; destination: string; code_hash: string; attempts: number; expires_at: number }>();
+    .bind(sessionId, scope)
+    .first<{
+      id: string;
+      destination: string;
+      channel: OtpChannel;
+      code_hash: string;
+      attempts: number;
+      expires_at: number;
+    }>();
 
   if (!row) return { ok: false, code: "no_challenge", message: "Ask for a code first." };
   if (row.expires_at < Date.now()) return { ok: false, code: "expired", message: "That code expired. Ask for a new one." };
@@ -375,24 +482,69 @@ export async function verifyPhoneChallenge(env: Bindings, sessionId: string, cod
     };
   }
 
-  // Consume every outstanding challenge for the session, not just this row, so
+  // Consume every outstanding challenge in this scope, not just this row, so
   // an older un-expired code cannot be replayed afterwards.
-  await env.DB.prepare(`UPDATE otp_challenges SET consumed_at = ?2 WHERE session_id = ?1 AND consumed_at IS NULL`)
-    .bind(sessionId, Date.now())
+  await env.DB.prepare(
+    `UPDATE otp_challenges SET consumed_at = ?3 WHERE session_id = ?1 AND scope = ?2 AND consumed_at IS NULL`,
+  )
+    .bind(sessionId, scope, Date.now())
     .run();
+
+  return { ok: true, destination: row.destination, channel: row.channel };
+}
+
+// ──────────────────────── Phone sign-in, our own OTP ────────────────────────
+
+export async function startPhoneChallenge(
+  env: Bindings,
+  sessionId: string,
+  rawPhone: string,
+  dialHint?: string,
+): Promise<StartResult> {
+  return startOtpChallenge(env, {
+    sessionId,
+    scope: "auth",
+    channel: "sms",
+    destination: rawPhone,
+    dialHint,
+  });
+}
+
+export async function verifyPhoneChallenge(env: Bindings, sessionId: string, code: string): Promise<AuthResult> {
+  const result = await verifyOtpChallenge(env, sessionId, "auth", code);
+  if (!result.ok) return result;
 
   return {
     ok: true,
     identity: {
       provider: "phone",
-      subject: row.destination,
+      subject: result.destination,
       email: null,
-      phone: row.destination,
+      phone: result.destination,
       name: null,
       pictureUrl: null,
       verifiedAt: Date.now(),
     },
   };
+}
+
+/**
+ * Email one code.
+ *
+ * Goes through the same queue as every other transactional message, so it
+ * inherits the provider fallback, the delivery record and the retries. That
+ * costs a second or two of latency, which is the same trade every sign-in code
+ * in the product already makes — and the alternative, sending inline, would
+ * put an outbound HTTP call on the respondent's turn.
+ */
+async function sendCodeEmail(
+  env: Bindings,
+  to: string,
+  code: string,
+  formTitle?: string,
+): Promise<{ ok: boolean }> {
+  await enqueueMail(env, { kind: "otp", to, code, purpose: "answer-verification", formTitle });
+  return { ok: true };
 }
 
 /**

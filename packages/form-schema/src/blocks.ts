@@ -120,6 +120,28 @@ const MatrixRow = z.object({ id: NanoId, label: z.string().min(1).max(300) });
  */
 const Unique = z.boolean().default(false);
 
+/**
+ * Make the respondent prove the address or number they just typed.
+ *
+ * A code goes to whatever they answered — an SMS for a phone block, an email
+ * for an email block — and the answer is not recorded until they type it back.
+ * A refused code is an ordinary validation failure: same `validation_error`,
+ * same conversational retry, same escalation counter.
+ *
+ * Off by default, and deliberately not the same thing as
+ * `settings.requireAuth`. That gate asks "who are you" once, before the first
+ * question, and produces an identity the whole response is filed under. This
+ * asks "is this particular value real" about one answer, which is what a form
+ * collecting a delivery number or a newsletter address actually wants — and it
+ * can be asked of somebody who never signed in at all.
+ *
+ * Where the two meet, the runtime does not ask twice: a respondent who
+ * verified with Google and then types that same address, or who verified by
+ * SMS and types that same number, is already proven and goes straight through.
+ * A *different* value is a different claim, and gets a code of its own.
+ */
+const VerifyAnswer = z.boolean().default(false);
+
 export const ContactField = z.enum(["first_name", "last_name", "email", "phone"]);
 export const AddressField = z.enum(["street", "city", "state", "postal", "country"]);
 
@@ -148,12 +170,16 @@ export const Block = z.discriminatedUnion("type", [
     type: z.literal("email"),
     unique: Unique,
     businessOnly: z.boolean().default(false),
+    /** Email a six-digit code and hold the answer until it comes back. */
+    verify: VerifyAnswer,
   }),
   z.object({
     ...BlockBase,
     type: z.literal("phone"),
     unique: Unique,
     countryHint: z.string().length(2).optional(),
+    /** SMS a six-digit code and hold the answer until it comes back. */
+    verify: VerifyAnswer,
   }),
   z.object({ ...BlockBase, type: z.literal("url"), unique: Unique }),
   z.object({

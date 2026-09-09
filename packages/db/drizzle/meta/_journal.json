@@ -134,6 +134,13 @@
       "when": 1789406400000,
       "tag": "0018_respondent_device_key",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1789492800000,
+      "tag": "0019_verified_answers",
+      "breakpoints": true
     }
   ]
 }

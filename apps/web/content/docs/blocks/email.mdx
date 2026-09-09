@@ -36,6 +36,10 @@ Fields specific to `email`. The [fields every block has](/docs/blocks/common-fie
     "businessOnly": {
       "default": false,
       "type": "boolean"
+    },
+    "verify": {
+      "default": false,
+      "type": "boolean"
     }
   },
   "required": [
@@ -208,7 +212,8 @@ In a generated draft these arrive as `config` pairs: `businessOnly=true to refus
   "title": "Work email?",
   "required": true,
   "imageKey": null,
-  "media": null
+  "media": null,
+  "verify": false
 }
 ```
 
@@ -275,3 +280,4 @@ The value is normalised before it is saved, so what you read back is not always 
 | `invalid_email` | `"maya"` | That doesn't look like a valid email address. |
 | `freemail` | `"maya@gmail.com"` — businessOnly rejects free providers | Please use your work email address. |
 | `duplicate` | `unique` is on and another response already gave this answer | Someone has already used that — please try a different one. |
+| `invalid_code` | `verify` is on and the code sent to this answer was wrong, expired, or guessed at too often | Varies with what went wrong — a wrong code says how many tries are left; an expired one asks for a new code. |

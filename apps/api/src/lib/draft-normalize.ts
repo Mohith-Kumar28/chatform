@@ -313,6 +313,7 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
             type,
             unique: flag(config, "unique"),
             businessOnly: flag(config, "businessonly"),
+            verify: flag(config, "verify"),
           }),
         );
       case "phone":
@@ -322,6 +323,7 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
             type,
             unique: flag(config, "unique"),
             countryHint: countryHintOf(config),
+            verify: flag(config, "verify"),
           }),
         );
       case "url":

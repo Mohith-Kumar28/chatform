@@ -48,6 +48,7 @@ const GROUPS: { title: string; rows: ({ limit: string } | { feature: string })[]
       { feature: "multi_language" },
       { feature: "respondent_auth_google" },
       { feature: "respondent_auth_phone" },
+      { feature: "verified_answers" },
       { feature: "collect_payments" },
     ],
   },

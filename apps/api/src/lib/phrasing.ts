@@ -87,3 +87,28 @@ export function asideText(block: Block): string {
     ? "Good question — I can't answer that one here, but this answer is needed to finish."
     : "Good question — I can't answer that one here, and you're welcome to skip this if you'd rather.";
 }
+
+/**
+ * What the agent says when a code has just gone out.
+ *
+ * The destination is repeated back deliberately. It is the last chance to
+ * notice a typo before waiting for a message that is never going to arrive,
+ * and the number or address they typed is not always the one we normalized.
+ */
+export function codeSentText(channel: "sms" | "email", destination: string): string {
+  return channel === "sms"
+    ? `I've texted a 6-digit code to ${destination} — pop it in below to confirm the number.`
+    : `I've emailed a 6-digit code to ${destination} — pop it in below to confirm the address.`;
+}
+
+/** When they replied to the code step with something that is not a code. */
+export function codeExpectedText(channel: "sms" | "email"): string {
+  return channel === "sms"
+    ? "I still need the 6-digit code from that text — or say the word and I'll send another."
+    : "I still need the 6-digit code from that email — or say the word and I'll send another.";
+}
+
+/** Once the code checks out, before the conversation moves on. */
+export function codeVerifiedText(channel: "sms" | "email"): string {
+  return channel === "sms" ? "Number confirmed, thank you." : "Address confirmed, thank you.";
+}

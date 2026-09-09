@@ -133,7 +133,7 @@ const SETTING_LABELS: Record<string, string> = {
   "closeRules.maxResponses": "Response cap",
   "closeRules.closedMessage": "Closed message",
   "requireAuth.enabled": "Sign-in requirement",
-  "requireAuth.methods": "Sign-in methods",
+  "requireAuth.method": "Sign-in method",
   "requireAuth.message": "Sign-in message",
   "password.enabled": "Password protection",
   "password.value": "Form password",

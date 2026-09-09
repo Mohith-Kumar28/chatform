@@ -150,6 +150,7 @@ const BUSINESS: Plan = {
     ...PRO.features,
     "respondent_auth_google",
     "respondent_auth_phone",
+    "verified_answers",
     "one_response_per_identity",
     "ai_insights",
     "agent_model_picker",

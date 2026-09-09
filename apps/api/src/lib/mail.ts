@@ -293,9 +293,19 @@ export type MailJob =
       code: string;
       /**
        * Better Auth's own vocabulary, passed through unchanged so a new flow it
-       * adds later cannot silently render as the wrong sentence.
+       * adds later cannot silently render as the wrong sentence — plus
+       * `answer-verification`, which is ours: a code proving one answer on
+       * somebody else's form, and the only purpose here addressed to a
+       * respondent rather than to an account holder.
        */
-      purpose: "sign-in" | "email-verification" | "forget-password" | "change-email";
+      purpose:
+        | "sign-in"
+        | "email-verification"
+        | "forget-password"
+        | "change-email"
+        | "answer-verification";
+      /** The form that asked, for `answer-verification`. Named in the message. */
+      formTitle?: string;
     }
   | {
       kind: "submission";

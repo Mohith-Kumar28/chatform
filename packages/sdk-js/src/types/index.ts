@@ -128,6 +128,20 @@ export interface TurnResult {
   collected: number;
   events: SessionEvent[];
   sinceSeq: number;
+  /**
+   * Set when the turn ended on a `verify` question waiting for its code.
+   *
+   * The next message you send is read as that code, not as an answer. Send it
+   * with `send()`; `act(sessionId, "resend_code")` sends another, and
+   * `act(sessionId, "change_answer")` drops it and asks the question again.
+   */
+  pendingVerification: {
+    ref: string;
+    channel: "sms" | "email";
+    /** Normalized: the address or E.164 number the code actually went to. */
+    sentTo: string;
+    sentAt: number;
+  } | null;
   /** Present when the turn outran its deadline and is still running. */
   status?: "processing";
   pollUrl?: string;

@@ -63,7 +63,7 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<number> {
     }
 
     case "otp": {
-      const msg = otpEmail({ code: job.code, purpose: job.purpose });
+      const msg = otpEmail({ code: job.code, purpose: job.purpose, formTitle: job.formTitle });
       await sendMail(env, { to: job.to, ...msg });
       return 1;
     }

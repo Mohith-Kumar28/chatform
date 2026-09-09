@@ -45,11 +45,11 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
   long_text: { summary: "A paragraph. Only when you genuinely want prose." },
   email: {
     summary: "An email address, validated as one.",
-    config: "businessOnly=true to refuse gmail and the other free providers; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
+    config: "businessOnly=true to refuse gmail and the other free providers; verify=true ONLY when the author asked for the address to be confirmed — it emails a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
   },
   phone: {
     summary: "A phone number, validated as one.",
-    config: "country=<2-letter code> to assume a dialling code; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
+    config: "country=<2-letter code> to assume a dialling code; verify=true ONLY when the author asked for the number to be confirmed — it texts a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
   },
   url: { summary: "A web address.", config: "unique=true to refuse a value another respondent already gave — a team name, a username, a seat number" },
   number: {

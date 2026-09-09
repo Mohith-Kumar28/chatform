@@ -86,6 +86,28 @@ const MIGRATIONS: ((doc: AnyDoc) => AnyDoc)[] = [
           : true;
     return { ...doc, schemaVersion: 5, settings: { ...rest, allowResubmissions } };
   },
+
+  // ── v5 → v6 ────────────────────────────────────────────────────────────
+  // `settings.requireAuth.methods` was a list, and the builder let an author
+  // switch on both Google and phone at once. Two doors into one form produce
+  // two different identities for the same human, which is precisely what the
+  // gate exists to prevent — so it is a single `method` now.
+  //
+  // A document that accepted both keeps the first, which is the order the
+  // builder listed them in and therefore the one the author saw first. An
+  // empty or missing list becomes Google, the schema's own default.
+  (doc) => {
+    const settings = (doc.settings ?? {}) as Record<string, unknown>;
+    const prior = (settings.requireAuth ?? {}) as Record<string, unknown>;
+    const { methods, ...auth } = prior;
+    const first = Array.isArray(methods) ? methods.find((m) => m === "google" || m === "phone") : undefined;
+    const method = typeof auth.method === "string" ? auth.method : (first ?? "google");
+    return {
+      ...doc,
+      schemaVersion: 6,
+      settings: { ...settings, requireAuth: { ...auth, method } },
+    };
+  },
 ];
 
 export function migrateFormDoc(raw: unknown): unknown {

@@ -118,7 +118,7 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
       { value: 1, code: "type" },
       { value: "", code: "required" },
     ],
-    codes: ["required", "type", "invalid_email", "freemail", "duplicate"],
+    codes: ["required", "type", "invalid_email", "freemail", "duplicate", "invalid_code"],
   },
   phone: {
     shape: "A phone number in E.164 (`+<country><number>`).",
@@ -135,7 +135,7 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
       { value: "not a phone", code: "invalid_phone" },
       { value: 9812345678, code: "type" },
     ],
-    codes: ["required", "type", "invalid_phone", "duplicate"],
+    codes: ["required", "type", "invalid_phone", "duplicate", "invalid_code"],
   },
   url: {
     shape: "A web address. `https://` is added when the scheme is missing.",

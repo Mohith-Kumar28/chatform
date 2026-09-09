@@ -220,6 +220,14 @@ async function respondToTurn(
     validation: result.validation,
     answers: result.status?.answers ?? {},
     collected: result.status?.collected ?? 0,
+    /**
+     * Set when the turn ended on a code step.
+     *
+     * A caller has to know this before sending anything else: while it is set
+     * the session reads the next message as the code for that answer, not as an
+     * answer of its own.
+     */
+    pendingVerification: result.status?.pendingVerification ?? null,
     events: result.events,
     sinceSeq: result.sinceSeq,
   };
@@ -275,14 +283,20 @@ const actionsRoute = (base: string) =>
   validator(
     "json",
     z.object({
-      action: z.enum(["skip", "stop", "restart", "edit", "submit"]),
+      /**
+       * `resend_code` and `change_answer` apply while a `verify` email or phone
+       * question is holding an answer until a code comes back: send the code
+       * again, or drop it and ask the question afresh. The code itself is an
+       * ordinary message.
+       */
+      action: z.enum(["skip", "stop", "restart", "edit", "submit", "resend_code", "change_answer"]),
       /** For `edit`: the question to go back to. */
       ref: z.string().optional(),
     }),
   ),
   describeRoute({
     tags: ["v1"],
-    summary: "Skip, edit, restart, stop, or submit",
+    summary: "Skip, edit, restart, stop, submit, or resend a verification code",
     responses: {
       200: { description: "The turn's result" },
       202: { description: "Still running" },

@@ -6,6 +6,8 @@ import {
   verifyFirebasePhoneToken,
   startPhoneChallenge,
   verifyPhoneChallenge,
+  startOtpChallenge,
+  verifyOtpChallenge,
   pruneOtpChallenges,
 } from "../src/lib/respondent-auth.js";
 import type { Bindings } from "../src/env.js";
@@ -373,5 +375,101 @@ describe("phone OTP", () => {
     const sid = nextSession();
     expect((await startPhoneChallenge(bindings(), sid, "+14155550138")).ok).toBe(true);
     expect(await startPhoneChallenge(bindings(), sid, "+14155550138")).toMatchObject({ ok: false, code: "cooldown" });
+  });
+
+  it("does not make you wait to send to a different number", async () => {
+    // Someone who mistyped and corrected it is not resending; holding them for
+    // thirty seconds would strand them on a code they can never receive.
+    const sid = nextSession();
+    expect((await startPhoneChallenge(bindings(), sid, "+14155550139")).ok).toBe(true);
+    expect(await startPhoneChallenge(bindings(), sid, "+14155550140")).toMatchObject({ ok: true });
+  });
+});
+
+/**
+ * One session can be proving two different things at once — who is answering,
+ * and whether the number they just typed into a question is theirs. The codes
+ * must not be interchangeable: whichever was sent last would otherwise answer
+ * for both, and the sign-in gate would accept a code sent to prove an answer.
+ */
+describe("challenge scopes", () => {
+  let n = 0;
+  const nextSession = () => `chs_scope_${Date.now()}_${n++}`;
+
+  const startBlock = (sid: string, ref: string, destination: string) =>
+    startOtpChallenge(bindings(), { sessionId: sid, scope: `block:${ref}`, channel: "sms", destination });
+
+  it("keeps a question's code out of the sign-in gate", async () => {
+    const sid = nextSession();
+    const forAnswer = await startBlock(sid, "q_phone", "+14155550201");
+    if (!forAnswer.ok) throw new Error("start failed");
+
+    // The gate has no challenge of its own, and must not adopt this one.
+    expect(await verifyPhoneChallenge(bindings(), sid, forAnswer.devCode!)).toMatchObject({
+      ok: false,
+      code: "no_challenge",
+    });
+  });
+
+  it("keeps the sign-in code out of a question", async () => {
+    const sid = nextSession();
+    const forGate = await startPhoneChallenge(bindings(), sid, "+14155550202");
+    if (!forGate.ok) throw new Error("start failed");
+
+    expect(await verifyOtpChallenge(bindings(), sid, "block:q_phone", forGate.devCode!)).toMatchObject({
+      ok: false,
+      code: "no_challenge",
+    });
+  });
+
+  it("verifies each scope with its own code, and consumes only that scope", async () => {
+    const sid = nextSession();
+    const forGate = await startPhoneChallenge(bindings(), sid, "+14155550203");
+    const forAnswer = await startBlock(sid, "q_phone", "+14155550204");
+    if (!forGate.ok || !forAnswer.ok) throw new Error("start failed");
+
+    expect(await verifyOtpChallenge(bindings(), sid, "block:q_phone", forAnswer.devCode!)).toMatchObject({
+      ok: true,
+      destination: "+14155550204",
+      channel: "sms",
+    });
+    // Proving the answer must not retire the code they are still holding for
+    // the gate.
+    expect(await verifyPhoneChallenge(bindings(), sid, forGate.devCode!)).toMatchObject({ ok: true });
+  });
+
+  it("counts the send cap per scope", async () => {
+    const sid = nextSession();
+    for (let i = 0; i < 5; i++) {
+      await env.DB.prepare(
+        `INSERT INTO otp_challenges (id, session_id, scope, channel, destination, code_hash, attempts, send_count, expires_at, created_at)
+         VALUES (?1, ?2, 'auth', 'sms', '+14155550205', 'x', 0, ?3, ?4, ?5)`,
+      )
+        .bind(`otp_scope_${sid}_${i}`, sid, i + 1, Date.now() + 60_000, Date.now() - 120_000)
+        .run();
+    }
+    expect(await startPhoneChallenge(bindings(), sid, "+14155550205")).toMatchObject({
+      ok: false,
+      code: "too_many_codes",
+    });
+    // A respondent who spent the gate's allowance must still be able to prove
+    // an answer — the two are separate budgets.
+    expect(await startBlock(sid, "q_phone", "+14155550206")).toMatchObject({ ok: true });
+  });
+
+  it("rejects an address that is not one, before spending a send", async () => {
+    const sid = nextSession();
+    expect(
+      await startOtpChallenge(bindings(), {
+        sessionId: sid,
+        scope: "block:q_email",
+        channel: "email",
+        destination: "not-an-address",
+      }),
+    ).toMatchObject({ ok: false, code: "invalid_email" });
+    const rows = await env.DB.prepare(`SELECT COUNT(*) AS n FROM otp_challenges WHERE session_id = ?1`)
+      .bind(sid)
+      .first<{ n: number }>();
+    expect(rows?.n).toBe(0);
   });
 });

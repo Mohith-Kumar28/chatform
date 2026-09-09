@@ -150,6 +150,20 @@ export function affordanceNote(block: Block): string | null {
     case "nps":
     case "opinion_scale":
       return "Its scale is ALREADY on screen under your message, one button per number. Saying the range in a sentence is fine; listing the numbers is not.";
+    /**
+     * A verified answer is not finished when it is given.
+     *
+     * The model is told to record an answer and go straight on to the next
+     * question in the same message, which is right everywhere else and wrong
+     * here: a code goes out first, and the conversation stops on this question
+     * until it comes back. Without this it promises a question the respondent
+     * is not going to see for another minute.
+     */
+    case "email":
+    case "phone":
+      return block.verify
+        ? `Their answer will be confirmed with a 6-digit code sent to it before it counts. Ask for the ${block.type === "phone" ? "number" : "address"} and stop — do not move on to the next question in the same message, and do not explain the code step: the form says so itself the moment the code goes out.`
+        : null;
     default:
       return null;
   }

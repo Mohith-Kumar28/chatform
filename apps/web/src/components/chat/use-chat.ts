@@ -94,7 +94,7 @@ export interface SubmittedState {
 
 /** The sign-in gate, while it is blocking the conversation. */
 export interface AuthState {
-  methods: ("google" | "phone")[];
+  method: "google" | "phone";
   message: string;
   /** Set once a code has been sent; the card switches to the code step. */
   phoneSentTo: string | null;
@@ -106,6 +106,24 @@ export interface AuthState {
   phoneSentAt: number | null;
   pending: boolean;
   error: string | null;
+  /** Dev convenience: with no SMS provider the API returns the code. */
+  devCode?: string;
+}
+
+/**
+ * A code sent to the answer they just gave, while it is outstanding.
+ *
+ * Separate from `AuthState` on purpose: that gate is about who they are and
+ * blocks the whole conversation; this is about one question, sits in the
+ * thread under it, and leaves everything already answered on screen.
+ */
+export interface VerifyState {
+  ref: string;
+  channel: "sms" | "email";
+  sentTo: string;
+  /** Restarts the resend countdown on every send, including a resend. */
+  sentAt: number;
+  pending: boolean;
   /** Dev convenience: with no SMS provider the API returns the code. */
   devCode?: string;
 }
@@ -338,6 +356,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
   /** True when a replay rebuilt a transcript we did not start in this tab. */
   const [resumed, setResumed] = useState(false);
   const [auth, setAuth] = useState<AuthState | null>(null);
+  const [verify, setVerify] = useState<VerifyState | null>(null);
   const [identity, setIdentity] = useState<VerifiedIdentity | null>(null);
   /**
    * Who this device signed in as last time, if anyone.
@@ -605,6 +624,8 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
       on("validation_error", (e) => {
         const { message } = JSON.parse((e as MessageEvent).data) as { message: string };
         setValidationHint(message);
+        // A refused code leaves the card up; only its spinner has to stop.
+        setVerify((v) => (v ? { ...v, pending: false } : v));
         settleTurn();
         // A refused answer never gets a server twin. Settle its echo here or it
         // stays pale forever and the next answer inherits its text.
@@ -652,7 +673,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
         // away a code the respondent is in the middle of typing.
         setAuth((prev) =>
           prev ?? {
-            methods: data.methods,
+            method: data.method,
             message: data.message,
             phoneSentTo: null,
             phoneSentAt: null,
@@ -673,6 +694,27 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
             ? prev
             : [...prev, { id: "sys_verified", role: "system", text: `Verified as ${who.label}` }],
         );
+      });
+
+      on("verify_required", (e) => {
+        const data = JSON.parse((e as MessageEvent).data) as {
+          ref: string;
+          channel: "sms" | "email";
+          sentTo: string;
+          sentAt: number;
+          devCode?: string;
+        };
+        // The server's `sentAt` rather than the clock here: a replay after a
+        // reconnect must not restart a cooldown that has already run down.
+        setVerify({ ...data, pending: false });
+        setValidationHint(null);
+        settleTurn();
+        settleEcho();
+      });
+
+      on("verify_settled", () => {
+        setVerify(null);
+        setValidationHint(null);
       });
 
       on("review", (e) => {
@@ -979,6 +1021,39 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     [post],
   );
 
+  /**
+   * The code for a `verify` answer.
+   *
+   * An ordinary message, not a route of its own: while a challenge is
+   * outstanding the session reads what arrives as the code, which is what lets
+   * a respondent type it into the box or a headless caller post it as text.
+   * Nothing is echoed into the thread — a one-time code is not conversation.
+   */
+  const submitVerifyCode = useCallback(
+    async (code: string) => {
+      setVerify((v) => (v ? { ...v, pending: true } : v));
+      setValidationHint(null);
+      setThinking(true);
+      await post("messages", { type: "text", text: code });
+    },
+    [post],
+  );
+
+  /** Another code to the same destination. */
+  const resendVerifyCode = useCallback(async () => {
+    setVerify((v) => (v ? { ...v, pending: true } : v));
+    setValidationHint(null);
+    await post("actions", { action: "resend_code" });
+  }, [post]);
+
+  /** Give up on the code and answer the question again. */
+  const changeVerifyAnswer = useCallback(async () => {
+    setVerify((v) => (v ? { ...v, pending: true } : v));
+    setValidationHint(null);
+    setThinking(true);
+    await post("actions", { action: "change_answer" });
+  }, [post]);
+
   /** Go back and change a previous answer. */
   const editAnswer = useCallback(
     async (ref: string) => {
@@ -1006,6 +1081,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
       setEnding(null);
       setReview(null);
       setAuth(null);
+      setVerify(null);
       setIdentity(null);
       setError(null);
       setRateLimited(null);
@@ -1041,6 +1117,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     setReview(null);
     setResumed(false);
     setAuth(null);
+    setVerify(null);
     setIdentity(null);
     setError(null);
     setStatus("connecting");
@@ -1397,6 +1474,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     rateLimited,
     resumed,
     auth,
+    verify,
     identity,
     respondentHint,
     forgetRespondentHint,
@@ -1406,6 +1484,9 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     verifyPhoneCode,
     signInWithPhoneToken,
     changePhoneNumber,
+    submitVerifyCode,
+    resendVerifyCode,
+    changeVerifyAnswer,
     escalatedRef,
     validationHint,
     uploadSpec,

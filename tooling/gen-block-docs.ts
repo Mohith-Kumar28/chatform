@@ -115,15 +115,29 @@ function errorTable(type: BlockType): string {
      * the database — there is no value that produces it and nothing to run — so
      * the message comes from the constant all three surfaces share.
      */
+    /**
+     * `invalid_code` is the other one, for a related reason: the message names
+     * how many tries are left, so it is a property of the challenge rather than
+     * of the answer. Described rather than quoted — a fixed string here would
+     * be documentation of a message no respondent ever sees.
+     */
     const message =
-      code === "duplicate" ? DUPLICATE_HINT : result && !result.ok ? (result.hint ?? "") : "";
+      code === "duplicate"
+        ? DUPLICATE_HINT
+        : code === "invalid_code"
+          ? "Varies with what went wrong — a wrong code says how many tries are left; an expired one asks for a new code."
+          : result && !result.ok
+            ? (result.hint ?? "")
+            : "";
     const when = example
       ? `\`${cell(JSON.stringify(example.value))}\`${example.note ? ` — ${cell(example.note)}` : ""}`
       : code === "required"
         ? "an empty answer on a required block"
         : code === "duplicate"
           ? "`unique` is on and another response already gave this answer"
-          : "—";
+          : code === "invalid_code"
+            ? "`verify` is on and the code sent to this answer was wrong, expired, or guessed at too often"
+            : "—";
     rows.push(`| \`${code}\` | ${when} | ${cell(message)} |`);
   }
   return rows.join("\n");

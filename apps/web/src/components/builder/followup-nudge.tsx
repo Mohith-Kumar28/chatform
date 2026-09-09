@@ -189,11 +189,15 @@ export function FollowUpNudge({
                 requireAuth: {
                   ...doc.settings.requireAuth,
                   enabled: true,
-                  // Union rather than replacement: an author who already accepts
-                  // another method keeps it.
-                  methods: doc.settings.requireAuth.methods.includes("google")
-                    ? doc.settings.requireAuth.methods
-                    : [...doc.settings.requireAuth.methods, "google" as const],
+                  /*
+                    Google, and only Google. The gate takes one method now, and
+                    this branch is reached only when the form has no address
+                    source at all — which includes a gate already set to phone,
+                    since a verified number is not somewhere an email can go.
+                    Anything else here would turn follow-ups on with nowhere to
+                    send them.
+                  */
+                  method: "google" as const,
                 },
               }
             : {}),
@@ -282,7 +286,7 @@ export function FollowUpNudge({
               {!entitled
                 ? "Automated follow-ups email anyone who walks away, with a link straight back to where they stopped — their answers are still there. Recovered responses are counted separately, so you see exactly what it brought back."
                 : needsSetup
-                  ? "To send a reminder we need somewhere to send it. Turning on sign-in with Google gives everyone who starts a verified address — nothing for them to type. It does add a step before the first question, so expect slightly fewer people to start."
+                  ? "To send a reminder we need somewhere to send it. Turning on sign-in with Google gives everyone who starts a verified address — nothing for them to type. It does add a step before the first question, so expect slightly fewer people to start, and it sets Google as the form's sign-in method."
                   : "We'll email anyone who walks away, with a link back to where they stopped. You can edit the timing and wording afterwards."}
             </p>
           </div>

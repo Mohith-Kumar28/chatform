@@ -178,24 +178,26 @@ export function SettingsPanel({
               </LockedControl>
               {settings.requireAuth.enabled && (
                 <>
-                  <SettingRow label="Accepted methods">
-                    <div className="flex gap-1.5">
+                  {/*
+                    One method, chosen — not a pair of toggles that could both
+                    be on. Offering two doors produces two identities for the
+                    same person, so "one response per person" below could be
+                    walked around by coming back through the other one.
+                  */}
+                  <SettingRow
+                    label="Verify with"
+                    description="How a respondent proves who they are. Pick one."
+                  >
+                    <div role="radiogroup" aria-label="Sign-in method" className="flex gap-1.5">
                       {(["google", "phone"] as const).map((m) => {
-                        const on = settings.requireAuth.methods.includes(m);
+                        const on = settings.requireAuth.method === m;
                         return (
                           <button
                             key={m}
                             type="button"
-                            aria-pressed={on}
-                            onClick={() => {
-                              const next = on
-                                ? settings.requireAuth.methods.filter((x) => x !== m)
-                                : [...settings.requireAuth.methods, m];
-                              // At least one method has to stay on, or the form
-                              // becomes impossible to answer.
-                              if (next.length === 0) return;
-                              patch({ requireAuth: { ...settings.requireAuth, methods: next } });
-                            }}
+                            role="radio"
+                            aria-checked={on}
+                            onClick={() => patch({ requireAuth: { ...settings.requireAuth, method: m } })}
                             className={cn(
                               "h-8 rounded-full border px-3 text-xs font-medium transition-colors",
                               on

@@ -266,15 +266,26 @@ export function passwordResetEmail(a: { name: string | null; resetUrl: string })
  * no link and no button: a code email that also contains a clickable action is
  * a phishing template with our logo on it.
  */
-export type OtpPurpose = "sign-in" | "email-verification" | "forget-password" | "change-email";
+export type OtpPurpose =
+  | "sign-in"
+  | "email-verification"
+  | "forget-password"
+  | "change-email"
+  /** Proving one answer on a customer's form. The only one not about an account. */
+  | "answer-verification";
 
-export function otpEmail(a: { code: string; purpose: OtpPurpose }): Omit<MailMessage, "to"> {
+export function otpEmail(a: { code: string; purpose: OtpPurpose; formTitle?: string }): Omit<MailMessage, "to"> {
   const copy = OTP_COPY[a.purpose];
   const spaced = a.code.split("").join(" ");
 
+  const lead =
+    a.purpose === "answer-verification" && a.formTitle
+      ? `Enter this code to confirm your email address on “${a.formTitle}”.`
+      : copy.lead;
+
   const body = [
     h1(copy.heading),
-    p(escapeHtml(copy.lead)),
+    p(escapeHtml(lead)),
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
   <tr>
     <td align="center" style="padding:16px 28px;border:1px solid ${BORDER};border-radius:12px;background-color:${GROUND};font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;font-size:30px;font-weight:600;letter-spacing:0.22em;color:${INK};">${escapeHtml(a.code)}</td>
@@ -290,7 +301,7 @@ export function otpEmail(a: { code: string; purpose: OtpPurpose }): Omit<MailMes
     // it is the single biggest saving in the whole flow.
     subject: `${a.code} is your chatform code`,
     html: layout({ preheader: `${spaced} — ${copy.heading.toLowerCase()}`, body }),
-    text: [copy.heading, ``, copy.lead, ``, a.code, ``, `Expires in 10 minutes.`, copy.disclaimer].join("\n"),
+    text: [copy.heading, ``, lead, ``, a.code, ``, `Expires in 10 minutes.`, copy.disclaimer].join("\n"),
   };
 }
 
@@ -314,6 +325,17 @@ const OTP_COPY: Record<OtpPurpose, { heading: string; lead: string; disclaimer: 
     heading: "Confirm your email change",
     lead: "Enter this code in chatform to confirm the address on your account.",
     disclaimer: "Didn't ask for this? Ignore this email — your address stays as it is.",
+  },
+  /*
+   * Addressed to a respondent, who has no account here and did not ask us for
+   * anything — so it says which form wants the address rather than talking
+   * about "your chatform account", and the disclaimer promises that ignoring it
+   * costs them nothing.
+   */
+  "answer-verification": {
+    heading: "Confirm your email address",
+    lead: "Enter this code back in the form to confirm this address.",
+    disclaimer: "Didn't fill in a form? Ignore this email — nothing is recorded without the code.",
   },
 };
 

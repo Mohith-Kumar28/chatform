@@ -37,6 +37,10 @@ Fields specific to `phone`. The [fields every block has](/docs/blocks/common-fie
       "type": "string",
       "minLength": 2,
       "maxLength": 2
+    },
+    "verify": {
+      "default": false,
+      "type": "boolean"
     }
   },
   "required": [
@@ -209,7 +213,8 @@ In a generated draft these arrive as `config` pairs: `country=<2-letter code> to
   "title": "Phone?",
   "required": true,
   "imageKey": null,
-  "media": null
+  "media": null,
+  "verify": false
 }
 ```
 
@@ -276,3 +281,4 @@ The value is normalised before it is saved, so what you read back is not always 
 | `type` | `9812345678` | Please enter a phone number. |
 | `invalid_phone` | `"not a phone"` | Please enter a valid phone number with country code. |
 | `duplicate` | `unique` is on and another response already gave this answer | Someone has already used that — please try a different one. |
+| `invalid_code` | `verify` is on and the code sent to this answer was wrong, expired, or guessed at too often | Varies with what went wrong — a wrong code says how many tries are left; an expired one asks for a new code. |

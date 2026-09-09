@@ -261,7 +261,7 @@ describe("extraction schemas", () => {
   });
 });
 
-describe("respondent auth (v3 → v4)", () => {
+describe("respondent auth (v3 → v4, v5 → v6)", () => {
   // The fixture leans on schema defaults and carries no `settings` key at all.
   const base = () => {
     const doc = structuredClone(leadFormFixture) as Record<string, unknown>;
@@ -275,7 +275,7 @@ describe("respondent auth (v3 → v4)", () => {
     (doc.settings as Record<string, unknown>).requireAuth = true;
     const out = readFormDoc(doc);
     expect(out.settings.requireAuth.enabled).toBe(true);
-    expect(out.settings.requireAuth.methods).toEqual(["google"]);
+    expect(out.settings.requireAuth.method).toBe("google");
     // The gate message has to materialize, or the chat renders an empty prompt.
     expect(out.settings.requireAuth.message.length).toBeGreaterThan(0);
   });
@@ -301,14 +301,26 @@ describe("respondent auth (v3 → v4)", () => {
     };
     const once = migrateFormDoc(doc);
     expect(migrateFormDoc(once)).toEqual(once);
-    expect(readFormDoc(doc).settings.requireAuth.methods).toEqual(["phone"]);
+    expect(readFormDoc(doc).settings.requireAuth.method).toBe("phone");
+  });
+
+  it("collapses a two-method gate onto the first method it listed", () => {
+    const doc = base();
+    (doc.settings as Record<string, unknown>).requireAuth = {
+      enabled: true,
+      methods: ["phone", "google"],
+    };
+    const out = readFormDoc(doc);
+    expect(out.settings.requireAuth.method).toBe("phone");
+    // The list itself is gone, not carried alongside its replacement.
+    expect((out.settings.requireAuth as Record<string, unknown>).methods).toBeUndefined();
   });
 
   it("projects the gate into the public config, and null when it is off", () => {
     const on = base();
     (on.settings as Record<string, unknown>).requireAuth = { enabled: true, methods: ["google", "phone"] };
     const cfg = toPublicConfig(readFormDoc(on), { slug: "s", brandingHidden: false });
-    expect(cfg.requireAuth?.methods).toEqual(["google", "phone"]);
+    expect(cfg.requireAuth?.method).toBe("google");
 
     const offCfg = toPublicConfig(readFormDoc(base()), { slug: "s", brandingHidden: false });
     expect(offCfg.requireAuth).toBeNull();

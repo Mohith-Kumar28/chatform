@@ -47,7 +47,7 @@ export function followUpReadiness(doc: FormDoc): FollowUpReadiness {
   const sources: AddressCapability[] = [];
 
   const auth = doc.settings.requireAuth;
-  const verifiedIdentity = Boolean(auth?.enabled && auth.methods.includes("google"));
+  const verifiedIdentity = Boolean(auth?.enabled && auth.method === "google");
   if (verifiedIdentity) sources.push("identity");
 
   if (doc.blocks.some((b) => b.type === "email" || b.type === "contact_info")) {

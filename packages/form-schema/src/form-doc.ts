@@ -7,7 +7,7 @@ import { Ending, HiddenField, LogicRule, Variable } from "./logic";
 import { SettingsDoc, ThemeDoc } from "./settings";
 import { buildUpiUri } from "./payment-link";
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const FormDoc = z.object({
   schemaVersion: z.number().int().positive().default(SCHEMA_VERSION),
@@ -94,6 +94,14 @@ export interface PublicBlock {
   minSelections?: number;
   maxSelections?: number;
   allowOther?: boolean;
+  /**
+   * email, phone: a code goes to the answer before it is recorded.
+   *
+   * Projected so the composer can say so *before* they type — "we'll text you
+   * a code" belongs next to the field, not in the reply that arrives after
+   * they have already committed to a number.
+   */
+  verify?: boolean;
   /** Image, video or downloadable file shown with the question. */
   media?: BlockMedia | null;
 }
@@ -219,6 +227,10 @@ export function toPublicBlock(b: Block): PublicBlock {
       pub.placeholder = b.placeholder;
       pub.maxLength = b.maxLength;
       break;
+    case "email":
+    case "phone":
+      pub.verify = b.verify;
+      break;
     default:
       break;
   }
@@ -297,7 +309,7 @@ export interface PublicFormConfig {
    * enforced in the DO, not here; this only says what to render.
    */
   requireAuth: {
-    methods: RespondentAuthMethod[];
+    method: RespondentAuthMethod;
     message: string;
   } | null;
   captchaEnabled: boolean;
@@ -384,7 +396,7 @@ export function toPublicConfig(
     agentMode: doc.settings.agent.mode,
     theme: doc.theme,
     requireAuth: doc.settings.requireAuth.enabled
-      ? { methods: doc.settings.requireAuth.methods, message: doc.settings.requireAuth.message }
+      ? { method: doc.settings.requireAuth.method, message: doc.settings.requireAuth.message }
       : null,
     captchaEnabled: doc.settings.captcha.enabled,
     embed: { allowedOrigins: doc.settings.embed?.allowedOrigins ?? [] },

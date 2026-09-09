@@ -378,6 +378,35 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
         </div>
       );
 
+    // A question that will send a code is a two-step question, and an author
+    // deciding whether to ask for it should see that here rather than only in
+    // the live preview.
+    case "email":
+    case "phone":
+      return (
+        <div className="space-y-1.5">
+          {block.verify && (
+            <p className="text-[0.6875rem] opacity-55">
+              {block.type === "phone"
+                ? "We'll text a 6-digit code to confirm this number."
+                : "We'll email a 6-digit code to confirm this address."}
+            </p>
+          )}
+          <div className="flex items-end gap-2">
+            <div className={cn(input, "flex-1")} style={chipStyle}>
+              {block.type === "phone" ? "+1 415 555 0132" : "you@example.com"}
+            </div>
+            <div
+              className="flex h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium"
+              style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+            >
+              Send
+              <CornerDownLeft className="hidden size-3.5 opacity-60 sm:block" aria-hidden />
+            </div>
+          </div>
+        </div>
+      );
+
     default:
       return (
         <div className="flex items-end gap-2">
