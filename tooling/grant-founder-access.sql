@@ -38,7 +38,7 @@ SELECT
   unixepoch() * 1000
   FROM members m
   JOIN users u ON u.id = m.user_id
- WHERE u.email IN ('mdayanbag@gmail.com', 'murugan28aug@gmail.com')
+ WHERE u.email IN ('mdayanbag@gmail.com', 'murugan28aug@gmail.com', 'mohithkumar808@gmail.com')
    AND m.role LIKE '%owner%'
 ON CONFLICT (dodo_subscription_id) DO UPDATE SET
   plan_id = excluded.plan_id, status = excluded.status,
@@ -47,4 +47,4 @@ ON CONFLICT (dodo_subscription_id) DO UPDATE SET
 
 SELECT DISTINCT u.email, m.organization_id
   FROM members m JOIN users u ON u.id = m.user_id
- WHERE u.email IN ('mdayanbag@gmail.com', 'murugan28aug@gmail.com') AND m.role LIKE '%owner%';
+ WHERE u.email IN ('mdayanbag@gmail.com', 'murugan28aug@gmail.com', 'mohithkumar808@gmail.com') AND m.role LIKE '%owner%';
