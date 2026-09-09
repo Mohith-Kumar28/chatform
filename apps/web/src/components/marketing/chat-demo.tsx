@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import {
+  ArrowDown,
   CalendarClock,
   Check,
   CreditCard,
@@ -31,10 +32,34 @@ import type { DemoCard, DemoTurn } from "./chat-demo-scripts";
  * so, and the link beside it goes to the real thing.
  */
 
-const CHARS_PER_TICK = 3;
-const TICK_MS = 22;
-const TYPING_DOTS_MS = 620;
-const LOOP_HOLD_MS = 6000;
+/**
+ * Pace.
+ *
+ * The recording used to run at three characters every 22ms — about 135 a
+ * second, which is faster than anybody reads and much faster than anybody
+ * types. It looked like a machine printing a transcript rather than a
+ * conversation happening, and the two turns that matter most (the follow-up on
+ * a thin answer, and the respondent interrupting with a question of their own)
+ * went past before you could register that they were different from the rest.
+ *
+ * Two chars every 32ms is about 62 a second — around a fast typist, which is
+ * what a bot streaming tokens should look like.
+ *
+ * `PACE` is the multiplier on every pause. The scripts set their own `waitMs`
+ * per turn and those relative rhythms are deliberate — a 250ms beat before a
+ * system note, a second and a half before somebody uploads a file — so this
+ * stretches all of them by the same factor instead of editing forty numbers
+ * and losing the shape.
+ */
+const CHARS_PER_TICK = 2;
+const TICK_MS = 32;
+const PACE = 1.4;
+const TYPING_DOTS_MS = 700;
+const OPENING_MS = 1100;
+const USER_TURN_MS = 1000;
+const LOOP_HOLD_MS = 7000;
+/** How close to the bottom still counts as following along. */
+const PIN_SLACK_PX = 32;
 
 interface Rendered extends DemoTurn {
   shown: string;
@@ -42,6 +67,8 @@ interface Rendered extends DemoTurn {
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** A scripted pause, stretched by `PACE`. */
+const beat = (ms: number) => sleep(ms * PACE);
 
 /** The opening bot turn, rendered complete before any animation starts. */
 function seed(script: readonly DemoTurn[]): Rendered[] {
@@ -78,6 +105,22 @@ export function ChatDemo({
 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Whether the transcript is following the conversation or being read.
+   *
+   * The demo used to scroll itself to the bottom on every new bubble, full
+   * stop, which meant scrolling up to re-read the question that produced an
+   * answer was impossible — the next turn yanked you back down. Now the
+   * follow only happens while the visitor is already at the bottom, and a
+   * button appears to take them back when they are not.
+   *
+   * The ref and the state hold the same value on purpose. The playback loop
+   * reads it from a closure that is never re-created, so it needs the ref;
+   * the button renders off the state.
+   */
+  const pinnedRef = useRef(true);
+  const [pinned, setPinned] = useState(true);
 
   /**
    * What to draw: the finished script when motion is unwelcome, otherwise
@@ -139,14 +182,14 @@ export function ChatDemo({
     const play = async () => {
       setTurns(seed(script));
       setTyping(false);
-      await sleep(900);
+      await beat(OPENING_MS);
 
       for (const turn of script.slice(seed(script).length)) {
         if (cancelled_()) return;
 
         if (turn.role === "bot") {
           setTyping(true);
-          await sleep(turn.waitMs ?? TYPING_DOTS_MS);
+          await beat(turn.waitMs ?? TYPING_DOTS_MS);
           if (cancelled_()) return;
           setTyping(false);
           setTurns((prev) => [...prev, { ...turn, shown: "", streaming: true }]);
@@ -165,7 +208,7 @@ export function ChatDemo({
             ),
           );
         } else {
-          await sleep(turn.waitMs ?? 900);
+          await beat(turn.waitMs ?? USER_TURN_MS);
           if (cancelled_()) return;
           setTurns((prev) => [...prev, { ...turn, shown: turn.text, streaming: false }]);
         }
@@ -173,6 +216,17 @@ export function ChatDemo({
 
       await sleep(LOOP_HOLD_MS);
       if (cancelled_()) return;
+
+      /* Never restart under somebody who is reading. Looping the recording
+         while a visitor has scrolled up to look at an earlier turn would
+         replace the thing they are reading with an empty thread, which is the
+         one way this demo could actively work against them. It waits instead,
+         and picks up the moment they scroll back down. */
+      while (!pinnedRef.current) {
+        await sleep(500);
+        if (cancelled_()) return;
+      }
+
       setRunId((n) => n + 1);
     };
 
@@ -182,14 +236,61 @@ export function ChatDemo({
     };
   }, [script, active, runId, reduced]);
 
-  // Follow the bottom as bubbles land. The container scrolls, never the page.
+  // Follow the bottom as bubbles land — but only while the visitor is there.
+  // The container scrolls, never the page.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !pinned) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: reduced ? "auto" : "smooth" });
+  }, [turns, typing, reduced, pinned]);
+
+  /**
+   * Unpin on intent, not on scroll position.
+   *
+   * A `scroll` listener cannot tell the two apart: the follow above scrolls
+   * smoothly, and every frame of that animation fires `scroll` from a position
+   * that is not yet the bottom — so the demo would unpin itself on its own
+   * scrolling and never follow anything again. `wheel` and `touchmove` only
+   * come from a person. The reading is taken after they stop, because a wheel
+   * tick has momentum behind it and the position at the moment of the event is
+   * not where the scroll ends up.
+   */
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: reduced ? "auto" : "smooth" });
-  }, [turns, typing, reduced]);
 
-  const restart = useCallback(() => setRunId((n) => n + 1), []);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const settle = () => {
+      const next = el.scrollHeight - el.scrollTop - el.clientHeight <= PIN_SLACK_PX;
+      pinnedRef.current = next;
+      setPinned(next);
+    };
+    const onIntent = () => {
+      clearTimeout(timer);
+      timer = setTimeout(settle, 160);
+    };
+
+    el.addEventListener("wheel", onIntent, { passive: true });
+    el.addEventListener("touchmove", onIntent, { passive: true });
+    return () => {
+      clearTimeout(timer);
+      el.removeEventListener("wheel", onIntent);
+      el.removeEventListener("touchmove", onIntent);
+    };
+  }, []);
+
+  const toBottom = useCallback(() => {
+    const el = scrollRef.current;
+    pinnedRef.current = true;
+    setPinned(true);
+    el?.scrollTo({ top: el.scrollHeight, behavior: reduced ? "auto" : "smooth" });
+  }, [reduced]);
+
+  const restart = useCallback(() => {
+    pinnedRef.current = true;
+    setPinned(true);
+    setRunId((n) => n + 1);
+  }, []);
 
   /**
    * The user turn that resolves the affordance under bot turn `index` — the
@@ -251,7 +352,18 @@ export function ChatDemo({
           <div
             ref={scrollRef}
             aria-hidden="true"
-            className="absolute inset-0 flex flex-col justify-end gap-3 overflow-y-auto px-4 py-5"
+            /* `[&>*:first-child]:mt-auto`, not `justify-end`.
+               Both push a short transcript to the bottom of the box. Only one
+               of them leaves an overflowing transcript scrollable: with
+               `justify-content: flex-end` on a scroll container the content
+               that does not fit spills past the *top* edge, into space the
+               scrollbar does not cover, and the first turns of the
+               conversation cannot be reached at all. An auto top margin
+               resolves to zero the moment there is no free space, so the
+               overflow goes the way the scrollbar expects. This was invisible
+               until the demo stopped dragging the visitor to the bottom on
+               every turn. */
+            className="[&>*:first-child]:mt-auto absolute inset-0 flex flex-col gap-3 overflow-y-auto px-4 py-5 overscroll-contain"
           >
             {thread.map((turn, i) =>
               turn.role === "note" ? (
@@ -361,6 +473,34 @@ export function ChatDemo({
                 so an overlay would bury it. The ending joins the thread. */}
             {reduced && ending && <DemoEnding ending={ending} inline />}
           </div>
+
+          {/* Back to the bottom.
+              It only exists while somebody has scrolled away from it, and it
+              says what it does rather than showing a bare chevron — this sits
+              on a surface with no other controls on it, so an unlabelled arrow
+              would read as decoration. Restarting the loop waits on the same
+              flag, so a visitor reading an earlier turn keeps it until they
+              come back. */}
+          {!reduced && !pinned && !ending && (
+            <button
+              type="button"
+              onClick={toBottom}
+              className={cn(
+                "text-micro absolute inset-x-0 bottom-3 z-20 mx-auto flex w-fit items-center gap-1.5",
+                "rounded-full border px-3 py-1.5 font-medium shadow-sm backdrop-blur",
+                "transition-colors duration-[var(--duration-micro)]",
+                "focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
+              )}
+              style={{
+                background: "var(--cf-surface)",
+                borderColor: "var(--cf-chip-border)",
+                color: "var(--cf-text)",
+              }}
+            >
+              <ArrowDown className="size-3.5" strokeWidth={2.25} />
+              Jump to latest
+            </button>
+          )}
 
           {!reduced && ending && <DemoEnding ending={ending} />}
         </div>

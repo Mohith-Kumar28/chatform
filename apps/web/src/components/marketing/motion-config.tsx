@@ -19,11 +19,25 @@ import { MotionConfig } from "motion/react";
  * same, and `ChatDemo` reads the preference through `usePrefersReducedMotion`
  * and renders the whole transcript at once with no typewriter.
  *
- * The scroll-entrance components this comment used to name — `Reveal` on every
- * band, and `FlowPreview`'s edge draw-in — are gone. Eleven identical fades
- * down one page is not eleven moments, it is a page that flickers as you
- * scroll it; and each one made whether content was visible at all conditional
- * on an IntersectionObserver delivering, which is a poor trade for a fade.
+ * Scroll entrances came back, and neither objection to the old `Reveal` was
+ * dropped to let them.
+ *
+ * The first was sameness: eleven identical fades down one page is not eleven
+ * moments, it is a page that flickers as you scroll it. What plays now is one
+ * entrance per *graphic* rather than one per band, and each says what its
+ * graphic is — a bar grows, a chat bubble arrives from the side it was sent
+ * from, a flow edge draws along its own path, a pen writes. `globals.css`
+ * carries the six verbs.
+ *
+ * The second was fragility: `Reveal` and `FlowPreview`'s draw-in both put the
+ * hidden frame into the server HTML, so whether content was visible at all
+ * depended on an IntersectionObserver delivering. `in-view.tsx` inverts that —
+ * nothing is hidden until the browser has proved it can animate, and it will
+ * not even try in a hidden tab, without IO, or under reduced motion. Every
+ * failure mode is the finished page.
+ *
+ * None of this runs through motion, which is why this file still only governs
+ * the sliding pill.
  */
 export function MarketingMotionConfig({ children }: { children: React.ReactNode }) {
   return <MotionConfig reducedMotion="never">{children}</MotionConfig>;

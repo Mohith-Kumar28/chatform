@@ -5,58 +5,12 @@ import { ChevronRight, Loader2, Phone, ShieldCheck } from "lucide-react";
 import type { AuthState } from "./use-chat";
 import { firebasePhoneConfigured, sendPhoneCode, type PhoneCodeSent } from "./firebase-phone";
 import { asEmail, type RespondentHint } from "./respondent-hint";
-
-const GOOGLE_RESPONDENT_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_RESPONDENT_CLIENT_ID ?? "";
-const GSI_SRC = "https://accounts.google.com/gsi/client";
-
-interface GsiId {
-  initialize: (o: {
-    client_id: string;
-    callback: (r: { credential: string }) => void;
-    /**
-     * Return a credential with no further interaction when the browser holds
-     * exactly one Google session that has already consented to this client —
-     * which is precisely the returning respondent this card is trying not to
-     * make sign in twice.
-     */
-    auto_select?: boolean;
-    /** The account to offer first, as an email address. */
-    login_hint?: string;
-    /**
-     * One Tap is browser-mediated now; the older page-drawn prompt is on its
-     * way out, and asking for it explicitly is what keeps `prompt()` from
-     * being a no-op in browsers that have already made the switch.
-     */
-    use_fedcm_for_prompt?: boolean;
-  }) => void;
-  renderButton: (el: HTMLElement, o: Record<string, unknown>) => void;
-  prompt: () => void;
-}
-declare global {
-  interface Window {
-    google?: { accounts?: { id?: GsiId } };
-  }
-}
-
-/** Load the Google script once per page, however many cards ask for it. */
-let gsiPromise: Promise<void> | null = null;
-function loadGsi(): Promise<void> {
-  if (typeof window === "undefined") return Promise.reject(new Error("ssr"));
-  if (window.google?.accounts?.id) return Promise.resolve();
-  gsiPromise ??= new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(`script[src="${GSI_SRC}"]`);
-    const script = existing ?? document.createElement("script");
-    script.src = GSI_SRC;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => {
-      gsiPromise = null; // let a later attempt retry rather than fail forever
-      reject(new Error("gsi_load_failed"));
-    };
-    if (!existing) document.head.appendChild(script);
-  });
-  return gsiPromise;
-}
+import {
+  GOOGLE_RESPONDENT_CLIENT_ID,
+  prepareGoogle,
+  setCredentialSink,
+  type GsiId,
+} from "./google-signin";
 
 /**
  * Sign-in, rendered as a card inside the conversation.
@@ -202,7 +156,9 @@ function GoogleSignIn({
   // else's page.
   const [topLevel] = useState(() => typeof window !== "undefined" && inTopLevelWindow());
   // Kept in a ref so re-renders never re-initialize GSI, which would tear down
-  // and re-mount its iframe under the respondent's cursor.
+  // and re-mount its iframe under the respondent's cursor. It is also what the
+  // module-level sink below forwards to, so a callback that changes identity
+  // every render cannot detach and reattach the credential handler.
   const cb = useRef(onToken);
   useEffect(() => {
     cb.current = onToken;
@@ -219,19 +175,10 @@ function GoogleSignIn({
   // any button has been rendered in the first case, and the second only
   // happens from the shortcut, so it never re-initializes under a live button.
   useEffect(() => {
-    if (!GOOGLE_RESPONDENT_CLIENT_ID) return;
     let cancelled = false;
-    loadGsi()
-      .then(() => {
-        const id = window.google?.accounts?.id;
+    prepareGoogle(loginHint)
+      .then((id) => {
         if (cancelled || !id) return;
-        id.initialize({
-          client_id: GOOGLE_RESPONDENT_CLIENT_ID,
-          callback: (r) => cb.current(r.credential),
-          auto_select: Boolean(loginHint),
-          login_hint: loginHint,
-          use_fedcm_for_prompt: true,
-        });
         idRef.current = id;
         setReady(true);
       })
@@ -240,6 +187,17 @@ function GoogleSignIn({
       cancelled = true;
     };
   }, [loginHint]);
+
+  /*
+    Claim the credential for as long as this card is on screen.
+
+    GSI's callback is fixed when `initialize` runs, and that now happens during
+    boot — before this component exists — so the token arrives at a module-level
+    dispatcher and is handed on to whoever is currently mounted. Detaching on
+    unmount is what keeps a credential from a prompt the respondent walked away
+    from reaching a card that has since been replaced.
+  */
+  useEffect(() => setCredentialSink((c) => cb.current(c)), []);
 
   // The host only exists when the button is being shown, and React has
   // committed it to the DOM by the time this runs — both when the script

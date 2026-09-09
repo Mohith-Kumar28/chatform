@@ -19,10 +19,11 @@ const COLUMNS = [
       { href: "/use-cases", label: "What people use it for" },
       { href: "/#how-it-works", label: "How it works" },
       { href: "/#the-moment", label: "How it answers back" },
-      /* Was labelled "How it works", which is now the band above it. This one
-         has always been the *build* flow — describe, shape, share — and giving
-         it the name it deserved makes the two distinguishable in a list. */
-      { href: "/#product", label: "Building and sharing" },
+      /* `/#product` was the describe/shape/share band, which is gone — the
+         mosaic it summarised does the same job at `#features`, sharing
+         included. A footer link to a deleted anchor scrolls nowhere and
+         nothing on the page says so. */
+      { href: "/#features", label: "Building and sharing" },
       { href: "/pricing#question-types", label: "Question types" },
       { href: "/pricing", label: "Pricing" },
     ],

@@ -27,6 +27,8 @@ interface SettingsPanelProps {
   settings: FormDoc["settings"];
   onChange: (next: FormDoc["settings"]) => void;
   formTitle?: string;
+  /** Renames the form. The name is a document field, so it saves like the rest. */
+  onTitleChange?: (title: string) => void;
   hiddenFields: FormDoc["hiddenFields"];
   onHiddenFieldsChange: (fields: FormDoc["hiddenFields"]) => void;
   variables: FormDoc["variables"];
@@ -54,6 +56,7 @@ export function SettingsPanel({
   settings,
   onChange,
   formTitle,
+  onTitleChange,
   hiddenFields,
   onHiddenFieldsChange,
   variables,
@@ -104,6 +107,19 @@ export function SettingsPanel({
         {/* content */}
         <div className="min-w-0 flex-1 space-y-3 overflow-y-auto p-6" style={{ maxHeight: "calc(100svh - 220px)" }}>
           {section === "general" && (
+            <>
+            {onTitleChange && (
+              <SettingSection title="Form">
+                <SettingGroup>
+                  <SettingRow
+                    label="Form name"
+                    description="Shown at the top of the chat, and in your dashboard. Renaming does not change the form's link."
+                  >
+                    <FormNameField title={formTitle ?? ""} onChange={onTitleChange} />
+                  </SettingRow>
+                </SettingGroup>
+              </SettingSection>
+            )}
             <SettingSection title="Display">
               <SettingGroup>
               <SettingRow
@@ -161,6 +177,7 @@ export function SettingsPanel({
               </LockedControl>
               </SettingGroup>
             </SettingSection>
+            </>
           )}
 
           {/* The AI Interviewer settings moved to the Agent tab, which has room
@@ -390,6 +407,48 @@ export function SettingsPanel({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The form's name, in the place people go looking for a setting.
+ *
+ * The header has an inline rename, which is where it will usually be done. This
+ * is the other half of the same habit: the answer to "where do I change the
+ * name" should be Settings even when there is a faster way, because that is the
+ * first place anyone looks.
+ *
+ * Local while it is being typed, so an empty field is a moment in the edit
+ * rather than an invalid document — the schema requires at least one character,
+ * and a rejected autosave in the middle of a rename would be indistinguishable
+ * from a broken form.
+ */
+function FormNameField({ title, onChange }: { title: string; onChange: (title: string) => void }) {
+  const [draft, setDraft] = useState(title);
+  const [focused, setFocused] = useState(false);
+
+  // Undo, the header field and the AI all write the same string; adopt theirs
+  // whenever this input is not the one doing the writing.
+  if (!focused && draft !== title) setDraft(title);
+
+  return (
+    <Input
+      value={draft}
+      maxLength={200}
+      aria-label="Form name"
+      placeholder="Untitled form"
+      className="w-72"
+      onFocus={() => setFocused(true)}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        const next = e.target.value.trim();
+        if (next) onChange(next);
+      }}
+      onBlur={(e) => {
+        setFocused(false);
+        if (!e.target.value.trim()) setDraft(title);
+      }}
+    />
   );
 }
 

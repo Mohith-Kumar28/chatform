@@ -78,13 +78,19 @@ async function assessIdentity(
   identity: RespondentIdentity,
 ): Promise<SignInVerdict> {
   const sess = await env.DB.prepare(
-    `SELECT s.form_id AS form_id, s.organization_id AS organization_id, fv.schema_json AS schema_json
+    `SELECT s.form_id AS form_id, s.organization_id AS organization_id, s.started_over AS started_over,
+            fv.schema_json AS schema_json
        FROM chat_sessions s
        LEFT JOIN form_versions fv ON fv.id = s.form_version_id
       WHERE s.id = ?1`,
   )
     .bind(sessionId)
-    .first<{ form_id: string; organization_id: string; schema_json: string | null }>();
+    .first<{
+      form_id: string;
+      organization_id: string;
+      started_over: number | null;
+      schema_json: string | null;
+    }>();
   if (!sess?.schema_json) return NOTHING;
 
   let settings: FormDoc["settings"];
@@ -119,6 +125,20 @@ async function assessIdentity(
       resume: null,
     };
   }
+
+  /**
+   * They asked to start from nothing, and signing in does not undo that.
+   *
+   * The session was opened by "Start over", which cleared the screen and
+   * declined the device match. Handing their half-finished response back a few
+   * turns later — because the sign-in gate finally learned their name — refills
+   * everything they just asked to be rid of, which is what the button is for.
+   *
+   * Only the resume is dropped. `blocked` above is the form author's rule about
+   * how many responses one person may leave, and no button a respondent presses
+   * is a way around it.
+   */
+  if (sess.started_over) return NOTHING;
 
   return { blocked: null, resume: history.resumable };
 }

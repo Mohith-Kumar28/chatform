@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { LogoMark } from "@/components/brand/logo";
+import { InView } from "./in-view";
+import { UnderlineMark } from "./annotate";
 
 /**
  * The close: full-strength brand, edge to edge, one line of type.
@@ -44,8 +46,18 @@ export function CtaBand() {
       />
 
       <div className="relative mx-auto max-w-4xl">
+        {/* The bookend. The hero rings "four." — the number people are lost
+            at — and the close scores the word they are kept to. A ring at both
+            ends would read as a device; a different pen at the second one
+            reads as the same hand. */}
         <h2 className="text-display-2xl max-w-[20ch] font-bold tracking-[-0.045em] text-balance">
-          Ask like a person. Watch them finish.
+          Ask like a person. Watch them{" "}
+          <InView as="span" className="inline">
+            <span className="relative inline-block">
+              finish.
+              <UnderlineMark draw delay={260} className="opacity-80" />
+            </span>
+          </InView>
         </h2>
 
         {/* These two were hand-rolled here first. They are now `on-brand` and

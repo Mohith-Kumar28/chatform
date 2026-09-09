@@ -19,6 +19,8 @@ import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { LogoMark } from "@/components/brand/logo";
 import { AuthCard } from "./auth-card";
+import { warmGoogleSignIn } from "./google-signin";
+import { asEmail } from "./respondent-hint";
 import { VerifyCard } from "./verify-card";
 import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
 import { useChat, type ChatMessage } from "./use-chat";
@@ -60,6 +62,33 @@ export function ChatClient({
     existingSession,
     onRestart,
   });
+
+  /**
+   * Fetch Google's sign-in script while the boot screen is still up.
+   *
+   * The card that needs it does not mount until `auth_required` arrives, which
+   * is itself behind opening the session and streaming the greeting. Leaving
+   * the script fetch inside the card therefore made the two round trips strictly
+   * serial, and a returning respondent — the one case where sign-in could be a
+   * single silent step — waited out both before Google was so much as asked.
+   *
+   * Everything needed to start is already here at first paint: the public
+   * config says the form is gated and names the method, and the hint is a
+   * synchronous read from local storage. Only `prompt()` stays behind the card,
+   * because it is the only part with a face; see `google-signin.ts`.
+   *
+   * Deliberately not run for a phone-gated or ungated form, which would be
+   * fetching a script for a door they do not open.
+   */
+  const googleGated = config.requireAuth?.method === "google";
+  const googleHintEmail =
+    googleGated && chat.respondentHint?.provider === "google"
+      ? asEmail(chat.respondentHint.label)
+      : undefined;
+  useEffect(() => {
+    if (!googleGated) return;
+    warmGoogleSignIn(googleHintEmail);
+  }, [googleGated, googleHintEmail]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);

@@ -7,6 +7,7 @@ import { AiBuildPreview } from "./ai-build-preview";
 import { ArrowMark, HandNote } from "./annotate";
 import { ResultsPreview } from "./results-preview";
 import { FlowPreview } from "./flow-preview";
+import { InView } from "./in-view";
 
 /**
  * One mosaic, where there used to be three grids of fourteen identical cards.
@@ -93,6 +94,64 @@ const REST = [
   },
 ] as const;
 
+/**
+ * What a person types, and what lands in the row.
+ *
+ * Each one is a different failure of the thing a form field would do instead:
+ * "a dozen" is a number with no digits in it, "five and ten grand" is a range
+ * in words, the HubSpot line is a negation wearing an affirmative sentence,
+ * and "after the holidays" is a date that only exists relative to today. None
+ * of them are edge cases — they are how people answer when the question feels
+ * like a conversation, which is the whole point.
+ */
+const READS = [
+  { typed: "we're about a dozen people right now", field: "Team size", value: "12" },
+  {
+    typed: "somewhere between five and ten grand a month",
+    field: "Budget",
+    value: "$5\u201310k",
+  },
+  {
+    typed: "yeah we tried HubSpot, dropped it last year",
+    field: "Current CRM",
+    value: "None",
+  },
+  { typed: "right after the holidays", field: "Timeline", value: "January" },
+] as const;
+
+/**
+ * The four routes a finished form takes to a person, each drawn rather than
+ * described.
+ *
+ * A bulleted list would have said the same words in a fifth of the space, and
+ * that is exactly the problem: "an embed" means nothing until you have seen
+ * where the thing lands on the page. The four drawings are deliberately at the
+ * same scale and in the same frame, so what the eye compares is the placement,
+ * which is the only thing that actually differs between them.
+ */
+const REACH = [
+  {
+    label: "A link",
+    detail: "Send it, post it, put it in a signature.",
+    art: <LinkArt />,
+  },
+  {
+    label: "A QR code",
+    detail: "Generated in the browser. Download it and print it.",
+    art: <QrArt />,
+  },
+  {
+    label: "An embed",
+    detail: "Popup, side tab, inline or full page \u2014 one script tag.",
+    art: <EmbedArt />,
+  },
+  {
+    label: "The API",
+    detail: "Build your own front end on the same endpoints.",
+    art: <ApiArt />,
+  },
+] as const;
+
 export function WhatItDoes() {
   return (
     <Band id="features" tone="sand">
@@ -145,34 +204,26 @@ export function WhatItDoes() {
             </ul>
           </div>
 
-          <div className="mt-6 lg:mt-0 lg:self-center">
+          <InView className="mt-6 lg:mt-0 lg:self-center">
             <AiBuildPreview readUrl="northwind.co" readPages={6} />
             {/* One pen mark in this band, on the line people do not believe
                 until they see it. In normal flow rather than absolutely
                 positioned: the first attempt floated it over the panel's
                 bottom-left corner, where the panel simply painted on top of
                 it. A note that can be covered is a note that will be. */}
-            <div className="mt-3 flex items-center justify-end gap-1 pr-1">
-              <ArrowMark dir="up-right" positioned={false} className="size-10 shrink-0 opacity-60" />
+            <div className="cf-a-rise mt-3 flex items-center justify-end gap-1 pr-1" style={{ animationDelay: "860ms" }}>
+              <ArrowMark
+                dir="up-right"
+                positioned={false}
+                draw
+                delay={900}
+                className="size-10 shrink-0 opacity-60"
+              />
               <HandNote tilt={-5} style={{ color: "var(--on-band-vivid)" }}>
                 it really reads your site
               </HandNote>
             </div>
-          </div>
-        </Tile>
-
-        {/* The agent brief. Demoted from the lead but not dropped: it is about
-            how the conversation RUNS, where the tile above is about how the
-            form gets made, and the page needs both. */}
-        <Tile tone="scale" span={5}>
-          <TileTitle>Then brief it like a person.</TileTitle>
-          <TileBody>
-            A persona, a goal, a knowledge base it can quote — and the topics it will not
-            touch.
-          </TileBody>
-          <div className="mt-5">
-            <AgentPanelPreview />
-          </div>
+          </InView>
         </Tile>
 
         <Tile tone="contact" span={7}>
@@ -180,71 +231,101 @@ export function WhatItDoes() {
           <TileBody>
             What you asked, what they said, and what got recorded — side by side.
           </TileBody>
-          <div className="mt-5">
+          <InView className="mt-5">
             <ResultsPreview />
-          </div>
+          </InView>
         </Tile>
 
+        {/* The agent brief, second in its row rather than first.
+
+            It led this row when the row was [5, 7], which put the two rows of
+            the mosaic at [5, 7] and [5, 7] — the same shape twice, which is a
+            grid pretending to be a mosaic. Swapping this row to [7, 5] makes
+            the widths alternate down the page, and it happens to be the better
+            reading order too: the output people care about goes first, and how
+            you brief the thing that produced it goes beside it. */}
+        <Tile tone="scale" span={5}>
+          <TileTitle>Then brief it like a person.</TileTitle>
+          <TileBody>
+            A persona, a goal, a knowledge base it can quote — and the topics it will not
+            touch.
+          </TileBody>
+          <InView className="mt-5">
+            <AgentPanelPreview />
+          </InView>
+        </Tile>
+
+        {/* The type tile. No icon, no panel — the transformation is the graphic,
+            and it is the single clearest proof that this is not a text field. */}
         {/* The type tile. No icon, no panel — the transformation is the graphic,
             and it is the single clearest proof that this is not a text field. */}
         <Tile tone="text" span={5} className="justify-between">
           <div>
             <TileTitle>It understands what people type.</TileTitle>
             <TileBody>
-              Choices stay exact-match and instant. Only free text goes to the model,
-              and a low-confidence read becomes a follow-up rather than a guess.
+              Choices stay instant and exact. Free text goes to the model — and when it
+              isn&rsquo;t sure, it asks instead of guessing.
             </TileBody>
           </div>
-          {/* The extraction, shown rather than described — and it has to say
-              what it is, which the old version did not.
 
-              It was a grey quote, a hairline, and a bare "12" in
-              `--family-text-ink`: two colours meant for a pale tint, now sitting
-              on the saturated blue, so the sentence was barely legible and the
-              number was a mystery. Nobody could tell what 12 referred to, which
-              made the one graphic that proves the feature the one graphic that
-              needed explaining. Labels on both ends, the band's own inks, and
-              an arrow that says which way the transformation runs. */}
-          <div className="mt-8">
-            <div className="flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-micro font-semibold uppercase tracking-[0.1em] opacity-70">
-                  They typed
-                </p>
-                <p className="text-caption mt-1 font-mono leading-snug">
-                  &ldquo;we&rsquo;re about a dozen people right now&rdquo;
-                </p>
-              </div>
+          {/* Four reads, not one.
+              It was a single row — a quote, an arrow and a bare "12" — pinned to
+              the bottom of a tile with a third of its height empty above it. One
+              example proves nothing: a reader assumes "a dozen" was hardcoded and
+              moves on. Four, each a different kind of read, is the argument.
+              They are chosen to be things a person would actually type and a
+              regex would actually miss: a number written as a word behind a
+              hedge, a range in words, a negation buried in an affirmative
+              sentence, and a date with no numbers in it at all.
 
-              <svg
-                aria-hidden
-                viewBox="0 0 40 24"
-                fill="none"
-                className="h-5 w-9 shrink-0 opacity-60"
-              >
-                <path
-                  d="M2 12 H32"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M25 5 L34 12 L25 19"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-
-              <div className="shrink-0 text-right">
-                <p className="text-micro font-semibold uppercase tracking-[0.1em] opacity-70">
-                  Team size
-                </p>
-                <p className="font-display tabular mt-0.5 text-4xl leading-none font-bold">12</p>
-              </div>
+              The arrow per row is gone with them. Two column labels say which
+              way the transformation runs once, and four arrows down the middle
+              of a narrow tile were four pieces of furniture doing that job
+              again. */}
+          <InView className="mt-8">
+            <div className="flex items-baseline justify-between gap-4">
+              <p className="text-micro font-semibold tracking-[0.1em] uppercase opacity-70">
+                They typed
+              </p>
+              <p className="text-micro font-semibold tracking-[0.1em] uppercase opacity-70">
+                Recorded as
+              </p>
             </div>
-          </div>
+
+            <ul className="mt-3 flex flex-col">
+              {READS.map((read, i) => (
+                <li
+                  key={read.field}
+                  /* The rule between rows is `currentColor` at low alpha rather
+                     than `--border`: this tile's ground is the saturated text
+                     blue, and the neutral border token disappears on it. */
+                  className="grid grid-cols-[1fr_auto] items-center gap-x-4 border-t border-current/15 py-2.5 first:border-t-0 first:pt-0 last:pb-0"
+                >
+                  {/* The typed line arrives, then the read of it — a beat
+                      later, every row, so the eye learns the pattern by the
+                      second one and reads the other three as cause and effect
+                      rather than as a two-column table. */}
+                  <p
+                    className="cf-a-slide-l text-caption min-w-0 font-mono leading-snug opacity-80"
+                    style={{ animationDelay: `${120 + i * 260}ms` }}
+                  >
+                    &ldquo;{read.typed}&rdquo;
+                  </p>
+                  <div
+                    className="cf-a-slide-r shrink-0 text-right"
+                    style={{ animationDelay: `${300 + i * 260}ms` }}
+                  >
+                    <p className="text-micro tracking-[0.08em] uppercase opacity-70">
+                      {read.field}
+                    </p>
+                    <p className="text-body font-display tabular leading-tight font-bold">
+                      {read.value}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </InView>
         </Tile>
 
         <Tile tone="number" span={7}>
@@ -253,9 +334,53 @@ export function WhatItDoes() {
             Nineteen operators, nested groups, scoring. The linter walks every path
             before publish.
           </TileBody>
-          <div className="border-border/70 bg-background mt-5 rounded-xl border p-2">
+          <InView className="border-border/70 bg-background mt-5 rounded-xl border p-2">
             <FlowPreview />
-          </div>
+          </InView>
+        </Tile>
+
+        {/* Row four: how a finished form reaches people.
+
+            This was a third of `how-it-works.tsx` — a "Share it" beat next to
+            "Describe it" and "Shape it", in a band that restated this entire
+            mosaic in three cards. The band is gone; the one thing in it that
+            this page did not already say is here, at full width, with the four
+            routes drawn instead of listed. All four are shipped: the public
+            `/f/:slug` page, the QR generated in the browser, `embed.js` with
+            its four `data-mode` values, and the same REST API the dashboard
+            itself runs on. */}
+        <Tile tone="advanced" span={12}>
+          <TileTitle>Then put it anywhere.</TileTitle>
+          <TileBody className="max-w-lg">
+            One form, four ways out — and nothing to rebuild for any of them.
+          </TileBody>
+
+          <InView as="div" className="mt-6">
+            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {REACH.map((way, i) => (
+              <li
+                key={way.label}
+                className="cf-a-rise border-border/70 bg-background flex flex-col rounded-xl border p-3"
+                style={{ animationDelay: `${100 + i * 110}ms` }}
+              >
+                {/* Fixed height, so four drawings of four different natural
+                    sizes still put their captions on one line. */}
+                <div className="grid h-24 place-items-center px-1">{way.art}</div>
+                {/* `text-foreground`, explicitly. The tile sets the near-black
+                    `--on-band-vivid` on itself and every child inherits it —
+                    correct on the coral ground, invisible inside a panel whose
+                    background flips to charcoal in the dark theme. The detail
+                    line below was already fine because `text-muted-foreground`
+                    is theme-aware; the label was the one thing on this row
+                    still wearing the tile's ink. */}
+                <p className="text-caption text-foreground mt-1 font-semibold">{way.label}</p>
+                <p className="text-micro text-muted-foreground mt-1 leading-snug">
+                  {way.detail}
+                </p>
+              </li>
+            ))}
+            </ul>
+          </InView>
         </Tile>
 
         {/* The list tile. Six claims that are honestly one line each, kept as one
@@ -307,7 +432,7 @@ function Tile({
   children,
   className,
 }: {
-  tone: "content" | "text" | "contact" | "number" | "choice" | "scale";
+  tone: "content" | "text" | "contact" | "number" | "choice" | "scale" | "advanced";
   span: 5 | 7 | 12;
   children: React.ReactNode;
   className?: string;
@@ -366,5 +491,192 @@ function TileBody({
     >
       {children}
     </p>
+  );
+}
+
+/**
+ * The four reach drawings.
+ *
+ * All four sit inside the same 132×72 frame at the same stroke weight, because
+ * the row is a comparison and a comparison drawn at four scales is not one.
+ * `--family-advanced-ink` is the tile's own family, so the accent in each
+ * drawing belongs to the tile it is on rather than to the brand generally.
+ */
+
+const ACCENT = "var(--family-advanced-ink)";
+
+/** A browser chrome, which three of the four drawings need. */
+function Frame({ children }: { children: React.ReactNode }) {
+  return (
+    <svg viewBox="0 0 132 72" className="h-[72px] w-[132px]" aria-hidden>
+      <rect
+        x="0.75"
+        y="0.75"
+        width="130.5"
+        height="70.5"
+        rx="6"
+        fill="var(--muted)"
+        stroke="var(--border)"
+        strokeWidth="1.5"
+      />
+      <path d="M0 14 H132" stroke="var(--border)" strokeWidth="1.5" />
+      <circle cx="9" cy="7.5" r="2" fill="var(--border)" />
+      <circle cx="16" cy="7.5" r="2" fill="var(--border)" />
+      <circle cx="23" cy="7.5" r="2" fill="var(--border)" />
+      {children}
+    </svg>
+  );
+}
+
+/** Page lines, the grey furniture the accent sits on top of. */
+function PageLines({ x = 10, width = 60 }: { x?: number; width?: number }) {
+  return (
+    <g fill="var(--border)">
+      <rect x={x} y="24" width={width} height="4" rx="2" />
+      <rect x={x} y="33" width={width * 0.75} height="4" rx="2" />
+      <rect x={x} y="42" width={width * 0.9} height="4" rx="2" />
+      <rect x={x} y="51" width={width * 0.55} height="4" rx="2" />
+    </g>
+  );
+}
+
+/** The URL in the address bar, because a link is a thing you read. */
+function LinkArt() {
+  return (
+    <Frame>
+      <rect x="32" y="3.5" width="92" height="8" rx="4" fill="var(--background)" />
+      {/* The URL fills the address bar rather than being in it, which is the
+          only thing that distinguishes this drawing from the embed one. */}
+      <g className="cf-a-grow" style={{ animationDelay: "260ms", transformOrigin: "36px 7.5px" }}>
+        <rect x="36" y="6" width="52" height="3" rx="1.5" fill={ACCENT} />
+      </g>
+      <PageLines width={112} />
+    </Frame>
+  );
+}
+
+/**
+ * A QR code as a glyph, not as a payload.
+ *
+ * The first attempt placed data modules on an 8px pitch inside a 72-unit
+ * viewBox and ran seven of them off the right edge, so what shipped was three
+ * finder squares and a spill. This is the real geometry instead — 21 modules,
+ * finders in three corners with their separator ring, a timing row that
+ * alternates — written out as a bitmap so the picture is legible in the source
+ * as well as on the page.
+ *
+ * It does not encode anything and is not meant to scan; the product's QR is
+ * generated from the form's own URL in the browser. This is the shape of one,
+ * at 72px, next to three other drawings of the same size.
+ */
+const QR = [
+  "#######.#.#.#.#######",
+  "#.....#...##..#.....#",
+  "#.###.#.#.#...#.###.#",
+  "#.###.#..##.#.#.###.#",
+  "#.###.#.#..##.#.###.#",
+  "#.....#..#.#..#.....#",
+  "#######.#.#.#.#######",
+  ".........#...........",
+  "##.#.##.#..#..#.##..#",
+  ".#..#..#.##.##..#.##.",
+  "#.##.#..#.#...##..#.#",
+  "..#..###..##.#.#.##..",
+  "#.#.#....##..#.#..#.#",
+  ".......#.#.#.###.#..#",
+  "#######.#.#....#.##.#",
+  "#.....#...##.###..#..",
+  "#.###.#.#..#...###.#.",
+  "#.###.##.##.#.#..##.#",
+  "#.###.#.#.#..#.#.#..#",
+  "#.....#...#.#.##..##.",
+  "#######.#..##..#.#.##",
+] as const;
+
+function QrArt() {
+  return (
+    <svg viewBox="0 0 21 21" className="size-[72px]" aria-hidden shapeRendering="crispEdges">
+      {/* The data modules resolve on a diagonal sweep — `x + y` rather than a
+          per-module random — so the whole code fills from the top-left corner
+          in one pass instead of flickering module by module. */}
+      {QR.flatMap((row, y) =>
+        [...row].map((cell, x) =>
+          cell === "#" ? (
+            <rect
+              key={`${x}-${y}`}
+              x={x}
+              y={y}
+              width="1"
+              height="1"
+              fill={ACCENT}
+              className="cf-a-rise"
+              style={{ animationDelay: `${380 + (x + y) * 14}ms` }}
+            />
+          ) : null,
+        ),
+      )}
+    </svg>
+  );
+}
+
+/** The launcher pill, sitting in the corner of somebody else's page. */
+function EmbedArt() {
+  return (
+    <Frame>
+      <PageLines width={70} />
+      {/* The pill arrives after the page it is landing on, because that is
+          the sequence: somebody's site loads, then the launcher appears in
+          the corner of it. */}
+      <g className="cf-a-pop" style={{ animationDelay: "420ms", transformOrigin: "102px 54px" }}>
+        <rect x="82" y="46" width="40" height="17" rx="8.5" fill={ACCENT} />
+        <rect x="90" y="53" width="24" height="3" rx="1.5" fill="var(--background)" />
+      </g>
+    </Frame>
+  );
+}
+
+/** Two calls, which is genuinely the whole of it. */
+function ApiArt() {
+  return (
+    <svg viewBox="0 0 132 72" className="h-[72px] w-[132px]" aria-hidden>
+      <rect
+        x="0.75"
+        y="0.75"
+        width="130.5"
+        height="70.5"
+        rx="6"
+        fill="var(--muted)"
+        stroke="var(--border)"
+        strokeWidth="1.5"
+      />
+      <text
+        x="10"
+        y="27"
+        fontSize="9"
+        fontFamily="ui-monospace, monospace"
+        fill={ACCENT}
+        fontWeight="600"
+      >
+        POST
+      </text>
+      <rect x="42" y="21" width="58" height="4" rx="2" fill="var(--border)" />
+      <rect x="10" y="36" width="80" height="4" rx="2" fill="var(--border)" />
+      <rect x="10" y="45" width="62" height="4" rx="2" fill="var(--border)" />
+      {/* The 200 comes back after the request goes out — a half-second of
+          latency, drawn. */}
+      <g className="cf-a-rise" style={{ animationDelay: "520ms" }}>
+        <text
+          x="10"
+          y="63"
+          fontSize="9"
+          fontFamily="ui-monospace, monospace"
+          fill={ACCENT}
+          fontWeight="600"
+        >
+          200
+        </text>
+        <rect x="34" y="57" width="44" height="4" rx="2" fill="var(--border)" />
+      </g>
+    </svg>
   );
 }

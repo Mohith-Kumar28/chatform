@@ -22,6 +22,27 @@ import { cn } from "@/lib/utils";
  */
 
 /**
+ * The props that turn a static stroke into one that draws itself on.
+ *
+ * `pathLength="1"` renormalises the path so `stroke-dasharray: 1` covers all
+ * of it whatever its real length is — which is what lets one keyframe in
+ * `globals.css` draw a ring, an arrow and an underline without any of them
+ * knowing how long they are.
+ *
+ * Nothing draws on its own: the class only does anything inside an `InView`
+ * that has armed itself, so a visitor without JS, without an
+ * IntersectionObserver, or with reduced motion on gets the finished mark.
+ */
+function drawProps(draw: boolean, delay: number) {
+  if (!draw) return {};
+  return {
+    pathLength: 1,
+    className: "cf-a-draw",
+    style: { animationDelay: `${delay}ms` },
+  } as const;
+}
+
+/**
  * A ring around a word, open at the top-left where the pen came round to meet
  * itself and missed. Wrap the word in a `relative inline-block` and drop this
  * inside it.
@@ -29,9 +50,15 @@ import { cn } from "@/lib/utils";
 export function CircleMark({
   className,
   strokeWidth = 3,
+  draw = false,
+  delay = 0,
 }: {
   className?: string;
   strokeWidth?: number;
+  /** Draw the stroke on rather than having it already there. See `InView`. */
+  draw?: boolean;
+  /** Milliseconds, for lining a mark up with whatever it is annotating. */
+  delay?: number;
 }) {
   return (
     <svg
@@ -49,13 +76,22 @@ export function CircleMark({
         strokeWidth={strokeWidth}
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
+        {...drawProps(draw, delay)}
       />
     </svg>
   );
 }
 
 /** A scribbled underline. Two strokes, because one pass never covers it. */
-export function UnderlineMark({ className }: { className?: string }) {
+export function UnderlineMark({
+  className,
+  draw = false,
+  delay = 0,
+}: {
+  className?: string;
+  draw?: boolean;
+  delay?: number;
+}) {
   return (
     <svg
       aria-hidden
@@ -70,6 +106,7 @@ export function UnderlineMark({ className }: { className?: string }) {
         strokeWidth={3}
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
+        {...drawProps(draw, delay)}
       />
       <path
         d="M12 13 C56 9 108 8 154 10"
@@ -78,6 +115,7 @@ export function UnderlineMark({ className }: { className?: string }) {
         strokeLinecap="round"
         opacity={0.55}
         vectorEffect="non-scaling-stroke"
+        {...drawProps(draw, delay + 260)}
       />
     </svg>
   );
@@ -93,11 +131,15 @@ export function ArrowMark({
   className,
   dir = "down-left",
   positioned = true,
+  draw = false,
+  delay = 0,
 }: {
   className?: string;
-  dir?: "down-left" | "down-right" | "up-right";
+  dir?: "down-left" | "down-right" | "up-right" | "up-left";
   /** Set false to place one in normal flow instead of over something. */
   positioned?: boolean;
+  draw?: boolean;
+  delay?: number;
 }) {
   const paths = {
     "down-left": {
@@ -112,6 +154,14 @@ export function ArrowMark({
       curve: "M6 64 C14 38 34 20 66 14",
       head: "M52 6 L68 13 L55 25",
     },
+    /* `up-right` mirrored across the box's centre line, plotted rather than
+       flipped with a transform — a `scaleX(-1)` would also reverse the stroke
+       taper and the overshoot, and those asymmetries are the whole reason
+       these are hand-plotted in the first place. */
+    "up-left": {
+      curve: "M74 64 C66 38 46 20 14 14",
+      head: "M28 6 L12 13 L25 25",
+    },
   }[dir];
 
   return (
@@ -121,13 +171,22 @@ export function ArrowMark({
       fill="none"
       className={cn("pointer-events-none size-16", positioned && "absolute", className)}
     >
-      <path d={paths.curve} stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" />
+      <path
+        d={paths.curve}
+        stroke="currentColor"
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        {...drawProps(draw, delay)}
+      />
+      {/* The head starts once the shaft has almost arrived, because that is
+          the order a hand does it in. */}
       <path
         d={paths.head}
         stroke="currentColor"
         strokeWidth={2.5}
         strokeLinecap="round"
         strokeLinejoin="round"
+        {...drawProps(draw, delay + 520)}
       />
     </svg>
   );

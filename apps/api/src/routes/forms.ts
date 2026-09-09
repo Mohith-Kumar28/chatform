@@ -426,8 +426,21 @@ formsRouter.put(
         ?.working_schema,
     );
 
-    await c.env.DB.prepare(`UPDATE forms SET working_schema = ?, updated_at = ? WHERE id = ?`)
-      .bind(JSON.stringify(doc), Date.now(), id)
+    /*
+      The name travels with the document.
+
+      `forms.title` is what the dashboard list, the command palette and every
+      email subject read; `doc.title` is what respondents see at the top of the
+      chat and what the agent is told the form is called. They were written once
+      at creation and never again, so nothing in the product could rename a form
+      — and a rename that updated only one of them would give the same form two
+      names. One write, from the document, which is the copy the author edits.
+
+      The slug is deliberately left alone: it is the public address, and a
+      rename must not break a link that is already out there.
+    */
+    await c.env.DB.prepare(`UPDATE forms SET working_schema = ?, title = ?, updated_at = ? WHERE id = ?`)
+      .bind(JSON.stringify(doc), doc.title, Date.now(), id)
       .run();
 
     /*

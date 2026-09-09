@@ -21,6 +21,7 @@ export function SettingsTab() {
         slug={slug}
         settings={doc.settings}
         formTitle={doc.title}
+        onTitleChange={(title) => edit((d) => { d.title = title; }, "doc:title")}
         hiddenFields={doc.hiddenFields}
         variables={doc.variables}
         onChange={(settings) => edit((d) => { d.settings = settings; })}

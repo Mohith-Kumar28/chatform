@@ -254,6 +254,14 @@ sessionsRouter.post(
        */
       embedOrigin: c.req.header("origin") ?? null,
       deviceSignal: body.deviceSignal ?? null,
+      /**
+       * Carried onto the session, not just used here.
+       *
+       * The device match is declined above, but a gated form meets its
+       * respondent later — at sign-in — and the identity lookup there would
+       * otherwise hand back the response they pressed "Start over" to leave.
+       */
+      ...(body.fresh ? { startedOver: true } : {}),
       ...(resume ? { resumeSubmissionId: resume.submissionId } : {}),
     });
     if (!opened.ok) return c.json(opened.body, opened.status);

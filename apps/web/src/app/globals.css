@@ -935,6 +935,122 @@
   }
 }
 
+/* ── graphic entrances ──────────────────────────────────────────────────────
+   The motion vocabulary the marketing graphics animate with, played by
+   `InView`.
+
+   Two rules hold this together. The static style is always the finished state:
+   nothing below hides anything until `InView` has written `data-armed`, which
+   only happens in a browser that has IntersectionObserver and has not asked
+   for less motion. And every animation is `backwards`, so an inline
+   `animation-delay` holds the opening frame through a stagger instead of
+   flashing the end state first.
+
+   Six verbs, not one. `motion-config.tsx` deleted the old `Reveal` because
+   eleven identical fades read as a page that flickers rather than eleven
+   moments; the answer is not "no motion", it is that a bar chart grows, a
+   chat message slides in from the side it was sent from, a dot pops, and a
+   pen draws. Each graphic picks the one that describes what it is.          */
+
+[data-armed]:not([data-inview]) :is(.cf-a-rise, .cf-a-pop, .cf-a-slide-l, .cf-a-slide-r, .cf-a-grow, .cf-a-draw) {
+  opacity: 0;
+}
+
+/* `.cf-a-grow` scales from nothing, so it also needs its start size held. */
+[data-armed]:not([data-inview]) .cf-a-grow {
+  transform: scaleX(0);
+}
+
+[data-inview] .cf-a-rise {
+  animation: cf-a-rise 560ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+[data-inview] .cf-a-pop {
+  animation: cf-a-pop 460ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+[data-inview] .cf-a-slide-l {
+  animation: cf-a-slide-l 520ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+[data-inview] .cf-a-slide-r {
+  animation: cf-a-slide-r 520ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+[data-inview] .cf-a-grow {
+  transform-origin: left center;
+  animation: cf-a-grow 760ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+/* The pen. `pathLength="1"` on the path makes the dash values unitless, so one
+   keyframe draws any stroke regardless of its real length. */
+[data-inview] .cf-a-draw {
+  animation: cf-a-draw 900ms cubic-bezier(0.65, 0, 0.35, 1) backwards;
+}
+
+@keyframes cf-a-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cf-a-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cf-a-slide-l {
+  from {
+    opacity: 0;
+    transform: translate3d(-14px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cf-a-slide-r {
+  from {
+    opacity: 0;
+    transform: translate3d(14px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cf-a-grow {
+  from {
+    opacity: 1;
+    transform: scaleX(0);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes cf-a-draw {
+  from {
+    opacity: 1;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+  to {
+    opacity: 1;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

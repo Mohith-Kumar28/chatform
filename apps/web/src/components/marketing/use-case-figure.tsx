@@ -2,6 +2,7 @@ import { AiBuildPreview } from "./ai-build-preview";
 import { FlowPreview } from "./flow-preview";
 import { ResultsPreview, type ResultsTranscriptTurn } from "./results-preview";
 import { SharePanel } from "./share-panel";
+import { InView } from "./in-view";
 import type { UseCase, UseCaseStep } from "@/content/use-cases/define";
 
 /**
@@ -50,6 +51,21 @@ export function UseCaseFigure({
   figure: NonNullable<UseCaseStep["figure"]>;
   useCase: UseCase;
 }) {
+  /* The same entrances the landing page's mosaic plays.
+     `AiBuildPreview`, `FlowPreview` and `ResultsPreview` carry their own
+     `cf-a-*` classes now, and those do nothing at all without an armed
+     ancestor — so without this wrapper these pages would render the same
+     drawings permanently static while the identical component animated one
+     route away. One boundary here rather than four inside the switch: each
+     figure is a single graphic, and it should play as a whole. */
+  const content = renderFigure(figure, useCase);
+  return content ? <InView>{content}</InView> : null;
+}
+
+function renderFigure(
+  figure: NonNullable<UseCaseStep["figure"]>,
+  useCase: UseCase,
+) {
   switch (figure) {
     case "prompt":
     case "questions":

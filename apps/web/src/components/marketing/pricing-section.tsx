@@ -12,6 +12,26 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { PlanCard } from "./plan-card";
 
 /**
+ * The way out of a five-line card and into the forty-row matrix.
+ *
+ * Five highlights per tier is a decision surface, and a decision surface
+ * always leaves somebody wanting the rest of it. This is the exit, and it goes
+ * directly under the cards on every surface that shows them — it used to
+ * appear only on the landing page, so the reader on `/pricing` had no signpost
+ * to the table sitting two bands below them.
+ */
+export function ComparisonLink({ href }: { href: string }) {
+  return (
+    <p className="text-caption text-muted-foreground text-center">
+      Five lines each. There are forty.{" "}
+      <Link href={href} className="text-primary font-medium underline underline-offset-4">
+        See the detailed comparison →
+      </Link>
+    </p>
+  );
+}
+
+/**
  * The landing page's pricing block, off the authoring catalogue.
  *
  * BILLING.md: "Pricing page opens on annual. '$16/mo billed yearly — save
@@ -20,9 +40,20 @@ import { PlanCard } from "./plan-card";
  * The four-sentence footnote under the cards is now one line. It explained the
  * fair-use ceiling, the reason AI conversations are metered, and what happens
  * past the cap — three arguments nobody is having at the moment they are
- * choosing a plan. The full explanation lives on `/pricing`, linked below.
+ * choosing a plan. The full explanation lives at the foot of `/pricing`, where
+ * somebody who has read the whole page ends up.
+ *
+ * `compareHref` rather than a boolean, because the link's destination differs
+ * by surface and its presence does not. From the landing page the matrix is on
+ * another route; from `/pricing` it is an anchor further down the same page.
+ * The old `showAllLink` hid the link entirely on `/pricing` — the one surface
+ * where somebody is definitely comparing plans.
  */
-export function PricingSection({ showAllLink = false }: { showAllLink?: boolean }) {
+export function PricingSection({
+  compareHref = "/pricing#everything",
+}: {
+  compareHref?: string;
+}) {
   const [cycle, setCycle] = useState<"annual" | "monthly">("annual");
   const annual = cycle === "annual";
 
@@ -60,20 +91,7 @@ export function PricingSection({ showAllLink = false }: { showAllLink?: boolean 
         ))}
       </div>
 
-      <p className="text-caption text-muted-foreground text-center">
-        AI conversations are metered because each one is a real conversation with a model.
-        {showAllLink && (
-          <>
-            {" "}
-            <Link
-              href="/pricing"
-              className="text-primary font-medium underline underline-offset-4"
-            >
-              Compare every feature and limit →
-            </Link>
-          </>
-        )}
-      </p>
+      <ComparisonLink href={compareHref} />
     </div>
   );
 }

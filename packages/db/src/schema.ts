@@ -468,6 +468,16 @@ export const chatSessions = sqliteTable(
     meta: text("meta"),
     /** JSON `RespondentIdentity`, set once the sign-in gate is satisfied. */
     respondentIdentity: text("respondent_identity"),
+    /**
+     * The respondent asked for this attempt to begin from nothing.
+     *
+     * Set by "Start over". The device match is declined at creation time, but a
+     * gated form only learns who it is talking to when they sign in — several
+     * turns later — and the identity lookup would then hand back the very
+     * response they had just asked to leave. This is how that later moment
+     * knows what the earlier one decided.
+     */
+    startedOver: bool("started_over").notNull().default(false),
     /** `chat` | `embed` | `api` — mirrors `submissions.source`. */
     source: text("source").notNull().default("chat"),
     /** Set when the session was opened with a `*_test_` API key. */

@@ -15,6 +15,7 @@ import { AuthGuard } from "@/components/dashboard/auth-guard";
 import { CommandPalette } from "@/components/dashboard/command-palette";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { invalidateForms } from "@/lib/query-keys";
 import { useBuilderStore } from "@/stores/builder-store";
 import { useAutosave } from "@/hooks/use-autosave";
 import { BuilderHeader } from "./builder-header";
@@ -42,6 +43,7 @@ export function BuilderShell({
   const publish = usePostApiFormsByIdPublish();
 
   const doc = useBuilderStore((s) => s.doc);
+  const edit = useBuilderStore((s) => s.edit);
   const hydrate = useBuilderStore((s) => s.hydrate);
   const markPublished = useBuilderStore((s) => s.markPublished);
   const loadedId = useBuilderStore((s) => s.formId);
@@ -194,7 +196,10 @@ export function BuilderShell({
        */
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: getGetApiFormsByIdQueryKey(formId as never) }),
-        queryClient.invalidateQueries({ queryKey: ["forms"] }),
+        // `["forms"]` — the key this used to pass — is not the key the generated
+        // client stores the list under (`["/api/forms"]`), so the dashboard's
+        // status was never actually being refreshed here.
+        invalidateForms(queryClient),
       ]);
       // Toasted here rather than at the button, because publishing now has two
       // call sites — the header and the leave guard — and only one of them was
@@ -217,7 +222,13 @@ export function BuilderShell({
         ) : (
           <BuilderHeader
             formId={formId}
-            title={row.title}
+            /*
+              The document's name, not the row's. They are the same string —
+              saving the document writes the column too — but only the document
+              moves on the keystroke, and a rename that took a round trip to
+              appear reads as a rename that did not take.
+            */
+            title={doc?.title ?? row.title}
             slug={row.slug}
             status={row.status}
             activeVersion={row.activeVersion}
@@ -227,6 +238,7 @@ export function BuilderShell({
             publishing={publishing}
             onPreview={() => setPreviewOpen(true)}
             onCopyLink={copyLink}
+            onRename={doc ? (title) => edit((d) => { d.title = title; }, "doc:title") : undefined}
           />
         )}
 

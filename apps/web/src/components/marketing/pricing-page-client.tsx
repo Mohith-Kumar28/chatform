@@ -7,6 +7,7 @@ import type { Catalogue } from "@/lib/pricing-catalogue";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Band, BandTitle, BandLede } from "@/components/marketing/band";
 import { PlanCard } from "@/components/marketing/plan-card";
+import { ComparisonLink } from "@/components/marketing/pricing-section";
 import { BlockTypeGrid } from "@/components/marketing/block-type-grid";
 import { QUESTION_TYPE_COUNT_WORD } from "@/components/marketing/question-types";
 import { ComparisonTable } from "@/components/marketing/comparison-table";
@@ -179,34 +180,7 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
             ))}
           </div>
 
-          {plans[0] && plans[1] && (
-            <div className="text-caption text-muted-foreground mx-auto max-w-3xl space-y-2.5">
-              <p className="flex items-start gap-2">
-                <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-                <span>
-                  <strong className="text-foreground font-semibold">
-                    &ldquo;Unlimited responses&rdquo;
-                  </strong>{" "}
-                  means no per-plan quota. There is a monthly ceiling for fair use —{" "}
-                  {formatLimit(plans[0].limits.responses_ceiling_per_month ?? null, "count")} on
-                  Free and{" "}
-                  {formatLimit(plans[1].limits.responses_ceiling_per_month ?? null, "count")} on
-                  paid plans. We would rather tell you the number than write
-                  &ldquo;subject to fair usage&rdquo;.
-                </span>
-              </p>
-              <p>
-                Every response is a real conversation with a language model, which costs us
-                money — so AI conversations are metered. Past the monthly count your forms
-                keep collecting, asking their questions directly instead of conversationally.
-                Nothing breaks and no response is lost.
-              </p>
-              <p>
-                Prices in USD. Tax is handled at checkout. Cancel any time from the billing
-                portal.
-              </p>
-            </div>
-          )}
+          <ComparisonLink href="#everything" />
         </div>
       </Band>
 
@@ -331,6 +305,48 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
           </table>
         </div>
       </Band>
+
+      {/* The fine print, at the foot of the argument rather than the head of
+          it.
+
+          These three paragraphs used to sit directly under the plan cards, in
+          the first screenful — the fair-use ceiling, why AI conversations are
+          metered, and the tax and cancellation line. All three are true and
+          worth publishing, and none of them is a thing anybody is weighing at
+          the moment they are choosing between $0 and $16. Read there they were
+          an objection raised before anyone had objected; read here, after the
+          forty-row matrix, they answer the questions the matrix actually
+          provokes. */}
+      {plans[0] && plans[1] && (
+        <Band tone="sand" size="tight">
+          <div className="text-caption text-muted-foreground mx-auto max-w-3xl space-y-2.5">
+            <p className="flex items-start gap-2">
+              <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>
+                <strong className="text-foreground font-semibold">
+                  &ldquo;Unlimited responses&rdquo;
+                </strong>{" "}
+                means no per-plan quota. There is a monthly ceiling for fair use —{" "}
+                {formatLimit(plans[0].limits.responses_ceiling_per_month ?? null, "count")} on
+                Free and{" "}
+                {formatLimit(plans[1].limits.responses_ceiling_per_month ?? null, "count")} on
+                paid plans. We would rather tell you the number than write
+                &ldquo;subject to fair usage&rdquo;.
+              </span>
+            </p>
+            <p>
+              Every response is a real conversation with a language model, which costs us
+              money — so AI conversations are metered. Past the monthly count your forms
+              keep collecting, asking their questions directly instead of conversationally.
+              Nothing breaks and no response is lost.
+            </p>
+            <p>
+              Prices in USD. Tax is handled at checkout. Cancel any time from the billing
+              portal.
+            </p>
+          </div>
+        </Band>
+      )}
 
       <Band id="faq" tone="content">
         <BandTitle className="mx-auto max-w-2xl text-center">

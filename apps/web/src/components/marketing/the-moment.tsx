@@ -1,5 +1,7 @@
 import { BookOpen, CornerDownLeft, Zap } from "lucide-react";
 import { Band, BandTitle, BandLede } from "./band";
+import { InView } from "./in-view";
+import { ArrowMark, HandNote } from "./annotate";
 import { ChatDemo } from "./chat-demo";
 import { MOMENT_SCRIPT } from "./chat-demo-scripts";
 
@@ -77,6 +79,31 @@ export function TheMoment() {
           ))}
         </ul>
       </div>
+
+      {/* This band's one mark, under the callouts and pointing back at the
+          transcript on the left. The band is named for a moment inside a
+          recording that plays itself — somebody watching the demo has no
+          reason to know which turn is the one worth watching for, and this
+          says it in five words rather than in a fourth callout. */}
+      <InView className="mt-10 flex items-start gap-2 lg:mt-4">
+        {/* Up and to the left, at the transcript it is about — the note sits
+            under the demo, so any arrow that curves downward points at the
+            page's own margin. */}
+        <ArrowMark
+          dir="up-left"
+          positioned={false}
+          draw
+          delay={260}
+          className="size-12 shrink-0 opacity-60"
+        />
+        <HandNote
+          tilt={-3}
+          className="cf-a-rise mt-6"
+          style={{ color: "var(--on-band-vivid)", animationDelay: "700ms" }}
+        >
+          nobody scripted that answer
+        </HandNote>
+      </InView>
     </Band>
   );
 }

@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { FormDoc } from "@repo/form-schema";
 import { useBuilderStore } from "@/stores/builder-store";
-import { usePutApiFormsByIdDoc } from "@/lib/api/dashboard/dashboard";
+import { getGetApiFormsByIdQueryKey, usePutApiFormsByIdDoc } from "@/lib/api/dashboard/dashboard";
+import { invalidateForms } from "@/lib/query-keys";
 
 const DEBOUNCE_MS = 800;
 
@@ -26,6 +28,7 @@ export function useAutosave(formId: string) {
   const markError = useBuilderStore((s) => s.markError);
 
   const { mutateAsync } = usePutApiFormsByIdDoc();
+  const queryClient = useQueryClient();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlight = useRef(false);
   const pending = useRef<FormDoc | null>(null);
@@ -51,6 +54,20 @@ export function useAutosave(formId: string) {
       try {
         await mutateAsync({ id: formId as never, data: { doc: next } as never });
         markSaved(Date.now());
+        /*
+          The form's name lives in the document, so a rename lands here and
+          nowhere else. The row carries a copy of it — the server writes both —
+          and every list that names this form is reading that copy from a cache
+          with a thirty-second life. Left alone, renaming a form and going back
+          to the dashboard showed the old name for half a minute, which reads as
+          a rename that did not save.
+        */
+        const key = getGetApiFormsByIdQueryKey(formId as never);
+        const row = queryClient.getQueryData<{ title?: string }>(key);
+        if (row && row.title !== next.title) {
+          queryClient.setQueryData(key, { ...row, title: next.title });
+          void invalidateForms(queryClient);
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : "Could not save";
         markError(message);
@@ -63,7 +80,7 @@ export function useAutosave(formId: string) {
         if (queued) void run(queued);
       }
     },
-    [formId, mutateAsync, markSaving, markSaved, markError],
+    [formId, mutateAsync, markSaving, markSaved, markError, queryClient],
   );
 
   /**

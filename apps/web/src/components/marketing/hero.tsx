@@ -75,47 +75,76 @@ export function Hero() {
         className="relative mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-[1.1fr_1fr] lg:gap-14"
       >
         <div>
-          {/* The outcome, not the mechanism.
-              Three headlines have stood here. "An interviewer, not a form."
+          {/* The outcome, said outright.
+
+              Four headlines have stood here. "An interviewer, not a form."
               read well and communicated nothing. "Turn any form into a chat."
-              fixed that — plain words, no metaphor to decode — but it still
-              described what the product *is*, and left the visitor to work out
-              on their own why a chat should be better than a form. Nobody
-              arrives wanting a chat. They arrive because a form is losing
-              them.
-              So the line names the loss. "Question four" is deliberately a low
-              number and deliberately not a statistic: it is the shape of the
-              problem, not a measurement, and there is no cross-customer
-              completion data in this product to make a measurement from. The
-              claim with real evidence behind it lives one band down, with its
-              citations, at /why-conversation-works.
-              "four." is ringed by hand rather than coloured, because the ground
-              here is the brand's two hues at full strength — the one place
-              where coloured type is guaranteed to disappear. */}
+              fixed that — plain words, no metaphor — but it described what the
+              product *is* and left the visitor to work out why a chat should
+              beat a form. "Stop losing people at question four." named the
+              problem instead of the product, which was the right move, and
+              then asked the reader to do arithmetic to collect the promise:
+              question four of what, and losing them to where. A headline that
+              needs a footnote is a headline still deciding what it wants to
+              say.
+
+              This one skips the problem and states the result, in the two
+              words a person running a form actually measures. Everything the
+              old line implied is still on the page and better placed for it:
+              the band directly beneath breaks the claim into three mechanisms,
+              and `TheDropOff` under that carries the evidence that long forms
+              lose people, with citations.
+
+              What it does not do is quote a rate. There is no cross-customer
+              completion data in this product — analytics computes drop-off for
+              one form at a time, for its owner — so "more" stays qualitative
+              here and the numbers stay where they can be sourced.
+
+              "more" is ringed by hand rather than coloured, because the ground
+              here is the brand's two hues at full strength — the one place on
+              the site where coloured type is guaranteed to disappear. */}
           {/*
             Sized here rather than by `text-display-2xl`, and this is the one
             place on the site allowed to do that.
 
             The shared utility tops out at 4.5rem, which was right for "Turn any
-            form into a chat." at 26 characters. This headline is 36, and at
-            72px "Stop losing people" measures 621px inside a 574px column — so
-            it broke to three lines with "people" orphaned on the middle one.
-            A type scale that cannot respond to the length of the line it is
-            setting is a scale being applied to the wrong thing.
+            form into a chat." at 26 characters. This headline is 34, and at
+            72px a line that long overflows the 574px column and breaks with a
+            word orphaned on its own. A type scale that cannot respond to the
+            length of the line it is setting is a scale applied to the wrong
+            thing.
 
-            The clamp is tuned so "Stop losing people" fits one line at every
-            width from the `lg` breakpoint up, which is what puts the ring on
-            "four." at the end of line two instead of stranding it. */}
+            The clamp is tuned so the headline holds two lines from the `lg`
+            breakpoint up, which is what keeps the ring on "more" mid-line
+            rather than stranding it. */}
           <h1 className="font-display font-bold tracking-[-0.045em] text-balance text-[clamp(2.5rem,1.1rem+3.4vw,4rem)] leading-[1]">
             <span className="word-rise inline-block" style={{ animationDelay: "60ms" }}>
-              Stop losing people
+              AI forms that get
             </span>{" "}
             <span className="word-rise inline-block" style={{ animationDelay: "150ms" }}>
-              at question{" "}
-              <span className="relative inline-block">
-                four.
-                <CircleMark className="text-[var(--on-band-vivid)] opacity-80" />
-              </span>
+              {/* `me-3` because the ring is drawn `-inset-x-4` — a whole rem
+                  wider than the word on each side, which is what makes it read
+                  as a pen going round something rather than as a border. At
+                  the end of a line that overhang costs nothing; mid-sentence
+                  it lands on the next word, and "more" had its ring resting on
+                  the S of "submissions". The word keeps its normal space and
+                  the mark gets its own. */}
+              <span className="relative me-3 inline-block">
+                more
+                {/* Drawn on, and last. The two words rise at 60ms and 150ms; the ring
+                    starts once they have both landed, which is the order it would
+                    happen if somebody were actually marking up the page. It needs no
+                    `InView` — this is the top of the document, always on screen at
+                    load — so it carries the armed attribute itself. */}
+                <span data-armed="" data-inview="" className="contents">
+                  <CircleMark
+                    draw
+                    delay={900}
+                    className="text-[var(--on-band-vivid)] opacity-80"
+                  />
+                </span>
+              </span>{" "}
+              submissions.
             </span>
           </h1>
 
@@ -156,9 +185,8 @@ export function Hero() {
             style={{ color: "var(--on-band-vivid-muted)" }}
             className="text-body-lg mt-6 max-w-md text-balance"
           >
-            chatform turns your form into a conversation that reads what people write and asks
-            again when an answer is too thin to use. Then it goes back for the ones who left
-            anyway — so you end up with more answers, and better ones.
+            chatform turns your form into a conversation that asks again when an answer is
+            thin, and follows up with the people who leave.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">

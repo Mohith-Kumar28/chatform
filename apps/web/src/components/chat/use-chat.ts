@@ -851,8 +851,14 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
              * above already returned in that case. A refresh mid-conversation
              * must not mint a second session against the same response just
              * because the token is still sitting in the address bar.
+             *
+             * And not after "Start over", which is the one case where the token
+             * is still in this component's props but the respondent has said
+             * plainly that they do not want what it points at. It outranks
+             * every other way of recognising them, so left in it would resume
+             * the very response they asked to abandon.
              */
-            ...(resumeToken ? { resumeToken } : {}),
+            ...(resumeToken && !freshRef.current ? { resumeToken } : {}),
             ...(followUpId ? { followUpId } : {}),
             /**
              * Which device this is, so an anonymous respondent who cleared

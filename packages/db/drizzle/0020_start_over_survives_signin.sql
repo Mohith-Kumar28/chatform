@@ -1,0 +1,17 @@
+-- "Start over" has to outlive the moment it was pressed.
+--
+-- `fresh` on the create-session call already declines the *device* match, so the
+-- new session opens empty. But a gated form does not know who it is talking to
+-- at that point — the respondent signs in several turns later, and the identity
+-- lookup that runs then found the half-finished response they had just asked to
+-- leave and adopted it. The screen cleared, the sign-in completed, and "you'd
+-- already answered 4 questions" put every one of them back.
+--
+-- The two decisions are made minutes apart by different code, so the intent has
+-- to be written down. This column is that note: set once at session creation,
+-- read by the sign-in gate, and never true for a session opened any other way.
+--
+-- It says nothing about the *next* visit. Starting over is about this attempt;
+-- a respondent who comes back tomorrow is an ordinary returning respondent and
+-- should be offered their answers again.
+ALTER TABLE chat_sessions ADD COLUMN started_over INTEGER NOT NULL DEFAULT 0;

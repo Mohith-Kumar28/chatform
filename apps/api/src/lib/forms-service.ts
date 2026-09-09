@@ -194,8 +194,11 @@ export async function saveWorkingDoc(
       )
     : null;
 
-  await env.DB.prepare(`UPDATE forms SET working_schema = ?, updated_at = ? WHERE id = ?`)
-    .bind(JSON.stringify(doc), Date.now(), formId)
+  // The row's title is the document's title — see the note on the builder's
+  // autosave route. Every path that stores a document keeps that true, or a
+  // rename made through one of them gives the form a second name.
+  await env.DB.prepare(`UPDATE forms SET working_schema = ?, title = ?, updated_at = ? WHERE id = ?`)
+    .bind(JSON.stringify(doc), doc.title, Date.now(), formId)
     .run();
 
   if (!activity) return;

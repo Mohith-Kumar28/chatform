@@ -12,6 +12,7 @@ import {
   FileClock,
   Link2,
   Loader2,
+  Pencil,
   Play,
   Redo2,
   Undo2,
@@ -56,6 +57,7 @@ export function BuilderHeader({
   publishing,
   onPreview,
   onCopyLink,
+  onRename,
 }: {
   formId: string;
   title: string;
@@ -78,6 +80,11 @@ export function BuilderHeader({
   onPreview: () => void;
   /** Copies the live link. Owned by the shell so ⇧⌘C runs the same code. */
   onCopyLink: () => void;
+  /**
+   * Renames the form. Absent until the document has loaded — the name lives in
+   * the document, so there is nothing to write into before then.
+   */
+  onRename?: (title: string) => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -117,7 +124,7 @@ export function BuilderHeader({
             {/* Title over one quiet status line, rather than a title flanked
                 by two competing chips. */}
             <div className="min-w-0 leading-tight">
-              <h1 className="truncate text-sm font-semibold">{title}</h1>
+              <EditableTitle title={title} onRename={onRename} />
               <p className="text-muted-foreground flex items-center gap-1.5 text-[0.6875rem]">
                 <span className={cn(published && !stale && "text-[var(--success)]")}>
                   {published ? `Live · v${activeVersion ?? 1}` : "Draft"}
@@ -349,6 +356,94 @@ export function BuilderHeader({
           panel outlives whichever tab you opened it from. */}
       <HistorySheet formId={formId} />
     </TooltipProvider>
+  );
+}
+
+/**
+ * The form's name, renamed where it is read.
+ *
+ * A form was named once, at creation, and after that the only way to change it
+ * was to build a new one — the name in the header was the one piece of the
+ * document with no editor anywhere in the product. It is a document field like
+ * any other, so it is edited like one: the rename goes through `edit()`, which
+ * means it autosaves, it undoes, it shows up in history as "Form name", and it
+ * marks the form as having unpublished changes — because it does. Respondents
+ * see this string at the top of the chat.
+ *
+ * The pencil appears on hover rather than sitting there permanently: a header
+ * that is mostly identity should not carry a control that looks like an action.
+ */
+function EditableTitle({ title, onRename }: { title: string; onRename?: (title: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+
+  /*
+    While closed, the field tracks the document. The name can change under it —
+    an undo, an AI edit, the Settings field — and reopening on a stale string
+    would let a click quietly restore the old name. Derived during the render
+    that sees the new name rather than in an effect afterwards, so the field is
+    never briefly holding the previous one.
+  */
+  if (!editing && draft !== title) setDraft(title);
+
+  function commit() {
+    setEditing(false);
+    // `min(1)` in the schema: an empty name is not a name, so an empty field
+    // cancels rather than saving a document the server will refuse.
+    const next = draft.trim().slice(0, 200);
+    if (!next || next === title) {
+      setDraft(title);
+      return;
+    }
+    onRename?.(next);
+  }
+
+  // Before the document loads there is nothing to rename, so the title is text.
+  if (!onRename) return <h1 className="truncate text-sm font-semibold">{title}</h1>;
+
+  if (editing) {
+    return (
+      <h1 className="min-w-0">
+        <input
+          value={draft}
+          autoFocus
+          onFocus={(e) => e.currentTarget.select()}
+          maxLength={200}
+          aria-label="Form name"
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setDraft(title);
+              setEditing(false);
+            }
+          }}
+          className="border-primary w-full min-w-0 border-0 border-b bg-transparent p-0 text-sm font-semibold outline-none"
+        />
+      </h1>
+    );
+  }
+
+  return (
+    <h1 className="min-w-0">
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        title="Rename"
+        className="group hover:decoration-border/80 flex min-w-0 max-w-full items-center gap-1.5 rounded text-sm font-semibold underline-offset-4 hover:underline hover:decoration-dashed"
+      >
+        <span className="min-w-0 truncate">{title}</span>
+        <Pencil
+          className="text-muted-foreground size-3 shrink-0 opacity-0 transition-opacity duration-[var(--duration-micro)] group-hover:opacity-100 group-focus-visible:opacity-100"
+          aria-hidden
+        />
+        <span className="sr-only">Rename form</span>
+      </button>
+    </h1>
   );
 }
 

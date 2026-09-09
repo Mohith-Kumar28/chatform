@@ -36,6 +36,15 @@ const FIELDS = [
   { label: "Email", value: "maya@northwind.co", tone: "contact" },
 ] as const;
 
+/**
+ * The entrance is the tile's argument, played out.
+ *
+ * Left column first, turn by turn, in the order the conversation happened;
+ * then each extracted field arrives on the right after the transcript has
+ * finished. "What they said, and what got recorded" is a claim about cause
+ * and effect, and a graphic where both halves appear at once states it
+ * without showing it.
+ */
 export function ResultsPreview({
   transcript = TRANSCRIPT,
   fields = FIELDS,
@@ -58,10 +67,11 @@ export function ResultsPreview({
           {transcript.map((m, i) => (
             <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
               <p
+                style={{ animationDelay: `${120 + i * 260}ms` }}
                 className={
                   m.role === "user"
-                    ? "bg-primary text-primary-foreground text-micro max-w-[85%] rounded-lg rounded-br-sm px-2.5 py-1.5"
-                    : "bg-muted text-micro max-w-[85%] rounded-lg rounded-bl-sm px-2.5 py-1.5"
+                    ? "cf-a-slide-r bg-primary text-primary-foreground text-micro max-w-[85%] rounded-lg rounded-br-sm px-2.5 py-1.5"
+                    : "cf-a-slide-l bg-muted text-micro max-w-[85%] rounded-lg rounded-bl-sm px-2.5 py-1.5"
                 }
               >
                 {m.text}
@@ -70,8 +80,12 @@ export function ResultsPreview({
           ))}
         </div>
         <dl className="flex flex-col gap-2.5 p-3">
-          {fields.map((f) => (
-            <div key={f.label}>
+          {fields.map((f, i) => (
+            <div
+              key={f.label}
+              className="cf-a-rise"
+              style={{ animationDelay: `${120 + transcript.length * 260 + i * 140}ms` }}
+            >
               <dt
                 className="text-micro font-medium"
                 style={{ color: `var(--family-${f.tone}-ink)` }}

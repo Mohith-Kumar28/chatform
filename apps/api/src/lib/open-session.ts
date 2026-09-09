@@ -99,6 +99,14 @@ export interface OpenSessionInput {
    * the response belongs to, not that the form is open to them.
    */
   resumeSubmissionId?: string;
+  /**
+   * The respondent pressed "Start over".
+   *
+   * The caller has already used it to decline the device match; this records it
+   * on the session so the sign-in gate, which runs long after this call and
+   * knows things this one could not, declines the identity match too.
+   */
+  startedOver?: boolean;
 }
 
 /** Exact origins, or one leading wildcard label. Matched on the host, never as a substring. */
@@ -346,9 +354,9 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
 
   await env.DB.prepare(
     `INSERT INTO chat_sessions (id, form_id, form_version_id, organization_id, respondent_token_hash, status,
-                                hidden_fields, ip_hash, fingerprint, country, source, is_test, submission_id,
-                                created_at, last_activity_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                hidden_fields, ip_hash, fingerprint, country, source, is_test, started_over,
+                                submission_id, created_at, last_activity_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       sessionId,
@@ -364,6 +372,7 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
       input.country,
       input.source,
       input.isTest ? 1 : 0,
+      input.startedOver ? 1 : 0,
       input.resumeSubmissionId ?? null,
       now,
       now,

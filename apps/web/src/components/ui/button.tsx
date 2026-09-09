@@ -70,7 +70,29 @@ const buttonVariants = cva(
         // needed the same two buttons, because the second copy is where a
         // pattern starts drifting.
         "on-brand": "bg-background text-foreground shadow-sm hover:bg-card",
-        "on-brand-outline": "border-2 border-current bg-transparent hover:opacity-70",
+        // The secondary of that pair, and it is NOT an outline any more.
+        //
+        // It was `border-2 border-current`, which on these grounds meant a 2px
+        // near-black ring drawn around empty space. Two problems with that.
+        // A hard rule at that weight is the heaviest mark on the band — it
+        // out-drew the solid button beside it, so the *secondary* action was
+        // the one your eye landed on. And an outline is a shape before it is a
+        // control: on a saturated ground with nothing inside it, what reads is
+        // the black rectangle, not the label.
+        //
+        // A tint of the band's own ink instead, with a hairline of the same at
+        // a fifth of the strength. `currentColor` rather than a token, so it
+        // takes whatever ink the band set on itself — the warm near-black of
+        // the vivid tier under the hero, `--on-primary` on the closing
+        // gradient — and stays legible on both without either knowing about
+        // the other. The pair now reads as one material at two strengths:
+        // opaque for the thing to do, translucent for the thing beside it.
+        "on-brand-outline": [
+          "bg-[color-mix(in_oklch,currentColor_9%,transparent)]",
+          "border border-[color-mix(in_oklch,currentColor_18%,transparent)]",
+          "hover:bg-[color-mix(in_oklch,currentColor_17%,transparent)]",
+          "hover:border-[color-mix(in_oklch,currentColor_26%,transparent)]",
+        ].join(" "),
         link: "text-primary underline-offset-4 hover:underline",
       },
       shape: {

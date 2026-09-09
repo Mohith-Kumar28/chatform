@@ -84,19 +84,37 @@ export function AiBuildPreview({
           <p className="text-micro min-w-0 flex-1 truncate font-mono">
             read {readUrl} — {readPages} pages
           </p>
-          <Check className="text-[var(--success)] size-3 shrink-0" strokeWidth={3} />
+          {/* The tick pops last, on its own, because the whole reason this row
+              exists is that people do not believe the step happened. */}
+          <Check
+            className="cf-a-pop text-[var(--success)] size-3 shrink-0"
+            style={{ animationDelay: "380ms" }}
+            strokeWidth={3}
+          />
         </div>
       )}
 
       <div className="flex flex-col gap-1.5 p-3">
-        <p className="text-micro text-muted-foreground mb-0.5 font-semibold tracking-[0.1em] uppercase">
+        <p
+          className="cf-a-rise text-micro text-muted-foreground mb-0.5 font-semibold tracking-[0.1em] uppercase"
+          style={{ animationDelay: "440ms" }}
+        >
           Drafted {questions.length} questions
         </p>
-        {questions.map((q) => (
+        {/* The questions land one after another, which is the only part of
+            this drawing that is a claim about time. "Describe it and it builds
+            it" is a sequence — you type, it reads, then the questions appear —
+            and a still of the finished state is the one frame of that sequence
+            that proves the least. The row delays start after the read row has
+            had its moment. */}
+        {questions.map((q, i) => (
           <div
             key={q.label}
-            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2"
-            style={{ background: `var(--family-${q.tone}-soft)` }}
+            className="cf-a-rise flex items-center gap-2.5 rounded-lg px-2.5 py-2"
+            style={{
+              background: `var(--family-${q.tone}-soft)`,
+              animationDelay: `${520 + i * 130}ms`,
+            }}
           >
             <span
               aria-hidden

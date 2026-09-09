@@ -8,25 +8,33 @@ import { BookOpen, ShieldCheck, Target } from "lucide-react";
 export function AgentPanelPreview() {
   return (
     <div className="border-border/70 bg-background text-foreground flex flex-col gap-3 rounded-xl border p-3.5">
-      <Row icon={Target} label="Goal">
+      <Row icon={Target} label="Goal" delay={80}>
         Qualify the lead and book a demo if they&apos;re a fit.
       </Row>
 
-      <div className="border-border/60 rounded-lg border p-2.5">
+      <div
+        className="cf-a-rise border-border/60 rounded-lg border p-2.5"
+        style={{ animationDelay: "300ms" }}
+      >
         <div className="flex items-center gap-2">
           <BookOpen className="text-primary size-3.5 shrink-0" strokeWidth={1.75} />
           <p className="text-micro flex-1 font-medium">Knowledge base</p>
           <p className="text-micro text-muted-foreground tabular">7,240 / 20,000</p>
         </div>
         <div className="bg-muted mt-2 h-1.5 overflow-hidden rounded-full">
-          <div className="bg-primary h-full rounded-full" style={{ width: "36%" }} />
+          <div className="h-full rounded-full" style={{ width: "36%" }}>
+            <div
+              className="cf-a-grow bg-primary h-full rounded-full"
+              style={{ animationDelay: "560ms" }}
+            />
+          </div>
         </div>
         <p className="text-micro text-muted-foreground mt-2 leading-snug">
           Pricing · Onboarding timeline · Security &amp; data handling
         </p>
       </div>
 
-      <Row icon={ShieldCheck} label="Guardrails">
+      <Row icon={ShieldCheck} label="Guardrails" delay={520}>
         Won&apos;t discuss competitors or give legal advice. Declines politely, then
         continues.
       </Row>
@@ -38,13 +46,19 @@ function Row({
   icon: Icon,
   label,
   children,
+  delay = 0,
 }: {
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   label: string;
   children: React.ReactNode;
+  /** Milliseconds. The brief is read top to bottom, so it arrives that way. */
+  delay?: number;
 }) {
   return (
-    <div className="border-border/60 rounded-lg border p-2.5">
+    <div
+      className="cf-a-rise border-border/60 rounded-lg border p-2.5"
+      style={{ animationDelay: `${delay}ms` }}
+    >
       <div className="flex items-center gap-2">
         <Icon className="text-primary size-3.5 shrink-0" strokeWidth={1.75} />
         <p className="text-micro font-medium">{label}</p>

@@ -163,8 +163,10 @@ export async function restoreVersion(
   const before = parseStoredDoc(current?.working_schema);
   const changes = before ? diffFormDoc(before, restored) : [];
 
-  await env.DB.prepare(`UPDATE forms SET working_schema = ?, updated_at = ? WHERE id = ?`)
-    .bind(JSON.stringify(restored), Date.now(), form.id)
+  // Including the name: restoring a version that was called something else
+  // restores that name too, rather than leaving the dashboard on the newer one.
+  await env.DB.prepare(`UPDATE forms SET working_schema = ?, title = ?, updated_at = ? WHERE id = ?`)
+    .bind(JSON.stringify(restored), restored.title, Date.now(), form.id)
     .run();
 
   const summary =

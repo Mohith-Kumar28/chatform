@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Band, BandTitle, BandLede } from "./band";
+import { InView } from "./in-view";
+import { UnderlineMark } from "./annotate";
 import { CostUpfront } from "./cost-upfront";
 import { study } from "@/content/research";
 
@@ -38,19 +40,36 @@ export function TheDropOff() {
             {[
               {
                 study: baymard,
-                text: "22% of people who abandon a checkout say they left because it was too long or too complicated.",
+                /* Split so the pen has something to underline. This is the
+                   band's one mark and it goes on the number, which is the only
+                   thing in three sentences of prose that a reader will quote
+                   back to somebody else. */
+                lead: "22%",
+                text: " of people who abandon a checkout say they left because it was too long or too complicated.",
               },
               {
                 study: kim,
+                lead: undefined,
                 text: "Asked through a chat interface, the same people gave more differentiated answers and were less likely to satisfice.",
               },
               {
                 study: xiao,
+                lead: undefined,
                 text: "An AI that follows up on a thin answer got significantly more informative and more specific ones.",
               },
             ].map((item) => (
               <li key={item.study.id} className="max-w-lg">
-                <p className="text-body leading-relaxed">{item.text}</p>
+                <p className="text-body leading-relaxed">
+                  {item.lead ? (
+                    <InView as="span" className="inline">
+                      <span className="relative inline-block font-semibold">
+                        {item.lead}
+                        <UnderlineMark draw delay={200} className="text-primary" />
+                      </span>
+                    </InView>
+                  ) : null}
+                  {item.text}
+                </p>
                 <p className="text-micro text-muted-foreground mt-1">
                   <a href={item.study.url} className="underline underline-offset-4" rel="noopener">
                     {item.study.venue}, {item.study.year}

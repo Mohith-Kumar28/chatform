@@ -16,12 +16,21 @@ import { QUESTION_TYPE_COUNT } from "./question-types";
  * for the same product is a drift waiting to happen — which is what was
  * already shipping.
  *
- * The highlight lists went from five and six lines to three. A plan card is a
- * decision surface, not a specification: six ticks of near-equal weight is a
- * spec sheet that happens to have a button on it, and the reader ends up
- * comparing eighteen lines across three columns to find the two that differ.
- * Three lines each, chosen as the ones that change between tiers; the full
- * matrix is on `/pricing` for anyone who wants it.
+ * On how many lines a card carries: three was too few.
+ *
+ * It went six → three to stop the card reading as a spec sheet, and that was
+ * the right instinct aimed at the wrong number. The actual failure was that
+ * three lines could not show what a tier *unlocks* — two of Pro's three were
+ * spent on a quota and a badge, so the page's answer to "what do I get for
+ * $16" was "more conversations", and the three columns looked like one product
+ * metered three ways. Pro turns on the agent brief, the follow-up sequence and
+ * the whole analytics surface; none of that was on the card.
+ *
+ * Five, and the additive line moved ABOVE the list. "Everything in Free, plus"
+ * read after five ticks is a correction; read before them it is the frame that
+ * makes the five mean something. What is still not here is the matrix — the
+ * link under the cards goes to it, and that link is now on both surfaces
+ * rather than only the landing page.
  */
 
 export interface PlanCardPlan {
@@ -34,22 +43,41 @@ export interface PlanCardPlan {
   yearlySavingPercent: number;
 }
 
-/** The three lines that decide each tier. Not a summary of the tier. */
+/**
+ * The five lines that decide each tier, and every one of them is a real
+ * entitlement — check against `PLANS` in `@repo/entitlements` before editing.
+ *
+ * Free's are limits because Free has no features at all (`features: []`); its
+ * story is "everything that gets a form collecting". The paid tiers lead with
+ * their quota and then spend four lines on what actually turns on, because
+ * that is the question the card is being asked.
+ */
 export const PLAN_HIGHLIGHTS: Record<string, readonly string[]> = {
   free: [
     "Unlimited responses",
     "200 AI conversations a month",
     `All ${QUESTION_TYPE_COUNT} question types, logic and endings`,
+    "100 forms, CSV export and webhooks",
+    "Your own endings, scoring and branching",
   ],
+  // agent_persona · agent_knowledge · agent_guardrails · followup_email ·
+  // partial_responses + advanced_analytics + conversation_analytics ·
+  // brand_logo + custom_fonts + remove_branding
   pro: [
     "2,000 AI conversations a month",
     "Persona, goal and a knowledge base",
+    "Follow-up emails to the people who left",
+    "Partial responses and drop-off analytics",
     "Your logo and fonts, no chatform badge",
   ],
+  // respondent_auth_google + respondent_auth_phone · verified_answers ·
+  // agent_model_picker · activity_log
   business: [
     "10,000 AI conversations a month",
     "Verified respondents — Google or SMS",
+    "Verified answers, by emailed or texted code",
     "Pick the model that runs the interview",
+    "An activity log of every change",
   ],
 };
 
@@ -166,7 +194,14 @@ export function PlanCard({
           dead end. */}
       {note && <p className="text-micro text-muted-foreground mt-2 text-center">{note}</p>}
 
-      <ul className="mt-6 flex flex-col gap-2.5">
+      {/* The frame, before the list rather than after it. */}
+      {plan.id !== "free" && (
+        <p className="text-caption mt-6 font-medium">
+          Everything in {plan.id === "pro" ? "Free" : "Pro"}, plus:
+        </p>
+      )}
+
+      <ul className={cn("flex flex-col gap-2.5", plan.id === "free" ? "mt-6" : "mt-3")}>
         {(PLAN_HIGHLIGHTS[plan.id] ?? []).map((line) => (
           <li key={line} className="text-body flex items-start gap-2.5">
             {/* The ticks take the card's own hue so they sit on its ground
@@ -184,16 +219,10 @@ export function PlanCard({
         ))}
       </ul>
 
-      {plan.id !== "free" && (
-        <p className="text-micro text-muted-foreground mt-auto pt-5">
-          Everything in {plan.id === "pro" ? "Free" : "Pro"}, plus the above.
-        </p>
-      )}
-
       {/* Priced but unbuilt features are named on the card that sells them, not
           only in the matrix further down. */}
       {soonLabels && soonLabels.length > 0 && (
-        <p className="text-micro text-muted-foreground mt-1.5">
+        <p className="text-micro text-muted-foreground mt-auto pt-5">
           Coming soon: {soonLabels.join(", ")}.
         </p>
       )}
