@@ -335,3 +335,75 @@ export async function enqueueMail(env: Bindings, job: MailJob): Promise<void> {
     console.error("mail_enqueue_failed", job.kind, err);
   }
 }
+
+/**
+ * The recipient's domain, and nothing else.
+ *
+ * The delivery record deliberately has no column for an address, so this is the
+ * whole of what is kept about who a message went to. It answers the only
+ * question the platform console needs to ask — is a particular provider
+ * rejecting us — without putting a customer's or a respondent's address on a
+ * cross-tenant screen.
+ */
+function domainOf(job: MailJob): string {
+  const to = "to" in job ? job.to : "";
+  const at = to.lastIndexOf("@");
+  return at === -1 ? "" : to.slice(at + 1).toLowerCase();
+}
+
+/**
+ * Record what the queue did with a job.
+ *
+ * Written by the consumer, on both outcomes, because a delivery rate needs the
+ * denominator. Everything transactional shares this queue, so this table is the
+ * only place that can answer "is mail working" across sign-in codes, password
+ * resets, invitations, notifications, auto-replies and nudges at once — until
+ * now that was five separate `console.log` lines and no way to count them.
+ *
+ * Never throws, for the same reason `enqueueMail` does not: a bookkeeping write
+ * that fails must not turn a delivered message into a retried one, which is how
+ * an observability table starts sending duplicates.
+ */
+export async function recordMailDelivery(
+  env: Bindings,
+  job: MailJob,
+  outcome: { status: "sent" | "failed"; messages?: number; attempt: number; error?: unknown },
+): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO mail_deliveries (id, kind, status, messages, attempt, domain, error, organization_id, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+    )
+      .bind(
+        crypto.randomUUID(),
+        job.kind,
+        outcome.status,
+        outcome.messages ?? 0,
+        outcome.attempt,
+        domainOf(job),
+        outcome.error === undefined ? null : String(outcome.error).slice(0, 300),
+        "organizationId" in job ? job.organizationId : null,
+        Date.now(),
+      )
+      .run();
+  } catch (err) {
+    console.error("mail_delivery_record_failed", job.kind, err);
+  }
+}
+
+/**
+ * Delivery records are operational, not historical.
+ *
+ * A row exists to answer "is mail working now" and "what broke last week". At
+ * a message per row this table grows faster than anything else the console
+ * reads, and nothing looks at a ninety-day-old successful OTP. Failures are
+ * kept the same length of time as successes on purpose: a rate needs both
+ * halves, and pruning only the successes would make the failure rate climb
+ * every time the sweep ran.
+ */
+export async function pruneMailDeliveries(env: Bindings, olderThanDays = 90): Promise<number> {
+  const res = await env.DB.prepare(`DELETE FROM mail_deliveries WHERE created_at < ?`)
+    .bind(Date.now() - olderThanDays * 86_400_000)
+    .run();
+  return res.meta?.changes ?? 0;
+}

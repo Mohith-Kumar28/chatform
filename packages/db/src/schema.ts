@@ -1067,3 +1067,54 @@ export const emailSuppressions = sqliteTable(
     index("idx_suppressions_address").on(t.address),
   ],
 );
+
+/**
+ * Every message the platform sends, and whether the provider accepted it.
+ *
+ * Everything transactional shares one queue — sign-in codes, password resets,
+ * invitations, submission notifications, auto-replies and abandoned-response
+ * nudges — and the only record of any of it used to be a line in the worker
+ * log. `followups` tracks its own schedule and `emailSuppressions` records who
+ * we stopped mailing, but neither answers "did that OTP go out", which is the
+ * question an expired provider key or an unverified sender makes urgent: it
+ * takes sign-in down for every new account at once.
+ *
+ * **No recipient address, by construction.** The column does not exist, so no
+ * query against this table can leak one to the platform console. The domain
+ * answers the operational question — is this provider rejecting us — and is the
+ * most that should reach a cross-tenant screen.
+ */
+export const mailDeliveries = sqliteTable(
+  "mail_deliveries",
+  {
+    id: text("id").primaryKey(),
+    /** `invitation` | `password_reset` | `otp` | `submission` | `followup` */
+    kind: text("kind").notNull(),
+    /** `sent` | `failed` */
+    status: text("status").notNull(),
+    /**
+     * How many messages the job produced.
+     *
+     * One completed response fans out to as many as eleven — ten notification
+     * addresses plus the auto-reply — so a count of jobs is not a count of mail.
+     */
+    messages: integer("messages").notNull().default(0),
+    /**
+     * The queue's own attempt number.
+     *
+     * A failure at the retry ceiling is a message that has gone to the
+     * dead-letter queue and will not be tried again, which is a different and
+     * much worse fact than a first attempt that failed and then succeeded.
+     */
+    attempt: integer("attempt").notNull().default(1),
+    /** The recipient's domain. Never the address. */
+    domain: text("domain").notNull().default(""),
+    error: text("error"),
+    organizationId: text("organization_id"),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("idx_mail_deliveries_at").on(t.createdAt),
+    index("idx_mail_deliveries_kind").on(t.kind, t.status, t.createdAt),
+  ],
+);

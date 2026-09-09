@@ -1962,6 +1962,55 @@
                         "complaintRate"
                       ]
                     },
+                    "mail": {
+                      "type": "object",
+                      "properties": {
+                        "jobs": {
+                          "type": "number"
+                        },
+                        "messages": {
+                          "type": "number"
+                        },
+                        "failed": {
+                          "type": "number"
+                        },
+                        "gaveUp": {
+                          "type": "number"
+                        },
+                        "deliveryRate": {
+                          "type": "number"
+                        },
+                        "byKind": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "recentFailures": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        }
+                      },
+                      "required": [
+                        "jobs",
+                        "messages",
+                        "failed",
+                        "gaveUp",
+                        "deliveryRate",
+                        "byKind",
+                        "recentFailures"
+                      ]
+                    },
                     "exports": {
                       "type": "array",
                       "items": {
@@ -2035,6 +2084,7 @@
                     "billing",
                     "integrations",
                     "email",
+                    "mail",
                     "exports",
                     "sessions",
                     "storage"

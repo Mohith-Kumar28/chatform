@@ -7,7 +7,7 @@ import { pruneGateLog } from "./lib/gate-log.js";
 import { pruneFormActivity } from "./lib/form-activity.js";
 import { runExport, pruneExpiredExports, type ExportMessage } from "./lib/exports.js";
 import { runMailJob } from "./lib/mail-jobs.js";
-import type { MailJob } from "./lib/mail.js";
+import { pruneMailDeliveries, recordMailDelivery, type MailJob } from "./lib/mail.js";
 import {
   sweepExpiredResponses,
   sweepExpiredSessions,
@@ -65,10 +65,18 @@ export default {
         const job = msg.body as MailJob;
         try {
           const n = await runMailJob(env, job);
-          if (n > 0) console.log("mail_sent", job.kind, n);
+          /**
+           * Recorded on both outcomes, because a delivery rate needs its
+           * denominator. `msg.attempts` is the queue's own counter, so a
+           * failure at the ceiling is distinguishable from one that went on to
+           * succeed — the first is a message in the dead-letter queue, the
+           * second is a blip.
+           */
+          await recordMailDelivery(env, job, { status: "sent", messages: n, attempt: msg.attempts });
           msg.ack();
         } catch (err) {
           console.error("mail_job_failed", job.kind, err);
+          await recordMailDelivery(env, job, { status: "failed", attempt: msg.attempts, error: err });
           msg.retry();
         }
       } else {
@@ -106,6 +114,9 @@ export default {
        */
       await sweepFollowUps(env).catch((err) => console.error("followup_sweep_failed", err));
       await pruneIdempotencyKeys(env).catch((err) => console.error("idempotency_prune_failed", err));
+      // A row per message sent. Kept long enough to explain last week's outage,
+      // not long enough to become the largest table in the database.
+      await pruneMailDeliveries(env).catch((err) => console.error("mail_prune_failed", err));
       await pruneTestData(env).catch((err) => console.error("test_data_prune_failed", err));
       /**
        * A form's history, bounded. Entries that shipped in a version are kept for two

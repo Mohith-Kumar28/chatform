@@ -559,6 +559,20 @@ export type GetApiAdminHealth200Email = {
   complaintRate: number;
 };
 
+export type GetApiAdminHealth200MailByKindItem = {[key: string]: unknown};
+
+export type GetApiAdminHealth200MailRecentFailuresItem = {[key: string]: unknown};
+
+export type GetApiAdminHealth200Mail = {
+  jobs: number;
+  messages: number;
+  failed: number;
+  gaveUp: number;
+  deliveryRate: number;
+  byKind: GetApiAdminHealth200MailByKindItem[];
+  recentFailures: GetApiAdminHealth200MailRecentFailuresItem[];
+};
+
 export type GetApiAdminHealth200ExportsItem = {
   key: string;
   value: number;
@@ -585,6 +599,7 @@ export type GetApiAdminHealth200 = {
   billing: GetApiAdminHealth200Billing;
   integrations: GetApiAdminHealth200Integrations;
   email: GetApiAdminHealth200Email;
+  mail: GetApiAdminHealth200Mail;
   exports: GetApiAdminHealth200ExportsItem[];
   sessions: GetApiAdminHealth200Sessions;
   storage: GetApiAdminHealth200Storage;

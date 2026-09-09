@@ -12,6 +12,7 @@ import {
 } from "../src/lib/platform-rollup.js";
 import { costUsdMicro } from "../src/lib/ai-pricing.js";
 import { IMPERSONATION_HEADER, signImpersonation, verifyImpersonation } from "../src/lib/impersonation.js";
+import { recordMailDelivery } from "../src/lib/mail.js";
 import { PLANS } from "@repo/entitlements";
 
 const DB = () => env as unknown as Bindings;
@@ -384,6 +385,66 @@ describe("the overview", () => {
     // Every series is gap-filled to one point per day in the range.
     expect(body.days).toHaveLength(30);
     for (const series of Object.values(body.series)) expect(series).toHaveLength(30);
+  });
+
+  /**
+   * The console's largest blind spot before this table existed: every
+   * transactional message shares one queue, and the only record of any of them
+   * was a `console.log` in the consumer. An expired provider key takes sign-in
+   * down for every new account at once and showed up on no screen.
+   */
+  describe("mail deliveries", () => {
+    beforeEach(async () => {
+      await env.DB.prepare(`DELETE FROM mail_deliveries`).run();
+    });
+
+    it("counts jobs, messages and the ones the queue gave up on", async () => {
+      const otp = { kind: "otp", to: "someone@gmail.com", code: "123456", purpose: "sign-in" } as const;
+      await recordMailDelivery(DB(), otp, { status: "sent", messages: 1, attempt: 1 });
+      await recordMailDelivery(DB(), otp, { status: "failed", attempt: 1, error: new Error("transient") });
+      // At the queue's `max_retries`, so this one is in the dead-letter queue.
+      await recordMailDelivery(DB(), otp, { status: "failed", attempt: 5, error: new Error("sender unverified") });
+
+      const res = await fetchApi("/api/admin/health?range=30d", { headers: { cookie: admin.cookie } });
+      const { mail } = (await res.json()) as {
+        mail: { jobs: number; messages: number; failed: number; gaveUp: number; deliveryRate: number; byKind: unknown[] };
+      };
+
+      expect(mail.jobs).toBe(3);
+      expect(mail.messages).toBe(1);
+      expect(mail.failed).toBe(2);
+      expect(mail.gaveUp).toBe(1);
+      expect(mail.deliveryRate).toBe(33.3);
+      expect(mail.byKind).toHaveLength(1);
+    });
+
+    /**
+     * The privacy rule this table is built around, asserted rather than trusted:
+     * the console reads across every tenant, so an address reaching it would be
+     * a cross-tenant leak of exactly the kind the rest of the surface refuses.
+     * The column does not exist, and this fails if anyone adds one.
+     */
+    it("never records or returns a recipient address", async () => {
+      await recordMailDelivery(
+        DB(),
+        { kind: "password_reset", to: "private.person@example.com", name: null, resetUrl: "https://x" },
+        { status: "failed", attempt: 5, error: new Error("mailbox full") },
+      );
+
+      const stored = await env.DB.prepare(`SELECT * FROM mail_deliveries`).first<Record<string, unknown>>();
+      expect(Object.values(stored ?? {}).join(" ")).not.toContain("private.person");
+      expect(stored?.domain).toBe("example.com");
+
+      const res = await fetchApi("/api/admin/health?range=30d", { headers: { cookie: admin.cookie } });
+      expect(JSON.stringify(await res.json())).not.toContain("private.person");
+    });
+
+    it("reports a healthy pipe as 100% when nothing has been queued", async () => {
+      const res = await fetchApi("/api/admin/health?range=30d", { headers: { cookie: admin.cookie } });
+      const { mail } = (await res.json()) as { mail: { deliveryRate: number; gaveUp: number } };
+      expect(mail.deliveryRate).toBe(100);
+      expect(mail.gaveUp).toBe(0);
+    });
   });
 
   /**

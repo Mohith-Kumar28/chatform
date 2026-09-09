@@ -52,12 +52,30 @@ interface Health {
     sent: number;
     complaintRate: number;
   };
+  mail: {
+    jobs: number;
+    messages: number;
+    failed: number;
+    gaveUp: number;
+    deliveryRate: number;
+    byKind: Row[];
+    recentFailures: Row[];
+  };
   exports: { key: string; value: number }[];
   sessions: { byStatus: { key: string; value: number }[]; stale: number };
   storage: { files: number; bytes: number; rejected: number };
 }
 
 const gb = (bytes: number) => `${(bytes / 1_073_741_824).toFixed(2)} GB`;
+
+/** The queue's job kinds, in the words a person would use for them. */
+const MAIL_KIND: Record<string, string> = {
+  otp: "Sign-in codes",
+  password_reset: "Password resets",
+  invitation: "Team invitations",
+  submission: "Response notifications",
+  followup: "Abandoned-response nudges",
+};
 
 /**
  * The denominator for every breakdown on this page.
@@ -78,6 +96,7 @@ export function HealthClient() {
   const h = apiData<Health>(data) ?? ({} as Health);
   const wh = h.webhooks ?? ({} as Health["webhooks"]);
   const email = h.email ?? ({} as Health["email"]);
+  const mail = h.mail ?? ({ byKind: [], recentFailures: [], deliveryRate: 100 } as unknown as Health["mail"]);
 
   async function replay(id: string) {
     setReplaying(id);
@@ -228,6 +247,125 @@ export function HealthClient() {
           )}
         </ChartCard>
       </div>
+
+      {/*
+        The queue everything transactional shares.
+
+        This was the console's largest blind spot. Sign-in codes, password
+        resets, invitations, response notifications and abandoned-response
+        nudges all go through one queue, and the only record of any of them was
+        a line in the worker log — so an expired provider key or an unverified
+        sender took sign-in down for every new account on the platform and
+        showed up on no screen. "Follow-up mail" below is one job kind's
+        schedule; this is whether the pipe works at all.
+      */}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <ChartCard
+          title="Mail that left the building"
+          subtitle="Every queued message — codes, resets, invitations, notifications, nudges."
+          hint="A job can be several messages: one completed response notifies up to ten addresses and sends the respondent an auto-reply. The rate counts jobs, so one job that failed twice and then sent counts once, as sent."
+        >
+          {/* Stacked, not side by side: this card is a third of the row, and a
+              116px gauge beside a two-line sentence leaves neither enough. */}
+          <div className="space-y-4">
+            <RadialGauge
+              value={mail.deliveryRate}
+              label="accepted by the provider"
+              caption={`${compact(mail.messages)} message${mail.messages === 1 ? "" : "s"} in ${compact(mail.jobs)} job${mail.jobs === 1 ? "" : "s"}`}
+              tone={mail.gaveUp > 0 ? "danger" : mail.deliveryRate >= 99 ? "success" : "warning"}
+              size={124}
+            />
+            <div>
+              {/*
+                The number that matters most on this card, and it is not the
+                rate: a job at the queue's retry ceiling is in the dead-letter
+                queue, which means somebody is waiting for a sign-in code that
+                is never going to arrive.
+              */}
+              {mail.gaveUp > 0 ? (
+                <p className="text-destructive text-sm font-medium">
+                  {mail.gaveUp} gave up after every retry — these are in the dead-letter queue and will not be sent.
+                </p>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  Nothing exhausted its retries. Every queued message reached the provider.
+                </p>
+              )}
+              {mail.failed > 0 && (
+                <p className="text-muted-foreground text-micro mt-2">
+                  {mail.failed} attempt{mail.failed === 1 ? "" : "s"} failed and were retried.
+                </p>
+              )}
+            </div>
+          </div>
+        </ChartCard>
+
+        <ChartCard className="lg:col-span-2" title="What the platform sent" subtitle="By what the message was for.">
+          <DataTable
+            rows={mail.byKind}
+            empty="No mail queued in this period."
+            columns={[
+              { key: "kind", header: "Kind", render: (r) => MAIL_KIND[str(r, "kind")] ?? str(r, "kind") },
+              { key: "jobs", header: "Jobs", width: "7rem", numeric: true, render: (r) => compact(num(r, "jobs")) },
+              {
+                key: "messages",
+                header: "Messages",
+                width: "8rem",
+                numeric: true,
+                render: (r) => compact(num(r, "messages")),
+              },
+              {
+                key: "failed",
+                header: "Failed",
+                width: "7rem",
+                numeric: true,
+                render: (r) =>
+                  num(r, "failed") > 0 ? (
+                    <span className="text-[var(--warning-soft-foreground)]">{num(r, "failed")}</span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  ),
+              },
+            ]}
+          />
+        </ChartCard>
+      </div>
+
+      {mail.recentFailures.length > 0 && (
+        <ChartCard
+          title="Messages that did not go out"
+          subtitle="Newest first."
+          hint="The recipient's domain is recorded; the address is not — the column does not exist, so no query here can return one. The domain is what answers “is this provider rejecting us”."
+        >
+          <DataTable
+            rows={mail.recentFailures}
+            columns={[
+              {
+                key: "kind",
+                header: "Kind",
+                width: "14rem",
+                render: (r) => MAIL_KIND[str(r, "kind")] ?? str(r, "kind"),
+              },
+              { key: "domain", header: "To", width: "12rem", render: (r) => str(r, "domain") || "—" },
+              {
+                key: "attempt",
+                header: "Attempt",
+                width: "7rem",
+                numeric: true,
+                render: (r) => num(r, "attempt"),
+              },
+              { key: "error", header: "Why", render: (r) => str(r, "error") || "no detail" },
+              {
+                key: "when",
+                header: "When",
+                width: "7rem",
+                muted: true,
+                render: (r) => relativeDay(num(r, "created_at")),
+              },
+            ]}
+          />
+        </ChartCard>
+      )}
 
       {/*
         Paired with the integrations table rather than given a row of its own.
