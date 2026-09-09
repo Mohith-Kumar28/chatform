@@ -46,7 +46,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 5;
+export const DEMO_REVISION = 6;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -409,7 +409,16 @@ export const DEMO_FORM = buildAuthoredDoc({
     agent: {
       mode: "ai",
       tone: "friendly",
-      displayName: "chatform",
+      /*
+       * Named for what it is, because this string is the header.
+       *
+       * It read plain "chatform", which on a public link is the product
+       * claiming the whole page — a visitor arriving from the hero could not
+       * tell whether they were in a survey, a support chat or the app itself.
+       * "chatform demo" says both things it needs to: whose it is, and that it
+       * is a demonstration they are free to play with.
+       */
+      displayName: "chatform demo",
       rephraseQuestions: true,
       goal:
         "Learn how this person collects answers today and what specifically frustrates them, in their own words — " +
