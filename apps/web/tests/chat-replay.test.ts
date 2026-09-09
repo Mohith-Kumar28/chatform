@@ -129,3 +129,60 @@ describe("optimistic echoes", () => {
     expect(t.messages).toEqual([{ id: "srv_1", text: "Verified as a@b.co" }]);
   });
 });
+
+/**
+ * Completing a bubble that arrived in pieces.
+ *
+ * The ratchet above is what makes a reconnect invisible, and it is also what
+ * makes one class of damage unrepairable by replay alone: a device that
+ * dropped out halfway through a streamed message holds a prefix, and every
+ * frame carrying the rest of that sentence sits *below* the sequence number it
+ * has already applied. Replaying them changes nothing, because they are
+ * dropped on the way in.
+ *
+ * `message_end` is the one frame of a message guaranteed to outrank all of its
+ * own tokens, so the server puts the finished text there and the client
+ * prefers it. That is the rule below, isolated from React.
+ */
+function bubble() {
+  let text = "";
+  return {
+    get text() {
+      return text;
+    },
+    token(delta: string) {
+      text += delta;
+    },
+    end(finished?: string) {
+      text = typeof finished === "string" ? finished : text;
+    },
+  };
+}
+
+describe("assembling a streamed message", () => {
+  it("is unchanged when every token arrived", () => {
+    const b = bubble();
+    b.token("Typeform and Tally ");
+    b.token("are solid classics!");
+    b.end("Typeform and Tally are solid classics!");
+    expect(b.text).toBe("Typeform and Tally are solid classics!");
+  });
+
+  it("completes a message the connection cut in half", () => {
+    const b = bubble();
+    // All this device got before the socket went away.
+    b.token("Typeform and Tally ");
+    // Reconnect: the tokens holding the rest are below its mark and dropped,
+    // so `message_end` is the only thing that can finish the sentence.
+    b.end("Typeform and Tally are solid classics!");
+    expect(b.text).toBe("Typeform and Tally are solid classics!");
+  });
+
+  it("keeps what it has when the server sends no finished text", () => {
+    // An older server, or a message interrupted before it produced any.
+    const b = bubble();
+    b.token("Typeform and Tally ");
+    b.end(undefined);
+    expect(b.text).toBe("Typeform and Tally ");
+  });
+});

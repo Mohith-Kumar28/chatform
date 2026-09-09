@@ -79,9 +79,24 @@ const createSessionSchema = z.object({
   followUpId: z.string().max(60).optional(),
 });
 
+/**
+ * `turnId` is what makes an answer safe to send twice.
+ *
+ * The browser fires and forgets: the POST returns 202 and the reply arrives on
+ * the stream, so a request that times out or dies in flight tells the client
+ * nothing about whether the answer landed. Retrying was therefore a choice
+ * between losing answers and duplicating them. With a client-minted id the
+ * session can recognise the second copy and do nothing, so the client is free
+ * to retry — which is the only way a flaky network stops costing submissions.
+ *
+ * Optional: an older page, the headless API and the SDK all post without one
+ * and keep the previous at-most-once behaviour.
+ */
+const turnId = z.string().min(8).max(64).optional();
+
 const messageSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("text"), text: z.string().min(1).max(5000) }),
-  z.object({ type: z.literal("structured"), ref: z.string(), value: z.unknown() }),
+  z.object({ type: z.literal("text"), text: z.string().min(1).max(5000), turnId }),
+  z.object({ type: z.literal("structured"), ref: z.string(), value: z.unknown(), turnId }),
 ]);
 
 const actionSchema = z.object({
@@ -457,8 +472,13 @@ sessionsRouter.post("/sessions/:id/messages", zValidator("json", messageSchema),
   const body = c.req.valid("json");
   const result =
     body.type === "text"
-      ? await stub(c.env, sessionId).handleUserTurn({ type: "text", text: body.text })
-      : await stub(c.env, sessionId).handleUserTurn({ type: "structured", ref: body.ref, value: body.value });
+      ? await stub(c.env, sessionId).handleUserTurn({ type: "text", text: body.text, turnId: body.turnId })
+      : await stub(c.env, sessionId).handleUserTurn({
+          type: "structured",
+          ref: body.ref,
+          value: body.value,
+          turnId: body.turnId,
+        });
   if (!result.accepted) return c.json({ error: { code: result.error ?? "rejected", message: "Turn rejected" } }, 400);
   return c.json({ ok: true }, 202);
 });

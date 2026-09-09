@@ -156,6 +156,15 @@ export interface SyncTurnResult {
 }
 
 /** The single `"session"` storage blob. Everything here survives eviction. */
+/**
+ * One respondent turn as it arrives. `turnId` is the client's own id for the
+ * send, carried so a retry of a request whose response was never seen can be
+ * recognised rather than replayed. See `TurnInput` handling in `handleUserTurn`.
+ */
+type TurnInput =
+  | { type: "text"; text: string; turnId?: string }
+  | { type: "structured"; ref: string; value: unknown; turnId?: string };
+
 interface StoredSession {
   meta: DoSessionMeta;
   docJson: unknown;
@@ -172,6 +181,7 @@ interface StoredSession {
   degraded?: boolean;
   pendingEndingRef?: string | null;
   gatedAtRef?: string | null;
+  seenTurnIds?: string[];
 }
 
 /**
@@ -180,6 +190,23 @@ interface StoredSession {
  */
 function acceptsAnyString(block: Block): boolean {
   return block.type === "short_text" || block.type === "long_text";
+}
+
+/**
+ * An Error, flattened into fields a log line will actually carry.
+ *
+ * `console.error("turn_failed", { err })` reads well in a terminal and is
+ * nearly worthless in Workers Logs: an `Error` is not a plain object, so it
+ * serialises to `{}` and the one thing worth knowing — what threw, and where —
+ * is dropped on the way out. Every failure path that matters flattens through
+ * here instead, so a turn that breaks in production can be read back rather
+ * than reproduced.
+ */
+function errorInfo(err: unknown): { errName: string; errMessage: string; errStack?: string } {
+  if (err instanceof Error) {
+    return { errName: err.name, errMessage: err.message, errStack: err.stack?.slice(0, 2000) };
+  }
+  return { errName: typeof err, errMessage: String(err) };
 }
 
 const IDLE_ALARM_MS = 30 * 60 * 1000;
@@ -250,6 +277,21 @@ export class SessionDO extends DurableObject<Bindings> {
   private lastAnswerDisplay: string | null = null;
   private writers = new Set<WritableStreamDefaultWriter<Uint8Array>>();
   private eventBuffer: SSEEnvelope[] = [];
+  /**
+   * Token frames written for a message that has not closed yet, so that
+   * `coalesceTokenRun` can collapse them once it does. In-memory only: an
+   * eviction mid-message simply leaves that one run uncollapsed.
+   */
+  private tokenRuns = new Map<string, { head: SSEEnvelope; keys: string[]; text: string }>();
+  /**
+   * Client turn ids already accepted, newest last.
+   *
+   * Bounded and persisted: an eviction between a turn and its retry is exactly
+   * the window this exists to cover, so keeping it in memory alone would leave
+   * the duplicate it is meant to catch. Twenty is far more than the handful of
+   * sends a retry ladder can produce and costs nothing to carry.
+   */
+  private seenTurnIds: string[] = [];
   /** Non-null while a synchronous turn is collecting the events it produces. */
   private turnJournal: SSEEnvelope[] | null = null;
   private seq = 0;
@@ -742,7 +784,7 @@ export class SessionDO extends DurableObject<Bindings> {
    * owner can read back.
    */
   private async handlePendingVerify(
-    input: { type: "text"; text: string } | { type: "structured"; ref: string; value: unknown },
+    input: TurnInput,
   ): Promise<{ accepted: boolean; error?: string }> {
     const pending = this.meta!.pendingVerify!;
     const block = this.doc!.blocks.find((b) => b.ref === pending.ref);
@@ -949,6 +991,7 @@ export class SessionDO extends DurableObject<Bindings> {
     this.degraded = stored.degraded ?? false;
     this.pendingEndingRef = stored.pendingEndingRef ?? null;
     this.gatedAtRef = stored.gatedAtRef ?? null;
+    this.seenTurnIds = stored.seenTurnIds ?? [];
     this.loaded = true;
     return true;
   }
@@ -971,6 +1014,7 @@ export class SessionDO extends DurableObject<Bindings> {
       degraded: this.degraded,
       pendingEndingRef: this.pendingEndingRef,
       gatedAtRef: this.gatedAtRef,
+      seenTurnIds: this.seenTurnIds,
     } satisfies StoredSession);
   }
 
@@ -990,8 +1034,29 @@ export class SessionDO extends DurableObject<Bindings> {
     const writer = writable.getWriter();
     this.writers.add(writer);
 
-    // replay from durable storage (in-memory buffer dies with the isolate)
-    const stored = await this.ctx.storage.list<SSEEnvelope>({ prefix: "evt:", limit: MAX_REPLAY * 4 });
+    /**
+     * Replay from durable storage — the newest events, not the oldest.
+     *
+     * `list` is ascending, so a bare `limit` returns the *first* N keys. Past N
+     * events that is precisely the wrong window: the client replayed the
+     * opening of the conversation, its seq ratchet accepted those, and the
+     * frames that say where the conversation actually stands — the last
+     * `question`, an `auth_required`, an `ending` — were never in the response
+     * at all. The form came back from a reload showing a stale transcript with
+     * no controls under it and no way to get any, because the watchdog that
+     * asks for a resync only arms under raised typing dots and a fresh load
+     * has none.
+     *
+     * `reverse` takes the tail instead; the sort below puts it back in order.
+     * A very long conversation now loses the *top* of its transcript on a
+     * reconnect, which is cosmetic, rather than its current state, which is
+     * the whole form.
+     */
+    const stored = await this.ctx.storage.list<SSEEnvelope>({
+      prefix: "evt:",
+      reverse: true,
+      limit: MAX_REPLAY * 4,
+    });
     const replay = [...stored.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([, v]) => v);
     const init = this.encoder.encode(`retry: 3000\n\n`);
     void writer.write(init);
@@ -1042,6 +1107,25 @@ export class SessionDO extends DurableObject<Bindings> {
   }
 
   private async emit(type: ServerEvent["type"], data: unknown): Promise<void> {
+    /**
+     * A closed bubble carries its own finished text.
+     *
+     * The seq ratchet on the client drops anything at or below what it has
+     * already applied, so a correction can only ever be delivered *above* the
+     * frames it corrects — and `message_end` is the only frame guaranteed to
+     * sit above every token of its own message. That makes it the one place a
+     * reconnecting client can be handed the whole message: one that dropped
+     * out halfway through has a prefix, and replay alone cannot complete it,
+     * because the frames holding the rest are all below its high-water mark.
+     *
+     * Live clients already have the identical text from the deltas, so this
+     * changes nothing for them. Consumers that do not know the field ignore it.
+     */
+    if (type === "message_end") {
+      const id = (data as { messageId?: string }).messageId;
+      const run = id ? this.tokenRuns.get(id) : undefined;
+      if (run) data = { ...(data as object), text: run.text };
+    }
     const evt: SSEEnvelope = { v: 1, seq: ++this.seq, ts: Date.now(), type, data };
     // The one line that makes a turn returnable over HTTP as well as streamable:
     // when a *Sync RPC is collecting, every event it would have streamed is also
@@ -1050,7 +1134,36 @@ export class SessionDO extends DurableObject<Bindings> {
     this.eventBuffer.push(evt);
     if (this.eventBuffer.length > MAX_REPLAY * 2) this.eventBuffer.splice(0, MAX_REPLAY);
     // persist for replay after eviction (key sorts by seq)
-    await this.ctx.storage.put(`evt:${String(evt.seq).padStart(8, "0")}`, evt);
+    const key = `evt:${String(evt.seq).padStart(8, "0")}`;
+    await this.ctx.storage.put(key, evt);
+    /**
+     * A finished message is one stored frame, not one per token.
+     *
+     * Every delta the model streams is its own durable `put`, and a single
+     * reply is fifty of them — so the replay window above was spent inside
+     * about eight exchanges, and the storage bill was being paid to keep a
+     * word-by-word recording of text nobody replays word by word. The tokens
+     * still stream live at full granularity; what changes is that once the
+     * bubble is closed, the run collapses into the first frame carrying the
+     * whole message.
+     *
+     * The seq numbers the run consumed are deliberately not reused. They stay
+     * below `message_end`'s, so the tail read in `ensureLoaded` still recovers
+     * a high-water mark no live client can be ahead of.
+     */
+    if (evt.type === "token") {
+      const { messageId, delta } = evt.data as { messageId: string; delta: string };
+      const run = this.tokenRuns.get(messageId);
+      if (run) {
+        run.keys.push(key);
+        run.text += delta;
+      } else {
+        this.tokenRuns.set(messageId, { head: evt, keys: [key], text: delta });
+      }
+    }
+    if (evt.type === "message_end") {
+      await this.coalesceTokenRun((evt.data as { messageId: string }).messageId);
+    }
     const payload = this.encoder.encode(this.serialize(evt));
     // In parallel, and never unbounded: see WRITE_STALL_MS. A connection that
     // fails or stalls is dropped and aborted, which ends its response so the
@@ -1080,6 +1193,29 @@ export class SessionDO extends DurableObject<Bindings> {
       return false;
     } finally {
       if (timer) clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Replace a message's run of token frames with one frame holding the text.
+   *
+   * Best-effort on purpose: this is a storage tidy-up behind a bubble the
+   * respondent has already read, and a failure here must not fail the turn
+   * that produced it. The worst case of it not running is the old behaviour.
+   */
+  private async coalesceTokenRun(messageId: string): Promise<void> {
+    const run = this.tokenRuns.get(messageId);
+    this.tokenRuns.delete(messageId);
+    if (!run || run.keys.length < 2) return;
+    const [first, ...rest] = run.keys;
+    try {
+      await this.ctx.storage.put(first!, { ...run.head, data: { messageId, delta: run.text } });
+      // The runtime caps one `delete` at 128 keys, and a long reply overruns that.
+      for (let i = 0; i < rest.length; i += 128) {
+        await this.ctx.storage.delete(rest.slice(i, i + 128));
+      }
+    } catch (err) {
+      console.error("coalesce_tokens_failed", { sessionId: this.meta?.sessionId, messageId, ...errorInfo(err) });
     }
   }
 
@@ -1264,7 +1400,7 @@ export class SessionDO extends DurableObject<Bindings> {
       this.pendingEffects = outcomes.flatMap((o) => (o.ok && o.effect ? [o.effect] : []));
       return text.trim().length > 0 || this.pendingEffects.length > 0;
     } catch (err) {
-      console.error("ai_stream_failed", err);
+      console.error("ai_stream_failed", { sessionId: this.meta?.sessionId, ...errorInfo(err) });
       // Close whatever was opened before returning to the template path, so
       // the caller's fallback question lands under a finished bubble.
       if (opened) {
@@ -1312,7 +1448,7 @@ export class SessionDO extends DurableObject<Bindings> {
       if (!out.confident || out.value === null || out.value === undefined) return null;
       return out.value;
     } catch (err) {
-      console.error("extract_failed", err);
+      console.error("extract_failed", { sessionId: this.meta?.sessionId, blockRef: block.ref, ...errorInfo(err) });
       return null;
     }
   }
@@ -1525,11 +1661,41 @@ export class SessionDO extends DurableObject<Bindings> {
    * with an error nobody can see. The `finally`-shaped tail here re-states the
    * question, which puts the controls back exactly as they were.
    */
-  async handleUserTurn(input: { type: "text"; text: string } | { type: "structured"; ref: string; value: unknown }): Promise<{ accepted: boolean; error?: string }> {
+  async handleUserTurn(input: TurnInput): Promise<{ accepted: boolean; error?: string }> {
+    /**
+     * A turn this session has already taken is a no-op, not a second turn.
+     *
+     * The client may resend an answer whose response it never saw — a request
+     * that timed out, a socket that died between the write and the reply — and
+     * without this the resend would append the same sentence to the transcript
+     * twice and put it through the agent twice. Answering `accepted` is the
+     * honest reply: the answer *was* accepted, and everything it produced is
+     * already on the stream waiting to be replayed.
+     */
+    if (input.turnId) {
+      if (!(await this.ensureLoaded())) return { accepted: false, error: "session_not_found" };
+      if (this.seenTurnIds.includes(input.turnId)) return { accepted: true };
+    }
     try {
-      return await this.runUserTurn(input);
+      const result = await this.runUserTurn(input);
+      // Recorded only on acceptance: a refused turn (a failed validation, a
+      // closed gate) is one the respondent is expected to send again.
+      if (input.turnId && result.accepted) {
+        this.seenTurnIds.push(input.turnId);
+        if (this.seenTurnIds.length > 20) this.seenTurnIds.splice(0, this.seenTurnIds.length - 20);
+        await this.persistMeta();
+      }
+      return result;
     } catch (err) {
-      console.error("turn_failed", { sessionId: this.meta?.sessionId, err });
+      console.error("turn_failed", {
+        sessionId: this.meta?.sessionId,
+        formId: this.meta?.formId,
+        blockRef: this.meta?.currentRef,
+        turnCount: this.turnCount,
+        collectedCount: this.collectedCount,
+        inputType: input.type,
+        ...errorInfo(err),
+      });
       await this.failTurn("turn_failed", "Something went wrong on our side. Please try that again.");
       return { accepted: false, error: "turn_failed" };
     }
@@ -1553,7 +1719,7 @@ export class SessionDO extends DurableObject<Bindings> {
     }
   }
 
-  private async runUserTurn(input: { type: "text"; text: string } | { type: "structured"; ref: string; value: unknown }): Promise<{ accepted: boolean; error?: string }> {
+  private async runUserTurn(input: TurnInput): Promise<{ accepted: boolean; error?: string }> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta || !this.doc) return { accepted: false, error: "session_not_found" };
     if (this.meta.status !== "active") return { accepted: false, error: "session_closed" };
@@ -2080,7 +2246,7 @@ export class SessionDO extends DurableObject<Bindings> {
    * caller resumes from `sinceSeq`.
    */
   async handleUserTurnSync(
-    input: { type: "text"; text: string } | { type: "structured"; ref: string; value: unknown },
+    input: TurnInput,
     opts: { deadlineMs?: number } = {},
   ): Promise<SyncTurnResult> {
     return this.runSync(() => this.handleUserTurn(input), opts);
@@ -2143,7 +2309,11 @@ export class SessionDO extends DurableObject<Bindings> {
     if (!outcome) {
       // Not a failure and not a rejection: the answer is still being processed.
       // Keep the turn alive past this response so its effects still land.
-      this.ctx.waitUntil(turn.catch((err) => console.error("turn_failed_after_deadline", err)));
+      this.ctx.waitUntil(
+        turn.catch((err) =>
+          console.error("turn_failed_after_deadline", { sessionId: this.meta?.sessionId, ...errorInfo(err) }),
+        ),
+      );
       return { ...(await this.projectTurn(journal)), accepted: true, timedOut: true, sinceSeq, events: [...journal] };
     }
     const settled = outcome as { accepted: boolean; error?: string };
@@ -2364,7 +2534,13 @@ export class SessionDO extends DurableObject<Bindings> {
     try {
       return await this.runAction(input);
     } catch (err) {
-      console.error("action_failed", { sessionId: this.meta?.sessionId, action: input.action, err });
+      console.error("action_failed", {
+        sessionId: this.meta?.sessionId,
+        formId: this.meta?.formId,
+        blockRef: this.meta?.currentRef,
+        action: input.action,
+        ...errorInfo(err),
+      });
       await this.failTurn("action_failed", "Something went wrong on our side. Please try that again.");
       return { accepted: false, error: "action_failed" };
     }
@@ -2704,6 +2880,52 @@ export class SessionDO extends DurableObject<Bindings> {
     }
   }
 
+  /**
+   * Last chance to notice an answer that never reached the results table.
+   *
+   * `projectAnswer` runs under `waitUntil` and swallows its own errors, which
+   * is right for a live turn — a D1 hiccup must not fail an answer the
+   * respondent has already given — but nothing was healing the miss
+   * afterwards. `finalizeResponse` reads `state.answers` only to build
+   * `search_text`, so a dropped row stayed dropped: the respondent was told
+   * their answer was recorded, the transcript proved they gave it, and the
+   * column it belonged in was empty forever.
+   *
+   * The DO's own `state.answers` is the authority — it is persisted with the
+   * session and is what every other consumer of this response is derived from
+   * — so anything in it without a row gets one here, once, at the end.
+   */
+  private async reconcileAnswerRows(submissionId: string): Promise<void> {
+    if (!this.doc || !this.meta) return;
+    if (this.meta.formVersionId === "preview") return;
+    const refs = Object.keys(this.state.answers);
+    if (refs.length === 0) return;
+    try {
+      const { results } = await this.env.DB.prepare(
+        `SELECT block_ref FROM submission_answers WHERE submission_id = ?`,
+      )
+        .bind(submissionId)
+        .all<{ block_ref: string }>();
+      const have = new Set((results ?? []).map((r) => r.block_ref));
+      const missing = refs.filter((ref) => !have.has(ref));
+      if (missing.length === 0) return;
+      // Loud on purpose: reaching this means a live projection was lost, and
+      // the rate it happens at is the health of the whole answer path.
+      console.warn("answer_rows_reconciled", {
+        sessionId: this.meta.sessionId,
+        submissionId,
+        refs: missing,
+      });
+      for (const ref of missing) {
+        const block = this.doc.blocks.find((b) => b.ref === ref);
+        if (!block) continue;
+        await recordAnswerRow(this.owner(), { responseId: submissionId, block, value: this.state.answers[ref] });
+      }
+    } catch (err) {
+      console.error("reconcile_answers_failed", { sessionId: this.meta.sessionId, submissionId, ...errorInfo(err) });
+    }
+  }
+
   private async projectAnswer(block: Block, value: unknown): Promise<void> {
     try {
       if (!this.meta) return;
@@ -2711,7 +2933,11 @@ export class SessionDO extends DurableObject<Bindings> {
       const submissionId = await this.ensureSubmissionRow();
       await recordAnswerRow(this.owner(), { responseId: submissionId, block, value });
     } catch (err) {
-      console.error("project_answer_failed", err);
+      console.error("project_answer_failed", {
+        sessionId: this.meta?.sessionId,
+        blockRef: block.ref,
+        ...errorInfo(err),
+      });
     }
   }
 
@@ -2788,6 +3014,7 @@ export class SessionDO extends DurableObject<Bindings> {
     }
 
     const submissionId = await this.ensureSubmissionRow();
+    await this.reconcileAnswerRows(submissionId);
 
     /**
      * The row update, the webhook fanout and the analytics point are the shared

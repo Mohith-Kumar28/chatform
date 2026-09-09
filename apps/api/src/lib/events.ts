@@ -24,7 +24,13 @@ export type ServerEvent =
   | { type: "session_ready"; data: { sessionId: string; formTitle: string; agentMode: string; brandingHidden: boolean } }
   | { type: "user_message"; data: { messageId: string; text: string } }
   | { type: "message_start"; data: { messageId: string; role: "assistant" } }
-  | { type: "message_end"; data: { messageId: string; interrupted?: boolean } }
+  /**
+   * `text` is the finished message, and is what a client resuming mid-stream
+   * uses to complete a bubble it only has part of — every frame carrying the
+   * rest sits below the sequence number it has already applied. Absent when
+   * the message streamed no tokens.
+   */
+  | { type: "message_end"; data: { messageId: string; interrupted?: boolean; text?: string } }
   | { type: "token"; data: { messageId: string; delta: string } }
   | { type: "question"; data: QuestionPayload }
   | { type: "validation_error"; data: { ref: string; code: string; message: string } }

@@ -1,6 +1,7 @@
 "use client";
 
 import { emitEmbedEvent } from "./embed-bridge";
+import { stuckTurnStep } from "./stuck-turn";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PublicBlock } from "@repo/form-schema";
 import { getRespondentSignal } from "@/lib/respondent-signal";
@@ -181,32 +182,6 @@ const MAX_RECONNECT_ATTEMPTS = 8;
 const STALL_MS = 45000;
 
 /**
- * How long the typing indicator may run against a silent stream before we
- * treat it as a bug rather than a wait.
- *
- * Nothing above this line is supposed to be able to strand it — but "supposed
- * to" is not a good enough guarantee for the one thing standing between a
- * respondent and the controls they need. Whatever the cause (a flag armed
- * after its own turn had already landed, an event lost to a half-open socket,
- * a turn the server abandoned mid-flight), dots over a stream that has said
- * nothing while the screen already holds something to act on is a stuck form,
- * and a stuck form has to get itself unstuck.
- */
-const THINKING_STALE_MS = 6000;
-
-/**
- * ...and how long before we stop reasoning about it and ask the server.
- *
- * Longer, because this is the case where the screen holds nothing to fall back
- * on, so the only safe recovery is to have the conversation re-state itself —
- * the same thing a page reload does, minus the reload.
- */
-const RESYNC_AFTER_MS = 12000;
-
-/** Give up asking after this many; three failures is a real outage, not a blip. */
-const MAX_RESYNC_ATTEMPTS = 3;
-
-/**
  * The longest the boot screen may hold the frame.
  *
  * `resolving` exists to answer one question — fresh conversation, resumed one,
@@ -301,6 +276,35 @@ function backoffMs(attempt: number): number {
   return base * (0.7 + Math.random() * 0.6);
 }
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * How long one send may take before it is treated as lost.
+ *
+ * Generous, because the reply does not come back this way — the POST only has
+ * to be accepted, and the interview arrives on the stream — so anything past
+ * this is a request that is not going to be answered at all.
+ */
+const POST_TIMEOUT_MS = 20000;
+
+/** Including the first. Two retries covers a hand-off; more is a real outage. */
+const POST_MAX_ATTEMPTS = 3;
+
+/**
+ * The `error.code` a refusal carries, or null if it did not carry one.
+ *
+ * Failing soft on purpose: an error body that cannot be read is still a
+ * refusal, and the caller has a sensible default for one it cannot name.
+ */
+async function refusalCode(res: Response): Promise<string | null> {
+  try {
+    const body = (await res.json()) as { error?: { code?: string } };
+    return body?.error?.code ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId, existingSession, onRestart }: UseChatOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState<QuestionState | null>(null);
@@ -373,6 +377,17 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** When the current stream last said anything at all, pings included. */
   const lastEventAtRef = useRef(0);
+  /**
+   * This session cannot be revived, only replaced.
+   *
+   * Set when the server says the conversation is closed, gone, or no longer
+   * ours. `retry` reads it so the button under that message opens a fresh
+   * conversation instead of reconnecting to a dead one — which is what it did
+   * before, forever, with no way for the respondent to tell.
+   */
+  const sessionDeadRef = useRef(false);
+  /** Late-bound so `post` can ask for a resync that is declared below it. */
+  const resyncRef = useRef<(() => Promise<void>) | null>(null);
   const stallTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /**
@@ -588,8 +603,29 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
       });
 
       on("message_end", (e) => {
-        const { messageId } = JSON.parse((e as MessageEvent).data) as { messageId: string };
-        setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, streaming: false } : m)));
+        const { messageId, text } = JSON.parse((e as MessageEvent).data) as { messageId: string; text?: string };
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === messageId
+              ? {
+                  ...m,
+                  streaming: false,
+                  /**
+                   * The finished message wins over whatever was accumulated.
+                   *
+                   * Identical to `m.text` on a live stream, and the repair on a
+                   * reconnect: a device that dropped out mid-message holds a
+                   * prefix, and replay cannot complete it — every frame with the
+                   * rest of the text sits below the sequence number it has
+                   * already passed, so the ratchet throws them away. This frame
+                   * is the only one above that mark, so it is the only one that
+                   * can put the sentence back together.
+                   */
+                  text: typeof text === "string" ? text : m.text,
+                }
+              : m,
+          ),
+        );
       });
 
       on("question", (e) => {
@@ -954,35 +990,114 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     setError(null);
     setStatus("connecting");
     const s = sessionRef.current;
+    /**
+     * A closed session is not a connection problem, and reconnecting to it
+     * just draws the same dead conversation again. Drop it and start over —
+     * the same thing the respondent would get by reloading, which is what they
+     * would (rightly) try next.
+     */
+    if (sessionDeadRef.current) {
+      sessionDeadRef.current = false;
+      sessionRef.current = null;
+      esRef.current?.close();
+      esRef.current = null;
+      lastSeqRef.current = 0;
+      void start();
+      return;
+    }
     if (s) connectStream(s.sessionId, s.token, 0);
     else void start();
   }, [connectStream, start]);
 
+  /**
+   * Send something on this session, and do not quietly lose it.
+   *
+   * Three things this has to get right, each of which used to be wrong:
+   *
+   *  1. **A deadline.** There was none, on any request in this file, so a
+   *     request that hung hung until the browser gave up on it — minutes, on
+   *     some mobile stacks. `AbortSignal.timeout` turns that into a failure
+   *     the ladder below can act on.
+   *  2. **A retry.** A send that failed was simply gone: the typing dots came
+   *     down, the bubble stayed on screen looking accepted, and the answer had
+   *     never reached the server. The `turnId` is what makes retrying safe —
+   *     the session recognises a second copy of a turn it already took and
+   *     does nothing — so a dropped packet costs a round trip instead of an
+   *     answer. Only answers are retried; an action is not idempotent, and
+   *     skipping a question twice skips two questions.
+   *  3. **Saying what happened.** Every refusal that was not a 429 used to be
+   *     swallowed whole. An expired session, a closed gate, a rejected turn —
+   *     all of them put the controls back with no explanation, so the form
+   *     looked like it had accepted an answer it had thrown away.
+   */
   const post = useCallback(
-    async (path: string, body: unknown) => {
+    async (path: string, body: Record<string, unknown>) => {
       const session = sessionRef.current;
       if (!session) return;
-      try {
-        const res = await fetch(`${apiOrigin}/p/sessions/${session.sessionId}/${path}`, {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-respondent-token": session.token },
-          body: JSON.stringify(body),
-        });
+      // One id for every attempt at this one send, which is what lets the
+      // server tell a retry apart from a second answer.
+      const idempotent = path === "messages";
+      const payload = idempotent ? { ...body, turnId: crypto.randomUUID() } : body;
+      const attempts = idempotent ? POST_MAX_ATTEMPTS : 1;
+
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        if (attempt > 0) await sleep(backoffMs(attempt - 1));
+        let res: Response;
+        try {
+          res = await fetch(`${apiOrigin}/p/sessions/${session.sessionId}/${path}`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-respondent-token": session.token },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(POST_TIMEOUT_MS),
+          });
+        } catch {
+          // Network, DNS, timeout — we cannot know whether it landed, which is
+          // exactly the case `turnId` exists to make safe to repeat.
+          if (attempt < attempts - 1) continue;
+          settleTurn();
+          settleEcho();
+          setError("That didn't send. Check your connection and try again.");
+          return;
+        }
+
+        if (res.ok) return;
+
         if (res.status === 429) {
           setRateLimited("You're going a bit fast — give it a moment.");
           settleTurn();
           settleEcho();
-        } else if (!res.ok) {
-          // Any other refusal: nothing is coming back over the stream for this
-          // turn, so the dots have to come down and the controls have to come
-          // back here, or the refusal reads as a hang.
+          return;
+        }
+
+        // The server is having a bad moment rather than refusing us. Worth
+        // another go; past the last one, say so rather than going quiet.
+        if (res.status >= 500) {
+          if (attempt < attempts - 1) continue;
           settleTurn();
           settleEcho();
+          setError("We couldn't reach the form just now. Tap retry to send that again.");
+          return;
         }
-      } catch {
+
+        // A considered refusal. Read it and act on what it says.
+        const code = await refusalCode(res);
         settleTurn();
-        setError("That didn't send. Check your connection and try again.");
         settleEcho();
+        if (code === "session_closed" || code === "session_not_found" || code === "unauthorized") {
+          // Reconnecting cannot revive this one; the way back is a new session.
+          sessionDeadRef.current = true;
+          setError("This conversation has expired. Tap retry to start a fresh one.");
+        } else if (code === "auth_required" || code === "stale_ref" || code === "no_question") {
+          // The session knows something this device does not. Rather than
+          // guessing at it, ask the conversation to say where it stands — the
+          // sign-in card, or the question we are actually on, comes back.
+          void resyncRef.current?.();
+        } else if (code !== "turn_failed") {
+          // `turn_failed` already announced itself on the stream as an
+          // `error_event`; anything else has said nothing at all until now.
+          setError("That answer didn't go through. Tap retry, or send it again.");
+        }
+        return;
       }
     },
     [apiOrigin, settleEcho, settleTurn],
@@ -1395,6 +1510,34 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     }
   }, [apiOrigin]);
 
+  useEffect(() => {
+    resyncRef.current = resync;
+  }, [resync]);
+
+  /**
+   * Throw this stream away and open a new one.
+   *
+   * The recovery a page reload performs, minus the reload — and unlike
+   * `resync`, it does not depend on the existing connection being alive,
+   * which is the whole point of having it. Replay from durable storage is
+   * deduped by sequence number, so a reconnect that turns out not to have
+   * been needed costs one round trip and changes nothing on screen.
+   */
+  const hardReconnect = useCallback(() => {
+    const s = sessionRef.current;
+    if (!s) return;
+    if (stallTimer.current) clearInterval(stallTimer.current);
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+    esRef.current?.close();
+    esRef.current = null;
+    setStatus("reconnecting");
+    // attempt 0: a fresh problem, not the continuation of a backoff.
+    reconnectRef.current?.(s.sessionId, s.token, 0);
+    // The reconnect replays what this device missed; this asks for anything it
+    // saw once and lost, which replay's seq ratchet will not re-deliver.
+    void resyncRef.current?.();
+  }, []);
+
   /**
    * What the watchdog below needs to know, kept somewhere it can read without
    * being rebuilt — and therefore restarted — every time any of it changes.
@@ -1430,30 +1573,32 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     let lastAttemptAt = 0;
     const timer = setInterval(() => {
       const now = Date.now();
-      // Something is arriving: the agent really is mid-turn. A keep-alive ping
-      // counts — it is the server saying the connection is real.
-      if (now - lastEventAtRef.current < THINKING_STALE_MS) return;
-      if (now - armedAt < THINKING_STALE_MS) return;
-
-      if (!liveRef.current.answering && liveRef.current.actionable) {
+      const step = stuckTurnStep({
+        now,
+        armedAt,
+        lastEventAt: lastEventAtRef.current,
+        lastAttemptAt,
+        attempts,
+        answering: liveRef.current.answering,
+        actionable: liveRef.current.actionable,
+      });
+      if (step === "wait") return;
+      if (step === "settle") {
         settleTurn();
         return;
       }
-      if (now - armedAt < RESYNC_AFTER_MS) return;
-      // Spaced out. Three requests in three seconds is not a retry, it is a
-      // client hammering a server that is already having a bad time.
-      if (now - lastAttemptAt < THINKING_STALE_MS) return;
-      if (attempts >= MAX_RESYNC_ATTEMPTS) {
+      if (step === "giveUp") {
         settleTurn();
         setError("That took longer than it should have. Tap retry to pick up where you left off.");
         return;
       }
-      attempts += 1;
       lastAttemptAt = now;
-      void resync();
+      attempts += 1;
+      if (step === "reconnect") hardReconnect();
+      else void resync();
     }, 1000);
     return () => clearInterval(timer);
-  }, [thinking, resync, settleTurn]);
+  }, [thinking, resync, hardReconnect, settleTurn]);
 
   useEffect(() => {
     const t = setTimeout(() => void start(), 0);
