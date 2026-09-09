@@ -42,6 +42,20 @@ export function formatDuration(ms: number | null | undefined): string {
   return m % 60 === 0 ? `${h}h` : `${h}h ${m % 60}m`;
 }
 
+/**
+ * Is this moment behind us?
+ *
+ * Here rather than at the call site because the clock lives in this module.
+ * `formatRelative` below already reads it, and a component that reads it
+ * directly is impure in a way the React compiler rejects — correctly, since a
+ * re-render can change the answer. Both facts are the same fact: a time
+ * rendered against "now" is only ever true for the render that produced it,
+ * which is exactly what a relative timestamp is for.
+ */
+export function isPast(at: number | string | Date): boolean {
+  return new Date(at).getTime() <= Date.now();
+}
+
 /** "3 hours ago", "in 2 days" — relative, for a stamp that is also shown in full. */
 export function formatRelative(at: number | string | Date): string {
   const diff = new Date(at).getTime() - Date.now();

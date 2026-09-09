@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -27,7 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogBody, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { formatDateTime, formatDuration, formatRelative, formatShortDateTime } from "@/lib/format";
+import { formatDateTime, formatDuration, formatRelative, formatShortDateTime, isPast } from "@/lib/format";
 import { useClientValue } from "@/hooks/use-client-value";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { blockMeta, TONE_CLASSES } from "./block-library";
@@ -142,7 +142,7 @@ function followUpLabel(row: SubmissionRecord): { text: string; tone: "good" | "m
      * the moment it is written. "Reminder 3 minutes ago" would read as a
      * message that has already gone, which is the opposite of what it means.
      */
-    return f.nextScheduledAt <= Date.now()
+    return isPast(f.nextScheduledAt)
       ? { text: "Reminder due", tone: "muted" }
       : { text: `Reminder ${formatRelative(f.nextScheduledAt)}`, tone: "muted" };
   }
@@ -156,15 +156,27 @@ function followUpLabel(row: SubmissionRecord): { text: string; tone: "good" | "m
 }
 
 /**
- * The two pinned columns on the right, and the arithmetic between them.
+ * A floor for the Submitted column, not its width.
  *
- * `Submitted` gets an explicit width so `Follow-up` can be pinned exactly
- * beside it. Tailwind needs both class names to exist literally, so the offset
- * cannot be computed from the width — keep them in step by hand, and keep them
- * next to each other so it is obvious that they are a pair.
+ * It was `w-[9.5rem]`, paired with a hardcoded `right-[9.5rem]` on the column
+ * pinned beside it. Under `table-layout: auto` a cell width is a suggestion the
+ * browser is free to exceed, and it does — so the second pinned column stopped
+ * short of the first and the answers scrolled through the gap between them. The
+ * offset is measured now; this only stops the column collapsing.
  */
-const SUBMITTED_W = "w-[9.5rem]";
-const FOLLOWUP_OFFSET = "sticky right-[9.5rem]";
+const SUBMITTED_MIN_W = "min-w-[9.5rem]";
+
+/**
+ * The lift under a pinned column, cast onto whatever is sliding beneath it.
+ *
+ * Deliberately one-sided: the spread is trimmed to nothing on three edges with
+ * a negative blur radius, so nothing bleeds onto the row above, below, or the
+ * far side. Without it the pinned columns and the scrolling ones sit on exactly
+ * the same plane, and the moment a long answer slides under one the table reads
+ * as broken rather than as layered.
+ */
+const PIN_SHADOW_LEFT = "shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.45)]";
+const PIN_SHADOW_RIGHT = "shadow-[10px_0_10px_-10px_rgba(0,0,0,0.45)]";
 
 /**
  * One phrase about the follow-up sequence, shared by the column and the dialog.
@@ -239,7 +251,7 @@ function FollowUpDetail({ row }: { row: SubmissionRecord }) {
     const step = total > 1 ? `Reminder ${Math.min(done + 1, total)} of ${total}` : "The reminder";
     // Due in the past means it is waiting on the next sweep, not that it went.
     lines.push(
-      f.nextScheduledAt <= Date.now()
+      isPast(f.nextScheduledAt)
         ? `${step} was due ${formatDateTime(f.nextScheduledAt)} and goes out on the next sweep.`
         : `${step} sends ${formatDateTime(f.nextScheduledAt)}.`,
     );
@@ -309,6 +321,30 @@ export function SubmissionsTable({
   const queryClient = useQueryClient();
   const del = useDeleteApiFormsByIdSubmissions();
   const canDelete = ent.allows("submission", "delete");
+
+  /**
+   * How far in the Follow-up column has to sit, measured rather than assumed.
+   *
+   * The Submitted column's width is decided by the browser — its content, the
+   * table's own width, and whatever `table-layout: auto` does with the leftover
+   * space — so no class can state it in advance. A `ResizeObserver` on the
+   * header cell keeps the two columns flush through a window resize, a switch
+   * to full screen, and a form whose questions change the table's width.
+   *
+   * The initial value matches `SUBMITTED_MIN_W`, so the first paint is already
+   * close and the correction is never a visible jump.
+   */
+  const submittedRef = useRef<HTMLTableCellElement>(null);
+  const [submittedW, setSubmittedW] = useState(152);
+  useEffect(() => {
+    const el = submittedRef.current;
+    if (!el) return;
+    const measure = () => setSubmittedW(el.getBoundingClientRect().width);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [full, columns.length, rows.length]);
 
   const hasRespondents = rows.some((r) => r.respondent);
   const openIndex = openId ? rows.findIndex((r) => r.id === openId) : -1;
@@ -431,7 +467,7 @@ export function SubmissionsTable({
                 out-rank their neighbours anyway. */}
             <thead>
               <tr className="bg-muted [&>th]:sticky [&>th]:top-0 [&>th]:z-20 [&>th]:border-b [&>th]:bg-muted">
-                <th className="left-0 z-30! w-10 px-3 py-2.5">
+                <th className={cn("left-0 z-30! w-10 px-3 py-2.5", PIN_SHADOW_RIGHT)}>
                   <input
                     type="checkbox"
                     className="size-3.5 accent-[var(--primary)] align-middle"
@@ -459,12 +495,15 @@ export function SubmissionsTable({
                   "when is the next reminder" is read against "when did they
                   leave" — the two numbers only mean something together.
 
-                  Its offset is `SUBMITTED_W`, which is why that column now
-                  carries an explicit width: a pinned column has to know exactly
-                  how wide its neighbour is.
+                  Its offset is the Submitted column's measured width — see
+                  `submittedW`. A pinned column has to know exactly how wide its
+                  neighbour ended up, and no class can say that in advance.
                 */}
                 {showFollowUp && (
-                  <th className={cn("z-30! border-l px-3 py-2.5 text-left", FOLLOWUP_OFFSET)}>
+                  <th
+                    className={cn("sticky z-30! border-l px-3 py-2.5 text-left", PIN_SHADOW_LEFT)}
+                    style={{ right: submittedW }}
+                  >
                     <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium whitespace-nowrap">
                       <MailCheck className="size-3.5" />
                       Follow-up
@@ -476,7 +515,16 @@ export function SubmissionsTable({
                   scrolling right — and because a table that ends in whitespace
                   reads as truncated rather than as finished.
                 */}
-                <th className={cn("right-0 z-30! border-l px-3 py-2.5 text-left", SUBMITTED_W)}>
+                <th
+                  ref={submittedRef}
+                  className={cn(
+                    "right-0 z-30! border-l px-3 py-2.5 text-left",
+                    SUBMITTED_MIN_W,
+                    // Only the column that leads the pinned group casts a
+                    // shadow. On both, the second would draw over the first.
+                    !showFollowUp && PIN_SHADOW_LEFT,
+                  )}
+                >
                   <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium whitespace-nowrap">
                     <Clock className="size-3.5" />
                     Submitted
@@ -499,7 +547,7 @@ export function SubmissionsTable({
                       picked ? "bg-primary-soft" : "bg-card hover:bg-muted",
                     )}
                   >
-                    <td className="w-10 bg-inherit px-3 py-2.5 sticky left-0 z-10">
+                    <td className={cn("w-10 bg-inherit px-3 py-2.5 sticky left-0 z-10", PIN_SHADOW_RIGHT)}>
                       <input
                         type="checkbox"
                         className="size-3.5 accent-[var(--primary)] align-middle"
@@ -531,9 +579,10 @@ export function SubmissionsTable({
                     {showFollowUp && (
                       <td
                         className={cn(
-                          "text-muted-foreground bg-inherit z-10 border-l px-3 py-2.5 whitespace-nowrap",
-                          FOLLOWUP_OFFSET,
+                          "text-muted-foreground bg-inherit sticky z-10 border-l px-3 py-2.5 whitespace-nowrap",
+                          PIN_SHADOW_LEFT,
                         )}
+                        style={{ right: submittedW }}
                       >
                         <FollowUpCell row={row} />
                       </td>
@@ -541,7 +590,8 @@ export function SubmissionsTable({
                     <td
                       className={cn(
                         "text-muted-foreground bg-inherit sticky right-0 z-10 border-l px-3 py-2.5 whitespace-nowrap",
-                        SUBMITTED_W,
+                        SUBMITTED_MIN_W,
+                        !showFollowUp && PIN_SHADOW_LEFT,
                       )}
                     >
                       {formatWhen(row)}
