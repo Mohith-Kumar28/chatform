@@ -40,6 +40,13 @@ Every answer is validated the same way whatever route it came in by, so an email
     title: "Pricing, and what the free plan includes",
     body: `Three plans. Prices are in USD.
 
+HOW TO QUOTE THESE. Always lead with the monthly price. The lower figure on each
+paid plan is the per-month cost of paying a year up front, and it is only
+available that way — quoting it on its own ("plans start at ${usd(yearlyPerMonthCents(pro))}/month")
+states a price nobody can actually pay monthly, which is the one pricing claim
+that gets a product accused of bait pricing. Say "${usd(pro.priceMonthlyCents)}/month, or ${usd(yearlyPerMonthCents(pro))}/month billed yearly",
+and if you only have room for one number, use the monthly one.
+
 Free — ${usd(free.priceMonthlyCents)}. No card, no expiry. Unlimited forms and unlimited responses, up to ${free.limits.responses_ceiling_per_month.toLocaleString()} a month. ${free.limits.ai_conversations_per_month} AI conversations a month; past that the interview keeps working but asks questions as written instead of phrasing them itself. Forms carry a small chatform mark.
 
 Pro — ${usd(pro.priceMonthlyCents)}/month, or ${usd(yearlyPerMonthCents(pro))}/month billed yearly. Removes the chatform mark, adds your own fonts and logo, partial responses (what people typed before they left), analytics, file uploads up to ${pro.limits.max_upload_mb_per_file}MB, a custom domain, the developer API, and the agent's persona and knowledge base. ${pro.limits.ai_conversations_per_month.toLocaleString()} AI conversations a month, ${pro.limits.seats} seats.

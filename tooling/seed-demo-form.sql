@@ -53,6 +53,13 @@ ON CONFLICT (id) DO UPDATE SET title = excluded.title,
 INSERT INTO knowledge_sources (id, organization_id, form_id, kind, title, raw_text, status, bytes, chunk_count, created_at)
 SELECT 'kbs_demo0002', f.organization_id, 'frm_demo00001', 'text', 'Pricing, and what the free plan includes', 'Three plans. Prices are in USD.
 
+HOW TO QUOTE THESE. Always lead with the monthly price. The lower figure on each
+paid plan is the per-month cost of paying a year up front, and it is only
+available that way — quoting it on its own ("plans start at $16/month")
+states a price nobody can actually pay monthly, which is the one pricing claim
+that gets a product accused of bait pricing. Say "$24/month, or $16/month billed yearly",
+and if you only have room for one number, use the monthly one.
+
 Free — $0. No card, no expiry. Unlimited forms and unlimited responses, up to 5,000 a month. 200 AI conversations a month; past that the interview keeps working but asks questions as written instead of phrasing them itself. Forms carry a small chatform mark.
 
 Pro — $24/month, or $16/month billed yearly. Removes the chatform mark, adds your own fonts and logo, partial responses (what people typed before they left), analytics, file uploads up to 25MB, a custom domain, the developer API, and the agent''s persona and knowledge base. 2,000 AI conversations a month, 3 seats.
