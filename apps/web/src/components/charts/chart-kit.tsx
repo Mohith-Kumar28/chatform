@@ -33,13 +33,17 @@ export const SERIES = [
   "var(--chart-6)",
 ] as const;
 
-/** A card with nothing in it, said in one line without leaving a void. */
+/**
+ * A card with nothing in it, said in one line.
+ *
+ * Directly under the header, not centred in the card. Cards stretch to their
+ * neighbours now, so centring left the sentence hanging in the middle of the
+ * space with a gap above it — which reads as content that failed to load rather
+ * than as an answer. Top-aligned it belongs to the subtitle it follows, and the
+ * slack falls to the bottom of the card where slack is unremarkable.
+ */
 export function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex h-full items-center">
-      <p className="text-muted-foreground text-sm">{children}</p>
-    </div>
-  );
+  return <p className="text-muted-foreground text-sm">{children}</p>;
 }
 
 export function seriesColor(i: number): string {
@@ -212,13 +216,24 @@ export function BarList({
                 <span className="ml-1.5 opacity-70">{pct}%</span>
               </span>
             </div>
-            {/* 4px rounded end, anchored to a shared baseline; the track is the
-                only grid this needs. */}
+            {/*
+              4px rounded end, anchored to a shared baseline; the track is the
+              only grid this needs.
+
+              **The bar is measured against whatever the label is measured
+              against.** These were drawn against the largest bar while the
+              percentage beside them was computed against `total`, so two
+              suppression reasons at one each rendered as two full-width bars
+              both labelled 50% — a bar that fills its track and says it is half
+              of something. When a caller passes a total, the track is the whole
+              and the bar is the part; without one, the leader defines the track
+              and the list is a ranking.
+            */}
             <div className="bg-muted h-2 overflow-hidden rounded-full">
               <div
                 className="h-full rounded-full transition-[width] duration-[var(--duration-standard)]"
                 style={{
-                  width: `${Math.max(item.value > 0 ? 2 : 0, (item.value / max) * 100)}%`,
+                  width: `${Math.max(item.value > 0 ? 2 : 0, (item.value / denom) * 100)}%`,
                   background: item.color ?? (colorBy === "series" ? seriesColor(i) : "var(--chart-1)"),
                 }}
               />
