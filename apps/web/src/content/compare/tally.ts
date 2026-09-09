@@ -42,6 +42,11 @@ export default defineComparison({
       body:
         "Scoped API keys, a published OpenAPI spec, two SDKs, and a headless session API that streams the turns so you can render the interview in your own product.",
     },
+    {
+      title: "It chases the people who left",
+      body:
+        "Tally Pro captures partial submissions, and says plainly that they do not trigger email notifications — the data is there to read, not to act on. chatform mails those people: up to three reminders, four hours then a day then three days apart, each one re-checked at send and dropped if they finished or unsubscribed, linking back to the question they stopped on with every answer intact. Hold a slice of them back and it will tell you what the reminders actually earned.",
+    },
   ],
 
   extraRows: [

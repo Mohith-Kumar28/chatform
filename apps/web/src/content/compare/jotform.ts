@@ -42,6 +42,11 @@ export default defineComparison({
       body:
         "Every response keeps its transcript. You read what you asked, what they said, and what got recorded, side by side — rather than a spreadsheet row with the reasoning thrown away.",
     },
+    {
+      title: "It chases the people who left",
+      body:
+        "Jotform can show you incomplete submissions once Save & Continue Later is on, and you can resend somebody the link to their draft by hand. There is no timed sequence. chatform sends up to three reminders on a widening gap, each re-checked when it comes due and dropped if they finished or opted out, with a link that reopens the conversation on the exact question they stopped on. It will also hold a share of abandoners out of the sequence entirely, which is the only way to know the reminders did anything.",
+    },
   ],
 
   extraRows: [

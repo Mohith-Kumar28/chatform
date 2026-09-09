@@ -136,12 +136,29 @@ export function Hero() {
             stop selling the mechanism.
           */}
 
+          {/*
+            Two sentences, and the second one is new.
+
+            The old lede described the conversation three ways — reads, asks
+            again, answers back — which is one mechanism stated three times and
+            says nothing about what the visitor ends up with. The headline
+            promises fewer people lost; the honest other half of that promise
+            is the follow-up sequence, which is the only part of this product
+            that adds answers rather than protecting the ones already coming.
+            So the lede is now ask-then-chase, which is also the order of the
+            first two tiles in the band directly beneath it.
+
+            "answers their questions too" came out to make room. It is a real
+            feature and it is on the page twice more, but it is the third-most
+            interesting thing here and it was taking the position of the first.
+          */}
           <p
             style={{ color: "var(--on-band-vivid-muted)" }}
             className="text-body-lg mt-6 max-w-md text-balance"
           >
-            chatform turns your form into a conversation. It reads what people write, asks again
-            when an answer is too thin to use, and answers their questions too — so they stay.
+            chatform turns your form into a conversation that reads what people write and asks
+            again when an answer is too thin to use. Then it goes back for the ones who left
+            anyway — so you end up with more answers, and better ones.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -155,7 +172,7 @@ export function Hero() {
               variant="on-brand-outline"
               className="h-12 px-7"
             >
-              <Link href="#the-moment">
+              <Link href="#how-it-works">
                 See how it works
                 <ArrowRight className="size-4" strokeWidth={2.25} />
               </Link>

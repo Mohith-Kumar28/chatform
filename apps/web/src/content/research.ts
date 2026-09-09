@@ -101,6 +101,41 @@ export const STUDIES: readonly Study[] = [
     year: 2024,
     url: "https://baymard.com/blog/checkout-flow-average-form-fields",
   },
+  /*
+   * The two below are about the *second* thing this product does — going back
+   * after the people who left — rather than about how the questions are asked.
+   * They are held to the same bar as the rest of the file, which is why the
+   * claim on the landing page is about reminder *wording* and not about a
+   * recovery percentage. Every recovery number in this category ("18.2% at 72
+   * hours", "most people convert on the third email") comes from a vendor
+   * measuring conversion of emails sent, with no control group, and would be
+   * indistinguishable from people who were coming back anyway.
+   */
+  {
+    id: "sauermann-2013",
+    finding:
+      "Reminders that changed their wording as the sequence went on raised the odds of a response by over 30% against reminders that repeated themselves.",
+    method:
+      "A contact-design field experiment on a web survey sent to more than 24,000 junior scientists and engineers, with final response rates between 20.7% and 31.1% across conditions.",
+    authors: "Henry Sauermann and Michael Roach",
+    title:
+      "Increasing web survey response rates in innovation research: An experimental study of static and dynamic contact design features",
+    venue: "Research Policy 42(1), 273–286",
+    year: 2013,
+    url: "https://doi.org/10.1016/j.respol.2012.05.003",
+  },
+  {
+    id: "nunes-2006",
+    finding:
+      "People shown a task as already begun, rather than as not yet started, were about twice as likely to finish it — with exactly the same work left to do either way.",
+    method:
+      "Car-wash loyalty cards: eight stamps to earn from scratch, against ten with two already given. The work remaining was identical; the completion rate was not.",
+    authors: "Joseph C. Nunes and Xavier Drèze",
+    title: "The Endowed Progress Effect: How Artificial Advancement Increases Effort",
+    venue: "Journal of Consumer Research 32(4), 504–512",
+    year: 2006,
+    url: "https://doi.org/10.1086/500480",
+  },
 ];
 
 export function study(id: string): Study {

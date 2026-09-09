@@ -39,6 +39,11 @@ const FAQ = [
       "In at least one well-controlled setting, yes. Lucas, Gratch, King and Morency told participants the same virtual interviewer was either automated or operated by a human. Those who believed it was automated reported less fear of disclosing, showed less impression management, and were rated by observers as more willing to disclose.",
   },
   {
+    question: "Do reminder emails for abandoned forms actually work?",
+    answer:
+      "Reminders do raise response — that part is well established in survey research, where the number of contacts is one of the strongest levers there is. What is not established is any of the recovery percentages this category quotes. Those measure conversion of emails sent, with no control group, which cannot separate a recovered person from one who was returning anyway. The finding worth acting on is Sauermann and Roach's: reminders that change their wording across a sequence raised the odds of a response by over 30% against reminders that repeated themselves. chatform sends at most three, worded differently, on a widening gap — and will hold a share of abandoners back and send them nothing, so the recovery number you read is a difference against a control rather than a count of clicks.",
+  },
+  {
     question: "Is a conversation always better than a form?",
     answer:
       "No. For a short, unambiguous form — three fields and a submit button — a conversation adds turns without adding information, and a plain form is the better interface. The research is about questions where interpretation matters: open-ended answers, ambiguous wording, anything where a one-word reply is a failure.",
@@ -206,6 +211,14 @@ export default function WhyConversationWorksPage() {
               term: "It shows you where people left",
               def: "Completion rate, per-question answer rate and drop-off, and median time to complete — for your form. Not an industry benchmark, which would be a number we made up.",
             },
+            {
+              term: "It goes back for them",
+              def: "Up to three reminders on a widening gap — four hours, a day, three days — each one worded differently, because Sauermann and Roach found reminders that change across a sequence beat reminders that repeat. Each leads with how far they already got, which is the one piece of the usual psychology story that survives scrutiny: Nunes and Drèze roughly doubled completion by reframing a task as already begun.",
+            },
+            {
+              term: "It can prove the reminders did anything",
+              def: "Hold a share of the people who left out of the sequence and send them nothing. What comes back from them was coming back regardless; the difference is what the reminders earned. Every recovery percentage published in this category is measured without one of these, which is why none of them appears on this site.",
+            },
           ].map((item) => (
             <div key={item.term}>
               <dt className="text-h2 font-semibold">{item.term}</dt>
@@ -226,7 +239,7 @@ export default function WhyConversationWorksPage() {
       <Band tone="sand">
         <div className="max-w-2xl">
           <BandTitle>What none of this means.</BandTitle>
-          <BandLede tone="sand">Four things the research above does not say.</BandLede>
+          <BandLede tone="sand">Five things the research above does not say.</BandLede>
         </div>
         <ul className="mt-12 grid gap-x-12 gap-y-8 sm:grid-cols-2">
           {[
@@ -237,6 +250,10 @@ export default function WhyConversationWorksPage() {
             {
               title: "That there is a completion-rate number",
               body: "None of these papers measured completion rate on a commercial web form, and chatform has no cross-customer data to offer one. Anyone quoting you a single percentage for this is quoting marketing.",
+            },
+            {
+              title: "That reminders recover a known share of people",
+              body: "The survey work says contacts raise response and that varying the wording raises it further. It does not give you a percentage for a commercial form, and neither do we. Switch the holdout on and you get your own.",
             },
             {
               title: "That chat is faster",

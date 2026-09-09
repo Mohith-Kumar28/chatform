@@ -3,6 +3,7 @@ import { Hero } from "@/components/marketing/hero";
 import { SpectrumStrip } from "@/components/marketing/spectrum-strip";
 import { TheMoment } from "@/components/marketing/the-moment";
 import { HowItWorks } from "@/components/marketing/how-it-works";
+import { HowItConverts } from "@/components/marketing/how-it-converts";
 import { WhatItDoes } from "@/components/marketing/what-it-does";
 import { Developers } from "@/components/marketing/developers";
 import { PricingSection } from "@/components/marketing/pricing-section";
@@ -70,6 +71,22 @@ export const metadata: Metadata = {
  * the full spectrum, violet, cream, sand with coloured tiles, ink, cream,
  * orange. The same colours a respondent moves through, in the same order.
  *
+ * `HowItConverts` is second, immediately under the hero, and it is the band
+ * this page was missing. The hero promises an outcome; `TheDropOff` proves the
+ * problem is real; `HowItWorks` explains how you *build* one. Between those
+ * three there was no answer to the only question a visitor actually has, which
+ * is what the product does differently to get the outcome. It now sits in the
+ * first scroll, in three tiles, in the order a respondent meets them: it asks
+ * better, it chases the ones who left, and it can tell you whether the chasing
+ * worked.
+ *
+ * It goes above `TheDropOff` rather than below. Both bands carry citations and
+ * running them together would read as one long bibliography, but the ordering
+ * argument is simpler than that: the pillars answer the headline, and the
+ * drop-off band explains why the headline is true. Somebody who is already
+ * sold does not need the second one, and somebody who is not will scroll one
+ * band further to find it.
+ *
  * `TheDropOff` was added after the hero moved from mechanism to outcome. A
  * headline that claims long forms lose people has to be answered on the same
  * screenful or it reads as the same unsupported assertion every competitor
@@ -82,6 +99,7 @@ export default function LandingPage() {
   return (
     <>
       <Hero />
+      <HowItConverts />
       <SpectrumStrip />
       <TheDropOff />
       <TheMoment />

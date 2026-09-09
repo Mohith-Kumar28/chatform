@@ -42,6 +42,11 @@ export default defineComparison({
       body:
         "Per-question drop-off, answer rate, and median time to complete, on your own form. Google Forms shows you responses; it does not show you the shape of the abandonment.",
     },
+    {
+      title: "It chases the people who left",
+      body:
+        "Google Forms has no partial responses, so somebody who closes the tab at question six leaves nothing behind and nobody to email. chatform keeps what they answered, and if they gave an address it sends up to three reminders — four hours, a day, three days — with a link back to the question they stopped on. Withhold a slice of them and it will show you how much of the return was the reminders rather than second thoughts.",
+    },
   ],
 
   extraRows: [

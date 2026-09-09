@@ -66,6 +66,32 @@ export const ROWS: readonly ComparisonRow[] = [
     ],
   },
   {
+    /*
+     * Checked against each vendor's own help pages in September 2026, not
+     * against the August sweep the rest of this table came from — hence its
+     * own footnote with its own date.
+     *
+     * This row is the one place the table concedes something interesting:
+     * Fillout ships real abandonment recovery, and their own guidance is that
+     * such an email "should only ever be sent once". That is a defensible
+     * position, not an absence, and writing it as `false` would be the kind of
+     * quiet lie rule 1 exists to stop. Tally is a genuine `false` because
+     * Tally publishes it — partial submissions, in their words, "won't trigger
+     * email notifications".
+     */
+    label: "Follow-ups when someone abandons",
+    hint: "Timed reminders to the respondent, linking back to the question they stopped on.",
+    cells: [
+      "Up to 3, widening gaps",
+      { partial: "One automation on a partial-submit trigger; paid add-on" },
+      { unknown: "Not documented" },
+      false,
+      { partial: "Resend the draft link by hand; no timed sequence" },
+      { partial: "One email, ~30 min after abandonment" },
+      false,
+    ],
+  },
+  {
     label: "Documented headless conversation API",
     hint: "Drive the interview from your own backend, not just read submissions.",
     cells: [true, false, false, false, { unknown: "Not documented" }, false, false],
@@ -130,4 +156,5 @@ export const FOOTNOTES: readonly string[] = [
   "Jotform's AI Agents are a genuine conversational form-filler with a trainable knowledge base, available from its free tier. It is the closest thing to this product on the list.",
   "“Not documented” means we could not find the capability on the vendor's public pages — not that it is confirmed absent.",
   "* Unlimited means no per-plan quota, subject to a fair-use ceiling of 5,000 responses a month on Free.",
+  "The abandonment follow-up row was checked separately in September 2026, against Typeform's partial-response and automation help pages, Tally's partial-submissions page (which states that partial submissions do not trigger email notifications), Jotform's incomplete-submission answers, and Fillout's form-abandonment help page. Fillout is the only competitor on this list with native timed recovery; their own guidance is to send it once. chatform sends at most three, and every one is re-checked at the moment it is due — dropped if the person finished, the form closed, or the address opted out in the meantime.",
 ];

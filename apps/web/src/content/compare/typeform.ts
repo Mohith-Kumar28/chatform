@@ -42,6 +42,11 @@ export default defineComparison({
       body:
         "Open a session, stream the turns, drive the whole conversation from your own backend and render it in your own interface. There is a published OpenAPI spec and two SDKs. Typeform's API reads and writes submissions; it does not hand you the conversation.",
     },
+    {
+      title: "It chases the people who left",
+      body:
+        "Somebody who stops halfway is the most recoverable lead a form produces, and Typeform's answer is one automation on a partial-submit trigger, on the Contacts & Automations add-on — which its own community notes also mails people who go on to finish. chatform sends up to three, four hours then a day then three days apart, and re-checks each one at the moment it is due: if they finished, if the form closed, if they opted out, it is dropped. Then it will hold a slice of abandoners back and send them nothing, so the recovery number you read is the reminders' work and not the people who were coming back anyway.",
+    },
   ],
 
   extraRows: [
