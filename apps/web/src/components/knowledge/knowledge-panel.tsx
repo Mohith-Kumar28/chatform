@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MeterBar } from "@/components/ui/usage-meter";
 import { Spinner } from "@/components/ui/spinner";
@@ -353,22 +354,46 @@ function PasteForm({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const canSave = title.trim().length > 0 && body.trim().length > 0 && !busy;
+  const titleId = useId();
+  const bodyId = useId();
 
   return (
-    <div className="border-border bg-card space-y-2 rounded-xl border p-3">
-      <Input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="Pricing"
-        className="h-8 font-medium"
-        autoFocus
-      />
-      <Textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        rows={5}
-        placeholder="Paste anything the agent should know…"
-      />
+    <div className="border-border bg-card space-y-3 rounded-xl border p-3">
+      {/*
+        Labelled, not just placeheld.
+
+        Two bare boxes stacked on each other say nothing about why there are
+        two of them, and the placeholders that explained it disappear the moment
+        anyone types — so the first thing this form does after you start using
+        it is stop telling you what it wants. Worse, an input whose only name is
+        a placeholder has no accessible name at all once filled: a screen reader
+        read this as "edit text, edit text".
+
+        The single-field `LinkForm` below is left on its placeholder alone, and
+        that is not an inconsistency — one box asking for a URL is not ambiguous
+        about which box is which.
+      */}
+      <div className="space-y-1.5">
+        <Label htmlFor={titleId}>Title</Label>
+        <Input
+          id={titleId}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Pricing"
+          className="h-8 font-medium"
+          autoFocus
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={bodyId}>Details</Label>
+        <Textarea
+          id={bodyId}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={5}
+          placeholder="Paste anything the agent should know…"
+        />
+      </div>
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" shape="pill" onClick={onCancel}>
           Cancel
