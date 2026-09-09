@@ -9,6 +9,7 @@ import {
   recordFollowUpClick,
   creditFollowUpRecovery,
 } from "../src/lib/followups.js";
+import { finalizeResponse, type ResponseOwner } from "../src/lib/submissions.js";
 import { computeFollowUpStats } from "../src/lib/followup-analytics.js";
 import { sweepFollowUps } from "../src/lib/sweeps.js";
 import { resolveRespondentAddress } from "../src/lib/respondent-address.js";
@@ -93,9 +94,16 @@ async function seedAbandoned(id: string, answers: Record<string, unknown> = {
 }
 
 function rowsFor(id: string) {
-  return env.DB.prepare(`SELECT step, status, address, reason, scheduled_at FROM followups WHERE submission_id = ? ORDER BY step`)
+  return env.DB.prepare(`SELECT step, status, address, reason, scheduled_at, sent_at FROM followups WHERE submission_id = ? ORDER BY step`)
     .bind(id)
-    .all<{ step: number; status: string; address: string; reason: string | null; scheduled_at: number }>();
+    .all<{
+      step: number;
+      status: string;
+      address: string;
+      reason: string | null;
+      scheduled_at: number;
+      sent_at: number | null;
+    }>();
 }
 
 /**
@@ -229,6 +237,107 @@ describe("scheduleFollowUps", () => {
     // 4h and 24h out, to the minute.
     expect(Math.round((results![0]!.scheduled_at - at) / 3_600_000)).toBe(4);
     expect(Math.round((results![1]!.scheduled_at - at) / 3_600_000)).toBe(24);
+  });
+
+  /**
+   * The silent branches, made legible.
+   *
+   * Each of these used to return zero and write nothing anywhere, so an author
+   * whose reminders never went out had no way to find out why — no row in
+   * `followups` to inspect, and no error on any surface they can see.
+   */
+  it("records on the response why nothing was scheduled", async () => {
+    const skipOf = (id: string) =>
+      env.DB
+        .prepare(`SELECT json_extract(meta, '$.followUpSkip') AS s FROM submissions WHERE id = ?`)
+        .bind(id)
+        .first<{ s: string | null }>();
+
+    await seedAbandoned("sbm_why_noaddr", { q_name: "Maya" });
+    await scheduleFollowUps({
+      env: env as unknown as Bindings,
+      submissionId: "sbm_why_noaddr",
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt: Date.now(),
+    });
+    expect((await skipOf("sbm_why_noaddr"))?.s).toBe("no_address");
+
+    await setPlan("free");
+    await seedAbandoned("sbm_why_plan");
+    await scheduleFollowUps({
+      env: env as unknown as Bindings,
+      submissionId: "sbm_why_plan",
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt: Date.now(),
+    });
+    expect((await skipOf("sbm_why_plan"))?.s).toBe("not_entitled");
+    await setPlan("pro");
+
+    // And cleared once a sequence is actually written, so a response rescheduled
+    // after the cause was fixed does not keep the old excuse.
+    await seedAbandoned("sbm_why_cleared");
+    await env.DB.prepare(
+      `UPDATE submissions SET meta = json_set(coalesce(meta,'{}'), '$.followUpSkip', 'not_entitled') WHERE id = ?`,
+    )
+      .bind("sbm_why_cleared")
+      .run();
+    await scheduleFollowUps({
+      env: env as unknown as Bindings,
+      submissionId: "sbm_why_cleared",
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt: Date.now(),
+    });
+    expect((await skipOf("sbm_why_cleared"))?.s).toBeNull();
+  });
+
+  /**
+   * The clock starts when the respondent stopped, not when we noticed.
+   *
+   * A conversation is not declared abandoned until its Durable Object has been
+   * idle for thirty minutes, so scheduling from the finalize time added that
+   * half hour to every delay the author configured — a "4 hours later" reminder
+   * went out at four and a half, with nothing in the product saying so.
+   * `finalizeResponse` reads `updated_at` before overwriting it, which is the
+   * whole fix and the reason this asserts through the writer rather than by
+   * calling `scheduleFollowUps` directly.
+   */
+  it("measures the delay from the last answer, not from the abandonment", async () => {
+    const owner: ResponseOwner = {
+      env: env as never,
+      formId: t.formId,
+      formVersionId: VERSION_ID,
+      organizationId: t.orgId,
+      sessionId: null,
+      source: "chat",
+    };
+    const startedAt = Date.now() - 4 * 3_600_000;
+    await seedAbandoned("sbm_clock");
+    // Put it back in progress with a last answer 30 minutes ago — the state the
+    // idle alarm actually finds.
+    const lastAnswer = Date.now() - 30 * 60_000;
+    await env.DB.prepare(`UPDATE submissions SET status = 'in_progress', updated_at = ? WHERE id = ?`)
+      .bind(lastAnswer, "sbm_clock")
+      .run();
+
+    await finalizeResponse(owner, {
+      responseId: "sbm_clock",
+      status: "abandoned",
+      endingRef: null,
+      abandonReason: "idle_timeout",
+      answers: {},
+      startedAt,
+      collectedCount: 1,
+    });
+
+    const { results } = await rowsFor("sbm_clock");
+    expect(results).toHaveLength(2);
+    // 4h and 24h from the last answer. Measured from `now` instead, each would
+    // be half an hour further out.
+    expect(Math.round((results![0]!.scheduled_at - lastAnswer) / 60_000)).toBe(240);
+    expect(Math.round((results![1]!.scheduled_at - lastAnswer) / 60_000)).toBe(1440);
   });
 
   it("is idempotent — a second call adds nothing", async () => {
@@ -381,12 +490,28 @@ describe("sweepFollowUps", () => {
     });
   }
 
-  it("queues a due nudge and marks it sent", async () => {
+  /**
+   * `queued`, not `sent`: the sweep hands the message to a queue and the queue
+   * consumer is what learns whether it was delivered. Marking it `sent` here
+   * meant a follow-up that failed every retry into the dead-letter queue still
+   * read as delivered in the results table.
+   */
+  it("queues a due nudge without yet calling it sent", async () => {
     await due("sbm_due");
     const n = await sweepFollowUps(env as unknown as Bindings);
     expect(n).toBe(2);
     const { results } = await rowsFor("sbm_due");
-    expect(results?.every((r) => r.status === "sent")).toBe(true);
+    expect(results?.every((r) => r.status === "queued")).toBe(true);
+    expect(results?.every((r) => r.sent_at === null)).toBe(true);
+  });
+
+  /** The guard against a second send: the sweep only ever picks up `scheduled`. */
+  it("does not re-enqueue a nudge that is already in flight", async () => {
+    await due("sbm_inflight");
+    expect(await sweepFollowUps(env as unknown as Bindings)).toBe(2);
+    expect(await sweepFollowUps(env as unknown as Bindings)).toBe(0);
+    const { results } = await rowsFor("sbm_inflight");
+    expect(results?.every((r) => r.status === "queued")).toBe(true);
   });
 
   it("skips a response that was completed after the nudge was scheduled", async () => {

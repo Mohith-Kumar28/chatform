@@ -260,6 +260,16 @@ export function FollowUpPanel({
             )}
           </div>
 
+          {/*
+            Says what "later" is measured from. It is the respondent's last
+            answer, not the moment we decide the response was abandoned — those
+            are half an hour apart, and without this line a "2 hours later"
+            reminder arriving at two and a half hours reads as a fault.
+          */}
+          <p className="text-muted-foreground text-xs">
+            Timed from the respondent&rsquo;s last answer.
+          </p>
+
           <button
             type="button"
             className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs"

@@ -237,8 +237,24 @@ export async function sweepFollowUps(env: Bindings, limit = 100): Promise<number
     }
 
     await env.Q_EMAIL.send({ kind: "followup", followupId: row.id });
-    await env.DB.prepare(`UPDATE followups SET status = 'sent', sent_at = ?2 WHERE id = ?1`)
-      .bind(row.id, now)
+    /**
+     * `queued`, not `sent` — the message has been handed to a queue, which is
+     * not the same as having reached anybody.
+     *
+     * Marketing mail takes the Resend path or no path at all (see `MailClass`),
+     * and it sends from a different subdomain than transactional mail does. An
+     * unverified sending domain therefore fails every follow-up while leaving
+     * password resets working, five retries deep into the dead-letter queue —
+     * and the row used to say `sent` throughout. The results table is about to
+     * show this state to authors, so it has to be true: `runFollowUpJob` moves
+     * it to `sent` once the send actually returns, and the queue consumer moves
+     * it to `failed` when the retries are exhausted.
+     *
+     * Safe against a double send: the query above selects `status = 'scheduled'`
+     * only, so a `queued` row is never picked up again.
+     */
+    await env.DB.prepare(`UPDATE followups SET status = 'queued', reason = NULL WHERE id = ?1`)
+      .bind(row.id)
       .run();
     sent++;
   }

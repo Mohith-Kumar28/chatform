@@ -27,6 +27,13 @@ export interface ScheduleInput {
   submissionId: string;
   formId: string;
   organizationId: string;
+  /**
+   * When the respondent last answered, not when we noticed they had gone.
+   *
+   * The two are half an hour apart on the chat path — that is the Durable
+   * Object's idle alarm — and every delay in the sequence is measured from
+   * here, so using the later of the two silently lengthened each one.
+   */
   abandonedAt: number;
   isTest?: boolean;
 }
@@ -113,6 +120,49 @@ export async function scheduleFollowUps(input: ScheduleInput): Promise<number> {
   }
 }
 
+/**
+ * Why this response is not getting a reminder, written where somebody can read it.
+ *
+ * Every check below is a reason not to mail a stranger, and each one used to be
+ * a bare `return 0`. That was fine while the only question was "should we send
+ * this", and useless the moment the question became "why did nothing arrive" —
+ * which is the question an author actually asks, with no log access and no row
+ * in `followups` to look at, because the whole point is that none was written.
+ *
+ * On `submissions.meta` rather than a column: it is already JSON, already
+ * written with `json_set` by `finalizeResponse`, and this needs no index and no
+ * migration. Cleared on the success path so a response that was rescheduled
+ * after the author fixed the cause does not still carry the old excuse.
+ */
+type SkipReason =
+  | "unpublished"
+  | "unreadable"
+  | "disabled"
+  | "not_entitled"
+  | "no_postal_address"
+  | "opted_out"
+  | "no_answers"
+  | "no_address"
+  | "suppressed"
+  | "closed";
+
+async function noteSkip(
+  env: Bindings,
+  submissionId: string,
+  reason: SkipReason | null,
+): Promise<number> {
+  try {
+    await env.DB.prepare(
+      `UPDATE submissions SET meta = json_set(coalesce(meta,'{}'), '$.followUpSkip', ?2) WHERE id = ?1`,
+    )
+      .bind(submissionId, reason)
+      .run();
+  } catch (err) {
+    console.error("followup_skip_note_failed", submissionId, err);
+  }
+  return 0;
+}
+
 async function scheduleInner(input: ScheduleInput): Promise<number> {
   const { env, submissionId, formId, organizationId, abandonedAt } = input;
 
@@ -129,18 +179,18 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
     .first<FormRow>();
   // No published version means nobody could have answered it through the
   // hosted form; nothing to schedule.
-  if (!form) return 0;
+  if (!form) return noteSkip(env, submissionId, "unpublished");
 
   let doc: FormDoc;
   try {
     doc = readFormDoc(JSON.parse(form.schema_json));
   } catch (err) {
     console.error("followup_doc_unreadable", formId, err);
-    return 0;
+    return noteSkip(env, submissionId, "unreadable");
   }
 
   const cfg = doc.settings.followUp;
-  if (!cfg?.enabled || cfg.steps.length === 0) return 0;
+  if (!cfg?.enabled || cfg.steps.length === 0) return noteSkip(env, submissionId, "disabled");
 
   /**
    * The entitlement is checked here as well as at publish.
@@ -149,7 +199,7 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
    * published document does not change when it does.
    */
   const ent = await getEntitlements(env, organizationId);
-  if (!can(ent, "followup_email")) return 0;
+  if (!can(ent, "followup_email")) return noteSkip(env, submissionId, "not_entitled");
 
   /**
    * No postal address, no reminders.
@@ -166,7 +216,7 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
     .first<{ postal_address: string | null }>();
   if (!org?.postal_address?.trim()) {
     console.log("followup_skipped_no_postal_address", organizationId);
-    return 0;
+    return noteSkip(env, submissionId, "no_postal_address");
   }
 
   /**
@@ -185,8 +235,9 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
   )
     .bind(submissionId)
     .first<SubRow>();
+  // Nothing to annotate if the row itself has gone.
   if (!sub) return 0;
-  if (sub.opted_out) return 0;
+  if (sub.opted_out) return noteSkip(env, submissionId, "opted_out");
 
   const answers = await env.DB.prepare(
     `SELECT block_ref, value_json FROM submission_answers WHERE submission_id = ?`,
@@ -205,7 +256,7 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
   // negotiations took place. `finalizeResponse` already declines to write a row
   // at all in that case, but an API response can reach here with an identity
   // and no answers.
-  if (byRef.size === 0) return 0;
+  if (byRef.size === 0) return noteSkip(env, submissionId, "no_answers");
 
   const hidden = parseHidden(sub.hidden_fields);
   const resolved = resolveRespondentAddress(doc, {
@@ -214,9 +265,11 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
     hiddenFields: hidden,
     ...(cfg.addressField ? { addressField: cfg.addressField } : {}),
   });
-  if (!resolved) return 0;
+  if (!resolved) return noteSkip(env, submissionId, "no_address");
 
-  if (await isSuppressed(env, organizationId, resolved.address)) return 0;
+  if (await isSuppressed(env, organizationId, resolved.address)) {
+    return noteSkip(env, submissionId, "suppressed");
+  }
 
   /**
    * The holdout.
@@ -245,7 +298,8 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
      */
     rows.push({ step: i + 1, at });
   });
-  if (rows.length === 0) return 0;
+  // Every step would land after the form stops accepting answers.
+  if (rows.length === 0) return noteSkip(env, submissionId, "closed");
 
   const stmts = rows.map((r) =>
     env.DB.prepare(
@@ -269,6 +323,9 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
     ),
   );
   await env.DB.batch(stmts);
+  // Something was written, so whatever excuse this response was carrying from
+  // an earlier attempt no longer applies.
+  await noteSkip(env, submissionId, null);
   return held ? 0 : rows.length;
 }
 

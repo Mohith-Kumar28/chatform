@@ -101,6 +101,33 @@ interface FollowUpRow {
  * time, so an author who fixes a typo in the sequence fixes it for mail that
  * has not gone out yet — which is what they expect.
  */
+/**
+ * Settle a follow-up row that will not be sent after all.
+ *
+ * Each of the gates below used to `return 0`, which acked the queue message and
+ * left the row reading `queued` forever — indistinguishable, to the results
+ * table, from one still waiting its turn. Never throws: the decision not to
+ * send has already been taken correctly, and failing here would retry a message
+ * we have just decided nobody should receive.
+ */
+async function settleFollowUp(
+  env: Bindings,
+  followupId: string,
+  status: "skipped" | "sent" | "failed",
+  reason: string | null,
+): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `UPDATE followups SET status = ?2, reason = ?3, sent_at = CASE WHEN ?2 = 'sent' THEN ?4 ELSE sent_at END
+        WHERE id = ?1`,
+    )
+      .bind(followupId, status, reason, Date.now())
+      .run();
+  } catch (err) {
+    console.error("followup_settle_failed", followupId, status, err);
+  }
+}
+
 async function runFollowUpJob(
   env: Bindings,
   job: Extract<MailJob, { kind: "followup" }>,
@@ -129,13 +156,17 @@ async function runFollowUpJob(
    * somebody "you didn't finish" after they finished is the single most
    * embarrassing thing this feature can do, so it is checked twice.
    */
-  if (row.sub_status !== "abandoned" && row.sub_status !== "in_progress") return 0;
+  if (row.sub_status !== "abandoned" && row.sub_status !== "in_progress") {
+    await settleFollowUp(env, row.id, "skipped", "response_settled");
+    return 0;
+  }
 
   let doc: FormDoc;
   try {
     doc = readFormDoc(JSON.parse(row.schema_json));
   } catch (err) {
     console.error("followup_doc_unreadable", row.form_id, err);
+    await settleFollowUp(env, row.id, "skipped", "unreadable");
     return 0;
   }
 
@@ -143,7 +174,10 @@ async function runFollowUpJob(
   const step = cfg?.steps[row.step - 1];
   // The author shortened the sequence after this was scheduled. Their most
   // recent intent wins.
-  if (!cfg?.enabled || !step) return 0;
+  if (!cfg?.enabled || !step) {
+    await settleFollowUp(env, row.id, "skipped", cfg?.enabled ? "step_removed" : "disabled");
+    return 0;
+  }
 
   const answers = await env.DB.prepare(
     `SELECT block_ref, value_json FROM submission_answers WHERE submission_id = ?`,
@@ -238,6 +272,9 @@ async function runFollowUpJob(
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
   });
+
+  // The send returned. Only now is this row honestly `sent`.
+  await settleFollowUp(env, row.id, "sent", null);
 
   await meterEmail(env, row.organization_id);
   /**

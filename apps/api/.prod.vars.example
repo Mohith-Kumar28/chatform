@@ -71,4 +71,11 @@ RESEND_API_KEY=
 # The From address for reminders. Defaults to hello@mail.<apex> when unset.
 # Keep it on a different subdomain from EMAIL_FROM so the two reputations are
 # judged separately.
+#
+# Set it rather than leaning on the default. The derivation is a guess about
+# DNS: it reads the apex out of APP_ORIGIN and assumes `mail.` under it is
+# verified in Resend. Move APP_ORIGIN to another host and the From silently
+# becomes an address nobody verified — and marketing mail has no fallback
+# transport, so every reminder fails five retries deep into the DLQ while
+# transactional mail carries on working.
 EMAIL_FROM_MARKETING=

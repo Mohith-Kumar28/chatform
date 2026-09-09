@@ -68,26 +68,196 @@ export interface SubmissionRecord {
   followUp?: {
     sent: number;
     scheduled: number;
+    queued: number;
     holdout: boolean;
     recovered: boolean;
+    /** Epoch ms of the next step still waiting to go out. */
+    nextScheduledAt: number | null;
+    lastSentAt: number | null;
+    stoppedStatus: string | null;
+    stoppedReason: string | null;
   } | null;
+  /** Why no sequence was ever scheduled — set when `followUp` is null for a reason. */
+  followUpSkip?: string | null;
+}
+
+/**
+ * Why this response is not getting a reminder, in the author's words.
+ *
+ * These are the silent branches of `scheduleFollowUps` and the sweep. An author
+ * whose postal address is missing, or whose change is saved but unpublished,
+ * gets no row in `followups` to look at and no error anywhere — the feature
+ * simply does nothing. Naming the cause on the response it happened to is the
+ * cheapest place to put it, because that is where they are already looking.
+ */
+const SKIP_COPY: Record<string, string> = {
+  unpublished: "form not published",
+  unreadable: "form could not be read",
+  disabled: "reminders off when they left",
+  not_entitled: "not on this plan",
+  no_postal_address: "no postal address set",
+  opted_out: "they opted out",
+  no_answers: "nothing answered yet",
+  no_address: "no email to send to",
+  suppressed: "unsubscribed",
+  closed: "form closes first",
+  response_settled: "they finished first",
+  step_removed: "step was removed",
+  email_quota: "email quota spent",
+  shared_domain_cap: "sending cap reached",
+  unsubscribed: "unsubscribed",
+  completed: "they finished",
+  disqualified: "screened out",
+};
+
+function skipCopy(reason: string): string {
+  return SKIP_COPY[reason] ?? reason.replace(/_/g, " ");
 }
 
 /**
  * What happened after they left, in two or three words.
  *
- * Worth a badge of its own rather than a column: it applies to a minority of
- * responses, and the one state anybody is looking for — they were nudged and
- * came back — is otherwise invisible without exporting and joining by hand.
+ * This began as a badge in the detail dialog only, on the grounds that it
+ * applies to a minority of responses. It earns a column in the Partial view
+ * because that is the view where it applies to *most* of them, and because the
+ * question it answers there — "why has nobody been nudged yet" — was previously
+ * unanswerable from the product at all.
  */
-function followUpLabel(row: SubmissionRecord): { text: string; tone: "good" | "muted" } | null {
+function followUpLabel(row: SubmissionRecord): { text: string; tone: "good" | "muted" | "warn" } | null {
   const f = row.followUp;
-  if (!f) return null;
+  if (!f) {
+    return row.followUpSkip
+      ? { text: `Not sent — ${skipCopy(row.followUpSkip)}`, tone: "warn" }
+      : null;
+  }
   if (f.recovered) return { text: "Recovered", tone: "good" };
   if (f.holdout) return { text: "Held back", tone: "muted" };
-  if (f.sent > 0) return { text: f.sent === 1 ? "Nudged" : `Nudged ×${f.sent}`, tone: "muted" };
+  // In flight beats the count: "sending" is the more useful thing to know while
+  // it is true, and it is true for seconds.
+  if (f.queued > 0) return { text: "Sending…", tone: "muted" };
+  if (f.scheduled > 0 && f.nextScheduledAt) {
+    /*
+     * A due time in the past is normal, not late: the sweep runs every five
+     * minutes, and a step configured for less than the idle window is overdue
+     * the moment it is written. "Reminder 3 minutes ago" would read as a
+     * message that has already gone, which is the opposite of what it means.
+     */
+    return f.nextScheduledAt <= Date.now()
+      ? { text: "Reminder due", tone: "muted" }
+      : { text: `Reminder ${formatRelative(f.nextScheduledAt)}`, tone: "muted" };
+  }
   if (f.scheduled > 0) return { text: "Reminder queued", tone: "muted" };
+  if (f.sent > 0) {
+    const n = f.sent === 1 ? "Nudged" : `Nudged ×${f.sent}`;
+    return { text: f.lastSentAt ? `${n} · ${formatRelative(f.lastSentAt)}` : n, tone: "muted" };
+  }
+  if (f.stoppedReason) return { text: `Not sent — ${skipCopy(f.stoppedReason)}`, tone: "warn" };
   return null;
+}
+
+/**
+ * The two pinned columns on the right, and the arithmetic between them.
+ *
+ * `Submitted` gets an explicit width so `Follow-up` can be pinned exactly
+ * beside it. Tailwind needs both class names to exist literally, so the offset
+ * cannot be computed from the width — keep them in step by hand, and keep them
+ * next to each other so it is obvious that they are a pair.
+ */
+const SUBMITTED_W = "w-[9.5rem]";
+const FOLLOWUP_OFFSET = "sticky right-[9.5rem]";
+
+/**
+ * One phrase about the follow-up sequence, shared by the column and the dialog.
+ *
+ * `empty` differs between the two on purpose: a table column has to hold its
+ * shape, so it shows an em-dash; a row of badges in the dialog should simply
+ * not carry one.
+ */
+function FollowUpCell({ row, empty = "dash" }: { row: SubmissionRecord; empty?: "dash" | "none" }) {
+  const label = followUpLabel(row);
+  if (!label) {
+    return empty === "dash" ? <span className="text-muted-foreground/60">—</span> : null;
+  }
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
+        // `--warning-soft` pairs with `--warning-soft-foreground`, never with
+        // `--warning` — that pairing is the one that reads in both themes.
+        label.tone === "good"
+          ? "bg-[var(--success-soft,var(--primary-soft))] text-[var(--success)]"
+          : label.tone === "warn"
+            ? "bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)]"
+            : "bg-muted text-muted-foreground",
+      )}
+    >
+      <MailCheck className="size-3 shrink-0" />
+      <span className="block max-w-[11rem] truncate">{label.text}</span>
+    </span>
+  );
+}
+
+/**
+ * The reminder sequence for one response, with real times on it.
+ *
+ * The badge says "Reminder in 1h", which is the right density for a table and
+ * the wrong one for somebody who has opened a response to work out what the
+ * product did. Here the times are absolute — a relative time is unfalsifiable,
+ * and "why has this not gone" is exactly the question you cannot answer without
+ * a clock you can compare against your own.
+ *
+ * Step numbers are derived rather than fetched: the counts already say how many
+ * steps this response's sequence has and how many have gone, which is the whole
+ * of "2 of 3" without a second query.
+ */
+function FollowUpDetail({ row }: { row: SubmissionRecord }) {
+  const f = row.followUp;
+  if (!f) {
+    if (!row.followUpSkip) return null;
+    return (
+      <p className="text-muted-foreground text-xs">
+        No reminder scheduled — {skipCopy(row.followUpSkip)}.
+      </p>
+    );
+  }
+
+  const total = f.sent + f.queued + f.scheduled;
+  const done = f.sent + f.queued;
+  const lines: string[] = [];
+
+  if (f.holdout) {
+    lines.push("Held back from the reminder sequence, to keep the recovery figure honest.");
+  }
+  if (f.lastSentAt) {
+    const which = f.sent === 1 ? "Reminder sent" : `${f.sent} reminders sent, last`;
+    lines.push(`${which} ${formatDateTime(f.lastSentAt)}.`);
+  }
+  if (f.queued > 0) {
+    lines.push("A reminder is with the mail queue now.");
+  }
+  if (f.nextScheduledAt) {
+    const step = total > 1 ? `Reminder ${Math.min(done + 1, total)} of ${total}` : "The reminder";
+    // Due in the past means it is waiting on the next sweep, not that it went.
+    lines.push(
+      f.nextScheduledAt <= Date.now()
+        ? `${step} was due ${formatDateTime(f.nextScheduledAt)} and goes out on the next sweep.`
+        : `${step} sends ${formatDateTime(f.nextScheduledAt)}.`,
+    );
+  }
+  if (f.stoppedReason) {
+    lines.push(
+      `${f.stoppedStatus === "failed" ? "Delivery failed" : "Sequence stopped"} — ${skipCopy(f.stoppedReason)}.`,
+    );
+  }
+  if (lines.length === 0) return null;
+
+  return (
+    <div className="text-muted-foreground space-y-1 text-xs">
+      {lines.map((l) => (
+        <p key={l}>{l}</p>
+      ))}
+    </div>
+  );
 }
 
 export type ResultColumn = Pick<Block, "ref" | "title" | "type">;
@@ -98,11 +268,18 @@ export function SubmissionsTable({
   columns,
   /** The status switcher, rendered on the left of the table's own toolbar. */
   filters,
+  /**
+   * Which chip is active. The follow-up column is Partial-only: on a completed
+   * response the answer is always "they finished", which is what the row
+   * already says.
+   */
+  showFollowUp = false,
 }: {
   formId: string;
   rows: SubmissionRecord[];
   columns: ResultColumn[];
   filters?: React.ReactNode;
+  showFollowUp?: boolean;
 }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   /**
@@ -278,11 +455,28 @@ export function SubmissionsTable({
                   );
                 })}
                 {/*
+                  Pinned beside Submitted rather than left to scroll, because
+                  "when is the next reminder" is read against "when did they
+                  leave" — the two numbers only mean something together.
+
+                  Its offset is `SUBMITTED_W`, which is why that column now
+                  carries an explicit width: a pinned column has to know exactly
+                  how wide its neighbour is.
+                */}
+                {showFollowUp && (
+                  <th className={cn("z-30! border-l px-3 py-2.5 text-left", FOLLOWUP_OFFSET)}>
+                    <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium whitespace-nowrap">
+                      <MailCheck className="size-3.5" />
+                      Follow-up
+                    </span>
+                  </th>
+                )}
+                {/*
                   Pinned, because it is the one column you look for after
                   scrolling right — and because a table that ends in whitespace
                   reads as truncated rather than as finished.
                 */}
-                <th className="right-0 z-30! border-l px-3 py-2.5 text-left">
+                <th className={cn("right-0 z-30! border-l px-3 py-2.5 text-left", SUBMITTED_W)}>
                   <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium whitespace-nowrap">
                     <Clock className="size-3.5" />
                     Submitted
@@ -334,7 +528,22 @@ export function SubmissionsTable({
                         </span>
                       </td>
                     ))}
-                    <td className="text-muted-foreground bg-inherit sticky right-0 z-10 border-l px-3 py-2.5 whitespace-nowrap">
+                    {showFollowUp && (
+                      <td
+                        className={cn(
+                          "text-muted-foreground bg-inherit z-10 border-l px-3 py-2.5 whitespace-nowrap",
+                          FOLLOWUP_OFFSET,
+                        )}
+                      >
+                        <FollowUpCell row={row} />
+                      </td>
+                    )}
+                    <td
+                      className={cn(
+                        "text-muted-foreground bg-inherit sticky right-0 z-10 border-l px-3 py-2.5 whitespace-nowrap",
+                        SUBMITTED_W,
+                      )}
+                    >
                       {formatWhen(row)}
                     </td>
                   </tr>
@@ -543,23 +752,7 @@ function SubmissionDialog({
                   ? "Screened out"
                   : "Didn't finish"}
             </span>
-            {(() => {
-              const f = followUpLabel(row);
-              if (!f) return null;
-              return (
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5",
-                    f.tone === "good"
-                      ? "bg-[var(--success-soft,var(--primary-soft))] text-[var(--success)]"
-                      : "bg-muted text-muted-foreground",
-                  )}
-                >
-                  {f.tone === "good" && <MailCheck className="size-3" />}
-                  {f.text}
-                </span>
-              );
-            })()}
+            <FollowUpCell row={row} empty="none" />
             <span className="text-muted-foreground">
               {answered} of {columns.length} answered
             </span>
@@ -573,6 +766,8 @@ function SubmissionDialog({
               </span>
             )}
           </div>
+
+          <FollowUpDetail row={row} />
 
           {/*
             The answer is the thing; the question is its label.

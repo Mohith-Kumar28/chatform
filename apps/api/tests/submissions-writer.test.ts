@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
 import { applySchema, seedTenant, fetchApi, type Tenant } from "./helpers.js";
-import { openResponse, recordAnswerRow, finalizeResponse, type ResponseOwner } from "../src/lib/submissions.js";
+import {
+  openResponse,
+  attachRespondent,
+  recordAnswerRow,
+  finalizeResponse,
+  type ResponseOwner,
+} from "../src/lib/submissions.js";
 
 /**
  * The two response writers must agree.
@@ -252,6 +258,71 @@ describe("chat and API writers agree", () => {
     expect(first.changed).toBe(true);
     expect(second.changed, "a second finalize must not fire a second webhook").toBe(false);
     expect((await rowFor(id)).status).toBe("completed");
+  });
+
+  /**
+   * Identity belongs to the response from the moment it is known.
+   *
+   * It used to be written only by `finalizeResponse`, which tied "who answered"
+   * to "they stopped answering": every partial read as anonymous in the results
+   * table, and a resumed one made its respondent sign in again, because
+   * `loadResumable` reads identity off this row.
+   */
+  it("stamps a verified respondent on a response that is still in progress", async () => {
+    const owner: ResponseOwner = {
+      env: env as never,
+      formId: t.formId,
+      formVersionId: VERSION_ID,
+      organizationId: t.orgId,
+      sessionId: null,
+      source: "api",
+    };
+    const identity = {
+      provider: "google" as const,
+      subject: "google-sub-writer",
+      email: "signed.in@northwind.example",
+      phone: null,
+      name: "Signed In",
+      pictureUrl: null,
+      verifiedAt: Date.now(),
+    };
+    const atOpen = await openResponse(owner, {
+      hiddenFields: {},
+      variables: {},
+      userAgent: null,
+      country: null,
+      startedAt: Date.now(),
+      identity,
+    });
+    const opened = await env.DB.prepare(
+      `SELECT status, respondent_provider, respondent_email FROM submissions WHERE id = ?`,
+    )
+      .bind(atOpen)
+      .first<{ status: string; respondent_provider: string | null; respondent_email: string | null }>();
+    expect(opened?.status).toBe("in_progress");
+    expect(opened?.respondent_email).toBe("signed.in@northwind.example");
+    expect(opened?.respondent_provider).toBe("google");
+
+    // And the later-sign-in path: a row opened anonymously, adopted afterwards.
+    const later = await openResponse(owner, {
+      hiddenFields: {},
+      variables: {},
+      userAgent: null,
+      country: null,
+      startedAt: Date.now(),
+    });
+    await attachRespondent(env as never, later, identity);
+    const adopted = await env.DB.prepare(`SELECT respondent_email FROM submissions WHERE id = ?`)
+      .bind(later)
+      .first<{ respondent_email: string | null }>();
+    expect(adopted?.respondent_email).toBe("signed.in@northwind.example");
+
+    // Write-once: a second identity cannot displace the first.
+    await attachRespondent(env as never, later, { ...identity, subject: "other", email: "other@x.example" });
+    const still = await env.DB.prepare(`SELECT respondent_email FROM submissions WHERE id = ?`)
+      .bind(later)
+      .first<{ respondent_email: string | null }>();
+    expect(still?.respondent_email).toBe("signed.in@northwind.example");
   });
 
   it("writes nothing at all for a preview session", async () => {

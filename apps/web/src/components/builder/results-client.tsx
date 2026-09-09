@@ -223,7 +223,15 @@ export function ResultsClient({ formId }: ResultsClientProps) {
               />
             </>
           ) : (
-            <SubmissionsTable formId={formId} rows={rows} columns={columns} filters={statusSwitcher} />
+            <SubmissionsTable
+              formId={formId}
+              rows={rows}
+              columns={columns}
+              filters={statusSwitcher}
+              // Partial only: on a finished response the follow-up story is
+              // always "they finished", which the status pill already says.
+              showFollowUp={statusFilter === "abandoned"}
+            />
           )}
         </div>
       )}

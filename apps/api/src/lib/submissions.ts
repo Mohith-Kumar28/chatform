@@ -57,6 +57,15 @@ export interface OpenResponseArgs {
   /** Null means "no deadline": the chat path's DO alarm owns abandonment. */
   expiresAt?: number | null;
   apiKeyId?: string | null;
+  /**
+   * The verified respondent, when one is already known at creation.
+   *
+   * Normally they are: the sign-in gate refuses every turn until an identity
+   * exists, and this row is opened lazily by the first accepted answer. Passing
+   * it here is what stops an `in_progress` row from being anonymous for its
+   * whole life — see `attachRespondent` for the case where sign-in comes later.
+   */
+  identity?: RespondentIdentity | null;
 }
 
 /**
@@ -71,8 +80,9 @@ export async function openResponse(o: ResponseOwner, a: OpenResponseArgs): Promi
   await o.env.DB.prepare(
     `INSERT INTO submissions
        (id, form_id, form_version_id, organization_id, session_id, source, is_test, status,
-        hidden_fields, meta, started_at, updated_at, expires_at, api_key_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, ?, ?, ?, ?, ?)
+        hidden_fields, meta, started_at, updated_at, expires_at, api_key_id,
+        respondent_provider, respondent_subject, respondent_email, respondent_phone, respondent_name)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO NOTHING`,
   )
     .bind(
@@ -91,9 +101,63 @@ export async function openResponse(o: ResponseOwner, a: OpenResponseArgs): Promi
       a.startedAt,
       a.expiresAt ?? null,
       a.apiKeyId ?? null,
+      a.identity?.provider ?? null,
+      a.identity?.subject ?? null,
+      a.identity?.email ?? null,
+      a.identity?.phone ?? null,
+      a.identity?.name ?? null,
     )
     .run();
   return id;
+}
+
+/**
+ * Stamp a verified respondent onto a response that already exists.
+ *
+ * For the case `openResponse` cannot cover: somebody who signs in *after* the
+ * row was opened, because the form did not require it and they volunteered, or
+ * because `requireAuth` was switched on mid-conversation.
+ *
+ * Until this existed, `finalizeResponse` was the only writer of these columns,
+ * which coupled "who answered" to "they stopped answering": every `in_progress`
+ * response read as anonymous in the results table, a resumed one made its
+ * respondent sign in again — `loadResumable` reads identity off this row — and
+ * a Durable Object that lost its storage before finalising lost the identity
+ * for good.
+ *
+ * `respondent_subject IS NULL` makes it write-once. The identity attached to a
+ * conversation cannot change (`attachIdentity` is idempotent on the same
+ * grounds), so a second writer here is a retry, not a correction, and letting
+ * it through would be a way to overwrite one respondent with another.
+ *
+ * Never throws: this hangs off a sign-in that has already succeeded, and
+ * failing the verification because a denormalised copy could not be written
+ * would send the respondent back to a gate they have just cleared.
+ */
+export async function attachRespondent(
+  env: Bindings,
+  responseId: string,
+  identity: RespondentIdentity,
+): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `UPDATE submissions
+          SET respondent_provider = ?2, respondent_subject = ?3,
+              respondent_email = ?4, respondent_phone = ?5, respondent_name = ?6
+        WHERE id = ?1 AND status = 'in_progress' AND respondent_subject IS NULL`,
+    )
+      .bind(
+        responseId,
+        identity.provider,
+        identity.subject,
+        identity.email ?? null,
+        identity.phone ?? null,
+        identity.name ?? null,
+      )
+      .run();
+  } catch (err) {
+    console.error("respondent_attach_failed", responseId, err);
+  }
 }
 
 export interface RecordAnswerArgs {
@@ -266,6 +330,30 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
   const durationMs = now - a.startedAt;
   if (isPreview(o)) return { changed: false, durationMs };
 
+  /**
+   * When the respondent actually stopped, read before the UPDATE below
+   * overwrites `updated_at` with `now`.
+   *
+   * Follow-up delays are measured from this rather than from the moment we
+   * noticed. A conversation is not declared abandoned until its Durable Object
+   * has been idle for thirty minutes, so scheduling from `now` quietly added
+   * that half hour to every delay the author configured: a "2 hours" reminder
+   * went out two and a half hours after they left, and the settings screen had
+   * no way to say so. `updated_at` is bumped by every answer, on both the chat
+   * and API paths, which makes it the same clock the author is thinking about.
+   *
+   * Only read on the abandon path — it is the only one that schedules — and it
+   * falls back to `now`, which is the old behaviour.
+   */
+  let lastActivityAt = now;
+  if (a.status === "abandoned") {
+    const prior = await o.env.DB.prepare(`SELECT updated_at FROM submissions WHERE id = ?`)
+      .bind(a.responseId)
+      .first<{ updated_at: number | null }>()
+      .catch(() => null);
+    if (prior?.updated_at) lastActivityAt = prior.updated_at;
+  }
+
   const id = a.identity ?? null;
   const stmts = [
     o.env.DB.prepare(
@@ -400,7 +488,7 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
       submissionId: a.responseId,
       formId: o.formId,
       organizationId: o.organizationId,
-      abandonedAt: now,
+      abandonedAt: lastActivityAt,
       ...(o.isTest === true ? { isTest: true } : {}),
     });
   } else {

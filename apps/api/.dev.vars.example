@@ -57,6 +57,18 @@ EMAIL_REPLY_TO=
 # Cloudflare scales with reputation and does not publish; set this and the binding
 # is bypassed for Resend's HTTP API, with no other change. See lib/mail.ts.
 RESEND_API_KEY=
+
+# The From address for follow-up reminders, which always go over Resend and
+# never touch the binding. Set this whenever RESEND_API_KEY is set: unset, it
+# derives `hello@mail.<apex of APP_ORIGIN>`, and the local APP_ORIGIN is
+# localhost — so the sender becomes `hello@mail.localhost` and Resend rejects
+# every reminder. Marketing mail has no fallback transport to absorb that.
+#
+# Whatever you put here must be a domain verified in Resend, which means a
+# reminder sent from a dev worker is a real email. Use a Resend test address if
+# that is not what you want.
+EMAIL_FROM_MARKETING=
+
 TURNSTILE_SECRET_KEY=
 FILE_ENCRYPTION_KEY=
 

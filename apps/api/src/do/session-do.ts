@@ -47,6 +47,7 @@ import { meter } from "../lib/entitlements.js";
 import { costUsdMicro } from "../lib/ai-pricing.js";
 import {
   openResponse,
+  attachRespondent,
   recordAnswerRow,
   deleteAnswerRow,
   finalizeResponse,
@@ -422,6 +423,30 @@ export class SessionDO extends DurableObject<Bindings> {
 
     this.meta.identity = identity;
     await this.persistMeta();
+
+    /**
+     * Write it down straight away, on both rows that carry it.
+     *
+     * `openResponse` covers the common order — gate, sign-in, first answer — but
+     * a respondent can also verify *after* a row exists: a form that did not
+     * require sign-in and asked anyway, or one where `requireAuth` was turned on
+     * mid-conversation. Leaving those to `finalizeResponse` is what made every
+     * partial response read as anonymous until it was abandoned.
+     *
+     * Failures are swallowed by the callees. The verification has already
+     * succeeded and is already in durable storage; a denormalised copy that did
+     * not land is a stale results table, not a failed sign-in.
+     */
+    const openRow = await this.ctx.storage.get<string>("submission_id").catch(() => null);
+    if (openRow) await attachRespondent(this.env, openRow, identity);
+    try {
+      await this.env.DB.prepare(`UPDATE chat_sessions SET respondent_identity = ? WHERE id = ?`)
+        .bind(JSON.stringify(identity), this.meta.sessionId)
+        .run();
+    } catch (err) {
+      console.error("session_identity_write_failed", this.meta.sessionId, err);
+    }
+
     await this.emit("auth_verified", {
       provider: identity.provider,
       label: identity.email ?? identity.phone ?? identity.name ?? "Verified",
@@ -2017,6 +2042,9 @@ export class SessionDO extends DurableObject<Bindings> {
         userAgent: this.meta!.userAgent,
         country: this.meta!.country,
         startedAt: this.meta!.startedAt,
+        // Usually present: the gate refuses every turn until it is, and this row
+        // is opened by the first accepted answer.
+        identity: this.meta!.identity ?? null,
       });
       await this.ctx.storage.put("submission_id", id);
       return id;

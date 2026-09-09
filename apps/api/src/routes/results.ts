@@ -33,6 +33,22 @@ const SubmissionRow = z.object({
   startedAt: z.number(),
   completedAt: z.number().nullable(),
   durationMs: z.number().nullable(),
+  /**
+   * Present only for forms that required sign-in.
+   *
+   * This and `followUp` below have been returned by the handler for some time
+   * without being declared here, so neither reached `openapi.json` and neither
+   * survived into the generated client — which is why the results page has to
+   * cast the response to a hand-written type. Declared now, with the fields the
+   * follow-up column needs.
+   */
+  respondent: z
+    .object({
+      provider: z.string(),
+      label: z.string(),
+      name: z.string().nullable(),
+    })
+    .nullable(),
   answers: z.array(
     z.object({
       blockRef: z.string(),
@@ -47,6 +63,24 @@ const SubmissionRow = z.object({
       createdAt: z.number(),
     }),
   ),
+  /** Null when this response was never in a follow-up sequence at all. */
+  followUp: z
+    .object({
+      sent: z.number(),
+      scheduled: z.number(),
+      queued: z.number(),
+      holdout: z.boolean(),
+      recovered: z.boolean(),
+      /** Epoch ms of the next step still waiting to go out. */
+      nextScheduledAt: z.number().nullable(),
+      lastSentAt: z.number().nullable(),
+      /** `skipped` | `failed` | `cancelled`, when the sequence ended early. */
+      stoppedStatus: z.string().nullable(),
+      stoppedReason: z.string().nullable(),
+    })
+    .nullable(),
+  /** Why no sequence was ever scheduled. Null when one was, or when nothing tried. */
+  followUpSkip: z.string().nullable(),
 });
 
 const Summary = z.object({
@@ -198,7 +232,10 @@ resultsRouter.get(
     // `?` with `?1` silently changes how many bindings the statement wants.
     const subs = await c.env.DB.prepare(
       `SELECT s.id, s.status, s.started_at, s.completed_at, s.duration_ms, s.session_id,
-              s.respondent_provider, s.respondent_email, s.respondent_phone, s.respondent_name
+              s.respondent_provider, s.respondent_email, s.respondent_phone, s.respondent_name,
+              -- Why no reminder was ever scheduled for this response. Written by
+              -- \`scheduleFollowUps\`, which otherwise makes that decision in silence.
+              json_extract(s.meta, '$.followUpSkip') AS followup_skip
        FROM submissions s WHERE s.form_id = ? AND (? = 'all' OR s.status = ?)
        ORDER BY s.started_at DESC LIMIT ?`,
     )
@@ -214,6 +251,7 @@ resultsRouter.get(
         respondent_email: string | null;
         respondent_phone: string | null;
         respondent_name: string | null;
+        followup_skip: string | null;
       }>();
 
     /**
@@ -228,11 +266,37 @@ resultsRouter.get(
       `SELECT submission_id,
               SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
               SUM(CASE WHEN status = 'scheduled' THEN 1 ELSE 0 END) AS scheduled,
-              MAX(CASE WHEN status = 'holdout' THEN 1 ELSE 0 END) AS holdout
+              SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
+              MAX(CASE WHEN status = 'holdout' THEN 1 ELSE 0 END) AS holdout,
+              -- When the next one is due. Only the steps still waiting count:
+              -- this is the number the results table renders as "Reminder in 1h",
+              -- and it has to be a time in the future or nothing at all.
+              MIN(CASE WHEN status IN ('scheduled','queued') THEN scheduled_at END) AS next_scheduled_at,
+              MAX(sent_at) AS last_sent_at,
+              -- Why the sequence stopped, if it did. Newest step wins, because a
+              -- later step's verdict supersedes an earlier one's.
+              (SELECT reason FROM followups x
+                WHERE x.submission_id = followups.submission_id
+                  AND x.status IN ('skipped','failed','cancelled')
+                ORDER BY x.step DESC LIMIT 1) AS stopped_reason,
+              (SELECT status FROM followups x
+                WHERE x.submission_id = followups.submission_id
+                  AND x.status IN ('skipped','failed','cancelled')
+                ORDER BY x.step DESC LIMIT 1) AS stopped_status
          FROM followups WHERE form_id = ? GROUP BY submission_id`,
     )
       .bind(id)
-      .all<{ submission_id: string; sent: number; scheduled: number; holdout: number }>();
+      .all<{
+        submission_id: string;
+        sent: number;
+        scheduled: number;
+        queued: number;
+        holdout: number;
+        next_scheduled_at: number | null;
+        last_sent_at: number | null;
+        stopped_reason: string | null;
+        stopped_status: string | null;
+      }>();
     const byId = new Map(followUps.results?.map((r) => [r.submission_id, r]) ?? []);
 
     const out = [];
@@ -284,10 +348,34 @@ resultsRouter.get(
           ? {
               sent: byId.get(s.id)!.sent,
               scheduled: byId.get(s.id)!.scheduled,
+              queued: byId.get(s.id)!.queued,
               holdout: byId.get(s.id)!.holdout === 1,
               recovered: byId.get(s.id)!.sent > 0 && s.status === "completed",
+              nextScheduledAt: byId.get(s.id)!.next_scheduled_at,
+              lastSentAt: byId.get(s.id)!.last_sent_at,
+              /**
+               * Set only when the sequence ended for a reason, and only when
+               * nothing is still pending — a first step that was skipped while
+               * the second is still due is not a stopped sequence.
+               */
+              stoppedReason:
+                byId.get(s.id)!.scheduled + byId.get(s.id)!.queued === 0
+                  ? byId.get(s.id)!.stopped_reason
+                  : null,
+              stoppedStatus:
+                byId.get(s.id)!.scheduled + byId.get(s.id)!.queued === 0
+                  ? byId.get(s.id)!.stopped_status
+                  : null,
             }
           : null,
+        /**
+         * Why no sequence exists at all. Distinct from `followUp.stoppedReason`,
+         * which is about one that did: an author looking at a partial with no
+         * reminder needs to know whether the cause is their postal address,
+         * their plan, an unpublished change, or the respondent opting out —
+         * none of which leaves a row behind to point at.
+         */
+        followUpSkip: s.followup_skip,
       });
     }
     return c.json(out);

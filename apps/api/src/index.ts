@@ -22,6 +22,9 @@ export { SessionDO };
 
 const app = createApp();
 
+/** `max_retries` for the `q-emails` consumer in `wrangler.jsonc`. */
+const MAX_EMAIL_ATTEMPTS = 5;
+
 export default {
   fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
@@ -77,6 +80,26 @@ export default {
         } catch (err) {
           console.error("mail_job_failed", job.kind, err);
           await recordMailDelivery(env, job, { status: "failed", attempt: msg.attempts, error: err });
+          /**
+           * A follow-up that has run out of retries is about to disappear into
+           * the dead-letter queue, where the author who configured it will
+           * never look. Record the ending on the row itself, which is what the
+           * results table reads — otherwise a reminder that failed every attempt
+           * still reads as `queued`, which is exactly the lie this pass exists
+           * to remove.
+           *
+           * `MAX_EMAIL_ATTEMPTS` must track `max_retries` for `q-emails` in
+           * `wrangler.jsonc`; being wrong costs a mislabelled row, not a lost
+           * message.
+           */
+          if (job.kind === "followup" && msg.attempts >= MAX_EMAIL_ATTEMPTS) {
+            await env.DB.prepare(
+              `UPDATE followups SET status = 'failed', reason = ?2 WHERE id = ?1 AND status = 'queued'`,
+            )
+              .bind(job.followupId, String(err).slice(0, 200))
+              .run()
+              .catch((e: unknown) => console.error("followup_fail_mark_failed", job.followupId, e));
+          }
           msg.retry();
         }
       } else {

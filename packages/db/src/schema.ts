@@ -1012,7 +1012,13 @@ export const followups = sqliteTable(
     addressSource: text("address_source").notNull(),
     /** 1-based position in the configured sequence. */
     step: integer("step").notNull(),
-    /** `scheduled` | `sent` | `skipped` | `cancelled` | `failed` | `holdout` */
+    /**
+     * `scheduled` | `queued` | `sent` | `skipped` | `cancelled` | `failed` | `holdout`
+     *
+     * `queued` sits between `scheduled` and `sent`: handed to the mail queue,
+     * not yet delivered. The sweep only ever picks up `scheduled`, so this is
+     * also what stops a message in flight from being enqueued a second time.
+     */
     status: text("status").notNull().default("scheduled"),
     /** Why it was skipped or cancelled, in words the results table can show. */
     reason: text("reason"),

@@ -90,7 +90,11 @@ export async function computeFollowUpStats(
       `SELECT
          COUNT(*) AS total,
          SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
-         SUM(CASE WHEN status = 'scheduled' THEN 1 ELSE 0 END) AS pending,
+         -- A queued row is handed to the mail queue but not yet delivered. It
+         -- is still pending from an author's point of view, and counting only
+         -- scheduled ones would make an in-flight reminder vanish from both
+         -- this number and sent.
+         SUM(CASE WHEN status IN ('scheduled','queued') THEN 1 ELSE 0 END) AS pending,
          SUM(CASE WHEN clicked_at IS NOT NULL THEN 1 ELSE 0 END) AS clicked,
          SUM(CASE WHEN recovered_at IS NOT NULL THEN 1 ELSE 0 END) AS recovered
        FROM followups WHERE form_id = ?`,

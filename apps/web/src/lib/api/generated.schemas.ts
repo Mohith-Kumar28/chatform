@@ -1281,6 +1281,12 @@ export const GetApiFormsByIdSubmissionsStatus = {
   in_progress: 'in_progress',
 } as const;
 
+export type GetApiFormsByIdSubmissions200ItemRespondent = {
+  provider: string;
+  label: string;
+  name: string | null;
+} | null;
+
 export type GetApiFormsByIdSubmissions200ItemAnswersItem = {
   blockRef: string;
   blockType: string;
@@ -1293,14 +1299,29 @@ export type GetApiFormsByIdSubmissions200ItemTranscriptItem = {
   createdAt: number;
 };
 
+export type GetApiFormsByIdSubmissions200ItemFollowUp = {
+  sent: number;
+  scheduled: number;
+  queued: number;
+  holdout: boolean;
+  recovered: boolean;
+  nextScheduledAt: number | null;
+  lastSentAt: number | null;
+  stoppedStatus: string | null;
+  stoppedReason: string | null;
+} | null;
+
 export type GetApiFormsByIdSubmissions200Item = {
   id: string;
   status: string;
   startedAt: number;
   completedAt: number | null;
   durationMs: number | null;
+  respondent: GetApiFormsByIdSubmissions200ItemRespondent;
   answers: GetApiFormsByIdSubmissions200ItemAnswersItem[];
   transcript: GetApiFormsByIdSubmissions200ItemTranscriptItem[];
+  followUp: GetApiFormsByIdSubmissions200ItemFollowUp;
+  followUpSkip: string | null;
 };
 
 export type DeleteApiFormsByIdSubmissionsBody = {

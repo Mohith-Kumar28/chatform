@@ -5123,6 +5123,39 @@
                           }
                         ]
                       },
+                      "respondent": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "provider": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "provider",
+                              "label",
+                              "name"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "answers": {
                         "type": "array",
                         "items": {
@@ -5164,6 +5197,94 @@
                             "createdAt"
                           ]
                         }
+                      },
+                      "followUp": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "sent": {
+                                "type": "number"
+                              },
+                              "scheduled": {
+                                "type": "number"
+                              },
+                              "queued": {
+                                "type": "number"
+                              },
+                              "holdout": {
+                                "type": "boolean"
+                              },
+                              "recovered": {
+                                "type": "boolean"
+                              },
+                              "nextScheduledAt": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "lastSentAt": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "stoppedStatus": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "stoppedReason": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "sent",
+                              "scheduled",
+                              "queued",
+                              "holdout",
+                              "recovered",
+                              "nextScheduledAt",
+                              "lastSentAt",
+                              "stoppedStatus",
+                              "stoppedReason"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "followUpSkip": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
                     },
                     "required": [
@@ -5172,8 +5293,11 @@
                       "startedAt",
                       "completedAt",
                       "durationMs",
+                      "respondent",
                       "answers",
-                      "transcript"
+                      "transcript",
+                      "followUp",
+                      "followUpSkip"
                     ]
                   }
                 }
