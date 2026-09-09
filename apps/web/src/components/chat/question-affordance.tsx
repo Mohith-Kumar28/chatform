@@ -10,7 +10,6 @@ import { SignatureComposer } from "./composers/signature";
 import { FieldsComposer, MatrixComposer, RankingComposer } from "./composers/structured";
 import { FileUploadControl } from "./file-upload";
 import { PaymentAffordance } from "./payment-affordance";
-import { QuestionMedia } from "./question-media";
 import { assetUrl } from "@/lib/assets";
 import { cn } from "@/lib/utils";
 
@@ -63,9 +62,10 @@ export const QuestionAffordance = memo(function QuestionAffordance(props: {
         props.disabled && "opacity-55",
       )}
     >
-      {/* An image, clip or download attached to the question. It was parsed,
-          projected all the way to the client, and then rendered nowhere. */}
-      <QuestionMedia media={props.block.media} imageKey={props.block.imageKey} />
+      {/* The question's media used to render here, under the agent's message
+          and above the chips — while the builder's preview drew it above the
+          question. `chat-client` now renders it in the one place both agree
+          on. */}
       <AffordanceControls {...props} />
       {props.followUpEnabled && collectsAddress(props.block) && props.onDeclineFollowUps && (
         <FollowUpOptOut onDecline={props.onDeclineFollowUps} />

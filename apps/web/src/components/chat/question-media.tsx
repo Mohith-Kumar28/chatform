@@ -11,6 +11,12 @@ import { assetUrl } from "@/lib/assets";
  * block, and projected all the way to the respondent's client — where nothing
  * rendered it. A question that said "which of these looks right?" above an
  * image showed no image at all.
+ *
+ * No border on the image or the clip. A chip border is there to say "this edge
+ * is a control"; an image already has an edge of its own, and the line drew a
+ * second one a pixel outside it — visible as a faint frame around artwork that
+ * was never meant to be framed. The download link keeps its border, because
+ * that one really is a control.
  */
 export function QuestionMedia({
   media,
@@ -25,7 +31,7 @@ export function QuestionMedia({
   if (fallback) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={fallback} alt="" className="max-h-64 w-auto rounded-2xl border border-[var(--cf-chip-border)] object-contain" />
+      <img src={fallback} alt="" className="max-h-64 w-auto rounded-2xl object-contain" />
     );
   }
   if (!media) return null;
@@ -40,7 +46,7 @@ export function QuestionMedia({
         <img
           src={url}
           alt={media.alt ?? ""}
-          className="max-h-64 w-auto rounded-2xl border border-[var(--cf-chip-border)] object-contain"
+          className="max-h-64 w-auto rounded-2xl object-contain"
           loading="lazy"
         />
         {media.caption && <figcaption className="px-1 text-xs opacity-55">{media.caption}</figcaption>}
@@ -56,7 +62,7 @@ export function QuestionMedia({
           controls
           playsInline
           preload="metadata"
-          className="max-h-72 w-full rounded-2xl border border-[var(--cf-chip-border)]"
+          className="max-h-72 w-full rounded-2xl"
         />
         {media.caption && <figcaption className="px-1 text-xs opacity-55">{media.caption}</figcaption>}
       </figure>

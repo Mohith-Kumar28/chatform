@@ -21,6 +21,7 @@ import { AuthCard } from "./auth-card";
 import { useChat, type ChatMessage } from "./use-chat";
 import { SendRow, TextInput } from "./composers/primitives";
 import { QuestionAffordance } from "./question-affordance";
+import { QuestionMedia } from "./question-media";
 import { ChatBoot } from "./chat-boot";
 import { Confetti } from "./confetti";
 import { cn } from "@/lib/utils";
@@ -156,6 +157,32 @@ export function ChatClient({
     [currentRef, sendStructured],
   );
   const onSkip = useCallback(() => void sendAction("skip"), [sendAction]);
+
+  /**
+   * The image, clip or file the current question carries — and the agent
+   * message it belongs above.
+   *
+   * It used to render inside `QuestionAffordance`, which sits *under* the
+   * agent's message with the chips. So the builder's preview showed the media
+   * above the question and the live form showed it below, and the preview was
+   * the one that was right: you look at the picture, then read what is being
+   * asked about it.
+   *
+   * Anchored to the last settled agent message rather than carried on the
+   * message itself, because a message does not record which block it asked
+   * about. While the next question is still streaming there is no settled
+   * bubble to sit above, so the previous question's media clears instead of
+   * hopping down onto the new one.
+   */
+  const media = chat.question?.block.media;
+  const imageKey = chat.question?.block.imageKey;
+  const mediaMessageId = useMemo(
+    () =>
+      media || imageKey
+        ? chat.messages.filter((m) => m.role === "assistant" && !m.streaming).at(-1)?.id
+        : undefined,
+    [media, imageKey, chat.messages],
+  );
   const uploadBase = chat.getUploadBase();
   const respondentToken = chat.getRespondentToken();
 
@@ -236,6 +263,11 @@ export function ChatClient({
 
           {chat.messages.map((m) => (
             <div key={m.id}>
+              {m.id === mediaMessageId && !chat.ending && !chat.auth && (
+                <div className="mb-2">
+                  <QuestionMedia media={media} imageKey={imageKey} />
+                </div>
+              )}
               <Bubble
                 message={m}
                 // A user message can be edited when we know which question it
