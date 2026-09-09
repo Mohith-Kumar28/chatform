@@ -17,7 +17,6 @@ import {
   Undo2,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -295,10 +294,9 @@ export function BuilderHeader({
                   size="sm"
                   shape="pill"
                   variant={published && !stale ? "soft" : "default"}
-                  onClick={async () => {
-                    await onPublish();
-                    toast.success(published ? "Changes published" : "Form published");
-                  }}
+                  // The shell reports the outcome — publishing has more than one
+                  // call site now, and only this one was saying it had worked.
+                  onClick={() => void onPublish()}
                   disabled={publishing || (published && !stale && settled)}
                 >
                   {publishing ? (

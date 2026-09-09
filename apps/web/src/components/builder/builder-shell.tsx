@@ -20,6 +20,8 @@ import { useAutosave } from "@/hooks/use-autosave";
 import { BuilderHeader } from "./builder-header";
 import { PreviewDialog } from "./preview-dialog";
 import { PublishStrippedDialog, type StrippedSetting } from "./publish-stripped-dialog";
+import { UnpublishedChangesDialog } from "./unpublished-changes-dialog";
+import { useUnpublishedGuard } from "./use-unpublished-guard";
 import { ShortcutsDialog } from "@/components/ui/shortcuts-dialog";
 import { useBuilderShortcuts } from "./use-builder-shortcuts";
 
@@ -68,6 +70,21 @@ export function BuilderShell({
         hasUnpublishedChanges: boolean;
       }
     | undefined;
+
+  /**
+   * Saved is not the same as live, and only one of those two facts survives
+   * closing the tab. The guard is armed only for a form that is actually
+   * published — a draft nobody can reach yet has no stale audience to warn
+   * about, and asking on the way out of every new form is how you teach someone
+   * to dismiss the dialog without reading it.
+   */
+  const editedSincePublish = useBuilderStore((s) => s.editedSincePublish);
+  const guard = useUnpublishedGuard({
+    formId,
+    active: row?.status === "published" && editedSincePublish,
+    // The dialog says the work is saved. Make that true before it says it.
+    onIntercept: () => void flush(),
+  });
 
   // Hydrate once per form. The doc is migrated client-side too so a tab opened
   // against a stale cache still sees the current shape.
@@ -133,6 +150,7 @@ export function BuilderShell({
   useEffect(() => setShortcuts(shortcuts), [shortcuts, setShortcuts]);
 
   async function onPublish() {
+    const wasPublished = row?.status === "published";
     setPublishing(true);
     try {
       // Flush first: Publish used to be disabled while the doc was dirty, so a
@@ -157,6 +175,10 @@ export function BuilderShell({
         queryClient.invalidateQueries({ queryKey: getGetApiFormsByIdQueryKey(formId as never) }),
         queryClient.invalidateQueries({ queryKey: ["forms"] }),
       ]);
+      // Toasted here rather than at the button, because publishing now has two
+      // call sites — the header and the leave guard — and only one of them was
+      // reporting that it had worked.
+      toast.success(wasPublished ? "Changes published" : "Form published");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Publish failed";
       toast.error("Could not publish", { description: message });
@@ -222,6 +244,15 @@ export function BuilderShell({
         )}
 
         <PublishStrippedDialog stripped={stripped} onClose={() => setStripped([])} />
+
+        <UnpublishedChangesDialog
+          open={guard.pending !== null}
+          activeVersion={row?.activeVersion ?? null}
+          publishedAt={row?.publishedAt ?? null}
+          onPublish={() => guard.publishAndLeave(onPublish)}
+          onLeave={guard.leave}
+          onStay={guard.stay}
+        />
 
         <ShortcutsDialog
           open={helpOpen}

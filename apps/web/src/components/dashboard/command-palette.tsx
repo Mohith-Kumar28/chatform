@@ -26,6 +26,7 @@ import { SETTINGS_SECTIONS } from "@/components/settings/sections";
 import { BUILDER_TABS } from "@/components/builder/builder-tabs";
 import { showHistory } from "@/components/builder/history-sheet";
 import { showShortcuts } from "@/components/builder/use-builder-shortcuts";
+import { requestLeave } from "@/lib/leave-guard";
 import { getGetApiFormsQueryKey, useGetApiForms } from "@/lib/api/dashboard/dashboard";
 import { apiData } from "@/lib/api/payload";
 import { templateAccent } from "@/lib/category-accent";
@@ -99,6 +100,12 @@ export function CommandPalette() {
 
   function go(href: string) {
     setOpen(false);
+    /*
+      A `router.push` fires no click and no `beforeunload`, so it is the one exit
+      the builder's unpublished-changes guard cannot see for itself. It gets
+      asked here instead, and when it takes the navigation it owns finishing it.
+    */
+    if (requestLeave(href, () => router.push(href))) return;
     router.push(href);
   }
 
