@@ -150,6 +150,17 @@ function inTopLevelWindow(): boolean {
 const PROMPT_GRACE_MS = 4000;
 
 /**
+ * The same wait, for the attempt nobody asked for.
+ *
+ * Shorter, because this one runs on its own the moment the card appears and
+ * whatever it is hiding — the row they could press — is the thing they came to
+ * press. Long enough for a silent credential to come back, short enough that a
+ * respondent whose browser is not going to answer is not left watching a
+ * spinner.
+ */
+const AUTO_PROMPT_GRACE_MS = 2000;
+
+/**
  * Google sign-in — and, for someone who has already done this once, a way past
  * it.
  *
@@ -199,6 +210,9 @@ function GoogleSignIn({
 
   const loginHint = hint ? asEmail(hint.label) : undefined;
   const shortcut = Boolean(hint) && topLevel && !fellBack;
+  // One automatic attempt per mount, tracked in a ref so re-initializing GSI
+  // when the hint arrives from storage cannot fire a second.
+  const autoTried = useRef(false);
 
   // Re-runs if the hint arrives from storage a beat after mount, or is
   // forgotten — both change what Google should be asked for. It runs before
@@ -247,26 +261,60 @@ function GoogleSignIn({
     if (fallbackTimer.current) clearTimeout(fallbackTimer.current);
   }, []);
 
-  const continueAsHint = useCallback(() => {
-    const id = idRef.current;
-    if (!id || disabled) return;
-    setPrompting(true);
-    id.prompt();
-    /*
-      Nothing after this line is guaranteed to happen. Google either returns a
-      credential, or shows the account for a confirmation, or — cooled off,
-      third-party sign-in turned off, the session ended since we last saw it —
-      does nothing whatsoever and says nothing about it: under FedCM the
-      notifications that used to report a prompt which never appeared are no
-      longer sent. So the card waits, and then stops waiting and shows the
-      button that always works. The prompt is not cancelled when it does; if
-      Google was merely slow, both routes still land in the same callback.
-    */
-    fallbackTimer.current = setTimeout(() => {
-      setPrompting(false);
-      setFellBack(true);
-    }, PROMPT_GRACE_MS);
-  }, [disabled]);
+  const askGoogle = useCallback(
+    (auto: boolean) => {
+      const id = idRef.current;
+      if (!id || disabled) return;
+      setPrompting(true);
+      id.prompt();
+      /*
+        Nothing after this line is guaranteed to happen. Google either returns a
+        credential, or shows the account for a confirmation, or — cooled off,
+        third-party sign-in turned off, the session ended since we last saw it —
+        does nothing whatsoever and says nothing about it: under FedCM the
+        notifications that used to report a prompt which never appeared are no
+        longer sent. So the card waits, and then stops waiting. The prompt is
+        not cancelled when it does; if Google was merely slow, both routes still
+        land in the same callback.
+
+        What it stops waiting *for* depends on who asked. An attempt they made
+        themselves has been refused, so the standard button — the one that
+        always works — takes over. An automatic one falls back only as far as
+        the row they can press: silent re-authentication has a cool-off period
+        that a real press goes straight through, so throwing the shortcut away
+        because the browser declined to use it unasked would be giving up one
+        step too early.
+      */
+      fallbackTimer.current = setTimeout(
+        () => {
+          setPrompting(false);
+          if (!auto) setFellBack(true);
+        },
+        auto ? AUTO_PROMPT_GRACE_MS : PROMPT_GRACE_MS,
+      );
+    },
+    [disabled],
+  );
+
+  /**
+   * Try to sign them in before they touch anything.
+   *
+   * A respondent who verified on this device an hour ago has proved everything
+   * this gate is asking for, and their browser can say so without a single tap:
+   * `auto_select` returns a credential outright when Google holds one consented
+   * session for this client. Waiting for a press meant a card that could have
+   * cleared itself instead sat there asking a returning respondent to confirm
+   * they are still themselves.
+   *
+   * Nothing about the trust model moves — the credential is a fresh ID token
+   * the server verifies exactly as it verifies a pressed one. This decides when
+   * to ask, not whether to check.
+   */
+  useEffect(() => {
+    if (!ready || !shortcut || disabled || autoTried.current) return;
+    autoTried.current = true;
+    askGoogle(true);
+  }, [ready, shortcut, disabled, askGoogle]);
 
   if (failed) {
     return (
@@ -282,14 +330,14 @@ function GoogleSignIn({
         <>
           <button
             type="button"
-            onClick={continueAsHint}
-            disabled={disabled || !ready}
+            onClick={() => askGoogle(false)}
+            disabled={disabled || !ready || prompting}
             className="flex w-full items-center gap-3 rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-bg)] p-1.5 pr-3 text-left transition-transform active:scale-[0.98] disabled:opacity-50 motion-reduce:active:scale-100"
           >
             <HintAvatar hint={hint} />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium">
-                Continue as {hint.name ?? hint.label}
+                {prompting ? "Signing you in…" : `Continue as ${hint.name ?? hint.label}`}
               </span>
               <span className="block truncate text-[0.6875rem] opacity-55">{hint.label}</span>
             </span>
