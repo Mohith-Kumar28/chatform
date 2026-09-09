@@ -169,6 +169,16 @@ export function FollowUpNudge({
 
     setBusy(true);
     const shipNow = !hasUnpublishedChanges;
+    /**
+     * Whether the document write landed, tracked separately from the publish.
+     *
+     * These are two requests and the second one can fail on its own — a publish
+     * refused for a plan limit answers 402, and the network does what it does.
+     * When that happens the settings are already saved: telling the author
+     * "could not turn on follow-ups" would be false, and would send them to
+     * re-do a change that is sitting in their draft.
+     */
+    let saved = false;
     try {
       const next: FormDoc = {
         ...doc,
@@ -204,10 +214,8 @@ export function FollowUpNudge({
       };
 
       await saveDoc.mutateAsync({ id: formId as never, data: { doc: next } as never });
+      saved = true;
       if (shipNow) await publish.mutateAsync({ id: formId as never });
-      await queryClient.invalidateQueries({
-        queryKey: getGetApiFormsByIdQueryKey(formId as never),
-      });
 
       dismiss();
       toast.success(
@@ -221,8 +229,27 @@ export function FollowUpNudge({
         },
       );
     } catch {
-      toast.error("Could not turn on follow-ups. Try the Follow-ups tab in Settings.");
+      toast.error(
+        saved ? "Follow-ups are on, but the form wasn't published" : "Could not turn on follow-ups",
+        {
+          description: saved
+            ? "Your settings are saved to the draft. Publish from the builder to start sending."
+            : "Nothing was changed. You can try again from the Follow-ups tab in Settings.",
+        },
+      );
     } finally {
+      /**
+       * Always, on both outcomes.
+       *
+       * The draft can have changed on the server even when the publish that
+       * followed it did not, and this query feeds the builder header, its
+       * publish button and the leave guard as well as this page. Leaving it
+       * stale after a half-completed run is exactly the divergence where the
+       * server knows the form is dirty and nothing on screen does.
+       */
+      await queryClient.invalidateQueries({
+        queryKey: getGetApiFormsByIdQueryKey(formId as never),
+      });
       setBusy(false);
     }
   }
