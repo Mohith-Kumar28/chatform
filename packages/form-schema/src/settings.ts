@@ -52,8 +52,8 @@ export const SettingsDoc = z.object({
         .default("Before we start, could you verify who you are? It only takes a moment."),
       /**
        * Only one response per verified identity. Distinct from
-       * `allowResubmissions`, which keys on a hashed IP and is trivially
-       * evaded; a verified identity is not.
+       * `allowResubmissions`, which keys on the respondent's device and can be
+       * sidestepped by using another one; a verified identity cannot.
        */
       onePerIdentity: z.boolean().default(false),
     })
@@ -87,12 +87,17 @@ export const SettingsDoc = z.object({
    * enforced it, so an author could switch it on and get no protection at all.
    *
    * It is a boolean now. Off means one response per respondent, keyed on the
-   * hashed IP of whoever opened the session — the only handle an anonymous
-   * form has. That handle identifies a network rather than a person, so an
-   * office or campus behind one address gets one response between them; a form
-   * that needs a real per-person guarantee wants `requireAuth.onePerIdentity`,
-   * which keys on a verified identity and cannot be sidestepped by changing
-   * networks.
+   * device signal the browser computes (`lib/respondent-key.ts` on the API,
+   * `lib/respondent-signal.ts` in the page), with the hashed IP only as a
+   * fallback when no signal arrives.
+   *
+   * That key survives a cleared cache and a private window — which the IP it
+   * replaced did not need to, because it identified a network rather than a
+   * person and handed a whole office one response between them. What it does
+   * not survive is a different browser or device, and it is computed in the
+   * page, so somebody determined to answer twice still can. A form that needs a
+   * real per-person guarantee wants `requireAuth.onePerIdentity`, which keys on
+   * a verified identity.
    */
   allowResubmissions: z.boolean().default(true),
 

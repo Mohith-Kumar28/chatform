@@ -154,7 +154,7 @@ export function SettingsPanel({
               <LockedControl feature="duplicate_prevention">
                 <SettingRow
                   label="Allow resubmissions"
-                  description="Off means one response per person. Without sign-in the only handle is the network, so an office or campus behind one address gets one response between them — require sign-in for a per-person guarantee."
+                  description="Off means one response per person. Without sign-in we recognise the respondent's browser, which survives a cleared cache and a private window but not a different device — require sign-in for a per-person guarantee."
                   checked={settings.allowResubmissions}
                   onCheckedChange={(v) => patch({ allowResubmissions: v })}
                 />
