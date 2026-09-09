@@ -221,6 +221,7 @@ const DASHBOARD_ONLY: Record<string, string> = {
   "/api/admin/accounts/{orgId}/overrides": "see /api/admin/me",
   "/api/admin/accounts/{orgId}/overrides/{key}": "see /api/admin/me",
   "/api/admin/accounts/{orgId}/refresh-entitlements": "see /api/admin/me",
+  "/api/admin/accounts/{orgId}/plan": "see /api/admin/me — a comped plan is a platform decision, not a tenant one",
   /**
    * Emphatically never. A key that could mint an impersonation token would be a
    * key that can become any user on the platform.

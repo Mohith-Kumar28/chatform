@@ -698,6 +698,34 @@ export type PostApiAdminAccountsByOrgIdRefreshEntitlements200 = {
   ok: boolean;
 };
 
+export type PostApiAdminAccountsByOrgIdPlanBodyPlanId = typeof PostApiAdminAccountsByOrgIdPlanBodyPlanId[keyof typeof PostApiAdminAccountsByOrgIdPlanBodyPlanId];
+
+
+export const PostApiAdminAccountsByOrgIdPlanBodyPlanId = {
+  pro: 'pro',
+  business: 'business',
+} as const;
+
+export type PostApiAdminAccountsByOrgIdPlanBody = {
+  planId: PostApiAdminAccountsByOrgIdPlanBodyPlanId;
+  months?: number | null;
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
+  reason: string;
+};
+
+export type PostApiAdminAccountsByOrgIdPlan200 = {
+  ok: boolean;
+  planId: string;
+  endsAt: number | null;
+};
+
+export type DeleteApiAdminAccountsByOrgIdPlan200 = {
+  ok: boolean;
+};
+
 export type PostApiAdminImpersonateBody = {
   /**
      * @minLength 1

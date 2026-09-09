@@ -2536,6 +2536,158 @@
         ]
       }
     },
+    "/api/admin/accounts/{orgId}/plan": {
+      "post": {
+        "operationId": "postApiAdminAccountsByOrgIdPlan",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "planId": {
+                    "type": "string",
+                    "enum": [
+                      "pro",
+                      "business"
+                    ]
+                  },
+                  "months": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 120
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  }
+                },
+                "required": [
+                  "planId",
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "summary": "Put one organization on a paid plan at no charge",
+        "responses": {
+          "200": {
+            "description": "Granted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "planId": {
+                      "type": "string"
+                    },
+                    "endsAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "planId",
+                    "endsAt"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin, or no such organization"
+          },
+          "409": {
+            "description": "The account already has a real subscription a timed comp would lose to"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "orgId",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteApiAdminAccountsByOrgIdPlan",
+        "tags": [
+          "admin"
+        ],
+        "summary": "Remove a comped plan from one organization",
+        "responses": {
+          "200": {
+            "description": "Removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "orgId",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/admin/impersonate": {
       "post": {
         "operationId": "postApiAdminImpersonate",

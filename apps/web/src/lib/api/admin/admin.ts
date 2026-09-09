@@ -21,6 +21,7 @@ import type {
 
 import type {
   DeleteApiAdminAccountsByOrgIdOverridesByKey200,
+  DeleteApiAdminAccountsByOrgIdPlan200,
   GetApiAdminAccounts200,
   GetApiAdminAccountsByOrgId200,
   GetApiAdminAccountsParams,
@@ -42,6 +43,8 @@ import type {
   GetApiAdminUsersParams,
   PostApiAdminAccountsByOrgIdOverrides200,
   PostApiAdminAccountsByOrgIdOverridesBody,
+  PostApiAdminAccountsByOrgIdPlan200,
+  PostApiAdminAccountsByOrgIdPlanBody,
   PostApiAdminAccountsByOrgIdRefreshEntitlements200,
   PostApiAdminBillingEventsByIdReprocess200,
   PostApiAdminImpersonate200,
@@ -1638,6 +1641,198 @@ export const usePostApiAdminAccountsByOrgIdRefreshEntitlements = <TError = void,
         TContext
       > => {
       return useMutation(getPostApiAdminAccountsByOrgIdRefreshEntitlementsMutationOptions(options));
+    }
+    export type postApiAdminAccountsByOrgIdPlanResponse200 = {
+  data: PostApiAdminAccountsByOrgIdPlan200
+  status: 200
+}
+
+export type postApiAdminAccountsByOrgIdPlanResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiAdminAccountsByOrgIdPlanResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postApiAdminAccountsByOrgIdPlanResponseSuccess = (postApiAdminAccountsByOrgIdPlanResponse200) & {
+  headers: Headers;
+};
+export type postApiAdminAccountsByOrgIdPlanResponseError = (postApiAdminAccountsByOrgIdPlanResponse404 | postApiAdminAccountsByOrgIdPlanResponse409) & {
+  headers: Headers;
+};
+
+export type postApiAdminAccountsByOrgIdPlanResponse = (postApiAdminAccountsByOrgIdPlanResponseSuccess | postApiAdminAccountsByOrgIdPlanResponseError)
+
+export const getPostApiAdminAccountsByOrgIdPlanUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/admin/accounts/${orgId}/plan`
+}
+
+/**
+ * @summary Put one organization on a paid plan at no charge
+ */
+export const postApiAdminAccountsByOrgIdPlan = async (orgId: string,
+    postApiAdminAccountsByOrgIdPlanBody: PostApiAdminAccountsByOrgIdPlanBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAdminAccountsByOrgIdPlanResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiAdminAccountsByOrgIdPlanResponse>(getPostApiAdminAccountsByOrgIdPlanUrl(orgId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiAdminAccountsByOrgIdPlanBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiAdminAccountsByOrgIdPlanMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminAccountsByOrgIdPlan>>, TError,PostApiAdminAccountsByOrgIdPlanMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAdminAccountsByOrgIdPlan>>, TError,PostApiAdminAccountsByOrgIdPlanMutationVariables, TContext> => {
+
+const mutationKey = ['postApiAdminAccountsByOrgIdPlan'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAdminAccountsByOrgIdPlan>>, PostApiAdminAccountsByOrgIdPlanMutationVariables> = (props) => {
+          const {orgId,data} = props ?? {};
+
+          return  postApiAdminAccountsByOrgIdPlan(orgId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiAdminAccountsByOrgIdPlanMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAdminAccountsByOrgIdPlan>>>
+    export type PostApiAdminAccountsByOrgIdPlanMutationBody = PostApiAdminAccountsByOrgIdPlanBody
+    export type PostApiAdminAccountsByOrgIdPlanMutationError = void
+    export type PostApiAdminAccountsByOrgIdPlanMutationVariables = {orgId: string;data: PostApiAdminAccountsByOrgIdPlanBody}
+
+    /**
+ * @summary Put one organization on a paid plan at no charge
+ */
+export const usePostApiAdminAccountsByOrgIdPlan = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminAccountsByOrgIdPlan>>, TError,PostApiAdminAccountsByOrgIdPlanMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiAdminAccountsByOrgIdPlan>>,
+        TError,
+        PostApiAdminAccountsByOrgIdPlanMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiAdminAccountsByOrgIdPlanMutationOptions(options));
+    }
+    export type deleteApiAdminAccountsByOrgIdPlanResponse200 = {
+  data: DeleteApiAdminAccountsByOrgIdPlan200
+  status: 200
+}
+
+export type deleteApiAdminAccountsByOrgIdPlanResponse404 = {
+  data: void
+  status: 404
+}
+
+export type deleteApiAdminAccountsByOrgIdPlanResponseSuccess = (deleteApiAdminAccountsByOrgIdPlanResponse200) & {
+  headers: Headers;
+};
+export type deleteApiAdminAccountsByOrgIdPlanResponseError = (deleteApiAdminAccountsByOrgIdPlanResponse404) & {
+  headers: Headers;
+};
+
+export type deleteApiAdminAccountsByOrgIdPlanResponse = (deleteApiAdminAccountsByOrgIdPlanResponseSuccess | deleteApiAdminAccountsByOrgIdPlanResponseError)
+
+export const getDeleteApiAdminAccountsByOrgIdPlanUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/admin/accounts/${orgId}/plan`
+}
+
+/**
+ * @summary Remove a comped plan from one organization
+ */
+export const deleteApiAdminAccountsByOrgIdPlan = async (orgId: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteApiAdminAccountsByOrgIdPlanResponse> => {
+
+  return customFetch<deleteApiAdminAccountsByOrgIdPlanResponse>(getDeleteApiAdminAccountsByOrgIdPlanUrl(orgId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiAdminAccountsByOrgIdPlanMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiAdminAccountsByOrgIdPlan>>, TError,DeleteApiAdminAccountsByOrgIdPlanMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiAdminAccountsByOrgIdPlan>>, TError,DeleteApiAdminAccountsByOrgIdPlanMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiAdminAccountsByOrgIdPlan'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiAdminAccountsByOrgIdPlan>>, DeleteApiAdminAccountsByOrgIdPlanMutationVariables> = (props) => {
+          const {orgId} = props ?? {};
+
+          return  deleteApiAdminAccountsByOrgIdPlan(orgId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiAdminAccountsByOrgIdPlanMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiAdminAccountsByOrgIdPlan>>>
+
+    export type DeleteApiAdminAccountsByOrgIdPlanMutationError = void
+    export type DeleteApiAdminAccountsByOrgIdPlanMutationVariables = {orgId: string}
+
+    /**
+ * @summary Remove a comped plan from one organization
+ */
+export const useDeleteApiAdminAccountsByOrgIdPlan = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiAdminAccountsByOrgIdPlan>>, TError,DeleteApiAdminAccountsByOrgIdPlanMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiAdminAccountsByOrgIdPlan>>,
+        TError,
+        DeleteApiAdminAccountsByOrgIdPlanMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiAdminAccountsByOrgIdPlanMutationOptions(options));
     }
     export type postApiAdminImpersonateResponse200 = {
   data: PostApiAdminImpersonate200

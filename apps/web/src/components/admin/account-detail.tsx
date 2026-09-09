@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { isPlanId } from "@repo/entitlements";
 import { apiData } from "@/lib/api/payload";
-import { AccountActions, RevokeOverride, entitlementLabel } from "./account-actions";
+import { AccountActions, RevokeCompedPlan, RevokeOverride, entitlementLabel } from "./account-actions";
 import { DataTable } from "./data-table";
 import { compact, money, relativeDay } from "./format";
 
@@ -119,9 +119,12 @@ export function AccountDetail({ orgId }: { orgId: string }) {
                 <Field label="Grace ends" value={relativeDay(num(sub, "grace_until"))} />
               )}
               {str(sub, "dodo_subscription_id").startsWith("internal_manual_") && (
-                <p className="text-muted-foreground text-micro pt-1">
-                  Granted by hand, not through a Dodo checkout — this account pays nothing.
-                </p>
+                <div className="pt-1">
+                  <p className="text-muted-foreground text-micro">
+                    Granted by hand, not through a Dodo checkout — this account pays nothing.
+                  </p>
+                  <RevokeCompedPlan orgId={orgId} onChanged={() => void refetch()} />
+                </div>
               )}
             </dl>
           ) : (

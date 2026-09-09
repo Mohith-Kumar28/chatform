@@ -265,6 +265,190 @@ opsRouter.post(
   },
 );
 
+// ───────────────────────── comped plans ─────────────────────────
+
+/**
+ * The subscription id a comp always writes to.
+ *
+ * Deterministic, so granting twice updates one row rather than accumulating
+ * them, and so `internal_manual_` — the prefix the console and every revenue
+ * query already test for — is the single mark that says "granted, not bought".
+ */
+function compedSubscriptionId(orgId: string): string {
+  return `internal_manual_${orgId}`;
+}
+
+/** Adds whole calendar months, so a comp granted on the 31st does not land in March. */
+function addMonths(from: number, months: number): number {
+  const d = new Date(from);
+  const day = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  d.setUTCDate(Math.min(day, new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate()));
+  return d.getTime();
+}
+
+/**
+ * Put an account on a paid plan without charging it.
+ *
+ * This is `tooling/grant-founder-access.sql` as a button, and it is a different
+ * instrument from an override. An override unlocks capabilities underneath a
+ * plan the customer keeps; this changes the plan itself, because `planId`, the
+ * plan pill and the Upgrade button read only from `subscriptions`. "Give this
+ * evaluator Business for a month" is this route — a pile of overrides would give
+ * them the features and leave them staring at an Upgrade button.
+ *
+ * Dodo never sees the row. `dodo_subscription_id` carries the `internal_manual_`
+ * prefix instead of a real one, so no webhook can match it, nothing renews and
+ * nothing is billed — and the revenue console excludes it from MRR by testing
+ * that same prefix.
+ *
+ * **How it expires**, which is the whole subtlety. `effectivePlan` honours an
+ * `active` subscription regardless of its period, so a timed comp written as
+ * `active` would never end. The status that expires by itself is the one Dodo's
+ * own downgrade uses: `canceled` with a future `current_period_end` entitles
+ * until that instant and falls to Free after it, with no job to run and nothing
+ * to clean up. So a timed comp is written `canceled` and an open-ended one
+ * `active`, and `cancel_at_period_end` is set alongside it so the customer's own
+ * plan panel says "ends 14 Oct" rather than "renews 14 Oct".
+ */
+opsRouter.post(
+  "/admin/accounts/:orgId/plan",
+  validator(
+    "json",
+    z.object({
+      planId: z.enum(["pro", "business"]),
+      /** `null` never expires. Anything else is whole calendar months from today. */
+      months: z.number().int().min(1).max(120).nullable().optional(),
+      reason: z.string().min(1).max(300),
+    }),
+  ),
+  describeRoute({
+    tags: ["admin"],
+    summary: "Put one organization on a paid plan at no charge",
+    responses: {
+      200: {
+        description: "Granted",
+        content: {
+          "application/json": {
+            schema: resolver(z.object({ ok: z.boolean(), planId: z.string(), endsAt: z.number().nullable() })),
+          },
+        },
+      },
+      409: { description: "The account already has a real subscription a timed comp would lose to" },
+      404: { description: "Not an admin, or no such organization" },
+    },
+  }),
+  async (c) => {
+    const orgId = c.req.param("orgId");
+    const { planId, months, reason } = c.req.valid("json");
+    const org = await c.env.DB.prepare(`SELECT id FROM organizations WHERE id = ?`).bind(orgId).first();
+    if (!org) return c.json({ error: { code: "not_found", message: "Not found" } }, 404);
+
+    /**
+     * A timed comp is `canceled`, and `canceled` sorts *below* `active` in the
+     * one query every entitlement read uses to choose a subscription. So on an
+     * account that is genuinely paying, a timed comp would be written, sorted
+     * beneath the real row, and silently do nothing. Refuse it and say why,
+     * rather than leaving a grant that looks applied and is not.
+     */
+    const paying = await c.env.DB.prepare(
+      `SELECT id FROM subscriptions
+        WHERE organization_id = ? AND status IN ('active','trialing')
+          AND dodo_subscription_id NOT LIKE 'internal_manual_%'
+        LIMIT 1`,
+    )
+      .bind(orgId)
+      .first<{ id: string }>();
+    if (paying && months) {
+      return c.json(
+        {
+          error: {
+            code: "conflict",
+            message:
+              "This account has a live paid subscription, which outranks a timed comp. Grant it with no expiry, or raise what they need with an override instead.",
+          },
+        },
+        409,
+      );
+    }
+
+    const now = Date.now();
+    const endsAt = months ? addMonths(now, months) : null;
+    await c.env.DB.prepare(
+      `INSERT INTO subscriptions (
+         id, organization_id, plan_id, dodo_subscription_id, cycle, status,
+         current_period_start, current_period_end, cancel_at_period_end, seats, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+       ON CONFLICT (dodo_subscription_id) DO UPDATE SET
+         plan_id = excluded.plan_id, cycle = excluded.cycle, status = excluded.status,
+         current_period_start = excluded.current_period_start,
+         current_period_end = excluded.current_period_end,
+         cancel_at_period_end = excluded.cancel_at_period_end,
+         updated_at = excluded.updated_at`,
+    )
+      .bind(
+        `sub_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+        orgId,
+        planId,
+        compedSubscriptionId(orgId),
+        months && months >= 12 ? "yearly" : "monthly",
+        // See the note above: `canceled` is what makes a dated comp end on its own.
+        months ? "canceled" : "active",
+        now,
+        // An open-ended comp still needs a period the UI can render; ten years
+        // is the founder script's own answer and reads as "not expiring".
+        endsAt ?? addMonths(now, 120),
+        months ? 1 : 0,
+        now,
+        now,
+      )
+      .run();
+
+    await invalidateEntitlements(c.env, orgId);
+    await audit(c, orgId, "admin.plan.granted", {
+      resourceType: "subscription",
+      resourceId: compedSubscriptionId(orgId),
+      planId,
+      months: months ?? null,
+      endsAt,
+      reason,
+    });
+    return c.json({ ok: true, planId, endsAt });
+  },
+);
+
+/**
+ * Take a comped plan back.
+ *
+ * Deletes only the row this console wrote — the `internal_manual_` prefix is the
+ * guard, so no amount of wrong ids can make this cancel something a customer is
+ * paying for. What is left is whatever they had before: a real subscription, or
+ * Free.
+ */
+opsRouter.delete(
+  "/admin/accounts/:orgId/plan",
+  describeRoute({
+    tags: ["admin"],
+    summary: "Remove a comped plan from one organization",
+    responses: {
+      200: { description: "Removed", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } },
+      404: { description: "Not an admin" },
+    },
+  }),
+  async (c) => {
+    const orgId = c.req.param("orgId");
+    await c.env.DB.prepare(
+      `DELETE FROM subscriptions WHERE organization_id = ? AND dodo_subscription_id LIKE 'internal_manual_%'`,
+    )
+      .bind(orgId)
+      .run();
+    await invalidateEntitlements(c.env, orgId);
+    await audit(c, orgId, "admin.plan.revoked", { resourceType: "subscription", resourceId: compedSubscriptionId(orgId) });
+    return c.json({ ok: true });
+  },
+);
+
 // ───────────────────────── impersonation ─────────────────────────
 
 /**

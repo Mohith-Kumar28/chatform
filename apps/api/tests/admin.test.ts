@@ -13,7 +13,8 @@ import {
 import { costUsdMicro } from "../src/lib/ai-pricing.js";
 import { IMPERSONATION_HEADER, signImpersonation, verifyImpersonation } from "../src/lib/impersonation.js";
 import { recordMailDelivery } from "../src/lib/mail.js";
-import { PLANS } from "@repo/entitlements";
+import { getEntitlements } from "../src/lib/entitlements.js";
+import { PLANS, effectivePlan } from "@repo/entitlements";
 
 const DB = () => env as unknown as Bindings;
 /** The allowlist is a worker secret, so a test sets it the same way a deploy would. */
@@ -174,6 +175,8 @@ describe("every route is behind the one guard", () => {
       ["POST", "/api/admin/impersonate"],
       ["POST", "/api/admin/accounts/org_x/refresh-entitlements"],
       ["POST", "/api/admin/accounts/org_x/overrides"],
+      ["POST", "/api/admin/accounts/org_x/plan"],
+      ["DELETE", "/api/admin/accounts/org_x/plan"],
       ["POST", "/api/admin/subscriptions/sub_x/grace"],
       ["POST", "/api/admin/billing-events/evt_x/reprocess"],
     ];
@@ -793,6 +796,140 @@ describe("impersonation", () => {
     // Falls back to a real membership rather than honouring the claim — a token
     // cannot be edited into access its subject does not have.
     expect(forms.map((f) => f.id)).not.toContain(admin.formId);
+  });
+});
+
+describe("comped plans", () => {
+  /** The console's own row, told apart from a real one by its id prefix. */
+  const comped = (orgId: string) =>
+    DB()
+      .DB.prepare(
+        `SELECT plan_id, status, cycle, current_period_end, cancel_at_period_end
+           FROM subscriptions WHERE organization_id = ? AND dodo_subscription_id = ?`,
+      )
+      .bind(orgId, `internal_manual_${orgId}`)
+      .first<{
+        plan_id: string;
+        status: string;
+        cycle: string;
+        current_period_end: number;
+        cancel_at_period_end: number;
+      }>();
+
+  const grant = (orgId: string, body: Record<string, unknown>) =>
+    fetchApi(`/api/admin/accounts/${orgId}/plan`, {
+      method: "POST",
+      headers: { cookie: admin.cookie, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  beforeEach(async () => {
+    await DB().DB.prepare(`DELETE FROM subscriptions WHERE organization_id = ?`).bind(customer.orgId).run();
+    await env.KV_CONFIG.delete(`ent:${customer.orgId}`);
+  });
+
+  it("puts an account on a paid plan with no Dodo subscription behind it", async () => {
+    expect((await grant(customer.orgId, { planId: "business", reason: "founder" })).status).toBe(200);
+
+    const row = await comped(customer.orgId);
+    expect(row?.plan_id).toBe("business");
+    // Open-ended, so it must outrank anything else the ordering sees.
+    expect(row?.status).toBe("active");
+    expect(row?.cancel_at_period_end).toBe(0);
+
+    const ent = await getEntitlements(DB(), customer.orgId);
+    expect(ent.planId).toBe("business");
+    expect(ent.features.activity_log).toBe(true);
+  });
+
+  it("writes a timed comp as canceled, so it expires with nothing to run", async () => {
+    const res = await grant(customer.orgId, { planId: "pro", months: 1, reason: "evaluating" });
+    const body = (await res.json()) as { endsAt: number };
+    const row = await comped(customer.orgId);
+
+    // `active` would never expire — `effectivePlan` ignores the period on an
+    // active row. `canceled` with a future end is the path that lapses by itself.
+    expect(row?.status).toBe("canceled");
+    expect(row?.cancel_at_period_end).toBe(1);
+    expect(row?.current_period_end).toBe(body.endsAt);
+    expect(body.endsAt).toBeGreaterThan(Date.now());
+
+    expect((await getEntitlements(DB(), customer.orgId)).planId).toBe("pro");
+
+    // And the same row, read after its end date, is Free again.
+    expect(
+      effectivePlan({ planId: "pro", status: "canceled", periodEnd: body.endsAt, now: body.endsAt + 1 }).planId,
+    ).toBe("free");
+  });
+
+  it("counts whole calendar months, not thirty-day blocks", async () => {
+    const res = await grant(customer.orgId, { planId: "pro", months: 12, reason: "annual comp" });
+    const { endsAt } = (await res.json()) as { endsAt: number };
+    const now = new Date();
+    expect(new Date(endsAt).getUTCFullYear()).toBe(now.getUTCFullYear() + 1);
+  });
+
+  it("grants twice without stacking rows", async () => {
+    await grant(customer.orgId, { planId: "pro", reason: "first" });
+    await grant(customer.orgId, { planId: "business", reason: "upgraded the comp" });
+    const all = await DB()
+      .DB.prepare(`SELECT COUNT(*) AS n FROM subscriptions WHERE organization_id = ?`)
+      .bind(customer.orgId)
+      .first<{ n: number }>();
+    expect(all?.n).toBe(1);
+    expect((await comped(customer.orgId))?.plan_id).toBe("business");
+  });
+
+  it("refuses a timed comp that a live paid subscription would outrank", async () => {
+    await DB()
+      .DB.prepare(
+        `INSERT INTO subscriptions (id, organization_id, plan_id, dodo_subscription_id, cycle, status, seats, created_at, updated_at)
+         VALUES ('sub_real', ?, 'pro', 'dodo_real_1', 'monthly', 'active', 1, ?, ?)`,
+      )
+      .bind(customer.orgId, Date.now(), Date.now())
+      .run();
+
+    const res = await grant(customer.orgId, { planId: "business", months: 1, reason: "evaluating" });
+    expect(res.status).toBe(409);
+    expect(await comped(customer.orgId)).toBeNull();
+
+    // The open-ended form is allowed, because an active row wins on recency.
+    expect((await grant(customer.orgId, { planId: "business", reason: "forever" })).status).toBe(200);
+    expect((await getEntitlements(DB(), customer.orgId)).planId).toBe("business");
+  });
+
+  it("takes back only the row the console wrote", async () => {
+    await DB()
+      .DB.prepare(
+        `INSERT INTO subscriptions (id, organization_id, plan_id, dodo_subscription_id, cycle, status, seats, created_at, updated_at)
+         VALUES ('sub_paid', ?, 'pro', 'dodo_real_2', 'monthly', 'active', 1, ?, ?)`,
+      )
+      .bind(customer.orgId, Date.now(), Date.now())
+      .run();
+    await grant(customer.orgId, { planId: "business", reason: "comp" });
+
+    const res = await fetchApi(`/api/admin/accounts/${customer.orgId}/plan`, {
+      method: "DELETE",
+      headers: { cookie: admin.cookie },
+    });
+    expect(res.status).toBe(200);
+    expect(await comped(customer.orgId)).toBeNull();
+    // What they were actually paying for survives.
+    expect((await getEntitlements(DB(), customer.orgId)).planId).toBe("pro");
+  });
+
+  it("tells the customer, in their own activity log", async () => {
+    await grant(customer.orgId, { planId: "pro", months: 3, reason: "ticket 41" });
+    const row = await DB()
+      .DB.prepare(
+        `SELECT actor_type, actor_label, meta FROM audit_logs
+          WHERE organization_id = ? AND action = 'admin.plan.granted' ORDER BY created_at DESC LIMIT 1`,
+      )
+      .bind(customer.orgId)
+      .first<{ actor_type: string; actor_label: string; meta: string }>();
+    expect(row?.actor_type).toBe("platform_admin");
+    expect(row?.actor_label).toBe("founder@example.com");
+    expect(JSON.parse(row!.meta)).toMatchObject({ planId: "pro", months: 3, reason: "ticket 41" });
   });
 });
 

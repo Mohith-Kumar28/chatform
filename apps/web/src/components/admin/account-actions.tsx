@@ -5,8 +5,10 @@ import { toast } from "sonner";
 import { Gift, RefreshCw, VenetianMask } from "lucide-react";
 import {
   postApiAdminAccountsByOrgIdOverrides,
+  postApiAdminAccountsByOrgIdPlan,
   postApiAdminAccountsByOrgIdRefreshEntitlements,
   deleteApiAdminAccountsByOrgIdOverridesByKey,
+  deleteApiAdminAccountsByOrgIdPlan,
 } from "@/lib/api/admin/admin";
 import {
   FEATURES,
@@ -66,6 +68,24 @@ function readLimit(key: LimitKey, value: LimitValue | undefined): string {
   return `${n}${unit}${period}`;
 }
 
+/** Whole calendar months, matching the API so the preview date is the real one. */
+function addMonths(from: number, months: number): number {
+  const d = new Date(from);
+  const day = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  d.setUTCDate(Math.min(day, new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate()));
+  return d.getTime();
+}
+
+const MONTH_OPTIONS = [
+  { value: "1", label: "1 month" },
+  { value: "3", label: "3 months" },
+  { value: "6", label: "6 months" },
+  { value: "12", label: "12 months" },
+  { value: "forever", label: "No expiry" },
+] as const;
+
 export function AccountActions({
   orgId,
   orgName,
@@ -90,14 +110,27 @@ export function AccountActions({
   const [visitReason, setVisitReason] = useState("");
   const [impersonateOpen, setImpersonateOpen] = useState(false);
   const [grantOpen, setGrantOpen] = useState(false);
-  const [kind, setKind] = useState<"feature" | "limit">("feature");
+  /**
+   * The clock, read once when the dialog opens rather than on every render.
+   *
+   * `Date.now()` during render is impure — the preview date would drift between
+   * renders — and a comp's end date is anchored to when the admin opened the
+   * dialog, which is close enough to when the API will stamp it.
+   */
+  const [openedAt, setOpenedAt] = useState(0);
+  const [kind, setKind] = useState<"feature" | "limit" | "plan">("feature");
+  const [compPlan, setCompPlan] = useState<"pro" | "business">("pro");
+  /** `"forever"` rather than an empty string: an open-ended comp is a choice, not a blank. */
+  const [months, setMonths] = useState<"1" | "3" | "6" | "12" | "forever">("1");
   const [featureKey, setFeatureKey] = useState<FeatureKey>(FEATURE_KEYS[0]!);
   const [limitKey, setLimitKey] = useState<LimitKey>(LIMIT_KEYS[0]!);
   const [value, setValue] = useState("");
   const [expiresInDays, setExpiresInDays] = useState("");
 
   const planName = PLANS[plan]?.name ?? plan;
-  const grantedLabel = kind === "feature" ? FEATURES[featureKey].label : limitMeta(limitKey).label;
+  const grantedLabel =
+    kind === "feature" ? FEATURES[featureKey].label : kind === "limit" ? limitMeta(limitKey).label : PLANS[compPlan].name;
+  const endsAt = months === "forever" || !openedAt ? null : addMonths(openedAt, Number(months));
   const alreadyHas = kind === "feature" && PLANS[plan]?.features.includes(featureKey);
 
   /**
@@ -121,6 +154,18 @@ export function AccountActions({
   async function grant() {
     setBusy("grant");
     try {
+      if (kind === "plan") {
+        await postApiAdminAccountsByOrgIdPlan(orgId, {
+          planId: compPlan,
+          months: months === "forever" ? null : Number(months),
+          reason,
+        });
+        toast.success(`${orgName} is on ${PLANS[compPlan].name}, free`);
+        setGrantOpen(false);
+        setReason("");
+        onChanged();
+        return;
+      }
       await postApiAdminAccountsByOrgIdOverrides(orgId, {
         kind,
         key: kind === "feature" ? featureKey : limitKey,
@@ -203,7 +248,13 @@ export function AccountActions({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={grantOpen} onOpenChange={setGrantOpen}>
+      <Dialog
+        open={grantOpen}
+        onOpenChange={(open) => {
+          setGrantOpen(open);
+          if (open) setOpenedAt(Date.now());
+        }}
+      >
         <DialogTrigger asChild>
           <Button size="sm" variant="secondary">
             <Gift className="size-3.5" strokeWidth={2} aria-hidden />
@@ -228,10 +279,49 @@ export function AccountActions({
             options={[
               { value: "feature", label: "Unlock a feature" },
               { value: "limit", label: "Raise a limit" },
+              { value: "plan", label: "Put them on a plan" },
             ]}
           />
 
-          {kind === "feature" ? (
+          {kind === "plan" ? (
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Which plan</Label>
+                  <Select value={compPlan} onValueChange={(v) => setCompPlan(v as "pro" | "business")}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pro">Pro</SelectItem>
+                      <SelectItem value="business">Business</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>For how long</Label>
+                  <Select value={months} onValueChange={(v) => setMonths(v as typeof months)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTH_OPTIONS.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>
+                          {m.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <p className="bg-muted/50 text-muted-foreground text-micro rounded-lg px-3 py-2">
+                This changes the plan itself, not just what is unlocked: their badge reads {PLANS[compPlan].name} and
+                the Upgrade button goes away. No checkout, no invoice, no card — the subscription row is marked as
+                granted by hand, and the revenue console leaves it out of MRR.
+                {endsAt !== null && " It ends on its own; nothing to remember."}
+              </p>
+            </div>
+          ) : kind === "feature" ? (
             <div className="space-y-2">
               <Label>Which feature</Label>
               <Select value={featureKey} onValueChange={(v) => setFeatureKey(v as FeatureKey)}>
@@ -289,7 +379,7 @@ export function AccountActions({
             </div>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className={kind === "plan" ? "space-y-2" : "grid gap-3 sm:grid-cols-2"}>
             <div className="space-y-2">
               <Label htmlFor="grant-reason">Why</Label>
               <Input
@@ -300,7 +390,7 @@ export function AccountActions({
               />
               <p className="text-muted-foreground text-micro">They can read this in their activity log.</p>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2" hidden={kind === "plan"}>
               <Label htmlFor="grant-expiry">Take it back after</Label>
               <Input
                 id="grant-expiry"
@@ -319,10 +409,22 @@ export function AccountActions({
             what it costs them, and whether it is reversible.
           */}
           <p className="bg-muted/50 text-caption rounded-lg px-3 py-2">
-            <strong>{orgName}</strong> gets <strong>{grantedLabel}</strong>
-            {kind === "limit" && ` raised to ${value.trim() === "" ? "unlimited" : value.trim()}`}, free
-            {expiresInDays ? ` for ${expiresInDays} days` : ", until you revoke it"}. They stay on {planName}, they are
-            billed exactly what they are billed now, and their plan badge will not change.
+            {kind === "plan" ? (
+              <>
+                <strong>{orgName}</strong> moves from {planName} to <strong>{PLANS[compPlan].name}</strong>, free
+                {endsAt === null
+                  ? ", with no end date"
+                  : `, until ${new Date(endsAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })} — then back to Free on its own`}
+                . Nothing is charged and no invoice exists, and you can take it back from this page at any time.
+              </>
+            ) : (
+              <>
+                <strong>{orgName}</strong> gets <strong>{grantedLabel}</strong>
+                {kind === "limit" && ` raised to ${value.trim() === "" ? "unlimited" : value.trim()}`}, free
+                {expiresInDays ? ` for ${expiresInDays} days` : ", until you revoke it"}. They stay on {planName}, they
+                are billed exactly what they are billed now, and their plan badge will not change.
+              </>
+            )}
           </p>
 
           <DialogFooter>
@@ -366,6 +468,39 @@ export function RevokeOverride({ orgId, keyName, onChanged }: { orgId: string; k
       }}
     >
       take it back
+    </button>
+  );
+}
+
+/**
+ * Take back a plan this console granted.
+ *
+ * Sits next to the "granted by hand" line rather than in the actions row,
+ * because it only exists when there is a comp to remove — and because the row of
+ * things you *can* do to any account should not carry an option that is
+ * meaningless on most of them.
+ */
+export function RevokeCompedPlan({ orgId, onChanged }: { orgId: string; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      className="text-muted-foreground hover:text-destructive text-xs underline-offset-2 transition-colors duration-[var(--duration-micro)] hover:underline"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await deleteApiAdminAccountsByOrgIdPlan(orgId);
+          toast.success("Comped plan removed — they are back to what they were paying for");
+          onChanged();
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Could not remove it");
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      take the plan back
     </button>
   );
 }
