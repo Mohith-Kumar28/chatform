@@ -263,3 +263,66 @@ describe("the gates a resume may and may not walk through", () => {
     await publish();
   });
 });
+
+/**
+ * The `fu` parameter, end to end through the public route.
+ *
+ * The unit tests in `followups.test.ts` cover what `recordFollowUpClick` does
+ * with an id. This covers the part that was missing entirely until now: that a
+ * respondent clicking the link in an actual email causes the click to be
+ * written at all.
+ */
+describe("follow-up attribution on resume", () => {
+  async function seedFollowUp(id: string, submissionId: string, step = 1): Promise<void> {
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT INTO followups (id, submission_id, form_id, organization_id, channel, address,
+                              address_source, step, status, scheduled_at, sent_at, created_at)
+       VALUES (?, ?, ?, ?, 'email', 'maya@northwind.example', 'answer', ?, 'sent', ?, ?, ?)`,
+    )
+      .bind(id, submissionId, t.formId, t.orgId, step, now - 3_600_000, now - 3_600_000, now)
+      .run();
+  }
+
+  it("records the click when the link carries its follow-up id", async () => {
+    await seedAbandoned("sbm_resume_fu1");
+    await seedFollowUp("flw_fu1", "sbm_resume_fu1");
+
+    const res = await open({
+      resumeToken: await token("sbm_resume_fu1"),
+      followUpId: "flw_fu1",
+    });
+    expect(res.status).toBe(200);
+
+    const row = await env.DB.prepare(`SELECT clicked_at, status FROM followups WHERE id = ?`)
+      .bind("flw_fu1")
+      .first<{ clicked_at: number | null; status: string }>();
+    expect(row?.clicked_at).toBeGreaterThan(0);
+    // And the rest of the sequence is still stopped — a click must not cost us
+    // the cancel that keeps us from nagging somebody mid-answer.
+    expect(row?.status).toBe("sent");
+  });
+
+  it("resumes normally when the id is absent, unknown, or another response's", async () => {
+    await seedAbandoned("sbm_resume_fu2");
+    await seedFollowUp("flw_fu2", "sbm_resume_fu2");
+    // Belongs to a response this token says nothing about.
+    await seedAbandoned("sbm_resume_fu3");
+    await seedFollowUp("flw_fu3", "sbm_resume_fu3");
+
+    for (const followUpId of [undefined, "flw_does_not_exist", "flw_fu3"]) {
+      const res = await open({
+        resumeToken: await token("sbm_resume_fu2"),
+        ...(followUpId ? { followUpId } : {}),
+      });
+      // A bad id is never the respondent's fault and never a dead end: the form
+      // opens and the answers come back either way.
+      expect(res.status).toBe(200);
+    }
+
+    const other = await env.DB.prepare(`SELECT clicked_at FROM followups WHERE id = ?`)
+      .bind("flw_fu3")
+      .first<{ clicked_at: number | null }>();
+    expect(other?.clicked_at).toBeNull();
+  });
+});

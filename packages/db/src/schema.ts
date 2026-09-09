@@ -1018,6 +1018,22 @@ export const followups = sqliteTable(
     reason: text("reason"),
     scheduledAt: ts("scheduled_at").notNull(),
     sentAt: ts("sent_at"),
+    /**
+     * When the resume link in this message was opened.
+     *
+     * Set once and never moved. A second visit from the same message is the
+     * same recovery, and overwriting would drag the click into whichever day
+     * the respondent last happened to reopen their inbox.
+     */
+    clickedAt: ts("clicked_at"),
+    /**
+     * When the response this message was about was finally completed.
+     *
+     * Credited to the most recently *clicked* step rather than to every step
+     * that was sent, so a sequence of three cannot claim three recoveries for
+     * one person.
+     */
+    recoveredAt: ts("recovered_at"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
   },
   (t) => [
@@ -1031,6 +1047,8 @@ export const followups = sqliteTable(
     index("idx_followups_due").on(t.status, t.scheduledAt),
     /** Cancelling on completion or resume, and the results table's badge. */
     index("idx_followups_submission").on(t.submissionId),
+    /** The recovery report, which groups one form's rows by step. */
+    index("idx_followups_form_step").on(t.formId, t.step),
   ],
 );
 

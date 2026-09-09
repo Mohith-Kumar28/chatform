@@ -243,19 +243,19 @@ export function ResultsAnalytics({ analytics }: { analytics: AnalyticsPayload })
   );
 }
 
-const TOOLTIP_STYLE = {
+export const TOOLTIP_STYLE = {
   background: "var(--popover)",
   border: "1px solid var(--border)",
   borderRadius: "0.5rem",
   fontSize: "0.8125rem",
 } as const;
 
-function shortDate(iso: string): string {
+export function shortDate(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
-function longDate(iso: string): string {
+export function longDate(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { dateStyle: "medium" });
 }

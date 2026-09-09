@@ -203,7 +203,18 @@ async function runFollowUpJob(
     bodyHtml: bodyMd ? markdownToHtml(bodyMd) : "",
     bodyText: bodyMd,
     formTitle: row.form_title,
-    resumeUrl: `${origin}/f/${encodeURIComponent(await slugOf(env, row.form_id))}?resume=${resumeToken}`,
+    /**
+     * `fu` is which message this link came out of, so the recovery report can
+     * say *which* reminder worked rather than only that some of them did.
+     *
+     * It rides in the URL rather than in the token because the token is a
+     * signed statement about a response, minted once per send and deliberately
+     * about nothing else; widening its payload to carry a per-message id would
+     * put analytics inside the thing that decides who may resume a stranger's
+     * half-finished form. The id on its own grants nothing — `recordFollowUpClick`
+     * only accepts it alongside the resume token for the same response.
+     */
+    resumeUrl: `${origin}/f/${encodeURIComponent(await slugOf(env, row.form_id))}?resume=${resumeToken}&fu=${row.id}`,
     unsubscribeUrl: `${origin}/p/unsubscribe/${unsubToken}`,
     ...(progress ? { progress: { answered: progress.answered, total: progress.totalEstimate } } : {}),
     ...(resolved?.firstName ? { firstName: resolved.firstName } : {}),

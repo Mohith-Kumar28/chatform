@@ -33,6 +33,7 @@ import type {
   GetApiFormsById200,
   GetApiFormsById404,
   GetApiFormsByIdAnalytics200,
+  GetApiFormsByIdFollowupAnalytics200,
   GetApiFormsByIdHistory200,
   GetApiFormsByIdHistoryParams,
   GetApiFormsByIdIntegrations200Item,
@@ -2269,6 +2270,94 @@ export function useGetApiFormsByIdAnalytics<TData = Awaited<ReturnType<typeof ge
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetApiFormsByIdAnalyticsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiFormsByIdFollowupAnalyticsResponse200 = {
+  data: GetApiFormsByIdFollowupAnalytics200
+  status: 200
+}
+
+export type getApiFormsByIdFollowupAnalyticsResponseSuccess = (getApiFormsByIdFollowupAnalyticsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiFormsByIdFollowupAnalyticsResponse = (getApiFormsByIdFollowupAnalyticsResponseSuccess)
+
+export const getGetApiFormsByIdFollowupAnalyticsUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/followup-analytics`
+}
+
+/**
+ * @summary Follow-up recovery report (sent, clicked, recovered, holdout lift)
+ */
+export const getApiFormsByIdFollowupAnalytics = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdFollowupAnalyticsResponse> => {
+
+  return customFetch<getApiFormsByIdFollowupAnalyticsResponse>(getGetApiFormsByIdFollowupAnalyticsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiFormsByIdFollowupAnalyticsQueryKey = (id: string,) => {
+    return [
+    `/api/forms/${id}/followup-analytics`
+    ] as const;
+    }
+
+
+export const getGetApiFormsByIdFollowupAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getApiFormsByIdFollowupAnalytics>>, TError = unknown>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdFollowupAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsByIdFollowupAnalyticsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFormsByIdFollowupAnalytics>>> = ({ signal }) => getApiFormsByIdFollowupAnalytics(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdFollowupAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiFormsByIdFollowupAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFormsByIdFollowupAnalytics>>>
+export type GetApiFormsByIdFollowupAnalyticsQueryError = unknown
+
+
+/**
+ * @summary Follow-up recovery report (sent, clicked, recovered, holdout lift)
+ */
+
+export function useGetApiFormsByIdFollowupAnalytics<TData = Awaited<ReturnType<typeof getApiFormsByIdFollowupAnalytics>>, TError = unknown>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdFollowupAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiFormsByIdFollowupAnalyticsQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

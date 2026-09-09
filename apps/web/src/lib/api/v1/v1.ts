@@ -1952,6 +1952,101 @@ export function useGetV1FormsByIdAnalytics<TData = Awaited<ReturnType<typeof get
 
 
 
+export type getV1FormsByIdFollowupAnalyticsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getV1FormsByIdFollowupAnalyticsResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getV1FormsByIdFollowupAnalyticsResponseSuccess = (getV1FormsByIdFollowupAnalyticsResponse200) & {
+  headers: Headers;
+};
+export type getV1FormsByIdFollowupAnalyticsResponseError = (getV1FormsByIdFollowupAnalyticsResponse404) & {
+  headers: Headers;
+};
+
+export type getV1FormsByIdFollowupAnalyticsResponse = (getV1FormsByIdFollowupAnalyticsResponseSuccess | getV1FormsByIdFollowupAnalyticsResponseError)
+
+export const getGetV1FormsByIdFollowupAnalyticsUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/followup-analytics`
+}
+
+/**
+ * @summary Follow-up recovery report (sent, clicked, recovered, holdout lift)
+ */
+export const getV1FormsByIdFollowupAnalytics = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1FormsByIdFollowupAnalyticsResponse> => {
+
+  return customFetch<getV1FormsByIdFollowupAnalyticsResponse>(getGetV1FormsByIdFollowupAnalyticsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1FormsByIdFollowupAnalyticsQueryKey = (id: string,) => {
+    return [
+    `/v1/forms/${id}/followup-analytics`
+    ] as const;
+    }
+
+
+export const getGetV1FormsByIdFollowupAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getV1FormsByIdFollowupAnalytics>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdFollowupAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1FormsByIdFollowupAnalyticsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1FormsByIdFollowupAnalytics>>> = ({ signal }) => getV1FormsByIdFollowupAnalytics(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdFollowupAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1FormsByIdFollowupAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getV1FormsByIdFollowupAnalytics>>>
+export type GetV1FormsByIdFollowupAnalyticsQueryError = void
+
+
+/**
+ * @summary Follow-up recovery report (sent, clicked, recovered, holdout lift)
+ */
+
+export function useGetV1FormsByIdFollowupAnalytics<TData = Awaited<ReturnType<typeof getV1FormsByIdFollowupAnalytics>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdFollowupAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1FormsByIdFollowupAnalyticsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type getV1TemplatesResponse200 = {
   data: GetV1Templates200Item[]
   status: 200

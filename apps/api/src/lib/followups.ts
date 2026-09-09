@@ -298,6 +298,86 @@ export async function cancelFollowUps(
   }
 }
 
+/**
+ * Somebody opened the resume link in one of our messages.
+ *
+ * The `fu` parameter that carries the id is public and guessable in principle,
+ * so the `submission_id` in the WHERE clause is the check that matters: a
+ * follow-up can only be credited by the resume token minted for the very
+ * response it was scheduled against, and that token is what proved the caller
+ * had the message in the first place.
+ *
+ * `clicked_at IS NULL` makes this write-once. Somebody who opens the same mail
+ * three times over a week is one person coming back, and letting the last visit
+ * win would quietly move the click forward in the daily series every time.
+ *
+ * Never throws: this is bookkeeping hanging off a respondent's first request,
+ * and a form that will not open because a stat could not be written is a much
+ * worse outcome than a stat that is missing.
+ */
+export async function recordFollowUpClick(
+  env: Bindings,
+  followUpId: string,
+  submissionId: string,
+): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `UPDATE followups SET clicked_at = ?3
+        WHERE id = ?1 AND submission_id = ?2 AND clicked_at IS NULL`,
+    )
+      .bind(followUpId, submissionId, Date.now())
+      .run();
+  } catch (err) {
+    console.error("followup_click_failed", followUpId, err);
+  }
+}
+
+/**
+ * A response that a nudge brought back has been completed. Credit it.
+ *
+ * Exactly one row is credited — the latest step they actually clicked — because
+ * the question this answers is "how many responses did follow-ups recover",
+ * and a sequence of three messages to one person recovered one response, not
+ * three. Which step gets the credit is the last one they acted on, which is the
+ * one that did the work.
+ *
+ * Silent when nothing was clicked. Somebody who was going to finish anyway,
+ * and happened to have a scheduled nudge that never landed, is not a recovery,
+ * and counting them as one is precisely the self-flattering measurement the
+ * holdout exists to protect against.
+ */
+export async function creditFollowUpRecovery(
+  env: Bindings,
+  submissionId: string,
+): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `UPDATE followups SET recovered_at = ?2
+        WHERE id = (
+          SELECT id FROM followups
+           WHERE submission_id = ?1 AND clicked_at IS NOT NULL AND recovered_at IS NULL
+           ORDER BY clicked_at DESC LIMIT 1
+        )
+          /*
+            And only if this response has not already been credited.
+            \`finalizeResponse\` runs this once per completion behind its own
+            \`changed\` guard, so a second call should be impossible — but the
+            subquery alone would happily credit the *next* unrecovered clicked
+            step if one ever arrived here twice, turning one person into two
+            recoveries in the number this feature is judged by. Cheap insurance
+            on a figure that gets quoted.
+          */
+          AND NOT EXISTS (
+            SELECT 1 FROM followups WHERE submission_id = ?1 AND recovered_at IS NOT NULL
+          )`,
+    )
+      .bind(submissionId, Date.now())
+      .run();
+  } catch (err) {
+    console.error("followup_recovery_credit_failed", submissionId, err);
+  }
+}
+
 /** Cancel every pending nudge queued for one address, across forms. For unsubscribe. */
 export async function cancelFollowUpsForAddress(
   env: Bindings,

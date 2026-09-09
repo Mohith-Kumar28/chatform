@@ -12,6 +12,7 @@ import { clampForRuntime, brandingHiddenFor } from "../../lib/doc-entitlements.j
 import { decodeCursor, paginate } from "../../lib/cursor.js";
 import { getEntitlements } from "../../lib/entitlements.js";
 import { computeAnalytics } from "../../lib/analytics-service.js";
+import { computeFollowUpStats } from "../../lib/followup-analytics.js";
 
 /**
  * Forms, programmatically.
@@ -379,5 +380,46 @@ formsV1Router.get(
       });
     }
     return c.json(aggregate);
+  },
+);
+
+/**
+ * The follow-up recovery report, for an integrator.
+ *
+ * The same numbers the dashboard draws. Worth having over the API for the
+ * reason the whole feature exists: a customer running reminders wants the
+ * recovery figure next to their own funnel in their own warehouse, and
+ * "responses we would not otherwise have had" is exactly the number somebody
+ * builds a dashboard around.
+ *
+ * Under `analytics:read` rather than a scope of its own — it is a read of one
+ * form's aggregate numbers, which is what that scope already means.
+ */
+formsV1Router.get(
+  "/forms/:id/followup-analytics",
+  requireScope("analytics", "read"),
+  describeRoute({
+    tags: ["v1"],
+    summary: "Follow-up recovery report (sent, clicked, recovered, holdout lift)",
+    responses: {
+      200: { description: "Recovery report" },
+      404: { description: "Form not found" },
+    },
+  }),
+  async (c) => {
+    const orgId = c.get("orgId")!;
+    const id = c.req.param("id");
+    if (!keyOwnsForm(c, id)) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+
+    const owned = await c.env.DB.prepare(
+      `SELECT id FROM forms WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`,
+    )
+      .bind(id, orgId)
+      .first();
+    if (!owned) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+
+    // No plan split. A form only has rows here if it was entitled to schedule
+    // them, so there is nothing to withhold that was not already paid for.
+    return c.json(await computeFollowUpStats(c.env, id));
   },
 );

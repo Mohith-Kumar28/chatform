@@ -1,7 +1,7 @@
 import type { Bindings } from "../env.js";
 import type { AnswerMap, RespondentIdentity } from "@repo/form-schema";
 import { enqueueMail } from "./mail.js";
-import { cancelFollowUps, scheduleFollowUps } from "./followups.js";
+import { cancelFollowUps, creditFollowUpRecovery, scheduleFollowUps } from "./followups.js";
 
 /**
  * Every write to `submissions` and `submission_answers`, in one place.
@@ -405,6 +405,15 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
     });
   } else {
     await cancelFollowUps(o.env, a.responseId, a.status === "completed" ? "completed" : "disqualified");
+    /**
+     * A response that a nudge brought back, finished.
+     *
+     * Only on `completed`: a screen-out is not a recovery, and neither is a
+     * response that came back through the link and was abandoned a second time.
+     * `creditFollowUpRecovery` credits nothing unless a link was actually
+     * clicked, so this is a no-op for the overwhelming majority of completions.
+     */
+    if (a.status === "completed") await creditFollowUpRecovery(o.env, a.responseId);
   }
 
   o.env.ANALYTICS.writeDataPoint({

@@ -112,6 +112,18 @@ interface UseChatOptions {
   slug: string;
   apiOrigin: string;
   hiddenFields?: Record<string, string>;
+  /**
+   * The signed token out of a follow-up email's "pick up where you left off".
+   *
+   * This has existed on the API since follow-ups shipped and nothing ever sent
+   * it: the mail minted a token, put it in the link, and the page it landed on
+   * read the query string for hidden fields and nothing else. Every nudge we
+   * have ever sent opened a brand new conversation at question one, in front of
+   * somebody who had just been told their answers were saved.
+   */
+  resumeToken?: string;
+  /** Which message in the sequence that link came from, for the recovery report. */
+  followUpId?: string;
   /** Existing session (preview mode) — skips session creation. */
   existingSession?: { sessionId: string; token: string; eventsUrl: string } | null;
   /**
@@ -260,7 +272,7 @@ function backoffMs(attempt: number): number {
   return base * (0.7 + Math.random() * 0.6);
 }
 
-export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRestart }: UseChatOptions) {
+export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId, existingSession, onRestart }: UseChatOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState<QuestionState | null>(null);
   const [ending, setEnding] = useState<EndingState | null>(null);
@@ -760,7 +772,17 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
         const res = await fetch(`${apiOrigin}/p/forms/${slug}/sessions`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ hiddenFields }),
+          body: JSON.stringify({
+            hiddenFields,
+            /**
+             * Only when there is no live session to reconnect to — the branches
+             * above already returned in that case. A refresh mid-conversation
+             * must not mint a second session against the same response just
+             * because the token is still sitting in the address bar.
+             */
+            ...(resumeToken ? { resumeToken } : {}),
+            ...(followUpId ? { followUpId } : {}),
+          }),
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
@@ -769,6 +791,28 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
         const data = (await res.json()) as { sessionId: string; respondentToken: string };
         sessionRef.current = { sessionId: data.sessionId, token: data.respondentToken };
         saveSession(slug, sessionRef.current);
+        /**
+         * Take the resume token back out of the address bar once it has been
+         * spent.
+         *
+         * It is a bearer credential for somebody's half-finished answers, and
+         * it stays valid for thirty days. Leaving it on screen puts it in
+         * screenshots, in "look at this form" links pasted into group chats,
+         * and in the `Referer` of every outbound click from the page. The
+         * session now lives in the ref and in storage, so nothing below needs
+         * it. `replaceState` rather than a navigation: this must not add a
+         * history entry or remount the conversation that just started.
+         */
+        if (resumeToken && typeof window !== "undefined") {
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("resume");
+            url.searchParams.delete("fu");
+            window.history.replaceState(null, "", url.toString());
+          } catch {
+            /* A URL we cannot parse is not worth failing a live session over. */
+          }
+        }
         connectStream(data.sessionId, data.respondentToken, 0);
       } catch (err) {
         setStatus("error");
@@ -779,7 +823,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, existingSession, onRest
       }
     })();
     await pendingRef.current;
-  }, [slug, apiOrigin, hiddenFields, connectStream, existingSession]);
+  }, [slug, apiOrigin, hiddenFields, resumeToken, followUpId, connectStream, existingSession]);
 
   /** Manual retry after a hard failure — replaces a full page reload. */
   const retry = useCallback(() => {

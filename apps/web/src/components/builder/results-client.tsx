@@ -18,6 +18,7 @@ import { type Block, type FormDoc } from "@repo/form-schema";
 import {
   useGetApiFormsById,
   useGetApiFormsByIdAnalytics,
+  useGetApiFormsByIdFollowupAnalytics,
   useGetApiFormsByIdSubmissions,
 } from "@/lib/api/dashboard/dashboard";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,8 @@ import { SubmissionsTable, type SubmissionRecord } from "./submissions-table";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { LockedOverlay, LockChip, SkeletonRows, SkeletonChart, useUpgrade } from "@/components/billing/gate";
 import { FirstPartialToast } from "@/components/billing/first-partial-toast";
+import { FollowUpNudge } from "./followup-nudge";
+import { FollowUpAnalytics, type FollowUpPayload } from "./followup-analytics";
 import { API_ORIGIN } from "@/lib/api/mutator";
 
 
@@ -75,10 +78,20 @@ export function ResultsClient({ formId }: ResultsClientProps) {
   const { data: rawAnalytics } = useGetApiFormsByIdAnalytics(formId as never);
   const { data: rawSubs, isLoading } = useGetApiFormsByIdSubmissions(formId as never);
   const { data: rawForm } = useGetApiFormsById(formId as never);
+  /**
+   * The recovery report rides alongside rather than inside `/analytics`: it is
+   * gated on `followup_email` rather than `advanced_analytics`, so somebody
+   * paying to send the reminders can read what they did without also paying for
+   * the funnel. Returns zeros for a form that has never scheduled one.
+   */
+  const { data: rawFollowUps } = useGetApiFormsByIdFollowupAnalytics(formId as never);
 
   const analytics = rawAnalytics as Analytics | undefined;
   const subs = (Array.isArray(rawSubs) ? rawSubs : []) as SubmissionRecord[];
-  const doc = (rawForm as { workingSchema?: FormDoc } | undefined)?.workingSchema;
+  const form = rawForm as
+    | { workingSchema?: FormDoc; status?: string; hasUnpublishedChanges?: boolean }
+    | undefined;
+  const doc = form?.workingSchema;
   const ent = useEntitlements();
 
   const canPartials = ent.can("partial_responses");
@@ -126,6 +139,21 @@ export function ResultsClient({ formId }: ResultsClientProps) {
       {/* Renders nothing; fires once per form, the first time there is both a response and
           an unfinished one to see. */}
       <FirstPartialToast formId={formId} completed={completedCount} partials={partialCount} />
+
+      {/*
+        Placed above the tabs rather than inside the Partial one.
+        The author who needs to read this is the one looking at their completed
+        responses and wondering where the rest went — putting it behind the tab
+        they have not clicked shows it only to people who already found the
+        problem.
+      */}
+      <FollowUpNudge
+        formId={formId}
+        doc={doc}
+        partials={partialCount}
+        published={form?.status === "published"}
+        hasUnpublishedChanges={form?.hasUnpublishedChanges ?? false}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SegmentedControl
@@ -201,7 +229,13 @@ export function ResultsClient({ formId }: ResultsClientProps) {
       )}
 
       {tab === "summary" && <SummaryTab analytics={analytics} entitled={canAnalytics} blocks={columns} />}
-      {tab === "analytics" && <AnalyticsTab analytics={analytics} entitled={canAnalytics} />}
+      {tab === "analytics" && (
+        <AnalyticsTab
+          analytics={analytics}
+          entitled={canAnalytics}
+          followUps={rawFollowUps as FollowUpPayload | undefined}
+        />
+      )}
     </div>
   );
 }
@@ -370,10 +404,30 @@ function SummaryTab({
  * arrives without the numbers behind it, so the locked panel can truthfully say
  * *where* people leave while the why stays locked.
  */
-function AnalyticsTab({ analytics, entitled }: { analytics?: Analytics; entitled: boolean }) {
+function AnalyticsTab({
+  analytics,
+  entitled,
+  followUps,
+}: {
+  analytics?: Analytics;
+  entitled: boolean;
+  followUps?: FollowUpPayload;
+}) {
   const upgrade = useUpgrade();
 
   if (!analytics) return <div className="shimmer h-64 rounded-xl" />;
+
+  /**
+   * Drawn under whichever half of this tab the plan allows, including the
+   * locked one.
+   *
+   * A form only has this section once it has actually scheduled a reminder,
+   * which means the author is already paying for follow-ups — withholding the
+   * report on mail they are sending because they have not *also* bought
+   * advanced analytics would be charging twice for one feature. It renders
+   * nothing when there is nothing, so the common case costs a row of null.
+   */
+  const recovery = followUps?.everScheduled ? <FollowUpAnalytics stats={followUps} /> : null;
 
   if (!entitled) {
     const locked = analytics.lockedContext;
@@ -419,9 +473,15 @@ function AnalyticsTab({ analytics, entitled }: { analytics?: Analytics; entitled
             <SkeletonChart bars={Math.min(9, Math.max(4, locked?.questionCount ?? 5))} />
           </div>
         </LockedOverlay>
+        {recovery}
       </div>
     );
   }
 
-  return <ResultsAnalytics analytics={analytics} />;
+  return (
+    <div className="space-y-6">
+      <ResultsAnalytics analytics={analytics} />
+      {recovery}
+    </div>
+  );
 }

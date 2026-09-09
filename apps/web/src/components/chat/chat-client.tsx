@@ -31,12 +31,18 @@ import { API_ORIGIN } from "@/lib/api/mutator";
 export function ChatClient({
   config,
   hiddenFields,
+  resumeToken,
+  followUpId,
   existingSession,
   previewMode,
   onRestart,
 }: {
   config: PublicFormConfig;
   hiddenFields?: Record<string, string>;
+  /** From `?resume=` — a follow-up email's link back to a half-finished response. */
+  resumeToken?: string;
+  /** From `?fu=` — which message in the sequence that link came from. */
+  followUpId?: string;
   existingSession?: { sessionId: string; token: string; eventsUrl: string } | null;
   previewMode?: boolean;
   /** Preview only: mint a fresh session, since a draft has no public slug. */
@@ -46,6 +52,8 @@ export function ChatClient({
     slug: config.slug,
     apiOrigin: API_ORIGIN,
     hiddenFields,
+    ...(resumeToken ? { resumeToken } : {}),
+    ...(followUpId ? { followUpId } : {}),
     existingSession,
     onRestart,
   });

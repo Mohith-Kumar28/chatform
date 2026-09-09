@@ -2991,6 +2991,10 @@
                   "resumeToken": {
                     "type": "string",
                     "maxLength": 300
+                  },
+                  "followUpId": {
+                    "type": "string",
+                    "maxLength": 60
                   }
                 }
               }
@@ -5675,6 +5679,163 @@
         ]
       }
     },
+    "/api/forms/{id}/followup-analytics": {
+      "get": {
+        "operationId": "getApiFormsByIdFollowupAnalytics",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Follow-up recovery report (sent, clicked, recovered, holdout lift)",
+        "responses": {
+          "200": {
+            "description": "Recovery report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "everScheduled": {
+                      "type": "boolean"
+                    },
+                    "sent": {
+                      "type": "number"
+                    },
+                    "pending": {
+                      "type": "number"
+                    },
+                    "clicked": {
+                      "type": "number"
+                    },
+                    "recovered": {
+                      "type": "number"
+                    },
+                    "clickRate": {
+                      "type": "number"
+                    },
+                    "recoveryRate": {
+                      "type": "number"
+                    },
+                    "byStep": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "step": {
+                            "type": "number"
+                          },
+                          "sent": {
+                            "type": "number"
+                          },
+                          "clicked": {
+                            "type": "number"
+                          },
+                          "recovered": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "step",
+                          "sent",
+                          "clicked",
+                          "recovered"
+                        ]
+                      }
+                    },
+                    "daily": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date": {
+                            "type": "string"
+                          },
+                          "sent": {
+                            "type": "number"
+                          },
+                          "recovered": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "date",
+                          "sent",
+                          "recovered"
+                        ]
+                      }
+                    },
+                    "holdout": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "people": {
+                              "type": "number"
+                            },
+                            "recovered": {
+                              "type": "number"
+                            },
+                            "rate": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "people",
+                            "recovered",
+                            "rate"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "liftPoints": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "everScheduled",
+                    "sent",
+                    "pending",
+                    "clicked",
+                    "recovered",
+                    "clickRate",
+                    "recoveryRate",
+                    "byStep",
+                    "daily",
+                    "holdout",
+                    "liftPoints"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
     "/v1/forms/{id}/responses": {
       "post": {
         "operationId": "postV1FormsByIdResponses",
@@ -6636,6 +6797,42 @@
           },
           "402": {
             "description": "The per-question detail needs a plan that includes it"
+          },
+          "404": {
+            "description": "Form not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-required-scope": "analytics:read",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/forms/{id}/followup-analytics": {
+      "get": {
+        "operationId": "getV1FormsByIdFollowupAnalytics",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Follow-up recovery report (sent, clicked, recovered, holdout lift)",
+        "responses": {
+          "200": {
+            "description": "Recovery report"
           },
           "404": {
             "description": "Form not found"

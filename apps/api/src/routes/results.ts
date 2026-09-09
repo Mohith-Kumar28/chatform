@@ -7,6 +7,7 @@ import { requireSession, requireOrg, requireFormAccess, type GuardVars } from ".
 import { requirePermission, assertPermission, assertFeature, hasFeature, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
 import { buildResponseTable, toCsv } from "../lib/response-table.js";
 import { computeAnalytics } from "../lib/analytics-service.js";
+import { computeFollowUpStats } from "../lib/followup-analytics.js";
 import { buildXlsx } from "../lib/xlsx.js";
 
 export const resultsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
@@ -24,6 +25,7 @@ resultsRouter.use("/forms/:id/*", requireFormAccess);
  */
 resultsRouter.use("/forms/:id/submissions", requirePermission("submission", "read"));
 resultsRouter.use("/forms/:id/analytics", requirePermission("analytics", "read"));
+resultsRouter.use("/forms/:id/followup-analytics", requirePermission("analytics", "read"));
 
 const SubmissionRow = z.object({
   id: z.string(),
@@ -515,5 +517,48 @@ resultsRouter.get(
             worstBlockIndex: worst?.index ?? null,
           },
     });
+  },
+);
+
+const FollowUpSummary = z.object({
+  everScheduled: z.boolean(),
+  sent: z.number(),
+  pending: z.number(),
+  clicked: z.number(),
+  recovered: z.number(),
+  clickRate: z.number(),
+  recoveryRate: z.number(),
+  byStep: z.array(
+    z.object({ step: z.number(), sent: z.number(), clicked: z.number(), recovered: z.number() }),
+  ),
+  daily: z.array(z.object({ date: z.string(), sent: z.number(), recovered: z.number() })),
+  holdout: z.object({ people: z.number(), recovered: z.number(), rate: z.number() }).nullable(),
+  liftPoints: z.number().nullable(),
+});
+
+/**
+ * What the follow-ups recovered.
+ *
+ * Separate from `/analytics` rather than folded into it, for two reasons. It is
+ * gated on a different feature — an author can be entitled to send nudges and
+ * not to advanced analytics, and refusing them the report on the mail they are
+ * paying to send would be absurd — and it is dead weight on every form that has
+ * follow-ups switched off, which is most of them.
+ *
+ * An unentitled or never-configured form gets `everScheduled: false` and zeros
+ * rather than a 402. There is nothing withheld here: the client draws the pitch
+ * for a feature that is off, and a payment-required on a page someone opened to
+ * read their results is a worse answer than "nothing to show yet".
+ */
+resultsRouter.get(
+  "/forms/:id/followup-analytics",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Follow-up recovery report (sent, clicked, recovered, holdout lift)",
+    responses: { 200: { description: "Recovery report", content: { "application/json": { schema: resolver(FollowUpSummary) } } } },
+  }),
+  async (c) => {
+    const id = c.get("form")!.id;
+    return c.json(await computeFollowUpStats(c.env, id));
   },
 );

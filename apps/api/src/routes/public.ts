@@ -13,7 +13,7 @@ import { mountRespondentAuth } from "./respondent-auth.js";
 import { getEntitlements, meter, checkQuota } from "../lib/entitlements.js";
 import { brandingHiddenFor, clampForRuntime } from "../lib/doc-entitlements.js";
 import { verifyEmailToken } from "../lib/signed-url.js";
-import { cancelFollowUps, cancelFollowUpsForAddress, suppress } from "../lib/followups.js";
+import { cancelFollowUps, cancelFollowUpsForAddress, recordFollowUpClick, suppress } from "../lib/followups.js";
 import type { RespondentIdentity } from "@repo/form-schema";
 
 const sessionsRouter = new Hono<{ Bindings: Bindings }>();
@@ -29,6 +29,15 @@ const createSessionSchema = z.object({
    * for which gates that relaxes and which it does not.
    */
   resumeToken: z.string().max(300).optional(),
+  /**
+   * Which follow-up message the resume link came out of, for attribution.
+   *
+   * Only ever read alongside a `resumeToken` that verifies against the same
+   * response, so it grants nothing on its own — a stranger passing an id here
+   * gets a fresh session and no write. Optional forever: links minted before
+   * this existed, and links somebody retyped by hand, must still resume.
+   */
+  followUpId: z.string().max(60).optional(),
 });
 
 const messageSchema = z.discriminatedUnion("type", [
@@ -217,6 +226,14 @@ sessionsRouter.post(
       )
         .bind(resume.submissionId, Date.now())
         .run();
+      /**
+       * Credit the click before cancelling the rest of the sequence — the
+       * cancel is what makes this row stop being `scheduled`, and doing it
+       * first would leave the click landing on a row we had just written off.
+       */
+      if (body.followUpId) {
+        await recordFollowUpClick(c.env, body.followUpId, resume.submissionId);
+      }
       await cancelFollowUps(c.env, resume.submissionId, "resumed");
       await c.env.Q_WEBHOOKS.send({
         event: "response.resumed",

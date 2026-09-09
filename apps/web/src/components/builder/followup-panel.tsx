@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, MessageCircle, X } from "lucide-react";
 import type { FormDoc } from "@repo/form-schema";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -321,6 +321,27 @@ export function FollowUpPanel({
             </div>
           )}
         </>
+      )}
+
+      {/*
+        The next channel, named but not promised.
+
+        Said here rather than nowhere because an author deciding whether email
+        is enough is exactly the person who wants to know a phone channel is
+        coming — and said as plainly as this because the `channel` column and
+        `resolveRespondentAddress`'s unused `phone` are as far as it has got.
+        The blocker is not the code: WhatsApp template messages need business
+        verification and per-template approval, which is not ours to schedule.
+      */}
+      {followUp.enabled && hasAddress && (
+        <div className="text-muted-foreground flex items-start gap-2 rounded-xl border border-dashed px-4 py-3 text-xs">
+          <MessageCircle className="mt-0.5 size-3.5 shrink-0" />
+          <p>
+            <span className="text-foreground font-medium">WhatsApp follow-ups are coming.</span>{" "}
+            When a respondent has verified a phone number, a reminder can go where they will
+            actually see it. Email is the only channel today.
+          </p>
+        </div>
       )}
 
       {org?.id && (

@@ -1,7 +1,15 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
 import { applySchema, seedTenant, type Tenant } from "./helpers.js";
-import { scheduleFollowUps, cancelFollowUps, suppress, isSuppressed } from "../src/lib/followups.js";
+import {
+  scheduleFollowUps,
+  cancelFollowUps,
+  suppress,
+  isSuppressed,
+  recordFollowUpClick,
+  creditFollowUpRecovery,
+} from "../src/lib/followups.js";
+import { computeFollowUpStats } from "../src/lib/followup-analytics.js";
 import { sweepFollowUps } from "../src/lib/sweeps.js";
 import { resolveRespondentAddress } from "../src/lib/respondent-address.js";
 import { sendMail } from "../src/lib/mail.js";
@@ -537,5 +545,159 @@ describe("marketing mail never uses the transactional pipe", () => {
     const res = await sendMail(e, { to: "a@example.com", subject: "s", html: "<p>h</p>", text: "h" });
     expect(res.transport).toBe("cloudflare");
     expect(sent).toHaveLength(1);
+  });
+});
+
+/**
+ * Attribution: what a nudge actually did.
+ *
+ * These numbers get quoted. The recovery figure is the one an author reads to
+ * decide whether the feature is worth paying for, and every test here is about
+ * a way of inflating it that the implementation must refuse — crediting a
+ * completion nobody was nudged into, counting one person three times because
+ * they got three messages, or letting a repeat visit move the click.
+ */
+describe("follow-up attribution", () => {
+  /** Mark scheduled rows as sent, the way the sweep would. */
+  async function markSent(submissionId: string): Promise<string[]> {
+    await env.DB.prepare(
+      `UPDATE followups SET status = 'sent', sent_at = ? WHERE submission_id = ? AND status = 'scheduled'`,
+    )
+      .bind(Date.now(), submissionId)
+      .run();
+    const rows = await env.DB.prepare(
+      `SELECT id FROM followups WHERE submission_id = ? ORDER BY step`,
+    )
+      .bind(submissionId)
+      .all<{ id: string }>();
+    return (rows.results ?? []).map((r) => r.id);
+  }
+
+  it("records a click once, and only against its own response", async () => {
+    const id = await seedAbandoned("sub_click");
+    await scheduleFollowUps({
+      env: env as unknown as Bindings,
+      submissionId: id,
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt: Date.now() - 5 * 3_600_000,
+    });
+    const [first] = await markSent(id);
+
+    await recordFollowUpClick(env as unknown as Bindings, first!, id);
+    const after = await env.DB.prepare(`SELECT clicked_at FROM followups WHERE id = ?`)
+      .bind(first)
+      .first<{ clicked_at: number }>();
+    expect(after?.clicked_at).toBeGreaterThan(0);
+
+    // A second visit from the same message is the same person coming back. The
+    // first timestamp must survive, or the daily series walks forward every
+    // time somebody reopens their inbox.
+    await recordFollowUpClick(env as unknown as Bindings, first!, id);
+    const again = await env.DB.prepare(`SELECT clicked_at FROM followups WHERE id = ?`)
+      .bind(first)
+      .first<{ clicked_at: number }>();
+    expect(again?.clicked_at).toBe(after?.clicked_at);
+  });
+
+  it("refuses a follow-up id that belongs to another response", async () => {
+    const mine = await seedAbandoned("sub_mine");
+    const theirs = await seedAbandoned("sub_theirs");
+    for (const s of [mine, theirs]) {
+      await scheduleFollowUps({
+        env: env as unknown as Bindings,
+        submissionId: s,
+        formId: t.formId,
+        organizationId: t.orgId,
+        abandonedAt: Date.now() - 5 * 3_600_000,
+      });
+    }
+    const [theirFirst] = await markSent(theirs);
+
+    // The id is real; the response it is paired with is not the one it was
+    // scheduled against. This is the check that makes the public `fu` parameter
+    // safe to put in a URL.
+    await recordFollowUpClick(env as unknown as Bindings, theirFirst!, mine);
+    const row = await env.DB.prepare(`SELECT clicked_at FROM followups WHERE id = ?`)
+      .bind(theirFirst)
+      .first<{ clicked_at: number | null }>();
+    expect(row?.clicked_at).toBeNull();
+  });
+
+  it("credits one recovery per person, not one per message", async () => {
+    const id = await seedAbandoned("sub_recover");
+    await scheduleFollowUps({
+      env: env as unknown as Bindings,
+      submissionId: id,
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt: Date.now() - 30 * 3_600_000,
+    });
+    const ids = await markSent(id);
+    expect(ids.length).toBe(2);
+
+    // They ignored the first and acted on the second.
+    await recordFollowUpClick(env as unknown as Bindings, ids[0]!, id);
+    await new Promise((r) => setTimeout(r, 2));
+    await recordFollowUpClick(env as unknown as Bindings, ids[1]!, id);
+    await creditFollowUpRecovery(env as unknown as Bindings, id);
+
+    const credited = await env.DB.prepare(
+      `SELECT id FROM followups WHERE submission_id = ? AND recovered_at IS NOT NULL`,
+    )
+      .bind(id)
+      .all<{ id: string }>();
+    expect(credited.results).toHaveLength(1);
+    // The one they actually acted on last, which is the one that did the work.
+    expect(credited.results?.[0]?.id).toBe(ids[1]);
+  });
+
+  it("credits nothing when the link was never opened", async () => {
+    const id = await seedAbandoned("sub_selfstarter");
+    await scheduleFollowUps({
+      env: env as unknown as Bindings,
+      submissionId: id,
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt: Date.now() - 5 * 3_600_000,
+    });
+    await markSent(id);
+
+    // Somebody who came back on their own while a nudge happened to be in their
+    // inbox is not a recovery. Counting them is exactly the self-flattery the
+    // holdout exists to catch.
+    await creditFollowUpRecovery(env as unknown as Bindings, id);
+    const stats = await computeFollowUpStats(env as unknown as Bindings, t.formId);
+    expect(stats.recovered).toBe(0);
+  });
+
+  it("counts holdout people rather than holdout rows", async () => {
+    // Three steps' worth of rows for one held-back person. Counting rows would
+    // treble the control arm and deflate the baseline it produces.
+    const id = await seedAbandoned("sub_holdout");
+    const now = Date.now();
+    for (const step of [1, 2, 3]) {
+      await env.DB.prepare(
+        `INSERT INTO followups (id, submission_id, form_id, organization_id, channel, address,
+                                address_source, step, status, reason, scheduled_at, created_at)
+         VALUES (?, ?, ?, ?, 'email', 'held@example.com', 'answer', ?, 'holdout', 'holdout', ?, ?)`,
+      )
+        .bind(`flw_hold_${step}`, id, t.formId, t.orgId, step, now, now)
+        .run();
+    }
+
+    const stats = await computeFollowUpStats(env as unknown as Bindings, t.formId);
+    expect(stats.holdout?.people).toBe(1);
+    // One person is far under the floor, so no lift figure is offered. A ratio
+    // computed from a handful of people is worse than none, because it is the
+    // one that gets repeated.
+    expect(stats.liftPoints).toBeNull();
+  });
+
+  it("reports nothing for a form that never scheduled one", async () => {
+    const stats = await computeFollowUpStats(env as unknown as Bindings, t.formId);
+    expect(stats.everScheduled).toBe(false);
+    expect(stats.sent).toBe(0);
+    expect(stats.holdout).toBeNull();
   });
 });

@@ -766,6 +766,8 @@ export type PostPFormsBySlugSessionsBody = {
   embed?: PostPFormsBySlugSessionsBodyEmbed;
   /** @maxLength 300 */
   resumeToken?: string;
+  /** @maxLength 60 */
+  followUpId?: string;
 };
 
 export type PostPFormsBySlugSessions200 = {
@@ -1394,6 +1396,39 @@ export type GetApiFormsByIdAnalytics200 = {
   durationBuckets: GetApiFormsByIdAnalytics200DurationBucketsItem[];
   locked: string[];
   lockedContext: GetApiFormsByIdAnalytics200LockedContext;
+};
+
+export type GetApiFormsByIdFollowupAnalytics200ByStepItem = {
+  step: number;
+  sent: number;
+  clicked: number;
+  recovered: number;
+};
+
+export type GetApiFormsByIdFollowupAnalytics200DailyItem = {
+  date: string;
+  sent: number;
+  recovered: number;
+};
+
+export type GetApiFormsByIdFollowupAnalytics200Holdout = {
+  people: number;
+  recovered: number;
+  rate: number;
+} | null;
+
+export type GetApiFormsByIdFollowupAnalytics200 = {
+  everScheduled: boolean;
+  sent: number;
+  pending: number;
+  clicked: number;
+  recovered: number;
+  clickRate: number;
+  recoveryRate: number;
+  byStep: GetApiFormsByIdFollowupAnalytics200ByStepItem[];
+  daily: GetApiFormsByIdFollowupAnalytics200DailyItem[];
+  holdout: GetApiFormsByIdFollowupAnalytics200Holdout;
+  liftPoints: number | null;
 };
 
 export type PostV1FormsByIdResponsesBodyAnswers = {[key: string]: unknown};

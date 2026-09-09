@@ -103,6 +103,22 @@ export default async function PublicFormPage({ params, searchParams }: PageProps
   const embedded = query.embed === "1";
   const parentOrigin = typeof query.parentOrigin === "string" ? query.parentOrigin : null;
 
+  /**
+   * The link out of a follow-up email.
+   *
+   * `?resume=` has been minted into every nudge since follow-ups shipped, and
+   * read here by nothing — the loop above pulls hidden fields out of the query
+   * and that was the whole of it. So the button that says "pick up where you
+   * left off" started a fresh conversation at question one, which is the single
+   * worst thing that link could do: it tells somebody their answers are saved
+   * and then throws them away in front of them.
+   *
+   * Passed down rather than read in the client, because the client reads the
+   * address bar once on mount and this page already has the parsed query.
+   */
+  const resumeToken = typeof query.resume === "string" ? query.resume : undefined;
+  const followUpId = typeof query.fu === "string" ? query.fu : undefined;
+
   return (
     <div className={embedded ? "cf-embedded" : undefined}>
       {/* A view is a view whether it is framed or not. */}
@@ -113,7 +129,12 @@ export default async function PublicFormPage({ params, searchParams }: PageProps
           allowedOrigins={config.embed?.allowedOrigins ?? []}
         />
       ) : null}
-      <ChatClient config={config} hiddenFields={hiddenFields} />
+      <ChatClient
+        config={config}
+        hiddenFields={hiddenFields}
+        resumeToken={resumeToken}
+        followUpId={followUpId}
+      />
     </div>
   );
 }

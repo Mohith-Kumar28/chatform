@@ -1092,6 +1092,42 @@
         ]
       }
     },
+    "/v1/forms/{id}/followup-analytics": {
+      "get": {
+        "operationId": "getV1FormsByIdFollowupAnalytics",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Follow-up recovery report (sent, clicked, recovered, holdout lift)",
+        "responses": {
+          "200": {
+            "description": "Recovery report"
+          },
+          "404": {
+            "description": "Form not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-required-scope": "analytics:read",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
     "/v1/templates": {
       "get": {
         "operationId": "getV1Templates",
