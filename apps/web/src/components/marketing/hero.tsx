@@ -207,39 +207,68 @@ export function Hero() {
             thin, and follows up with the people who leave.
           </p>
 
+          {/*
+            Two pills, and where there is a demo to point at, the demo is the
+            opaque one.
+
+            The variants above call this out themselves: opaque for the thing to
+            do, translucent for the thing beside it. Trying the product IS the
+            thing to do. Someone who has answered the demo has used chatform and
+            knows whether they like it; someone who clicked "start free" first
+            has an empty builder and a decision they are not yet equipped to
+            make. So the demo takes the fill and the sign-up takes the tint.
+
+            Not three pills. The pair reads as one decision with a secondary
+            option; a third makes it a menu, and the third would have been an
+            in-page anchor wearing the weight of a real destination. "See how it
+            works" drops to the line below — reading about the product is what
+            you do once you have decided not to try it.
+
+            With no demo configured the emphasis goes back: "start free" is the
+            thing to do again, because the alternative is an anchor to a section
+            further down the same page. Gating the *button* on the slug instead
+            would leave a one-pill hero in every environment without the env var
+            set — local dev, previews, and production too if the var is ever
+            dropped or the demo unpublished.
+          */}
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Button asChild size="lg" shape="pill" variant="on-brand" className="h-12 px-8">
-              <Link href="/signin">Start free</Link>
-            </Button>
-            {/*
-              Two pills, and the second one is the demo wherever there is a demo
-              to point at.
-
-              Not three. The pair reads as one decision with a secondary option;
-              a third makes it a menu, and the third would have been an in-page
-              anchor wearing the same weight as a real destination. So the demo
-              takes the secondary slot and "see how it works" drops to the line
-              below — someone who wants to be shown the product can now be shown
-              it rather than read about it.
-
-              It falls back rather than disappearing. Gating the button itself on
-              the slug would leave a single-pill hero in every environment
-              without the env var set — local dev, any preview deploy, and
-              production too if the var is ever dropped or the demo unpublished.
-              The row is two pills either way.
-            */}
-            <Button
-              asChild
-              size="lg"
-              shape="pill"
-              variant="on-brand-outline"
-              className="h-12 px-7"
-            >
-              <Link href={DEMO_SLUG ? `/f/${DEMO_SLUG}` : "#how-it-works"}>
-                {DEMO_SLUG ? "Try a demo form" : "See how it works"}
-                <ArrowRight className="size-4" strokeWidth={2.25} />
-              </Link>
-            </Button>
+            {DEMO_SLUG ? (
+              <>
+                <Button asChild size="lg" shape="pill" variant="on-brand" className="h-12 px-8">
+                  <Link href={`/f/${DEMO_SLUG}`}>
+                    Try it yourself
+                    <ArrowRight className="size-4" strokeWidth={2.25} />
+                  </Link>
+                </Button>
+                <Button
+                  asChild
+                  size="lg"
+                  shape="pill"
+                  variant="on-brand-outline"
+                  className="h-12 px-7"
+                >
+                  <Link href="/signin">Start free</Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button asChild size="lg" shape="pill" variant="on-brand" className="h-12 px-8">
+                  <Link href="/signin">Start free</Link>
+                </Button>
+                <Button
+                  asChild
+                  size="lg"
+                  shape="pill"
+                  variant="on-brand-outline"
+                  className="h-12 px-7"
+                >
+                  <Link href="#how-it-works">
+                    See how it works
+                    <ArrowRight className="size-4" strokeWidth={2.25} />
+                  </Link>
+                </Button>
+              </>
+            )}
           </div>
 
           {/* "200 AI conversations a month" is a metering detail nobody has
