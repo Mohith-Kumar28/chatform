@@ -7,10 +7,20 @@ import { GradientField } from "@/components/brand/gradient-field";
 import { CircleMark } from "./annotate";
 
 /**
+ * The published demo form, or nothing.
+ *
  * `NEXT_PUBLIC_DEMO_FORM_SLUG` replaces the hardcoded `/f/test-waitlist` the
  * old hero pointed at — a seed row that may or may not exist in any given
- * environment. With no slug configured the link is simply not rendered, rather
- * than shipping a link to a 404.
+ * environment. Unset, the secondary pill falls back to the "how it works"
+ * anchor rather than shipping a link to a 404.
+ *
+ * Inlined at build time, like every `NEXT_PUBLIC_*`. Two consequences worth
+ * knowing before debugging this: changing it needs `pnpm deploy:web` and not
+ * just an API deploy, and it will not render under `next dev` unless
+ * `.env.local` sets it — which reads exactly like the change not working.
+ *
+ * The form itself is authored in `tooling/demo-form/` and published by
+ * `pnpm seed:demo:remote`.
  */
 const DEMO_SLUG = process.env.NEXT_PUBLIC_DEMO_FORM_SLUG;
 
@@ -201,6 +211,23 @@ export function Hero() {
             <Button asChild size="lg" shape="pill" variant="on-brand" className="h-12 px-8">
               <Link href="/signin">Start free</Link>
             </Button>
+            {/*
+              Two pills, and the second one is the demo wherever there is a demo
+              to point at.
+
+              Not three. The pair reads as one decision with a secondary option;
+              a third makes it a menu, and the third would have been an in-page
+              anchor wearing the same weight as a real destination. So the demo
+              takes the secondary slot and "see how it works" drops to the line
+              below — someone who wants to be shown the product can now be shown
+              it rather than read about it.
+
+              It falls back rather than disappearing. Gating the button itself on
+              the slug would leave a single-pill hero in every environment
+              without the env var set — local dev, any preview deploy, and
+              production too if the var is ever dropped or the demo unpublished.
+              The row is two pills either way.
+            */}
             <Button
               asChild
               size="lg"
@@ -208,8 +235,8 @@ export function Hero() {
               variant="on-brand-outline"
               className="h-12 px-7"
             >
-              <Link href="#how-it-works">
-                See how it works
+              <Link href={DEMO_SLUG ? `/f/${DEMO_SLUG}` : "#how-it-works"}>
+                {DEMO_SLUG ? "Try a demo form" : "See how it works"}
                 <ArrowRight className="size-4" strokeWidth={2.25} />
               </Link>
             </Button>
@@ -221,14 +248,23 @@ export function Hero() {
               it costs nothing and that the thing they collect is not capped. */}
           <p style={{ color: "var(--on-band-vivid-muted)" }} className="text-caption mt-6">
             Free forever · Unlimited forms and responses · No card
+            {/*
+              The demo is a pill above now, so the link that used to live here
+              is gone: the same destination twice inside two hundred pixels is
+              not emphasis. What takes its place is the anchor the pill
+              displaced, which belongs in the quieter position anyway — reading
+              about the product is what you do when you have decided not to try
+              it. Only shown when the pill is the demo, or it would be a
+              duplicate of the button directly above it.
+            */}
             {DEMO_SLUG && (
               <>
                 {" · "}
                 <Link
-                  href={`/f/${DEMO_SLUG}`}
+                  href="#how-it-works"
                   className="underline underline-offset-4 hover:opacity-70"
                 >
-                  try a real one
+                  See how it works
                 </Link>
               </>
             )}
