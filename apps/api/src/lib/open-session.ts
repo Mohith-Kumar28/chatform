@@ -2,6 +2,7 @@ import { readFormDoc, sha256Hex, type FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { getEntitlements, meter, checkQuota } from "./entitlements.js";
 import { clampForRuntime, brandingHiddenFor } from "./doc-entitlements.js";
+import { respondentKey, type RespondentKey } from "./respondent-key.js";
 import { isHashedPassword, verifyPassword, timingSafeEqual } from "./crypto.js";
 import type { ResponseSource } from "./submissions.js";
 
@@ -27,6 +28,8 @@ export interface FormRow {
   organization_id: string;
   version_id: string;
   schema_json: string;
+  /** Per-form salt for the respondent device key. See `lib/respondent-key.ts`. */
+  fingerprint_salt: string;
 }
 
 export interface OpenSessionInput {
@@ -60,6 +63,14 @@ export interface OpenSessionInput {
    * supplied deliberately.
    */
   respondentIpHash?: string;
+  /**
+   * The device signal the browser computed, when there is a browser.
+   *
+   * Optional everywhere. It is blocked by extensions, refused by hardened
+   * browsers, and absent from every server-to-server caller — so the key falls
+   * back to the IP, which is what it was before. See `lib/respondent-key.ts`.
+   */
+  deviceSignal?: string | null;
   /** Opened with a test-mode key: real rows, excluded from every count. */
   isTest?: boolean;
   apiKeyId?: string | null;
@@ -125,6 +136,8 @@ export type OpenSessionResult =
       brandingHidden: boolean;
       aiDegraded: boolean;
       ipHash: string;
+      /** The salted device key, and how much of it is a real device signal. */
+      device: RespondentKey;
     }
   | { ok: false; status: 401 | 403 | 409; body: { error: { code: string; message: string } } };
 
@@ -259,6 +272,21 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
   const ipHash = input.respondentIpHash ?? (input.ip ? sha256Hex(input.ip) : "");
 
   /**
+   * The device key, which is what the duplicate rule keys on now.
+   *
+   * `ipHash` is still computed and still stored — it is what analytics and the
+   * abuse paths read, and it is the fallback when no device signal arrives —
+   * but it is no longer what decides whether somebody has answered before. An
+   * IP is a network: it treated a hundred people in one office as one person,
+   * and one person moving from wifi to mobile data as two.
+   */
+  const device = respondentKey({
+    signal: input.deviceSignal,
+    ip: input.ip,
+    salt: form.fingerprint_salt,
+  });
+
+  /**
    * "One response per person."
    *
    * This used to expire after 24 hours, on the reasoning that an IP identifies
@@ -280,13 +308,22 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
    * counts alongside `completed`, or screening out would be undone by
    * reloading and answering differently.
    */
-  if (!settings.allowResubmissions && ipHash && !input.resumeSubmissionId) {
+  if (!settings.allowResubmissions && device.value && !input.resumeSubmissionId) {
+    /*
+     * Matched on the device key, and on the old IP hash beside it.
+     *
+     * The second half is not belt-and-braces — it is the only thing that still
+     * recognises everybody who answered before this key existed. Their sessions
+     * carry an `ip_hash` and no `fingerprint`, and dropping the clause would
+     * quietly reopen the form to all of them at once.
+     */
     const prior = await env.DB.prepare(
       `SELECT 1 FROM chat_sessions
-        WHERE form_id = ?1 AND ip_hash = ?2 AND status IN ('completed', 'disqualified')
+        WHERE form_id = ?1 AND status IN ('completed', 'disqualified')
+          AND (fingerprint = ?2 OR (?3 != '' AND ip_hash = ?3))
         LIMIT 1`,
     )
-      .bind(form.id, ipHash)
+      .bind(form.id, device.value, ipHash)
       .first();
     if (prior) {
       return {
@@ -309,9 +346,9 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
 
   await env.DB.prepare(
     `INSERT INTO chat_sessions (id, form_id, form_version_id, organization_id, respondent_token_hash, status,
-                                hidden_fields, ip_hash, country, source, is_test, submission_id,
+                                hidden_fields, ip_hash, fingerprint, country, source, is_test, submission_id,
                                 created_at, last_activity_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       sessionId,
@@ -321,6 +358,9 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
       sha256Hex(respondentToken),
       JSON.stringify(input.hiddenFields),
       ipHash,
+      // Empty string rather than null would make every signal-less session
+      // match every other one on the resubmission gate.
+      device.value || null,
       input.country,
       input.source,
       input.isTest ? 1 : 0,
@@ -362,5 +402,6 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
     brandingHidden: brandingHiddenFor(doc, ent),
     aiDegraded,
     ipHash,
+    device,
   };
 }

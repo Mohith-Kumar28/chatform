@@ -127,6 +127,13 @@
       "when": 1789320000000,
       "tag": "0017_followup_attribution",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1789406400000,
+      "tag": "0018_respondent_device_key",
+      "breakpoints": true
     }
   ]
 }

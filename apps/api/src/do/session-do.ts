@@ -76,6 +76,8 @@ interface DoSessionMeta {
   startedAt: number;
   hiddenFields: Record<string, string>;
   ipHash: string | null;
+  /** Salted device key, from `lib/respondent-key.ts`. Null when nothing identified the device. */
+  fingerprint?: string | null;
   country: string | null;
   userAgent: string | null;
   /** Set when the respondent submits, for the already-submitted screen. */
@@ -269,6 +271,7 @@ export class SessionDO extends DurableObject<Bindings> {
     respondentToken: string;
     hiddenFields: Record<string, string>;
     ipHash: string | null;
+    fingerprint?: string | null;
     country: string | null;
     userAgent: string | null;
     /** Which surface opened this. Defaults to a conversation. */
@@ -309,6 +312,7 @@ export class SessionDO extends DurableObject<Bindings> {
       startedAt: Date.now(),
       hiddenFields: params.hiddenFields,
       ipHash: params.ipHash,
+      fingerprint: params.fingerprint ?? null,
       country: params.country,
       userAgent: params.userAgent,
       source: params.source ?? "chat",
@@ -2080,6 +2084,7 @@ export class SessionDO extends DurableObject<Bindings> {
         userAgent: this.meta!.userAgent,
         country: this.meta!.country,
         startedAt: this.meta!.startedAt,
+        fingerprint: this.meta!.fingerprint ?? null,
         // Usually present: the gate refuses every turn until it is, and this row
         // is opened by the first accepted answer.
         identity: this.meta!.identity ?? null,

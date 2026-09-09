@@ -3,6 +3,7 @@
 import { emitEmbedEvent } from "./embed-bridge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PublicBlock } from "@repo/form-schema";
+import { getRespondentSignal } from "@/lib/respondent-signal";
 import {
   clearRespondentHint,
   loadRespondentHint,
@@ -314,6 +315,17 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
   const [rateLimited, setRateLimited] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewState | null>(null);
   const [submitted, setSubmitted] = useState<SubmittedState | null>(null);
+  /**
+   * The next session was asked for explicitly, so it must not be resumed into
+   * anything.
+   *
+   * The device key would otherwise match the very response they just walked
+   * away from and hand it straight back — "Start over" would clear the screen
+   * and then refill it. Cleared client-side signals cannot fix this and should
+   * not try: the same key still has to work for the duplicate rule, so it is
+   * this flag, and the server, that decide not to resume.
+   */
+  const freshRef = useRef(false);
   /**
    * True until we know which screen this visit belongs on.
    *
@@ -796,6 +808,12 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
 
     pendingRef.current = (async () => {
       try {
+        /*
+         * Computed here rather than at mount: it runs a canvas and an audio
+         * probe, and nothing needs it until a session is actually being opened.
+         * Failure is normal and returns null.
+         */
+        const deviceSignal = await getRespondentSignal();
         const res = await fetch(`${apiOrigin}/p/forms/${slug}/sessions`, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -809,6 +827,18 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
              */
             ...(resumeToken ? { resumeToken } : {}),
             ...(followUpId ? { followUpId } : {}),
+            /**
+             * Which device this is, so an anonymous respondent who cleared
+             * their storage or opened the form privately gets their own
+             * half-finished response back instead of a blank one — and so the
+             * duplicate rule stops treating a whole office as one person.
+             *
+             * Awaited rather than fired alongside: the server needs it in this
+             * request to decide both. Null whenever the signal cannot be
+             * computed, which the server handles by falling back to the IP.
+             */
+            ...(deviceSignal ? { deviceSignal } : {}),
+            ...(freshRef.current ? { fresh: true } : {}),
           }),
         });
         if (!res.ok) {
@@ -830,6 +860,8 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
           }
           throw new Error(body?.error?.message ?? "Could not start session");
         }
+        // Spent. A later reload is an ordinary visit and should resume again.
+        freshRef.current = false;
         const data = (await res.json()) as { sessionId: string; respondentToken: string };
         sessionRef.current = { sessionId: data.sessionId, token: data.respondentToken };
         saveSession(slug, sessionRef.current);
@@ -988,6 +1020,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     }
     clearSaved(slug);
     clearSubmitted(slug);
+    freshRef.current = true;
     setResolving(true);
     setSubmitted(null);
     sessionRef.current = null;

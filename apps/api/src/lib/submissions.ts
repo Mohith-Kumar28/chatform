@@ -58,6 +58,14 @@ export interface OpenResponseArgs {
   expiresAt?: number | null;
   apiKeyId?: string | null;
   /**
+   * The salted device key for this respondent, from `lib/respondent-key.ts`.
+   *
+   * Denormalised onto the response for the same reason the identity is:
+   * sessions get pruned, and the duplicate rule has to keep working against
+   * responses long after the session that produced them is gone.
+   */
+  fingerprint?: string | null;
+  /**
    * The verified respondent, when one is already known at creation.
    *
    * Normally they are: the sign-in gate refuses every turn until an identity
@@ -80,9 +88,9 @@ export async function openResponse(o: ResponseOwner, a: OpenResponseArgs): Promi
   await o.env.DB.prepare(
     `INSERT INTO submissions
        (id, form_id, form_version_id, organization_id, session_id, source, is_test, status,
-        hidden_fields, meta, started_at, updated_at, expires_at, api_key_id,
+        hidden_fields, meta, started_at, updated_at, expires_at, api_key_id, fingerprint,
         respondent_provider, respondent_subject, respondent_email, respondent_phone, respondent_name)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO NOTHING`,
   )
     .bind(
@@ -101,6 +109,7 @@ export async function openResponse(o: ResponseOwner, a: OpenResponseArgs): Promi
       a.startedAt,
       a.expiresAt ?? null,
       a.apiKeyId ?? null,
+      a.fingerprint || null,
       a.identity?.provider ?? null,
       a.identity?.subject ?? null,
       a.identity?.email ?? null,

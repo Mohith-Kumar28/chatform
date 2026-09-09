@@ -116,7 +116,7 @@ const createSessionRoute = (path: string) =>
     const body = c.req.valid("json");
 
     const formRow = await c.env.DB.prepare(
-      `SELECT f.id, f.slug, f.status, f.close_at, f.organization_id, fv.id AS version_id, fv.schema_json
+      `SELECT f.id, f.slug, f.status, f.close_at, f.organization_id, f.fingerprint_salt, fv.id AS version_id, fv.schema_json
          FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
         WHERE f.id = ? AND f.organization_id = ? AND f.status = 'published' AND f.deleted_at IS NULL`,
     )
@@ -161,6 +161,7 @@ const createSessionRoute = (path: string) =>
       respondentToken: opened.respondentToken,
       hiddenFields: body.hiddenFields ?? {},
       ipHash: opened.ipHash || null,
+      fingerprint: opened.device.value || null,
       country: body.respondent?.country ?? null,
       userAgent: body.respondent?.userAgent ?? "api",
       source: "api",

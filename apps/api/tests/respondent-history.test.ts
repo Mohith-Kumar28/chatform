@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
 import { applySchema, seedTenant, type Tenant } from "./helpers.js";
-import { findIdentityHistory } from "../src/lib/respondent-history.js";
+import { findIdentityHistory, findDeviceResumable } from "../src/lib/respondent-history.js";
+import { respondentKey, readDeviceSignal } from "../src/lib/respondent-key.js";
 import type { RespondentIdentity } from "@repo/form-schema";
 import type { Bindings } from "../src/env.js";
 
@@ -43,6 +44,8 @@ async function seed(opts: {
   sessionId?: string;
   updatedAt?: number;
   formId?: string;
+  fingerprint?: string;
+  anonymous?: boolean;
 }): Promise<string> {
   const id = `sbm_hist_${++n}`;
   const now = opts.updatedAt ?? Date.now();
@@ -50,9 +53,9 @@ async function seed(opts: {
   await env.DB.prepare(
     `INSERT INTO submissions
        (id, form_id, organization_id, session_id, status, source, is_test,
-        started_at, updated_at, completed_at,
+        started_at, updated_at, completed_at, fingerprint,
         respondent_provider, respondent_subject, respondent_email)
-     VALUES (?, ?, ?, ?, ?, 'chat', ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, 'chat', ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       id,
@@ -64,9 +67,10 @@ async function seed(opts: {
       now,
       now,
       opts.status === "in_progress" || opts.status === "abandoned" ? null : now,
-      who.provider,
-      who.subject,
-      who.email,
+      opts.fingerprint ?? null,
+      opts.anonymous ? null : who.provider,
+      opts.anonymous ? null : who.subject,
+      opts.anonymous ? null : who.email,
     )
     .run();
 
@@ -85,7 +89,7 @@ const look = (identity: RespondentIdentity = ME) =>
   findIdentityHistory(env as unknown as Bindings, t.formId, identity, CURRENT);
 
 beforeAll(async () => {
-  await applySchema(env.DB);
+  await applySchema();
   t = await seedTenant("histy");
 });
 
@@ -169,5 +173,84 @@ describe("findIdentityHistory", () => {
     expect(finished?.submissionId).toBe(done);
     expect(resumable).toBeNull();
     await env.DB.prepare(`DELETE FROM submissions WHERE id IN (?, ?)`).bind(open, done).run();
+  });
+});
+
+describe("respondentKey", () => {
+  it("prefers the device signal and falls back to the IP", () => {
+    expect(respondentKey({ signal: "abcdefgh1234", ip: "1.2.3.4", salt: "s" }).source).toBe("device");
+    expect(respondentKey({ signal: null, ip: "1.2.3.4", salt: "s" }).source).toBe("ip");
+    expect(respondentKey({ signal: null, ip: "", salt: "s" })).toEqual({ value: "", source: "none" });
+  });
+
+  /**
+   * The salt is per form, so the same device answering two customers' forms is
+   * two unrelated values. Without it this table would be a cross-tenant record
+   * of which devices filled in which forms.
+   */
+  it("gives one device different keys on different forms", () => {
+    const a = respondentKey({ signal: "abcdefgh1234", ip: null, salt: "salt-a" });
+    const b = respondentKey({ signal: "abcdefgh1234", ip: null, salt: "salt-b" });
+    expect(a.value).not.toBe(b.value);
+    expect(a.value).toHaveLength(64);
+  });
+
+  /** Unauthenticated input from a public endpoint. Bounded before it is hashed. */
+  it("refuses a signal that is not one", () => {
+    expect(readDeviceSignal("short")).toBeNull();
+    expect(readDeviceSignal("x".repeat(200))).toBeNull();
+    expect(readDeviceSignal("has spaces!!")).toBeNull();
+    expect(readDeviceSignal(12345)).toBeNull();
+    expect(readDeviceSignal("abcdefgh1234")).toBe("abcdefgh1234");
+  });
+});
+
+describe("findDeviceResumable", () => {
+  const DEVICE = { value: "fp-device-key", source: "device" as const };
+
+  it("hands back an anonymous response left on this device", async () => {
+    const id = await seed({
+      status: "abandoned",
+      anonymous: true,
+      fingerprint: DEVICE.value,
+      answers: { q_name: "Maya" },
+    });
+    const found = await findDeviceResumable(env as unknown as Bindings, t.formId, DEVICE);
+    expect(found?.submissionId).toBe(id);
+    expect(found?.answers).toEqual({ q_name: "Maya" });
+    await env.DB.prepare(`DELETE FROM submissions WHERE id = ?`).bind(id).run();
+  });
+
+  /**
+   * The security boundary. A signed-in person's response is theirs, and a
+   * guessed device signal must not be a way past the sign-in gate to it.
+   */
+  it("refuses a response that belongs to a verified respondent", async () => {
+    const id = await seed({ status: "in_progress", fingerprint: DEVICE.value });
+    expect(await findDeviceResumable(env as unknown as Bindings, t.formId, DEVICE)).toBeNull();
+    await env.DB.prepare(`DELETE FROM submissions WHERE id = ?`).bind(id).run();
+  });
+
+  /**
+   * An IP is a whole office. Resuming on one would routinely open a colleague's
+   * half-finished response, so only a real device signal may.
+   */
+  it("never resumes on an IP-derived key", async () => {
+    const id = await seed({ status: "in_progress", anonymous: true, fingerprint: DEVICE.value });
+    const asIp = { value: DEVICE.value, source: "ip" as const };
+    expect(await findDeviceResumable(env as unknown as Bindings, t.formId, asIp)).toBeNull();
+    await env.DB.prepare(`DELETE FROM submissions WHERE id = ?`).bind(id).run();
+  });
+
+  it("ignores a finished response and a rehearsal", async () => {
+    const done = await seed({ status: "completed", anonymous: true, fingerprint: DEVICE.value });
+    const rehearsal = await seed({
+      status: "in_progress",
+      anonymous: true,
+      isTest: true,
+      fingerprint: DEVICE.value,
+    });
+    expect(await findDeviceResumable(env as unknown as Bindings, t.formId, DEVICE)).toBeNull();
+    await env.DB.prepare(`DELETE FROM submissions WHERE id IN (?, ?)`).bind(done, rehearsal).run();
   });
 });

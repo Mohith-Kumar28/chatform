@@ -9,6 +9,8 @@ import { timingSafeEqual, isHashedPassword, verifyPassword } from "../lib/crypto
 import { SessionDO } from "../do/session-do.js";
 import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
 import { openSession, type FormRow } from "../lib/open-session.js";
+import { respondentKey } from "../lib/respondent-key.js";
+import { findDeviceResumable } from "../lib/respondent-history.js";
 import { mountRespondentAuth } from "./respondent-auth.js";
 import { getEntitlements, meter, checkQuota } from "../lib/entitlements.js";
 import { brandingHiddenFor, clampForRuntime } from "../lib/doc-entitlements.js";
@@ -29,6 +31,25 @@ const createSessionSchema = z.object({
    * for which gates that relaxes and which it does not.
    */
   resumeToken: z.string().max(300).optional(),
+  /**
+   * The device signal from `lib/respondent-signal` in the browser.
+   *
+   * Optional throughout: it is blocked by extensions, unavailable in hardened
+   * browsers, and absent from every non-browser caller. Missing means the
+   * server falls back to hashing the IP, which is what it did before this
+   * existed.
+   */
+  deviceSignal: z.string().max(128).optional(),
+  /**
+   * Start this response from nothing, whatever the device key matches.
+   *
+   * Sent by "Start over". Without it the device match would hand back the very
+   * response the respondent just asked to leave, so clearing the screen would
+   * be followed immediately by refilling it. The key is still computed and
+   * still stored — the duplicate rule has to keep working — this only declines
+   * to resume.
+   */
+  fresh: z.boolean().optional(),
   /**
    * Which follow-up message the resume link came out of, for attribution.
    *
@@ -158,7 +179,7 @@ sessionsRouter.post(
     const body = c.req.valid("json");
 
     const formRow = await c.env.DB.prepare(
-      `SELECT f.id, f.slug, f.status, f.close_at, f.organization_id, fv.id AS version_id, fv.schema_json
+      `SELECT f.id, f.slug, f.status, f.close_at, f.organization_id, f.fingerprint_salt, fv.id AS version_id, fv.schema_json
        FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
        WHERE f.slug = ? AND f.deleted_at IS NULL LIMIT 1`,
     )
@@ -177,7 +198,27 @@ sessionsRouter.post(
      * rather than a dead end. They lose their previous answers, which is sad,
      * but a working form is better than a page saying "invalid token".
      */
-    const resume = await loadResumable(c.env, formRow.id, body.resumeToken);
+    /**
+     * Which response, if any, this session continues.
+     *
+     * The emailed link first — it is explicit, it is proof, and it works for a
+     * respondent on a machine that has never seen this form. Failing that, the
+     * device: same person, same browser, but the session id in `localStorage`
+     * is gone because they cleared it, went private, or the form is embedded in
+     * a frame whose storage the browser partitions. That case used to start
+     * them at question one beside their own half-finished response.
+     *
+     * A signed-in respondent is handled later and elsewhere — see
+     * `assessIdentity` — because until they sign in we do not know who they are.
+     */
+    const device = respondentKey({
+      signal: body.deviceSignal,
+      ip: c.req.header("cf-connecting-ip") ?? "",
+      salt: formRow.fingerprint_salt,
+    });
+    const resume =
+      (await loadResumable(c.env, formRow.id, body.resumeToken)) ??
+      (body.fresh ? null : await findDeviceResumable(c.env, formRow.id, device));
 
     /**
      * Every gate now lives in `openSession`, shared with the headless API.
@@ -207,6 +248,7 @@ sessionsRouter.post(
        * an allowed one.
        */
       embedOrigin: c.req.header("origin") ?? null,
+      deviceSignal: body.deviceSignal ?? null,
       ...(resume ? { resumeSubmissionId: resume.submissionId } : {}),
     });
     if (!opened.ok) return c.json(opened.body, opened.status);
@@ -258,6 +300,7 @@ sessionsRouter.post(
       respondentToken: opened.respondentToken,
       hiddenFields: body.hiddenFields ?? {},
       ipHash: opened.ipHash,
+      fingerprint: opened.device.value || null,
       country: c.req.header("cf-ipcountry") ?? null,
       userAgent: c.req.header("user-agent") ?? null,
       source: body.embed?.origin ? "embed" : "chat",

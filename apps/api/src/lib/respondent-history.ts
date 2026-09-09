@@ -1,5 +1,6 @@
 import type { RespondentIdentity } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
+import type { RespondentKeySource } from "./respondent-key.js";
 
 /**
  * What a verified respondent has already done to this form.
@@ -32,6 +33,12 @@ export interface PriorResponse {
 export interface ResumableResponse {
   submissionId: string;
   answers: Record<string, unknown>;
+  /**
+   * Always null here. A device match never carries an identity — that is the
+   * point of the `respondent_subject IS NULL` filter below — and the field
+   * exists so this is interchangeable with the resume-link path, which does.
+   */
+  identity?: null;
 }
 
 export interface IdentityHistory {
@@ -115,6 +122,52 @@ export async function findIdentityHistory(
   } catch (err) {
     console.error("identity_history_failed", formId, err);
     return { finished: null, resumable: null };
+  }
+}
+
+/**
+ * The unfinished response belonging to this *device*, for a respondent who has
+ * not signed in.
+ *
+ * This is the case `localStorage` cannot cover: the same person, the same
+ * machine, but the session id is gone — they cleared their data, or opened the
+ * form in a private window, or it is embedded in a frame whose storage the
+ * browser partitions per top-level site.
+ *
+ * Two rules make it safe to hand answers back on a signal the browser computed
+ * and could have made up.
+ *
+ * It must be a *device* key, never the IP fallback. A hashed IP is shared by
+ * everyone in an office, so resuming on one would routinely open one person's
+ * half-finished response in front of a colleague. The device signal collides
+ * far more rarely — rarely enough for a de-duplication hint, which is what this
+ * is.
+ *
+ * And the response must carry no verified identity. Once somebody has signed in
+ * their response belongs to them, and `findIdentityHistory` is the only thing
+ * that may hand it back. Otherwise a guessed signal would be a way past the
+ * sign-in gate to a named person's answers.
+ */
+export async function findDeviceResumable(
+  env: Bindings,
+  formId: string,
+  key: { value: string; source: RespondentKeySource },
+): Promise<ResumableResponse | null> {
+  if (key.source !== "device" || !key.value) return null;
+  try {
+    const row = await env.DB.prepare(
+      `SELECT id FROM submissions
+        WHERE form_id = ?1 AND fingerprint = ?2
+          AND status IN ('in_progress', 'abandoned') AND is_test = 0
+          AND respondent_subject IS NULL
+        ORDER BY updated_at DESC LIMIT 1`,
+    )
+      .bind(formId, key.value)
+      .first<{ id: string }>();
+    return row ? { ...(await loadAnswers(env, row.id)), identity: null } : null;
+  } catch (err) {
+    console.error("device_resumable_failed", formId, err);
+    return null;
   }
 }
 
