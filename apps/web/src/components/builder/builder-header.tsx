@@ -51,6 +51,7 @@ export function BuilderHeader({
   status,
   activeVersion,
   publishedAt,
+  unpublished,
   onPublish,
   publishing,
   onPreview,
@@ -63,6 +64,14 @@ export function BuilderHeader({
   activeVersion: number | null;
   /** When the live version went live. Null until the form is published once. */
   publishedAt: number | null;
+  /**
+   * Does the draft hold anything the live version does not?
+   *
+   * Passed in rather than read from the store, because the store only knows
+   * about edits made in the builder — see the note at the call site. The header
+   * had its own subscription and therefore its own, quieter answer.
+   */
+  unpublished: boolean;
   onPublish: () => void | Promise<void>;
   publishing: boolean;
   /** Opens the full conversation preview. */
@@ -85,10 +94,9 @@ export function BuilderHeader({
    * failed, offline), and the rest of the time the line reports the publish clock instead.
    * Two indicators competing for the same six words is what made it unreadable.
    */
-  const editedSincePublish = useBuilderStore((s) => s.editedSincePublish);
   const saveState = useBuilderStore((s) => s.saveState);
   const settled = saveState === "saved";
-  const stale = published && editedSincePublish;
+  const stale = published && unpublished;
 
   const undo = useBuilderStore((s) => s.undo);
   const redo = useBuilderStore((s) => s.redo);

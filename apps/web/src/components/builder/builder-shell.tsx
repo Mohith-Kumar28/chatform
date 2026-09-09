@@ -72,16 +72,37 @@ export function BuilderShell({
     | undefined;
 
   /**
+   * Does the draft hold anything the live version does not? Two sources, OR-ed,
+   * and neither one is redundant.
+   *
+   * The store answers for edits made *here*: it flips on the keystroke, so the
+   * header moves immediately rather than after a round trip. The server answers
+   * for everything else — and there is an "everything else". The follow-up
+   * nudge on the Results tab writes the document straight through the API and
+   * deliberately does not publish, so the form acquires unpublished changes
+   * without a single call to `edit()`. Reading only the store there left the
+   * header saying "Published" with its publish button *disabled*, while a toast
+   * two inches away told the author to go and publish — no way out of the
+   * builder except a reload.
+   *
+   * Computed once, here, so the indicator, the button and the leave guard
+   * cannot disagree about it. The one direction to err in is claiming there is
+   * something to publish when there is not; the other direction hides work from
+   * the people it was written for.
+   */
+  const editedSincePublish = useBuilderStore((s) => s.editedSincePublish);
+  const unpublished = editedSincePublish || Boolean(row?.hasUnpublishedChanges);
+
+  /**
    * Saved is not the same as live, and only one of those two facts survives
    * closing the tab. The guard is armed only for a form that is actually
    * published — a draft nobody can reach yet has no stale audience to warn
    * about, and asking on the way out of every new form is how you teach someone
    * to dismiss the dialog without reading it.
    */
-  const editedSincePublish = useBuilderStore((s) => s.editedSincePublish);
   const guard = useUnpublishedGuard({
     formId,
-    active: row?.status === "published" && editedSincePublish,
+    active: row?.status === "published" && unpublished,
     // The dialog says the work is saved. Make that true before it says it.
     onIntercept: () => void flush(),
   });
@@ -201,6 +222,7 @@ export function BuilderShell({
             status={row.status}
             activeVersion={row.activeVersion}
             publishedAt={row.publishedAt}
+            unpublished={unpublished}
             onPublish={onPublish}
             publishing={publishing}
             onPreview={() => setPreviewOpen(true)}
