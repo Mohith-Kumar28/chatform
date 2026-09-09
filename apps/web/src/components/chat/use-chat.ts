@@ -1229,6 +1229,26 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     setRespondentHint(null);
   }, []);
 
+  /**
+   * Answer as somebody else.
+   *
+   * The identity on a conversation cannot be swapped in place — `attachIdentity`
+   * is write-once, deliberately, so that nothing can move a half-written
+   * response from one verified person to another. Switching account is
+   * therefore a *new* conversation: this one keeps the answers already recorded
+   * against the person who gave them, and the gate asks again with whichever
+   * methods the form allows.
+   *
+   * The remembered name goes too. Leaving it would put the account they just
+   * left back on the card as the one-tap suggestion, which is the opposite of
+   * what "switch account" means.
+   */
+  const switchAccount = useCallback(async () => {
+    clearRespondentHint();
+    setRespondentHint(null);
+    await startOver();
+  }, [startOver]);
+
   /** Back out of the code step to correct a mistyped number. */
   const changePhoneNumber = useCallback(() => {
     setAuth((a) => (a ? { ...a, phoneSentTo: null, phoneSentAt: null, error: null, devCode: undefined } : a));
@@ -1380,6 +1400,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     identity,
     respondentHint,
     forgetRespondentHint,
+    switchAccount,
     signInWithGoogle,
     requestPhoneCode,
     verifyPhoneCode,

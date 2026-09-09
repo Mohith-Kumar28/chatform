@@ -183,6 +183,9 @@ export function ChatClient({
     [currentRef, sendStructured],
   );
   const onSkip = useCallback(() => void sendAction("skip"), [sendAction]);
+  /* Stable for the same reason as the handlers above: it rides on every bubble. */
+  const { switchAccount } = chat;
+  const onSwitchAccount = useCallback(() => void switchAccount(), [switchAccount]);
 
   /**
    * The image, clip or file the current question carries — and the agent
@@ -310,6 +313,17 @@ export function ChatClient({
                 // every streamed token and defeat the memo entirely.
                 canEdit={!m.optimistic && !!m.answeredRef && !chat.ending}
                 onEdit={chat.editAnswer}
+                /*
+                  Offered only while the form still wants an answer, and only
+                  where signing in was asked for in the first place. On a
+                  finished conversation it would be a way to throw the response
+                  away, which is not what the words say.
+                */
+                onSwitchAccount={
+                  config.requireAuth && !chat.ending && !chat.submitted
+                    ? onSwitchAccount
+                    : undefined
+                }
               />
             </div>
           ))}
@@ -581,19 +595,40 @@ const Bubble = memo(function Bubble({
   message,
   canEdit,
   onEdit,
+  onSwitchAccount,
 }: {
   message: ChatMessage;
   canEdit: boolean;
   /** Stable across renders — see `editAnswer` in `useChat`. */
   onEdit: (ref: string) => void;
+  /** Present only beside the "verified as" note, and only on a gated form. */
+  onSwitchAccount?: (() => void) | undefined;
 }) {
   // A note about the conversation, not a turn in it: quiet, unbubbled, and
   // left in place in the thread.
   if (message.role === "system") {
     return (
-      <p className="animate-message-in flex items-center gap-1.5 pl-1 text-[0.6875rem] opacity-45">
-        <Check className="size-3" />
-        {message.text}
+      <p className="animate-message-in flex flex-wrap items-center gap-x-2 gap-y-1 pl-1 text-[0.6875rem] opacity-45">
+        <span className="flex items-center gap-1.5">
+          <Check className="size-3" />
+          {message.text}
+        </span>
+        {/*
+          The way out of the wrong account, where the wrong account is written.
+          A respondent who signed in on a shared machine, or tapped the one-tap
+          suggestion without reading it, could otherwise only escape by finding
+          "Start over" — which reads like discarding the form, not like
+          correcting who they are.
+        */}
+        {onSwitchAccount && (
+          <button
+            type="button"
+            onClick={onSwitchAccount}
+            className="underline underline-offset-2 transition-opacity hover:opacity-100"
+          >
+            Switch account
+          </button>
+        )}
       </p>
     );
   }
