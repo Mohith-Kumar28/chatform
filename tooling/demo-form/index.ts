@@ -46,7 +46,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 6;
+export const DEMO_REVISION = 7;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -399,7 +399,32 @@ export const DEMO_FORM = buildAuthoredDoc({
     },
 
     /** Deliberately empty: 2000 responses would be 2000 emails. Read the results tab. */
-    onComplete: { requireSubmit: true, delaySec: 5, notificationEmails: [] },
+    /**
+     * Finish the demo, land on pricing.
+     *
+     * Someone who has just answered twelve questions has spent three minutes
+     * inside the product and is as warm as they will ever be. The ending
+     * already offers "start a free form", but a link is a thing you have to
+     * decide to click; the redirect makes the next step the default and still
+     * leaves them somewhere they can read rather than a signup wall.
+     *
+     * It applies to both endings — `toPublicEnding` falls back to this for any
+     * ending that does not name its own target — which is right: "we'll be in
+     * touch" and "thanks, that's useful" are both people who just finished.
+     *
+     * Eight seconds, not the default five. The ending is two short paragraphs
+     * and a CTA, and five is enough to notice the page changed but not enough
+     * to read why. The cost is real and worth stating: an auto-redirect
+     * overrides "Submit another response" for anyone who wanted to go again,
+     * so if that ever matters more than the pricing click, this is the line to
+     * remove.
+     */
+    onComplete: {
+      requireSubmit: true,
+      redirectUrl: "https://chatform.in/pricing",
+      delaySec: 8,
+      notificationEmails: [],
+    },
 
     meta: {
       ogTitle: "How do you use forms today?",
