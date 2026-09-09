@@ -88,18 +88,21 @@ export function useUnpublishedGuard({
     window.history.pushState(state, "", window.location.href);
   }, []);
 
-  // ── the tab itself ──
-  useEffect(() => {
-    if (!active) return;
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      // Browsers show their own wording here and ignore ours; this is the only
-      // exit we cannot dress up, and it is still worth the interruption.
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [active]);
+  /*
+    Closing the tab is deliberately NOT guarded here.
+
+    `beforeunload` is the one exit that can only speak in the browser's own
+    words: every engine has ignored the page's custom message since 2016 and
+    shows "Changes that you made may not be saved" instead. On a form whose
+    edits are already saved that sentence is simply false, and it lands directly
+    under a header that says "Saved" — the reader has to decide which of the two
+    is lying to them, and the guard exists to remove exactly that kind of doubt.
+
+    A warning nobody can trust is worse than the silence it replaces, so this
+    guard stays quiet on unload. `useAutosave` still installs its own
+    `beforeunload` for the case where the browser's wording happens to be true:
+    a save that has not landed yet.
+  */
 
   // ── links ──
   useEffect(() => {

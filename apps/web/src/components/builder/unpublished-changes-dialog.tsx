@@ -51,7 +51,12 @@ export function UnpublishedChangesDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && !publishing && onStay()}>
-      <DialogContent size="md" showCloseButton={!publishing}>
+      {/*
+        `lg`, not `md`. Three actions come to 405px of buttons and `md` gives
+        them 398px of room — seven pixels short, which is enough to push the
+        primary onto a line of its own and read as a mistake.
+      */}
+      <DialogContent size="lg" showCloseButton={!publishing}>
         <div className="flex items-start gap-3">
           <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)]">
             <CloudUpload className="size-4" aria-hidden />
@@ -75,16 +80,28 @@ export function UnpublishedChangesDialog({
           </div>
         </div>
 
-        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        {/*
+          `flex-wrap`, because buttons carry `shrink-0`: three labels that add up
+          to more than the panel is wide do not compress, they run off the right
+          edge and out through the rounded corner. Wrapping is the only end state
+          that cannot clip, whatever the labels end up saying in translation.
+        */}
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
           <Button variant="ghost" onClick={onStay} disabled={publishing}>
             Keep editing
           </Button>
           <Button variant="outline" onClick={onLeave} disabled={publishing}>
-            Leave without publishing
+            Leave anyway
           </Button>
+          {/*
+            "Publish changes" is what the header button says in exactly this
+            state. Two names for one action is two actions as far as the reader
+            is concerned, and this dialog is where someone meets the word for
+            the first time.
+          */}
           <Button onClick={publish} disabled={publishing}>
             {publishing && <Loader2 className="size-3.5 animate-spin" />}
-            {publishing ? "Publishing" : "Make it live"}
+            {publishing ? "Publishing" : "Publish changes"}
           </Button>
         </div>
       </DialogContent>
