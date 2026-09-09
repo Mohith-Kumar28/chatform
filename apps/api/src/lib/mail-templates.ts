@@ -341,6 +341,33 @@ const OTP_COPY: Record<OtpPurpose, { heading: string; lead: string; disclaimer: 
 
 // ───────────────────── new response, to the form owner ─────────────────────
 
+/**
+ * Question above answer, as a table rather than a definition list.
+ *
+ * Outlook renders `<dl>` unpredictably and ignores margins on it, and every
+ * layout in this file is already table-based for the same reason. The rule sits
+ * on top of the question rather than under the answer so the first pair has one
+ * too — a list whose first item is missing its separator reads as a heading.
+ *
+ * Shared by the owner's notification and the respondent's confirmation: they
+ * are the same content read by two people, and one of them noticing a
+ * difference in how their answers came back would be right to wonder which copy
+ * was the real one.
+ */
+function answerTable(lines: AnswerLine[]): string {
+  const rows = lines
+    .map(
+      (l) => `<tr>
+  <td style="padding:10px 0 2px 0;font-size:12px;line-height:1.5;color:${MUTED};border-top:1px solid ${BORDER};">${escapeHtml(l.question)}</td>
+</tr>
+<tr>
+  <td style="padding:0 0 10px 0;font-size:15px;line-height:1.6;color:${INK};white-space:pre-wrap;">${escapeHtml(l.answer)}</td>
+</tr>`,
+    )
+    .join("\n");
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">${rows}</table>`;
+}
+
 export interface AnswerLine {
   question: string;
   answer: string;
@@ -355,17 +382,6 @@ export function submissionNotificationEmail(a: {
   /** True when a `*_test_` API key wrote the response. Says so, rather than lying. */
   isTest: boolean;
 }): Omit<MailMessage, "to"> {
-  const rows = a.answers
-    .map(
-      (l) => `<tr>
-  <td style="padding:10px 0 2px 0;font-size:12px;line-height:1.5;color:${MUTED};border-top:1px solid ${BORDER};">${escapeHtml(l.question)}</td>
-</tr>
-<tr>
-  <td style="padding:0 0 10px 0;font-size:15px;line-height:1.6;color:${INK};white-space:pre-wrap;">${escapeHtml(l.answer)}</td>
-</tr>`,
-    )
-    .join("\n");
-
   const body = [
     a.isTest
       ? `<p style="margin:0 0 14px 0;padding:8px 12px;border-radius:8px;background-color:#f4f0ff;font-size:13px;color:#5b3fa8;">Test response — written with a test API key, and excluded from your counts.</p>`
@@ -375,7 +391,7 @@ export function submissionNotificationEmail(a: {
       ? p(`From <a href="mailto:${escapeHtml(a.respondentEmail)}" style="color:${INK};">${escapeHtml(a.respondentEmail)}</a>`)
       : "",
     a.answers.length
-      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">${rows}</table>`
+      ? answerTable(a.answers)
       : p(`<span style="color:${MUTED};">No answers were recorded.</span>`),
     button(a.responseUrl, "Open in chatform"),
   ]
@@ -403,17 +419,40 @@ export function submissionNotificationEmail(a: {
   };
 }
 
-// ─────────────────── auto-reply, to the respondent ───────────────────
+// ─────────────────── confirmation, to the respondent ───────────────────
 
+/**
+ * The receipt somebody gets for having answered.
+ *
+ * Its job is to be the artefact a chat conversation does not leave behind: proof
+ * the answers arrived, and a copy of what they were. So the answers lead the
+ * layout under the message rather than sitting below a call to action, and there
+ * is no button at all — there is nowhere useful to send a respondent, and a link
+ * would turn a receipt into a solicitation.
+ */
 export function autoReplyEmail(a: {
   subject: string;
   bodyHtml: string;
   bodyText: string;
   formTitle: string;
+  /**
+   * Their own answers, echoed back. Empty when the author switched the summary
+   * off, or when the response recorded nothing worth listing.
+   */
+  answers?: AnswerLine[];
   /** Absent when the form owner has paid to remove it. */
   showPoweredBy: boolean;
 }): Omit<MailMessage, "to"> {
-  const body = [h1(a.subject), a.bodyHtml].join("\n");
+  const answers = a.answers ?? [];
+  const body = [
+    h1(a.subject),
+    a.bodyHtml,
+    answers.length
+      ? `<p style="margin:22px 0 0 0;font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:${MUTED};">What you sent</p>${answerTable(answers)}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
   return {
     subject: a.subject,
     html: layout({
@@ -424,7 +463,14 @@ export function autoReplyEmail(a: {
         ? `In reply to your response to ${escapeHtml(a.formTitle)}. Powered by chatform.`
         : `In reply to your response to ${escapeHtml(a.formTitle)}.`,
     }),
-    text: `${a.bodyText}\n\n—\nIn reply to your response to ${a.formTitle}.`,
+    text: [
+      a.bodyText,
+      answers.length ? `\nWhat you sent\n` : ``,
+      ...answers.map((l) => `${l.question}\n${l.answer}\n`),
+      `—\nIn reply to your response to ${a.formTitle}.`,
+    ]
+      .filter((l) => l !== ``)
+      .join("\n"),
   };
 }
 

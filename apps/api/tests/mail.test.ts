@@ -4,6 +4,7 @@ import { applySchema, seedTenant, type Tenant } from "./helpers.js";
 import { runMailJob } from "../src/lib/mail-jobs.js";
 import { mailFrom, sendMail } from "../src/lib/mail.js";
 import type { Bindings } from "../src/env.js";
+import { DEFAULT_CONFIRMATION_SUBJECT, SCHEMA_VERSION } from "@repo/form-schema";
 
 /**
  * The email layer, from a queued job to what lands in the inbox.
@@ -55,7 +56,13 @@ const VERSION_ID = "ver_mailtest";
  * there is one.
  */
 const DOC = {
-  schemaVersion: 4,
+  /**
+   * Current, and it has to be: the v7 → v8 migration switches the confirmation
+   * email on for every older document, so a doc published at v4 could not
+   * express "the author turned this off" — which is half of what these tests
+   * assert. `tests/schema-migration.test.ts` covers the legacy path instead.
+   */
+  schemaVersion: SCHEMA_VERSION,
   title: "Feedback",
   blocks: [
     { id: "blk_mail1", ref: "q_name", type: "short_text", title: "Your name", required: true },
@@ -272,7 +279,14 @@ describe("submission notifications", () => {
   it("mails every address on the list, with answers in document order", async () => {
     await publish({
       ...DOC,
-      settings: { onComplete: { notificationEmails: ["one@example.com", "two@example.com"] } },
+      settings: {
+        onComplete: {
+          notificationEmails: ["one@example.com", "two@example.com"],
+          // Off, so this test is about the owner's copy alone. The respondent's
+          // now goes out by default and has tests of its own below.
+          autoReplyEmail: { enabled: false },
+        },
+      },
     });
     await seedResponse("sbm_mail_notify", { respondentEmail: "ada@example.com" });
 
@@ -300,8 +314,8 @@ describe("submission notifications", () => {
     expect(sent[0]!.replyTo).toBe("ada@example.com");
   });
 
-  it("sends nothing when the form has no notification list and no auto-reply", async () => {
-    await publish(DOC);
+  it("sends nothing when the form has no notification list and no confirmation", async () => {
+    await publish({ ...DOC, settings: { onComplete: { autoReplyEmail: { enabled: false } } } });
     await seedResponse("sbm_mail_quiet");
     const { sent, binding } = captureBinding();
     const n = await runMailJob(withMail({ EMAIL: binding }), {
@@ -309,6 +323,79 @@ describe("submission notifications", () => {
       organizationId: t.orgId,
       formId: t.formId,
       responseId: "sbm_mail_quiet",
+      isTest: false,
+    });
+    expect(n).toBe(0);
+    expect(sent).toHaveLength(0);
+  });
+
+  /**
+   * The default that matters most: a form nobody has configured still thanks
+   * the person who filled it in. Every failure mode here is silent — an author
+   * who never opens the settings panel will not discover that the receipt they
+   * assume exists does not.
+   */
+  it("confirms to the respondent by default, with their answers", async () => {
+    await publish(DOC);
+    await seedResponse("sbm_mail_default_confirm");
+    const { sent, binding } = captureBinding();
+    const n = await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_default_confirm",
+      isTest: false,
+    });
+
+    expect(n).toBe(1);
+    // The address they typed into the email block, with no notification list
+    // and nothing switched on by hand.
+    expect(sent[0]!.to).toBe("ada@example.com");
+    expect(sent[0]!.subject).toBe(DEFAULT_CONFIRMATION_SUBJECT);
+    // Their own answers, echoed back by label rather than by option id.
+    expect(sent[0]!.html).toContain("What you sent");
+    expect(sent[0]!.html).toContain("Your name");
+    expect(sent[0]!.html).toContain("Ada");
+    expect(sent[0]!.html).toContain("Coffee");
+    expect(sent[0]!.html).not.toContain("opt_coffee");
+    expect(sent[0]!.text).toContain("Ada");
+    // The form's title reaches the default body through `{{form.title}}`, so a
+    // respondent never sees the braces.
+    expect(sent[0]!.html).toContain("Feedback");
+    expect(sent[0]!.html).not.toContain("{{form.title}}");
+  });
+
+  it("leaves the answers out when the author switches the summary off", async () => {
+    await publish({
+      ...DOC,
+      settings: { onComplete: { autoReplyEmail: { enabled: true, includeAnswers: false } } },
+    });
+    await seedResponse("sbm_mail_no_answers");
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_no_answers",
+      isTest: false,
+    });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.html).not.toContain("What you sent");
+    // The one thing that must not leak: an answer to a question the author has
+    // decided should not travel back by email.
+    expect(sent[0]!.html).not.toContain("Coffee");
+  });
+
+  it("sends no confirmation when the author turns it off", async () => {
+    await publish({ ...DOC, settings: { onComplete: { autoReplyEmail: { enabled: false } } } });
+    await seedResponse("sbm_mail_confirm_off");
+    const { sent, binding } = captureBinding();
+    const n = await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_confirm_off",
       isTest: false,
     });
     expect(n).toBe(0);

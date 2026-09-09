@@ -16,7 +16,11 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import type { FormDoc } from "@repo/form-schema";
+import {
+  DEFAULT_CONFIRMATION_BODY,
+  DEFAULT_CONFIRMATION_SUBJECT,
+  type FormDoc,
+} from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
 import { LinkSettings } from "./link-settings";
 import { FollowUpPanel } from "./followup-panel";
@@ -402,6 +406,8 @@ export function SettingsPanel({
               </SettingRow>
               </LockedControl>
               </SettingGroup>
+
+              <ConfirmationEmailSettings settings={settings} onChange={onChange} />
             </SettingSection>
           )}
 
@@ -479,6 +485,80 @@ function FormNameField({ title, onChange }: { title: string; onChange: (title: s
 }
 
 // ── building blocks ──────────────────────────────────────────────────
+
+/**
+ * The receipt the respondent gets, and the switch for it.
+ *
+ * A group of its own rather than two more rows in "On completion", because the
+ * rows above it are about the *owner* — where their notification goes, where
+ * their respondent lands — and this one is the only thing on the page that
+ * sends mail to the person who filled the form in. Reading them as one list
+ * made the notification address look like it might be the recipient of this
+ * too.
+ *
+ * The copy fields are behind the paywall and the switch is not: everybody sends
+ * the receipt, Pro writes its words. They stay visible while locked so the
+ * author can see what they would be buying, which is the whole reason
+ * `LockedControl` renders its children rather than hiding them.
+ */
+function ConfirmationEmailSettings({
+  settings,
+  onChange,
+}: {
+  settings: FormDoc["settings"];
+  onChange: (next: FormDoc["settings"]) => void;
+}) {
+  const onComplete = settings.onComplete;
+  const confirmation = onComplete.autoReplyEmail;
+  const patch = (p: Partial<typeof confirmation>) =>
+    onChange({
+      ...settings,
+      onComplete: { ...onComplete, autoReplyEmail: { ...confirmation, ...p } },
+    });
+
+  return (
+    <SettingGroup label="To the respondent">
+      <SettingRow
+        label="Confirmation email"
+        description="Thank people for answering, at the email address they gave you. Nothing is sent if the form never asks for one."
+        checked={confirmation.enabled}
+        onCheckedChange={(enabled) => patch({ enabled })}
+      />
+      {confirmation.enabled && (
+        <>
+          <SettingRow
+            label="Include their answers"
+            description="Send a copy of what they filled in. Turn this off for anything they would not want sitting in an inbox."
+            checked={confirmation.includeAnswers}
+            onCheckedChange={(includeAnswers) => patch({ includeAnswers })}
+          />
+          <LockedControl feature="auto_reply_email">
+            <SettingRow label="Subject" description="Leave it as it is, or write your own.">
+              <Input
+                className="max-w-md"
+                value={confirmation.subject}
+                placeholder={DEFAULT_CONFIRMATION_SUBJECT}
+                onChange={(e) => patch({ subject: e.target.value })}
+              />
+            </SettingRow>
+            <SettingRow
+              label="Message"
+              description="Use {{form.title}} or any question's ref to write their own answers back to them."
+              stacked
+            >
+              <Textarea
+                rows={3}
+                value={confirmation.bodyMd}
+                placeholder={DEFAULT_CONFIRMATION_BODY}
+                onChange={(e) => patch({ bodyMd: e.target.value })}
+              />
+            </SettingRow>
+          </LockedControl>
+        </>
+      )}
+    </SettingGroup>
+  );
+}
 
 function SettingSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (

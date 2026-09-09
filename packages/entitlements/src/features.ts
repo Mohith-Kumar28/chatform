@@ -111,7 +111,10 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
 
   form_metadata: { label: "Form metadata", blurb: "Control the link preview title, description and image." },
   completion_redirect: { label: "Redirect on completion", blurb: "Send respondents somewhere when they finish." },
-  auto_reply_email: { label: "Auto-reply email", blurb: "Email the respondent after they submit.", soon: true },
+  auto_reply_email: {
+    label: "Custom confirmation email",
+    blurb: "Write your own subject and message for the receipt every respondent gets.",
+  },
   followup_email: {
     label: "Follow-up emails",
     blurb: "Nudge people who started answering and left, with a link back to where they stopped.",

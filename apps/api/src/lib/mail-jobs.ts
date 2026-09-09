@@ -2,6 +2,8 @@ import {
   readFormDoc,
   displayAnswer,
   progressOf,
+  DEFAULT_CONFIRMATION_BODY,
+  DEFAULT_CONFIRMATION_SUBJECT,
   type AnswerMap,
   type Block,
   type FormDoc,
@@ -469,12 +471,18 @@ async function runSubmissionJob(
     const to = resolveRespondentAddress(doc, { respondentEmail: sub.respondent_email, byRef })?.address;
     if (to) {
       const vars = interpolationVars(doc, byRef, form.form_title, sub);
-      const bodyMd = interpolate(autoReply.bodyMd ?? "", vars);
+      const bodyMd = interpolate(autoReply.bodyMd || DEFAULT_CONFIRMATION_BODY, vars);
       const msg = autoReplyEmail({
-        subject: interpolate(autoReply.subject || "Thanks for your response", vars),
+        subject: interpolate(autoReply.subject || DEFAULT_CONFIRMATION_SUBJECT, vars),
         bodyHtml: markdownToHtml(bodyMd),
         bodyText: bodyMd,
         formTitle: form.form_title,
+        /**
+         * The same lines the owner's notification carries, from the same list.
+         * `includeAnswers` is the author's switch for the forms whose answers a
+         * respondent would not want sitting in an inbox.
+         */
+        ...(autoReply.includeAnswers ? { answers: lines } : {}),
         showPoweredBy: !doc.settings.branding?.hidePoweredBy,
       });
       try {
