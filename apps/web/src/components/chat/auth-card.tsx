@@ -1,16 +1,36 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Loader2, Phone, ShieldCheck } from "lucide-react";
+import { ChevronRight, Loader2, Phone, ShieldCheck } from "lucide-react";
 import type { AuthState } from "./use-chat";
 import { firebasePhoneConfigured, sendPhoneCode, type PhoneCodeSent } from "./firebase-phone";
+import { asEmail, type RespondentHint } from "./respondent-hint";
 
 const GOOGLE_RESPONDENT_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_RESPONDENT_CLIENT_ID ?? "";
 const GSI_SRC = "https://accounts.google.com/gsi/client";
 
 interface GsiId {
-  initialize: (o: { client_id: string; callback: (r: { credential: string }) => void; auto_select?: boolean }) => void;
+  initialize: (o: {
+    client_id: string;
+    callback: (r: { credential: string }) => void;
+    /**
+     * Return a credential with no further interaction when the browser holds
+     * exactly one Google session that has already consented to this client —
+     * which is precisely the returning respondent this card is trying not to
+     * make sign in twice.
+     */
+    auto_select?: boolean;
+    /** The account to offer first, as an email address. */
+    login_hint?: string;
+    /**
+     * One Tap is browser-mediated now; the older page-drawn prompt is on its
+     * way out, and asking for it explicitly is what keeps `prompt()` from
+     * being a no-op in browsers that have already made the switch.
+     */
+    use_fedcm_for_prompt?: boolean;
+  }) => void;
   renderButton: (el: HTMLElement, o: Record<string, unknown>) => void;
+  prompt: () => void;
 }
 declare global {
   interface Window {
@@ -49,21 +69,32 @@ function loadGsi(): Promise<void> {
  */
 export function AuthCard({
   auth,
+  hint,
   onGoogle,
   onRequestCode,
   onVerifyCode,
   onPhoneToken,
   onChangeNumber,
+  onForgetHint,
 }: {
   auth: AuthState;
+  /** Who this device signed in as last time, if this form takes that method. */
+  hint: RespondentHint | null;
   onGoogle: (idToken: string) => void;
   onRequestCode: (phone: string, dialHint?: string) => void;
   onVerifyCode: (code: string) => void;
   onPhoneToken: (idToken: string) => void;
   onChangeNumber: () => void;
+  onForgetHint: () => void;
 }) {
   const showGoogle = auth.methods.includes("google");
   const showPhone = auth.methods.includes("phone");
+
+  // A hint is only worth showing when this form actually takes that method: a
+  // form that asks for a phone number has no use for a remembered Google
+  // account, and offering one would be a dead end.
+  const googleHint = showGoogle && hint?.provider === "google" ? hint : null;
+  const phoneHint = showPhone && hint?.provider === "phone" ? hint : null;
 
   return (
     <div className="animate-message-in space-y-3 rounded-2xl bg-[var(--cf-chip-bg)] p-4">
@@ -72,7 +103,14 @@ export function AuthCard({
         Verify to continue
       </p>
 
-      {showGoogle && <GoogleButton onToken={onGoogle} disabled={auth.pending} />}
+      {showGoogle && (
+        <GoogleSignIn
+          hint={googleHint}
+          onToken={onGoogle}
+          onUseAnother={onForgetHint}
+          disabled={auth.pending}
+        />
+      )}
 
       {showGoogle && showPhone && (
         <div className="flex items-center gap-3 text-[0.6875rem] opacity-40">
@@ -91,10 +129,11 @@ export function AuthCard({
       */}
       {showPhone &&
         (firebasePhoneConfigured ? (
-          <FirebasePhoneFlow auth={auth} onPhoneToken={onPhoneToken} />
+          <FirebasePhoneFlow auth={auth} hint={phoneHint} onPhoneToken={onPhoneToken} />
         ) : (
           <PhoneFlow
             auth={auth}
+            hint={phoneHint}
             onRequestCode={onRequestCode}
             onVerifyCode={onVerifyCode}
             onChangeNumber={onChangeNumber}
@@ -110,11 +149,64 @@ export function AuthCard({
   );
 }
 
-function GoogleButton({ onToken, disabled }: { onToken: (t: string) => void; disabled: boolean }) {
+/**
+ * One Tap is drawn by the browser against the top-level document. Inside an
+ * embedded form it has nowhere to go, so the shortcut is not offered there —
+ * the standard button, which works in a frame, is.
+ */
+function inTopLevelWindow(): boolean {
+  try {
+    return window.self === window.top;
+  } catch {
+    // Reading `top` across origins throws, and that is itself the answer.
+    return false;
+  }
+}
+
+/** How long a prompt that may never appear is given before the button does. */
+const PROMPT_GRACE_MS = 4000;
+
+/**
+ * Google sign-in — and, for someone who has already done this once, a way past
+ * it.
+ *
+ * Most respondents arriving at a form that asks them to verify are signed in
+ * to Google in that very browser already. Making them press "Continue with
+ * Google", pick their account out of a chooser, and wait for a popup is asking
+ * them to prove something the browser could simply be asked for. When this
+ * device has verified before, the card opens on "Continue as <them>", and one
+ * press takes the whole sign-in: `auto_select` returns a credential outright
+ * when Google is sure who this is, and shows the account when it wants a
+ * confirmation.
+ *
+ * Nothing about the trust model moves. The remembered name is a hint with no
+ * authority — the press still produces a fresh ID token, and the server still
+ * verifies its signature, issuer, audience and expiry before anyone is
+ * verified. The shortcut saves taps, not checks.
+ */
+function GoogleSignIn({
+  hint,
+  onToken,
+  onUseAnother,
+  disabled,
+}: {
+  hint: RespondentHint | null;
+  onToken: (t: string) => void;
+  onUseAnother: () => void;
+  disabled: boolean;
+}) {
   const host = useRef<HTMLDivElement>(null);
+  const idRef = useRef<GsiId | null>(null);
+  const fallbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // No client id configured is knowable at first render; there is nothing to
   // wait for and nothing to load.
   const [failed, setFailed] = useState(!GOOGLE_RESPONDENT_CLIENT_ID);
+  const [ready, setReady] = useState(false);
+  const [prompting, setPrompting] = useState(false);
+  const [fellBack, setFellBack] = useState(false);
+  // Decided once, at mount: whether this form is running inside someone
+  // else's page.
+  const [topLevel] = useState(() => typeof window !== "undefined" && inTopLevelWindow());
   // Kept in a ref so re-renders never re-initialize GSI, which would tear down
   // and re-mount its iframe under the respondent's cursor.
   const cb = useRef(onToken);
@@ -122,31 +214,76 @@ function GoogleButton({ onToken, disabled }: { onToken: (t: string) => void; dis
     cb.current = onToken;
   }, [onToken]);
 
+  const loginHint = hint ? asEmail(hint.label) : undefined;
+  const shortcut = Boolean(hint) && topLevel && !fellBack;
+
+  // Re-runs if the hint arrives from storage a beat after mount, or is
+  // forgotten — both change what Google should be asked for. It runs before
+  // any button has been rendered in the first case, and the second only
+  // happens from the shortcut, so it never re-initializes under a live button.
   useEffect(() => {
     if (!GOOGLE_RESPONDENT_CLIENT_ID) return;
     let cancelled = false;
     loadGsi()
       .then(() => {
         const id = window.google?.accounts?.id;
-        if (cancelled || !id || !host.current) return;
+        if (cancelled || !id) return;
         id.initialize({
           client_id: GOOGLE_RESPONDENT_CLIENT_ID,
           callback: (r) => cb.current(r.credential),
+          auto_select: Boolean(loginHint),
+          login_hint: loginHint,
+          use_fedcm_for_prompt: true,
         });
-        id.renderButton(host.current, {
-          type: "standard",
-          theme: "outline",
-          size: "large",
-          shape: "pill",
-          text: "continue_with",
-          width: 320,
-        });
+        idRef.current = id;
+        setReady(true);
       })
       .catch(() => !cancelled && setFailed(true));
     return () => {
       cancelled = true;
     };
+  }, [loginHint]);
+
+  // The host only exists when the button is being shown, and React has
+  // committed it to the DOM by the time this runs — both when the script
+  // finishes loading and when the shortcut steps aside for it.
+  useEffect(() => {
+    if (shortcut || !ready || !host.current) return;
+    host.current.replaceChildren(); // never stack two buttons
+    idRef.current?.renderButton(host.current, {
+      type: "standard",
+      theme: "outline",
+      size: "large",
+      shape: "pill",
+      text: "continue_with",
+      width: 320,
+    });
+  }, [ready, shortcut]);
+
+  useEffect(() => () => {
+    if (fallbackTimer.current) clearTimeout(fallbackTimer.current);
   }, []);
+
+  const continueAsHint = useCallback(() => {
+    const id = idRef.current;
+    if (!id || disabled) return;
+    setPrompting(true);
+    id.prompt();
+    /*
+      Nothing after this line is guaranteed to happen. Google either returns a
+      credential, or shows the account for a confirmation, or — cooled off,
+      third-party sign-in turned off, the session ended since we last saw it —
+      does nothing whatsoever and says nothing about it: under FedCM the
+      notifications that used to report a prompt which never appeared are no
+      longer sent. So the card waits, and then stops waiting and shows the
+      button that always works. The prompt is not cancelled when it does; if
+      Google was merely slow, both routes still land in the same callback.
+    */
+    fallbackTimer.current = setTimeout(() => {
+      setPrompting(false);
+      setFellBack(true);
+    }, PROMPT_GRACE_MS);
+  }, [disabled]);
 
   if (failed) {
     return (
@@ -157,12 +294,91 @@ function GoogleButton({ onToken, disabled }: { onToken: (t: string) => void; dis
   }
 
   return (
-    <div
-      ref={host}
-      // GSI renders its own button in an iframe, so pointer-events is the only
-      // way to disable it while a verification is in flight.
-      className={disabled ? "pointer-events-none opacity-50" : undefined}
-    />
+    <div className="space-y-2">
+      {shortcut && hint && (
+        <>
+          <button
+            type="button"
+            onClick={continueAsHint}
+            disabled={disabled || !ready}
+            className="flex w-full items-center gap-3 rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-bg)] p-1.5 pr-3 text-left transition-transform active:scale-[0.98] disabled:opacity-50 motion-reduce:active:scale-100"
+          >
+            <HintAvatar hint={hint} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">
+                Continue as {hint.name ?? hint.label}
+              </span>
+              <span className="block truncate text-[0.6875rem] opacity-55">{hint.label}</span>
+            </span>
+            {prompting ? (
+              <Loader2 className="size-4 shrink-0 animate-spin opacity-60" />
+            ) : (
+              <ChevronRight className="size-4 shrink-0 opacity-40" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={onUseAnother}
+            className="text-[0.6875rem] underline opacity-55 hover:opacity-100"
+          >
+            Use a different account
+          </button>
+        </>
+      )}
+
+      {/*
+        Said only when the shortcut was pressed and came to nothing. The button
+        that appears in its place is not the one they pressed, and without a
+        line saying so the card looks like it swapped itself out for no reason.
+      */}
+      {fellBack && hint && (
+        <p className="text-[0.6875rem] opacity-55">
+          Pick your account to continue.
+        </p>
+      )}
+
+      {!shortcut && (
+        <div
+          ref={host}
+          // GSI renders its own button in an iframe, so pointer-events is the
+          // only way to disable it while a verification is in flight.
+          className={disabled ? "pointer-events-none opacity-50" : undefined}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The remembered face, or the first letter of the remembered name. */
+function HintAvatar({ hint }: { hint: RespondentHint }) {
+  const [broken, setBroken] = useState(false);
+  const initial = (hint.name ?? hint.label).trim().charAt(0).toUpperCase() || "?";
+
+  if (hint.pictureUrl && !broken) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={hint.pictureUrl}
+        alt=""
+        // Google's profile URLs are served to anyone, and a picture in a
+        // sign-in card is not worth handing Google the form's address for.
+        referrerPolicy="no-referrer"
+        // These URLs outlive nothing in particular; a broken image would leave
+        // a torn box where a face should be.
+        onError={() => setBroken(true)}
+        className="size-8 shrink-0 rounded-full object-cover"
+      />
+    );
+  }
+
+  return (
+    <span
+      aria-hidden
+      className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-medium"
+      style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+    >
+      {initial}
+    </span>
   );
 }
 
@@ -175,12 +391,20 @@ function GoogleButton({ onToken, disabled }: { onToken: (t: string) => void; dis
  */
 function NumberForm({
   pending,
+  initialPhone,
   onSubmit,
 }: {
   pending: boolean;
+  /**
+   * The number this device verified with last time. Filled in rather than
+   * merely suggested — it is already in E.164, so the one thing a respondent
+   * most often gets wrong here is answered before they start, and editing it
+   * is what a text field is for.
+   */
+  initialPhone?: string;
   onSubmit: (phone: string) => void;
 }) {
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(initialPhone ?? "");
   const phoneId = useId();
 
   return (
@@ -369,18 +593,22 @@ function CodeForm({
  */
 function PhoneFlow({
   auth,
+  hint,
   onRequestCode,
   onVerifyCode,
   onChangeNumber,
 }: {
   auth: AuthState;
+  hint: RespondentHint | null;
   onRequestCode: (phone: string, dialHint?: string) => void;
   onVerifyCode: (code: string) => void;
   onChangeNumber: () => void;
 }) {
   const sent = auth.phoneSentTo;
 
-  if (!sent) return <NumberForm pending={auth.pending} onSubmit={onRequestCode} />;
+  if (!sent) {
+    return <NumberForm pending={auth.pending} initialPhone={hint?.label} onSubmit={onRequestCode} />;
+  }
 
   return (
     <CodeForm
@@ -406,9 +634,11 @@ function PhoneFlow({
  */
 function FirebasePhoneFlow({
   auth,
+  hint,
   onPhoneToken,
 }: {
   auth: AuthState;
+  hint: RespondentHint | null;
   onPhoneToken: (idToken: string) => void;
 }) {
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -480,7 +710,7 @@ function FirebasePhoneFlow({
           onChangeNumber={changeNumber}
         />
       ) : (
-        <NumberForm pending={pending} onSubmit={send} />
+        <NumberForm pending={pending} initialPhone={hint?.label} onSubmit={send} />
       )}
       {/*
         The verifier binds to this element. It stays in the layout even though

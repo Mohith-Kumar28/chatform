@@ -334,6 +334,8 @@ export function ChatClient({
           {chat.auth && (
             <AuthCard
               auth={chat.auth}
+              hint={chat.respondentHint}
+              onForgetHint={chat.forgetRespondentHint}
               onGoogle={(t) => void chat.signInWithGoogle(t)}
               onRequestCode={(phone, hint) => void chat.requestPhoneCode(phone, hint)}
               onVerifyCode={(code) => void chat.verifyPhoneCode(code)}

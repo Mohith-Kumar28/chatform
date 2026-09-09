@@ -3,6 +3,12 @@
 import { emitEmbedEvent } from "./embed-bridge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PublicBlock } from "@repo/form-schema";
+import {
+  clearRespondentHint,
+  loadRespondentHint,
+  saveRespondentHint,
+  type RespondentHint,
+} from "./respondent-hint";
 
 export interface ChatMessage {
   /**
@@ -311,6 +317,17 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
   const [resumed, setResumed] = useState(false);
   const [auth, setAuth] = useState<AuthState | null>(null);
   const [identity, setIdentity] = useState<VerifiedIdentity | null>(null);
+  /**
+   * Who this device signed in as last time, if anyone.
+   *
+   * Read once, lazily, and guarded for the server render this component still
+   * goes through — there is no `localStorage` there. Reading it during render
+   * rather than from an effect is safe because it changes nothing the server
+   * drew: the sign-in card it feeds only exists after the stream asks for one.
+   */
+  const [respondentHint, setRespondentHint] = useState<RespondentHint | null>(() =>
+    typeof window === "undefined" ? null : loadRespondentHint(),
+  );
 
   /** A preview runs against a draft and must leave no trace on the device. */
   const ephemeral = Boolean(existingSession);
@@ -1090,6 +1107,34 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     [authPost],
   );
 
+  /**
+   * Remember the verified identity for the *next* form on this device.
+   *
+   * An effect on `identity` rather than a line in each of the four sign-in
+   * paths, because the fifth way an identity arrives is the `auth_verified`
+   * event on a resumed session, and a shortcut that worked everywhere except
+   * after a reload would be the one people notice.
+   *
+   * A preview runs against a draft and must leave no trace on the device, so
+   * it reads the hint — the author should see what a respondent sees — and
+   * writes nothing.
+   */
+  useEffect(() => {
+    if (!identity || ephemeral) return;
+    saveRespondentHint({
+      provider: identity.provider,
+      label: identity.label,
+      name: identity.name,
+      pictureUrl: identity.pictureUrl,
+    });
+  }, [identity, ephemeral]);
+
+  /** "Use a different account": forget the name on the card, for good. */
+  const forgetRespondentHint = useCallback(() => {
+    clearRespondentHint();
+    setRespondentHint(null);
+  }, []);
+
   /** Back out of the code step to correct a mistyped number. */
   const changePhoneNumber = useCallback(() => {
     setAuth((a) => (a ? { ...a, phoneSentTo: null, phoneSentAt: null, error: null, devCode: undefined } : a));
@@ -1239,6 +1284,8 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     resumed,
     auth,
     identity,
+    respondentHint,
+    forgetRespondentHint,
     signInWithGoogle,
     requestPhoneCode,
     verifyPhoneCode,
