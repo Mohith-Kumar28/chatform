@@ -99,11 +99,23 @@ function MediaBlock({ block }: { block: Block }) {
   if (media.kind === "image") {
     return (
       <figure className="space-y-1">
+        {/*
+          `object-contain`, not `object-cover`. Paired with `w-full` the cover
+          crop sliced the top and bottom off anything that was not already
+          letterbox-shaped — a square logo lost its head — and it did so only
+          here: the respondent's runtime (`question-media.tsx`) has always drawn
+          the whole image. A preview that crops what the live form shows in full
+          is worse than no preview, because you correct for a problem that only
+          exists on your screen.
+
+          `w-auto` with `mx-auto` so a portrait image is its own width and
+          centred, rather than a narrow strip pinned to the left of the card.
+        */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}
           alt={media.alt ?? ""}
-          className="max-h-56 w-full rounded-xl object-cover"
+          className="mx-auto block max-h-72 w-auto max-w-full rounded-xl object-contain"
           style={{ borderRadius: "var(--cf-radius)" }}
         />
         {media.caption && <figcaption className="px-1 text-xs opacity-60">{media.caption}</figcaption>}
