@@ -48,13 +48,11 @@ export function AgentTab() {
   return (
     <div className="mx-auto h-[calc(100svh-3.5rem)] w-full max-w-3xl overflow-y-auto p-6">
       <div className="min-w-0 space-y-6">
-        <div className="space-y-1">
-          <h1 className="text-h1">Agent</h1>
-          <p className="text-muted-foreground text-body">
-            Your form is an interviewer. This is who it is and how it behaves.
-          </p>
-        </div>
-
+        {/*
+          No page heading. The tab you are on already says "Agent", and the
+          sibling tabs (Results, Share, Integrate) print no title of their own —
+          a heading here restated the nav and pushed the controls down a screen.
+        */}
         <SegmentedControl
           options={SECTIONS}
           value={section}
@@ -64,7 +62,7 @@ export function AgentTab() {
 
         {section === "persona" && (
           <SettingGroup>
-            <SettingRow label="Interview style" description="How the agent sounds throughout." control={
+            <SettingRow label="Interview style" control={
               <SegmentedControl
                 size="sm"
                 options={[
@@ -78,10 +76,10 @@ export function AgentTab() {
             } />
             <p className="text-muted-foreground text-micro -mt-1 px-1">
               {agent.mode === "ai"
-                ? "Fully conversational — rephrases, answers questions back, handles objections."
+                ? "Rephrases, answers back, handles objections."
                 : agent.mode === "hybrid"
-                  ? "Conversational phrasing, but falls back to scripted text when the model is unavailable."
-                  : "Fixed wording, zero AI cost. Fastest and completely predictable."}
+                  ? "Conversational, falling back to your wording if the model is down."
+                  : "Your exact wording. No AI cost."}
             </p>
 
             <SettingRow label="Name" description="Shown in the chat header." stacked>
@@ -93,8 +91,8 @@ export function AgentTab() {
             </SettingRow>
 
             <SettingRow
-              label="Let the agent reword questions"
-              description="Off, each question is asked exactly as you wrote it."
+              label="Reword questions"
+              description="Off, each is asked exactly as written."
               control={
                 <SwitchField
                   label=""
@@ -119,7 +117,7 @@ export function AgentTab() {
 
             <SettingRow
               label="Persona"
-              description="Free-form character notes. Who is this, and how do they talk?"
+              description="Who is this, and how do they talk?"
               stacked
             >
               <Textarea
@@ -134,7 +132,7 @@ export function AgentTab() {
         )}
 
         {section === "goal" && (
-          <SettingGroup description="What a good conversation achieves, beyond every field being filled.">
+          <SettingGroup>
             <SettingRow label="Goal" stacked>
               <Textarea
                 rows={3}
@@ -146,7 +144,7 @@ export function AgentTab() {
             </SettingRow>
             <SettingRow
               label="What good looks like"
-              description="Helps the agent decide when to dig deeper and when to move on."
+              description="When to dig deeper, when to move on."
               stacked
             >
               <Textarea
@@ -161,16 +159,21 @@ export function AgentTab() {
         )}
 
         {section === "knowledge" && (
-          <SettingGroup description="What the agent can answer when a respondent asks a question back. Everything you add here is read, indexed and looked up only when it is relevant — so a 200-page manual costs the same per conversation as a one-line FAQ.">
+          /*
+            No group description. It ran to three lines explaining indexing and
+            per-conversation cost above a panel whose own empty state already
+            says what knowledge is for.
+          */
+          <SettingGroup>
             <KnowledgePanel formId={formId} />
           </SettingGroup>
         )}
 
         {section === "guardrails" && (
-          <SettingGroup description="The edges of the conversation.">
+          <SettingGroup>
             <SettingRow
               label="Answer off-topic questions"
-              description="When on, the agent may answer things your knowledge base doesn't cover. When off, it politely deflects."
+              description="Off, it politely deflects."
               control={
                 <SwitchField
                   label=""
@@ -205,7 +208,7 @@ export function AgentTab() {
             <div className="grid grid-cols-2 gap-3">
               <NumberField
                 label="Max turns"
-                hint="Hard stop on runaway conversations."
+                hint="Hard stop."
                 value={agent.guardrails.maxTurns}
                 min={5}
                 max={200}
@@ -213,7 +216,7 @@ export function AgentTab() {
               />
               <NumberField
                 label="Give up after"
-                hint="Bad answers before showing a widget instead."
+                hint="Bad answers before it shows a widget."
                 value={agent.escalateAfterInvalid}
                 min={1}
                 max={10}
@@ -231,11 +234,11 @@ export function AgentTab() {
           pick; what is left are the two limits an author has a real stake in.
         */}
         {section === "budget" && (
-          <SettingGroup description="How much a single conversation may spend.">
+          <SettingGroup>
             <div className="grid grid-cols-2 gap-3">
               <NumberField
                 label="Token budget"
-                hint="Per conversation. Falls back to scripted when spent."
+                hint="Per conversation."
                 value={agent.sessionTokenBudget}
                 min={1000}
                 max={200000}
@@ -243,7 +246,7 @@ export function AgentTab() {
               />
               <NumberField
                 label="Reply length"
-                hint="Max tokens per agent turn."
+                hint="Tokens per turn."
                 value={agent.responseMaxTokens}
                 min={50}
                 max={2000}

@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MeterBar } from "@/components/ui/usage-meter";
 import { Spinner } from "@/components/ui/spinner";
+import type { GetApiFormsByIdKnowledge200 } from "@/lib/api/generated.schemas";
 import {
   useGetApiFormsByIdKnowledge,
   getGetApiFormsByIdKnowledgeQueryKey,
@@ -28,6 +29,7 @@ import {
   usePostApiFormsByIdKnowledgeLink,
   useDeleteApiFormsByIdKnowledgeBySourceId,
 } from "@/lib/api/dashboard/dashboard";
+import { isPlanDenial } from "@/lib/api/mutator";
 import { uploadKnowledgeFile } from "./upload-knowledge";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +52,9 @@ import { cn } from "@/lib/utils";
  */
 
 type Mode = "idle" | "text" | "link";
+
+/** The list endpoint's body. `customFetch` resolves to it directly. */
+type KnowledgeList = GetApiFormsByIdKnowledge200;
 
 const KIND_ICON: Record<string, typeof FileText> = {
   file: FileText,
@@ -83,7 +88,7 @@ export function KnowledgePanel({ formId, className }: { formId: string; classNam
     void queryClient.invalidateQueries({ queryKey: getGetApiFormsByIdKnowledgeQueryKey(formId) });
   }, [queryClient, formId]);
 
-  const { data, isLoading } = useGetApiFormsByIdKnowledge(formId, {
+  const { data, isLoading, error: listError } = useGetApiFormsByIdKnowledge(formId, {
     query: {
       queryKey: getGetApiFormsByIdKnowledgeQueryKey(formId),
       /**
@@ -94,7 +99,7 @@ export function KnowledgePanel({ formId, className }: { formId: string; classNam
        * question whose answer cannot change.
        */
       refetchInterval: (query) => {
-        const sources = query.state.data?.data?.sources ?? [];
+        const sources = (query.state.data as KnowledgeList | undefined)?.sources ?? [];
         return sources.some((s) => PENDING_STATUSES.has(s.status)) ? 2000 : false;
       },
     },
@@ -104,9 +109,17 @@ export function KnowledgePanel({ formId, className }: { formId: string; classNam
   const addLink = usePostApiFormsByIdKnowledgeLink({ mutation: { onSuccess: invalidate } });
   const remove = useDeleteApiFormsByIdKnowledgeBySourceId({ mutation: { onSuccess: invalidate } });
 
-  const sources = data?.data?.sources ?? [];
-  const usage = data?.data?.usage;
-  const enabled = data?.data?.enabled ?? true;
+  /**
+   * `customFetch` resolves to the response body itself, so the payload is the
+   * list — not a `{ data }` envelope around it. Reading a level too deep left
+   * every field undefined, which is indistinguishable from an empty knowledge
+   * base: a source added successfully never appeared, and the usage meter never
+   * rendered at all.
+   */
+  const list = data as KnowledgeList | undefined;
+  const sources = list?.sources ?? [];
+  const usage = list?.usage;
+  const enabled = list?.enabled ?? true;
 
   const onFiles = useCallback(
     async (files: FileList | null) => {
@@ -130,6 +143,8 @@ export function KnowledgePanel({ formId, className }: { formId: string; classNam
     [formId, invalidate],
   );
 
+  const addError = errorText(uploadError, addText.error, addLink.error, remove.error);
+
   const overBudget = useMemo(
     () => usage?.maxBytes != null && usage.bytes > usage.maxBytes,
     [usage],
@@ -141,7 +156,7 @@ export function KnowledgePanel({ formId, className }: { formId: string; classNam
         compact
         icon={BookOpen}
         title="Knowledge is a Pro feature"
-        description="Upgrade and the interviewer can answer questions about your pricing, policies and product mid-form, instead of deflecting."
+        description="Upgrade to let the interviewer answer questions mid-form."
         className={className}
       />
     );
@@ -188,10 +203,17 @@ export function KnowledgePanel({ formId, className }: { formId: string; classNam
         }}
       />
 
-      {uploadError && (
+      {/*
+        Every way of adding fails in the same place, in words.
+        A plan denial raises the paywall from the mutator, but a bad URL, an
+        unreachable page or a server fault used to leave the button clicked and
+        nothing on screen — the author had no way to tell a silent failure from
+        a slow success.
+      */}
+      {addError && (
         <p className="text-destructive text-caption flex items-center gap-1.5">
           <AlertCircle className="size-3.5 shrink-0" />
-          {uploadError}
+          {addError}
         </p>
       )}
 
@@ -219,12 +241,24 @@ export function KnowledgePanel({ formId, className }: { formId: string; classNam
         <div className="flex justify-center py-8">
           <Spinner />
         </div>
+      ) : listError && !list ? (
+        /*
+          A list that could not be loaded must not render as a list that is
+          empty. The two look identical and mean opposite things — one says
+          you have added nothing, the other hides everything you have.
+        */
+        <EmptyState
+          compact
+          icon={AlertCircle}
+          title="Couldn't load your knowledge"
+          description={listError instanceof Error ? listError.message : "Reload to try again."}
+        />
       ) : sources.length === 0 ? (
         <EmptyState
           compact
           icon={BookOpen}
-          title="No knowledge yet"
-          description="Add your pricing, FAQ, policies or a link to your site, and the agent can answer questions mid-form instead of deflecting."
+          title="Nothing added yet"
+          description="Pricing, an FAQ, a link — whatever the agent should be able to answer from."
         />
       ) : (
         <ul className="space-y-2">
@@ -286,7 +320,7 @@ function DropZone({
           <Upload className="text-muted-foreground/60 mx-auto size-5" strokeWidth={1.75} />
           <p className="text-body mt-2">Drop files here</p>
           <p className="text-muted-foreground text-caption mt-0.5">
-            PDFs, Word, Excel, CSV, images and voice notes — up to 25MB each
+            Documents, images and audio · 25MB each
           </p>
           <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
             <Button size="sm" variant="outline" shape="pill" onClick={onBrowse}>
@@ -333,7 +367,7 @@ function PasteForm({
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={5}
-        placeholder="Paste anything the agent should be able to answer from…"
+        placeholder="Paste anything the agent should know…"
       />
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" shape="pill" onClick={onCancel}>
@@ -430,6 +464,22 @@ function SourceRow({
       </Button>
     </li>
   );
+}
+
+/**
+ * The first failure worth showing, as a sentence.
+ *
+ * Plan denials are dropped: `mutator.ts` has already raised the paywall dialog
+ * for those, and repeating them in red under the drop zone reads as a second,
+ * unrelated fault.
+ */
+function errorText(...errors: unknown[]): string | null {
+  for (const err of errors) {
+    if (typeof err === "string") return err;
+    if (isPlanDenial(err)) continue;
+    if (err instanceof Error) return err.message;
+  }
+  return null;
 }
 
 function formatBytes(bytes: number): string {

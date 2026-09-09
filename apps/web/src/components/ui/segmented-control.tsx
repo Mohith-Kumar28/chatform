@@ -14,6 +14,16 @@ import { cn } from "@/lib/utils";
  *
  * The active pill is a shared `layoutId`, so it slides between options instead
  * of blinking. Under reduced motion the slide is skipped, not the highlight.
+ *
+ * ## Why the pill is violet
+ *
+ * It used to be `bg-card` — a slightly lighter grey on a grey track, which on
+ * the dark theme left the selected tab nearly indistinguishable from its
+ * neighbours. Violet is the brand's counterpart hue, and selection is exactly
+ * what it is for: orange stays the one call to action on a screen, so a tab
+ * that is merely *where you are* must not compete with the button that does
+ * something. It is set here rather than at each of the dozen call sites, so
+ * every segmented control in the product moves together.
  */
 
 export interface SegmentedOption<T extends string> {
@@ -69,13 +79,15 @@ export function SegmentedControl<T extends string>({
               "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
               "disabled:pointer-events-none disabled:opacity-50",
               size === "sm" ? "px-3 py-1 text-xs" : "px-4 py-1.5 text-sm",
-              active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+              active
+                ? "text-brand-violet-soft-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             {active && (
               <motion.span
                 layoutId={`segmented-${layoutGroup}`}
-                className="bg-card shadow-xs absolute inset-0 -z-10 rounded-full"
+                className="bg-brand-violet-soft shadow-xs absolute inset-0 -z-10 rounded-full"
                 transition={{ type: "spring", stiffness: 500, damping: 40 }}
               />
             )}
@@ -85,7 +97,9 @@ export function SegmentedControl<T extends string>({
               <span
                 className={cn(
                   "tabular rounded-full px-1.5 py-0.5 text-[0.6875rem] leading-none",
-                  active ? "bg-primary-soft text-primary" : "bg-muted-foreground/15",
+                  active
+                    ? "bg-brand-violet/20 text-brand-violet-soft-foreground"
+                    : "bg-muted-foreground/15",
                 )}
               >
                 {opt.badge}
