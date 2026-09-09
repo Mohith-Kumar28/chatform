@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Empty } from "@/components/charts/chart-kit";
 import { cn } from "@/lib/utils";
 
 /**
@@ -30,6 +31,12 @@ export interface Column<T> {
   numeric?: boolean;
   /** Kept narrow and quiet — timestamps, ids. */
   muted?: boolean;
+  /**
+   * A CSS width, honoured by the fixed layout on both header and body cells.
+   *
+   * Set it on the columns that should *not* grow — counts, dates, badges — and
+   * leave the one column carrying text unset, so it takes the remainder.
+   */
   width?: string;
   render: (row: T) => React.ReactNode;
 }
@@ -59,13 +66,24 @@ export function DataTable<T>({
    * nothing wrong on it stays short.
    */
   if (rows.length === 0) {
-    return <p className="text-muted-foreground text-sm">{empty}</p>;
+    return <Empty>{empty}</Empty>;
   }
 
   return (
     <div className="overflow-x-auto">
       {caption && <p className="text-muted-foreground text-caption mb-2">{caption}</p>}
-      <Table>
+      {/*
+        `table-fixed`, so the declared widths are obeyed and the first column
+        absorbs whatever is left.
+
+        With `auto` layout the browser sizes every column to its content, which
+        for these tables means five columns of three-digit integers hugging the
+        left and a gutter half the card wide on the right. Fixed layout plus a
+        width on each numeric column puts the slack where it is useful — the
+        account name, the question, the endpoint — which is also the only column
+        anyone reads across.
+      */}
+      <Table className="w-full table-fixed">
         <TableHeader>
           <TableRow>
             {columns.map((col) => (
@@ -86,10 +104,13 @@ export function DataTable<T>({
                     <TableCell
                       key={col.key}
                       className={cn(
+                        // Fixed layout means a long value would otherwise run
+                        // under its neighbour rather than being clipped by it.
+                        "truncate",
                         col.numeric && "tabular text-right",
-                        col.muted && "text-muted-foreground text-xs whitespace-nowrap",
-                        ci === 0 && "max-w-80",
+                        col.muted && "text-muted-foreground text-xs",
                       )}
+                      style={{ width: col.width }}
                     >
                       {href && ci === 0 ? (
                         <Link

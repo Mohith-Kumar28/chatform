@@ -30,6 +30,7 @@ function Queue({
   rows,
   empty,
   render,
+  className,
 }: {
   title: string;
   icon: LucideIcon;
@@ -37,6 +38,7 @@ function Queue({
   rows: Row[];
   empty: string;
   render: (row: Row) => { primary: string; secondary: string; trailing?: string; href?: string };
+  className?: string;
 }) {
   const toneClass = {
     warning: "text-[var(--warning-soft-foreground)] bg-[var(--warning-soft)]",
@@ -45,7 +47,7 @@ function Queue({
   }[tone];
 
   return (
-    <div className="bg-card shadow-xs rounded-xl p-4">
+    <div className={`bg-card shadow-xs h-full rounded-xl border p-4 ${className ?? ""}`}>
       <div className="mb-3 flex items-center gap-2">
         <span className={`grid size-6 shrink-0 place-items-center rounded-md ${toneClass}`}>
           <Icon className="size-3.5" strokeWidth={1.75} aria-hidden />
@@ -100,9 +102,9 @@ export function ActionQueue() {
 
   if (isPending) {
     return (
-      <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 5 }, (_, i) => (
-          <Skeleton key={i} className="h-40 rounded-xl" />
+          <Skeleton key={i} className={`h-40 rounded-xl ${i === 4 ? "xl:col-span-2" : ""}`} />
         ))}
       </div>
     );
@@ -116,7 +118,12 @@ export function ActionQueue() {
   const atLimit = q.atLimit ?? [];
 
   return (
-    <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
+    /*
+      Five lists in three columns left a hole in the second row. The last one
+      spans it — and it is the right one to widen, because its rows carry a raw
+      provider error string that was being truncated hardest of the five.
+    */
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       <Queue
         title="Payment at risk"
         icon={AlertTriangle}
@@ -180,6 +187,7 @@ export function ActionQueue() {
       />
 
       <Queue
+        className="md:col-span-2 xl:col-span-2"
         title="Billing events stuck"
         icon={Zap}
         tone="destructive"

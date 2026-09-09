@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Bindings } from "../../env.js";
-import { utcDay } from "../../lib/platform-rollup.js";
+import { RANGES, utcDay, type RangeKey } from "../../lib/platform-rollup.js";
 
 /**
  * The pieces every admin route needs, written once.
@@ -15,9 +15,18 @@ import { utcDay } from "../../lib/platform-rollup.js";
  */
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
-export const RANGES = { "7d": 7, "30d": 30, "90d": 90, "365d": 365 } as const;
-export type RangeKey = keyof typeof RANGES;
-export const RangeQuery = z.object({ range: z.enum(["7d", "30d", "90d", "365d"]).default("30d") });
+
+/**
+ * The accepted periods, derived from the one list rather than retyped.
+ *
+ * They used to be spelled out three more times — here, inline in `core.ts`, and
+ * in the rollup's cache-invalidation loop — so adding a range in one place left
+ * the API rejecting a value its own picker had just offered. The day count and
+ * the validation now come from the same object and cannot disagree.
+ */
+export { RANGES, type RangeKey };
+const RANGE_KEYS = Object.keys(RANGES) as [RangeKey, ...RangeKey[]];
+export const RangeQuery = z.object({ range: z.enum(RANGE_KEYS).default("30d") });
 
 /**
  * The plan-ranking sub-select, matching `loadSubscription()` in

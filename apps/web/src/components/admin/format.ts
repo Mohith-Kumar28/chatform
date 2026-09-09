@@ -53,3 +53,34 @@ export function relativeDay(ms: number | null | undefined): string {
   const year = d.getFullYear() === new Date().getFullYear() ? "" : ` ${d.getFullYear()}`;
   return `${d.getDate()} ${d.toLocaleString("en", { month: "short" })}${year}`;
 }
+
+/**
+ * What the line under a KPI says about how the number moved.
+ *
+ * Pulled out of the tile because the wording is where this went wrong, not the
+ * arithmetic. On a zero baseline the tile printed the word "new" and then, from
+ * a separate span, "vs previous" — so it read **"new vs previous"**, which names
+ * neither what is new nor what the previous period was. Three cases, and each
+ * has to say something a reader can act on:
+ *
+ *   - **No baseline to compare against** (a standing total like "block types in
+ *     use"): no delta at all, because inventing one would be inventing a number.
+ *   - **A zero baseline**: the move itself, spelled out — "+3", "none before" —
+ *     rather than a percentage of nothing.
+ *   - **Anything else**: the percentage, against a *named* window. "vs prev 30
+ *     days", never "vs previous", which leaves the reader guessing whether it
+ *     means yesterday, last month or all time.
+ */
+export function deltaLabel(
+  value: number,
+  previous: number | undefined,
+  comparedTo: string,
+  format: (n: number) => string = (n) => n.toLocaleString(),
+): { change: string; against: string } | null {
+  if (previous === undefined) return null;
+  const delta = value - previous;
+  if (delta === 0) return null;
+  if (previous <= 0) return { change: `${delta > 0 ? "+" : ""}${format(delta)}`, against: "none before" };
+  const pct = Math.round((delta / previous) * 1000) / 10;
+  return { change: `${pct > 0 ? "+" : ""}${pct}%`, against: `vs ${comparedTo}` };
+}

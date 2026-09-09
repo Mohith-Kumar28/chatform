@@ -79,12 +79,7 @@ export function AiClient() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-h1">AI cost</h1>
-          <p className="text-muted-foreground text-caption mt-0.5">
-            The platform&rsquo;s marginal cost — what it spends to run conversations, and on whom.
-          </p>
-        </div>
+        <h1 className="text-h1">AI cost</h1>
         <RangePicker />
       </div>
 
@@ -127,7 +122,6 @@ export function AiClient() {
 
       <ChartCard
         title="Spend over time"
-        subtitle="Daily cost in dollars, with a seven-day average."
         aside={<Legend items={[{ label: "Cost", color: SERIES[0]! }]} />}
       >
         <TrendChart
@@ -138,8 +132,8 @@ export function AiClient() {
         />
       </ChartCard>
 
-      <div className="grid items-start gap-3 lg:grid-cols-3">
-        <ChartCard title="Cost by model" subtitle="Where the money goes.">
+      <div className="grid gap-3 lg:grid-cols-3">
+        <ChartCard title="Cost by model">
           <BarList
             items={(a.byModel ?? []).map((m) => ({
               label: m.key.split("/").pop() ?? m.key,
@@ -170,17 +164,18 @@ export function AiClient() {
           number people feel is how long the interviewer takes to answer, and
           that is a per-model property traded off directly against cost.
         */}
-        <ChartCard title="How fast each model answers" subtitle="Median and 90th percentile, in this period.">
+        <ChartCard title="How fast each model answers" subtitle="Median and 90th percentile.">
           <DataTable
             rows={a.latency ?? []}
             empty="No latency recorded."
             columns={[
               { key: "model", header: "Model", render: (m) => m.model.split("/").pop() ?? m.model },
-              { key: "calls", header: "Calls", numeric: true, render: (m) => compact(m.calls) },
-              { key: "p50", header: "p50", numeric: true, render: (m) => `${(m.p50 / 1000).toFixed(1)}s` },
+              { key: "calls", header: "Calls", width: "4.5rem", numeric: true, render: (m) => compact(m.calls) },
+              { key: "p50", header: "p50", width: "4rem", numeric: true, render: (m) => `${(m.p50 / 1000).toFixed(1)}s` },
               {
                 key: "p90",
                 header: "p90",
+                width: "4rem",
                 numeric: true,
                 render: (m) => (
                   <span className={m.p90 > 15_000 ? "text-[var(--warning-soft-foreground)]" : undefined}>
@@ -197,19 +192,22 @@ export function AiClient() {
         The margin table. A free account costing real money is a marketing
         expense; a paid one costing more than it pays is a pricing bug.
       */}
+      <div className="grid gap-3 lg:grid-cols-2">
       <ChartCard
         title="Costing more than they pay"
-        subtitle="Accounts whose AI spend exceeds their revenue — free accounts appear once they cost more than a few cents."
+        subtitle="AI spend above revenue. Free accounts appear once they cost more than a few cents."
+        hint="Revenue is monthly; spend is over the selected period. The two line up exactly at 30 days — over 90, an account can look like a loss-maker only because it is being compared against one month of income."
       >
         <DataTable
           rows={a.lossMakers ?? []}
           hrefFor={(row) => `/admin/accounts/${str(row, "org_id")}`}
-          empty="Nobody is costing more than they pay. "
+          empty="Nobody is costing more than they pay."
           columns={[
             { key: "name", header: "Account", render: (row) => str(row, "name") },
             {
               key: "plan",
               header: "Plan",
+              width: "5.5rem",
               render: (row) => (
                 <Badge
                   className={
@@ -220,37 +218,36 @@ export function AiClient() {
                 </Badge>
               ),
             },
-            { key: "conversations", header: "Conversations", numeric: true, render: (row) => compact(num(row, "conversations")) },
-            { key: "tokens", header: "Tokens", numeric: true, render: (row) => compact(num(row, "tokens")) },
-            { key: "cost", header: "Costs us", numeric: true, render: (row) => usd(num(row, "cost_micro")) },
+            { key: "conversations", header: "Chats", width: "5rem", numeric: true, render: (row) => compact(num(row, "conversations")) },
+            { key: "tokens", header: "Tokens", width: "5.5rem", numeric: true, render: (row) => compact(num(row, "tokens")) },
+            { key: "cost", header: "Costs us", width: "6rem", numeric: true, render: (row) => usd(num(row, "cost_micro")) },
             {
               key: "mrr",
               header: "Pays us",
+              width: "6rem",
               numeric: true,
               render: (row) =>
                 num(row, "mrr_cents") > 0 ? money(num(row, "mrr_cents")) : <span className="text-muted-foreground">—</span>,
             },
           ]}
         />
-        <p className="text-muted-foreground text-micro mt-3">
-          Revenue is monthly; spend is over the selected period. The two line up exactly at 30 days.
-        </p>
       </ChartCard>
 
-      <ChartCard title="Biggest AI users" subtitle="By spend in this period, whatever they pay.">
+        <ChartCard title="Biggest AI users" subtitle="By spend in this period, whatever they pay.">
         <DataTable
           rows={a.topSpenders ?? []}
           hrefFor={(row) => `/admin/accounts/${str(row, "org_id")}`}
           empty="No AI usage in this period."
           columns={[
             { key: "name", header: "Account", render: (row) => str(row, "name") },
-            { key: "plan", header: "Plan", render: (row) => str(row, "plan") },
-            { key: "calls", header: "Calls", numeric: true, render: (row) => compact(num(row, "calls")) },
-            { key: "tokens", header: "Tokens", numeric: true, render: (row) => compact(num(row, "tokens")) },
-            { key: "cost", header: "Cost", numeric: true, render: (row) => usd(num(row, "cost_micro")) },
+            { key: "plan", header: "Plan", width: "5.5rem", render: (row) => str(row, "plan") },
+            { key: "calls", header: "Calls", width: "5rem", numeric: true, render: (row) => compact(num(row, "calls")) },
+            { key: "tokens", header: "Tokens", width: "5.5rem", numeric: true, render: (row) => compact(num(row, "tokens")) },
+            { key: "cost", header: "Cost", width: "6rem", numeric: true, render: (row) => usd(num(row, "cost_micro")) },
           ]}
         />
-      </ChartCard>
+        </ChartCard>
+      </div>
     </div>
   );
 }

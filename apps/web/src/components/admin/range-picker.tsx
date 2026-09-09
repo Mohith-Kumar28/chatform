@@ -3,10 +3,37 @@
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
-export const RANGES = ["7d", "30d", "90d", "365d"] as const;
+/**
+ * The periods, their labels, and how many days each is — one object, because
+ * these three used to live in three places and the pages built `?since=` links
+ * from a fourth copy.
+ *
+ * "Today" is a single day-bucket. Every count, list and funnel on the page
+ * scopes to it; the time-series charts notice they have one point and draw a
+ * bar rather than an area, which is the difference between "one quiet day" and
+ * a chart that looks broken.
+ */
+export const RANGES = ["1d", "7d", "30d", "90d", "365d"] as const;
 export type Range = (typeof RANGES)[number];
 
-const LABELS: Record<Range, string> = { "7d": "7 days", "30d": "30 days", "90d": "90 days", "365d": "12 months" };
+const LABELS: Record<Range, string> = {
+  "1d": "Today",
+  "7d": "7 days",
+  "30d": "30 days",
+  "90d": "90 days",
+  "365d": "12 months",
+};
+
+export const RANGE_DAYS: Record<Range, number> = { "1d": 1, "7d": 7, "30d": 30, "90d": 90, "365d": 365 };
+
+/** What a tile's `previous` figure is, said in words. */
+export const COMPARED_TO: Record<Range, string> = {
+  "1d": "yesterday",
+  "7d": "prev 7 days",
+  "30d": "prev 30 days",
+  "90d": "prev 90 days",
+  "365d": "prev 12 months",
+};
 
 /** The range in the URL, defaulted and validated. Never trust a hand-typed param. */
 export function useRange(): Range {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { InfoHint } from "@/components/ui/info-hint";
 import { cn } from "@/lib/utils";
 
 /**
@@ -32,37 +33,81 @@ export const SERIES = [
   "var(--chart-6)",
 ] as const;
 
+/** A card with nothing in it, said in one line without leaving a void. */
+export function Empty({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex h-full items-center">
+      <p className="text-muted-foreground text-sm">{children}</p>
+    </div>
+  );
+}
+
 export function seriesColor(i: number): string {
   // Never a generated hue past the palette: the seventh entity folds back onto
   // the ramp rather than inventing a colour nothing else uses.
   return SERIES[i % SERIES.length]!;
 }
 
+/**
+ * The card every chart sits in.
+ *
+ * **It stretches, and so does what is inside it.** Two cards side by side are
+ * almost never the same natural height — a sixteen-row bar list against a
+ * 132px donut — and the grids here used to pin them to the top with
+ * `items-start`, which left every row of the console bottoming out at a
+ * different line. Stretching the card alone is not enough: a `<section>` that
+ * is taller than its content just grows a band of empty surface underneath.
+ * So the card is a column, and the body is `flex-1` — a short chart grows to
+ * meet its tall neighbour instead of leaving a hole under it.
+ *
+ * `dense` opts out, for the handful of cards whose content genuinely has a
+ * fixed size and would look stretched rather than filled.
+ */
 export function ChartCard({
   title,
   subtitle,
+  hint,
   aside,
   children,
   className,
+  dense = false,
 }: {
   title?: React.ReactNode;
   subtitle?: React.ReactNode;
+  /**
+   * The caveat a reader needs *once*, folded behind an icon on the title.
+   *
+   * Most of what used to sit in `subtitle` was not a subtitle — it was a
+   * definition ("a yearly plan counts as a twelfth per month") that has to be
+   * available and does not have to be on screen. Printed under every card it
+   * became furniture the numbers had to be found between; here it is one click
+   * away from the title it qualifies. Reserve `subtitle` for what genuinely
+   * changes how the chart is read at a glance.
+   */
+  hint?: React.ReactNode;
   aside?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  /** Sizes to its content instead of filling the grid row. */
+  dense?: boolean;
 }) {
   return (
-    <section className={cn("bg-card rounded-xl p-4 sm:p-5", className)}>
+    <section className={cn("bg-card shadow-xs flex flex-col rounded-xl border p-4 sm:p-5", !dense && "h-full", className)}>
       {(title || aside) && (
         <header className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            {title && <h3 className="text-h3 leading-snug">{title}</h3>}
+            {title && (
+              <h3 className="text-h3 flex items-center gap-1 leading-snug">
+                {title}
+                {hint && <InfoHint align="start">{hint}</InfoHint>}
+              </h3>
+            )}
             {subtitle && <p className="text-muted-foreground text-caption mt-0.5">{subtitle}</p>}
           </div>
           {aside && <div className="text-muted-foreground text-caption shrink-0 whitespace-nowrap">{aside}</div>}
         </header>
       )}
-      {children}
+      <div className={cn(!dense && "flex-1")}>{children}</div>
     </section>
   );
 }
@@ -124,9 +169,33 @@ export function BarList({
   unit?: string;
   emptyLabel?: string;
 }) {
-  if (items.length === 0) return <p className="text-muted-foreground text-sm">{emptyLabel}</p>;
+  /*
+    Centred in whatever height the card ended up at, rather than pinned to the
+    top of it. Cards stretch to their neighbours now, so a one-line "nothing
+    here" that stays at the top of a 300px card reads as content that failed to
+    load below it. Vertically centred, horizontally left — a sentence centred in
+    a card the width of the page is harder to find, not easier.
+  */
+  if (items.length === 0) return <Empty>{emptyLabel}</Empty>;
   const max = Math.max(...items.map((i) => i.value), 1);
   const denom = total && total > 0 ? total : max;
+
+  /*
+    One row that accounts for the whole total is not a comparison, and a
+    full-width bar labelled 100% is a chart of a thing against itself. "Cost by
+    model" on a platform running one model said exactly that, and so does a
+    question everyone answered the same way. The sentence carries the same fact
+    and leaves the card legible.
+  */
+  if (items.length === 1 && items[0]!.value >= denom) {
+    const only = items[0]!;
+    return (
+      <Empty>
+        Only one: <span className="text-foreground font-medium">{only.label}</span> (
+        {only.display ?? `${only.value}${unit}`}).
+      </Empty>
+    );
+  }
 
   return (
     <ol className="space-y-2.5">
@@ -193,7 +262,7 @@ export function Donut({
    * tall, drawn to say nothing happened. The bar lists say that in one line.
    */
   if (total <= 0 || items.length === 0) {
-    return <p className="text-muted-foreground text-sm">{emptyLabel}</p>;
+    return <Empty>{emptyLabel}</Empty>;
   }
   const size = 132;
   const stroke = 18;
@@ -280,25 +349,49 @@ export function ColumnChart({
   colorFor,
 }: {
   bars: { label: string; value: number; hint?: string }[];
+  /** The floor. The columns grow past it to fill a card stretched by a neighbour. */
   height?: number;
   colorFor?: (label: string, i: number) => string;
 }) {
   const max = Math.max(...bars.map((b) => b.value), 1);
   return (
-    <div className="flex items-end gap-1.5 sm:gap-2" style={{ height: height + 34 }}>
-      {bars.map((b, i) => (
-        <div key={`${b.label}-${i}`} className="flex min-w-0 flex-1 flex-col items-center gap-1" title={b.hint}>
-          <span className="text-muted-foreground tabular text-[0.6875rem]">{b.value || ""}</span>
-          <div
-            className="w-full rounded-t-[4px] transition-[height] duration-[var(--duration-standard)]"
-            style={{
-              height: Math.max(b.value > 0 ? 3 : 1, (b.value / max) * height),
-              background: b.value > 0 ? (colorFor?.(b.label, i) ?? "var(--chart-1)") : "var(--muted)",
-            }}
-          />
-          <span className="text-muted-foreground w-full truncate text-center text-[0.6875rem]">{b.label}</span>
-        </div>
-      ))}
+    /*
+      Column heights are percentages of the plotting area rather than pixels off
+      `height`, so this fills whatever the grid gives the card. With fixed pixel
+      heights the card stretched to match its neighbour and the columns stayed
+      where they were, leaving a band of empty surface above them that read as a
+      chart that had failed to draw.
+    */
+    <div className="flex h-full flex-col" style={{ minHeight: height + 34 }}>
+      <div className="flex flex-1 items-stretch gap-1.5 sm:gap-2">
+        {bars.map((b, i) => (
+          <div key={`${b.label}-${i}`} className="flex min-w-0 flex-1 flex-col gap-1" title={b.hint}>
+            <span className="text-muted-foreground tabular h-4 text-center text-[0.6875rem] leading-4">
+              {b.value || ""}
+            </span>
+            <div className="flex flex-1 items-end">
+              <div
+                className="w-full rounded-t-[4px] transition-[height] duration-[var(--duration-standard)]"
+                style={{
+                  height: `${Math.max(b.value > 0 ? 2 : 0.5, (b.value / max) * 100)}%`,
+                  background: b.value > 0 ? (colorFor?.(b.label, i) ?? "var(--chart-1)") : "var(--muted)",
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* The scale, on its own row so a long bucket label cannot shorten a bar. */}
+      <div className="mt-1 flex gap-1.5 sm:gap-2">
+        {bars.map((b, i) => (
+          <span
+            key={`${b.label}-${i}`}
+            className="text-muted-foreground min-w-0 flex-1 truncate text-center text-[0.6875rem]"
+          >
+            {b.label}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

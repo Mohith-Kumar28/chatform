@@ -3,7 +3,13 @@ import { env } from "cloudflare:test";
 import { applySchema, seedTenant, fetchApi, type Tenant } from "./helpers.js";
 import type { Bindings } from "../src/env.js";
 import { isPlatformAdmin } from "../src/lib/platform-admin.js";
-import { rollupPlatformDaily, rollupFormStructure, backfillPlatformDaily, utcDay } from "../src/lib/platform-rollup.js";
+import {
+  RANGES,
+  rollupPlatformDaily,
+  rollupFormStructure,
+  backfillPlatformDaily,
+  utcDay,
+} from "../src/lib/platform-rollup.js";
 import { costUsdMicro } from "../src/lib/ai-pricing.js";
 import { IMPERSONATION_HEADER, signImpersonation, verifyImpersonation } from "../src/lib/impersonation.js";
 import { PLANS } from "@repo/entitlements";
@@ -53,7 +59,7 @@ beforeEach(async () => {
   setAllowlist("founder@example.com");
   // The overview is cached for five minutes; a test that seeds new rows and
   // then reads a cached payload would assert against the previous test's data.
-  for (const range of ["7d", "30d", "90d", "365d"]) await env.KV_CONFIG.delete(`admin:overview:${range}`);
+  for (const range of Object.keys(RANGES)) await env.KV_CONFIG.delete(`admin:overview:${range}`);
 });
 
 describe("the gate", () => {
@@ -378,6 +384,48 @@ describe("the overview", () => {
     // Every series is gap-filled to one point per day in the range.
     expect(body.days).toHaveLength(30);
     for (const series of Object.values(body.series)) expect(series).toHaveLength(30);
+  });
+
+  /**
+   * Every range the picker offers has to be one the API accepts, and the
+   * accepted set used to be retyped in four places — `RANGES`, `RangeQuery`,
+   * an inline enum in `core.ts`, and the rollup's cache-invalidation loop. A
+   * range added to one of them was rejected by the next with a 400 naming a
+   * value the picker had just offered. Driving this loop off `RANGES` means a
+   * new period cannot ship half-wired.
+   */
+  it("accepts every range it publishes, on every route that takes one", async () => {
+    const routes = ["overview", "product", "revenue", "ai", "health"];
+    for (const range of Object.keys(RANGES)) {
+      for (const route of routes) {
+        const res = await fetchApi(`/api/admin/${route}?range=${range}`, { headers: { cookie: admin.cookie } });
+        expect(res.status, `${route}?range=${range}`).toBe(200);
+      }
+    }
+  });
+
+  it("returns one day of series for the shortest range", async () => {
+    const res = await fetchApi("/api/admin/overview?range=1d", { headers: { cookie: admin.cookie } });
+    const body = (await res.json()) as { days: string[]; series: Record<string, number[]> };
+    expect(body.days).toEqual([utcDay()]);
+    for (const series of Object.values(body.series)) expect(series).toHaveLength(1);
+  });
+
+  /**
+   * The rollup busts one cache key per range. A range missing from that loop
+   * is not an error anywhere — it just serves a stale overview for five minutes
+   * after every tick, which reads as "the dashboard is broken" rather than "the
+   * dashboard is cached".
+   */
+  it("the rollup invalidates the cached overview for every range", async () => {
+    for (const range of Object.keys(RANGES)) {
+      await fetchApi(`/api/admin/overview?range=${range}`, { headers: { cookie: admin.cookie } });
+      expect(await env.KV_CONFIG.get(`admin:overview:${range}`)).not.toBeNull();
+    }
+    await rollupPlatformDaily(DB());
+    for (const range of Object.keys(RANGES)) {
+      expect(await env.KV_CONFIG.get(`admin:overview:${range}`), range).toBeNull();
+    }
   });
 
   /**

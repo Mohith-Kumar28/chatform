@@ -39,6 +39,21 @@ import type { Bindings } from "../env.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * The periods the console can be asked for, and the only list of them.
+ *
+ * Here rather than beside the routes because this module is the one that has to
+ * delete a cache key per range, and that loop was previously a hardcoded array
+ * a few hundred lines below — so a range added to the routes' own copy would
+ * have been served a stale overview for five minutes after every rollup, which
+ * is the hardest kind of bug to see: the number is only wrong for a while.
+ * Routes import it back through `routes/admin/shared.ts`.
+ *
+ * `1d` is today, compared against yesterday.
+ */
+export const RANGES = { "1d": 1, "7d": 7, "30d": 30, "90d": 90, "365d": 365 } as const;
+export type RangeKey = keyof typeof RANGES;
+
 /** `YYYY-MM-DD` in UTC, the key every metric row is bucketed by. */
 export function utcDay(at: number | Date = Date.now()): string {
   return new Date(at).toISOString().slice(0, 10);
@@ -383,9 +398,7 @@ export async function rollupPlatformDaily(env: Bindings, date = utcDay()): Promi
  */
 async function invalidateOverview(env: Bindings): Promise<void> {
   await Promise.all(
-    ["7d", "30d", "90d", "365d"].map((range) =>
-      env.KV_CONFIG.delete(`admin:overview:${range}`).catch(() => {}),
-    ),
+    Object.keys(RANGES).map((range) => env.KV_CONFIG.delete(`admin:overview:${range}`).catch(() => {})),
   );
 }
 

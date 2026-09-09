@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 import { useGetApiAdminHealth, postApiAdminBillingEventsByIdReprocess } from "@/lib/api/admin/admin";
 import { BarList, ChartCard } from "@/components/charts/chart-kit";
+import { RadialGauge } from "@/components/charts/radial-gauge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -98,12 +99,7 @@ export function HealthClient() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-h1">Health</h1>
-          <p className="text-muted-foreground text-caption mt-0.5">
-            Webhooks, billing events, integrations, mail and storage — the promises made outside the product.
-          </p>
-        </div>
+        <h1 className="text-h1">Health</h1>
         <RangePicker />
       </div>
 
@@ -156,7 +152,7 @@ export function HealthClient() {
         />
       </div>
 
-      <div className="grid items-start gap-3 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <ChartCard
           title="Endpoints that keep failing"
           subtitle="A customer's integration stopped working and they may not know yet."
@@ -188,38 +184,74 @@ export function HealthClient() {
                     </span>
                   ),
               },
-              { key: "fails", header: "In a row", numeric: true, render: (row) => num(row, "consecutive_failures") },
+              { key: "fails", header: "In a row", width: "6rem", numeric: true, render: (row) => num(row, "consecutive_failures") },
             ]}
           />
         </ChartCard>
 
-        <ChartCard title="What endpoints answer" subtitle="HTTP status of every delivery in this period.">
-          <BarList
-            items={(wh.byStatusCode ?? []).map((s) => ({
-              label: s.key,
-              value: s.value,
-              display: compact(s.value),
-              // 2xx is fine; everything else is the customer's server saying no.
-              color: s.key.startsWith("2") ? "var(--chart-1)" : "var(--chart-2)",
-            }))}
-            total={sum(wh.byStatusCode)}
-            emptyLabel="No deliveries attempted in this period."
-          />
+        {/*
+          The rate first, then what the failures were.
+
+          This was three bar rows — a 200 count, a 404 count, a 500 count — which
+          is a bar chart of a thing against itself; the number anyone actually
+          wants out of it is the share that got through. The gauge carries that,
+          and the codes stay underneath for the diagnosis.
+        */}
+        <ChartCard title="What endpoints answer" subtitle="HTTP status of every delivery attempted.">
+          {sum(wh.byStatusCode) > 0 ? (
+            <div className="flex flex-wrap items-center gap-6">
+              <RadialGauge
+                value={wh.successRate ?? 100}
+                label="accepted"
+                caption={`${compact(wh.delivered ?? 0)} delivered`}
+                tone={(wh.successRate ?? 100) >= 99 ? "success" : (wh.successRate ?? 100) >= 90 ? "warning" : "danger"}
+                size={116}
+              />
+              <div className="min-w-56 flex-1">
+                <BarList
+                  items={(wh.byStatusCode ?? []).map((s) => ({
+                    label: s.key,
+                    value: s.value,
+                    display: compact(s.value),
+                    // 2xx is fine; everything else is the customer's server
+                    // saying no. The one place in the console where colour is a
+                    // verdict rather than an identity — and the gauge beside it
+                    // already reads that way.
+                    color: s.key.startsWith("2") ? "var(--success)" : "var(--destructive)",
+                  }))}
+                  total={sum(wh.byStatusCode)}
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm">No deliveries attempted in this period.</p>
+          )}
         </ChartCard>
       </div>
 
+      {/*
+        Paired with the integrations table rather than given a row of its own.
+
+        Its usual state is one sentence saying every event processed, and a
+        sentence does not need the width of the page — but when it does have
+        rows they carry a raw provider error and a Replay button, so it keeps
+        the larger two-thirds either way.
+      */}
+      <div className="grid gap-3 lg:grid-cols-3">
       <ChartCard
+        className="lg:col-span-2"
         title="Billing events that did not process"
-        subtitle="The payload was stored when it arrived, so these can be replayed once the cause is fixed."
+        hint="The payload was stored when it arrived, so these can be replayed once the cause is fixed — replaying is safe to repeat, the handler is idempotent."
       >
         <DataTable
           rows={h.billing?.stuck ?? []}
-          empty="Every Dodo event has been processed. "
+          empty="Every Dodo event has been processed."
           columns={[
-            { key: "type", header: "Event", render: (row) => str(row, "type") },
+            { key: "type", header: "Event", width: "16rem", render: (row) => str(row, "type") },
             {
               key: "status",
               header: "Status",
+              width: "8rem",
               render: (row) => (
                 <Badge className="bg-[var(--destructive-soft)] text-destructive">{str(row, "status")}</Badge>
               ),
@@ -231,10 +263,11 @@ export function HealthClient() {
                 <span className="text-muted-foreground truncate text-xs">{str(row, "error") || "—"}</span>
               ),
             },
-            { key: "when", header: "Arrived", muted: true, render: (row) => relativeDay(num(row, "created_at")) },
+            { key: "when", header: "Arrived", width: "7rem", muted: true, render: (row) => relativeDay(num(row, "created_at")) },
             {
               key: "action",
               header: "",
+              width: "7rem",
               render: (row) => (
                 <Button
                   size="sm"
@@ -255,7 +288,50 @@ export function HealthClient() {
         />
       </ChartCard>
 
-      <div className="grid items-start gap-3 lg:grid-cols-3">
+        <ChartCard title="Integrations" subtitle="Connected feeds, by provider and state.">
+          <DataTable
+            rows={h.integrations?.byStatus ?? []}
+            empty="No integrations connected."
+            columns={[
+              { key: "provider", header: "Provider", render: (row) => str(row, "provider") },
+              {
+                key: "status",
+                header: "State",
+                width: "9rem",
+                render: (row) => (
+                  <Badge
+                    className={
+                      str(row, "status") === "connected"
+                        ? "bg-[var(--success-soft)] text-[var(--success)]"
+                        : "bg-[var(--destructive-soft)] text-destructive"
+                    }
+                  >
+                    {str(row, "status")}
+                  </Badge>
+                ),
+              },
+              { key: "n", header: "Count", width: "6rem", numeric: true, render: (row) => num(row, "n") },
+            ]}
+          />
+          {(h.integrations?.failing ?? []).length > 0 && (
+            <div className="mt-4 border-t pt-3">
+              <p className="text-caption mb-2 font-medium">Currently broken</p>
+              <ul className="space-y-1">
+                {(h.integrations?.failing ?? []).map((f, i) => (
+                  <li key={i} className="text-muted-foreground truncate text-xs">
+                    <span className="text-foreground">{str(f, "name")}</span> · {str(f, "provider")} —{" "}
+                    {str(f, "last_error") || str(f, "status")}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* Four small breakdowns, one row: each is two or three rows of bars, and
+          each used to get a third or a half of the page to say so. */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <ChartCard title="Follow-up mail" subtitle="What happened to each scheduled nudge.">
           <BarList
             items={(email.followupsByStatus ?? []).map((s) => ({ label: s.key, value: s.value }))}
@@ -265,7 +341,11 @@ export function HealthClient() {
           />
         </ChartCard>
 
-        <ChartCard title="Suppressed addresses" subtitle="Why we stopped mailing them.">
+        <ChartCard
+          title="Suppressed addresses"
+          subtitle="Why we stopped mailing them."
+          hint="Bounces and complaints are the two that cost us the sending domain's reputation; unsubscribes are the system working."
+        >
           <BarList
             items={(email.suppressionsByReason ?? []).map((s) => ({
               label: s.key,
@@ -285,61 +365,22 @@ export function HealthClient() {
             emptyLabel="No sessions in this period."
           />
         </ChartCard>
-      </div>
 
-      <div className="grid items-start gap-3 lg:grid-cols-2">
-        <ChartCard title="Integrations" subtitle="Connected feeds, by provider and state.">
-          <DataTable
-            rows={h.integrations?.byStatus ?? []}
-            empty="No integrations connected."
-            columns={[
-              { key: "provider", header: "Provider", render: (row) => str(row, "provider") },
-              {
-                key: "status",
-                header: "State",
-                render: (row) => (
-                  <Badge
-                    className={
-                      str(row, "status") === "connected"
-                        ? "bg-[var(--success-soft)] text-[var(--success)]"
-                        : "bg-[var(--destructive-soft)] text-destructive"
-                    }
-                  >
-                    {str(row, "status")}
-                  </Badge>
-                ),
-              },
-              { key: "n", header: "Count", numeric: true, render: (row) => num(row, "n") },
-            ]}
-          />
-          {(h.integrations?.failing ?? []).length > 0 && (
-            <div className="mt-4 border-t pt-3">
-              <p className="text-caption mb-2 font-medium">Currently broken</p>
-              <ul className="space-y-1">
-                {(h.integrations?.failing ?? []).map((f, i) => (
-                  <li key={i} className="text-muted-foreground truncate text-xs">
-                    <span className="text-foreground">{str(f, "name")}</span> · {str(f, "provider")} —{" "}
-                    {str(f, "last_error") || str(f, "status")}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </ChartCard>
-
-        <ChartCard title="Exports" subtitle="Queued response downloads, by state.">
+        <ChartCard
+          title="Exports"
+          subtitle="Queued response downloads, by state."
+          aside={
+            (h.storage?.rejected ?? 0) > 0
+              ? `${h.storage.rejected} upload${h.storage.rejected === 1 ? "" : "s"} rejected`
+              : undefined
+          }
+        >
           <BarList
             items={(h.exports ?? []).map((s) => ({ label: s.key, value: s.value }))}
             total={sum(h.exports)}
             colorBy="series"
             emptyLabel="No exports requested."
           />
-          {(h.storage?.rejected ?? 0) > 0 && (
-            <p className="text-muted-foreground text-micro mt-3">
-              {h.storage.rejected} uploaded file{h.storage.rejected === 1 ? " was" : "s were"} rejected — worth a look
-              if that number is climbing.
-            </p>
-          )}
         </ChartCard>
       </div>
     </div>

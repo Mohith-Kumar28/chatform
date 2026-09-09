@@ -54,6 +54,7 @@ export type GetApiAdminOverviewRange = typeof GetApiAdminOverviewRange[keyof typ
 
 
 export const GetApiAdminOverviewRange = {
+  '1d': '1d',
   '7d': '7d',
   '30d': '30d',
   '90d': '90d',
@@ -244,6 +245,7 @@ export type GetApiAdminProductRange = typeof GetApiAdminProductRange[keyof typeo
 
 
 export const GetApiAdminProductRange = {
+  '1d': '1d',
   '7d': '7d',
   '30d': '30d',
   '90d': '90d',
@@ -361,6 +363,7 @@ export type GetApiAdminRevenueRange = typeof GetApiAdminRevenueRange[keyof typeo
 
 
 export const GetApiAdminRevenueRange = {
+  '1d': '1d',
   '7d': '7d',
   '30d': '30d',
   '90d': '90d',
@@ -434,6 +437,7 @@ export type GetApiAdminAiRange = typeof GetApiAdminAiRange[keyof typeof GetApiAd
 
 
 export const GetApiAdminAiRange = {
+  '1d': '1d',
   '7d': '7d',
   '30d': '30d',
   '90d': '90d',
@@ -493,6 +497,7 @@ export type GetApiAdminHealthRange = typeof GetApiAdminHealthRange[keyof typeof 
 
 
 export const GetApiAdminHealthRange = {
+  '1d': '1d',
   '7d': '7d',
   '30d': '30d',
   '90d': '90d',

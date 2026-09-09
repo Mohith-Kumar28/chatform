@@ -7,6 +7,7 @@ import { getGetApiAdminMeQueryKey, useGetApiAdminMe } from "@/lib/api/admin/admi
 import { apiData } from "@/lib/api/payload";
 import { ApiError } from "@/lib/api/mutator";
 import { ADMIN_NAV } from "./admin-nav";
+import { LogoMark } from "@/components/brand/logo";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -101,13 +102,19 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh">
       <header className="bg-card sticky top-0 z-20 border-b">
-        <div className="mx-auto flex h-14 w-full max-w-[110rem] items-center gap-4 px-4 sm:px-6">
-          <span className="flex shrink-0 items-center gap-2">
-            <span className="bg-foreground text-background grid size-6 place-items-center rounded-md text-[0.625rem] font-semibold">
-              cf
-            </span>
+        <div className="mx-auto flex h-14 w-full max-w-[96rem] items-center gap-4 px-4 sm:px-6">
+          {/*
+            The product's own mark, not a monogram standing in for it.
+
+            `LogoMark` rather than `AppMark`: `AppMark` substitutes whichever
+            organization is currently active for its uploaded logo, and this
+            console belongs to no organization — it is the one place in the app
+            where a customer's logo in the header would be actively wrong.
+          */}
+          <Link href="/dashboard" className="flex shrink-0 items-center gap-2">
+            <LogoMark className="size-6" />
             <span className="text-sm font-semibold">Platform</span>
-          </span>
+          </Link>
 
           <nav className="flex min-w-0 items-center gap-0.5" aria-label="Platform console">
             {ADMIN_NAV.map((item) => {
@@ -143,7 +150,17 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[110rem] px-4 py-6 sm:px-6">{children}</main>
+      {/*
+        1536px, not the 1760px this started at.
+
+        The console needs more room than the app's 1280px — the account
+        directory is eight columns — but 1760px was a width nothing in here was
+        drawn for. Cards stretched to it; their contents did not, so a six-week
+        retention grid sat in a card three times its width. Wider than the
+        product, narrower than the screen, and every card's content now fills
+        its card rather than floating at the left edge of one.
+      */}
+      <main className="mx-auto w-full max-w-[96rem] px-4 py-6 sm:px-6">{children}</main>
     </div>
   );
 }

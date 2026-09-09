@@ -5,12 +5,12 @@ import { ChevronLeft } from "lucide-react";
 import { getGetApiAdminAccountsByOrgIdQueryKey, useGetApiAdminAccountsByOrgId } from "@/lib/api/admin/admin";
 import { ChartCard } from "@/components/charts/chart-kit";
 import { MeterBar } from "@/components/ui/usage-meter";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { apiData } from "@/lib/api/payload";
 import { AccountActions, RevokeOverride } from "./account-actions";
+import { DataTable } from "./data-table";
 import { compact, money, relativeDay } from "./format";
 
 /**
@@ -195,7 +195,7 @@ export function AccountDetail({ orgId }: { orgId: string }) {
         */}
         <ChartCard
           title="Walls they hit"
-          subtitle="Locked features this account reached for, and how often."
+          subtitle="Locked features they reached for."
           className="lg:col-span-1"
         >
           {denials.length === 0 ? (
@@ -221,56 +221,50 @@ export function AccountDetail({ orgId }: { orgId: string }) {
         </ChartCard>
       </div>
 
-      <ChartCard title="Forms" subtitle={`${forms.length} live, newest first.`}>
-        {forms.length === 0 ? (
-          <p className="text-muted-foreground text-sm">This account has never built a form.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Questions</TableHead>
-                  <TableHead className="text-right">Started</TableHead>
-                  <TableHead className="text-right">Completed</TableHead>
-                  <TableHead className="text-right">Completion</TableHead>
-                  <TableHead className="text-right">Updated</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {forms.map((f, i) => {
-                  const started = num(f, "started");
-                  const completed = num(f, "completed");
-                  return (
-                    <TableRow key={i}>
-                      <TableCell className="max-w-72 truncate font-medium">{str(f, "title")}</TableCell>
-                      <TableCell>
-                        <Badge className="bg-muted text-muted-foreground">{str(f, "status")}</Badge>
-                      </TableCell>
-                      <TableCell className="tabular text-right">{num(f, "blocks")}</TableCell>
-                      <TableCell className="tabular text-right">{started}</TableCell>
-                      <TableCell className="tabular text-right">{completed}</TableCell>
-                      <TableCell className="tabular text-right">
-                        {started > 0 ? (
-                          `${Math.round((completed / started) * 100)}%`
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-right text-xs whitespace-nowrap">
-                        {relativeDay(num(f, "updated_at"))}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+      {/*
+        `DataTable` rather than a hand-rolled `<Table>`, so this aligns and
+        sizes like the other twelve tables in the console instead of letting
+        five integer columns share the width equally with the title.
+      */}
+      <ChartCard title="Forms" aside={`${forms.length} live · newest first`}>
+        <DataTable
+          rows={forms}
+          empty="This account has never built a form."
+          columns={[
+            { key: "title", header: "Title", render: (f) => <span className="font-medium">{str(f, "title")}</span> },
+            {
+              key: "status",
+              header: "Status",
+              width: "7.5rem",
+              render: (f) => <Badge className="bg-muted text-muted-foreground">{str(f, "status")}</Badge>,
+            },
+            { key: "blocks", header: "Questions", width: "7rem", numeric: true, render: (f) => num(f, "blocks") },
+            { key: "started", header: "Started", width: "6rem", numeric: true, render: (f) => num(f, "started") },
+            { key: "completed", header: "Completed", width: "7rem", numeric: true, render: (f) => num(f, "completed") },
+            {
+              key: "rate",
+              header: "Completion",
+              width: "7rem",
+              numeric: true,
+              render: (f) =>
+                num(f, "started") > 0 ? (
+                  `${Math.round((num(f, "completed") / num(f, "started")) * 100)}%`
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                ),
+            },
+            {
+              key: "updated",
+              header: "Updated",
+              width: "7rem",
+              muted: true,
+              render: (f) => relativeDay(num(f, "updated_at")),
+            },
+          ]}
+        />
       </ChartCard>
 
-      <div className="grid items-start gap-3 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <ChartCard title="People">
           <ul className="space-y-2">
             {members.map((m, i) => (
@@ -287,7 +281,7 @@ export function AccountDetail({ orgId }: { orgId: string }) {
           </ul>
         </ChartCard>
 
-        <ChartCard title="Recent activity" subtitle="From this account's own audit log.">
+        <ChartCard title="Recent activity" aside="from this account's audit log">
           {audit.length === 0 ? (
             <p className="text-muted-foreground text-sm">Nothing recorded.</p>
           ) : (

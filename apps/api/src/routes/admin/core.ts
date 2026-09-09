@@ -11,6 +11,7 @@ import {
   OpsRows,
   PLAN_OF_ORG,
   RANGES,
+  RangeQuery,
   STAGE_OF_ORG,
   dayKeys,
   latestOf,
@@ -62,7 +63,7 @@ const OverviewResponse = z.object({
 
 coreRouter.get(
   "/admin/overview",
-  validator("query", z.object({ range: z.enum(["7d", "30d", "90d", "365d"]).default("30d") })),
+  validator("query", RangeQuery),
   describeRoute({
     tags: ["admin"],
     summary: "Platform-wide growth, funnel, retention and revenue",

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { relativeDay, money, usd, compact } from "@/components/admin/format";
+import { deltaLabel, relativeDay, money, usd, compact } from "@/components/admin/format";
 
 const DAY = 86_400_000;
 
@@ -48,5 +48,33 @@ describe("money formatting", () => {
   it("compacts large counts", () => {
     expect(compact(61_306)).toBe("61.3K");
     expect(compact(42)).toBe("42");
+  });
+});
+
+/**
+ * The tile used to read "new vs previous" on a zero baseline — two half-written
+ * comparisons run together, naming neither the thing that is new nor the period
+ * being compared against. These are the four cases it has to get right.
+ */
+describe("deltaLabel", () => {
+  it("says nothing when there is no baseline to compare against", () => {
+    expect(deltaLabel(26, undefined, "prev 30 days")).toBeNull();
+  });
+
+  it("says nothing when the number has not moved", () => {
+    expect(deltaLabel(12, 12, "prev 30 days")).toBeNull();
+  });
+
+  it("spells out the move rather than a percentage of zero", () => {
+    expect(deltaLabel(3, 0, "prev 30 days")).toEqual({ change: "+3", against: "none before" });
+  });
+
+  it("formats a zero-baseline move in the tile's own units", () => {
+    expect(deltaLabel(10_900, 0, "prev 30 days", money)).toEqual({ change: "+$109", against: "none before" });
+  });
+
+  it("names the window it is comparing against", () => {
+    expect(deltaLabel(120, 100, "prev 30 days")).toEqual({ change: "+20%", against: "vs prev 30 days" });
+    expect(deltaLabel(80, 100, "yesterday")).toEqual({ change: "-20%", against: "vs yesterday" });
   });
 });

@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import { useGetApiAdminOverview } from "@/lib/api/admin/admin";
-import { ChartCard, Donut, Legend, SERIES } from "@/components/charts/chart-kit";
+import { ChartCard, Legend, SERIES } from "@/components/charts/chart-kit";
+import { PieChart } from "@/components/charts/pie-chart";
 import { TrendChart } from "@/components/charts/trend-chart";
 import { FunnelBars, type FunnelStep } from "@/components/charts/funnel-bars";
-import { CohortGrid, type Cohort } from "@/components/charts/cohort-grid";
+import { CohortGrid, NOISE_FLOOR, type Cohort } from "@/components/charts/cohort-grid";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiTile } from "./kpi-tile";
 import { ActionQueue } from "./action-queue";
-import { RangePicker, useRange } from "./range-picker";
+import { COMPARED_TO, RANGE_DAYS, RangePicker, useRange } from "./range-picker";
 import { apiData } from "@/lib/api/payload";
 import { money, usd, relativeDay } from "./format";
 
@@ -24,8 +25,6 @@ interface Overview {
   cohorts: Cohort[];
   formStatsAsOf: number | null;
 }
-
-const RANGE_DAYS: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90, "365d": 365 };
 
 /** Which cohort each funnel step drops you into on the accounts page. */
 const FUNNEL_COHORT: Record<string, string | null> = {
@@ -87,57 +86,52 @@ export function OverviewClient() {
   const kpi = (key: string) => o.kpis?.[key] ?? { value: 0, previous: 0 };
   const planTotal = (o.planMix ?? []).reduce((n, p) => n + p.orgs, 0);
   const growth = GROWTH_VIEWS[view];
+  const comparedTo = COMPARED_TO[range];
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-h1">Overview</h1>
-          <p className="text-muted-foreground text-caption mt-0.5">
-            Every organization, every form, every response — across the whole platform.
-          </p>
-        </div>
+        <h1 className="text-h1">Overview</h1>
         <RangePicker />
       </div>
 
       {/* Where things stand. Deltas compare to the same length of time before. */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KpiTile label="Signups" {...kpi("signups")} series={o.series?.signups} />
-        <KpiTile label="New accounts" {...kpi("orgs_created")} series={o.series?.orgs_created} />
-        <KpiTile label="Forms created" {...kpi("forms_created")} series={o.series?.forms_created} />
+        <KpiTile label="Signups" {...kpi("signups")} series={o.series?.signups} comparedTo={comparedTo} />
+        <KpiTile label="New accounts" {...kpi("orgs_created")} series={o.series?.orgs_created} comparedTo={comparedTo} />
+        <KpiTile
+          label="Forms created"
+          {...kpi("forms_created")}
+          series={o.series?.forms_created}
+          comparedTo={comparedTo}
+        />
         <KpiTile
           label="Responses collected"
           {...kpi("responses_completed")}
           series={o.series?.responses_completed}
+          comparedTo={comparedTo}
         />
-        <KpiTile
-          label="MRR"
-          {...kpi("mrr_cents")}
-          series={o.mrrSeries}
-          format={money}
-          hint="vs a period ago"
-        />
+        <KpiTile label="MRR" {...kpi("mrr_cents")} series={o.mrrSeries} format={money} comparedTo={comparedTo} />
         <KpiTile
           label="AI spend"
           {...kpi("ai_cost_micro")}
           series={o.series?.ai_cost_micro}
           format={usd}
+          comparedTo={comparedTo}
           // The one tile where climbing is bad.
           lowerIsBetter
         />
       </div>
 
       {/*
-        The funnel is tall and the plan mix is short, so the right-hand column
-        stacks two cards rather than letting one stretch to the funnel's height
-        with nothing in the bottom half. It also puts the two commercial charts
-        — who is on what, and what that is worth — next to each other.
+        Two rows of two, rather than one tall card beside a stack of short ones.
+
+        The funnel takes the wider column in both because it is the chart that
+        produces work — everything else describes, this one accuses. The cards
+        beside it are no longer pinned to the top: `ChartCard` fills its grid
+        cell now, so a row bottoms out on one line instead of three.
       */}
-      <div className="grid items-start gap-3 lg:grid-cols-5">
-        {/*
-          The funnel gets the wider column because it is the chart that
-          produces work. Everything else describes; this one accuses.
-        */}
+      <div className="grid gap-3 lg:grid-cols-5">
         <ChartCard
           className="lg:col-span-3"
           title="From signup to paying"
@@ -158,36 +152,28 @@ export function OverviewClient() {
           />
         </ChartCard>
 
-        <div className="grid gap-3 lg:col-span-2">
-          <ChartCard title="Who is on what" subtitle="Every organization, by the plan it is on today.">
-            <Donut
-              items={(o.planMix ?? []).map((p) => ({ label: PLAN_LABEL[p.plan] ?? p.plan, value: p.orgs }))}
-              total={planTotal}
-              centerValue={planTotal.toLocaleString()}
-              centerLabel="accounts"
-            />
-          </ChartCard>
-
-          <ChartCard
-            title="Recurring revenue"
-            subtitle="Monthly equivalent — a yearly plan counts as a twelfth per month."
-            aside={<Legend items={[{ label: "MRR", color: SERIES[0]! }]} />}
-          >
-            <TrendChart
-              days={days}
-              series={[{ key: "mrr", label: "MRR" }]}
-              // Cents to dollars: an axis in cents reads as a revenue figure a
-              // hundred times larger than it is.
-              data={{ mrr: (o.mrrSeries ?? []).map((c) => Math.round(c / 100)) }}
-              height={180}
-            />
-          </ChartCard>
-        </div>
+        {/*
+          A pie rather than the donut it was: the split *is* the question here,
+          and the total it used to hold in its middle is a smaller fact that now
+          rides in the corner. Naming each wedge on itself also retired the
+          "N paying accounts, M trialing" line that used to sit underneath.
+        */}
+        <ChartCard
+          className="lg:col-span-2"
+          title="Who is on what"
+          aside={`${planTotal.toLocaleString()} accounts`}
+        >
+          <PieChart
+            items={(o.planMix ?? []).map((p) => ({ label: PLAN_LABEL[p.plan] ?? p.plan, value: p.orgs }))}
+            total={planTotal}
+            height={240}
+            emptyLabel="No accounts yet."
+          />
+        </ChartCard>
       </div>
 
       <ChartCard
         title="Growth"
-        subtitle="Daily, with a seven-day average over the noise."
         aside={
           <div className="flex items-center gap-3">
             <Legend items={growth.series.map((s, i) => ({ label: s.label, color: SERIES[i]! }))} />
@@ -209,14 +195,32 @@ export function OverviewClient() {
         />
       </ChartCard>
 
-      {/* Full width: the triangle grows a column per week, and a half-width card
-          would start scrolling it sideways within three months. */}
-      <ChartCard
-        title="Do they come back?"
-        subtitle="Of the accounts that signed up in a week, the share still collecting or building later."
-      >
-        <CohortGrid cohorts={o.cohorts ?? []} />
-      </ChartCard>
+      <div className="grid gap-3 lg:grid-cols-5">
+        {/* The triangle grows a column per week, so it takes the wider half. */}
+        <ChartCard
+          className="lg:col-span-3"
+          title="Do they come back?"
+          hint={`Each row is the accounts that signed up in that week; each cell is the share of them still collecting or building that many weeks later. Faded rows have fewer than ${NOISE_FLOOR} accounts — their percentages move too much to read as a trend.`}
+        >
+          <CohortGrid cohorts={o.cohorts ?? []} />
+        </ChartCard>
+
+        <ChartCard
+          className="lg:col-span-2"
+          title="Recurring revenue"
+          hint="Monthly equivalent — a yearly plan counts as a twelfth per month, and manually comped accounts count as nothing."
+          aside={<Legend items={[{ label: "MRR", color: SERIES[0]! }]} />}
+        >
+          <TrendChart
+            days={days}
+            series={[{ key: "mrr", label: "MRR" }]}
+            // Cents to dollars: an axis in cents reads as a revenue figure a
+            // hundred times larger than it is.
+            data={{ mrr: (o.mrrSeries ?? []).map((c) => Math.round(c / 100)) }}
+            height={190}
+          />
+        </ChartCard>
+      </div>
 
       <div>
         <div className="mb-3 flex items-baseline justify-between gap-3">

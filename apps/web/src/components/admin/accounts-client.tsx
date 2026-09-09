@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { apiData } from "@/lib/api/payload";
@@ -145,14 +146,15 @@ export function AccountsClient() {
       {tab !== "accounts" ? null : (
       <>
       {/*
-        Two rows, each with one job.
+        One toolbar: search, the cohort chips, and a sort control.
 
-        These were one wrapping row of fourteen identical ghost buttons —
-        eight filters and six sorts — which wrapped into two lines with the
-        sorts stranded on the right of the second. Two kinds of control that
-        look the same and land wherever the wrap puts them cannot be told
-        apart, so the filters get a row and the sort gets a labelled group
-        beside the search.
+        This was fourteen identical ghost buttons across two rows — eight
+        filters, six sorts — and two kinds of control that look the same and
+        reflow independently cannot be told apart. The filters stay as chips
+        because they are a set you scan, and the sort becomes a select: it is a
+        single choice from a list, it never wraps, and it is the same width
+        whichever option is picked, so the row stops rearranging itself as you
+        use it.
       */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <form
@@ -176,33 +178,31 @@ export function AccountsClient() {
           />
         </form>
 
-        <div className="ml-auto flex flex-wrap items-center gap-1">
-          <span className="text-muted-foreground text-caption mr-1">Sort</span>
-          {SORTS.map((s) => (
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
+          {COHORTS.map((c) => (
             <Button
-              key={s.value}
+              key={c.value || "all"}
               size="sm"
-              variant={sort === s.value ? "secondary" : "ghost"}
-              onClick={() => setParam({ sort: s.value })}
+              variant={cohort === c.value ? "secondary" : "ghost"}
+              onClick={() => setParam({ cohort: c.value })}
             >
-              {s.label}
+              {c.label}
             </Button>
           ))}
         </div>
-      </div>
 
-      <div className="flex flex-wrap items-center gap-1">
-        <span className="text-muted-foreground text-caption mr-1">Show</span>
-        {COHORTS.map((c) => (
-          <Button
-            key={c.value || "all"}
-            size="sm"
-            variant={cohort === c.value ? "secondary" : "ghost"}
-            onClick={() => setParam({ cohort: c.value })}
-          >
-            {c.label}
-          </Button>
-        ))}
+        <Select value={sort} onValueChange={(v) => setParam({ sort: v })}>
+          <SelectTrigger size="sm" aria-label="Sort accounts" className="ml-auto w-44 shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SORTS.map((s) => (
+              <SelectItem key={s.value} value={s.value}>
+                {s.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {isPending ? (

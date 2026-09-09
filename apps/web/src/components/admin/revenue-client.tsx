@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useGetApiAdminRevenue } from "@/lib/api/admin/admin";
-import { ChartCard, Donut, Legend, SERIES } from "@/components/charts/chart-kit";
+import { ChartCard, Legend, SERIES } from "@/components/charts/chart-kit";
+import { PieChart } from "@/components/charts/pie-chart";
+import { RadialGauge } from "@/components/charts/radial-gauge";
 import { TrendChart } from "@/components/charts/trend-chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -81,15 +83,16 @@ export function RevenueClient() {
   const planTotal = (r.mrrByPlan ?? []).reduce((n, p) => n + p.orgs, 0);
   const funnel = [...(r.upgradeFunnel ?? [])];
 
+  // Two rates the tables underneath exist to explain, pulled out as gauges.
+  const paywallOrgs = funnel.reduce((n, f) => n + f.orgs, 0);
+  const paywallPaid = funnel.reduce((n, f) => n + f.converted, 0);
+  const payments = r.recentPayments ?? [];
+  const paymentsOk = payments.filter((row) => str(row, "status") === "succeeded").length;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-h1">Revenue</h1>
-          <p className="text-muted-foreground text-caption mt-0.5">
-            What the business earns, what is at risk, and which paywall converts.
-          </p>
-        </div>
+        <h1 className="text-h1">Revenue</h1>
         <RangePicker />
       </div>
 
@@ -100,7 +103,7 @@ export function RevenueClient() {
           previous={r.mrrSeries?.[0] ?? 0}
           series={r.mrrSeries}
           format={money}
-          hint="vs period start"
+          comparedTo="period start"
         />
         <KpiTile label="ARR" value={t.arrCents ?? 0} previous={t.arrCents ?? 0} format={money} hint="MRR × 12" />
         <KpiTile
@@ -108,6 +111,7 @@ export function RevenueClient() {
           value={t.payingOrgs ?? 0}
           previous={r.payingSeries?.[0] ?? 0}
           series={r.payingSeries}
+          comparedTo="period start"
         />
         <KpiTile
           label="Revenue per account"
@@ -134,11 +138,11 @@ export function RevenueClient() {
         />
       </div>
 
-      <div className="grid items-start gap-3 lg:grid-cols-3">
+      <div className="grid gap-3 lg:grid-cols-3">
         <ChartCard
           className="lg:col-span-2"
           title="Recurring revenue"
-          subtitle="Monthly equivalent — a yearly plan counts as a twelfth per month."
+          hint="Monthly equivalent — a yearly plan counts as a twelfth per month, and manually comped accounts count as nothing."
           aside={<Legend items={[{ label: "MRR", color: SERIES[0]! }]} />}
         >
           <TrendChart
@@ -148,26 +152,28 @@ export function RevenueClient() {
           />
         </ChartCard>
 
-        <ChartCard title="Revenue by plan" subtitle="Where the money actually comes from.">
-          <Donut
+        {/* The split is the question; the total is already the first KPI tile,
+            so it moves to the corner and the footnote it used to carry goes
+            with it. */}
+        <ChartCard
+          title="Revenue by plan"
+          aside={`${planTotal.toLocaleString()} paying${t.trialing ? ` · ${t.trialing} trialing` : ""}`}
+        >
+          <PieChart
             items={(r.mrrByPlan ?? []).map((p) => ({
               label: p.plan,
               value: p.mrrCents,
               display: money(p.mrrCents),
             }))}
             total={(r.mrrByPlan ?? []).reduce((n, p) => n + p.mrrCents, 0)}
-            centerValue={money(t.mrrCents ?? 0)}
-            centerLabel="per month"
+            height={200}
+            emptyLabel="Nothing recurring yet."
           />
-          <p className="text-muted-foreground text-micro mt-3">
-            {planTotal.toLocaleString()} paying {planTotal === 1 ? "account" : "accounts"}
-            {t.trialing ? `, ${t.trialing} still trialing` : ""}.
-          </p>
         </ChartCard>
       </div>
 
-      <div className="grid items-start gap-3 lg:grid-cols-3">
-        <ChartCard title="Subscription states" subtitle="With the revenue standing behind each." className="self-start">
+      <div className="grid gap-3 lg:grid-cols-3">
+        <ChartCard title="Subscription states" subtitle="With the revenue standing behind each.">
           <ul className="space-y-2">
             {(r.statusBoard ?? []).map((s) => (
               <li key={s.status} className="flex items-baseline justify-between gap-3 text-sm">
@@ -189,7 +195,6 @@ export function RevenueClient() {
         <ChartCard
           className="lg:col-span-2"
           title="Payments"
-          subtitle="Collected against failed, day by day."
           aside={
             <Legend
               items={[
@@ -209,6 +214,10 @@ export function RevenueClient() {
               succeeded: (r.paymentsSeries ?? []).map((d) => Math.round(d.succeeded / 100)),
               failed: (r.paymentsSeries ?? []).map((d) => Math.round(d.failed / 100)),
             }}
+            // Charges are discrete events on a day, not a quantity flowing
+            // between days: an area here draws revenue on the afternoons
+            // between two payments.
+            shape="bar"
             height={200}
           />
         </ChartCard>
@@ -225,89 +234,111 @@ export function RevenueClient() {
       <ChartCard
         title="Which wall they hit"
         subtitle="Accounts that reached for a locked feature, and how many of them went on to buy."
+        hint="A feature several accounts reach for and none buy is priced wrong or does not deliver once bought. One nobody reaches for at all is a tier boundary in the wrong place."
       >
-        <DataTable
-          rows={funnel}
-          empty="Nobody has hit a paywall yet."
-          columns={[
-            { key: "feature", header: "Feature", render: (f) => <span className="truncate">{feature(f.feature)}</span> },
-            {
-              key: "surface",
-              header: "Where",
-              render: (f) => f.topSurface ?? <span className="text-muted-foreground">—</span>,
-            },
-            { key: "orgs", header: "Accounts", numeric: true, render: (f) => f.orgs },
-            { key: "denials", header: "Attempts", numeric: true, render: (f) => f.denials },
-            { key: "converted", header: "Then paid", numeric: true, render: (f) => f.converted },
-            {
-              key: "conversion",
-              header: "Conversion",
-              numeric: true,
-              render: (f) => (
-                <span
-                  className={
-                    f.orgs >= 3 && f.conversion === 0
-                      ? "text-[var(--warning-soft-foreground)]"
-                      : f.conversion >= 20
-                        ? "text-[var(--success)]"
-                        : undefined
-                  }
-                >
-                  {f.conversion}%
-                </span>
-              ),
-            },
-          ]}
-        />
-        <p className="text-muted-foreground text-micro mt-3">
-          A feature several accounts reach for and none buy is priced wrong or does not deliver once bought. One
-          nobody reaches for at all is a tier boundary in the wrong place.
-        </p>
+        {/*
+          The gauge sits beside the table, not in the card's header slot: the
+          header is a single row, so a 150px gauge in it pushed the table that
+          far down and left a band of empty card under the subtitle.
+        */}
+        <div className="flex flex-wrap-reverse items-start gap-6">
+          <div className="min-w-72 flex-1">
+            <DataTable
+              rows={funnel}
+              empty="Nobody has hit a paywall yet."
+              columns={[
+                { key: "feature", header: "Feature", render: (f) => feature(f.feature) },
+                {
+                  key: "surface",
+                  header: "Where",
+                  width: "12rem",
+                  render: (f) => f.topSurface ?? <span className="text-muted-foreground">—</span>,
+                },
+                { key: "orgs", header: "Accounts", width: "7rem", numeric: true, render: (f) => f.orgs },
+                { key: "denials", header: "Attempts", width: "7rem", numeric: true, render: (f) => f.denials },
+                { key: "converted", header: "Then paid", width: "7rem", numeric: true, render: (f) => f.converted },
+                {
+                  key: "conversion",
+                  header: "Conversion",
+                  width: "8rem",
+                  numeric: true,
+                  render: (f) => (
+                    <span
+                      className={
+                        f.orgs >= 3 && f.conversion === 0
+                          ? "text-[var(--warning-soft-foreground)]"
+                          : f.conversion >= 20
+                            ? "text-[var(--success)]"
+                            : undefined
+                      }
+                    >
+                      {f.conversion}%
+                    </span>
+                  ),
+                },
+              ]}
+            />
+          </div>
+          {paywallOrgs > 0 && (
+            <RadialGauge
+              value={(paywallPaid / paywallOrgs) * 100}
+              label="went on to pay"
+              caption={`${paywallPaid} of ${paywallOrgs}`}
+              size={116}
+            />
+          )}
+        </div>
       </ChartCard>
 
-      <div className="grid items-start gap-3 lg:grid-cols-2">
-        <ChartCard title="Leaving, or already gone" subtitle="Cancellations, dunning and expiries — newest first.">
+      <div className="grid gap-3 lg:grid-cols-2">
+        <ChartCard title="Leaving, or already gone" subtitle="Newest first.">
           <DataTable
             rows={r.cancellations ?? []}
             hrefFor={(row) => `/admin/accounts/${str(row, "org_id")}`}
-            empty="Nobody is cancelling. "
+            empty="Nobody is cancelling."
             columns={[
               { key: "name", header: "Account", render: (row) => str(row, "name") },
-              { key: "plan", header: "Plan", render: (row) => str(row, "plan_id") },
+              { key: "plan", header: "Plan", width: "6rem", render: (row) => str(row, "plan_id") },
               {
                 key: "status",
                 header: "Status",
-                render: (row) => (
-                  <Badge className={STATUS_TONE[str(row, "status")] ?? "bg-muted text-muted-foreground"}>
-                    {num(row, "cancel_at_period_end") === 1 ? "cancelling" : str(row, "status")}
-                  </Badge>
-                ),
+                width: "8rem",
+                render: (row) => {
+                  // The tone follows the word on the badge, not the raw column.
+                  // An account with `cancel_at_period_end` is still `active` in
+                  // `subscriptions.status`, so keying the colour off the column
+                  // printed "cancelling" in the green reserved for healthy
+                  // subscriptions — on the one table whose entire job is to
+                  // show the unhealthy ones.
+                  const label = num(row, "cancel_at_period_end") === 1 ? "cancelling" : str(row, "status");
+                  return (
+                    <Badge className={STATUS_TONE[label] ?? "bg-muted text-muted-foreground"}>{label}</Badge>
+                  );
+                },
               },
-              { key: "mrr", header: "Was worth", numeric: true, render: (row) => money(num(row, "mrr_cents")) },
-              { key: "when", header: "Changed", muted: true, render: (row) => relativeDay(num(row, "updated_at")) },
+              { key: "mrr", header: "Was worth", width: "7rem", numeric: true, render: (row) => money(num(row, "mrr_cents")) },
+              { key: "when", header: "Changed", width: "7rem", muted: true, render: (row) => relativeDay(num(row, "updated_at")) },
             ]}
           />
         </ChartCard>
 
-        <ChartCard
-          title="Comped accounts"
-          subtitle="On a paid plan through a manual grant — these pay nothing."
-        >
+        <ChartCard title="Comped accounts" hint="On a paid plan through a manual grant — these pay nothing, and are excluded from every revenue figure on this page.">
           <DataTable
             rows={r.comped ?? []}
             hrefFor={(row) => `/admin/accounts/${str(row, "org_id")}`}
             empty="No manual grants outstanding."
             columns={[
               { key: "name", header: "Account", render: (row) => str(row, "name") },
-              { key: "plan", header: "Plan", render: (row) => str(row, "plan_id") },
-              { key: "forms", header: "Forms", numeric: true, render: (row) => num(row, "forms") },
-              { key: "since", header: "Since", muted: true, render: (row) => relativeDay(num(row, "created_at")) },
+              { key: "plan", header: "Plan", width: "6rem", render: (row) => str(row, "plan_id") },
+              { key: "forms", header: "Forms", width: "6rem", numeric: true, render: (row) => num(row, "forms") },
+              { key: "since", header: "Since", width: "7rem", muted: true, render: (row) => relativeDay(num(row, "created_at")) },
             ]}
           />
         </ChartCard>
       </div>
 
-      <ChartCard title="Recent payments" subtitle="Every charge, newest first.">
+      <div className="grid gap-3 lg:grid-cols-4">
+      <ChartCard className="lg:col-span-3" title="Recent payments" subtitle="Newest first.">
         <DataTable
           rows={r.recentPayments ?? []}
           empty="No payments recorded."
@@ -324,6 +355,7 @@ export function RevenueClient() {
             {
               key: "status",
               header: "Status",
+              width: "8rem",
               render: (row) => (
                 <Badge
                   className={
@@ -336,11 +368,12 @@ export function RevenueClient() {
                 </Badge>
               ),
             },
-            { key: "amount", header: "Amount", numeric: true, render: (row) => money(num(row, "amount_cents")) },
-            { key: "at", header: "When", muted: true, render: (row) => relativeDay(num(row, "at")) },
+            { key: "amount", header: "Amount", width: "7rem", numeric: true, render: (row) => money(num(row, "amount_cents")) },
+            { key: "at", header: "When", width: "7rem", muted: true, render: (row) => relativeDay(num(row, "at")) },
             {
               key: "invoice",
               header: "Invoice",
+              width: "6rem",
               render: (row) =>
                 str(row, "invoice_url") ? (
                   <a
@@ -358,6 +391,22 @@ export function RevenueClient() {
           ]}
         />
       </ChartCard>
+
+        {/* The rate the list is evidence for, so the card next to it is not a
+            metre of empty surface. */}
+        <ChartCard title="Charges that went through" dense>
+          {payments.length > 0 ? (
+            <RadialGauge
+              value={(paymentsOk / payments.length) * 100}
+              label="of recent charges succeeded"
+              caption={`${paymentsOk} of ${payments.length}`}
+              tone={paymentsOk === payments.length ? "success" : "warning"}
+            />
+          ) : (
+            <p className="text-muted-foreground text-sm">No payments recorded.</p>
+          )}
+        </ChartCard>
+      </div>
     </div>
   );
 }

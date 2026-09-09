@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight, TrendingDown } from "lucide-react";
+import { Empty } from "./chart-kit";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,7 +34,7 @@ export interface FunnelStep {
 export function FunnelBars({ steps, hrefFor }: { steps: FunnelStep[]; hrefFor?: (step: FunnelStep) => string | null }) {
   const top = steps[0]?.count ?? 0;
   if (top === 0) {
-    return <p className="text-muted-foreground text-sm">No accounts signed up in this period.</p>;
+    return <Empty>No accounts signed up in this period.</Empty>;
   }
 
   // The steepest single fall, named once rather than colouring every row by how

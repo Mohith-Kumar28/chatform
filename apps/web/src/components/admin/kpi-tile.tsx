@@ -2,6 +2,7 @@
 
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { Sparkline } from "@/components/charts/sparkline";
+import { deltaLabel } from "./format";
 import { cn } from "@/lib/utils";
 
 /**
@@ -18,12 +19,17 @@ import { cn } from "@/lib/utils";
  * is worse than no colour at all.
  *
  * **A move from a zero baseline is not a percentage.** "+∞%" and "+100%" are
- * both nonsense when last period was zero; it says "new" instead.
+ * both nonsense when last period was zero. This used to print "new" and then,
+ * because the trailing text was a separate span, follow it with "vs previous" —
+ * so the tile read "new vs previous", which names neither what is new nor what
+ * the previous period was. It now spells out the move itself: "+3 · none
+ * before".
  */
 export function KpiTile({
   label,
   value,
   previous,
+  comparedTo = "previous period",
   format = (n: number) => n.toLocaleString(),
   series,
   lowerIsBetter = false,
@@ -40,16 +46,24 @@ export function KpiTile({
    * a different height and a different shape depending which page you were on.
    */
   previous?: number;
+  /**
+   * What `previous` actually is, named — "prev 30 days", "yesterday".
+   *
+   * The comparison window is the page's date range, which the tile cannot see;
+   * saying "vs previous" instead made the reader guess whether it meant the day
+   * before, the month before, or all time.
+   */
+  comparedTo?: string;
   format?: (n: number) => string;
   series?: number[];
   lowerIsBetter?: boolean;
   hint?: string;
 }) {
-  const comparable = previous !== undefined;
   const delta = value - (previous ?? value);
-  const pct = comparable && previous! > 0 ? Math.round((delta / previous!) * 1000) / 10 : null;
   const flat = delta === 0;
   const good = lowerIsBetter ? delta < 0 : delta > 0;
+  // The wording lives in `format.ts` so it can be tested without a DOM.
+  const moved = deltaLabel(value, previous, comparedTo, format);
 
   const Icon = flat ? Minus : delta > 0 ? ArrowUpRight : ArrowDownRight;
 
@@ -92,16 +106,16 @@ export function KpiTile({
           flat ? "text-muted-foreground" : good ? "text-[var(--success)]" : "text-[var(--warning-soft-foreground)]",
         )}
       >
-        {!comparable || flat ? (
+        {moved === null ? (
           <span className="truncate" title={hint}>
-            {hint ?? (comparable ? "no change" : "")}
+            {hint ?? (previous !== undefined ? "no change" : "")}
           </span>
         ) : (
           <>
             <Icon className="size-3 shrink-0" strokeWidth={2.25} aria-hidden />
-            <span className="tabular shrink-0">{pct === null ? "new" : `${pct > 0 ? "+" : ""}${pct}%`}</span>
-            <span className="text-muted-foreground truncate" title={hint}>
-              {hint ?? "vs previous"}
+            <span className="tabular shrink-0">{moved.change}</span>
+            <span className="text-muted-foreground truncate" title={hint ?? moved.against}>
+              {hint ?? moved.against}
             </span>
           </>
         )}
