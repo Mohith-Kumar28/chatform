@@ -124,6 +124,40 @@
         "limit": 600,
         "period": 10
       }
+    },
+    // The respondent surface. Keyed by address, because `/p` has no key — and
+    // split three ways because the three things a respondent can do cost wildly
+    // different amounts, and one counter would have to be set for the dearest.
+    {
+      "name": "RATE_LIMIT_P",
+      "namespace_id": "1003",
+      // Everything under /p. Two a second sustained is far above a person
+      // answering questions and far below anything worth calling traffic.
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    },
+    {
+      "name": "RATE_LIMIT_P_START",
+      "namespace_id": "1004",
+      // Opening a session writes rows and meters a response. Eight a minute
+      // covers a reload, a start-over, an embed and the hosted page at once;
+      // nothing legitimate needs a ninth.
+      "simple": {
+        "limit": 8,
+        "period": 60
+      }
+    },
+    {
+      "name": "RATE_LIMIT_P_AUTH",
+      "namespace_id": "1005",
+      // Each attempt fetches a JWKS document over the network before it can
+      // fail, so this is the one an attacker would pick.
+      "simple": {
+        "limit": 12,
+        "period": 60
+      }
     }
   ],
   "triggers": {

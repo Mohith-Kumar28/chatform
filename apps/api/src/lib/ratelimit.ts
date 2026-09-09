@@ -28,13 +28,17 @@ async function bucketFor(presented: string): Promise<string> {
   return (await hashApiKey(presented)).slice(0, 24);
 }
 
-function tooMany(c: Parameters<MiddlewareHandler>[0], seconds: number, scope: "burst" | "ip") {
+function tooMany(
+  c: Parameters<MiddlewareHandler>[0],
+  { seconds, scope, policy }: { seconds: number; scope: "burst" | "ip"; policy?: string },
+) {
   c.header("retry-after", String(seconds));
-  c.header("ratelimit-policy", scope === "burst" ? "100;w=10" : "");
-  return c.json(
-    { error: { code: "rate_limited", message: "Too many requests", scope } },
-    429,
-  );
+  // Only when there is one to state. This used to be set unconditionally, with
+  // an empty string for anything that was not the burst limiter — a header
+  // present and blank, which a client parsing it has to treat as a policy of
+  // nothing rather than as no policy at all.
+  if (policy) c.header("ratelimit-policy", policy);
+  return c.json({ error: { code: "rate_limited", message: "Too many requests", scope } }, 429);
 }
 
 export const burstLimit: MiddlewareHandler<{
@@ -58,7 +62,82 @@ export const burstLimit: MiddlewareHandler<{
   if (!binding) return next();
 
   const { success } = await binding.limit({ key: `k:${await bucketFor(presented)}` });
-  if (!success) return tooMany(c, 10, "burst");
+  if (!success) return tooMany(c, { seconds: 10, scope: "burst", policy: "100;w=10" });
+  await next();
+};
+
+/**
+ * The respondent surface has no key to key on, so it is keyed by address.
+ *
+ * Three rules here, and each one is load-bearing rather than defensive:
+ *
+ * 1. **No address, no limit.** Off the Cloudflare edge — Miniflare, the test
+ *    suite, a direct request to `wrangler dev` — there is no `cf-connecting-ip`
+ *    at all. Bucketing those under a constant like "unknown" would put every
+ *    caller in one window, and since `vitest.config.ts` points Miniflare at this
+ *    same `wrangler.jsonc`, the first test to open a ninth session would start
+ *    failing the suite. In production behind Cloudflare the header is always
+ *    there. This is the rule that lets the bindings exist without the tests
+ *    knowing.
+ * 2. **No binding, no limit** — as `burstLimit` already does.
+ * 3. **A throwing limiter is not an outage.** `burstLimit` does not catch, and
+ *    on `/v1` that is arguable. Here it is not: a limiter exception would turn a
+ *    live form into a 500 for a respondent halfway through answering it, which
+ *    is strictly worse than a request that went uncounted.
+ */
+async function limited(
+  c: Parameters<MiddlewareHandler>[0],
+  binding: RateLimit | undefined,
+  keys: string[],
+): Promise<boolean> {
+  if (!binding) return false;
+  const ip = c.req.header("cf-connecting-ip");
+  if (!ip) return false;
+  try {
+    for (const key of keys) {
+      const { success } = await binding.limit({ key });
+      if (!success) return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+/**
+ * Everything under `/p`, counted per address and — inside a session — per
+ * session as well.
+ *
+ * Two counters rather than one because they fail differently. An office, a
+ * school or a phone network behind one address is many respondents who must not
+ * exhaust each other; a single runaway tab is one respondent who must not
+ * outrun the form. Neither counter alone says both.
+ */
+export const publicIpLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
+  const ip = c.req.header("cf-connecting-ip");
+  const sessionId = c.req.path.match(/^\/p\/sessions\/([^/]+)/)?.[1];
+  const keys = [`p:${ip}`, ...(sessionId ? [`ps:${sessionId}`] : [])];
+  if (await limited(c, c.env.RATE_LIMIT_P, keys)) {
+    return tooMany(c, { seconds: 60, scope: "ip", policy: "120;w=60" });
+  }
+  await next();
+};
+
+/** Opening a session: writes rows, meters a response, and can send mail. */
+export const sessionStartLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
+  const ip = c.req.header("cf-connecting-ip");
+  if (await limited(c, c.env.RATE_LIMIT_P_START, [`ps:${ip}`])) {
+    return tooMany(c, { seconds: 60, scope: "ip", policy: "8;w=60" });
+  }
+  await next();
+};
+
+/** Proving an identity: a JWKS fetch happens before the attempt can even fail. */
+export const respondentAuthLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
+  const ip = c.req.header("cf-connecting-ip");
+  if (await limited(c, c.env.RATE_LIMIT_P_AUTH, [`pa:${ip}`])) {
+    return tooMany(c, { seconds: 60, scope: "ip", policy: "12;w=60" });
+  }
   await next();
 };
 

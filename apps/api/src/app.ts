@@ -26,6 +26,7 @@ import { formHistoryRouter } from "./routes/form-history.js";
 import { adminRouter } from "./routes/admin/index.js";
 import { mountOpenApiSpec } from "./lib/openapi.js";
 import { requestId, type RequestIdVars } from "./lib/request-id.js";
+import { publicIpLimit } from "./lib/ratelimit.js";
 import { attachErrorContext } from "./lib/api-error.js";
 
 export function createApp() {
@@ -47,6 +48,20 @@ export function createApp() {
       maxAge: 86400,
     }),
   );
+  /**
+   * After CORS, so a 429 is a response the page can actually read.
+   *
+   * A refusal that the browser blocks on origin grounds reaches the client as a
+   * network error with no status and no `retry-after`, which is the one thing
+   * the chat client cannot tell apart from the connection dropping — it would
+   * retry, which is precisely wrong. `retry-after` is already in the
+   * `exposeHeaders` list above.
+   *
+   * Mounted on `/p` rather than globally: `/v1` has `burstLimit` and a
+   * per-key sustained window of its own, and counting a developer's request in
+   * both places would quietly halve the limit they are paying for.
+   */
+  app.use("/p/*", publicIpLimit);
 
   app.use(
     "/api/*",

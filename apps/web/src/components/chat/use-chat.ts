@@ -891,6 +891,23 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
             setResolving(false);
             return;
           }
+          /*
+           * A limit is a wait, not a breakdown — and it is very often not this
+           * person's fault. The window is keyed by address, so an office, a
+           * campus or a phone network can spend it between them, and the
+           * respondent who meets it has done nothing but open a link. "Too many
+           * requests" over the generic failure screen reads as an accusation
+           * and, worse, tells them to retry immediately, which is the one thing
+           * that cannot help. Say roughly how long instead; `retry-after` is in
+           * the CORS `exposeHeaders` list precisely so this can read it.
+           */
+          if (res.status === 429) {
+            const secs = Number(res.headers.get("retry-after")) || 60;
+            throw new Error(
+              `This form is being opened a lot from your network right now. ` +
+                `Try again in about ${secs < 90 ? "a minute" : `${Math.ceil(secs / 60)} minutes`}.`,
+            );
+          }
           throw new Error(body?.error?.message ?? "Could not start session");
         }
         // Spent. A later reload is an ordinary visit and should resume again.
@@ -1146,8 +1163,20 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     [apiOrigin],
   );
 
-  const authError = (data: Record<string, unknown>): string =>
-    ((data.error as { message?: string } | undefined)?.message) ?? "That didn't work. Please try again.";
+  const authError = (data: Record<string, unknown>): string => {
+    const err = data.error as { code?: string; message?: string } | undefined;
+    /*
+     * "Please try again" is the worst possible instruction to someone who has
+     * been rate limited, and the sign-in window is the tightest one there is —
+     * every attempt fetches a JWKS document before it can even be judged. The
+     * generic fallback below would have them tapping the button in a loop,
+     * spending the window they are waiting on.
+     */
+    if (err?.code === "rate_limited") {
+      return "Too many sign-in attempts from your network. Wait about a minute and try again.";
+    }
+    return err?.message ?? "That didn't work. Please try again.";
+  };
 
   /**
    * The one sign-in failure that is not a failure.

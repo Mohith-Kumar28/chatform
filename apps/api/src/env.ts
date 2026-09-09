@@ -20,6 +20,18 @@ export interface Bindings {
    */
   RATE_LIMIT?: RateLimit;
   RATE_LIMIT_PK?: RateLimit;
+  /**
+   * The respondent surface, keyed by address rather than by key.
+   *
+   * `/p` has no API key to key on — that is the whole point of it — so these
+   * three are the only limiters that surface has. Split by cost rather than by
+   * route: a message turn may call a model, opening a session writes rows and
+   * meters a response, and a sign-in fetches a JWKS document over the network.
+   * One shared counter would have to be set for the most expensive of them.
+   */
+  RATE_LIMIT_P?: RateLimit;
+  RATE_LIMIT_P_START?: RateLimit;
+  RATE_LIMIT_P_AUTH?: RateLimit;
   WORKERS_AI?: Ai;
   /**
    * Cloudflare Email Service, bound directly rather than reached over HTTP.
