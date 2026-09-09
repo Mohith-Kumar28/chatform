@@ -182,7 +182,7 @@ The tone should be casual and a bit human — this is a founder talking to an ea
     {
       question: "Can I stop the same person signing up five times?",
       answer:
-        "Yes. Turn on duplicate prevention and it will only accept one signup per email address, which keeps your count honest and your list clean.",
+        "Yes. Mark the email question \"no duplicate answers\" and a second signup on an address already in the list is refused — that keys on the address itself, so it holds. If you want a guarantee that survives someone using a second address, require sign-in and switch off resubmissions: that keys on the verified person. Switching off resubmissions on its own matches by network, which will also turn away a second genuine signup from the same office or campus.",
     },
   ],
 

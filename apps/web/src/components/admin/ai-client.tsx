@@ -196,7 +196,7 @@ export function AiClient() {
       <ChartCard
         title="Costing more than they pay"
         subtitle="AI spend above revenue. Free accounts appear once they cost more than a few cents."
-        hint="Revenue is monthly; spend is over the selected period. The two line up exactly at 30 days — over 90, an account can look like a loss-maker only because it is being compared against one month of income."
+        hint="Revenue is monthly; spend is over the selected period. The two line up exactly at 30 days — over 90, an account can look like a loss-maker only because it is being compared against one month of income. An account marked comped was granted its plan by hand and pays nothing by design."
       >
         <DataTable
           rows={a.lossMakers ?? []}
@@ -206,8 +206,11 @@ export function AiClient() {
             { key: "name", header: "Account", render: (row) => str(row, "name") },
             {
               key: "plan",
+              // Wide enough for the badge around the longest plan name: the
+              // cell clips, and at 5.5rem "business" lost its last letters to
+              // an ellipsis sitting outside the pill.
               header: "Plan",
-              width: "5.5rem",
+              width: "6.5rem",
               render: (row) => (
                 <Badge
                   className={
@@ -226,8 +229,18 @@ export function AiClient() {
               header: "Pays us",
               width: "6rem",
               numeric: true,
+              /*
+                A paid plan against no revenue reads as a broken billing lookup,
+                and for a comped account it is not one — the plan was granted by
+                hand and never charged for. Saying so is the difference between
+                a pricing bug and a deliberate expense.
+              */
               render: (row) =>
-                num(row, "mrr_cents") > 0 ? money(num(row, "mrr_cents")) : <span className="text-muted-foreground">—</span>,
+                num(row, "mrr_cents") > 0 ? (
+                  money(num(row, "mrr_cents"))
+                ) : (
+                  <span className="text-muted-foreground">{num(row, "comped") > 0 ? "comped" : "—"}</span>
+                ),
             },
           ]}
         />

@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { applySchema, fetchApi, minimalDoc, seedTenant, type Tenant } from "./helpers.js";
 import { hashPassword } from "../src/lib/crypto.js";
+import { sha256Hex } from "@repo/form-schema";
 
 /**
  * The gates on session creation.
@@ -200,17 +201,39 @@ describe("duplicate responses", () => {
       body: JSON.stringify({}),
     });
 
-  it("turns one-per-day away on a repeat, and lets a different address through", async () => {
-    const slug = await publish("dup", { duplicates: { strategy: "ip_daily" } });
+  /** Mark every session opened from an address as finished, as completing the form would. */
+  const finishFrom = (ip: string) =>
+    env.DB.prepare(`UPDATE chat_sessions SET status = 'completed' WHERE ip_hash = ?1`)
+      .bind(sha256Hex(ip))
+      .run();
+
+  it("turns a finished respondent away on a repeat, and lets a different address through", async () => {
+    const slug = await publish("dup", { allowResubmissions: false });
     expect((await withIp(slug, "203.0.113.9")).status).toBe(200);
+    await finishFrom("203.0.113.9");
     expect((await withIp(slug, "203.0.113.9")).status).toBe(409);
     // An IP identifies a network, not a person, so the block must be per-address.
     expect((await withIp(slug, "203.0.113.10")).status).toBe(200);
   });
 
-  it("lets everyone through when the strategy is none", async () => {
-    const slug = await publish("nodup", { duplicates: { strategy: "none" } });
+  /**
+   * Opening the link and leaving is not an answer.
+   *
+   * The rule used to expire after a day, which hid this: an abandoned session
+   * blocked the same person for 24h and then let them back in. With no window
+   * left to expire, a gate that counted opens would lock someone out forever
+   * over a closed tab.
+   */
+  it("does not count a session that was opened and abandoned", async () => {
+    const slug = await publish("dupopen", { allowResubmissions: false });
+    expect((await withIp(slug, "203.0.113.12")).status).toBe(200);
+    expect((await withIp(slug, "203.0.113.12")).status).toBe(200);
+  });
+
+  it("lets everyone through when resubmissions are allowed", async () => {
+    const slug = await publish("nodup", { allowResubmissions: true });
     expect((await withIp(slug, "203.0.113.11")).status).toBe(200);
+    await finishFrom("203.0.113.11");
     expect((await withIp(slug, "203.0.113.11")).status).toBe(200);
   });
 });

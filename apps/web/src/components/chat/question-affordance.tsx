@@ -588,7 +588,7 @@ function PictureOption({
       )}
       <span className="flex items-center gap-1.5 px-3 py-2 text-sm">
         {index < 9 && (
-          <kbd className="hidden size-4 place-items-center rounded bg-[var(--cf-chip-border)]/40 text-[0.625rem] font-medium sm:grid">
+          <kbd className="cf-key-hint size-4 place-items-center rounded bg-[var(--cf-chip-border)]/40 text-[0.625rem] font-medium">
             {index + 1}
           </kbd>
         )}

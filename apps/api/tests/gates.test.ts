@@ -531,7 +531,7 @@ describe("stripForPublish", () => {
     const doc = docWith({
       settings: {
         branding: { hidePoweredBy: true },
-        duplicates: { strategy: "ip_daily" },
+        allowResubmissions: false,
         onComplete: { redirectUrl: "https://example.com/thanks", autoReplyEmail: { enabled: true } },
         meta: { ogTitle: "Custom", noIndex: true },
         agent: { personaPrompt: "Be terse", goal: "Qualify the lead", knowledge: [{ id: "kb_0001", title: "Pricing", body: "$24" }] },

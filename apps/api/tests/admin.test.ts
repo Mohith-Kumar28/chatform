@@ -818,3 +818,68 @@ describe("AI pricing", () => {
     expect(costUsdMicro("google/gemini-3.7-flash", 0, 0)).toBe(0);
   });
 });
+
+/**
+ * The margin table has to separate two things that look identical in the data:
+ * an account whose billing has broken, and one that was handed its plan.
+ */
+describe("the margin table", () => {
+  it("marks an account on a hand-granted plan as comped rather than as paying nothing", async () => {
+    const granted = await seedTenant("granted");
+    const now = Date.now();
+    await DB()
+      .DB.prepare(
+        `INSERT INTO subscriptions (id, organization_id, plan_id, dodo_subscription_id, cycle, status, seats, created_at, updated_at)
+         VALUES ('sub_granted', ?, 'business', 'internal_manual_granted', 'yearly', 'active', 5, ?, ?)`,
+      )
+      .bind(granted.orgId, now, now)
+      .run();
+    await DB()
+      .DB.prepare(
+        `INSERT INTO ai_generations (id, organization_id, kind, provider, model, prompt_tokens, completion_tokens, cost_usd_micro, created_at)
+         VALUES ('gen_granted', ?, 'reply', 'openrouter', 'google/gemini-3.7-flash', 1000, 1000, 100000, ?)`,
+      )
+      .bind(granted.orgId, now)
+      .run();
+
+    const res = await fetchApi("/api/admin/ai", { headers: { cookie: admin.cookie } });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      lossMakers: { org_id: string; plan: string; mrr_cents: number; comped: number }[];
+    };
+    const row = body.lossMakers.find((r) => r.org_id === granted.orgId);
+    // It belongs on the list — a granted plan still costs real money — but the
+    // plan it is on and the nothing it pays are not a contradiction.
+    expect(row).toBeDefined();
+    expect(row!.plan).toBe("business");
+    expect(row!.mrr_cents).toBe(0);
+    expect(row!.comped).toBe(1);
+  });
+
+  it("leaves a paying account's revenue alone", async () => {
+    const paying = await seedTenant("paying");
+    const now = Date.now();
+    await DB()
+      .DB.prepare(
+        `INSERT INTO subscriptions (id, organization_id, plan_id, dodo_subscription_id, cycle, status, seats, created_at, updated_at)
+         VALUES ('sub_paying', ?, 'business', 'dodo_paying', 'monthly', 'active', 1, ?, ?)`,
+      )
+      .bind(paying.orgId, now, now)
+      .run();
+    await DB()
+      .DB.prepare(
+        `INSERT INTO ai_generations (id, organization_id, kind, provider, model, prompt_tokens, completion_tokens, cost_usd_micro, created_at)
+         VALUES ('gen_paying', ?, 'reply', 'openrouter', 'google/gemini-3.7-flash', 1000, 1000, 100000, ?)`,
+      )
+      .bind(paying.orgId, now)
+      .run();
+
+    const res = await fetchApi("/api/admin/ai", { headers: { cookie: admin.cookie } });
+    const body = (await res.json()) as {
+      topSpenders: { org_id: string; mrr_cents: number; comped: number }[];
+    };
+    const row = body.topSpenders.find((r) => r.org_id === paying.orgId);
+    expect(row?.mrr_cents).toBeGreaterThan(0);
+    expect(row?.comped).toBe(0);
+  });
+});

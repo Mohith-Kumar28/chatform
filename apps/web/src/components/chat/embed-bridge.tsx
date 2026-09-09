@@ -34,6 +34,51 @@ export function emitEmbedEvent(message: Omit<ToParent, "source" | "v">): void {
   post?.(message);
 }
 
+/**
+ * Ask the host page to close the panel.
+ *
+ * `embed.js` has always handled an inbound `close`, and this end has always
+ * been able to send one — what was missing was anything in the form that
+ * *would*. So a framed form had no exit of its own: the launcher was the only
+ * way out, and in side-tab and on a phone the launcher is underneath the sheet
+ * it would be closing.
+ *
+ * Returns whether the message went anywhere, because the caller needs to know
+ * whether to render a control at all. Untrusted parent, no frame, standalone
+ * page — all three are `false`, and all three mean "do not offer a close".
+ */
+export function requestEmbedClose(): boolean {
+  if (!post) return false;
+  post({ type: "close" });
+  return true;
+}
+
+/**
+ * Whether this form is framed by a host page that accepted our handshake.
+ *
+ * Subscribable, because the answer is not known at first render — the handshake
+ * runs in an effect — and a close button that appears a tick late is correct
+ * where one rendered eagerly and wired to nothing is a lie.
+ */
+const bridgeListeners = new Set<() => void>();
+
+export function embedBridgeReady(): boolean {
+  return post !== null;
+}
+
+export function subscribeEmbedBridge(onChange: () => void): () => void {
+  bridgeListeners.add(onChange);
+  return () => {
+    bridgeListeners.delete(onChange);
+  };
+}
+
+function setPost(next: typeof post): void {
+  if (post === next) return;
+  post = next;
+  for (const listener of bridgeListeners) listener();
+}
+
 export function EmbedBridge({
   parentOrigin,
   allowedOrigins,
@@ -74,7 +119,7 @@ export function EmbedBridge({
     const send = (message: Omit<ToParent, "source" | "v">) => {
       window.parent.postMessage({ source: "chatform", v: 1, ...message }, parentOrigin);
     };
-    post = send;
+    setPost(send);
     send({ type: "ready" });
 
     /**
@@ -109,7 +154,7 @@ export function EmbedBridge({
       observer.disconnect();
       cancelAnimationFrame(frame);
       window.removeEventListener("message", onMessage);
-      post = null;
+      setPost(null);
     };
   }, [parentOrigin, allowedOrigins]);
 

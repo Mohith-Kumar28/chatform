@@ -77,9 +77,9 @@ export interface OpenSessionInput {
    *
    * It relaxes exactly two gates, and only those two:
    *
-   * `duplicates.strategy: "ip_daily"` — which would answer "you have already
-   * answered this form today" to the very person we just invited back, since
-   * they demonstrably have. And `maxSubmissions`, which counts *completed*
+   * `allowResubmissions: false` — which would answer "you have already answered
+   * this form" to the very person we just invited back, since they demonstrably
+   * have. And `maxSubmissions`, which counts *completed*
    * responses: a form at its cap should stop taking new respondents, not
    * refuse the ones already half-way through.
    *
@@ -259,18 +259,34 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
   const ipHash = input.respondentIpHash ?? (input.ip ? sha256Hex(input.ip) : "");
 
   /**
-   * "One response per person, per day."
+   * "One response per person."
    *
-   * Scoped to a day rather than forever because an IP identifies a network, not
-   * a person: an office or a campus shares one, and a permanent block would lock
-   * out everyone behind the first respondent.
+   * This used to expire after 24 hours, on the reasoning that an IP identifies
+   * a network rather than a person and a permanent block locks out everyone
+   * behind a shared office or campus address. The window is gone because the
+   * setting no longer says "per day" — an author who switched resubmissions off
+   * meant off, and a block that quietly lapses overnight is a setting that does
+   * not do what it is called.
+   *
+   * The shared-address cost is real and unchanged; it is now a reason to reach
+   * for `requireAuth.onePerIdentity`, which keys on a verified person, rather
+   * than a reason to weaken this.
+   *
+   * What does count as a prior response also changed: a *finished* session,
+   * not merely one that was opened. The window used to hide this — abandoning
+   * the form locked you out for a day and then let you back in. With no window
+   * to expire, opening the link and closing the tab would have locked someone
+   * out forever without them answering a single question. `disqualified`
+   * counts alongside `completed`, or screening out would be undone by
+   * reloading and answering differently.
    */
-  if (settings.duplicates.strategy === "ip_daily" && ipHash && !input.resumeSubmissionId) {
-    const since = Date.now() - 24 * 60 * 60 * 1000;
+  if (!settings.allowResubmissions && ipHash && !input.resumeSubmissionId) {
     const prior = await env.DB.prepare(
-      `SELECT 1 FROM chat_sessions WHERE form_id = ?1 AND ip_hash = ?2 AND created_at > ?3 LIMIT 1`,
+      `SELECT 1 FROM chat_sessions
+        WHERE form_id = ?1 AND ip_hash = ?2 AND status IN ('completed', 'disqualified')
+        LIMIT 1`,
     )
-      .bind(form.id, ipHash, since)
+      .bind(form.id, ipHash)
       .first();
     if (prior) {
       return {
@@ -279,7 +295,7 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
         body: {
           error: {
             code: "already_responded",
-            message: "It looks like you have already answered this form today.",
+            message: "It looks like you have already answered this form.",
           },
         },
       };

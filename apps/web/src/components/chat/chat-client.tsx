@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   Check,
   ArrowDown,
@@ -11,6 +11,7 @@ import {
   ShieldAlert,
   SkipForward,
   TriangleAlert,
+  X,
 } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -18,6 +19,7 @@ import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { LogoMark } from "@/components/brand/logo";
 import { AuthCard } from "./auth-card";
+import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
 import { useChat, type ChatMessage } from "./use-chat";
 import { SendRow, TextInput } from "./composers/primitives";
 import { QuestionAffordance } from "./question-affordance";
@@ -149,6 +151,22 @@ export function ChatClient({
 
   const themeVars = useMemo(() => chatThemeVars(config.theme), [config.theme]);
 
+  /**
+   * A framed form gets its own way out.
+   *
+   * The launcher that opened the panel is the only close a host page offers,
+   * and it is the wrong control for the job: in side-tab it sits underneath the
+   * sheet, and under 520px the panel goes edge-to-edge and covers it outright,
+   * so the button that would close the form is behind the form. The one place
+   * guaranteed to be reachable and to collide with nothing is this header,
+   * which is already laid out and already has a slot beside "Start over".
+   *
+   * Gated on the handshake rather than on `?embed=1`: a parent that failed the
+   * origin allowlist gets no messages from us, and a close button that posts
+   * into a void is worse than no close button.
+   */
+  const canClose = useSyncExternalStore(subscribeEmbedBridge, embedBridgeReady, () => false);
+
   /*
     Stable handlers for the question controls.
    
@@ -226,8 +244,8 @@ export function ChatClient({
           submitted={chat.submitted}
           theme={config.theme}
           title={config.agentName || config.title}
-          // A form that fingerprints respondents is not expecting a second answer.
-          allowRepeat={config.duplicates === "none"}
+          // A form with resubmissions switched off is not expecting a second answer.
+          allowRepeat={config.allowResubmissions}
           onResubmit={() => void chat.startOver()}
         />
       </div>
@@ -260,6 +278,7 @@ export function ChatClient({
         // Always offered once anything has been said, rather than only in a
         // "welcome back" banner that appeared once and then vanished.
         onStartOver={chat.messages.length > 0 && !chat.ending ? () => void chat.startOver() : undefined}
+        onClose={canClose ? () => void requestEmbedClose() : undefined}
       />
 
       <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto">
@@ -357,7 +376,7 @@ export function ChatClient({
             <EndingCard
               ending={chat.ending}
               theme={config.theme}
-              allowRepeat={config.duplicates === "none"}
+              allowRepeat={config.allowResubmissions}
               onRestart={() => void chat.startOver()}
             />
           )}
@@ -456,6 +475,7 @@ function ChatHeader({
   total,
   status,
   onStartOver,
+  onClose,
 }: {
   title: string;
   brandName?: string;
@@ -466,6 +486,8 @@ function ChatHeader({
   total: number;
   status: string;
   onStartOver?: () => void;
+  /** Embedded only: collapse the panel back to the host page's launcher. */
+  onClose?: () => void;
 }) {
   return (
     <header className="sticky top-0 z-10 bg-[var(--cf-bg)]/95 backdrop-blur">
@@ -505,6 +527,23 @@ function ChatHeader({
         </div>
 
         {onStartOver && <StartOverButton onConfirm={onStartOver} />}
+
+        {/*
+          Unlabelled, unlike "Start over" beside it. An X in the corner of a
+          panel is the most over-learned control on the web and needs no word,
+          and the header is the one row here with no space to spare — the title
+          truncates already.
+        */}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close the form"
+            className="grid size-7 shrink-0 place-items-center rounded-full opacity-45 transition-opacity hover:opacity-90 focus-visible:opacity-90"
+          >
+            <X className="size-4" />
+          </button>
+        )}
       </div>
 
       {/* An actual bar. `progressBar` supported percent/steps/none and only the
@@ -1038,8 +1077,8 @@ function EndingCard({
           the screen you reach by coming BACK. Someone who has just finished and
           wants to file a second response — the same person entering a colleague,
           a second device, another idea — had to reload and hope. Gated on the
-          form's own duplicate policy, so a form that fingerprints respondents
-          still does not invite a second answer.
+          form's own resubmission setting, so a form that only wants one answer
+          per person still does not invite a second one.
         */}
         {allowRepeat && !ending.redirectUrl && (
           <button

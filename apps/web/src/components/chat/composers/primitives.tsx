@@ -20,7 +20,7 @@ export function Chip({
   onClick: () => void;
   selected?: boolean;
   disabled?: boolean;
-  /** 1–9 keyboard hint, shown on wider screens. */
+  /** 1–9 keyboard hint, shown wherever there is a keyboard to press. */
   shortcut?: number;
   className?: string;
 }) {
@@ -54,7 +54,7 @@ export function Chip({
       {shortcut !== undefined && shortcut <= 9 && (
         <kbd
           className={cn(
-            "hidden size-4 place-items-center rounded text-[0.625rem] font-medium sm:grid",
+            "cf-key-hint size-4 place-items-center rounded text-[0.625rem] font-medium",
             selected
               ? "bg-[var(--cf-accent)] text-[var(--cf-accent-text)]"
               : "bg-[var(--cf-chip-border)]/40",

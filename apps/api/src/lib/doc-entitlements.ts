@@ -111,10 +111,9 @@ export function stripForPublish(input: FormDoc, ent: Entitlements): StripResult 
   }
 
   // ── collect ─────────────────────────────────────────────────────────────────
-  if (s.duplicates?.strategy && s.duplicates.strategy !== "none" && !can(ent, "duplicate_prevention")) {
-    s.duplicates.strategy = "none";
-    s.duplicates.fieldRef = undefined;
-    note(stripped, "settings.duplicates.strategy", "duplicate_prevention");
+  if (s.allowResubmissions === false && !can(ent, "duplicate_prevention")) {
+    s.allowResubmissions = true;
+    note(stripped, "settings.allowResubmissions", "duplicate_prevention");
   }
   if (s.requireAuth?.enabled) {
     // Respondent verification is per-method: Google and phone are separate features, and

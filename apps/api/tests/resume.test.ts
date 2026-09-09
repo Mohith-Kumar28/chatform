@@ -3,6 +3,7 @@ import { env } from "cloudflare:test";
 import { applySchema, seedTenant, fetchApi, type Tenant } from "./helpers.js";
 import { mintEmailToken } from "../src/lib/signed-url.js";
 import { RESUME_TTL_DAYS } from "../src/lib/followups.js";
+import { sha256Hex } from "@repo/form-schema";
 import type { Bindings } from "../src/env.js";
 
 /**
@@ -82,7 +83,7 @@ const open = (body: Record<string, unknown>, ip?: string) =>
     method: "POST",
     headers: {
       "content-type": "application/json",
-      // `ip_daily` hashes this header; without it the duplicate rule is inert
+      // The resubmission rule hashes this header; without it the rule is inert
       // and the test that depends on it would pass for the wrong reason.
       ...(ip ? { "cf-connecting-ip": ip } : {}),
     },
@@ -229,12 +230,15 @@ describe("resuming when it should not work", () => {
 });
 
 describe("the gates a resume may and may not walk through", () => {
-  it("is not blocked by the daily duplicate rule it would otherwise trip", async () => {
-    await publish({ ...DOC.settings, duplicates: { strategy: "ip_daily" } });
+  it("is not blocked by the resubmission rule it would otherwise trip", async () => {
+    await publish({ ...DOC.settings, allowResubmissions: false });
     await seedAbandoned("sbm_resume09");
-    // A prior session from the same address is exactly what `ip_daily` refuses.
+    // A finished session from the same address is exactly what the rule refuses.
     const IP = "203.0.113.7";
     await open({}, IP);
+    await env.DB.prepare(`UPDATE chat_sessions SET status = 'completed' WHERE ip_hash = ?1`)
+      .bind(sha256Hex(IP))
+      .run();
     const blocked = await open({}, IP);
     expect(blocked.status).toBe(409);
 

@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Bindings } from "../../env.js";
 import type { PlatformAdminVars } from "../../lib/platform-admin.js";
 import {
+  COMPED_OF_ORG,
   DAY_MS,
   MRR_CENTS,
   NOT_COMPED,
@@ -141,6 +142,10 @@ aiRouter.get(
        * only directly comparable at 30 days — the UI says so rather than
        * pretending otherwise. What is unambiguous at any range is the ordering:
        * these are the accounts the AI bill is being run up by.
+       *
+       * `comped` rides along because revenue alone cannot tell a paid account
+       * whose billing has broken apart from one that was granted its plan by
+       * hand. Both show nothing; only one is a problem.
        */
       rows(
         c.env.DB.prepare(
@@ -152,6 +157,7 @@ aiRouter.get(
                   COALESCE((SELECT ${MRR_CENTS} FROM subscriptions s JOIN plans p ON p.id = s.plan_id
                              WHERE s.organization_id = o.id AND s.status IN ('active','trialing') AND ${NOT_COMPED}
                              ORDER BY s.created_at DESC LIMIT 1), 0) AS mrr_cents,
+                  COALESCE((${COMPED_OF_ORG}), 0) AS comped,
                   (SELECT COUNT(*) FROM chat_sessions cs WHERE cs.organization_id = o.id AND cs.is_test = 0 AND cs.created_at >= ?1) AS conversations
              FROM ai_generations g
              JOIN organizations o ON o.id = g.organization_id

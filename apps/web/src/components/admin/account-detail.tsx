@@ -8,8 +8,9 @@ import { MeterBar } from "@/components/ui/usage-meter";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { isPlanId } from "@repo/entitlements";
 import { apiData } from "@/lib/api/payload";
-import { AccountActions, RevokeOverride } from "./account-actions";
+import { AccountActions, RevokeOverride, entitlementLabel } from "./account-actions";
 import { DataTable } from "./data-table";
 import { compact, money, relativeDay } from "./format";
 
@@ -86,6 +87,9 @@ export function AccountDetail({ orgId }: { orgId: string }) {
         <div className="mt-3">
           <AccountActions
             orgId={orgId}
+            orgName={str(org, "name")}
+            plan={isPlanId(plan) ? plan : "free"}
+            limits={limits}
             owner={
               /* The owner if there is one, otherwise whoever joined first —
                  an account with no owner row still needs to be reproducible. */
@@ -126,13 +130,14 @@ export function AccountDetail({ orgId }: { orgId: string }) {
 
           {overrides.length > 0 && (
             <div className="mt-4 border-t pt-3">
-              <p className="text-caption mb-2 font-medium">Overrides</p>
+              <p className="text-caption mb-2 font-medium">Given free</p>
               <ul className="space-y-1">
                 {overrides.map((o, i) => (
                   <li key={i} className="flex items-baseline justify-between gap-2 text-xs">
                     <span className="text-muted-foreground min-w-0 truncate">
-                      <span className="text-foreground">{str(o, "key")}</span> = {str(o, "value")}
-                      {str(o, "reason") && ` — ${str(o, "reason")}`}
+                      <span className="text-foreground">{entitlementLabel(str(o, "key"))}</span>
+                      {str(o, "kind") === "limit" && ` — ${str(o, "value") || "unlimited"}`}
+                      {str(o, "reason") && ` · ${str(o, "reason")}`}
                       {num(o, "expires_at") > 0 && ` · until ${relativeDay(num(o, "expires_at"))}`}
                     </span>
                     <RevokeOverride orgId={orgId} keyName={str(o, "key")} onChanged={() => void refetch()} />

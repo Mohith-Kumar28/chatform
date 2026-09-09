@@ -63,6 +63,29 @@ const MIGRATIONS: ((doc: AnyDoc) => AnyDoc)[] = [
         : (prior ?? { enabled: false });
     return { ...doc, schemaVersion: 4, settings: { ...settings, requireAuth } };
   },
+
+  // ── v4 → v5 ────────────────────────────────────────────────────────────
+  // `settings.duplicates` was `{ strategy: "none" | "ip_daily" | "field" }`,
+  // one of which ("field") no code ever enforced. Collapsed to the boolean the
+  // author was actually choosing between.
+  //
+  // Anything that was not "none" was an author asking for one response per
+  // person, however they had been made to spell it — including the "field"
+  // strategy that silently did nothing. All of them become
+  // `allowResubmissions: false`, which is the first time a form set to "field"
+  // gets the protection it was already claiming.
+  (doc) => {
+    const settings = (doc.settings ?? {}) as Record<string, unknown>;
+    const { duplicates, ...rest } = settings;
+    const strategy = (duplicates as { strategy?: unknown } | undefined)?.strategy;
+    const allowResubmissions =
+      typeof rest.allowResubmissions === "boolean"
+        ? rest.allowResubmissions
+        : typeof strategy === "string"
+          ? strategy === "none"
+          : true;
+    return { ...doc, schemaVersion: 5, settings: { ...rest, allowResubmissions } };
+  },
 ];
 
 export function migrateFormDoc(raw: unknown): unknown {

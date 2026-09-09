@@ -7,7 +7,7 @@ import { Ending, HiddenField, LogicRule, Variable } from "./logic";
 import { SettingsDoc, ThemeDoc } from "./settings";
 import { buildUpiUri } from "./payment-link";
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const FormDoc = z.object({
   schemaVersion: z.number().int().positive().default(SCHEMA_VERSION),
@@ -331,7 +331,7 @@ export interface PublicFormConfig {
   /** The agent's display name, when the builder set one. */
   agentName?: string;
   /** Whether one person may answer more than once. */
-  duplicates: "none" | "ip_daily" | "field";
+  allowResubmissions: boolean;
   /** Whether the form asks for an explicit submit once everything is answered. */
   requireSubmit: boolean;
   /**
@@ -368,7 +368,7 @@ export function toPublicConfig(
       noIndex: metaSettings.noIndex,
     },
     agentName: doc.settings.agent.displayName,
-    duplicates: doc.settings.duplicates.strategy,
+    allowResubmissions: doc.settings.allowResubmissions,
     requireSubmit: doc.settings.onComplete.requireSubmit,
     followUpEnabled: doc.settings.followUp.enabled,
     slug: opts.slug,

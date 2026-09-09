@@ -143,24 +143,21 @@ export function SettingsPanel({
               </LockedControl>
               </SettingGroup>
               <SettingGroup>
+              {/*
+                One switch, not a menu of mechanisms.
+
+                This was a three-way select — "allow repeats", "one per device
+                per day", "fingerprint by answer field" — which made the author
+                choose an implementation for a question they only had one
+                opinion about, and one of the three did nothing at all.
+              */}
               <LockedControl feature="duplicate_prevention">
-              <SettingRow label="Duplicate responses" description="Control whether the same person can respond twice.">
-                <Select
-                  value={settings.duplicates.strategy}
-                  onValueChange={(v) =>
-                    patch({ duplicates: { ...settings.duplicates, strategy: v as FormDoc["settings"]["duplicates"]["strategy"] } })
-                  }
-                >
-                  <SelectTrigger className="w-auto min-w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Allow repeats</SelectItem>
-                    <SelectItem value="ip_daily">One per device per day</SelectItem>
-                    <SelectItem value="field">Fingerprint by answer field</SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingRow>
+                <SettingRow
+                  label="Allow resubmissions"
+                  description="Off means one response per person. Without sign-in the only handle is the network, so an office or campus behind one address gets one response between them — require sign-in for a per-person guarantee."
+                  checked={settings.allowResubmissions}
+                  onCheckedChange={(v) => patch({ allowResubmissions: v })}
+                />
               </LockedControl>
               </SettingGroup>
             </SettingSection>

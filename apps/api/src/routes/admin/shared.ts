@@ -33,11 +33,28 @@ export const RangeQuery = z.object({ range: z.enum(RANGE_KEYS).default("30d") })
  * `lib/entitlements.ts` exactly. Correlates on an outer `o` aliased to
  * `organizations`.
  */
+const PLAN_RANKED = `ORDER BY CASE s.status WHEN 'active' THEN 0 WHEN 'trialing' THEN 1 ELSE 2 END, s.created_at DESC
+   LIMIT 1`;
+
 export const PLAN_OF_ORG = `
   SELECT s.plan_id FROM subscriptions s
    WHERE s.organization_id = o.id
-   ORDER BY CASE s.status WHEN 'active' THEN 0 WHEN 'trialing' THEN 1 ELSE 2 END, s.created_at DESC
-   LIMIT 1`;
+   ${PLAN_RANKED}`;
+
+/**
+ * Whether the plan `PLAN_OF_ORG` reports was granted by hand rather than bought.
+ *
+ * The two must pick the same subscription row, or a table can print a plan from
+ * one row and describe how it was paid for from another — hence the shared
+ * ranking. Returns 1 or 0; correlates on an outer `o`.
+ *
+ * A comped account is why a paid plan can sit next to no revenue anywhere the
+ * `NOT_COMPED` guard is applied: the grant is real, the money is not.
+ */
+export const COMPED_OF_ORG = `
+  SELECT s.dodo_subscription_id LIKE 'internal_manual_%' FROM subscriptions s
+   WHERE s.organization_id = o.id
+   ${PLAN_RANKED}`;
 
 /**
  * The organization's owner, for a "who do I email about this" column.

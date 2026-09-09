@@ -52,7 +52,7 @@ export const SettingsDoc = z.object({
         .default("Before we start, could you verify who you are? It only takes a moment."),
       /**
        * Only one response per verified identity. Distinct from
-       * `duplicates.strategy`, which keys on IP or an answer and is trivially
+       * `allowResubmissions`, which keys on a hashed IP and is trivially
        * evaded; a verified identity is not.
        */
       onePerIdentity: z.boolean().default(false),
@@ -77,12 +77,24 @@ export const SettingsDoc = z.object({
     })
     .default({ enabled: true, provider: "turnstile", mode: "adaptive" }),
 
-  duplicates: z
-    .object({
-      strategy: z.enum(["none", "ip_daily", "field"]).default("none"),
-      fieldRef: z.string().optional(),
-    })
-    .default({ strategy: "none" }),
+  /**
+   * May the same person answer this form more than once?
+   *
+   * This used to be a three-way `duplicates.strategy` — `none`, `ip_daily`,
+   * `field` — which asked the author to pick a *mechanism* for a question they
+   * only ever had one opinion about. Worse, `field` was never implemented:
+   * the builder offered "fingerprint by answer field" and nothing anywhere
+   * enforced it, so an author could switch it on and get no protection at all.
+   *
+   * It is a boolean now. Off means one response per respondent, keyed on the
+   * hashed IP of whoever opened the session — the only handle an anonymous
+   * form has. That handle identifies a network rather than a person, so an
+   * office or campus behind one address gets one response between them; a form
+   * that needs a real per-person guarantee wants `requireAuth.onePerIdentity`,
+   * which keys on a verified identity and cannot be sidestepped by changing
+   * networks.
+   */
+  allowResubmissions: z.boolean().default(true),
 
   onComplete: z
     .object({

@@ -1124,6 +1124,31 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Keyboard hints
+
+   The `1` `2` `3` badges on choice chips were gated on `sm:` — a 640px minimum
+   viewport width — which is the wrong question asked of the wrong thing. Inside
+   an embedded form the media query measures the *iframe*, and the default popup
+   panel is 400px wide, so every hint vanished on desktop the moment the form
+   was embedded. The shortcuts themselves kept working: `useChoiceKeys` binds to
+   the frame's own window, so `1` picked the first option while nothing on
+   screen said so.
+
+   Width was only ever a proxy for "has a keyboard". Ask that instead. A phone
+   is coarse-pointered and hoverless at any width; a 400px frame on a desktop is
+   neither, and gets its hints back.
+   ═════════════════════════════════════════════════════════════════════════ */
+.cf-key-hint {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .cf-key-hint {
+    display: grid;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    reCAPTCHA badge
 
    Phone verification runs an *invisible* reCAPTCHA: nothing is asked of the

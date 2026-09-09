@@ -51,9 +51,9 @@ interface Options {
  * Refuse a second response from someone who already answered, when the form
  * asked for that.
  *
- * `duplicates.strategy` keys on an IP or on an answer, both of which a
- * determined person changes in seconds. A verified identity is the only
- * de-duplication we offer that actually holds, so it is checked here — at the
+ * `allowResubmissions: false` keys on a hashed IP, which a determined person
+ * changes in seconds. A verified identity is the only de-duplication we offer
+ * that actually holds, so it is checked here — at the
  * moment the identity becomes known, before any question is asked, rather than
  * at submit time when the respondent has already done the work.
  */

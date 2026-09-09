@@ -108,6 +108,41 @@ describe("readFormDoc", () => {
     expect(safeReadFormDoc({ schemaVersion: 1, title: "" })).toBeNull();
     expect(safeReadFormDoc(v1Doc)?.title).toBe("Old form");
   });
+
+  /**
+   * v4 → v5: `settings.duplicates.strategy` collapses to `allowResubmissions`.
+   *
+   * "field" is the interesting case. The builder offered it and no code path
+   * ever enforced it, so a form set that way had been claiming a protection it
+   * did not have; it migrates to the boolean that finally provides one.
+   */
+  describe("the duplicates strategy that became a boolean", () => {
+    const at4 = (duplicates: unknown) =>
+      readFormDoc({ ...v1Doc, schemaVersion: 4, settings: { duplicates } });
+
+    it("reads 'none' as resubmissions allowed", () => {
+      expect(at4({ strategy: "none" }).settings.allowResubmissions).toBe(true);
+    });
+
+    it("reads every other strategy as resubmissions refused", () => {
+      expect(at4({ strategy: "ip_daily" }).settings.allowResubmissions).toBe(false);
+      expect(at4({ strategy: "field", fieldRef: "q_email" }).settings.allowResubmissions).toBe(false);
+    });
+
+    it("allows resubmissions on a doc that never set the field", () => {
+      expect(at4(undefined).settings.allowResubmissions).toBe(true);
+    });
+
+    it("drops the old key rather than carrying both", () => {
+      const out = migrateFormDoc({ ...v1Doc, schemaVersion: 4, settings: { duplicates: { strategy: "ip_daily" } } });
+      expect((out as { settings: Record<string, unknown> }).settings.duplicates).toBeUndefined();
+    });
+
+    it("is idempotent", () => {
+      const once = migrateFormDoc({ ...v1Doc, schemaVersion: 4, settings: { duplicates: { strategy: "ip_daily" } } });
+      expect(migrateFormDoc(once)).toEqual(once);
+    });
+  });
 });
 
 describe("agent layer", () => {

@@ -109,6 +109,17 @@
   var isOpen = false;
   var destroyed = false;
 
+  /**
+   * The frame's own close button is the one the respondent should use, so the
+   * loader waits for the handshake before drawing a worse one of its own.
+   * Nothing arriving means a blank or broken panel — and since the launcher is
+   * hidden while open, that would otherwise be a form with no way out.
+   */
+  var frameReady = false;
+  var fallbackClose = null;
+  var fallbackTimer = 0;
+  var READY_GRACE_MS = 3500;
+
   function emit(name, payload) {
     var handlers = listeners[name] || [];
     for (var i = 0; i < handlers.length; i++) {
@@ -157,6 +168,23 @@
         "box-shadow:0 12px 48px rgba(0,0,0,.22);display:none;overflow:hidden}",
         ".cf-panel.cf-open{display:block}",
         ".cf-fullpage{inset:0;width:100vw;height:100vh;border-radius:0}",
+        /*
+         * The launcher stands down while the panel is up.
+         *
+         * It was drawn at a fixed corner and the panel was drawn over it, which
+         * is fine for a popup on a desktop and wrong everywhere else: a side tab
+         * runs the full height of that same edge, and under 520px the panel goes
+         * edge-to-edge — so "Join Waitlist" sat on top of the sheet it had just
+         * opened, over the composer, still saying "open me". The panel carries
+         * its own close now, so there is nothing left for it to do until it is
+         * closed again.
+         */
+        ".cf-launcher.cf-away{display:none}",
+        ".cf-close{position:absolute;top:10px;right:10px;z-index:1;width:32px;height:32px;padding:0;",
+        "border:0;border-radius:50%;background:rgba(15,15,15,.55);color:#fff;cursor:pointer;",
+        "display:grid;place-items:center}",
+        ".cf-close:hover{background:rgba(15,15,15,.75)}",
+        ".cf-close svg{width:16px;height:16px;display:block}",
         "@media (prefers-reduced-motion:reduce){.cf-launcher{transition:none}}",
       ].join(""),
     );
@@ -276,11 +304,50 @@
     }
   }
 
+  /** The X the loader draws only when the frame never offered one of its own. */
+  function showFallbackClose() {
+    if (fallbackClose || !panel || frameReady) return;
+    fallbackClose = document.createElement("button");
+    fallbackClose.type = "button";
+    fallbackClose.className = "cf-close";
+    fallbackClose.setAttribute("aria-label", "Close the form");
+    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2.5");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("aria-hidden", "true");
+    var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", "M18 6 6 18M6 6l12 12");
+    svg.appendChild(path);
+    fallbackClose.appendChild(svg);
+    fallbackClose.addEventListener("click", close);
+    panel.appendChild(fallbackClose);
+  }
+
+  function hideFallbackClose() {
+    if (fallbackTimer) {
+      clearTimeout(fallbackTimer);
+      fallbackTimer = 0;
+    }
+    if (fallbackClose && fallbackClose.parentNode) {
+      fallbackClose.parentNode.removeChild(fallbackClose);
+    }
+    fallbackClose = null;
+  }
+
   function open() {
     if (destroyed || isOpen) return;
     if (!frame && panel) panel.appendChild(buildFrame());
     if (panel) panel.classList.add("cf-open");
-    if (launcher) launcher.setAttribute("aria-expanded", "true");
+    if (launcher) {
+      launcher.setAttribute("aria-expanded", "true");
+      launcher.classList.add("cf-away");
+    }
+    // Nothing to escape through until the frame says hello, so give it a moment
+    // and then draw an exit anyway.
+    if (!frameReady && !fallbackTimer) fallbackTimer = setTimeout(showFallbackClose, READY_GRACE_MS);
     isOpen = true;
     emit("open", {});
   }
@@ -288,7 +355,11 @@
   function close() {
     if (destroyed || !isOpen || mode === "inline") return;
     if (panel) panel.classList.remove("cf-open");
-    if (launcher) launcher.setAttribute("aria-expanded", "false");
+    if (launcher) {
+      launcher.setAttribute("aria-expanded", "false");
+      launcher.classList.remove("cf-away");
+    }
+    hideFallbackClose();
     isOpen = false;
     emit("close", {});
   }
@@ -320,6 +391,9 @@
 
     switch (message.type) {
       case "ready":
+        // The frame draws its own close from here on, so retire ours.
+        frameReady = true;
+        hideFallbackClose();
         emit("ready", message);
         break;
       case "resize":
@@ -371,6 +445,7 @@
 
   function destroy() {
     destroyed = true;
+    hideFallbackClose();
     if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
     if (launcher && launcher.parentNode) launcher.parentNode.removeChild(launcher);
     frame = null;
