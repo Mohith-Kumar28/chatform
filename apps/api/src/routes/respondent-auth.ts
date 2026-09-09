@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { readFormDoc, type RespondentIdentity } from "@repo/form-schema";
+import { readFormDoc, type FormDoc, type RespondentIdentity } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { SessionDO } from "../do/session-do.js";
 import {
@@ -10,6 +10,9 @@ import {
   startPhoneChallenge,
   verifyPhoneChallenge,
 } from "../lib/respondent-auth.js";
+import { findIdentityHistory } from "../lib/respondent-history.js";
+import { clampForRuntime } from "../lib/doc-entitlements.js";
+import { getEntitlements } from "../lib/entitlements.js";
 
 /**
  * Respondent sign-in routes, mounted twice.
@@ -48,67 +51,112 @@ interface Options {
 }
 
 /**
- * Refuse a second response from someone who already answered, when the form
- * asked for that.
+ * What we should do about everything this person has already done here.
  *
- * `allowResubmissions: false` keys on a hashed IP, which a determined person
- * changes in seconds. A verified identity is the only de-duplication we offer
- * that actually holds, so it is checked here — at the
- * moment the identity becomes known, before any question is asked, rather than
- * at submit time when the respondent has already done the work.
+ * Signing in is the one moment a gated form learns who it is talking to, and
+ * until now it spent that knowledge on a single question — has this identity
+ * already *completed* the form, and only when `onePerIdentity` was on. Two
+ * things it could have answered went unasked.
+ *
+ * A response they left half-finished: it was found only by a session id in
+ * `localStorage`, so a different browser, a cleared cache or an embedded frame
+ * whose storage the browser partitions started them again at question one while
+ * their real answers sat in the results table as a second partial. The identity
+ * on those rows was always enough to find them.
+ *
+ * And `allowResubmissions: false`, which keys on a hashed IP — a network, not a
+ * person, wrong in both directions. It locks out a household and waves through
+ * anybody on a different connection. Where a verified identity exists it is the
+ * better key, and this checks both: the IP gate in `openSession` still runs for
+ * respondents who never sign in.
+ *
+ * Entitlements are applied first. `identityAlreadyAnswered` read the stored
+ * document, so a customer whose plan had lapsed still had these settings
+ * enforced against their respondents while the builder showed them switched
+ * off. `clampForRuntime` is what the rest of the runtime reads.
  */
-async function identityAlreadyAnswered(
+interface SignInVerdict {
+  blocked: { code: "already_answered"; message: string; completedAt: number | null } | null;
+  resume: { submissionId: string; answers: Record<string, unknown> } | null;
+}
+
+const NOTHING: SignInVerdict = { blocked: null, resume: null };
+
+async function assessIdentity(
   env: Bindings,
   sessionId: string,
   identity: RespondentIdentity,
-): Promise<boolean> {
+): Promise<SignInVerdict> {
   const sess = await env.DB.prepare(
-    `SELECT s.form_id AS form_id, fv.schema_json AS schema_json
+    `SELECT s.form_id AS form_id, s.organization_id AS organization_id, fv.schema_json AS schema_json
        FROM chat_sessions s
        LEFT JOIN form_versions fv ON fv.id = s.form_version_id
       WHERE s.id = ?1`,
   )
     .bind(sessionId)
-    .first<{ form_id: string; schema_json: string | null }>();
-  if (!sess?.schema_json) return false;
+    .first<{ form_id: string; organization_id: string; schema_json: string | null }>();
+  if (!sess?.schema_json) return NOTHING;
 
-  let onePer = false;
+  let settings: FormDoc["settings"];
   try {
-    onePer = readFormDoc(JSON.parse(sess.schema_json)).settings.requireAuth.onePerIdentity;
-  } catch {
-    return false; // a doc we cannot read must not become a lockout
+    const ent = await getEntitlements(env, sess.organization_id);
+    settings = clampForRuntime(readFormDoc(JSON.parse(sess.schema_json)), ent).settings;
+  } catch (err) {
+    // A document we cannot read must not become a lockout, and must not stop
+    // somebody signing in either.
+    console.error("signin_settings_unreadable", sess.form_id, err);
+    return NOTHING;
   }
-  if (!onePer) return false;
 
-  const prior = await env.DB.prepare(
-    `SELECT 1 FROM submissions
-      WHERE form_id = ?1 AND status = 'completed'
-        AND respondent_provider = ?2 AND respondent_subject = ?3
-        AND session_id IS NOT ?4
-      LIMIT 1`,
-  )
-    .bind(sess.form_id, identity.provider, identity.subject, sessionId)
-    .first();
-  return Boolean(prior);
+  const history = await findIdentityHistory(env, sess.form_id, identity, sessionId);
+
+  if (history.finished) {
+    /*
+     * Two different settings can refuse a second response, and they mean
+     * different things: `onePerIdentity` is "one per person, and we checked",
+     * `allowResubmissions: false` is "one per respondent, however we can tell".
+     * Either being on is enough; neither being on means the author is happy to
+     * take another answer, and they get a fresh response rather than a lecture.
+     */
+    const oncePerPerson = settings.requireAuth.onePerIdentity || !settings.allowResubmissions;
+    if (!oncePerPerson) return NOTHING;
+    return {
+      blocked: {
+        code: "already_answered",
+        message: "This form takes one response per person, and you have already answered it.",
+        completedAt: history.finished.completedAt,
+      },
+      resume: null,
+    };
+  }
+
+  return { blocked: null, resume: history.resumable };
 }
 
 export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
   const { resolve, stub, base } = opts;
 
   const attach = async (c: Ctx, identity: RespondentIdentity, sessionId: string) => {
-    if (await identityAlreadyAnswered(c.env, sessionId, identity)) {
+    const verdict = await assessIdentity(c.env, sessionId, identity);
+    if (verdict.blocked) {
+      /*
+       * `completedAt` rides along so the page can say *when* they answered
+       * rather than only that they did. "You already answered this" with no
+       * date is the kind of message people argue with.
+       */
       return c.json(
         {
           error: {
-            code: "already_answered",
-            message: "This form takes one response per person, and you have already answered it.",
+            code: verdict.blocked.code,
+            message: verdict.blocked.message,
+            completedAt: verdict.blocked.completedAt,
           },
         },
         409,
       );
     }
 
-    const result = await stub(c.env, sessionId).attachIdentity(identity);
+    const result = await stub(c.env, sessionId).attachIdentity(identity, verdict.resume ?? undefined);
     if (!result.accepted) {
       return c.json({ error: { code: result.error ?? "rejected", message: "Could not verify." } }, 400);
     }
@@ -120,6 +168,11 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
         name: identity.name,
         pictureUrl: identity.pictureUrl,
       },
+      /*
+       * So the client can say "picking up where you left off" in its own UI
+       * rather than inferring it from a conversation that suddenly has history.
+       */
+      resumed: Boolean(verdict.resume),
     });
   };
 

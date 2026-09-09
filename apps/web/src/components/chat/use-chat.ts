@@ -75,10 +75,20 @@ export interface ReviewState {
   answers: { ref: string; title: string; display: string }[];
 }
 
-/** A response this device already sent for this form. */
+/** A response already sent for this form — by this device, or by this person. */
 export interface SubmittedState {
   at: number;
   answers: { ref: string; title: string; display: string }[];
+  /**
+   * Whether starting another response is on the table.
+   *
+   * Undefined means "ask the form's settings", which is the device-local case:
+   * we found a completed response in `localStorage` and `allowResubmissions`
+   * decides. False is the server having refused a specific person — either
+   * `onePerIdentity` or resubmissions being off — and there is no point
+   * offering a button that will be turned down at the next sign-in.
+   */
+  canRepeat?: boolean;
 }
 
 /** The sign-in gate, while it is blocking the conversation. */
@@ -802,7 +812,22 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
           }),
         });
         if (!res.ok) {
-          const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+          const body = (await res.json().catch(() => null)) as {
+            error?: { code?: string; message?: string };
+          } | null;
+          /*
+           * "You have already answered this" is an outcome, not a breakdown.
+           * The open-session gate returns it for a form with resubmissions off
+           * when this address has finished one before — and it was surfacing as
+           * the generic "something went wrong" screen, which tells a respondent
+           * to retry the one thing that cannot work.
+           */
+          if (body?.error?.code === "already_responded") {
+            setSubmitted({ at: 0, answers: [], canRepeat: false });
+            setStatus("ended");
+            setResolving(false);
+            return;
+          }
           throw new Error(body?.error?.message ?? "Could not start session");
         }
         const data = (await res.json()) as { sessionId: string; respondentToken: string };
@@ -1017,6 +1042,39 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     ((data.error as { message?: string } | undefined)?.message) ?? "That didn't work. Please try again.";
 
   /**
+   * The one sign-in failure that is not a failure.
+   *
+   * Verifying can now come back with "you have already answered this", because
+   * signing in is the moment the server can finally match a person to a
+   * response they left on another device. Rendered as a red line under the
+   * sign-in button it read as something to retry — so people pressed it again,
+   * verified again, and got the same red line. It is an ending, so it gets the
+   * ending screen.
+   *
+   * Returns true when it handled the response, so each caller can bail out
+   * before setting an error state that would sit behind the card.
+   */
+  const settledAsAnswered = useCallback((data: Record<string, unknown>): boolean => {
+    const err = data.error as { code?: string; completedAt?: number | null } | undefined;
+    if (err?.code !== "already_answered") return false;
+    setThinking(false);
+    setAuth(null);
+    setSubmitted({
+      at: err.completedAt ?? Date.now(),
+      /*
+       * Left empty deliberately. The card hides the "view my answers" button
+       * when there are none, and fetching a past response over a session that
+       * has just been refused is a lookup we should not be doing here.
+       */
+      answers: [],
+      canRepeat: false,
+    });
+    setStatus("ended");
+    setResolving(false);
+    return true;
+  }, []);
+
+  /**
    * Armed BEFORE the request, never after it.
    *
    * Verifying an identity is not a quick acknowledgement. The same call clears
@@ -1042,9 +1100,10 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
         return;
       }
       setThinking(false);
+      if (settledAsAnswered(data)) return;
       setAuth((a) => (a ? { ...a, pending: false, error: authError(data) } : a));
     },
-    [authPost],
+    [authPost, settledAsAnswered],
   );
 
   const requestPhoneCode = useCallback(
@@ -1081,9 +1140,10 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
         return;
       }
       setThinking(false);
+      if (settledAsAnswered(data)) return;
       setAuth((a) => (a ? { ...a, pending: false, error: authError(data) } : a));
     },
-    [authPost],
+    [authPost, settledAsAnswered],
   );
 
   /**
@@ -1102,9 +1162,10 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
         return;
       }
       setThinking(false);
+      if (settledAsAnswered(data)) return;
       setAuth((a) => (a ? { ...a, pending: false, error: authError(data) } : a));
     },
-    [authPost],
+    [authPost, settledAsAnswered],
   );
 
   /**

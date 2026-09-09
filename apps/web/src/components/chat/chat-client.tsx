@@ -244,8 +244,14 @@ export function ChatClient({
           submitted={chat.submitted}
           theme={config.theme}
           title={config.agentName || config.title}
-          // A form with resubmissions switched off is not expecting a second answer.
-          allowRepeat={config.allowResubmissions}
+          /*
+            A form with resubmissions switched off is not expecting a second
+            answer. `canRepeat` overrides it when the *server* refused this
+            particular person — `onePerIdentity` can be on while resubmissions
+            are allowed, and offering a button that the next sign-in will turn
+            down again is worse than not offering one.
+          */
+          allowRepeat={chat.submitted.canRepeat ?? config.allowResubmissions}
           onResubmit={() => void chat.startOver()}
         />
       </div>

@@ -415,7 +415,19 @@ export class SessionDO extends DurableObject<Bindings> {
    * an OTP, only the attested result — so this method must stay the single
    * place that clears the gate.
    */
-  async attachIdentity(identity: RespondentIdentity): Promise<{ accepted: boolean; error?: string }> {
+  async attachIdentity(
+    identity: RespondentIdentity,
+    /**
+     * A response this same person already has open on this form, found by the
+     * route from their verified identity.
+     *
+     * The resume-link path hands the equivalent to `init`, before the greeting.
+     * It cannot happen that early here: until somebody has signed in we do not
+     * know who they are, which is the entire reason a gated form could not
+     * recognise a returning respondent at all.
+     */
+    resume?: { submissionId: string; answers: Record<string, unknown> },
+  ): Promise<{ accepted: boolean; error?: string }> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta || !this.doc) return { accepted: false, error: "session_not_found" };
     if (this.meta.status !== "active") return { accepted: false, error: "session_closed" };
@@ -458,10 +470,36 @@ export class SessionDO extends DurableObject<Bindings> {
       `Respondent verified via ${identity.provider}: ${identity.email ?? identity.phone ?? identity.subject}`,
     );
 
+    /**
+     * Adopt the response they already had open, before the flow starts.
+     *
+     * `submission_id` goes into storage first, exactly as the resume-link path
+     * does: `ensureSubmissionRow` reads that key before anything else, so every
+     * answer from here lands on the original row. Without it they would fill in
+     * a *second* response and the first would sit half-finished forever — which
+     * is what was happening to every signed-in respondent who came back on a
+     * different device, or whose embed had its storage partitioned away.
+     *
+     * Guarded on this session having no answers of its own: adopting one on top
+     * of another would silently discard whichever lost.
+     */
+    if (resume && this.collectedCount === 0 && !this.meta.currentRef) {
+      await this.ctx.storage.put("submission_id", resume.submissionId);
+      this.state.answers = { ...(resume.answers as EvalState["answers"]) };
+      this.collectedCount = Object.keys(resume.answers).length;
+      this.resumed = true;
+      await this.persistMeta();
+      if (this.collectedCount > 0) {
+        await this.emitMessage(resumeGreeting(this.doc, this.collectedCount));
+        await this.appendMessage("assistant", resumeGreeting(this.doc, this.collectedCount));
+      }
+    }
+
     // Only start the flow if the gate is what was holding it. A session that
     // verified mid-conversation (a settings change, a resumed session) must not
-    // be rewound to question one.
-    if (!this.meta.currentRef && this.collectedCount === 0) {
+    // be rewound to question one. `resumed` is the exception: it has answers but
+    // no cursor yet, and `beginInterview` is what replays it to the right block.
+    if (!this.meta.currentRef && (this.collectedCount === 0 || this.resumed)) {
       try {
         await this.beginInterview();
       } catch (err) {
