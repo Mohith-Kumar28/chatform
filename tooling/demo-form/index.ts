@@ -46,7 +46,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 8;
+export const DEMO_REVISION = 9;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -75,7 +75,7 @@ export const DEMO_FORM = buildAuthoredDoc({
 
   greeting:
     "Hi — I'm the chatform agent, and this is a real chatform form, so you're seeing exactly what your own respondents would. " +
-    "I'd like to hear how forms are actually working out for you. About three minutes, twelve questions, and you can ask me anything about chatform as we go.",
+    "I'd like to hear how forms are actually working out for you. Under two minutes, eight questions, and you can ask me anything about chatform as we go.",
 
   questions: [
     {
@@ -112,48 +112,6 @@ export const DEMO_FORM = buildAuthoredDoc({
         { label: "Airtable Forms" },
         { label: "Something we built ourselves" },
         { label: "None yet — this is new to me" },
-      ],
-    },
-    {
-      /*
-       * Skipped for anyone who has used nothing, via the branch below. Asking
-       * "which do you reach for" of someone who just said "none" is the exact
-       * moment a form stops feeling like it is listening — and this one is
-       * being judged on whether it listens.
-       */
-      ref: "main_tool",
-      type: "single_select",
-      title: "And which one do you actually reach for now?",
-      required: true,
-      options: [
-        { label: "Typeform" },
-        { label: "Google Forms" },
-        { label: "Tally" },
-        { label: "Youform" },
-        { label: "Jotform" },
-        { label: "Fillout" },
-        { label: "SurveyMonkey" },
-        { label: "Airtable Forms" },
-        { label: "Our own thing" },
-        { label: "Nothing regularly" },
-      ],
-    },
-    {
-      ref: "use_case",
-      type: "multi_select",
-      title: "What do you mostly use forms for?",
-      required: true,
-      minSelections: 1,
-      maxSelections: 8,
-      options: [
-        { label: "Capturing leads" },
-        { label: "Customer feedback and surveys" },
-        { label: "Job applications" },
-        { label: "Event registration" },
-        { label: "Onboarding or intake" },
-        { label: "Support requests" },
-        { label: "Research interviews" },
-        { label: "Orders and bookings" },
       ],
     },
     {
@@ -202,31 +160,29 @@ export const DEMO_FORM = buildAuthoredDoc({
       maxLength: 700,
     },
     {
-      ref: "pain_rank",
+      /*
+       * Ranks what would make them SWITCH, not what annoys them.
+       *
+       * It used to rank the same six frustrations `biggest_problem` had just
+       * asked them to pick one of — the identical list, twice, once as "which
+       * is worst" and once as "put all six in order". That is the single most
+       * tedious thing this form did, and it collected almost nothing the
+       * previous question had not.
+       *
+       * Ranking what would move them keeps the block — it is the most
+       * distinctive control in the product — and asks something genuinely new.
+       * Four items rather than six: a ranking is one tap per item, and this is
+       * the most expensive question here by a wide margin.
+       */
+      ref: "switch_rank",
       type: "ranking",
-      title: "Now rank these by how much they actually get in your way. Worst first.",
+      title: "What would actually make you switch? Most important first.",
       required: true,
       items: [
-        "People not finishing",
-        "Thin or useless answers",
-        "Time spent building the thing",
-        "What you pay for it",
-        "Looking generic",
-        "Getting the data somewhere useful",
-      ],
-    },
-    {
-      ref: "switch_trigger",
-      type: "single_select",
-      title: "Be honest: what would actually make you move to something else?",
-      required: true,
-      options: [
-        { label: "Noticeably more people finishing" },
-        { label: "Much richer answers" },
-        { label: "Faster to build" },
-        { label: "A lower price" },
-        { label: "Proper control over how it looks" },
-        { label: "Honestly, nothing right now" },
+        "More people finishing",
+        "Richer answers",
+        "Less time building it",
+        "A lower price",
       ],
     },
     {
@@ -255,13 +211,6 @@ export const DEMO_FORM = buildAuthoredDoc({
       maxSizeMB: 3,
     },
     {
-      ref: "anything_missing",
-      type: "long_text",
-      title: "What would chatform need to do before you'd use it for something real?",
-      required: false,
-      maxLength: 800,
-    },
-    {
       ref: "interested",
       type: "single_select",
       title: "Last one. Want us to follow up?",
@@ -284,9 +233,6 @@ export const DEMO_FORM = buildAuthoredDoc({
    * their own are routed explicitly past the three that do.
    */
   branches: [
-    // Nobody who has used no tools is asked which one they prefer.
-    { when: "tools", op: "contains", is: "None yet — this is new to me", then: "use_case" },
-
     { when: "biggest_problem", is: "People don't finish", then: "dropoff_detail" },
     { when: "biggest_problem", is: "The answers are thin and useless", then: "quality_detail" },
     { when: "biggest_problem", is: "Building the logic is fiddly", then: "build_detail" },
@@ -295,9 +241,9 @@ export const DEMO_FORM = buildAuthoredDoc({
     { when: "biggest_problem", is: "Getting the data where it needs to go", then: "problem_detail" },
 
     // Each detail arm rejoins the trunk rather than falling into the next arm.
-    { when: "dropoff_detail", always: true, then: "pain_rank" },
-    { when: "quality_detail", always: true, then: "pain_rank" },
-    { when: "build_detail", always: true, then: "pain_rank" },
+    { when: "dropoff_detail", always: true, then: "switch_rank" },
+    { when: "quality_detail", always: true, then: "switch_rank" },
+    { when: "build_detail", always: true, then: "switch_rank" },
 
     /*
      * Two conditions rather than one unconditional jump plus one exception:

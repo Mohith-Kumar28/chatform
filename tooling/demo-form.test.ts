@@ -64,11 +64,19 @@ describe("short enough that people finish it", () => {
     return Math.max(trunk, ...arms);
   }
 
-  it("asks at most twelve questions on any single run", () => {
-    // Past about four minutes, demo drop-off climbs sharply — and a visitor
-    // abandoning the demo is a worse signal than a shorter form.
-    expect(longestPath()).toBeLessThanOrEqual(12);
-    expect(DEMO_FORM.estMinutes).toBeLessThanOrEqual(4);
+  it("asks at most eight questions on any single run", () => {
+    // Was twelve, and four of those were asking the same thing twice: which
+    // tool they use and which they reach for most; the worst frustration and
+    // then all six frustrations ranked; a free-text detail and then a second
+    // free-text box. Every one of those cost a screen and collected almost
+    // nothing the question before it had not.
+    //
+    // The ceiling is deliberately tight rather than comfortable. This form's
+    // job is to be finished — a visitor who abandons the demo is a worse
+    // signal than a shorter form — so a question added here has to earn its
+    // place by displacing one.
+    expect(longestPath()).toBeLessThanOrEqual(8);
+    expect(DEMO_FORM.estMinutes).toBeLessThanOrEqual(3);
   });
 
   it("says in the greeting how long it will take", () => {
@@ -76,6 +84,8 @@ describe("short enough that people finish it", () => {
     // it sits directly above a sign-in they will be asked for shortly.
     const welcome = doc.blocks.find((b) => b.type === "welcome");
     expect(welcome?.title).toMatch(/minute/i);
+    // And the count it promises has to be the count it asks.
+    expect(welcome?.title).toMatch(/eight questions/i);
   });
 });
 
