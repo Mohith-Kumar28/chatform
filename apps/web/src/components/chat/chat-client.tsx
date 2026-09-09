@@ -264,38 +264,17 @@ export function ChatClient({
     );
   }
 
-  if (chat.submitted) {
-    return (
-      <div
-        className={cn(
-          "chat-surface flex items-center justify-center",
-          previewMode ? "h-full min-h-0" : "h-svh",
-        )}
-        style={themeVars}
-      >
-        <AlreadySubmittedCard
-          submitted={chat.submitted}
-          theme={config.theme}
-          title={config.agentName || config.title}
-          /*
-            A form with resubmissions switched off is not expecting a second
-            answer. `canRepeat` overrides it when the *server* refused this
-            particular person — `onePerIdentity` can be on while resubmissions
-            are allowed, and offering a button that the next sign-in will turn
-            down again is worse than not offering one.
-          */
-          allowRepeat={chat.submitted.canRepeat ?? config.allowResubmissions}
-          onResubmit={() => void chat.startOver()}
-        />
-      </div>
-    );
-  }
   // The builder can name the interviewer; fall back to the form title.
   const agentName = config.agentName || config.title;
   // Review and the ending both mean every question is answered; without this
   // the bar dropped to zero at the last step because there is no current
   // question to read progress from.
-  const pct = chat.review || chat.ending ? 100 : (chat.question?.progress.pct ?? 0);
+  // `submitted` joins these now that it renders in the thread rather than
+  // replacing the screen: the header is on show for the first time in that
+  // state, and a finished response reading "0% complete" is the bar contradicting
+  // the sentence underneath it. All three mean every question is answered.
+  const pct =
+    chat.review || chat.ending || chat.submitted ? 100 : (chat.question?.progress.pct ?? 0);
 
   return (
     <div
@@ -442,6 +421,37 @@ export function ChatClient({
               theme={config.theme}
               allowRepeat={config.allowResubmissions}
               onRestart={() => void chat.startOver()}
+            />
+          )}
+
+          {/* Coming back to a form you already answered, in the thread — like
+              every other state in here. This used to be an early return that
+              replaced the whole screen with a centred card, which threw away
+              the conversation and left a bare list of answers where the chat
+              had been. The sign-in gate, the code step, the review and the
+              ending all sit in the thread for the same reason: the respondent
+              should see what they said, not an interstitial about it. */}
+          {chat.submitted && (
+            <AlreadySubmittedCard
+              submitted={chat.submitted}
+              title={agentName}
+              /*
+                A form with resubmissions switched off is not expecting a second
+                answer. `canRepeat` overrides it when the *server* refused this
+                particular person — `onePerIdentity` can be on while
+                resubmissions are allowed, and offering a button that the next
+                sign-in will turn down again is worse than not offering one.
+              */
+              allowRepeat={chat.submitted.canRepeat ?? config.allowResubmissions}
+              onResubmit={() => void chat.startOver()}
+              /*
+                Whether this session still holds the conversation. It does when
+                they finished just now and were told mid-session; it does not
+                when they came back later and the server recognised them at the
+                door, which is the common case — and the one that needs the
+                answers replayed to have a thread at all.
+              */
+              hasTranscript={chat.messages.length > 0}
             />
           )}
 
@@ -796,81 +806,93 @@ function TypingDots() {
  */
 function AlreadySubmittedCard({
   submitted,
-  theme,
   title,
   allowRepeat,
   onResubmit,
+  hasTranscript,
 }: {
   submitted: NonNullable<ReturnType<typeof useChat>["submitted"]>;
-  theme: PublicFormConfig["theme"];
   title: string;
   allowRepeat: boolean;
   onResubmit: () => void;
+  hasTranscript: boolean;
 }) {
-  const [showAnswers, setShowAnswers] = useState(false);
+  const answers = submitted.answers;
 
   return (
-    <div className="animate-message-in w-full max-w-md px-6 py-10 text-center">
-      {theme.logoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={theme.logoUrl} alt="" className="mx-auto mb-5 h-10 object-contain" />
-      ) : (
-        <div
-          className="mx-auto mb-5 grid size-14 place-items-center rounded-full"
-          style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
-        >
-          <CheckCheck className="size-7" strokeWidth={1.75} />
-        </div>
-      )}
+    <>
+      {/*
+        The conversation, replayed from what was stored.
 
-      <h2 className="text-xl font-semibold" style={{ fontFamily: "var(--cf-font-heading)" }}>
-        You&apos;ve already answered this
-      </h2>
-      <p className="mt-1 text-sm opacity-60">
-        {title} · {relativeDay(submitted.at)}
-      </p>
+        A respondent who comes back days later gets a fresh session, so there
+        are no messages to show — the server recognised them at the door and
+        the client holds only the answer summary. Rendering that summary as a
+        list was the old behaviour and it read as a receipt: the questions in
+        small grey type, the answers under them, nothing like the thing they
+        had actually used. These are the same two bubbles the live thread
+        draws, so what they come back to is the conversation they had.
 
-      {showAnswers && submitted.answers.length > 0 && (
-        <ul className="mt-5 space-y-2 rounded-2xl bg-[var(--cf-chip-bg)] p-4 text-left text-sm">
-          {submitted.answers.map((a) => (
-            <li key={a.ref}>
-              <span className="block text-xs opacity-55">{a.title}</span>
-              <span className="block break-words">{a.display || "—"}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+        Skipped when the session still has the real messages — replaying on top
+        of them would print everything twice.
+      */}
+      {!hasTranscript &&
+        answers.map((a) => (
+          <div key={a.ref} className="space-y-3">
+            <div className="animate-message-in flex justify-start">
+              <div
+                className="bubble-bot max-w-[85%] border px-4 py-2.5 text-[0.9375rem] leading-relaxed"
+                style={{
+                  background: "var(--cf-bot-bubble)",
+                  color: "var(--cf-bot-bubble-text)",
+                  borderColor: "var(--cf-bot-bubble-border)",
+                }}
+              >
+                <p className="whitespace-pre-wrap">{a.title}</p>
+              </div>
+            </div>
+            <div className="animate-message-in flex justify-end">
+              <div
+                className="bubble-user max-w-[85%] px-4 py-2.5 text-[0.9375rem] leading-relaxed"
+                style={{
+                  background: "var(--cf-user-bubble)",
+                  color: "var(--cf-user-bubble-text)",
+                  borderColor: "transparent",
+                }}
+              >
+                <p className="whitespace-pre-wrap">{a.display || "\u2014"}</p>
+              </div>
+            </div>
+          </div>
+        ))}
 
       {/*
-        The emphasis was backwards. Someone who lands here has already
-        answered, so the thing they came to do is look at what they said —
-        while "Resubmit" throws that away and starts again. Filling the width
-        in the accent colour made destroying the answer the obvious action and
-        reading it the afterthought.
+        And the status under it, sized like a footnote rather than a screen.
+
+        There is no "view my answers" button any more: the answers are the
+        thread above, so a control to reveal them would be a control to reveal
+        what is already on screen. What is left is the one thing they might
+        actually want, which is to go again.
       */}
-      <div className="mt-6 flex flex-col items-center gap-3">
-        {submitted.answers.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowAnswers((v) => !v)}
-            className="h-11 w-full rounded-full text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
-            style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
-          >
-            {showAnswers ? "Hide my answers" : "View my answers"}
-          </button>
-        )}
+      <div className="animate-message-in flex flex-col items-center gap-3 pt-6 pb-2 text-center">
+        <div className="flex items-center gap-2 text-sm opacity-60">
+          <CheckCheck className="size-4 shrink-0" strokeWidth={2} />
+          <span>
+            You already answered {title} {relativeDay(submitted.at)}
+          </span>
+        </div>
 
         {allowRepeat && (
           <button
             type="button"
             onClick={onResubmit}
-            className="text-sm underline opacity-60 transition-opacity hover:opacity-100"
+            className="h-11 rounded-full px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
+            style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
           >
             Submit another response
           </button>
         )}
       </div>
-    </div>
+    </>
   );
 }
 
