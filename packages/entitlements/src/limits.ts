@@ -29,7 +29,7 @@ export type LimitKind =
 
 export interface LimitMeta {
   label: string;
-  unit: "count" | "megabytes" | "tokens" | "chars";
+  unit: "count" | "megabytes" | "bytes" | "tokens" | "chars";
   mode: EnforcementMode;
   kind: LimitKind;
   /** The `usage_counters.metric` this limit is checked against, for monthly limits. */
@@ -117,8 +117,18 @@ export const LIMITS = {
   max_upload_mb_per_file: { label: "Maximum file size", unit: "megabytes", mode: "hard", kind: "document" },
   blocks_per_form: { label: "Questions per form", unit: "count", mode: "hard", kind: "document" },
   webhooks_per_form: { label: "Webhooks per form", unit: "count", mode: "hard", kind: "document" },
-  knowledge_entries: { label: "Knowledge entries", unit: "count", mode: "hard", kind: "document" },
-  knowledge_chars: { label: "Knowledge size", unit: "chars", mode: "hard", kind: "document" },
+  /**
+   * The knowledge base, metered as documents rather than as characters.
+   *
+   * These replaced `knowledge_entries` / `knowledge_chars`, which were sized
+   * for knowledge that was typed into a textarea and inlined into a system
+   * prompt: twenty entries, twenty thousand characters. Knowledge is now
+   * uploaded, extracted and retrieved, so the quantities that matter are how
+   * many sources a form has and how much extracted text they came to — a
+   * single PDF blows past the old character budget on its own.
+   */
+  knowledge_sources_count: { label: "Knowledge sources", unit: "count", mode: "hard", kind: "document" },
+  knowledge_bytes: { label: "Knowledge size", unit: "bytes", mode: "hard", kind: "document" },
 
   agent_max_turns: { label: "Turns per conversation", unit: "count", mode: "clamp", kind: "document" },
   agent_token_budget: { label: "Tokens per conversation", unit: "tokens", mode: "clamp", kind: "document" },

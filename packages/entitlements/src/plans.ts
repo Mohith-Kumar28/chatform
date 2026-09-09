@@ -70,8 +70,8 @@ const FREE: Plan = {
     max_upload_mb_per_file: 5,
     blocks_per_form: 100,
     webhooks_per_form: 2,
-    knowledge_entries: 0,
-    knowledge_chars: 0,
+    knowledge_sources_count: 0,
+    knowledge_bytes: 0,
 
     agent_max_turns: 30,
     agent_token_budget: 6_000,
@@ -129,8 +129,8 @@ const PRO: Plan = {
     max_upload_mb_per_file: 25,
     blocks_per_form: 300,
     webhooks_per_form: 10,
-    knowledge_entries: 20,
-    knowledge_chars: 20_000,
+    knowledge_sources_count: 50,
+    knowledge_bytes: 25 * 1024 * 1024,
 
     agent_max_turns: 60,
     agent_token_budget: 12_000,
@@ -174,8 +174,8 @@ const BUSINESS: Plan = {
     max_upload_mb_per_file: 100,
     blocks_per_form: 300,
     webhooks_per_form: 25,
-    knowledge_entries: 20,
-    knowledge_chars: 20_000,
+    knowledge_sources_count: 500,
+    knowledge_bytes: 250 * 1024 * 1024,
 
     agent_max_turns: 200,
     agent_token_budget: 30_000,

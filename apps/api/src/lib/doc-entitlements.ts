@@ -17,7 +17,11 @@
  * thing and can see it.
  */
 
-import type { FormDoc } from "@repo/form-schema";
+import {
+  DEFAULT_CONFIRMATION_BODY,
+  DEFAULT_CONFIRMATION_SUBJECT,
+  type FormDoc,
+} from "@repo/form-schema";
 import {
   can,
   limitOf,
@@ -101,9 +105,25 @@ export function stripForPublish(input: FormDoc, ent: Entitlements): StripResult 
     s.onComplete.redirectUrl = undefined;
     note(stripped, "settings.onComplete.redirectUrl", "completion_redirect");
   }
-  if (s.onComplete?.autoReplyEmail?.enabled && !can(ent, "auto_reply_email")) {
-    s.onComplete.autoReplyEmail.enabled = false;
-    note(stripped, "settings.onComplete.autoReplyEmail", "auto_reply_email");
+  /**
+   * The confirmation email is not a paid feature; writing your own is.
+   *
+   * It used to be switched off wholesale below Pro, which was the wrong line to
+   * draw once it became the default: a respondent to a free form would get
+   * nothing back, and the author would have had no way of knowing that from a
+   * switch reading "on". A receipt for having answered belongs to the
+   * respondent rather than to the plan, so the send survives and the *copy* is
+   * what gets reset — a free plan sends the standard words.
+   */
+  const autoReply = s.onComplete?.autoReplyEmail;
+  if (autoReply?.enabled && !can(ent, "auto_reply_email")) {
+    const customised =
+      autoReply.subject !== DEFAULT_CONFIRMATION_SUBJECT || autoReply.bodyMd !== DEFAULT_CONFIRMATION_BODY;
+    if (customised) {
+      autoReply.subject = DEFAULT_CONFIRMATION_SUBJECT;
+      autoReply.bodyMd = DEFAULT_CONFIRMATION_BODY;
+      note(stripped, "settings.onComplete.autoReplyEmail", "auto_reply_email");
+    }
   }
   if (s.followUp?.enabled && !can(ent, "followup_email")) {
     s.followUp.enabled = false;
@@ -164,32 +184,13 @@ export function stripForPublish(input: FormDoc, ent: Entitlements): StripResult 
         note(stripped, "settings.agent.personaPrompt", "agent_persona");
       }
     }
-    if (agent.knowledge.length > 0 && !can(ent, "agent_knowledge")) {
-      agent.knowledge = [];
-      note(stripped, "settings.agent.knowledge", "agent_knowledge");
-    } else if (agent.knowledge.length > 0) {
-      // Entitled, but capped. Truncation is reported the same way a removal is.
-      const maxEntries = limitOf(ent, "knowledge_entries");
-      if (maxEntries != null && agent.knowledge.length > maxEntries) {
-        agent.knowledge = agent.knowledge.slice(0, maxEntries);
-        note(stripped, "settings.agent.knowledge", "agent_knowledge");
-      }
-      const maxChars = limitOf(ent, "knowledge_chars");
-      if (maxChars != null) {
-        let budget = maxChars;
-        const kept = [];
-        for (const entry of agent.knowledge) {
-          const size = entry.title.length + entry.body.length;
-          if (size > budget) break;
-          budget -= size;
-          kept.push(entry);
-        }
-        if (kept.length !== agent.knowledge.length) {
-          agent.knowledge = kept;
-          note(stripped, "settings.agent.knowledge", "agent_knowledge");
-        }
-      }
-    }
+    /*
+     * Knowledge is not stripped here any more, because it is no longer in the
+     * document. It lives in `knowledge_sources` and is gated where an author
+     * can actually see the refusal — at upload, in `routes/knowledge.ts` —
+     * rather than silently vanishing at publish, which is what a document
+     * field could only ever do.
+     */
     if (!can(ent, "agent_guardrails") && agent.guardrails) {
       if (agent.guardrails.forbiddenTopics.length > 0) {
         agent.guardrails.forbiddenTopics = [];

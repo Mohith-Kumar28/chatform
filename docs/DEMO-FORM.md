@@ -88,6 +88,27 @@ curl -s https://api.chatform.in/p/forms/how-you-use-forms/config | jq .requireAu
 
 `null` means the comp or the cache bust did not land. It should be an object.
 
+3. **Wait one cron tick for the knowledge base.** The demo's knowledge is no
+   longer part of the form document — it is `knowledge_sources` rows, seeded
+   `status = 'pending'`, because seed SQL is applied by `wrangler d1 execute`,
+   which has no Workers AI binding and therefore cannot embed anything. The
+   ingest sweep on the five-minute cron picks them up and indexes them.
+
+   So immediately after a fresh seed the agent has a knowledge base that is not
+   searchable yet, and will politely deflect every product question. That is the
+   sweep not having run, not a broken form. Check before concluding otherwise:
+
+   ```bash
+   pnpm --filter @repo/api exec wrangler d1 execute chatform --remote \
+     --command "SELECT status, COUNT(*) FROM knowledge_sources WHERE form_id = 'frm_demo00001' GROUP BY status"
+   ```
+
+   Every row `ready` means retrieval is live. Any row `failed` carries a readable
+   reason in its `error` column. Note this needs the org on **Pro or above** —
+   `agent_knowledge` is a Pro feature and `SessionDO` re-checks it per session,
+   so a lapsed comp turns the agent back into one that knows nothing. The
+   Business comp above covers it.
+
 Locally you also need `NEXT_PUBLIC_GOOGLE_RESPONDENT_CLIENT_ID` in
 `apps/web/.env.local` and `http://localhost:3000` in the chatform-respondent
 OAuth client's authorised origins, or the sign-in card degrades to "not

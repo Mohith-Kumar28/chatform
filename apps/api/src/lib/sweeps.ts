@@ -1,5 +1,7 @@
 import type { Bindings } from "../env.js";
 import { pruneIdempotencyKeys } from "./idempotency.js";
+import { knowledgeStore } from "./knowledge/index.js";
+import { enqueue } from "./knowledge-service.js";
 
 /**
  * Periodic work, from the cron that already runs every five minutes.
@@ -295,6 +297,105 @@ export async function pruneTestData(env: Bindings, limit = 500): Promise<number>
     .bind(cutoff, limit)
     .run();
   return res.meta?.changes ?? 0;
+}
+
+/**
+ * How long a deleted form's knowledge outlives it.
+ *
+ * A form delete is soft — `forms.deleted_at`, with the row and its responses
+ * kept — so the knowledge behind it should not evaporate the instant someone
+ * mis-clicks. A week is long enough to undo a mistake and short enough that a
+ * deleted form is not still paying for storage a month later.
+ */
+const KNOWLEDGE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Forget the knowledge of forms deleted longer ago than the retention window.
+ *
+ * Ordering is the whole of it: vectors, then chunk rows, then the R2 objects,
+ * then `files`. `files` is the only index of what is in R2, so it goes last —
+ * the same reason `delete-account.ts` gives. A crash midway leaves rows
+ * pointing at bytes that are gone, which the next pass cleans up; the reverse
+ * would leave bytes nothing can ever find.
+ */
+export async function sweepDeletedFormKnowledge(env: Bindings, limit = 20): Promise<number> {
+  const cutoff = Date.now() - KNOWLEDGE_RETENTION_MS;
+  const { results } = await env.DB.prepare(
+    `SELECT DISTINCT s.form_id AS form_id
+       FROM knowledge_sources s
+       JOIN forms f ON f.id = s.form_id
+      WHERE f.deleted_at IS NOT NULL AND f.deleted_at < ?
+      LIMIT ?`,
+  )
+    .bind(cutoff, limit)
+    .all<{ form_id: string }>();
+
+  const formIds = (results ?? []).map((r) => r.form_id);
+  if (formIds.length === 0) return 0;
+
+  const store = knowledgeStore(env);
+  let cleared = 0;
+
+  for (const formId of formIds) {
+    try {
+      await store.deleteForm(formId);
+
+      const { results: files } = await env.DB.prepare(
+        `SELECT f.id AS id, f.r2_key AS r2_key
+           FROM knowledge_sources s JOIN files f ON f.id = s.file_id
+          WHERE s.form_id = ?`,
+      )
+        .bind(formId)
+        .all<{ id: string; r2_key: string }>();
+
+      for (const file of files ?? []) {
+        await env.R2.delete(file.r2_key).catch((err: unknown) =>
+          console.error("knowledge_sweep_r2_failed", file.id, err),
+        );
+      }
+
+      await env.DB.prepare(`DELETE FROM knowledge_sources WHERE form_id = ?`).bind(formId).run();
+
+      for (const file of files ?? []) {
+        await env.DB.prepare(`DELETE FROM files WHERE id = ?`).bind(file.id).run();
+      }
+      cleared += 1;
+    } catch (err) {
+      // One form's teardown failing must not stop the others'.
+      console.error("knowledge_sweep_failed", formId, err);
+    }
+  }
+  return cleared;
+}
+
+/**
+ * Re-enqueue sources that never got picked up.
+ *
+ * Two things land here. A queue send that failed leaves a `pending` row with no
+ * message behind it, and the seeded knowledge that templates and the demo form
+ * write is created deferred on purpose — seed SQL runs nowhere near Workers AI,
+ * so it cannot embed anything, and this is what turns those rows into an index.
+ *
+ * `extracting` and `indexing` are included past a longer threshold: a worker
+ * that died mid-ingest leaves a row in one of them forever otherwise.
+ */
+export async function sweepStuckKnowledgeIngest(env: Bindings, limit = 25): Promise<number> {
+  const pendingCutoff = Date.now() - 2 * 60 * 1000;
+  const workingCutoff = Date.now() - 30 * 60 * 1000;
+
+  const { results } = await env.DB.prepare(
+    `SELECT id FROM knowledge_sources
+      WHERE (status = 'pending' AND created_at < ?)
+         OR (status IN ('extracting', 'indexing') AND created_at < ?)
+      ORDER BY created_at ASC
+      LIMIT ?`,
+  )
+    .bind(pendingCutoff, workingCutoff, limit)
+    .all<{ id: string }>();
+
+  const ids = (results ?? []).map((r) => r.id);
+  for (const id of ids) await enqueue(env, id);
+  return ids.length;
 }
 
 export { pruneIdempotencyKeys };

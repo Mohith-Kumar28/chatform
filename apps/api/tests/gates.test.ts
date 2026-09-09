@@ -5,7 +5,7 @@ import type { Bindings } from "../src/env.js";
 import { invalidateEntitlements, meter, getEntitlements } from "../src/lib/entitlements.js";
 import { stripForPublish, clampForRuntime, brandingHiddenFor, checkDocLimits } from "../src/lib/doc-entitlements.js";
 import { PLANS, resolve, type PlanId } from "@repo/entitlements";
-import { FormDoc } from "@repo/form-schema";
+import { DEFAULT_CONFIRMATION_BODY, DEFAULT_CONFIRMATION_SUBJECT, FormDoc } from "@repo/form-schema";
 
 const DB = () => env as unknown as Bindings;
 
@@ -532,21 +532,32 @@ describe("stripForPublish", () => {
       settings: {
         branding: { hidePoweredBy: true },
         allowResubmissions: false,
-        onComplete: { redirectUrl: "https://example.com/thanks", autoReplyEmail: { enabled: true } },
+        onComplete: {
+          redirectUrl: "https://example.com/thanks",
+          // Custom copy is what Pro buys here; the send itself survives on Free,
+          // so only a subject the author wrote gets reported as stripped.
+          autoReplyEmail: { enabled: true, subject: "A subject of my own", bodyMd: "In my own words." },
+        },
         meta: { ogTitle: "Custom", noIndex: true },
-        agent: { personaPrompt: "Be terse", goal: "Qualify the lead", knowledge: [{ id: "kb_0001", title: "Pricing", body: "$24" }] },
+        agent: { personaPrompt: "Be terse", goal: "Qualify the lead" },
       },
       theme: { brandName: "Acme", logoUrl: "https://cdn/x.png", fontHeading: "Playfair Display" },
     });
     const { doc: out, stripped } = stripForPublish(doc, entFor("free"));
     const features = new Set(stripped.map((s) => s.feature));
-    for (const f of ["remove_branding", "brand_logo", "custom_fonts", "duplicate_prevention", "completion_redirect", "auto_reply_email", "form_metadata", "agent_persona", "agent_knowledge"]) {
+    // `agent_knowledge` is absent on purpose: knowledge left the document, so
+    // there is nothing here to strip. It is gated at upload instead.
+    for (const f of ["remove_branding", "brand_logo", "custom_fonts", "duplicate_prevention", "completion_redirect", "auto_reply_email", "form_metadata", "agent_persona"]) {
       expect(features.has(f as never), f).toBe(true);
     }
     expect(out.settings.branding.hidePoweredBy).toBe(false);
     expect(out.theme.logoUrl).toBeNull();
     expect(out.settings.onComplete.redirectUrl).toBeUndefined();
-    expect(out.settings.agent.knowledge).toEqual([]);
+    // The confirmation email is not a Pro feature — a respondent to a free form
+    // still gets their receipt. Only the words are reset.
+    expect(out.settings.onComplete.autoReplyEmail.enabled).toBe(true);
+    expect(out.settings.onComplete.autoReplyEmail.subject).toBe(DEFAULT_CONFIRMATION_SUBJECT);
+    expect(out.settings.onComplete.autoReplyEmail.bodyMd).toBe(DEFAULT_CONFIRMATION_BODY);
   });
 
   it("leaves the input document untouched", () => {
@@ -575,28 +586,21 @@ describe("stripForPublish", () => {
     expect(stripped).toEqual([]);
   });
 
-  it("truncates a knowledge base to the plan's character budget", () => {
-    // The 20-entry cap is already enforced by the document schema, so what the plan layer
-    // has to police is the character budget: twenty entries can still be far too large.
-    const entries = Array.from({ length: 20 }, (_, i) => ({
-      id: `kb_${String(i).padStart(4, "0")}`,
-      title: `T${i}`,
-      body: "x".repeat(2_000),
-    }));
-    const doc = docWith({ settings: { agent: { knowledge: entries } } });
-    const { doc: out, stripped } = stripForPublish(doc, entFor("pro"));
-    const total = out.settings.agent.knowledge.reduce((n, e) => n + e.title.length + e.body.length, 0);
-    expect(out.settings.agent.knowledge.length).toBeLessThan(20);
-    expect(total).toBeLessThanOrEqual(PLANS.pro.limits.knowledge_chars!);
-    expect(stripped.some((s) => s.feature === "agent_knowledge")).toBe(true);
-  });
-
-  it("keeps a knowledge base that fits", () => {
-    const entries = Array.from({ length: 5 }, (_, i) => ({ id: `kb_${String(i).padStart(4, "0")}`, title: `T${i}`, body: "x".repeat(50) }));
-    const doc = docWith({ settings: { agent: { knowledge: entries } } });
-    const { doc: out, stripped } = stripForPublish(doc, entFor("pro"));
-    expect(out.settings.agent.knowledge).toHaveLength(5);
-    expect(stripped).toEqual([]);
+  /**
+   * Knowledge is no longer this layer's business.
+   *
+   * It used to be a document field, so `stripForPublish` truncated it to the
+   * plan's character budget — which meant an over-quota knowledge base was
+   * silently discarded at publish, with the author's only clue a `stripped`
+   * entry nothing surfaced prominently. It now lives in `knowledge_sources`
+   * and is refused at upload, in `routes/knowledge.ts`, where the author is
+   * looking when it happens.
+   */
+  it("no longer strips knowledge, which is not in the document", () => {
+    const doc = docWith({ settings: { agent: { knowledge: [{ id: "kb_0001", title: "T", body: "x".repeat(50_000) }] } } });
+    const { doc: out, stripped } = stripForPublish(doc, entFor("free"));
+    expect((out.settings.agent as Record<string, unknown>).knowledge).toBeUndefined();
+    expect(stripped.some((s) => s.feature === "agent_knowledge")).toBe(false);
   });
 
   it("drops a model override below Business", () => {

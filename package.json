@@ -37,6 +37,8 @@
     "deploy:all": "pnpm deploy:api && pnpm deploy:web",
     "secrets:push": "python3 tooling/push-secrets.py",
     "secrets:list": "pnpm --filter @repo/api exec wrangler secret list",
+    "knowledge:backfill": "node tooling/backfill-knowledge-sources.mjs",
+    "knowledge:backfill:remote": "node tooling/backfill-knowledge-sources.mjs --remote",
     "apikeys:backfill": "node tooling/backfill-apikey-hashes.mjs",
     "apikeys:backfill:remote": "node tooling/backfill-apikey-hashes.mjs --remote",
     "gen:openapi": "pnpm --filter @repo/api gen:openapi",

@@ -540,6 +540,97 @@ export const files = sqliteTable(
   (t) => [index("idx_files_session").on(t.sessionId), index("idx_files_status_created").on(t.status, t.createdAt)],
 );
 
+// ───────────────────────── Knowledge base ─────────────────────────
+
+/**
+ * One row per thing an author added to a form's knowledge base.
+ *
+ * This is the app's table, not the retrieval backend's: the builder lists it,
+ * the plan caps meter it, and `status` is what tells an author their upload is
+ * still being read — or could not be read at all. A knowledge base that
+ * silently indexes nothing is the failure mode this column exists to prevent.
+ *
+ * Deliberately NOT part of the form document. Knowledge used to live in
+ * `settings.agent.knowledge`, which meant it was versioned and republished with
+ * the form and capped at what fits in a system prompt. A 200-page PDF is not a
+ * document field.
+ *
+ * `organization_id` is carried even though `form_id` implies it, so a
+ * workspace-level library later is a join table rather than a backfill.
+ */
+export const knowledgeSources = sqliteTable(
+  "knowledge_sources",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    formId: text("form_id").notNull().references(() => forms.id, { onDelete: "cascade" }),
+    /** How it arrived: file | text | link | image | audio | crawl. */
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    /** The URL it came from, or the original filename. */
+    origin: text("origin"),
+    /**
+     * The uploaded bytes, when there are any.
+     *
+     * No FK on purpose, matching `files` itself: that table is the only index
+     * of what is in R2, so it outlives the rows that reference it and is
+     * cleared last by the sweep.
+     */
+    fileId: text("file_id"),
+    /**
+     * Extraction input for sources that never touch R2 — pasted text, and the
+     * knowledge the template and demo generators seed. Seeded rows cannot
+     * carry embeddings (seed SQL runs nowhere near Workers AI), so they land
+     * here as `pending` and the ingest sweep picks them up.
+     */
+    rawText: text("raw_text"),
+    /** The retrieval backend's own handle, when it has one. Unused by Vectorize. */
+    externalId: text("external_id"),
+    /** pending | extracting | indexing | ready | failed */
+    status: text("status").notNull().default("pending"),
+    /** Why it failed, in words an author can act on. */
+    error: text("error"),
+    bytes: integer("bytes").notNull().default(0),
+    chunkCount: integer("chunk_count").notNull().default(0),
+    /** Of the extracted text, so re-adding the same document is a no-op. */
+    checksumSha256: text("checksum_sha256"),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+    indexedAt: ts("indexed_at"),
+  },
+  (t) => [
+    index("idx_knowledge_sources_form").on(t.formId),
+    // The ingest sweep's query: everything stuck in a non-terminal state,
+    // oldest first.
+    index("idx_knowledge_sources_status").on(t.status, t.createdAt),
+  ],
+);
+
+/**
+ * One row per chunk, and the text behind one vector.
+ *
+ * Owned by the Vectorize adapter — a backend that chunks for us (Supermemory
+ * does) simply leaves this empty. The text lives here rather than in vector
+ * metadata because Vectorize allows 10 KiB of metadata per vector and indexes
+ * only the first 64 bytes of a string, so metadata carries the form and source
+ * ids for filtering and nothing else.
+ *
+ * `id` is also the vector id, which is what makes deletion possible: Vectorize
+ * deletes by id, so the mapping has to be durable somewhere we control.
+ */
+export const knowledgeChunks = sqliteTable(
+  "knowledge_chunks",
+  {
+    id: text("id").primaryKey(),
+    sourceId: text("source_id").notNull().references(() => knowledgeSources.id, { onDelete: "cascade" }),
+    formId: text("form_id").notNull(),
+    /** Position within the source, so retrieved passages can be read in order. */
+    ordinal: integer("ordinal").notNull(),
+    text: text("text").notNull(),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [index("idx_knowledge_chunks_source").on(t.sourceId), index("idx_knowledge_chunks_form").on(t.formId)],
+);
+
 // ───────────────────────── Webhooks & integrations ─────────────────────────
 
 export const webhooks = sqliteTable(

@@ -148,6 +148,13 @@
       "when": 1789579200000,
       "tag": "0020_start_over_survives_signin",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1788979071352,
+      "tag": "0021_faithful_clea",
+      "breakpoints": true
     }
   ]
 }

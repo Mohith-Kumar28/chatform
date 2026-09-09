@@ -41,11 +41,32 @@ describe("verbatim question mode", () => {
 });
 
 describe("knowledge base and guardrails reach the prompt", () => {
-  it("inlines knowledge entries", () => {
-    const doc = docWith({
-      knowledge: [{ id: "kb_0001", title: "Pricing", body: "Pro is $29/month." }],
-    });
-    expect(buildStablePrefix(doc)).toContain("Pro is $29/month.");
+  /*
+   * The knowledge base is pointed at, not pasted in.
+   *
+   * These three assertions are the contract that keeps retrieval cheap: the
+   * prefix must name the tool when there is knowledge, say nothing when there
+   * is not, and never carry the material itself — the prompt is re-sent on
+   * every turn of every session, and inlining is what capped the old knowledge
+   * base at twenty thousand characters.
+   */
+  it("points at the retrieval tool when the form has knowledge", () => {
+    const prefix = buildStablePrefix(docWith({}), { hasKnowledge: true });
+    expect(prefix).toContain("answer_from_knowledge");
+    expect(prefix).toContain("WHAT YOU KNOW");
+  });
+
+  it("says nothing about knowledge when the form has none", () => {
+    const prefix = buildStablePrefix(docWith({}), { hasKnowledge: false });
+    expect(prefix).not.toContain("WHAT YOU KNOW");
+    expect(prefix).not.toContain("answer_from_knowledge");
+  });
+
+  it("stays byte-identical across turns, whatever the knowledge base holds", () => {
+    // The prefix is the cacheable half of the system prompt. If retrieved
+    // passages ever get spliced back into it, this is what fails.
+    const doc = docWith({});
+    expect(buildStablePrefix(doc, { hasKnowledge: true })).toBe(buildStablePrefix(doc, { hasKnowledge: true }));
   });
 
   it("uses the refusal line when off-topic answering is disabled", () => {

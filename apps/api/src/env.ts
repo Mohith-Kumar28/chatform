@@ -8,6 +8,13 @@ export interface Bindings {
   Q_WEBHOOKS: Queue;
   Q_EXPORTS: Queue;
   Q_EMAIL: Queue;
+  /**
+   * Knowledge ingestion. Extraction, chunking and embedding all take far longer
+   * than a request can wait — a single PDF is a `toMarkdown` call, an OCR
+   * fallback and dozens of embedding calls — so the upload route registers a
+   * row and hands the work to this queue.
+   */
+  Q_KNOWLEDGE: Queue;
   ANALYTICS: AnalyticsEngineDataset;
   /** Per-request API telemetry. Optional: Miniflare does not always provide it. */
   ANALYTICS_API?: AnalyticsEngineDataset;
@@ -33,6 +40,20 @@ export interface Bindings {
   RATE_LIMIT_P_START?: RateLimit;
   RATE_LIMIT_P_AUTH?: RateLimit;
   WORKERS_AI?: Ai;
+  /**
+   * The knowledge base's vector index, one namespace per form.
+   *
+   * Optional for the same reason as `EMAIL`: Miniflare does not implement the
+   * binding, so a hard dependency would fail the whole test suite rather than
+   * degrade. `lib/knowledge` treats an absent binding as "retrieval is off",
+   * which is also what a local dev run without a remote index should do.
+   */
+  VECTORIZE?: VectorizeIndex;
+  /**
+   * Which `KnowledgeStore` implementation to build — see `lib/knowledge/index.ts`.
+   * Absent means `vectorize`, the only one currently shipped.
+   */
+  KNOWLEDGE_BACKEND?: string;
   /**
    * Cloudflare Email Service, bound directly rather than reached over HTTP.
    *

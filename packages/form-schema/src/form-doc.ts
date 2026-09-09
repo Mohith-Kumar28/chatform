@@ -7,7 +7,7 @@ import { Ending, HiddenField, LogicRule, Variable } from "./logic";
 import { SettingsDoc, ThemeDoc } from "./settings";
 import { buildUpiUri } from "./payment-link";
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 8;
 
 export const FormDoc = z.object({
   schemaVersion: z.number().int().positive().default(SCHEMA_VERSION),

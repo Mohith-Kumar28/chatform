@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FormDoc, SCHEMA_VERSION } from "./form-doc";
+import { DEFAULT_CONFIRMATION_BODY, DEFAULT_CONFIRMATION_SUBJECT } from "./settings";
 
 /**
  * Form document migrations.
@@ -106,6 +107,69 @@ const MIGRATIONS: ((doc: AnyDoc) => AnyDoc)[] = [
       ...doc,
       schemaVersion: 6,
       settings: { ...settings, requireAuth: { ...auth, method } },
+    };
+  },
+
+  // ── v6 → v7 ────────────────────────────────────────────────────────────
+  // `settings.agent.knowledge` leaves the document.
+  //
+  // It was an array of title/body entries inlined into the system prompt, which
+  // is why it was capped at twenty of them and twenty thousand characters. The
+  // knowledge base is now uploaded documents, links and recordings, extracted
+  // and indexed in `knowledge_sources` — far too large to version inside a form
+  // and far too large to put in a prompt.
+  //
+  // Dropping the key here rather than leaving it to be ignored keeps published
+  // versions honest: a v6 document rendered today should not still carry a
+  // knowledge base that nothing reads. The entries themselves are not lost —
+  // `tooling/backfill-knowledge-sources.mjs` copies them into the new tables
+  // before this ships, reading the stored JSON directly.
+  (doc) => {
+    const settings = (doc.settings ?? {}) as Record<string, unknown>;
+    const agent = settings.agent as Record<string, unknown> | undefined;
+    if (!agent || !("knowledge" in agent)) return { ...doc, schemaVersion: 7 };
+    const { knowledge: _dropped, ...rest } = agent;
+    return { ...doc, schemaVersion: 7, settings: { ...settings, agent: rest } };
+  },
+
+  // ── v7 → v8 ────────────────────────────────────────────────────────────
+  // The respondent's confirmation email turns on.
+  //
+  // It existed at v7 as `autoReplyEmail`, defaulted off, and had no control
+  // anywhere in the builder — the only way to switch it on was to write the
+  // JSON. So a stored `enabled: false` is not an author's decision to decline
+  // it; it is the absence of a decision, and every one of those becomes yes.
+  // This is the one migration in the chain that changes what a published form
+  // *does* rather than how it is spelled, which is defensible only because the
+  // thing it starts doing is sending a receipt to the person who just wrote in
+  // — and because the author can turn it off in one click now that there is a
+  // switch to turn.
+  //
+  // Copy the author did write survives: anyone who reached these fields through
+  // the API meant what they typed, so a non-empty subject or body is kept and
+  // only the blanks are filled.
+  (doc) => {
+    const settings = (doc.settings ?? {}) as Record<string, unknown>;
+    const onComplete = (settings.onComplete ?? {}) as Record<string, unknown>;
+    const prior = (onComplete.autoReplyEmail ?? {}) as Record<string, unknown>;
+    const kept = (key: string, fallback: string) =>
+      typeof prior[key] === "string" && (prior[key] as string).trim() ? (prior[key] as string) : fallback;
+    return {
+      ...doc,
+      schemaVersion: 8,
+      settings: {
+        ...settings,
+        onComplete: {
+          ...onComplete,
+          autoReplyEmail: {
+            ...prior,
+            enabled: true,
+            subject: kept("subject", DEFAULT_CONFIRMATION_SUBJECT),
+            bodyMd: kept("bodyMd", DEFAULT_CONFIRMATION_BODY),
+            includeAnswers: typeof prior.includeAnswers === "boolean" ? prior.includeAnswers : true,
+          },
+        },
+      },
     };
   },
 ];

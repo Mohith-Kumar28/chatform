@@ -1,26 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Bot,
-  BookOpen,
-  Plus,
-  Shield,
-  Target,
-  Trash2,
-  Coins,
-} from "lucide-react";
-import { KNOWLEDGE_CHAR_BUDGET, knowledgeSize } from "@repo/form-schema";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Bot, BookOpen, Shield, Target, Coins } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { EmptyState } from "@/components/ui/empty-state";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingGroup, SettingRow } from "@/components/ui/setting-row";
 import {  NumberField, SwitchField } from "../inspector/fields";
 import { useBuilderStore } from "@/stores/builder-store";
-import { cn } from "@/lib/utils";
+import { KnowledgePanel } from "@/components/knowledge/knowledge-panel";
 
 const SECTIONS = [
   { value: "persona", label: "Persona", icon: Bot },
@@ -32,8 +20,6 @@ const SECTIONS = [
 
 type Section = (typeof SECTIONS)[number]["value"];
 
-const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
-
 /**
  * The Agent tab — the reason this product isn't Youform.
  *
@@ -43,6 +29,7 @@ const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0
 export function AgentTab() {
   const doc = useBuilderStore((s) => s.doc);
   const edit = useBuilderStore((s) => s.edit);
+  const formId = useBuilderStore((s) => s.formId);
   const [section, setSection] = useState<Section>("persona");
 
   if (!doc) return null;
@@ -57,9 +44,6 @@ export function AgentTab() {
     edit((d) => {
       Object.assign(d.settings.agent.guardrails, p);
     });
-
-  const used = knowledgeSize(agent.knowledge);
-  const overBudget = used > KNOWLEDGE_CHAR_BUDGET;
 
   return (
     <div className="mx-auto h-[calc(100svh-3.5rem)] w-full max-w-3xl overflow-y-auto p-6">
@@ -177,89 +161,8 @@ export function AgentTab() {
         )}
 
         {section === "knowledge" && (
-          <SettingGroup description="What the agent can answer when a respondent asks a question back.">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-caption text-muted-foreground tabular">
-                  {used.toLocaleString()} / {KNOWLEDGE_CHAR_BUDGET.toLocaleString()} characters
-                </span>
-                {overBudget && <Badge variant="destructive">Over budget</Badge>}
-              </div>
-              <Button
-                size="sm"
-                shape="pill"
-                disabled={agent.knowledge.length >= 20}
-                onClick={() =>
-                  patch({
-                    knowledge: [...agent.knowledge, { id: uid("kb"), title: "", body: "" }],
-                  })
-                }
-              >
-                <Plus className="size-3.5" />
-                Add entry
-              </Button>
-            </div>
-
-            <div
-              className={cn(
-                "bg-muted h-1 overflow-hidden rounded-full",
-                overBudget && "bg-[var(--destructive-soft)]",
-              )}
-            >
-              <div
-                className={cn("h-full rounded-full transition-all", overBudget ? "bg-destructive" : "bg-primary")}
-                style={{ width: `${Math.min(100, (used / KNOWLEDGE_CHAR_BUDGET) * 100)}%` }}
-              />
-            </div>
-
-            {agent.knowledge.length === 0 ? (
-              <EmptyState
-                compact
-                icon={BookOpen}
-                title="No knowledge yet"
-                description="Add your pricing, FAQ or policies and the agent can answer questions mid-form instead of deflecting."
-              />
-            ) : (
-              <div className="space-y-3">
-                {agent.knowledge.map((entry, i) => (
-                  <div key={entry.id} className="border-border bg-card space-y-2 rounded-xl border p-3">
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={entry.title}
-                        placeholder="Pricing"
-                        className="h-8 font-medium"
-                        onChange={(e) =>
-                          edit((d) => {
-                            d.settings.agent.knowledge[i]!.title = e.target.value;
-                          }, `kbTitle:${entry.id}`)
-                        }
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Remove entry"
-                        className="hover:text-destructive shrink-0"
-                        onClick={() =>
-                          patch({ knowledge: agent.knowledge.filter((k) => k.id !== entry.id) })
-                        }
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                    <Textarea
-                      rows={4}
-                      value={entry.body}
-                      placeholder="Pro is $29/month billed monthly, or $240/year. It includes 1,000 responses, the AI agent, and no chatform branding."
-                      onChange={(e) =>
-                        edit((d) => {
-                          d.settings.agent.knowledge[i]!.body = e.target.value;
-                        }, `kbBody:${entry.id}`)
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
+          <SettingGroup description="What the agent can answer when a respondent asks a question back. Everything you add here is read, indexed and looked up only when it is relevant — so a 200-page manual costs the same per conversation as a one-line FAQ.">
+            <KnowledgePanel formId={formId} />
           </SettingGroup>
         )}
 

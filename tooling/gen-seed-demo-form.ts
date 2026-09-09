@@ -25,7 +25,7 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { canonicalJson, sha256Hex } from "@repo/form-schema";
-import { DEMO_FORM, DEMO_SLUG, DEMO_REVISION, DEMO_OWNER_EMAIL } from "./demo-form/index.js";
+import { DEMO_FORM, DEMO_SLUG, DEMO_REVISION, DEMO_OWNER_EMAIL, DEMO_KNOWLEDGE } from "./demo-form/index.js";
 
 const FORM_ID = "frm_demo00001";
 
@@ -190,6 +190,47 @@ async function sqlFor(previous: string | null): Promise<string> {
   const current = versionBlock(DEMO_REVISION, schemaJson, checksum);
   const allBlocks = latest && latest.checksum === checksum ? blocks : [...blocks, current];
 
+  /*
+   * The demo's knowledge, as rows rather than as part of the document.
+   *
+   * Emitted BEFORE the version blocks, and that position is load-bearing.
+   * `sliceVersionBlocks` re-reads this file on every generation by splitting
+   * everything above `FOOTER_MARKER` on `VERSION_MARKER` — so anything placed
+   * between the last version block and the footer is read back as part of that
+   * block and re-emitted with it, growing the file by one copy per run. Ask how
+   * I know. Up here it sits in the header, which is rewritten wholesale and
+   * never parsed, and the form row it references is created immediately above.
+   *
+   * Seeded `pending` and left there deliberately: embedding requires Workers
+   * AI, and this file is applied by `wrangler d1 execute`, which has no
+   * bindings and no network. `sweepStuckKnowledgeIngest` picks up anything
+   * pending for more than two minutes, so the demo indexes itself within one
+   * cron tick of being seeded — locally and in production alike.
+   *
+   * Ids are derived from the ordinal so a re-seed updates the same rows rather
+   * than accumulating duplicates, and the ON CONFLICT resets status to
+   * `pending` so edited copy is genuinely re-indexed.
+   */
+  const knowledgeRows = [
+    "",
+    "-- ─── the demo agent's knowledge ────────────────────────────────────────",
+    "-- Seeded pending: seed SQL cannot embed anything. The ingest sweep indexes",
+    "-- these within a few minutes. Source: tooling/demo-form/knowledge.ts.",
+    ...DEMO_KNOWLEDGE.flatMap((entry, i) => {
+      const id = `kbs_demo${String(i + 1).padStart(4, "0")}`;
+      return [
+        `INSERT INTO knowledge_sources (id, organization_id, form_id, kind, title, raw_text, status, bytes, chunk_count, created_at)`,
+        `SELECT ${q(id)}, f.organization_id, ${q(FORM_ID)}, 'text', ${q(entry.title)}, ${q(entry.body)}, 'pending', 0, 0, ${EPOCH}`,
+        `  FROM forms f WHERE f.id = ${q(FORM_ID)}`,
+        `ON CONFLICT (id) DO UPDATE SET title = excluded.title,`,
+        `                               raw_text = excluded.raw_text,`,
+        `                               status = 'pending',`,
+        `                               error = NULL;`,
+      ];
+    }),
+    "",
+  ].join("\n");
+
   const footer = [
     `${FOOTER_MARKER}──────────────────────────────`,
     "-- Rewritten on every generation, unlike the version rows above. The working",
@@ -207,7 +248,7 @@ async function sqlFor(previous: string | null): Promise<string> {
     "",
   ].join("\n");
 
-  return [header, ...allBlocks, footer].join("\n");
+  return [header, knowledgeRows, ...allBlocks, footer].join("\n");
 }
 
 const here = dirname(fileURLToPath(import.meta.url));

@@ -23,6 +23,7 @@ import { versionsV1Router } from "./v1/versions.js";
 import { aiV1Router } from "./v1/ai.js";
 import { integrationsV1Router } from "./v1/integrations.js";
 import { uploadsV1Router } from "./uploads.js";
+import { knowledgeV1Router } from "./knowledge.js";
 
 /**
  * Developer API v1 — API-key auth, headless chat contract.
@@ -182,6 +183,7 @@ v1Router.route("/", exportsV1Router);
  * containing one impossible to complete programmatically.
  */
 v1Router.route("/", uploadsV1Router);
+v1Router.route("/", knowledgeV1Router);
 
 // ─── headless chat ───
 

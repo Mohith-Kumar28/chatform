@@ -40,6 +40,27 @@
       "bucket_name": "chatform-uploads"
     }
   ],
+  // Workers AI carries the whole knowledge pipeline that is not a model call to
+  // OpenRouter: `toMarkdown` turns an uploaded PDF, spreadsheet or image into
+  // markdown, Whisper transcribes a voice note, and bge-m3 embeds the chunks.
+  // The binding was already declared in `Bindings` and never bound; this is it.
+  "ai": {
+    "binding": "WORKERS_AI"
+  },
+  // One index for every form, partitioned by a per-form namespace rather than
+  // an index each: Vectorize allows 50,000 namespaces per index and only 50,000
+  // indexes per *account*, so a form-per-index design would spend the account's
+  // entire ceiling on one customer's forms.
+  //
+  // `dimensions` and `metric` are immutable once the index exists. 1024 is
+  // bge-m3's output and sits under Vectorize's 1536 ceiling; changing embedding
+  // model later means a new index and a full re-embed, not an ALTER.
+  "vectorize": [
+    {
+      "binding": "VECTORIZE",
+      "index_name": "chatform-knowledge"
+    }
+  ],
   "durable_objects": {
     "bindings": [
       {
@@ -58,7 +79,8 @@
     "producers": [
       { "binding": "Q_WEBHOOKS", "queue": "q-webhooks" },
       { "binding": "Q_EXPORTS", "queue": "q-exports" },
-      { "binding": "Q_EMAIL", "queue": "q-emails" }
+      { "binding": "Q_EMAIL", "queue": "q-emails" },
+      { "binding": "Q_KNOWLEDGE", "queue": "q-knowledge" }
     ],
     "consumers": [
       {
@@ -85,6 +107,21 @@
         // neither is transient. The DLQ is where those go to be looked at.
         "max_retries": 5,
         "dead_letter_queue": "q-emails-dlq"
+      },
+      {
+        // One source per message. A batch would share a fate, and these
+        // messages are long and uneven — a 40-page PDF next to a pasted
+        // paragraph — so a batch is only as fast as its worst member and
+        // retries the cheap ones along with the expensive one.
+        "queue": "q-knowledge",
+        "max_batch_size": 1,
+        // Extraction is the failure-prone half and most of its failures are
+        // permanent: a corrupt file, a page that will not parse, an image with
+        // no text in it. Three attempts distinguishes a transient model error
+        // from a document we are never going to read, and the row itself
+        // records the reason either way.
+        "max_retries": 3,
+        "dead_letter_queue": "q-knowledge-dlq"
       }
     ]
   },

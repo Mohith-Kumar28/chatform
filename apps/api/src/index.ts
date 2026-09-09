@@ -7,6 +7,7 @@ import { pruneGateLog } from "./lib/gate-log.js";
 import { pruneFormActivity } from "./lib/form-activity.js";
 import { runExport, pruneExpiredExports, type ExportMessage } from "./lib/exports.js";
 import { runMailJob } from "./lib/mail-jobs.js";
+import { ingestSource } from "./lib/knowledge-service.js";
 import { pruneMailDeliveries, recordMailDelivery, type MailJob } from "./lib/mail.js";
 import {
   sweepExpiredResponses,
@@ -15,6 +16,8 @@ import {
   sweepFollowUps,
   pruneTestData,
   pruneIdempotencyKeys,
+  sweepDeletedFormKnowledge,
+  sweepStuckKnowledgeIngest,
 } from "./lib/sweeps.js";
 import { rollupPlatformDaily, rollupFormStructure, backfillPlatformDaily } from "./lib/platform-rollup.js";
 
@@ -58,6 +61,26 @@ export default {
           // The row is already marked failed with a reader-facing message;
           // retrying is for a transient D1 or R2 error.
           msg.retry();
+        }
+      } else if (batch.queue === "q-knowledge") {
+        /**
+         * One source per message, and `ingestSource` swallows the failures that
+         * are about the document rather than about us — a corrupt PDF becomes a
+         * `failed` row with a reason, not three retries of the same corrupt
+         * PDF. What reaches the catch here is infrastructure, which is exactly
+         * what a retry is for.
+         */
+        const { sourceId } = msg.body as { sourceId?: string };
+        if (!sourceId) {
+          msg.ack();
+        } else {
+          try {
+            await ingestSource(env, sourceId);
+            msg.ack();
+          } catch (err) {
+            console.error("knowledge_ingest_message_failed", sourceId, err);
+            msg.retry();
+          }
         }
       } else if (batch.queue === "q-emails") {
         /**
@@ -117,6 +140,21 @@ export default {
       // Unconverted gate denials are only interesting while they are recent; a converted
       // row is kept forever because it is the attribution for a sale.
       await pruneGateLog(env).catch((err) => console.error("gate_log_prune_failed", err));
+      /**
+       * The knowledge base's housekeeping.
+       *
+       * `sweepStuckKnowledgeIngest` is the safety net under the ingest queue —
+       * a send that failed, a worker that died mid-extract, and the seeded
+       * knowledge that templates and the demo form deliberately defer, since
+       * seed SQL cannot embed anything. `sweepDeletedFormKnowledge` is what
+       * makes a deleted form's knowledge go away with it, a week later.
+       */
+      const requeued = await sweepStuckKnowledgeIngest(env).catch((err) => {
+        console.error("knowledge_ingest_sweep_failed", err);
+        return 0;
+      });
+      if (requeued > 0) console.log(`knowledge_ingest_requeued: ${requeued}`);
+      await sweepDeletedFormKnowledge(env).catch((err) => console.error("knowledge_delete_sweep_failed", err));
 
       /**
        * The API path's housekeeping.

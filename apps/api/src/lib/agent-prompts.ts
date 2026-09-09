@@ -4,10 +4,16 @@ import { ADDABLE_BLOCK_TYPES, enforcesUnique, renderBlockCatalog, type Block, ty
  * The interview agent's prompts.
  *
  * Ordering matters for cost. The system prompt is assembled STABLE FIRST —
- * identity, persona, goal, knowledge base, question manifest — and volatile
- * content (transcript, current objective, progress) last. That prefix is
+ * identity, persona, goal, question manifest — and volatile content
+ * (transcript, current objective, progress) last. That prefix is
  * byte-identical across every turn of a session, so the provider's prompt
- * cache can serve it, and the knowledge base is usually the largest part.
+ * cache can serve it.
+ *
+ * The knowledge base used to be inlined here and was usually the largest part
+ * of it. It is now retrieved per question through `answer_from_knowledge`, so
+ * what remains is a single line saying the tool is worth calling — retrieved
+ * passages must arrive as tool results, never spliced back in here, or the
+ * prefix stops being byte-identical and every turn misses the cache.
  */
 
 const TONE_GUIDE: Record<string, string> = {
@@ -29,7 +35,7 @@ export interface AgentContext {
  * The stable half of the system prompt: everything that does not change within
  * a session. Cache-friendly by construction.
  */
-export function buildStablePrefix(doc: FormDoc): string {
+export function buildStablePrefix(doc: FormDoc, opts: { hasKnowledge?: boolean } = {}): string {
   const agent = doc.settings.agent;
   const parts: string[] = [];
 
@@ -49,18 +55,22 @@ export function buildStablePrefix(doc: FormDoc): string {
     );
   }
 
-  // The knowledge base is what lets the agent answer questions back instead of
-  // deflecting — the single biggest behavioural difference from a normal form.
-  if (agent.knowledge.length > 0) {
-    const kb = agent.knowledge
-      .filter((k) => k.title.trim() || k.body.trim())
-      .map((k) => `### ${k.title}\n${k.body}`)
-      .join("\n\n");
-    if (kb) {
-      parts.push(
-        `WHAT YOU KNOW\nUse this to answer the respondent's questions. Quote it faithfully; never invent details it does not contain.\n\n${kb}`,
-      );
-    }
+  /*
+   * The knowledge base is named here, not pasted here.
+   *
+   * It used to be inlined in full, which is why it was capped at twenty
+   * entries and twenty thousand characters: the cap was not a product decision
+   * but the size of prompt anyone was willing to pay for on every turn. Now the
+   * material is chunked and indexed, and `answer_from_knowledge` fetches only
+   * the passages a respondent's question actually needs.
+   *
+   * So this block is one line, and a form with a 500-page manual has the same
+   * prompt as a form with a one-line FAQ.
+   */
+  if (opts.hasKnowledge) {
+    parts.push(
+      "WHAT YOU KNOW\nThis form has a knowledge base. When the respondent asks anything about the product, pricing, policy or the form itself, call `answer_from_knowledge` FIRST and answer from what it returns. Quote it faithfully; never invent details it does not contain.",
+    );
   }
 
   const guards = agent.guardrails;

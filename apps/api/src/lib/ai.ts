@@ -43,6 +43,20 @@ export const MODELS = {
   generation: "google/gemini-3.7-flash",
   /** Reading the author's site and searching around it, before drafting. */
   research: "google/gemini-3.7-flash",
+  /**
+   * Reading a document Workers AI could not.
+   *
+   * `AI.toMarkdown` extracts a PDF's embedded text and walks its structure
+   * tree; it does not OCR. A scanned contract or a photographed price list has
+   * no embedded text, so it comes back empty and the author would get an
+   * indexed document containing nothing. This tier is the fallback for exactly
+   * that case — a vision model that reads pixels.
+   *
+   * Cold path by construction: it runs only when extraction has already
+   * yielded almost nothing, and only when an author uploads (never on a
+   * respondent's turn), so its latency is nobody's typing indicator.
+   */
+  ocr: "google/gemini-3.7-flash",
 } as const;
 
 export const DEFAULT_MODEL = MODELS.interview;

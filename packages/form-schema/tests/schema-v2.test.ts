@@ -8,12 +8,12 @@ import {
   safeReadFormDoc,
   extractionSchema,
   needsExtraction,
-  knowledgeSize,
-  KNOWLEDGE_CHAR_BUDGET,
   leadFormFixture,
   toPublicConfig,
   lintFormDoc,
   conditionIsAlwaysTrue,
+  DEFAULT_CONFIRMATION_BODY,
+  DEFAULT_CONFIRMATION_SUBJECT,
   normalizeE164,
   type Block,
 } from "../src/index";
@@ -47,7 +47,6 @@ describe("migration chain", () => {
 
   it("a migrated v1 doc parses and materializes every new default", () => {
     const doc = FormDoc.parse(migrateFormDoc(v1Doc));
-    expect(doc.settings.agent.knowledge).toEqual([]);
     expect(doc.settings.agent.guardrails.answerOffTopic).toBe(true);
     expect(doc.settings.agent.guardrails.maxTurns).toBe(60);
     expect(doc.settings.agent.model).toBeUndefined();
@@ -159,27 +158,119 @@ describe("agent layer", () => {
           mode: "ai",
           model: "anthropic/claude-sonnet-5",
           goal: "Qualify the lead and book a demo",
-          knowledge: [{ id: "kb_0001", title: "Pricing", body: "Pro is $29/month." }],
           guardrails: { answerOffTopic: false, forbiddenTopics: ["competitors"] },
         },
       },
     });
     expect(doc.settings.agent.goal).toBe("Qualify the lead and book a demo");
-    expect(doc.settings.agent.knowledge[0]!.title).toBe("Pricing");
     expect(doc.settings.agent.guardrails.answerOffTopic).toBe(false);
     // unspecified guardrails still default
     expect(doc.settings.agent.guardrails.maxTurns).toBe(60);
   });
 
-  it("rejects more knowledge entries than the cap", () => {
-    const tooMany = Array.from({ length: 21 }, (_, i) => ({ id: `kb_x${String(i).padStart(4, "0")}`, title: "t", body: "b" }));
-    const res = FormDoc.safeParse({ ...v1Doc, settings: { agent: { knowledge: tooMany } } });
-    expect(res.success).toBe(false);
+  /**
+   * Knowledge left the document at v7.
+   *
+   * It was an array of title/body entries inlined into the system prompt,
+   * capped at twenty entries and twenty thousand characters because that is
+   * what a prompt sent on every turn can afford. It now lives in
+   * `knowledge_sources`, is chunked and embedded, and is retrieved per
+   * question — so the document must no longer carry it, and a stored document
+   * that still does must come back without it.
+   */
+  it("drops knowledge from a document that still carries it", () => {
+    const migrated = migrateFormDoc({
+      ...v1Doc,
+      schemaVersion: 6,
+      settings: { agent: { knowledge: [{ id: "kb_0001", title: "Pricing", body: "Pro is $29/month." }] } },
+    }) as { schemaVersion: number; settings: { agent: Record<string, unknown> } };
+
+    expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(migrated.settings.agent.knowledge).toBeUndefined();
   });
 
-  it("meters knowledge size against the budget", () => {
-    expect(knowledgeSize([{ title: "ab", body: "cde" }])).toBe(5);
-    expect(KNOWLEDGE_CHAR_BUDGET).toBe(20000);
+  it("leaves an agent block that never had knowledge alone", () => {
+    const migrated = migrateFormDoc({
+      ...v1Doc,
+      schemaVersion: 6,
+      settings: { agent: { goal: "Book a demo" } },
+    }) as { settings: { agent: Record<string, unknown> } };
+
+    expect(migrated.settings.agent.goal).toBe("Book a demo");
+    expect(migrated.settings.agent.knowledge).toBeUndefined();
+  });
+
+  /**
+   * The confirmation email turns on at v8.
+   *
+   * The field existed before that, defaulted off, and had no control anywhere in
+   * the builder — so a stored `false` records the absence of a decision rather
+   * than a decision, and the migration reads it that way. This is the only
+   * migration in the chain that changes what a published form *does*, which is
+   * why it is asserted rather than assumed.
+   */
+  describe("v7 → v8: the respondent's confirmation email", () => {
+    type Migrated = {
+      schemaVersion: number;
+      settings: { onComplete: { autoReplyEmail: Record<string, unknown> } };
+    };
+
+    it("switches on for a document that predates the setting", () => {
+      const migrated = migrateFormDoc({ ...v1Doc, schemaVersion: 7 }) as Migrated;
+      const confirmation = migrated.settings.onComplete.autoReplyEmail;
+      expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
+      expect(confirmation.enabled).toBe(true);
+      expect(confirmation.includeAnswers).toBe(true);
+      expect(confirmation.subject).toBe(DEFAULT_CONFIRMATION_SUBJECT);
+      expect(confirmation.bodyMd).toBe(DEFAULT_CONFIRMATION_BODY);
+    });
+
+    it("keeps copy the author wrote through the API", () => {
+      const migrated = migrateFormDoc({
+        ...v1Doc,
+        schemaVersion: 7,
+        settings: {
+          onComplete: { autoReplyEmail: { enabled: true, subject: "We got it", bodyMd: "Speak soon." } },
+        },
+      }) as Migrated;
+
+      expect(migrated.settings.onComplete.autoReplyEmail.subject).toBe("We got it");
+      expect(migrated.settings.onComplete.autoReplyEmail.bodyMd).toBe("Speak soon.");
+    });
+
+    it("leaves the rest of onComplete alone", () => {
+      const migrated = migrateFormDoc({
+        ...v1Doc,
+        schemaVersion: 7,
+        settings: { onComplete: { notificationEmails: ["owner@example.com"], delaySec: 9 } },
+      }) as Migrated & { settings: { onComplete: Record<string, unknown> } };
+
+      expect(migrated.settings.onComplete.notificationEmails).toEqual(["owner@example.com"]);
+      expect(migrated.settings.onComplete.delaySec).toBe(9);
+    });
+
+    /**
+     * The switch has to stay off once there is a switch to turn. A doc already
+     * at v8 skips the chain, so an author's "no" survives every later read.
+     */
+    it("does not re-enable a form whose author has turned it off", () => {
+      const off = {
+        ...v1Doc,
+        schemaVersion: SCHEMA_VERSION,
+        settings: { onComplete: { autoReplyEmail: { enabled: false } } },
+      };
+      const migrated = migrateFormDoc(off) as Migrated;
+      expect(migrated.settings.onComplete.autoReplyEmail.enabled).toBe(false);
+      expect(FormDoc.parse(migrated).settings.onComplete.autoReplyEmail.enabled).toBe(false);
+    });
+  });
+
+  it("ignores a knowledge key on a parsed document", () => {
+    const doc = FormDoc.parse({
+      ...v1Doc,
+      settings: { agent: { knowledge: [{ id: "kb_0001", title: "Pricing", body: "x" }] } },
+    });
+    expect((doc.settings.agent as Record<string, unknown>).knowledge).toBeUndefined();
   });
 });
 

@@ -1,5 +1,14 @@
 import { buildAuthoredDoc } from "../templates/define.js";
-import { DEMO_KNOWLEDGE } from "./knowledge.js";
+/**
+ * Re-exported, not embedded.
+ *
+ * The demo's knowledge used to be part of the form document. It is now rows in
+ * `knowledge_sources`, which `gen-seed-demo-form.ts` emits alongside the form —
+ * seeded as `pending`, because seed SQL runs nowhere near Workers AI and
+ * therefore cannot embed anything. The ingest sweep indexes them within a few
+ * minutes of the seed being applied.
+ */
+export { DEMO_KNOWLEDGE } from "./knowledge.js";
 
 /**
  * The form behind "Try a demo form" on the landing page.
@@ -18,7 +27,7 @@ import { DEMO_KNOWLEDGE } from "./knowledge.js";
  * demo nobody finishes demonstrates nothing.
  *
  * Our job is to learn something. So the questions are the ones we actually want
- * answered — which tool they use, what it costs them, what would make them
+ * answered — which tool they use, where it gets in their way, what would make them
  * switch — asked in the order a person would think about them rather than the
  * order a spreadsheet would want them.
  *
@@ -37,7 +46,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 1;
+export const DEMO_REVISION = 5;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -46,12 +55,23 @@ export const DEMO_REVISION = 1;
  * database and production, and a committed file cannot know either. The SQL
  * joins through `members` to find the org this address owns.
  */
-export const DEMO_OWNER_EMAIL = "officialsoaib@gmail.com";
+/*
+ * The account that owns this in PRODUCTION, which is not the address a
+ * developer happens to be signed in as.
+ *
+ * This was `officialsoaib@gmail.com` and no such user exists in the production
+ * database — so the seed's `members` join matched nothing, the INSERT wrote
+ * zero rows, and the whole file succeeded having done absolutely nothing. That
+ * is the failure the trailing SELECT exists to catch, and it is silent without
+ * it. `mohithkumar808@gmail.com` is the owner of org_0afbd3d1, the same account
+ * the Cloudflare deploy runs as.
+ */
+export const DEMO_OWNER_EMAIL = "mohithkumar808@gmail.com";
 
 export const DEMO_FORM = buildAuthoredDoc({
   slug: DEMO_SLUG,
   title: "How you use forms",
-  description: "A short conversation about the form tools you already use, and what they cost you.",
+  description: "A short conversation about the form tools you already use, and where they get in your way.",
 
   greeting:
     "Hi — I'm the chatform agent, and this is a real chatform form, so you're seeing exactly what your own respondents would. " +
@@ -146,7 +166,7 @@ export const DEMO_FORM = buildAuthoredDoc({
         { label: "People don't finish" },
         { label: "The answers are thin and useless" },
         { label: "Building the logic is fiddly" },
-        { label: "It costs more than it's worth" },
+        { label: "It's not worth what it takes" },
         { label: "It looks generic and off-brand" },
         { label: "Getting the data where it needs to go" },
       ],
@@ -177,20 +197,20 @@ export const DEMO_FORM = buildAuthoredDoc({
       /** Where the other three options land, so every arm has somewhere to go. */
       ref: "problem_detail",
       type: "long_text",
-      title: "Say more about that — what does it cost you in practice?",
+      title: "Say more about that — what does it get in the way of?",
       required: true,
       maxLength: 700,
     },
     {
       ref: "pain_rank",
       type: "ranking",
-      title: "Now rank these by how much they actually cost you. Worst first.",
+      title: "Now rank these by how much they actually get in your way. Worst first.",
       required: true,
       items: [
         "People not finishing",
         "Thin or useless answers",
         "Time spent building the thing",
-        "What it costs per response",
+        "What you pay for it",
         "Looking generic",
         "Getting the data somewhere useful",
       ],
@@ -270,7 +290,7 @@ export const DEMO_FORM = buildAuthoredDoc({
     { when: "biggest_problem", is: "People don't finish", then: "dropoff_detail" },
     { when: "biggest_problem", is: "The answers are thin and useless", then: "quality_detail" },
     { when: "biggest_problem", is: "Building the logic is fiddly", then: "build_detail" },
-    { when: "biggest_problem", is: "It costs more than it's worth", then: "problem_detail" },
+    { when: "biggest_problem", is: "It's not worth what it takes", then: "problem_detail" },
     { when: "biggest_problem", is: "It looks generic and off-brand", then: "problem_detail" },
     { when: "biggest_problem", is: "Getting the data where it needs to go", then: "problem_detail" },
 
@@ -325,14 +345,33 @@ export const DEMO_FORM = buildAuthoredDoc({
       enabled: true,
       method: "google",
       afterBlocks: 3,
-      onePerIdentity: true,
+      /*
+       * Off, and this is the one place a demo differs from a real form.
+       *
+       * On anything collecting genuine responses a verified person answering
+       * once is the point. Here the form's whole job is to be tried, and
+       * locking somebody out of the product tour forever because they took it
+       * in March is the opposite of what it is for — they come back to a dead
+       * end with no way through and nothing to look at.
+       *
+       * What is left holding the line: sign-in is still required, which is real
+       * friction for a script, and `maxSubmissions` still caps the total spend.
+       */
+      onePerIdentity: false,
       message:
         "Quick pause before we go on — sign in with Google so I know you're a real person. " +
         "One tap, I won't email you, and it's the only reason this demo can be open to everyone.",
     },
 
-    /** Device-keyed, so it catches a second run before there is an identity to check. */
-    allowResubmissions: false,
+    /**
+     * Allowed, for the same reason as `onePerIdentity` above.
+     *
+     * This is also what puts "Submit another response" on the already-answered
+     * screen: the button is drawn from `allowResubmissions`, so switching it
+     * off did not just prevent a second run, it removed the only way out of
+     * that screen and left a visitor staring at their old answers.
+     */
+    allowResubmissions: true,
 
     /*
      * Left on, and currently inert: `TURNSTILE_SECRET_KEY` is not deployed, and
@@ -423,10 +462,6 @@ export const DEMO_FORM = buildAuthoredDoc({
       sessionTokenBudget: 14000,
       responseMaxTokens: 320,
 
-      knowledge: DEMO_KNOWLEDGE.map((entry, i) => ({
-        id: `kb_demo${String(i + 1).padStart(2, "0")}`,
-        ...entry,
-      })),
     },
   },
 });

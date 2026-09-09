@@ -44,6 +44,9 @@ import {
   buildRetryObjective,
 } from "../lib/agent-prompts.js";
 import { buildAgentTools, type ToolOutcome } from "./agent-tools.js";
+import { knowledgeStore, knowledgeAvailable } from "../lib/knowledge/index.js";
+import { getEntitlements } from "../lib/entitlements.js";
+import { can } from "@repo/entitlements";
 import { meter } from "../lib/entitlements.js";
 import { costUsdMicro } from "../lib/ai-pricing.js";
 import {
@@ -233,6 +236,16 @@ export class SessionDO extends DurableObject<Bindings> {
   private doc: FormDoc | null = null;
   private state: EvalState = { answers: {}, variables: {}, hidden: {} };
   private invalidCounts = new Map<string, number>();
+  /**
+   * Whether this form has any indexed knowledge, resolved once per session.
+   *
+   * Cached because it decides one line of the stable prefix, and the prefix has
+   * to be byte-identical across every turn for the provider's cache to serve
+   * it. Re-reading it per turn would also mean a source finishing indexing
+   * mid-conversation silently changed the prompt — the same bytes are worth
+   * more than the freshness here.
+   */
+  private hasKnowledge: boolean | null = null;
   /** Human-readable summary of the most recent recorded answer (for AI acks). */
   private lastAnswerDisplay: string | null = null;
   private writers = new Set<WritableStreamDefaultWriter<Uint8Array>>();
@@ -1142,12 +1155,18 @@ export class SessionDO extends DurableObject<Bindings> {
       const answered = Object.keys(this.state.answers).length;
       const context = await this.conversationContext();
       const outcomes: ToolOutcome[] = [];
+      const formId = this.meta?.formId ?? "";
+      const hasKnowledge = await this.resolveHasKnowledge(formId);
       const tools = buildAgentTools(
         {
           doc: this.doc,
           currentBlock: block,
           allowedNext: allowedNextRefs(this.doc, block.ref, this.state),
           clarifications: this.invalidCounts.get(block.ref) ?? 0,
+          hasKnowledge,
+          searchKnowledge: hasKnowledge
+            ? (query: string) => knowledgeStore(this.env).search(formId, query)
+            : undefined,
         },
         (o: ToolOutcome) => outcomes.push(o),
       );
@@ -1156,14 +1175,19 @@ export class SessionDO extends DurableObject<Bindings> {
         model,
         // Stable prefix first so the provider's prompt cache can serve the
         // persona, goal, knowledge base and question manifest across turns.
-        system: `${buildStablePrefix(this.doc)}\n\n${buildTurnSuffix(this.doc, block, answered, { ...context, turnCount: this.turnCount })}`,
+        system: `${buildStablePrefix(this.doc, { hasKnowledge })}\n\n${buildTurnSuffix(this.doc, block, answered, { ...context, turnCount: this.turnCount })}`,
         prompt: objective,
         tools,
         // A tool call ends a step. Without this the model looks something up
         // (or records an answer) and the turn ends having said nothing, so the
         // respondent sees the deterministic fallback instead of a reply.
-        // Four steps is enough for look-up → answer → record → ask.
-        stopWhen: stepCountIs(4),
+        //
+        // Four covered look-up → answer → record → ask, which was enough while
+        // the whole knowledge base also sat in the prompt and the look-up was
+        // really a pointer. Retrieval can miss and be worth rephrasing once, and
+        // a turn that spends its last step searching says nothing at all — so
+        // six, which buys exactly one retry without letting a turn wander.
+        stopWhen: stepCountIs(6),
         // The author's setting governs the visible reply; reasoning gets its
         // own headroom on top so it can never starve the answer.
         maxOutputTokens: this.doc.settings.agent.responseMaxTokens + REASONING_HEADROOM_TOKENS,
@@ -1362,6 +1386,62 @@ export class SessionDO extends DurableObject<Bindings> {
   }
 
   /** Recent conversation + collected answers, for the agent's system prompt. */
+  /**
+   * Does this form have anything indexed to retrieve?
+   *
+   * One query per session. `ready` specifically: a source still extracting has
+   * no vectors behind it, and telling the agent a knowledge base exists when
+   * every search will come back empty is how it ends up insisting it should
+   * know something it does not.
+   */
+  private async resolveHasKnowledge(formId: string): Promise<boolean> {
+    if (this.hasKnowledge !== null) return this.hasKnowledge;
+    if (!formId || !knowledgeAvailable(this.env)) {
+      this.hasKnowledge = false;
+      return false;
+    }
+    /*
+     * The plan is re-checked here, not only at upload.
+     *
+     * Uploading is gated in `routes/knowledge.ts`, but rows outlive the
+     * subscription that was allowed to create them: an org that indexes a
+     * knowledge base on Pro and then downgrades would otherwise keep a paid
+     * feature running on Free forever. This is the same re-derivation
+     * `clampForRuntime` does for the sign-in gate and verified answers, and for
+     * the same reason — what a form may do is decided by the plan it is being
+     * answered on, not the plan it was published on.
+     */
+    const orgId = this.meta?.organizationId;
+    if (orgId) {
+      try {
+        const ent = await getEntitlements(this.env, orgId);
+        if (!can(ent, "agent_knowledge")) {
+          this.hasKnowledge = false;
+          return false;
+        }
+      } catch (err) {
+        // Failing open would hand the feature to everyone on an outage;
+        // failing closed only costs an entitled form one conversation's
+        // retrieval, and the guardrail already says something sensible.
+        console.error("knowledge_entitlement_check_failed", orgId, err);
+        this.hasKnowledge = false;
+        return false;
+      }
+    }
+    try {
+      const row = await this.env.DB.prepare(
+        `SELECT 1 AS ok FROM knowledge_sources WHERE form_id = ? AND status = 'ready' LIMIT 1`,
+      )
+        .bind(formId)
+        .first<{ ok: number }>();
+      this.hasKnowledge = Boolean(row);
+    } catch (err) {
+      console.error("knowledge_presence_check_failed", formId, err);
+      this.hasKnowledge = false;
+    }
+    return this.hasKnowledge;
+  }
+
   private async conversationContext(): Promise<{ transcript: string; answers: string }> {
     const entries = await this.ctx.storage.list<{ id: string; role: string; content: string; createdAt: number }>({ prefix: "msg:" });
     const msgs = [...entries.values()].sort((a, b) => a.createdAt - b.createdAt).slice(-16);

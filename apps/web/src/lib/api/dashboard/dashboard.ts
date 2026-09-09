@@ -21,6 +21,7 @@ import type {
 
 import type {
   DeleteApiFormsById200,
+  DeleteApiFormsByIdKnowledgeBySourceId200,
   DeleteApiFormsByIdSubmissions200,
   DeleteApiFormsByIdSubmissionsBody,
   DeleteApiKeysById200,
@@ -37,6 +38,7 @@ import type {
   GetApiFormsByIdHistory200,
   GetApiFormsByIdHistoryParams,
   GetApiFormsByIdIntegrations200Item,
+  GetApiFormsByIdKnowledge200,
   GetApiFormsByIdSubmissions200Item,
   GetApiFormsByIdSubmissionsParams,
   GetApiFormsByIdVersions200Item,
@@ -68,6 +70,18 @@ import type {
   PostApiFormsBody,
   PostApiFormsByIdIntegrationsSpreadsheet200,
   PostApiFormsByIdIntegrationsSpreadsheetBody,
+  PostApiFormsByIdKnowledgeCrawl200,
+  PostApiFormsByIdKnowledgeCrawl402,
+  PostApiFormsByIdKnowledgeCrawlBody,
+  PostApiFormsByIdKnowledgeLink200,
+  PostApiFormsByIdKnowledgeLink402,
+  PostApiFormsByIdKnowledgeLinkBody,
+  PostApiFormsByIdKnowledgeText200,
+  PostApiFormsByIdKnowledgeText402,
+  PostApiFormsByIdKnowledgeTextBody,
+  PostApiFormsByIdKnowledgeUpload200,
+  PostApiFormsByIdKnowledgeUpload413,
+  PostApiFormsByIdKnowledgeUpload415,
   PostApiFormsByIdPreviewSessions200,
   PostApiFormsByIdPublish200,
   PostApiFormsByIdPublish402,
@@ -1027,6 +1041,565 @@ export const usePostApiFormsByIdPublish = <TError = PostApiFormsByIdPublish402 |
         TContext
       > => {
       return useMutation(getPostApiFormsByIdPublishMutationOptions(options));
+    }
+    export type getApiFormsByIdKnowledgeResponse200 = {
+  data: GetApiFormsByIdKnowledge200
+  status: 200
+}
+
+export type getApiFormsByIdKnowledgeResponseSuccess = (getApiFormsByIdKnowledgeResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiFormsByIdKnowledgeResponse = (getApiFormsByIdKnowledgeResponseSuccess)
+
+export const getGetApiFormsByIdKnowledgeUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/knowledge`
+}
+
+/**
+ * @summary List a form's knowledge sources
+ */
+export const getApiFormsByIdKnowledge = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdKnowledgeResponse> => {
+
+  return customFetch<getApiFormsByIdKnowledgeResponse>(getGetApiFormsByIdKnowledgeUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiFormsByIdKnowledgeQueryKey = (id: string,) => {
+    return [
+    `/api/forms/${id}/knowledge`
+    ] as const;
+    }
+
+
+export const getGetApiFormsByIdKnowledgeQueryOptions = <TData = Awaited<ReturnType<typeof getApiFormsByIdKnowledge>>, TError = unknown>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdKnowledge>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsByIdKnowledgeQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFormsByIdKnowledge>>> = ({ signal }) => getApiFormsByIdKnowledge(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdKnowledge>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiFormsByIdKnowledgeQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFormsByIdKnowledge>>>
+export type GetApiFormsByIdKnowledgeQueryError = unknown
+
+
+/**
+ * @summary List a form's knowledge sources
+ */
+
+export function useGetApiFormsByIdKnowledge<TData = Awaited<ReturnType<typeof getApiFormsByIdKnowledge>>, TError = unknown>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdKnowledge>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiFormsByIdKnowledgeQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postApiFormsByIdKnowledgeTextResponse200 = {
+  data: PostApiFormsByIdKnowledgeText200
+  status: 200
+}
+
+export type postApiFormsByIdKnowledgeTextResponse402 = {
+  data: PostApiFormsByIdKnowledgeText402
+  status: 402
+}
+
+export type postApiFormsByIdKnowledgeTextResponseSuccess = (postApiFormsByIdKnowledgeTextResponse200) & {
+  headers: Headers;
+};
+export type postApiFormsByIdKnowledgeTextResponseError = (postApiFormsByIdKnowledgeTextResponse402) & {
+  headers: Headers;
+};
+
+export type postApiFormsByIdKnowledgeTextResponse = (postApiFormsByIdKnowledgeTextResponseSuccess | postApiFormsByIdKnowledgeTextResponseError)
+
+export const getPostApiFormsByIdKnowledgeTextUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/knowledge/text`
+}
+
+/**
+ * @summary Add pasted text as knowledge
+ */
+export const postApiFormsByIdKnowledgeText = async (id: string,
+    postApiFormsByIdKnowledgeTextBody: PostApiFormsByIdKnowledgeTextBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiFormsByIdKnowledgeTextResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiFormsByIdKnowledgeTextResponse>(getPostApiFormsByIdKnowledgeTextUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiFormsByIdKnowledgeTextBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiFormsByIdKnowledgeTextMutationOptions = <TError = PostApiFormsByIdKnowledgeText402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeText>>, TError,PostApiFormsByIdKnowledgeTextMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeText>>, TError,PostApiFormsByIdKnowledgeTextMutationVariables, TContext> => {
+
+const mutationKey = ['postApiFormsByIdKnowledgeText'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeText>>, PostApiFormsByIdKnowledgeTextMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postApiFormsByIdKnowledgeText(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFormsByIdKnowledgeTextMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeText>>>
+    export type PostApiFormsByIdKnowledgeTextMutationBody = PostApiFormsByIdKnowledgeTextBody
+    export type PostApiFormsByIdKnowledgeTextMutationError = PostApiFormsByIdKnowledgeText402
+    export type PostApiFormsByIdKnowledgeTextMutationVariables = {id: string;data: PostApiFormsByIdKnowledgeTextBody}
+
+    /**
+ * @summary Add pasted text as knowledge
+ */
+export const usePostApiFormsByIdKnowledgeText = <TError = PostApiFormsByIdKnowledgeText402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeText>>, TError,PostApiFormsByIdKnowledgeTextMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFormsByIdKnowledgeText>>,
+        TError,
+        PostApiFormsByIdKnowledgeTextMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFormsByIdKnowledgeTextMutationOptions(options));
+    }
+    export type postApiFormsByIdKnowledgeLinkResponse200 = {
+  data: PostApiFormsByIdKnowledgeLink200
+  status: 200
+}
+
+export type postApiFormsByIdKnowledgeLinkResponse402 = {
+  data: PostApiFormsByIdKnowledgeLink402
+  status: 402
+}
+
+export type postApiFormsByIdKnowledgeLinkResponseSuccess = (postApiFormsByIdKnowledgeLinkResponse200) & {
+  headers: Headers;
+};
+export type postApiFormsByIdKnowledgeLinkResponseError = (postApiFormsByIdKnowledgeLinkResponse402) & {
+  headers: Headers;
+};
+
+export type postApiFormsByIdKnowledgeLinkResponse = (postApiFormsByIdKnowledgeLinkResponseSuccess | postApiFormsByIdKnowledgeLinkResponseError)
+
+export const getPostApiFormsByIdKnowledgeLinkUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/knowledge/link`
+}
+
+/**
+ * @summary Add a web page as knowledge
+ */
+export const postApiFormsByIdKnowledgeLink = async (id: string,
+    postApiFormsByIdKnowledgeLinkBody: PostApiFormsByIdKnowledgeLinkBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiFormsByIdKnowledgeLinkResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiFormsByIdKnowledgeLinkResponse>(getPostApiFormsByIdKnowledgeLinkUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiFormsByIdKnowledgeLinkBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiFormsByIdKnowledgeLinkMutationOptions = <TError = PostApiFormsByIdKnowledgeLink402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeLink>>, TError,PostApiFormsByIdKnowledgeLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeLink>>, TError,PostApiFormsByIdKnowledgeLinkMutationVariables, TContext> => {
+
+const mutationKey = ['postApiFormsByIdKnowledgeLink'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeLink>>, PostApiFormsByIdKnowledgeLinkMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postApiFormsByIdKnowledgeLink(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFormsByIdKnowledgeLinkMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeLink>>>
+    export type PostApiFormsByIdKnowledgeLinkMutationBody = PostApiFormsByIdKnowledgeLinkBody
+    export type PostApiFormsByIdKnowledgeLinkMutationError = PostApiFormsByIdKnowledgeLink402
+    export type PostApiFormsByIdKnowledgeLinkMutationVariables = {id: string;data: PostApiFormsByIdKnowledgeLinkBody}
+
+    /**
+ * @summary Add a web page as knowledge
+ */
+export const usePostApiFormsByIdKnowledgeLink = <TError = PostApiFormsByIdKnowledgeLink402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeLink>>, TError,PostApiFormsByIdKnowledgeLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFormsByIdKnowledgeLink>>,
+        TError,
+        PostApiFormsByIdKnowledgeLinkMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFormsByIdKnowledgeLinkMutationOptions(options));
+    }
+    export type postApiFormsByIdKnowledgeCrawlResponse200 = {
+  data: PostApiFormsByIdKnowledgeCrawl200
+  status: 200
+}
+
+export type postApiFormsByIdKnowledgeCrawlResponse402 = {
+  data: PostApiFormsByIdKnowledgeCrawl402
+  status: 402
+}
+
+export type postApiFormsByIdKnowledgeCrawlResponseSuccess = (postApiFormsByIdKnowledgeCrawlResponse200) & {
+  headers: Headers;
+};
+export type postApiFormsByIdKnowledgeCrawlResponseError = (postApiFormsByIdKnowledgeCrawlResponse402) & {
+  headers: Headers;
+};
+
+export type postApiFormsByIdKnowledgeCrawlResponse = (postApiFormsByIdKnowledgeCrawlResponseSuccess | postApiFormsByIdKnowledgeCrawlResponseError)
+
+export const getPostApiFormsByIdKnowledgeCrawlUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/knowledge/crawl`
+}
+
+/**
+ * @summary Crawl a site and add its pages as knowledge
+ */
+export const postApiFormsByIdKnowledgeCrawl = async (id: string,
+    postApiFormsByIdKnowledgeCrawlBody: PostApiFormsByIdKnowledgeCrawlBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiFormsByIdKnowledgeCrawlResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiFormsByIdKnowledgeCrawlResponse>(getPostApiFormsByIdKnowledgeCrawlUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiFormsByIdKnowledgeCrawlBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiFormsByIdKnowledgeCrawlMutationOptions = <TError = PostApiFormsByIdKnowledgeCrawl402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeCrawl>>, TError,PostApiFormsByIdKnowledgeCrawlMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeCrawl>>, TError,PostApiFormsByIdKnowledgeCrawlMutationVariables, TContext> => {
+
+const mutationKey = ['postApiFormsByIdKnowledgeCrawl'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeCrawl>>, PostApiFormsByIdKnowledgeCrawlMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postApiFormsByIdKnowledgeCrawl(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFormsByIdKnowledgeCrawlMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeCrawl>>>
+    export type PostApiFormsByIdKnowledgeCrawlMutationBody = PostApiFormsByIdKnowledgeCrawlBody
+    export type PostApiFormsByIdKnowledgeCrawlMutationError = PostApiFormsByIdKnowledgeCrawl402
+    export type PostApiFormsByIdKnowledgeCrawlMutationVariables = {id: string;data: PostApiFormsByIdKnowledgeCrawlBody}
+
+    /**
+ * @summary Crawl a site and add its pages as knowledge
+ */
+export const usePostApiFormsByIdKnowledgeCrawl = <TError = PostApiFormsByIdKnowledgeCrawl402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeCrawl>>, TError,PostApiFormsByIdKnowledgeCrawlMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFormsByIdKnowledgeCrawl>>,
+        TError,
+        PostApiFormsByIdKnowledgeCrawlMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFormsByIdKnowledgeCrawlMutationOptions(options));
+    }
+    export type postApiFormsByIdKnowledgeUploadResponse200 = {
+  data: PostApiFormsByIdKnowledgeUpload200
+  status: 200
+}
+
+export type postApiFormsByIdKnowledgeUploadResponse413 = {
+  data: PostApiFormsByIdKnowledgeUpload413
+  status: 413
+}
+
+export type postApiFormsByIdKnowledgeUploadResponse415 = {
+  data: PostApiFormsByIdKnowledgeUpload415
+  status: 415
+}
+
+export type postApiFormsByIdKnowledgeUploadResponseSuccess = (postApiFormsByIdKnowledgeUploadResponse200) & {
+  headers: Headers;
+};
+export type postApiFormsByIdKnowledgeUploadResponseError = (postApiFormsByIdKnowledgeUploadResponse413 | postApiFormsByIdKnowledgeUploadResponse415) & {
+  headers: Headers;
+};
+
+export type postApiFormsByIdKnowledgeUploadResponse = (postApiFormsByIdKnowledgeUploadResponseSuccess | postApiFormsByIdKnowledgeUploadResponseError)
+
+export const getPostApiFormsByIdKnowledgeUploadUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/knowledge/upload`
+}
+
+/**
+ * @summary Upload a document, image or recording as knowledge
+ */
+export const postApiFormsByIdKnowledgeUpload = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postApiFormsByIdKnowledgeUploadResponse> => {
+
+  return customFetch<postApiFormsByIdKnowledgeUploadResponse>(getPostApiFormsByIdKnowledgeUploadUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiFormsByIdKnowledgeUploadMutationOptions = <TError = PostApiFormsByIdKnowledgeUpload413 | PostApiFormsByIdKnowledgeUpload415,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeUpload>>, TError,PostApiFormsByIdKnowledgeUploadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeUpload>>, TError,PostApiFormsByIdKnowledgeUploadMutationVariables, TContext> => {
+
+const mutationKey = ['postApiFormsByIdKnowledgeUpload'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeUpload>>, PostApiFormsByIdKnowledgeUploadMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postApiFormsByIdKnowledgeUpload(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFormsByIdKnowledgeUploadMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeUpload>>>
+
+    export type PostApiFormsByIdKnowledgeUploadMutationError = PostApiFormsByIdKnowledgeUpload413 | PostApiFormsByIdKnowledgeUpload415
+    export type PostApiFormsByIdKnowledgeUploadMutationVariables = {id: string}
+
+    /**
+ * @summary Upload a document, image or recording as knowledge
+ */
+export const usePostApiFormsByIdKnowledgeUpload = <TError = PostApiFormsByIdKnowledgeUpload413 | PostApiFormsByIdKnowledgeUpload415,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeUpload>>, TError,PostApiFormsByIdKnowledgeUploadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFormsByIdKnowledgeUpload>>,
+        TError,
+        PostApiFormsByIdKnowledgeUploadMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFormsByIdKnowledgeUploadMutationOptions(options));
+    }
+    export type deleteApiFormsByIdKnowledgeBySourceIdResponse200 = {
+  data: DeleteApiFormsByIdKnowledgeBySourceId200
+  status: 200
+}
+
+export type deleteApiFormsByIdKnowledgeBySourceIdResponseSuccess = (deleteApiFormsByIdKnowledgeBySourceIdResponse200) & {
+  headers: Headers;
+};
+;
+
+export type deleteApiFormsByIdKnowledgeBySourceIdResponse = (deleteApiFormsByIdKnowledgeBySourceIdResponseSuccess)
+
+export const getDeleteApiFormsByIdKnowledgeBySourceIdUrl = (id: string,
+    sourceId: string,) => {
+
+
+
+
+  return `/api/forms/${id}/knowledge/${sourceId}`
+}
+
+/**
+ * @summary Remove a knowledge source
+ */
+export const deleteApiFormsByIdKnowledgeBySourceId = async (id: string,
+    sourceId: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteApiFormsByIdKnowledgeBySourceIdResponse> => {
+
+  return customFetch<deleteApiFormsByIdKnowledgeBySourceIdResponse>(getDeleteApiFormsByIdKnowledgeBySourceIdUrl(id,sourceId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiFormsByIdKnowledgeBySourceIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFormsByIdKnowledgeBySourceId>>, TError,DeleteApiFormsByIdKnowledgeBySourceIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiFormsByIdKnowledgeBySourceId>>, TError,DeleteApiFormsByIdKnowledgeBySourceIdMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiFormsByIdKnowledgeBySourceId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiFormsByIdKnowledgeBySourceId>>, DeleteApiFormsByIdKnowledgeBySourceIdMutationVariables> = (props) => {
+          const {id,sourceId} = props ?? {};
+
+          return  deleteApiFormsByIdKnowledgeBySourceId(id,sourceId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiFormsByIdKnowledgeBySourceIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiFormsByIdKnowledgeBySourceId>>>
+
+    export type DeleteApiFormsByIdKnowledgeBySourceIdMutationError = unknown
+    export type DeleteApiFormsByIdKnowledgeBySourceIdMutationVariables = {id: string;sourceId: string}
+
+    /**
+ * @summary Remove a knowledge source
+ */
+export const useDeleteApiFormsByIdKnowledgeBySourceId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFormsByIdKnowledgeBySourceId>>, TError,DeleteApiFormsByIdKnowledgeBySourceIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiFormsByIdKnowledgeBySourceId>>,
+        TError,
+        DeleteApiFormsByIdKnowledgeBySourceIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiFormsByIdKnowledgeBySourceIdMutationOptions(options));
     }
     export type getApiWorkspacesResponse200 = {
   data: GetApiWorkspaces200Item[]

@@ -27,6 +27,12 @@ import { invalidateForms } from "@/lib/query-keys";
 import { filterTemplates, templateCategories, useTemplates } from "@/lib/templates";
 import { cn } from "@/lib/utils";
 import { seedAiBarThread } from "@/components/builder/ai-bar-thread";
+import {
+  AddKnowledgeButton,
+  StagedKnowledgeDialog,
+  flushStagedKnowledge,
+  type StagedItem,
+} from "@/components/knowledge/staged-knowledge";
 
 /**
  * Every way into a new form, on one screen — but not three equal ways.
@@ -60,6 +66,14 @@ export function CreateFormDialog({
   const generation = useFormGeneration();
 
   const [prompt, setPrompt] = useState("");
+  /**
+   * Knowledge chosen before the form exists.
+   *
+   * Held here rather than uploaded on selection because there is no form id to
+   * upload against yet — `generate` flushes it the moment there is one.
+   */
+  const [staged, setStaged] = useState<StagedItem[]>([]);
+  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
 
   const [blankOpen, setBlankOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -135,6 +149,13 @@ export function CreateFormDialog({
           questions: result.questions,
           rules: result.rules,
         });
+        // Fire-and-forget: ingestion is asynchronous anyway, and the Knowledge
+        // tab is where its progress and any failure belong. Blocking the route
+        // change on an upload would make creating a form feel slower than it is.
+        if (staged.length > 0) {
+          void flushStagedKnowledge(result.formId, staged);
+          setStaged([]);
+        }
         setPrompt("");
         // A beat on the finished checklist, so the last step is seen landing
         // rather than replaced mid-animation by a route change.
@@ -169,6 +190,7 @@ export function CreateFormDialog({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent size="3xl" layout="panel" className="gap-0">
         <DialogHeader className="border-border shrink-0 border-b px-6 py-4 text-left">
@@ -201,6 +223,8 @@ export function CreateFormDialog({
           ) : (
             <div>
               <AiPanel
+                knowledgeCount={staged.length}
+                onOpenKnowledge={() => setKnowledgeOpen(true)}
                 prompt={prompt}
                 setPrompt={setPrompt}
                 canGenerate={canGenerate}
@@ -310,6 +334,14 @@ export function CreateFormDialog({
         )}
       </DialogContent>
     </Dialog>
+
+    <StagedKnowledgeDialog
+      open={knowledgeOpen}
+      onOpenChange={setKnowledgeOpen}
+      items={staged}
+      onChange={setStaged}
+    />
+    </>
   );
 }
 
@@ -319,11 +351,15 @@ function AiPanel({
   setPrompt,
   canGenerate,
   onGenerate,
+  knowledgeCount,
+  onOpenKnowledge,
 }: {
   prompt: string;
   setPrompt: (v: string) => void;
   canGenerate: boolean;
   onGenerate: () => void;
+  knowledgeCount: number;
+  onOpenKnowledge: () => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -375,7 +411,10 @@ function AiPanel({
           placeholder offering two options is an instruction, and it vanishes
           the moment anyone starts typing. */}
       <div className="flex items-center gap-3 px-4 pt-1 pb-3">
-     
+        {/* Knowledge sits with the brief because it is the same act: what the
+            form should ask, and what it should already know. Quiet, because
+            Generate is the thing on this row that has to be found. */}
+        <AddKnowledgeButton count={knowledgeCount} onClick={onOpenKnowledge} />
         <span className="text-muted-foreground ml-auto hidden items-center gap-1 text-xs sm:flex">
           <Kbd>⌘</Kbd>
           <Kbd>↵</Kbd>

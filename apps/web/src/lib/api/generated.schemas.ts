@@ -794,6 +794,9 @@ export type PostPFormsBySlugSessionsBody = {
   embed?: PostPFormsBySlugSessionsBodyEmbed;
   /** @maxLength 300 */
   resumeToken?: string;
+  /** @maxLength 128 */
+  deviceSignal?: string;
+  fresh?: boolean;
   /** @maxLength 60 */
   followUpId?: string;
 };
@@ -1103,6 +1106,182 @@ export type PostApiFormsByIdPublish422Error = {
 
 export type PostApiFormsByIdPublish422 = {
   error: PostApiFormsByIdPublish422Error;
+};
+
+export type GetApiFormsByIdKnowledge200SourcesItem = {
+  id: string;
+  kind: string;
+  title: string;
+  origin: string | null;
+  status: string;
+  error: string | null;
+  bytes: number;
+  chunkCount: number;
+  createdAt: number;
+  indexedAt: number | null;
+};
+
+export type GetApiFormsByIdKnowledge200Usage = {
+  bytes: number;
+  maxBytes: number | null;
+  count: number;
+  maxCount: number | null;
+};
+
+export type GetApiFormsByIdKnowledge200 = {
+  sources: GetApiFormsByIdKnowledge200SourcesItem[];
+  usage: GetApiFormsByIdKnowledge200Usage;
+  enabled: boolean;
+};
+
+export type PostApiFormsByIdKnowledgeTextBody = {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  title: string;
+  /**
+     * @minLength 1
+     * @maxLength 500000
+     */
+  body: string;
+};
+
+export type PostApiFormsByIdKnowledgeText200 = {
+  id: string;
+};
+
+export type PostApiFormsByIdKnowledgeText402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdKnowledgeText402Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdKnowledgeText402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdKnowledgeText402 = {
+  error: PostApiFormsByIdKnowledgeText402Error;
+};
+
+export type PostApiFormsByIdKnowledgeLinkBody = {
+  /** @maxLength 2000 */
+  url: string;
+  /** @maxLength 200 */
+  title?: string;
+};
+
+export type PostApiFormsByIdKnowledgeLink200 = {
+  id: string;
+};
+
+export type PostApiFormsByIdKnowledgeLink402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdKnowledgeLink402Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdKnowledgeLink402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdKnowledgeLink402 = {
+  error: PostApiFormsByIdKnowledgeLink402Error;
+};
+
+export type PostApiFormsByIdKnowledgeCrawlBody = {
+  /** @maxLength 2000 */
+  url: string;
+  /**
+     * @minimum 1
+     * @maximum 25
+     */
+  pages?: number;
+};
+
+export type PostApiFormsByIdKnowledgeCrawl200 = {
+  ids: string[];
+};
+
+export type PostApiFormsByIdKnowledgeCrawl402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdKnowledgeCrawl402Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdKnowledgeCrawl402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdKnowledgeCrawl402 = {
+  error: PostApiFormsByIdKnowledgeCrawl402Error;
+};
+
+export type PostApiFormsByIdKnowledgeUpload200 = {
+  id: string;
+};
+
+export type PostApiFormsByIdKnowledgeUpload413ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdKnowledgeUpload413Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdKnowledgeUpload413ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdKnowledgeUpload413 = {
+  error: PostApiFormsByIdKnowledgeUpload413Error;
+};
+
+export type PostApiFormsByIdKnowledgeUpload415ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdKnowledgeUpload415Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdKnowledgeUpload415ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdKnowledgeUpload415 = {
+  error: PostApiFormsByIdKnowledgeUpload415Error;
+};
+
+export type DeleteApiFormsByIdKnowledgeBySourceId200 = {
+  ok: boolean;
 };
 
 export type GetApiWorkspaces200Item = {
@@ -2187,6 +2366,182 @@ export type PostV1SessionsBySidUploadsByFileIdConfirm200 = {
   ok: boolean;
 };
 
+export type GetV1FormsByIdKnowledge200SourcesItem = {
+  id: string;
+  kind: string;
+  title: string;
+  origin: string | null;
+  status: string;
+  error: string | null;
+  bytes: number;
+  chunkCount: number;
+  createdAt: number;
+  indexedAt: number | null;
+};
+
+export type GetV1FormsByIdKnowledge200Usage = {
+  bytes: number;
+  maxBytes: number | null;
+  count: number;
+  maxCount: number | null;
+};
+
+export type GetV1FormsByIdKnowledge200 = {
+  sources: GetV1FormsByIdKnowledge200SourcesItem[];
+  usage: GetV1FormsByIdKnowledge200Usage;
+  enabled: boolean;
+};
+
+export type PostV1FormsByIdKnowledgeTextBody = {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  title: string;
+  /**
+     * @minLength 1
+     * @maxLength 500000
+     */
+  body: string;
+};
+
+export type PostV1FormsByIdKnowledgeText200 = {
+  id: string;
+};
+
+export type PostV1FormsByIdKnowledgeText402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1FormsByIdKnowledgeText402Error = {
+  code: string;
+  message: string;
+  issues?: PostV1FormsByIdKnowledgeText402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1FormsByIdKnowledgeText402 = {
+  error: PostV1FormsByIdKnowledgeText402Error;
+};
+
+export type PostV1FormsByIdKnowledgeLinkBody = {
+  /** @maxLength 2000 */
+  url: string;
+  /** @maxLength 200 */
+  title?: string;
+};
+
+export type PostV1FormsByIdKnowledgeLink200 = {
+  id: string;
+};
+
+export type PostV1FormsByIdKnowledgeLink402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1FormsByIdKnowledgeLink402Error = {
+  code: string;
+  message: string;
+  issues?: PostV1FormsByIdKnowledgeLink402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1FormsByIdKnowledgeLink402 = {
+  error: PostV1FormsByIdKnowledgeLink402Error;
+};
+
+export type PostV1FormsByIdKnowledgeCrawlBody = {
+  /** @maxLength 2000 */
+  url: string;
+  /**
+     * @minimum 1
+     * @maximum 25
+     */
+  pages?: number;
+};
+
+export type PostV1FormsByIdKnowledgeCrawl200 = {
+  ids: string[];
+};
+
+export type PostV1FormsByIdKnowledgeCrawl402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1FormsByIdKnowledgeCrawl402Error = {
+  code: string;
+  message: string;
+  issues?: PostV1FormsByIdKnowledgeCrawl402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1FormsByIdKnowledgeCrawl402 = {
+  error: PostV1FormsByIdKnowledgeCrawl402Error;
+};
+
+export type PostV1FormsByIdKnowledgeUpload200 = {
+  id: string;
+};
+
+export type PostV1FormsByIdKnowledgeUpload413ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1FormsByIdKnowledgeUpload413Error = {
+  code: string;
+  message: string;
+  issues?: PostV1FormsByIdKnowledgeUpload413ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1FormsByIdKnowledgeUpload413 = {
+  error: PostV1FormsByIdKnowledgeUpload413Error;
+};
+
+export type PostV1FormsByIdKnowledgeUpload415ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1FormsByIdKnowledgeUpload415Error = {
+  code: string;
+  message: string;
+  issues?: PostV1FormsByIdKnowledgeUpload415ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1FormsByIdKnowledgeUpload415 = {
+  error: PostV1FormsByIdKnowledgeUpload415Error;
+};
+
+export type DeleteV1FormsByIdKnowledgeBySourceId200 = {
+  ok: boolean;
+};
+
 export type PostV1FormsByIdSessionsBodyHiddenFields = {[key: string]: string};
 
 export type PostV1FormsByIdSessionsBodyRespondent = {
@@ -2273,6 +2628,8 @@ export const PostV1SessionsBySidActionsBodyAction = {
   restart: 'restart',
   edit: 'edit',
   submit: 'submit',
+  resend_code: 'resend_code',
+  change_answer: 'change_answer',
 } as const;
 
 export type PostV1SessionsBySidActionsBody = {
@@ -2302,6 +2659,8 @@ export const PostV1ChatSessionsBySidActionsBodyAction = {
   restart: 'restart',
   edit: 'edit',
   submit: 'submit',
+  resend_code: 'resend_code',
+  change_answer: 'change_answer',
 } as const;
 
 export type PostV1ChatSessionsBySidActionsBody = {

@@ -19,7 +19,8 @@ describe("docs are migrated on read", () => {
     const body = await res.json<{ workingSchema: Record<string, any> }>();
     expect(body.workingSchema.schemaVersion).toBe(SCHEMA_VERSION);
     expect(body.workingSchema.settings.agent.guardrails.maxTurns).toBe(60);
-    expect(body.workingSchema.settings.agent.knowledge).toEqual([]);
+    // Knowledge left the document at v7; a migrated read must not carry it.
+    expect(body.workingSchema.settings.agent.knowledge).toBeUndefined();
     expect(body.workingSchema.blocks[0].agentHints).toBeNull();
     expect(body.workingSchema.blocks[0].media).toBeNull();
     expect(body.workingSchema.settings.agent.rephraseQuestions).toBe(true);

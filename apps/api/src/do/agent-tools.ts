@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { tool, type ToolSet } from "ai";
 import type { Block, FormDoc } from "@repo/form-schema";
+import type { KnowledgeHit } from "../lib/knowledge/index.js";
 
 /**
  * The interview agent's toolset.
@@ -23,6 +24,20 @@ export interface ToolContext {
   allowedNext: string[];
   /** Clarifications already spent on the current block. */
   clarifications: number;
+  /**
+   * Retrieval over the form's knowledge base.
+   *
+   * Injected rather than imported so this file stays a pure description of the
+   * agent's verbs — the DO owns the bindings, and a test can hand in a stub
+   * without standing up Vectorize.
+   *
+   * Absent means this deployment has no knowledge base wired (Miniflare
+   * implements neither Vectorize nor Workers AI), and the tool degrades to
+   * saying so rather than throwing at a respondent.
+   */
+  searchKnowledge?: (query: string) => Promise<KnowledgeHit[]>;
+  /** Whether the form has any indexed knowledge at all. */
+  hasKnowledge?: boolean;
 }
 
 export interface ToolOutcome {
@@ -77,13 +92,40 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
       },
     }),
 
+    /**
+     * The retrieval verb.
+     *
+     * This is the only way the knowledge base reaches the model, and that is
+     * deliberate. The material used to be pasted whole into the system prompt
+     * *and* re-scored here, which put a ceiling on it of whatever fits in a
+     * prompt — about twenty thousand characters. Now the prompt says only that
+     * a knowledge base exists, and the passages arrive as this tool's result,
+     * on the turns where a respondent actually asked something.
+     *
+     * Two consequences worth keeping in mind when editing:
+     *
+     * - The stable prefix stays byte-identical across a session, so the
+     *   provider's prompt cache keeps serving it. Splicing retrieved text back
+     *   into the system prompt would lose that on every turn.
+     * - The size of a form's knowledge no longer costs anything per turn. A
+     *   500-page manual and a one-line FAQ are the same prompt.
+     */
     answer_from_knowledge: tool({
       description:
         "Look up something the respondent asked about, from the form's knowledge base. Use this before answering any question about pricing, policy, the product, or the form itself.",
       inputSchema: z.object({ query: z.string().describe("What they want to know.") }),
       execute: async ({ query }) => {
-        const kb = ctx.doc.settings.agent.knowledge;
-        if (kb.length === 0) {
+        const guards = ctx.doc.settings.agent.guardrails;
+        const nothingFound = () =>
+          record({
+            name: "answer_from_knowledge",
+            ok: true,
+            message: guards.answerOffTopic
+              ? "Nothing in the knowledge base covers that. Answer briefly from general knowledge and say you are not certain."
+              : `Nothing in the knowledge base covers that. Say: "${guards.refusalMessage}"`,
+          });
+
+        if (!ctx.searchKnowledge || ctx.hasKnowledge === false) {
           return record({
             name: "answer_from_knowledge",
             ok: true,
@@ -91,32 +133,25 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
               "No knowledge base is configured for this form. Answer from the form's title and description only, and say if you are unsure.",
           });
         }
-        // Deliberately simple lexical scoring: the whole KB is capped at ~20k
-        // characters and already sits in the system prompt, so this is about
-        // pointing the model at the right entry, not retrieval.
-        const terms = query.toLowerCase().split(/\W+/).filter((t) => t.length > 2);
-        const scored = kb
-          .map((entry) => {
-            const hay = `${entry.title} ${entry.body}`.toLowerCase();
-            return { entry, score: terms.filter((t) => hay.includes(t)).length };
-          })
-          .filter((s) => s.score > 0)
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 3);
 
-        if (scored.length === 0) {
-          return record({
-            name: "answer_from_knowledge",
-            ok: true,
-            message: ctx.doc.settings.agent.guardrails.answerOffTopic
-              ? "Nothing in the knowledge base covers that. Answer briefly from general knowledge and say you are not certain."
-              : `Nothing in the knowledge base covers that. Say: "${ctx.doc.settings.agent.guardrails.refusalMessage}"`,
-          });
+        let hits: KnowledgeHit[];
+        try {
+          hits = await ctx.searchKnowledge(query);
+        } catch (err) {
+          // A retrieval failure is not a reason to end the respondent's turn.
+          // Treating it as a miss lets the guardrail decide what to say, which
+          // is the same thing that happens when the answer genuinely is not
+          // there.
+          console.error("knowledge_search_failed", err);
+          return nothingFound();
         }
+
+        if (hits.length === 0) return nothingFound();
+
         return record({
           name: "answer_from_knowledge",
           ok: true,
-          message: scored.map((s) => `### ${s.entry.title}\n${s.entry.body}`).join("\n\n"),
+          message: hits.map((hit) => `### ${hit.title}\n${hit.text}`).join("\n\n"),
         });
       },
     }),

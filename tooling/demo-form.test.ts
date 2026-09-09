@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { FormDoc, hasErrors, lintFormDoc, knowledgeSize, resolveNext } from "@repo/form-schema";
-import { DEMO_FORM, DEMO_SLUG, DEMO_REVISION } from "./demo-form/index.js";
+import { FormDoc, hasErrors, lintFormDoc, resolveNext } from "@repo/form-schema";
+import { DEMO_FORM, DEMO_SLUG, DEMO_REVISION, DEMO_KNOWLEDGE } from "./demo-form/index.js";
 
 /**
  * The demo form is the one form whose failure is a lost customer.
@@ -120,7 +120,12 @@ describe("safe to leave open to the internet", () => {
   it("requires a verified respondent, a few questions in", () => {
     expect(settings.requireAuth.enabled).toBe(true);
     expect(settings.requireAuth.method).toBe("google");
-    expect(settings.requireAuth.onePerIdentity).toBe(true);
+    // False here and true on a real form. A demo exists to be tried, and one
+    // response per identity means somebody who took it once can never open it
+    // again — they come back to a dead end. Sign-in still gates it and
+    // `maxSubmissions` still caps the spend.
+    expect(settings.requireAuth.onePerIdentity).toBe(false);
+    expect(settings.allowResubmissions).toBe(true);
     // Not 0: a sign-in card at interaction zero is where a demo loses people.
     // Not late either — everything before it is ungated and costs real tokens.
     expect(settings.requireAuth.afterBlocks).toBeGreaterThan(0);
@@ -156,13 +161,34 @@ describe("safe to leave open to the internet", () => {
 });
 
 describe("the knowledge base", () => {
-  const knowledge = doc.settings.agent.knowledge;
+  /*
+   * Read from `DEMO_KNOWLEDGE` rather than from the document.
+   *
+   * Knowledge left `settings.agent.knowledge` when it stopped being inlined
+   * into the system prompt: it is seeded into `knowledge_sources` by
+   * `gen-seed-demo-form.ts`, chunked and embedded, and retrieved per question.
+   * What is asserted here is unchanged — this is the only thing the public
+   * demo agent is allowed to say about the product, and every claim in it is
+   * one a visitor can hold us to.
+   */
+  const knowledge = DEMO_KNOWLEDGE;
 
-  it("fits in a prompt prefix that is sent on every turn", () => {
+  it("covers enough ground to answer a visitor", () => {
     expect(knowledge.length).toBeGreaterThanOrEqual(5);
-    // Well inside the schema's 20 000 cap: this is inlined into the stable
-    // system prompt by `buildStablePrefix` and paid for on every single turn.
-    expect(knowledgeSize(knowledge)).toBeLessThanOrEqual(8000);
+    // No prompt-size ceiling any more — retrieval pulls only what a question
+    // needs, so the old 8 000-character cap measured nothing. What still
+    // matters is that no entry is a stub: a title with two lines under it
+    // chunks into one thin passage that matches everything and answers
+    // nothing.
+    for (const entry of knowledge) {
+      expect(entry.body.trim().length, `"${entry.title}" is too thin to retrieve`).toBeGreaterThan(200);
+    }
+  });
+
+  it("is seeded into the knowledge tables, not into the document", () => {
+    // The document must not carry knowledge any more. If this fails, the demo
+    // is paying for a prompt prefix nothing reads.
+    expect((doc.settings.agent as Record<string, unknown>).knowledge).toBeUndefined();
   });
 
   it("quotes prices that came from the plans, not from someone's memory", () => {

@@ -21,11 +21,13 @@ import type {
 
 import type {
   DeleteV1FormsByIdIntegrationsSpreadsheet404,
+  DeleteV1FormsByIdKnowledgeBySourceId200,
   GetV1ExportsById200,
   GetV1ExportsParams,
   GetV1FilesById200,
   GetV1FormsByIdIntegrations200Item,
   GetV1FormsByIdIntegrations404,
+  GetV1FormsByIdKnowledge200,
   GetV1FormsByIdResponsesParams,
   GetV1FormsByIdVersions200Item,
   GetV1FormsByIdVersions404,
@@ -51,6 +53,18 @@ import type {
   PostV1FormsByIdChatSessionsBody,
   PostV1FormsByIdExports202,
   PostV1FormsByIdExportsBody,
+  PostV1FormsByIdKnowledgeCrawl200,
+  PostV1FormsByIdKnowledgeCrawl402,
+  PostV1FormsByIdKnowledgeCrawlBody,
+  PostV1FormsByIdKnowledgeLink200,
+  PostV1FormsByIdKnowledgeLink402,
+  PostV1FormsByIdKnowledgeLinkBody,
+  PostV1FormsByIdKnowledgeText200,
+  PostV1FormsByIdKnowledgeText402,
+  PostV1FormsByIdKnowledgeTextBody,
+  PostV1FormsByIdKnowledgeUpload200,
+  PostV1FormsByIdKnowledgeUpload413,
+  PostV1FormsByIdKnowledgeUpload415,
   PostV1FormsByIdResponsesBody,
   PostV1FormsByIdSessions200,
   PostV1FormsByIdSessionsBody,
@@ -96,7 +110,287 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type postV1FormsByIdResponsesResponse201 = {
+export type postPSessionsByIdAuthGoogleResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postPSessionsByIdAuthGoogleResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postPSessionsByIdAuthGoogleResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postPSessionsByIdAuthGoogleResponseSuccess = (postPSessionsByIdAuthGoogleResponse200) & {
+  headers: Headers;
+};
+export type postPSessionsByIdAuthGoogleResponseError = (postPSessionsByIdAuthGoogleResponse400 | postPSessionsByIdAuthGoogleResponse409) & {
+  headers: Headers;
+};
+
+export type postPSessionsByIdAuthGoogleResponse = (postPSessionsByIdAuthGoogleResponseSuccess | postPSessionsByIdAuthGoogleResponseError)
+
+export const getPostPSessionsByIdAuthGoogleUrl = (id: string,) => {
+
+
+
+
+  return `/p/sessions/${id}/auth/google`
+}
+
+/**
+ * @summary Verify a respondent with a Google ID token
+ */
+export const postPSessionsByIdAuthGoogle = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postPSessionsByIdAuthGoogleResponse> => {
+
+  return customFetch<postPSessionsByIdAuthGoogleResponse>(getPostPSessionsByIdAuthGoogleUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostPSessionsByIdAuthGoogleMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdAuthGoogle>>, TError,PostPSessionsByIdAuthGoogleMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdAuthGoogle>>, TError,PostPSessionsByIdAuthGoogleMutationVariables, TContext> => {
+
+const mutationKey = ['postPSessionsByIdAuthGoogle'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postPSessionsByIdAuthGoogle>>, PostPSessionsByIdAuthGoogleMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postPSessionsByIdAuthGoogle(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostPSessionsByIdAuthGoogleMutationResult = NonNullable<Awaited<ReturnType<typeof postPSessionsByIdAuthGoogle>>>
+
+    export type PostPSessionsByIdAuthGoogleMutationError = void
+    export type PostPSessionsByIdAuthGoogleMutationVariables = {id: string}
+
+    /**
+ * @summary Verify a respondent with a Google ID token
+ */
+export const usePostPSessionsByIdAuthGoogle = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdAuthGoogle>>, TError,PostPSessionsByIdAuthGoogleMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postPSessionsByIdAuthGoogle>>,
+        TError,
+        PostPSessionsByIdAuthGoogleMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostPSessionsByIdAuthGoogleMutationOptions(options));
+    }
+    export type postPSessionsByIdAuthPhoneTokenResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postPSessionsByIdAuthPhoneTokenResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postPSessionsByIdAuthPhoneTokenResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postPSessionsByIdAuthPhoneTokenResponseSuccess = (postPSessionsByIdAuthPhoneTokenResponse200) & {
+  headers: Headers;
+};
+export type postPSessionsByIdAuthPhoneTokenResponseError = (postPSessionsByIdAuthPhoneTokenResponse400 | postPSessionsByIdAuthPhoneTokenResponse409) & {
+  headers: Headers;
+};
+
+export type postPSessionsByIdAuthPhoneTokenResponse = (postPSessionsByIdAuthPhoneTokenResponseSuccess | postPSessionsByIdAuthPhoneTokenResponseError)
+
+export const getPostPSessionsByIdAuthPhoneTokenUrl = (id: string,) => {
+
+
+
+
+  return `/p/sessions/${id}/auth/phone/token`
+}
+
+/**
+ * @summary Verify a respondent with a Firebase phone ID token
+ */
+export const postPSessionsByIdAuthPhoneToken = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postPSessionsByIdAuthPhoneTokenResponse> => {
+
+  return customFetch<postPSessionsByIdAuthPhoneTokenResponse>(getPostPSessionsByIdAuthPhoneTokenUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostPSessionsByIdAuthPhoneTokenMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdAuthPhoneToken>>, TError,PostPSessionsByIdAuthPhoneTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdAuthPhoneToken>>, TError,PostPSessionsByIdAuthPhoneTokenMutationVariables, TContext> => {
+
+const mutationKey = ['postPSessionsByIdAuthPhoneToken'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postPSessionsByIdAuthPhoneToken>>, PostPSessionsByIdAuthPhoneTokenMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postPSessionsByIdAuthPhoneToken(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostPSessionsByIdAuthPhoneTokenMutationResult = NonNullable<Awaited<ReturnType<typeof postPSessionsByIdAuthPhoneToken>>>
+
+    export type PostPSessionsByIdAuthPhoneTokenMutationError = void
+    export type PostPSessionsByIdAuthPhoneTokenMutationVariables = {id: string}
+
+    /**
+ * @summary Verify a respondent with a Firebase phone ID token
+ */
+export const usePostPSessionsByIdAuthPhoneToken = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdAuthPhoneToken>>, TError,PostPSessionsByIdAuthPhoneTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postPSessionsByIdAuthPhoneToken>>,
+        TError,
+        PostPSessionsByIdAuthPhoneTokenMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostPSessionsByIdAuthPhoneTokenMutationOptions(options));
+    }
+    export type postPSessionsByIdVerifyPhoneTokenResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postPSessionsByIdVerifyPhoneTokenResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postPSessionsByIdVerifyPhoneTokenResponseSuccess = (postPSessionsByIdVerifyPhoneTokenResponse200) & {
+  headers: Headers;
+};
+export type postPSessionsByIdVerifyPhoneTokenResponseError = (postPSessionsByIdVerifyPhoneTokenResponse400) & {
+  headers: Headers;
+};
+
+export type postPSessionsByIdVerifyPhoneTokenResponse = (postPSessionsByIdVerifyPhoneTokenResponseSuccess | postPSessionsByIdVerifyPhoneTokenResponseError)
+
+export const getPostPSessionsByIdVerifyPhoneTokenUrl = (id: string,) => {
+
+
+
+
+  return `/p/sessions/${id}/verify/phone-token`
+}
+
+/**
+ * @summary Confirm a phone answer with a Firebase phone ID token
+ */
+export const postPSessionsByIdVerifyPhoneToken = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postPSessionsByIdVerifyPhoneTokenResponse> => {
+
+  return customFetch<postPSessionsByIdVerifyPhoneTokenResponse>(getPostPSessionsByIdVerifyPhoneTokenUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostPSessionsByIdVerifyPhoneTokenMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdVerifyPhoneToken>>, TError,PostPSessionsByIdVerifyPhoneTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdVerifyPhoneToken>>, TError,PostPSessionsByIdVerifyPhoneTokenMutationVariables, TContext> => {
+
+const mutationKey = ['postPSessionsByIdVerifyPhoneToken'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postPSessionsByIdVerifyPhoneToken>>, PostPSessionsByIdVerifyPhoneTokenMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postPSessionsByIdVerifyPhoneToken(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostPSessionsByIdVerifyPhoneTokenMutationResult = NonNullable<Awaited<ReturnType<typeof postPSessionsByIdVerifyPhoneToken>>>
+
+    export type PostPSessionsByIdVerifyPhoneTokenMutationError = void
+    export type PostPSessionsByIdVerifyPhoneTokenMutationVariables = {id: string}
+
+    /**
+ * @summary Confirm a phone answer with a Firebase phone ID token
+ */
+export const usePostPSessionsByIdVerifyPhoneToken = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdVerifyPhoneToken>>, TError,PostPSessionsByIdVerifyPhoneTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postPSessionsByIdVerifyPhoneToken>>,
+        TError,
+        PostPSessionsByIdVerifyPhoneTokenMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostPSessionsByIdVerifyPhoneTokenMutationOptions(options));
+    }
+    export type postV1FormsByIdResponsesResponse201 = {
   data: void
   status: 201
 }
@@ -4333,6 +4627,565 @@ export const usePostV1SessionsBySidUploadsByFileIdConfirm = <TError = void,
       > => {
       return useMutation(getPostV1SessionsBySidUploadsByFileIdConfirmMutationOptions(options));
     }
+    export type getV1FormsByIdKnowledgeResponse200 = {
+  data: GetV1FormsByIdKnowledge200
+  status: 200
+}
+
+export type getV1FormsByIdKnowledgeResponseSuccess = (getV1FormsByIdKnowledgeResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getV1FormsByIdKnowledgeResponse = (getV1FormsByIdKnowledgeResponseSuccess)
+
+export const getGetV1FormsByIdKnowledgeUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/knowledge`
+}
+
+/**
+ * @summary List a form's knowledge sources
+ */
+export const getV1FormsByIdKnowledge = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1FormsByIdKnowledgeResponse> => {
+
+  return customFetch<getV1FormsByIdKnowledgeResponse>(getGetV1FormsByIdKnowledgeUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1FormsByIdKnowledgeQueryKey = (id: string,) => {
+    return [
+    `/v1/forms/${id}/knowledge`
+    ] as const;
+    }
+
+
+export const getGetV1FormsByIdKnowledgeQueryOptions = <TData = Awaited<ReturnType<typeof getV1FormsByIdKnowledge>>, TError = unknown>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdKnowledge>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1FormsByIdKnowledgeQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1FormsByIdKnowledge>>> = ({ signal }) => getV1FormsByIdKnowledge(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdKnowledge>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1FormsByIdKnowledgeQueryResult = NonNullable<Awaited<ReturnType<typeof getV1FormsByIdKnowledge>>>
+export type GetV1FormsByIdKnowledgeQueryError = unknown
+
+
+/**
+ * @summary List a form's knowledge sources
+ */
+
+export function useGetV1FormsByIdKnowledge<TData = Awaited<ReturnType<typeof getV1FormsByIdKnowledge>>, TError = unknown>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdKnowledge>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1FormsByIdKnowledgeQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postV1FormsByIdKnowledgeTextResponse200 = {
+  data: PostV1FormsByIdKnowledgeText200
+  status: 200
+}
+
+export type postV1FormsByIdKnowledgeTextResponse402 = {
+  data: PostV1FormsByIdKnowledgeText402
+  status: 402
+}
+
+export type postV1FormsByIdKnowledgeTextResponseSuccess = (postV1FormsByIdKnowledgeTextResponse200) & {
+  headers: Headers;
+};
+export type postV1FormsByIdKnowledgeTextResponseError = (postV1FormsByIdKnowledgeTextResponse402) & {
+  headers: Headers;
+};
+
+export type postV1FormsByIdKnowledgeTextResponse = (postV1FormsByIdKnowledgeTextResponseSuccess | postV1FormsByIdKnowledgeTextResponseError)
+
+export const getPostV1FormsByIdKnowledgeTextUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/knowledge/text`
+}
+
+/**
+ * @summary Add pasted text as knowledge
+ */
+export const postV1FormsByIdKnowledgeText = async (id: string,
+    postV1FormsByIdKnowledgeTextBody: PostV1FormsByIdKnowledgeTextBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1FormsByIdKnowledgeTextResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1FormsByIdKnowledgeTextResponse>(getPostV1FormsByIdKnowledgeTextUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1FormsByIdKnowledgeTextBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1FormsByIdKnowledgeTextMutationOptions = <TError = PostV1FormsByIdKnowledgeText402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeText>>, TError,PostV1FormsByIdKnowledgeTextMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeText>>, TError,PostV1FormsByIdKnowledgeTextMutationVariables, TContext> => {
+
+const mutationKey = ['postV1FormsByIdKnowledgeText'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeText>>, PostV1FormsByIdKnowledgeTextMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postV1FormsByIdKnowledgeText(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1FormsByIdKnowledgeTextMutationResult = NonNullable<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeText>>>
+    export type PostV1FormsByIdKnowledgeTextMutationBody = PostV1FormsByIdKnowledgeTextBody
+    export type PostV1FormsByIdKnowledgeTextMutationError = PostV1FormsByIdKnowledgeText402
+    export type PostV1FormsByIdKnowledgeTextMutationVariables = {id: string;data: PostV1FormsByIdKnowledgeTextBody}
+
+    /**
+ * @summary Add pasted text as knowledge
+ */
+export const usePostV1FormsByIdKnowledgeText = <TError = PostV1FormsByIdKnowledgeText402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeText>>, TError,PostV1FormsByIdKnowledgeTextMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1FormsByIdKnowledgeText>>,
+        TError,
+        PostV1FormsByIdKnowledgeTextMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1FormsByIdKnowledgeTextMutationOptions(options));
+    }
+    export type postV1FormsByIdKnowledgeLinkResponse200 = {
+  data: PostV1FormsByIdKnowledgeLink200
+  status: 200
+}
+
+export type postV1FormsByIdKnowledgeLinkResponse402 = {
+  data: PostV1FormsByIdKnowledgeLink402
+  status: 402
+}
+
+export type postV1FormsByIdKnowledgeLinkResponseSuccess = (postV1FormsByIdKnowledgeLinkResponse200) & {
+  headers: Headers;
+};
+export type postV1FormsByIdKnowledgeLinkResponseError = (postV1FormsByIdKnowledgeLinkResponse402) & {
+  headers: Headers;
+};
+
+export type postV1FormsByIdKnowledgeLinkResponse = (postV1FormsByIdKnowledgeLinkResponseSuccess | postV1FormsByIdKnowledgeLinkResponseError)
+
+export const getPostV1FormsByIdKnowledgeLinkUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/knowledge/link`
+}
+
+/**
+ * @summary Add a web page as knowledge
+ */
+export const postV1FormsByIdKnowledgeLink = async (id: string,
+    postV1FormsByIdKnowledgeLinkBody: PostV1FormsByIdKnowledgeLinkBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1FormsByIdKnowledgeLinkResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1FormsByIdKnowledgeLinkResponse>(getPostV1FormsByIdKnowledgeLinkUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1FormsByIdKnowledgeLinkBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1FormsByIdKnowledgeLinkMutationOptions = <TError = PostV1FormsByIdKnowledgeLink402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeLink>>, TError,PostV1FormsByIdKnowledgeLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeLink>>, TError,PostV1FormsByIdKnowledgeLinkMutationVariables, TContext> => {
+
+const mutationKey = ['postV1FormsByIdKnowledgeLink'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeLink>>, PostV1FormsByIdKnowledgeLinkMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postV1FormsByIdKnowledgeLink(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1FormsByIdKnowledgeLinkMutationResult = NonNullable<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeLink>>>
+    export type PostV1FormsByIdKnowledgeLinkMutationBody = PostV1FormsByIdKnowledgeLinkBody
+    export type PostV1FormsByIdKnowledgeLinkMutationError = PostV1FormsByIdKnowledgeLink402
+    export type PostV1FormsByIdKnowledgeLinkMutationVariables = {id: string;data: PostV1FormsByIdKnowledgeLinkBody}
+
+    /**
+ * @summary Add a web page as knowledge
+ */
+export const usePostV1FormsByIdKnowledgeLink = <TError = PostV1FormsByIdKnowledgeLink402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeLink>>, TError,PostV1FormsByIdKnowledgeLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1FormsByIdKnowledgeLink>>,
+        TError,
+        PostV1FormsByIdKnowledgeLinkMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1FormsByIdKnowledgeLinkMutationOptions(options));
+    }
+    export type postV1FormsByIdKnowledgeCrawlResponse200 = {
+  data: PostV1FormsByIdKnowledgeCrawl200
+  status: 200
+}
+
+export type postV1FormsByIdKnowledgeCrawlResponse402 = {
+  data: PostV1FormsByIdKnowledgeCrawl402
+  status: 402
+}
+
+export type postV1FormsByIdKnowledgeCrawlResponseSuccess = (postV1FormsByIdKnowledgeCrawlResponse200) & {
+  headers: Headers;
+};
+export type postV1FormsByIdKnowledgeCrawlResponseError = (postV1FormsByIdKnowledgeCrawlResponse402) & {
+  headers: Headers;
+};
+
+export type postV1FormsByIdKnowledgeCrawlResponse = (postV1FormsByIdKnowledgeCrawlResponseSuccess | postV1FormsByIdKnowledgeCrawlResponseError)
+
+export const getPostV1FormsByIdKnowledgeCrawlUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/knowledge/crawl`
+}
+
+/**
+ * @summary Crawl a site and add its pages as knowledge
+ */
+export const postV1FormsByIdKnowledgeCrawl = async (id: string,
+    postV1FormsByIdKnowledgeCrawlBody: PostV1FormsByIdKnowledgeCrawlBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1FormsByIdKnowledgeCrawlResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1FormsByIdKnowledgeCrawlResponse>(getPostV1FormsByIdKnowledgeCrawlUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1FormsByIdKnowledgeCrawlBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1FormsByIdKnowledgeCrawlMutationOptions = <TError = PostV1FormsByIdKnowledgeCrawl402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeCrawl>>, TError,PostV1FormsByIdKnowledgeCrawlMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeCrawl>>, TError,PostV1FormsByIdKnowledgeCrawlMutationVariables, TContext> => {
+
+const mutationKey = ['postV1FormsByIdKnowledgeCrawl'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeCrawl>>, PostV1FormsByIdKnowledgeCrawlMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postV1FormsByIdKnowledgeCrawl(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1FormsByIdKnowledgeCrawlMutationResult = NonNullable<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeCrawl>>>
+    export type PostV1FormsByIdKnowledgeCrawlMutationBody = PostV1FormsByIdKnowledgeCrawlBody
+    export type PostV1FormsByIdKnowledgeCrawlMutationError = PostV1FormsByIdKnowledgeCrawl402
+    export type PostV1FormsByIdKnowledgeCrawlMutationVariables = {id: string;data: PostV1FormsByIdKnowledgeCrawlBody}
+
+    /**
+ * @summary Crawl a site and add its pages as knowledge
+ */
+export const usePostV1FormsByIdKnowledgeCrawl = <TError = PostV1FormsByIdKnowledgeCrawl402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeCrawl>>, TError,PostV1FormsByIdKnowledgeCrawlMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1FormsByIdKnowledgeCrawl>>,
+        TError,
+        PostV1FormsByIdKnowledgeCrawlMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1FormsByIdKnowledgeCrawlMutationOptions(options));
+    }
+    export type postV1FormsByIdKnowledgeUploadResponse200 = {
+  data: PostV1FormsByIdKnowledgeUpload200
+  status: 200
+}
+
+export type postV1FormsByIdKnowledgeUploadResponse413 = {
+  data: PostV1FormsByIdKnowledgeUpload413
+  status: 413
+}
+
+export type postV1FormsByIdKnowledgeUploadResponse415 = {
+  data: PostV1FormsByIdKnowledgeUpload415
+  status: 415
+}
+
+export type postV1FormsByIdKnowledgeUploadResponseSuccess = (postV1FormsByIdKnowledgeUploadResponse200) & {
+  headers: Headers;
+};
+export type postV1FormsByIdKnowledgeUploadResponseError = (postV1FormsByIdKnowledgeUploadResponse413 | postV1FormsByIdKnowledgeUploadResponse415) & {
+  headers: Headers;
+};
+
+export type postV1FormsByIdKnowledgeUploadResponse = (postV1FormsByIdKnowledgeUploadResponseSuccess | postV1FormsByIdKnowledgeUploadResponseError)
+
+export const getPostV1FormsByIdKnowledgeUploadUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/knowledge/upload`
+}
+
+/**
+ * @summary Upload a document, image or recording as knowledge
+ */
+export const postV1FormsByIdKnowledgeUpload = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1FormsByIdKnowledgeUploadResponse> => {
+
+  return customFetch<postV1FormsByIdKnowledgeUploadResponse>(getPostV1FormsByIdKnowledgeUploadUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1FormsByIdKnowledgeUploadMutationOptions = <TError = PostV1FormsByIdKnowledgeUpload413 | PostV1FormsByIdKnowledgeUpload415,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeUpload>>, TError,PostV1FormsByIdKnowledgeUploadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeUpload>>, TError,PostV1FormsByIdKnowledgeUploadMutationVariables, TContext> => {
+
+const mutationKey = ['postV1FormsByIdKnowledgeUpload'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeUpload>>, PostV1FormsByIdKnowledgeUploadMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postV1FormsByIdKnowledgeUpload(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1FormsByIdKnowledgeUploadMutationResult = NonNullable<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeUpload>>>
+
+    export type PostV1FormsByIdKnowledgeUploadMutationError = PostV1FormsByIdKnowledgeUpload413 | PostV1FormsByIdKnowledgeUpload415
+    export type PostV1FormsByIdKnowledgeUploadMutationVariables = {id: string}
+
+    /**
+ * @summary Upload a document, image or recording as knowledge
+ */
+export const usePostV1FormsByIdKnowledgeUpload = <TError = PostV1FormsByIdKnowledgeUpload413 | PostV1FormsByIdKnowledgeUpload415,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdKnowledgeUpload>>, TError,PostV1FormsByIdKnowledgeUploadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1FormsByIdKnowledgeUpload>>,
+        TError,
+        PostV1FormsByIdKnowledgeUploadMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1FormsByIdKnowledgeUploadMutationOptions(options));
+    }
+    export type deleteV1FormsByIdKnowledgeBySourceIdResponse200 = {
+  data: DeleteV1FormsByIdKnowledgeBySourceId200
+  status: 200
+}
+
+export type deleteV1FormsByIdKnowledgeBySourceIdResponseSuccess = (deleteV1FormsByIdKnowledgeBySourceIdResponse200) & {
+  headers: Headers;
+};
+;
+
+export type deleteV1FormsByIdKnowledgeBySourceIdResponse = (deleteV1FormsByIdKnowledgeBySourceIdResponseSuccess)
+
+export const getDeleteV1FormsByIdKnowledgeBySourceIdUrl = (id: string,
+    sourceId: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/knowledge/${sourceId}`
+}
+
+/**
+ * @summary Remove a knowledge source
+ */
+export const deleteV1FormsByIdKnowledgeBySourceId = async (id: string,
+    sourceId: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteV1FormsByIdKnowledgeBySourceIdResponse> => {
+
+  return customFetch<deleteV1FormsByIdKnowledgeBySourceIdResponse>(getDeleteV1FormsByIdKnowledgeBySourceIdUrl(id,sourceId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteV1FormsByIdKnowledgeBySourceIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteV1FormsByIdKnowledgeBySourceId>>, TError,DeleteV1FormsByIdKnowledgeBySourceIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteV1FormsByIdKnowledgeBySourceId>>, TError,DeleteV1FormsByIdKnowledgeBySourceIdMutationVariables, TContext> => {
+
+const mutationKey = ['deleteV1FormsByIdKnowledgeBySourceId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteV1FormsByIdKnowledgeBySourceId>>, DeleteV1FormsByIdKnowledgeBySourceIdMutationVariables> = (props) => {
+          const {id,sourceId} = props ?? {};
+
+          return  deleteV1FormsByIdKnowledgeBySourceId(id,sourceId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteV1FormsByIdKnowledgeBySourceIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteV1FormsByIdKnowledgeBySourceId>>>
+
+    export type DeleteV1FormsByIdKnowledgeBySourceIdMutationError = unknown
+    export type DeleteV1FormsByIdKnowledgeBySourceIdMutationVariables = {id: string;sourceId: string}
+
+    /**
+ * @summary Remove a knowledge source
+ */
+export const useDeleteV1FormsByIdKnowledgeBySourceId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteV1FormsByIdKnowledgeBySourceId>>, TError,DeleteV1FormsByIdKnowledgeBySourceIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteV1FormsByIdKnowledgeBySourceId>>,
+        TError,
+        DeleteV1FormsByIdKnowledgeBySourceIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteV1FormsByIdKnowledgeBySourceIdMutationOptions(options));
+    }
     export type postV1FormsByIdSessionsResponse200 = {
   data: PostV1FormsByIdSessions200
   status: 200
@@ -4672,7 +5525,7 @@ export const getPostV1SessionsBySidActionsUrl = (sid: string,) => {
 }
 
 /**
- * @summary Skip, edit, restart, stop, or submit
+ * @summary Skip, edit, restart, stop, submit, or resend a verification code
  */
 export const postV1SessionsBySidActions = async (sid: string,
     postV1SessionsBySidActionsBody: PostV1SessionsBySidActionsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidActionsResponse> => {
@@ -4729,7 +5582,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostV1SessionsBySidActionsMutationVariables = {sid: string;data: PostV1SessionsBySidActionsBody}
 
     /**
- * @summary Skip, edit, restart, stop, or submit
+ * @summary Skip, edit, restart, stop, submit, or resend a verification code
  */
 export const usePostV1SessionsBySidActions = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidActions>>, TError,PostV1SessionsBySidActionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -5014,6 +5867,286 @@ export const usePostV1SessionsBySidTokenRotate = <TError = void,
       > => {
       return useMutation(getPostV1SessionsBySidTokenRotateMutationOptions(options));
     }
+    export type postV1SessionsBySidAuthGoogleResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1SessionsBySidAuthGoogleResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postV1SessionsBySidAuthGoogleResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postV1SessionsBySidAuthGoogleResponseSuccess = (postV1SessionsBySidAuthGoogleResponse200) & {
+  headers: Headers;
+};
+export type postV1SessionsBySidAuthGoogleResponseError = (postV1SessionsBySidAuthGoogleResponse400 | postV1SessionsBySidAuthGoogleResponse409) & {
+  headers: Headers;
+};
+
+export type postV1SessionsBySidAuthGoogleResponse = (postV1SessionsBySidAuthGoogleResponseSuccess | postV1SessionsBySidAuthGoogleResponseError)
+
+export const getPostV1SessionsBySidAuthGoogleUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}/auth/google`
+}
+
+/**
+ * @summary Verify a respondent with a Google ID token
+ */
+export const postV1SessionsBySidAuthGoogle = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidAuthGoogleResponse> => {
+
+  return customFetch<postV1SessionsBySidAuthGoogleResponse>(getPostV1SessionsBySidAuthGoogleUrl(sid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1SessionsBySidAuthGoogleMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidAuthGoogle>>, TError,PostV1SessionsBySidAuthGoogleMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidAuthGoogle>>, TError,PostV1SessionsBySidAuthGoogleMutationVariables, TContext> => {
+
+const mutationKey = ['postV1SessionsBySidAuthGoogle'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1SessionsBySidAuthGoogle>>, PostV1SessionsBySidAuthGoogleMutationVariables> = (props) => {
+          const {sid} = props ?? {};
+
+          return  postV1SessionsBySidAuthGoogle(sid,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1SessionsBySidAuthGoogleMutationResult = NonNullable<Awaited<ReturnType<typeof postV1SessionsBySidAuthGoogle>>>
+
+    export type PostV1SessionsBySidAuthGoogleMutationError = void
+    export type PostV1SessionsBySidAuthGoogleMutationVariables = {sid: string}
+
+    /**
+ * @summary Verify a respondent with a Google ID token
+ */
+export const usePostV1SessionsBySidAuthGoogle = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidAuthGoogle>>, TError,PostV1SessionsBySidAuthGoogleMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1SessionsBySidAuthGoogle>>,
+        TError,
+        PostV1SessionsBySidAuthGoogleMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1SessionsBySidAuthGoogleMutationOptions(options));
+    }
+    export type postV1SessionsBySidAuthPhoneTokenResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1SessionsBySidAuthPhoneTokenResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postV1SessionsBySidAuthPhoneTokenResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postV1SessionsBySidAuthPhoneTokenResponseSuccess = (postV1SessionsBySidAuthPhoneTokenResponse200) & {
+  headers: Headers;
+};
+export type postV1SessionsBySidAuthPhoneTokenResponseError = (postV1SessionsBySidAuthPhoneTokenResponse400 | postV1SessionsBySidAuthPhoneTokenResponse409) & {
+  headers: Headers;
+};
+
+export type postV1SessionsBySidAuthPhoneTokenResponse = (postV1SessionsBySidAuthPhoneTokenResponseSuccess | postV1SessionsBySidAuthPhoneTokenResponseError)
+
+export const getPostV1SessionsBySidAuthPhoneTokenUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}/auth/phone/token`
+}
+
+/**
+ * @summary Verify a respondent with a Firebase phone ID token
+ */
+export const postV1SessionsBySidAuthPhoneToken = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidAuthPhoneTokenResponse> => {
+
+  return customFetch<postV1SessionsBySidAuthPhoneTokenResponse>(getPostV1SessionsBySidAuthPhoneTokenUrl(sid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1SessionsBySidAuthPhoneTokenMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidAuthPhoneToken>>, TError,PostV1SessionsBySidAuthPhoneTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidAuthPhoneToken>>, TError,PostV1SessionsBySidAuthPhoneTokenMutationVariables, TContext> => {
+
+const mutationKey = ['postV1SessionsBySidAuthPhoneToken'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1SessionsBySidAuthPhoneToken>>, PostV1SessionsBySidAuthPhoneTokenMutationVariables> = (props) => {
+          const {sid} = props ?? {};
+
+          return  postV1SessionsBySidAuthPhoneToken(sid,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1SessionsBySidAuthPhoneTokenMutationResult = NonNullable<Awaited<ReturnType<typeof postV1SessionsBySidAuthPhoneToken>>>
+
+    export type PostV1SessionsBySidAuthPhoneTokenMutationError = void
+    export type PostV1SessionsBySidAuthPhoneTokenMutationVariables = {sid: string}
+
+    /**
+ * @summary Verify a respondent with a Firebase phone ID token
+ */
+export const usePostV1SessionsBySidAuthPhoneToken = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidAuthPhoneToken>>, TError,PostV1SessionsBySidAuthPhoneTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1SessionsBySidAuthPhoneToken>>,
+        TError,
+        PostV1SessionsBySidAuthPhoneTokenMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1SessionsBySidAuthPhoneTokenMutationOptions(options));
+    }
+    export type postV1SessionsBySidVerifyPhoneTokenResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1SessionsBySidVerifyPhoneTokenResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postV1SessionsBySidVerifyPhoneTokenResponseSuccess = (postV1SessionsBySidVerifyPhoneTokenResponse200) & {
+  headers: Headers;
+};
+export type postV1SessionsBySidVerifyPhoneTokenResponseError = (postV1SessionsBySidVerifyPhoneTokenResponse400) & {
+  headers: Headers;
+};
+
+export type postV1SessionsBySidVerifyPhoneTokenResponse = (postV1SessionsBySidVerifyPhoneTokenResponseSuccess | postV1SessionsBySidVerifyPhoneTokenResponseError)
+
+export const getPostV1SessionsBySidVerifyPhoneTokenUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}/verify/phone-token`
+}
+
+/**
+ * @summary Confirm a phone answer with a Firebase phone ID token
+ */
+export const postV1SessionsBySidVerifyPhoneToken = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidVerifyPhoneTokenResponse> => {
+
+  return customFetch<postV1SessionsBySidVerifyPhoneTokenResponse>(getPostV1SessionsBySidVerifyPhoneTokenUrl(sid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1SessionsBySidVerifyPhoneTokenMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidVerifyPhoneToken>>, TError,PostV1SessionsBySidVerifyPhoneTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidVerifyPhoneToken>>, TError,PostV1SessionsBySidVerifyPhoneTokenMutationVariables, TContext> => {
+
+const mutationKey = ['postV1SessionsBySidVerifyPhoneToken'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1SessionsBySidVerifyPhoneToken>>, PostV1SessionsBySidVerifyPhoneTokenMutationVariables> = (props) => {
+          const {sid} = props ?? {};
+
+          return  postV1SessionsBySidVerifyPhoneToken(sid,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1SessionsBySidVerifyPhoneTokenMutationResult = NonNullable<Awaited<ReturnType<typeof postV1SessionsBySidVerifyPhoneToken>>>
+
+    export type PostV1SessionsBySidVerifyPhoneTokenMutationError = void
+    export type PostV1SessionsBySidVerifyPhoneTokenMutationVariables = {sid: string}
+
+    /**
+ * @summary Confirm a phone answer with a Firebase phone ID token
+ */
+export const usePostV1SessionsBySidVerifyPhoneToken = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidVerifyPhoneToken>>, TError,PostV1SessionsBySidVerifyPhoneTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1SessionsBySidVerifyPhoneToken>>,
+        TError,
+        PostV1SessionsBySidVerifyPhoneTokenMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1SessionsBySidVerifyPhoneTokenMutationOptions(options));
+    }
     export type postV1ChatSessionsBySidMessagesResponse200 = {
   data: void
   status: 200
@@ -5149,7 +6282,7 @@ export const getPostV1ChatSessionsBySidActionsUrl = (sid: string,) => {
 }
 
 /**
- * @summary Skip, edit, restart, stop, or submit
+ * @summary Skip, edit, restart, stop, submit, or resend a verification code
  */
 export const postV1ChatSessionsBySidActions = async (sid: string,
     postV1ChatSessionsBySidActionsBody: PostV1ChatSessionsBySidActionsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatSessionsBySidActionsResponse> => {
@@ -5206,7 +6339,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostV1ChatSessionsBySidActionsMutationVariables = {sid: string;data: PostV1ChatSessionsBySidActionsBody}
 
     /**
- * @summary Skip, edit, restart, stop, or submit
+ * @summary Skip, edit, restart, stop, submit, or resend a verification code
  */
 export const usePostV1ChatSessionsBySidActions = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidActions>>, TError,PostV1ChatSessionsBySidActionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -5490,4 +6623,284 @@ export const usePostV1ChatSessionsBySidTokenRotate = <TError = void,
         TContext
       > => {
       return useMutation(getPostV1ChatSessionsBySidTokenRotateMutationOptions(options));
+    }
+    export type postV1ChatSessionsBySidAuthGoogleResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1ChatSessionsBySidAuthGoogleResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postV1ChatSessionsBySidAuthGoogleResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postV1ChatSessionsBySidAuthGoogleResponseSuccess = (postV1ChatSessionsBySidAuthGoogleResponse200) & {
+  headers: Headers;
+};
+export type postV1ChatSessionsBySidAuthGoogleResponseError = (postV1ChatSessionsBySidAuthGoogleResponse400 | postV1ChatSessionsBySidAuthGoogleResponse409) & {
+  headers: Headers;
+};
+
+export type postV1ChatSessionsBySidAuthGoogleResponse = (postV1ChatSessionsBySidAuthGoogleResponseSuccess | postV1ChatSessionsBySidAuthGoogleResponseError)
+
+export const getPostV1ChatSessionsBySidAuthGoogleUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/chat/sessions/${sid}/auth/google`
+}
+
+/**
+ * @summary Verify a respondent with a Google ID token
+ */
+export const postV1ChatSessionsBySidAuthGoogle = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatSessionsBySidAuthGoogleResponse> => {
+
+  return customFetch<postV1ChatSessionsBySidAuthGoogleResponse>(getPostV1ChatSessionsBySidAuthGoogleUrl(sid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1ChatSessionsBySidAuthGoogleMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthGoogle>>, TError,PostV1ChatSessionsBySidAuthGoogleMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthGoogle>>, TError,PostV1ChatSessionsBySidAuthGoogleMutationVariables, TContext> => {
+
+const mutationKey = ['postV1ChatSessionsBySidAuthGoogle'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthGoogle>>, PostV1ChatSessionsBySidAuthGoogleMutationVariables> = (props) => {
+          const {sid} = props ?? {};
+
+          return  postV1ChatSessionsBySidAuthGoogle(sid,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ChatSessionsBySidAuthGoogleMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthGoogle>>>
+
+    export type PostV1ChatSessionsBySidAuthGoogleMutationError = void
+    export type PostV1ChatSessionsBySidAuthGoogleMutationVariables = {sid: string}
+
+    /**
+ * @summary Verify a respondent with a Google ID token
+ */
+export const usePostV1ChatSessionsBySidAuthGoogle = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthGoogle>>, TError,PostV1ChatSessionsBySidAuthGoogleMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthGoogle>>,
+        TError,
+        PostV1ChatSessionsBySidAuthGoogleMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ChatSessionsBySidAuthGoogleMutationOptions(options));
+    }
+    export type postV1ChatSessionsBySidAuthPhoneTokenResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1ChatSessionsBySidAuthPhoneTokenResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postV1ChatSessionsBySidAuthPhoneTokenResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postV1ChatSessionsBySidAuthPhoneTokenResponseSuccess = (postV1ChatSessionsBySidAuthPhoneTokenResponse200) & {
+  headers: Headers;
+};
+export type postV1ChatSessionsBySidAuthPhoneTokenResponseError = (postV1ChatSessionsBySidAuthPhoneTokenResponse400 | postV1ChatSessionsBySidAuthPhoneTokenResponse409) & {
+  headers: Headers;
+};
+
+export type postV1ChatSessionsBySidAuthPhoneTokenResponse = (postV1ChatSessionsBySidAuthPhoneTokenResponseSuccess | postV1ChatSessionsBySidAuthPhoneTokenResponseError)
+
+export const getPostV1ChatSessionsBySidAuthPhoneTokenUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/chat/sessions/${sid}/auth/phone/token`
+}
+
+/**
+ * @summary Verify a respondent with a Firebase phone ID token
+ */
+export const postV1ChatSessionsBySidAuthPhoneToken = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatSessionsBySidAuthPhoneTokenResponse> => {
+
+  return customFetch<postV1ChatSessionsBySidAuthPhoneTokenResponse>(getPostV1ChatSessionsBySidAuthPhoneTokenUrl(sid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1ChatSessionsBySidAuthPhoneTokenMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthPhoneToken>>, TError,PostV1ChatSessionsBySidAuthPhoneTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthPhoneToken>>, TError,PostV1ChatSessionsBySidAuthPhoneTokenMutationVariables, TContext> => {
+
+const mutationKey = ['postV1ChatSessionsBySidAuthPhoneToken'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthPhoneToken>>, PostV1ChatSessionsBySidAuthPhoneTokenMutationVariables> = (props) => {
+          const {sid} = props ?? {};
+
+          return  postV1ChatSessionsBySidAuthPhoneToken(sid,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ChatSessionsBySidAuthPhoneTokenMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthPhoneToken>>>
+
+    export type PostV1ChatSessionsBySidAuthPhoneTokenMutationError = void
+    export type PostV1ChatSessionsBySidAuthPhoneTokenMutationVariables = {sid: string}
+
+    /**
+ * @summary Verify a respondent with a Firebase phone ID token
+ */
+export const usePostV1ChatSessionsBySidAuthPhoneToken = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthPhoneToken>>, TError,PostV1ChatSessionsBySidAuthPhoneTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthPhoneToken>>,
+        TError,
+        PostV1ChatSessionsBySidAuthPhoneTokenMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ChatSessionsBySidAuthPhoneTokenMutationOptions(options));
+    }
+    export type postV1ChatSessionsBySidVerifyPhoneTokenResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1ChatSessionsBySidVerifyPhoneTokenResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postV1ChatSessionsBySidVerifyPhoneTokenResponseSuccess = (postV1ChatSessionsBySidVerifyPhoneTokenResponse200) & {
+  headers: Headers;
+};
+export type postV1ChatSessionsBySidVerifyPhoneTokenResponseError = (postV1ChatSessionsBySidVerifyPhoneTokenResponse400) & {
+  headers: Headers;
+};
+
+export type postV1ChatSessionsBySidVerifyPhoneTokenResponse = (postV1ChatSessionsBySidVerifyPhoneTokenResponseSuccess | postV1ChatSessionsBySidVerifyPhoneTokenResponseError)
+
+export const getPostV1ChatSessionsBySidVerifyPhoneTokenUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/chat/sessions/${sid}/verify/phone-token`
+}
+
+/**
+ * @summary Confirm a phone answer with a Firebase phone ID token
+ */
+export const postV1ChatSessionsBySidVerifyPhoneToken = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatSessionsBySidVerifyPhoneTokenResponse> => {
+
+  return customFetch<postV1ChatSessionsBySidVerifyPhoneTokenResponse>(getPostV1ChatSessionsBySidVerifyPhoneTokenUrl(sid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1ChatSessionsBySidVerifyPhoneTokenMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidVerifyPhoneToken>>, TError,PostV1ChatSessionsBySidVerifyPhoneTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidVerifyPhoneToken>>, TError,PostV1ChatSessionsBySidVerifyPhoneTokenMutationVariables, TContext> => {
+
+const mutationKey = ['postV1ChatSessionsBySidVerifyPhoneToken'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ChatSessionsBySidVerifyPhoneToken>>, PostV1ChatSessionsBySidVerifyPhoneTokenMutationVariables> = (props) => {
+          const {sid} = props ?? {};
+
+          return  postV1ChatSessionsBySidVerifyPhoneToken(sid,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ChatSessionsBySidVerifyPhoneTokenMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ChatSessionsBySidVerifyPhoneToken>>>
+
+    export type PostV1ChatSessionsBySidVerifyPhoneTokenMutationError = void
+    export type PostV1ChatSessionsBySidVerifyPhoneTokenMutationVariables = {sid: string}
+
+    /**
+ * @summary Confirm a phone answer with a Firebase phone ID token
+ */
+export const usePostV1ChatSessionsBySidVerifyPhoneToken = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidVerifyPhoneToken>>, TError,PostV1ChatSessionsBySidVerifyPhoneTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1ChatSessionsBySidVerifyPhoneToken>>,
+        TError,
+        PostV1ChatSessionsBySidVerifyPhoneTokenMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ChatSessionsBySidVerifyPhoneTokenMutationOptions(options));
     }

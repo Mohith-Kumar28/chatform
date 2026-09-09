@@ -74,9 +74,14 @@ const ADOPTION: [feature: string, sql: string][] = [
       WHERE deleted_at IS NULL AND json_extract(settings_json, '$.requireAuth.enabled') = 1`,
   ],
   [
+    // Counted from `knowledge_sources` now that knowledge is rows rather than a
+    // JSON array on the form. Joined back to `forms` so a deleted form's
+    // leftover sources — they outlive it by a week, see `sweeps.ts` — do not
+    // keep counting as adoption.
     "Agent knowledge",
-    `SELECT COUNT(DISTINCT organization_id) AS n FROM forms
-      WHERE deleted_at IS NULL AND json_array_length(json_extract(settings_json, '$.agent.knowledge')) > 0`,
+    `SELECT COUNT(DISTINCT k.organization_id) AS n FROM knowledge_sources k
+       JOIN forms f ON f.id = k.form_id
+      WHERE f.deleted_at IS NULL AND k.status = 'ready'`,
   ],
   [
     "Custom branding",

@@ -2,6 +2,22 @@ import { z } from "zod";
 import { NanoId } from "./ids";
 import { RespondentAuthMethod } from "./respondent";
 
+/**
+ * The confirmation email's copy when the author has not written their own.
+ *
+ * Exported because three places need the same words: the schema default, the
+ * builder's placeholder, and `doc-entitlements`, which resets a free plan's
+ * customised copy back to exactly this rather than switching the mail off.
+ */
+export const DEFAULT_CONFIRMATION_SUBJECT = "Thanks for your response";
+
+/**
+ * Deliberately says nothing the author has not promised. "We'll be in touch"
+ * is a commitment on their behalf; "this is your copy" is only true.
+ */
+export const DEFAULT_CONFIRMATION_BODY =
+  "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.";
+
 export const SettingsDoc = z.object({
   language: z.string().length(2).default("en"),
   rtl: z.boolean().default(false),
@@ -145,13 +161,46 @@ export const SettingsDoc = z.object({
       redirectUrl: z.string().url().optional(),
       delaySec: z.number().int().min(0).max(120).default(5),
       notificationEmails: z.array(z.string().email()).max(10).default([]),
+      /**
+       * The receipt the respondent gets, and the only email in this product
+       * that defaults to on.
+       *
+       * Somebody who has just typed their answers into a chat window has no
+       * artefact of having done it — no confirmation page they can find again,
+       * nothing in their sent folder. Every form product they have used before
+       * sends them one, so its absence reads as the submission having failed.
+       * That is why it is on by default and why the answers are included: the
+       * mail is a copy of what they sent, not a marketing touch.
+       *
+       * It is transactional in the sense every regime that has an opinion
+       * means: it goes only to a person who just completed the form, at an
+       * address they typed into it, in direct response to that act. So unlike
+       * `followUp` it carries no unsubscribe and no postal address, and unlike
+       * `followUp` it is not gated — see `doc-entitlements.ts`, where what the
+       * paid feature buys is writing your own copy rather than sending at all.
+       */
       autoReplyEmail: z
         .object({
-          enabled: z.boolean().default(false),
-          subject: z.string().max(300).default("Thanks for your response"),
-          bodyMd: z.string().max(10000).default(""),
+          enabled: z.boolean().default(true),
+          subject: z.string().max(300).default(DEFAULT_CONFIRMATION_SUBJECT),
+          bodyMd: z.string().max(10000).default(DEFAULT_CONFIRMATION_BODY),
+          /**
+           * Echo their answers back under the message.
+           *
+           * Separately switchable because the one form that must not do it is
+           * the one collecting something the respondent would not want sitting
+           * in their inbox — a health intake, a whistleblowing report. The
+           * author of that form needs a switch, not a reason to turn the whole
+           * confirmation off.
+           */
+          includeAnswers: z.boolean().default(true),
         })
-        .default({ enabled: false, subject: "Thanks for your response", bodyMd: "" }),
+        .default({
+          enabled: true,
+          subject: DEFAULT_CONFIRMATION_SUBJECT,
+          bodyMd: DEFAULT_CONFIRMATION_BODY,
+          includeAnswers: true,
+        }),
     })
     .prefault({}),
 
@@ -312,25 +361,9 @@ export const SettingsDoc = z.object({
       goal: z.string().max(1000).optional(),
       successCriteria: z.string().max(1000).optional(),
 
-      /**
-       * Inline knowledge the agent answers respondent questions from. Kept small
-       * and inlined into a stable system-prompt prefix so it stays cacheable —
-       * no embeddings, no vector store.
-       */
-      knowledge: z
-        .array(
-          z.object({
-            id: NanoId,
-            title: z.string().min(1).max(200),
-            body: z.string().max(20000),
-          }),
-        )
-        .max(20)
-        .default([]),
-
       guardrails: z
         .object({
-          /** May it answer questions the knowledge base does not cover? */
+          /** May it answer questions retrieval from the knowledge base does not cover? */
           answerOffTopic: z.boolean().default(true),
           maxTurns: z.number().int().min(5).max(200).default(60),
           refusalMessage: z
@@ -348,13 +381,6 @@ export const SettingsDoc = z.object({
     })
     .prefault({}),
 });
-
-/** Total characters across all knowledge entries — the budget the UI meters. */
-export const KNOWLEDGE_CHAR_BUDGET = 20000;
-
-export function knowledgeSize(entries: { title: string; body: string }[]): number {
-  return entries.reduce((n, e) => n + e.title.length + e.body.length, 0);
-}
 
 export type SettingsDoc = z.output<typeof SettingsDoc>;
 export type SettingsInput = z.input<typeof SettingsDoc>;
