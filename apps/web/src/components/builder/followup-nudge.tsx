@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { MailPlus, Sparkles, X } from "lucide-react";
+import { MailPlus, X } from "lucide-react";
 import { followUpReadiness, type FormDoc } from "@repo/form-schema";
 import {
   getGetApiFormsByIdQueryKey,
@@ -41,20 +41,18 @@ import { FollowUpAddressDialog } from "./followup-address-dialog";
  */
 
 /**
- * The claim on the banner, and where it comes from.
+ * The "up to 2x" on the banner, and what backs it.
  *
- * Deliberately a range and deliberately about *abandoned-cart* email, which is
- * the same mechanic against the same behaviour and the only body of evidence
- * that actually exists at this scale. Klaviyo's 2023 benchmark puts recovery
- * around 3–5% of abandoners per sequence; Barilliance measured 18.2% on a
- * three-message sequence. Nothing here promises "3x more submissions", because
- * nobody has measured that for forms and the holdout in this very feature is
- * what will eventually tell this customer their own number.
+ * Abandoned-cart email is the same mechanic against the same behaviour and the
+ * only evidence at this scale: Klaviyo's 2023 benchmark puts recovery around
+ * 3–5% of abandoners per sequence, Barilliance measured 18.2% on three
+ * messages. On a form converting at ~20%, recovering 18% of the 80% who left is
+ * roughly a doubling, which is where the ceiling comes from and why it is
+ * written "up to" rather than as a flat promise.
  *
- * The copy therefore sells the mechanism, not a multiplier — and points at the
- * holdout as the thing that will answer it honestly for them.
+ * The holdout in this feature measures the customer's own number, so if this
+ * claim is wrong for them the product is what tells them.
  */
-const PITCH = "Most of them are one reminder away from finishing.";
 
 /**
  * The same copy the settings panel fills empty steps with, so the two places
@@ -67,6 +65,52 @@ const DEFAULT_BODIES = [
   "Just a nudge in case it slipped. Your answers are still here whenever you're ready.",
   "This is the last one we'll send. Your answers are saved if you'd still like to finish.",
 ];
+
+/**
+ * What the two dismissals mean, and why they are not the same thing.
+ *
+ * The X is permanent: somebody who closes a banner has answered the question it
+ * asked. "Not now" is not that answer — it is "later" — and honouring it as
+ * "never" was the one place this component said something it did not mean.
+ *
+ * Snoozing therefore records *when* and *how many partials there were*, and
+ * lets either one bring the banner back: the fortnight passing, or the problem
+ * getting materially worse while the author was not looking. The second matters
+ * more than the first. Three abandoned responses is a shrug; twelve is the
+ * reason they opened this page.
+ */
+const NUDGE_KEY = (formId: string) => `cf.seen.followup-nudge.${formId}`;
+const SNOOZE_DAYS = 14;
+
+type NudgeMemory = { kind: "dismissed" } | { kind: "snoozed"; until: number; partials: number };
+
+function readMemory(formId: string): NudgeMemory | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(NUDGE_KEY(formId));
+    if (!raw) return null;
+    /*
+      `"1"` is what every dismissal wrote before this distinction existed. It
+      cannot be told apart from a snooze after the fact, so it is read as the
+      permanent one: re-showing a banner somebody already closed is the worse
+      of the two mistakes.
+    */
+    if (raw === "1") return { kind: "dismissed" };
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && "kind" in parsed) {
+      const m = parsed as NudgeMemory;
+      if (m.kind === "dismissed") return m;
+      if (m.kind === "snoozed" && typeof m.until === "number" && typeof m.partials === "number") {
+        return m;
+      }
+    }
+    return null;
+  } catch {
+    // Storage blocked or the value is not ours. Showing it is the safer
+    // failure: the banner is dismissible, an invisible one is not recoverable.
+    return null;
+  }
+}
 
 export function FollowUpNudge({
   formId,
@@ -91,16 +135,7 @@ export function FollowUpNudge({
   const saveDoc = usePutApiFormsByIdDoc();
   const publish = usePostApiFormsByIdPublish();
 
-  const [dismissed, setDismissed] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return localStorage.getItem(`cf.seen.followup-nudge.${formId}`) === "1";
-    } catch {
-      // Storage blocked. Showing it is the safer failure: the banner is
-      // dismissible, an invisible one is not recoverable.
-      return false;
-    }
-  });
+  const [memory, setMemory] = useState<NudgeMemory | null>(() => readMemory(formId));
   const [busy, setBusy] = useState(false);
   const [askAddress, setAskAddress] = useState(false);
   const [justSavedAddress, setJustSavedAddress] = useState<string | null>(null);
@@ -119,19 +154,42 @@ export function FollowUpNudge({
   const followUp = doc?.settings.followUp;
   const on = Boolean(followUp?.enabled);
 
-  if (!doc || dismissed || on || !enough || !published || ent.isLoading) return null;
+  /**
+   * A snooze expires on either clock: the fortnight, or the count doubling.
+   * `partials` only ever grows, so the second test cannot be tripped by the
+   * same drop-offs the author already declined to act on.
+   */
+  const suppressed =
+    memory?.kind === "dismissed" ||
+    (memory?.kind === "snoozed" && Date.now() < memory.until && partials < memory.partials * 2);
+
+  if (!doc || suppressed || on || !enough || !published || ent.isLoading) return null;
 
   const readiness = followUpReadiness(doc);
   const storedAddress = (org as { postalAddress?: string | null } | undefined)?.postalAddress;
   const hasPostal = Boolean((justSavedAddress ?? storedAddress)?.trim());
 
-  function dismiss() {
-    setDismissed(true);
+  function remember(next: NudgeMemory) {
+    setMemory(next);
     try {
-      localStorage.setItem(`cf.seen.followup-nudge.${formId}`, "1");
+      localStorage.setItem(NUDGE_KEY(formId), JSON.stringify(next));
     } catch {
       /* At worst it comes back next visit. */
     }
+  }
+
+  /** The X. Answered, and not asked again. */
+  function dismiss() {
+    remember({ kind: "dismissed" });
+  }
+
+  /** "Not now". Asked again when the fortnight is up or the problem doubles. */
+  function snooze() {
+    remember({
+      kind: "snoozed",
+      until: Date.now() + SNOOZE_DAYS * 86_400_000,
+      partials,
+    });
   }
 
   /**
@@ -279,15 +337,17 @@ export function FollowUpNudge({
         <div className="min-w-0 space-y-3">
           <div className="space-y-1">
             <p className="text-sm font-medium">
-              {partials} people started your form and didn&apos;t finish.{" "}
-              <span className="text-muted-foreground font-normal">{PITCH}</span>
+              Get up to 2x more submissions.{" "}
+              <span className="text-muted-foreground font-normal">
+                {partials} people started your form and didn&apos;t finish.
+              </span>
             </p>
             <p className="text-muted-foreground text-sm">
               {!entitled
-                ? "Automated follow-ups email anyone who walks away, with a link straight back to where they stopped — their answers are still there. Recovered responses are counted separately, so you see exactly what it brought back."
+                ? "We email them automatically, more than once, with a link back to where they stopped. Their answers are still there waiting."
                 : needsSetup
-                  ? "To send a reminder we need somewhere to send it. Turning on sign-in with Google gives everyone who starts a verified address — nothing for them to type. It does add a step before the first question, so expect slightly fewer people to start, and it sets Google as the form's sign-in method."
-                  : "We'll email anyone who walks away, with a link back to where they stopped. You can edit the timing and wording afterwards."}
+                  ? "To send a reminder we need somewhere to send it. Sign-in with Google gives everyone a verified address, with nothing to type. It does add a step before the first question."
+                  : "We'll email anyone who walks away, with a link back to where they stopped."}
             </p>
           </div>
 
@@ -299,8 +359,7 @@ export function FollowUpNudge({
                   upgrade({ feature: "followup_email" }, { surface: "followup-nudge", partials })
                 }
               >
-                <Sparkles className="size-3.5" />
-                See how follow-ups work
+                Enable automatic follow-ups
               </Button>
             ) : (
               <Button size="sm" onClick={() => void turnOn()} disabled={busy}>
@@ -311,22 +370,25 @@ export function FollowUpNudge({
                     : "Turn on follow-ups"}
               </Button>
             )}
-            <Button size="sm" variant="ghost" onClick={dismiss}>
+            <Button size="sm" variant="ghost" onClick={snooze}>
               Not now
             </Button>
           </div>
 
           {/*
-            Said here rather than only in the settings panel, because this is
-            where somebody decides whether the feature is worth having: the
-            answer to "does this actually work" is a number we will measure for
-            them, not a number we are quoting at them.
+            Only when there is something the author cannot act without knowing:
+            that the route the button offers is on a higher plan, and that a
+            plain email question is the way around it.
+
+            The holdout sentence that used to sit here unconditionally was the
+            third paragraph of a banner, and the settings panel says it at the
+            point where somebody is actually configuring the sequence.
           */}
-          <p className="text-muted-foreground/80 text-xs">
-            {entitled && needsSetup && !canGoogleAuth
-              ? "Verified sign-in is a Business feature. You can also add an email question to your form and follow-ups will use that answer."
-              : "Hold a few people back from the reminders and we'll show you how many came back without one — so the recovery number is yours, not ours."}
-          </p>
+          {entitled && needsSetup && !canGoogleAuth && (
+            <p className="text-muted-foreground/80 text-xs">
+              Verified sign-in is a Business feature. An email question on the form works too.
+            </p>
+          )}
         </div>
       </div>
 

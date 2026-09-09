@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, FileUp, Loader2, TriangleAlert, X } from "lucide-react";
+import { Check, FileText, FileUp, ImageUp, Loader2, TriangleAlert, X } from "lucide-react";
 import { uploadToSession, type UploadedFile } from "./upload-transport";
 import { cn } from "@/lib/utils";
 
@@ -104,9 +104,26 @@ export function FileUploadControl({
   const done = items.filter((i) => i.state === "done");
   const busy = items.some((i) => i.state === "uploading");
   const full = items.filter((i) => i.state !== "error").length >= maxFiles;
+  // "Up to 3MB" answered the question nobody asked. What a respondent about to
+  // dig through their files wants first is which files are even allowed.
+  const limits = [
+    describeFormats(accept),
+    `up to ${maxSizeMB}MB`,
+    maxFiles > 1 ? `${maxFiles} files max` : "",
+  ]
+    .filter(Boolean)
+    .join(" \u00b7 ");
 
   return (
     <div className="space-y-2">
+      {/*
+        The dropzone carries the form's own accent rather than the neutral
+        border every other surface uses. It is the only thing being asked for
+        on the screen, and a grey dashed rectangle around a grey glyph read as
+        a disabled placeholder — so the dash, the wash and the icon are all
+        mixed from `--cf-accent`, which means they follow whatever palette the
+        form is themed in.
+      */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -119,8 +136,15 @@ export function FileUploadControl({
           void upload(Array.from(e.dataTransfer.files));
         }}
         className={cn(
-          "rounded-2xl border border-dashed transition-colors",
-          dragging ? "border-[var(--cf-accent)] bg-[var(--cf-accent)]/5" : "border-[var(--cf-chip-border)]",
+          "group rounded-2xl border border-dashed",
+          "transition-[background-color,border-color] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
+          dragging
+            ? "border-solid border-[var(--cf-accent)] bg-[color-mix(in_oklch,var(--cf-accent)_10%,transparent)]"
+            : cn(
+                "border-[color-mix(in_oklch,var(--cf-accent)_38%,var(--cf-chip-border))]",
+                "bg-[color-mix(in_oklch,var(--cf-accent)_4%,transparent)]",
+                !full && "hover:border-[var(--cf-accent)] hover:bg-[color-mix(in_oklch,var(--cf-accent)_7%,transparent)]",
+              ),
           full && "opacity-50",
         )}
       >
@@ -128,15 +152,29 @@ export function FileUploadControl({
           type="button"
           disabled={disabled || full}
           onClick={() => inputRef.current?.click()}
-          className="flex w-full flex-col items-center gap-1.5 px-4 py-6 disabled:pointer-events-none"
+          className="flex w-full flex-col items-center gap-2 px-4 py-6 disabled:pointer-events-none"
         >
-          <FileUp className="size-5 opacity-50" />
-          <span className="text-sm">
+          {/* The glyph gets a tinted disc so it reads as an affordance rather
+              than a stray icon floating in the middle of a box. */}
+          <span
+            className={cn(
+              "grid size-10 place-items-center rounded-full",
+              "transition-[background-color,color,transform] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
+              "motion-reduce:transition-none",
+              dragging
+                ? "scale-105 bg-[var(--cf-accent)] text-[var(--cf-accent-text)] motion-reduce:scale-100"
+                : cn(
+                    "bg-[color-mix(in_oklch,var(--cf-accent)_14%,transparent)] text-[var(--cf-accent)]",
+                    !full && "group-hover:bg-[color-mix(in_oklch,var(--cf-accent)_22%,transparent)]",
+                  ),
+            )}
+          >
+            {dropIcon(accept)}
+          </span>
+          <span className="text-sm font-medium">
             {full ? "That's all we need" : dragging ? "Drop to upload" : "Drop a file or tap to choose"}
           </span>
-          <span className="text-xs opacity-50">
-            Up to {maxSizeMB}MB{maxFiles > 1 ? ` · ${maxFiles} files max` : ""}
-          </span>
+          <span className="text-xs opacity-55">{limits}</span>
         </button>
         <input
           ref={inputRef}
@@ -226,6 +264,25 @@ function describeType(mime: string): string {
   if (sub.includes("wordprocessing")) return "Word";
   if (sub.includes("spreadsheet")) return "Excel";
   return sub.split(/[.+-]/).pop()!.toUpperCase();
+}
+
+/** The upload glyph, matched to what the block actually takes. */
+function dropIcon(accept: string[]) {
+  const props = { className: "size-5", strokeWidth: 1.75 };
+  if (accept.length === 0) return <FileUp {...props} />;
+  if (accept.every((a) => a.startsWith("image/"))) return <ImageUp {...props} />;
+  if (accept.every((a) => a === "application/pdf" || a.startsWith("text/") || /word|sheet/.test(a)))
+    return <FileText {...props} />;
+  return <FileUp {...props} />;
+}
+
+/** "PNG, JPG or PDF" — the formats line under the prompt. */
+function describeFormats(accept: string[]): string {
+  const names = [...new Set(accept.map(describeType))];
+  if (names.length === 0) return "";
+  if (names.length > 3) return `${names.slice(0, 3).join(", ")} +${names.length - 3} more`;
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
 }
 
 function describeAccept(accept: string[]): string {

@@ -471,8 +471,8 @@ function AnalyticsTab({
           feature="advanced_analytics"
           headline={
             locked?.worstBlockIndex
-              ? `Most people drop off at question ${locked.worstBlockIndex} — “${locked.worstBlockTitle}”. Unlock to see why.`
-              : "See exactly which question people leave on, when responses arrive, and where they come from."
+              ? `Question ${locked.worstBlockIndex}, “${locked.worstBlockTitle}”, is where most people give up. See why.`
+              : "See which question people leave on, when responses arrive, and where they come from."
           }
           className="bg-card"
         >

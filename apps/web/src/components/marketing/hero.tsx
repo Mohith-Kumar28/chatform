@@ -72,9 +72,29 @@ export function Hero() {
            way — it only makes the drift too faint to notice, which leaves the
            cost of the effect and none of it. The mask still softens the bottom
            edge into the page. */}
+      {/* The mask is a smoothstep, not a ramp, and that is the whole point of
+          the stop list.
+
+          It was `black 78% → transparent 100%`: a straight line in alpha, which
+          ends by walking into zero at a constant rate and then stopping dead.
+          The value is continuous there and the SLOPE is not, and a slope
+          discontinuity across a full-bleed edge is exactly the thing the eye
+          is built to find — it showed up as a hairline ruled across the page
+          at the section boundary, most visible on the violet end where the
+          wash is furthest from the charcoal underneath it.
+
+          These nine stops sample `1 - (3t² - 2t³)` over the last third. The
+          curve leaves full opacity gently and arrives at zero asymptotically,
+          so there is no rate for the eye to catch at either end. The plateau
+          also runs to 66% now rather than 78% — the fade is longer AND it
+          starts lower, because the visible fade has to finish before the
+          section does, not at it.
+
+          Two-thirds of the field is still flat colour, which is what keeps the
+          headline, the buttons and the caption line on full-strength ground. */}
       <GradientField
         tier="vivid"
-        className="-top-32 [mask-image:linear-gradient(to_bottom,black_0%,black_78%,transparent_100%)]"
+        className="-top-32 [mask-image:linear-gradient(to_bottom,#000_0%,#000_66%,#000000ee_71%,#000000c2_76%,#00000093_81%,#0000006c_85%,#0000003e_89%,#0000001a_93%,#00000007_97%,transparent_100%)]"
       />
       {/* The dot grid keeps the wash from reading as a flat panel. */}
       <div
@@ -213,13 +233,13 @@ export function Hero() {
             Both matter, and the order between them is a judgement about who is
             reading. Someone ready to build wants the sign-up, and burying it
             behind a demo costs the visit. Someone not ready yet wants to see
-            the thing work — so the second button has to be genuinely inviting
-            rather than the faint tint a "secondary" usually gets, which is why
-            `on-brand-outline` carries a heavier fill than a hairline outline.
+            the thing work — so the second button is not a "secondary" in the
+            faint sense at all. Both are opaque and both are loud; what tells
+            them apart is which end of the range they take, ink against white.
 
-            Not three pills. "See how it works" drops to the line below —
-            reading about the product is what you do once you have decided not
-            to try it.
+            Not three pills, and no fourth link either. "See how it works" is
+            reached from the nav and from the band it names; it is not worth an
+            underline in the caption under two pills this deliberate.
 
             The demo button falls back to that anchor when no demo is
             configured, rather than disappearing: gating the button on the slug
@@ -228,10 +248,50 @@ export function Hero() {
             unpublished.
           */}
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Button asChild size="lg" shape="pill" variant="on-brand" className="h-12 px-8">
+            {/* Both pills are opaque, and they are told apart by which end of
+                the range they sit at rather than by one of them being faint.
+
+                The ink one first: `--on-band-vivid` is the same near-black the
+                type on this wash is set in, so the primary is the darkest mark
+                in the section and reads as primary from across the room. It is
+                stated here rather than left to `on-brand`, whose `bg-background`
+                is charcoal in the dark theme — right, by accident — and warm
+                cream in the light one, where it would land a shade off the
+                white pill beside it and the pair would read as one button cut
+                in half. One value, both themes, because the ink and the wash
+                under it are both theme-stable already. */}
+            <Button
+              asChild
+              size="lg"
+              shape="pill"
+              variant="on-brand"
+              className="h-12 bg-[var(--on-band-vivid)] px-8 text-white hover:bg-[color-mix(in_oklch,var(--on-band-vivid)_86%,white)]"
+            >
               <Link href="/signin">Start free</Link>
             </Button>
-            <Button asChild size="lg" shape="pill" variant="on-brand-outline" className="h-12 px-7">
+            {/* And the white one, which was `on-brand-outline` — a fifth of the
+                band's own ink over the band, so it took the wash's colour and
+                sat about as far from it as a disabled control does. On a ground
+                this saturated a translucent fill is not a quieter button, it is
+                a smudge, and this is the pill for the visitor who is not ready
+                to sign up yet — the larger half of the traffic.
+
+                White, because white is the one fill that is not on the wash's
+                own scale: every hue this field drifts through is a mid-tone, so
+                a paper-white rectangle is the brightest thing available and it
+                cannot be mistaken for part of the ground. With the ink pill
+                beside it the pair now brackets the wash from both ends.
+
+                `on-brand-outline` is left as it is: the closing CTA still uses
+                it over the full-strength gradient, where the ink is
+                `--on-primary` and the calculus is different. */}
+            <Button
+              asChild
+              size="lg"
+              shape="pill"
+              variant="on-brand"
+              className="h-12 bg-white px-7 text-[var(--on-band-vivid)] hover:bg-white/90"
+            >
               <Link href={DEMO_SLUG ? `/f/${DEMO_SLUG}` : "#how-it-works"}>
                 {DEMO_SLUG ? "Try it yourself" : "See how it works"}
                 <ArrowRight className="size-4" strokeWidth={2.25} />
@@ -244,27 +304,13 @@ export function Hero() {
               two facts that actually decide whether somebody signs up are that
               it costs nothing and that the thing they collect is not capped. */}
           <p style={{ color: "var(--on-band-vivid-muted)" }} className="text-caption mt-6">
+            {/* Three facts and no fourth link. "See how it works" used to hang
+                off the end of this line, underlined, and an underline inside a
+                caption is a fourth thing competing with two pills that had just
+                been made loud on purpose — it pulled the eye down and past
+                them. The anchor still exists; the nav and the section below
+                both reach it. */}
             Free forever · Unlimited forms and responses · No card
-            {/*
-              The demo is a pill above now, so the link that used to live here
-              is gone: the same destination twice inside two hundred pixels is
-              not emphasis. What takes its place is the anchor the pill
-              displaced, which belongs in the quieter position anyway — reading
-              about the product is what you do when you have decided not to try
-              it. Only shown when the pill is the demo, or it would be a
-              duplicate of the button directly above it.
-            */}
-            {DEMO_SLUG && (
-              <>
-                {" · "}
-                <Link
-                  href="#how-it-works"
-                  className="underline underline-offset-4 hover:opacity-70"
-                >
-                  See how it works
-                </Link>
-              </>
-            )}
           </p>
         </div>
 

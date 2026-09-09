@@ -2,6 +2,23 @@
 
 import { useState } from "react";
 import { GripVertical } from "lucide-react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 
 /**
@@ -79,7 +96,15 @@ export function FieldsComposer({
   );
 }
 
-/** Click-to-order ranking — simpler and far more reliable on touch than drag. */
+/**
+ * Ranking — tap to place, drag to rearrange.
+ *
+ * The grip used to sit on the *unranked* chips, which are tap-only: it
+ * advertised a drag in the one place nothing could be dragged, while the
+ * ranked rows — the only things that have an order to change — offered no way
+ * to change it short of removing an item and re-tapping everything after it.
+ * The handle now lives where the reordering happens.
+ */
 export function RankingComposer({
   items,
   onSubmit,
@@ -89,33 +114,41 @@ export function RankingComposer({
 }) {
   const [order, setOrder] = useState<string[]>([]);
   const remaining = items.filter((i) => !order.includes(i.id));
+  const sensors = useSensors(
+    // A short threshold so a tap on "Remove" is still a tap, not a drag.
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  function onDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    setOrder((o) => {
+      const from = o.indexOf(String(active.id));
+      const to = o.indexOf(String(over.id));
+      return from < 0 || to < 0 ? o : arrayMove(o, from, to);
+    });
+  }
 
   return (
     <div className="space-y-2">
       {order.length > 0 && (
-        <ol className="space-y-1">
-          {order.map((id, i) => {
-            const item = items.find((x) => x.id === id)!;
-            return (
-              <li
-                key={id}
-                className="flex items-center gap-2 rounded-xl border border-[var(--cf-accent)] bg-[var(--cf-chip-bg)] px-3 py-2 text-sm"
-              >
-                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[var(--cf-accent)] text-[0.625rem] font-semibold text-[var(--cf-accent-text)]">
-                  {i + 1}
-                </span>
-                <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                <button
-                  type="button"
-                  onClick={() => setOrder((o) => o.filter((x) => x !== id))}
-                  className="shrink-0 text-xs opacity-50 transition-opacity hover:opacity-100"
-                >
-                  Remove
-                </button>
-              </li>
-            );
-          })}
-        </ol>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={order} strategy={verticalListSortingStrategy}>
+            <ol className="space-y-1">
+              {order.map((id, i) => (
+                <RankedRow
+                  key={id}
+                  id={id}
+                  position={i + 1}
+                  label={items.find((x) => x.id === id)?.label ?? id}
+                  draggable={order.length > 1}
+                  onRemove={() => setOrder((o) => o.filter((x) => x !== id))}
+                />
+              ))}
+            </ol>
+          </SortableContext>
+        </DndContext>
       )}
 
       {remaining.length > 0 && (
@@ -125,9 +158,24 @@ export function RankingComposer({
               key={item.id}
               type="button"
               onClick={() => setOrder((o) => [...o, item.id])}
-              className="rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3 py-2 text-sm transition-colors hover:border-[var(--cf-accent)]"
+              className={cn(
+                "group flex items-center gap-2 rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)]",
+                "py-1.5 pr-4 pl-1.5 text-sm transition-colors hover:border-[var(--cf-accent)]",
+              )}
             >
-              <GripVertical className="mr-1 inline size-3 opacity-40" />
+              {/* The slot this chip would land in. Showing the next position
+                  tells the respondent what the tap does — which is what the
+                  grip was pretending to do. */}
+              <span
+                className={cn(
+                  "grid size-6 shrink-0 place-items-center rounded-full border border-dashed border-[var(--cf-chip-border)]",
+                  "text-[0.625rem] font-semibold opacity-60 transition-colors",
+                  "group-hover:border-solid group-hover:border-[var(--cf-accent)] group-hover:bg-[var(--cf-accent)]",
+                  "group-hover:text-[var(--cf-accent-text)] group-hover:opacity-100",
+                )}
+              >
+                {order.length + 1}
+              </span>
               {item.label}
             </button>
           ))}
@@ -135,7 +183,11 @@ export function RankingComposer({
       )}
 
       <p className="text-xs opacity-50">
-        {remaining.length > 0 ? "Tap in order, best first." : "All ranked."}
+        {remaining.length > 0
+          ? order.length > 1
+            ? "Tap in order, best first · drag a handle to rearrange."
+            : "Tap in order, best first."
+          : "All ranked — drag a handle to rearrange."}
       </p>
 
       <button
@@ -152,6 +204,63 @@ export function RankingComposer({
         Confirm ranking
       </button>
     </div>
+  );
+}
+
+/** One placed item. The grip is the drag handle — and only appears once there
+ *  is something to reorder against. */
+function RankedRow({
+  id,
+  position,
+  label,
+  draggable,
+  onRemove,
+}: {
+  id: string;
+  position: number;
+  label: string;
+  draggable: boolean;
+  onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    disabled: !draggable,
+  });
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "flex items-center gap-2 rounded-xl border border-[var(--cf-accent)] bg-[var(--cf-chip-bg)] py-2 pr-3 pl-1.5 text-sm",
+        isDragging && "relative z-10 shadow-md",
+      )}
+    >
+      {draggable ? (
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label={`Reorder ${label}`}
+          className="shrink-0 cursor-grab touch-none rounded-md p-1 opacity-35 transition-opacity hover:opacity-90 focus-visible:opacity-90 active:cursor-grabbing"
+        >
+          <GripVertical className="size-3.5" />
+        </button>
+      ) : (
+        <span className="size-3.5 shrink-0 p-1" aria-hidden />
+      )}
+      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[var(--cf-accent)] text-[0.625rem] font-semibold text-[var(--cf-accent-text)]">
+        {position}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="shrink-0 text-xs opacity-50 transition-opacity hover:opacity-100"
+      >
+        Remove
+      </button>
+    </li>
   );
 }
 

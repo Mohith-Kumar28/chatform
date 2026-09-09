@@ -3,7 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CornerDownLeft } from "lucide-react";
 import { isMeetingRoom, schedulingLabel, type PublicBlock } from "@repo/form-schema";
-import { Chip } from "./composers/primitives";
+import { Chip, KeyHint } from "./composers/primitives";
 import { RatingComposer, ScaleComposer } from "./composers/rating";
 import { DateComposer } from "./composers/date";
 import { SignatureComposer } from "./composers/signature";
@@ -587,11 +587,7 @@ function PictureOption({
         <span className="grid aspect-[4/3] w-full place-items-center text-2xl opacity-25">{label.charAt(0)}</span>
       )}
       <span className="flex items-center gap-1.5 px-3 py-2 text-sm">
-        {index < 9 && (
-          <kbd className="cf-key-hint size-4 place-items-center rounded bg-[var(--cf-chip-border)]/40 text-[0.625rem] font-medium">
-            {index + 1}
-          </kbd>
-        )}
+        {index < 9 && <KeyHint>{index + 1}</KeyHint>}
         <span className="min-w-0 flex-1 truncate">{label}</span>
       </span>
     </button>

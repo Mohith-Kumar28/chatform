@@ -40,11 +40,11 @@ export const metadata: Metadata = {
    */
   title: { absolute: "chatform — AI forms that get more submissions" },
   description:
-    "chatform turns your form into a conversation: it reads what people write, asks again when an answer is too thin to use, and follows up with the ones who leave. More of the people who start finish.",
+    "chatform turns your boring form into a conversation: it reads what people write, asks again when an answer is too thin to use, and follows up with the ones who leave. More of the people who start finish.",
   ...canonical("/"),
   openGraph: {
     ...openGraphBase("/"),
-    title: "chatform — AI forms that get more submissions",
+    title: "chatform — Agentic forms that get more responses",
     description:
       "It reads what people write, asks again when an answer is thin, and follows up with the ones who leave.",
   },

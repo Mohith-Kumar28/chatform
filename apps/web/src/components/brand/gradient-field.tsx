@@ -47,11 +47,15 @@ import { cn } from "@/lib/utils";
  * in front of the content to feel the cursor.
  *
  * @example The hero wash — bled up behind the nav, faded into the page.
+ *
+ * The mask stops are a curve and not a ramp on purpose: a linear fade to
+ * transparent has a slope discontinuity where it lands, and across a full-bleed
+ * edge the eye reads that as a ruled line. See the note at the call site.
  * ```tsx
  * <section className="relative">
  *   <GradientField
  *     tier="vivid"
- *     className="-top-32 [mask-image:linear-gradient(to_bottom,black_0%,black_78%,transparent_100%)]"
+ *     className="-top-32 [mask-image:linear-gradient(to_bottom,#000_0%,#000_66%,#000000c2_76%,#0000006c_85%,#0000001a_93%,transparent_100%)]"
  *   />
  *   <div className="relative" style={{ color: "var(--on-band-vivid)" }}>…</div>
  * </section>

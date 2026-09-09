@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { CornerDownLeft, Download, FileText } from "lucide-react";
+import { CornerDownLeft, Download, FileText, FileUp, PenLine } from "lucide-react";
 import { schedulingLabel, toPublicBlock, type Block, type FormDoc } from "@repo/form-schema";
 import { DateComposer } from "@/components/chat/composers/date";
 import { PaymentAffordance } from "@/components/chat/payment-affordance";
@@ -353,15 +353,33 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
       );
 
     case "file_upload":
-    case "signature":
+    case "signature": {
+      // Mirrors the runtime dropzone in `chat/file-upload` — the accent-tinted
+      // dash and disc, not the grey box the preview used to draw.
+      const Glyph = block.type === "signature" ? PenLine : FileUp;
       return (
         <div
-          className="grid h-24 place-items-center rounded-2xl border border-dashed text-sm opacity-50"
-          style={{ borderColor: "var(--cf-chip-border)" }}
+          className="grid h-24 place-items-center gap-2 rounded-2xl border border-dashed"
+          style={{
+            borderColor: "color-mix(in oklch, var(--cf-accent) 38%, var(--cf-chip-border))",
+            background: "color-mix(in oklch, var(--cf-accent) 4%, transparent)",
+          }}
         >
-          {block.type === "signature" ? "Sign here" : "Drop a file or tap to choose"}
+          <span
+            className="grid size-10 place-items-center justify-self-center rounded-full"
+            style={{
+              background: "color-mix(in oklch, var(--cf-accent) 14%, transparent)",
+              color: "var(--cf-accent)",
+            }}
+          >
+            <Glyph className="size-5" strokeWidth={1.75} />
+          </span>
+          <span className="text-sm font-medium opacity-70">
+            {block.type === "signature" ? "Sign here" : "Drop a file or tap to choose"}
+          </span>
         </div>
       );
+    }
 
     case "legal_consent":
       return (

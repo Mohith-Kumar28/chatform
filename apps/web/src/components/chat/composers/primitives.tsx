@@ -1,12 +1,47 @@
 "use client";
 
-import { CornerDownLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
  * Chat composer primitives, themed entirely from the runtime `--cf-*` variables
  * so a form's palette applies without any component knowing about ThemeDoc.
  */
+
+/**
+ * A key, drawn the same everywhere in the runtime — the `--cf-*` twin of
+ * `ui/kbd`, which is painted in dashboard tokens a form's palette never
+ * reaches.
+ *
+ * `cf-key-hint` is what decides whether it is drawn at all: hints only make
+ * sense where there is a keyboard, and that is a `(hover: hover) and (pointer:
+ * fine)` question, not a width one.
+ */
+export function KeyHint({
+  children,
+  tone = "default",
+  className,
+}: {
+  children: React.ReactNode;
+  /** `accent` for keys sitting on an accent-filled control. */
+  tone?: "default" | "accent" | "inverse";
+  className?: string;
+}) {
+  return (
+    <kbd
+      className={cn(
+        "cf-key-hint size-4 shrink-0 place-items-center rounded font-sans text-[0.625rem] leading-none font-medium tabular-nums",
+        tone === "accent"
+          ? "bg-[var(--cf-accent)] text-[var(--cf-accent-text)]"
+          : tone === "inverse"
+            ? "bg-[color-mix(in_oklch,var(--cf-accent-text)_25%,transparent)] text-[var(--cf-accent-text)]"
+            : "bg-[var(--cf-chip-border)]/40",
+        className,
+      )}
+    >
+      {children}
+    </kbd>
+  );
+}
 
 export function Chip({
   children,
@@ -52,16 +87,7 @@ export function Chip({
       )}
     >
       {shortcut !== undefined && shortcut <= 9 && (
-        <kbd
-          className={cn(
-            "cf-key-hint size-4 place-items-center rounded text-[0.625rem] font-medium",
-            selected
-              ? "bg-[var(--cf-accent)] text-[var(--cf-accent-text)]"
-              : "bg-[var(--cf-chip-border)]/40",
-          )}
-        >
-          {shortcut}
-        </kbd>
+        <KeyHint tone={selected ? "accent" : "default"}>{shortcut}</KeyHint>
       )}
       {children}
     </button>
@@ -104,9 +130,11 @@ export function SendRow({
         )}
       >
         {label}
-        {/* Hints that Enter also sends — hidden on touch-sized screens, which
-            have no physical Enter key to point at. */}
-        <CornerDownLeft className="hidden size-3.5 opacity-60 sm:block" aria-hidden />
+        {/* Says Enter sends, in the same key chip the choice chips use. The
+            icon this replaces was hidden below `sm`, which is the width proxy
+            `cf-key-hint` exists to avoid: an embedded form in a 400px frame on
+            a desktop has a keyboard and was told nothing. */}
+        <KeyHint tone="inverse">↵</KeyHint>
       </button>
     </div>
   );

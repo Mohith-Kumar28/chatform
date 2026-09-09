@@ -318,10 +318,17 @@ export function LockedOverlay({
   const thing = noun ?? meta.noun ?? "";
 
   return (
-    <div className={cn("relative overflow-hidden rounded-xl", className)}>
+    /*
+      The skeleton and the pitch share one grid cell rather than the pitch being
+      absolutely positioned over the skeleton, so the card is as tall as whichever
+      is taller. Absolute positioning made the skeleton the only thing with a
+      height, and a short one — three rows when the count is zero — cropped the
+      price line clean off under `overflow-hidden`.
+    */
+    <div className={cn("relative grid items-center overflow-hidden rounded-xl", className)}>
       <div
         aria-hidden
-        className="pointer-events-none blur-[6px] saturate-50 select-none"
+        className="pointer-events-none col-start-1 row-start-1 blur-[6px] saturate-50 select-none"
         /*
           `inert={true}`, not `inert=""`.
 
@@ -336,7 +343,7 @@ export function LockedOverlay({
         {children}
       </div>
 
-      <div className="absolute inset-0 flex items-center justify-center bg-[var(--background)]/55 p-6 backdrop-blur-[2px]">
+      <div className="col-start-1 row-start-1 flex items-center justify-center self-stretch bg-[var(--background)]/55 p-6 backdrop-blur-[2px]">
         <div className="max-w-sm text-center">
           <div className="bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)] mx-auto mb-3 flex size-9 items-center justify-center rounded-full">
             <Lock className="size-4" aria-hidden />
@@ -356,11 +363,6 @@ export function LockedOverlay({
           <Button variant="gradient" className="mt-4" onClick={() => upgrade({ feature }, { count, ...context })}>
             Unlock with {plan.name}
           </Button>
-
-          <p className="text-muted-foreground mt-2 text-xs">
-            ${(plan.priceMonthlyCents / 100).toFixed(0)}/mo, or $
-            {(Math.round(plan.priceYearlyCents / 12) / 100).toFixed(0)}/mo billed yearly
-          </p>
         </div>
       </div>
     </div>
