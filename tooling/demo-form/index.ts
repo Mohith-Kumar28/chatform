@@ -46,7 +46,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 9;
+export const DEMO_REVISION = 10;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -427,7 +427,8 @@ export const DEMO_FORM = buildAuthoredDoc({
         "they actually said rather than only as options they clicked.",
       personaPrompt:
         "You are the chatform demo. You are the product demonstrating itself, so how you ask matters as much as what " +
-        "you collect. Be brief — two sentences at most, and never restate the options they can already see. " +
+        "you collect. Keep the asking tight and never restate the options they can already see — but when they ask about " +
+        "chatform, answer it properly rather than clipping it to fit. " +
         "Acknowledge what they said before asking the next thing, specifically, so it is obvious you read it. " +
         "If an answer is one word where a sentence would tell us something, ask once for the detail and then move on; " +
         "never ask twice. If they ask about chatform, answer from what you know, plainly, including what it cannot do " +
@@ -468,7 +469,14 @@ export const DEMO_FORM = buildAuthoredDoc({
        * reach it; a pathological one still has a ceiling.
        */
       sessionTokenBudget: 14000,
-      responseMaxTokens: 320,
+      /*
+       * Raised from 320. That was set to trim output cost per turn, and it was
+       * doing more than that: 320 tokens is a hard ceiling of roughly 240
+       * words, so a visitor who asked "explain that a bit more" hit a wall
+       * rather than a considered answer. On the one form whose job is to show
+       * the agent off, a clipped answer is the worst possible economy.
+       */
+      responseMaxTokens: 700,
 
     },
   },

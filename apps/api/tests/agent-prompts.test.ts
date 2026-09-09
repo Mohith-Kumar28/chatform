@@ -91,6 +91,32 @@ describe("knowledge base and guardrails reach the prompt", () => {
     expect(prefix).toMatch(/do NOT know this product's pricing/);
   });
 
+  it("does not cap an answer at one sentence", () => {
+    /*
+     * The rule used to read "answer it in one sentence", and it applied to
+     * every question a respondent could ask — so "what does this app do?" and
+     * "can you explain that a bit more?" got replies of identical length, and
+     * the second one was, in substance, a refusal. Retrieval made it worse:
+     * three good passages were being summarised down to one vague line.
+     *
+     * Length is now a consequence of the question. Pinned as a string because
+     * the failure is invisible — nothing errors, the agent just answers badly
+     * and consistently, which reads like a house style rather than a bug.
+     */
+    const prefix = buildStablePrefix(docWith({}), { hasKnowledge: true });
+    expect(prefix).not.toContain("answer it in one sentence");
+    expect(prefix).not.toContain("be brief about what came back");
+    expect(prefix).toContain("Length follows the question");
+  });
+
+  it("tells the agent that markdown renders", () => {
+    // The bubble has run react-markdown the whole time, and the prompt never
+    // mentioned it — so the agent wrote flat prose for want of knowing it had
+    // bold and lists available.
+    const prefix = buildStablePrefix(docWith({}), { hasKnowledge: true });
+    expect(prefix).toMatch(/markdown renders/i);
+  });
+
   it("keeps the plain off-topic wording when there is no knowledge base", () => {
     // Without retrieval there is no lookup to insist on, and a form that
     // simply has no knowledge base must not tell the agent to call a tool that

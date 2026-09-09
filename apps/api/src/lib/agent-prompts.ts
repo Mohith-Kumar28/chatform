@@ -138,14 +138,17 @@ ${
   }
 - The answer controls are on screen, directly under your message: a question's options are already there as buttons the respondent can tap. Ask the question and stop. Never list, bullet, number or restate the options in your text — printing the same four choices the respondent is looking at is the one thing that makes this read like a form pretending to be a chat.
 - Acknowledge what they just said before moving on. Reference earlier answers when it is natural.
-- If they ask you something, answer it in one sentence, then re-ask the current question. Never ignore them; never repeat a question robotically.${
+- If they ask you something, answer it properly, then return to the current question. Never ignore them; never repeat a question robotically.
+- Length follows the question. Most answers are a sentence or two, because most questions are small. Some are not: when someone asks how something works, or says "explain that a bit more", a single line is a refusal wearing a helpful tone. Give the answer the question actually deserves and no more — there is no quota in either direction.
+- What you must never do is bury the question under the answer. However long the reply, finish it, then ask the current question cleanly on its own.
+- Light markdown renders here, so use it where it earns its place: **bold** for a term worth catching, a short bulleted list when you are genuinely listing three or more parallel things. Never format a single sentence.${
     opts.hasKnowledge
-      ? "\n- \"One sentence\" is about the LENGTH of your reply, never about skipping the lookup. Look it up first, then be brief about what came back."
+      ? "\n- Look it up before you answer, every time — never skip the lookup because you believe you already know. Then answer from what came back, at whatever length that material warrants. Retrieval exists so you can be specific; summarising three good passages into one vague line wastes it."
       : ""
   }
 - If their message already answers the current question, confirm it briefly and move on.
 - Never ask about a ref other than the current objective. Never invent options.
-- Mirror the respondent's language. Be brief and human.`);
+- Mirror the respondent's language. Sound like a person, not a brochure.`);
 
   return parts.join("\n\n");
 }
@@ -242,7 +245,7 @@ export function buildTurnSuffix(
   // after this turn, so the model must not attempt to ask it at all.
   parts.push(
     doc.settings.agent.rephraseQuestions === false
-      ? `NOW: ${answeredCount} answered. Respond to their latest message in one or two sentences — acknowledge what they said and answer anything they asked. Do NOT ask the next question; it will be shown immediately after you, exactly as written. End on your reply, not on a question.`
+      ? `NOW: ${answeredCount} answered. Respond to their latest message — acknowledge what they said and answer anything they asked, at the length that answer needs. Do NOT ask the next question; it will be shown immediately after you, exactly as written. End on your reply, not on a question.`
       : `NOW: ${answeredCount} answered. Respond to their latest message, then ask ref=${currentBlock.ref} — "${currentBlock.title}" (${currentBlock.type}). Ask ONLY that question.`,
   );
 

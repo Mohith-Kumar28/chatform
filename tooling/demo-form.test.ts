@@ -149,7 +149,10 @@ describe("safe to leave open to the internet", () => {
     expect(settings.closeRules.maxSubmissions).toBeLessThanOrEqual(5000);
     expect(settings.agent.guardrails.maxTurns).toBeLessThanOrEqual(40);
     expect(settings.agent.sessionTokenBudget).toBeLessThanOrEqual(14000);
-    expect(settings.agent.responseMaxTokens).toBeLessThanOrEqual(400);
+    // Room for a real answer when someone asks for one. It is still a
+    // ceiling — the cost guard is `maxTurns` and the submission cap, not a
+    // gag on the one form meant to show the agent answering well.
+    expect(settings.agent.responseMaxTokens).toBeLessThanOrEqual(800);
   });
 
   it("still says something useful once it is full", () => {
