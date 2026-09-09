@@ -224,25 +224,35 @@ export function HandNote({
 /**
  * The mark, blown up and dropped into a corner at low opacity.
  *
- * This is the page's one repeating background device. It is the logo rather
- * than an abstract blob on purpose: a shape that means something is worth
- * looking at twice, and the silhouette is already the most recognisable object
- * the brand owns. `mono` in `currentColor`, so it takes the ink of whatever
- * band it lands in and never fights the ground it sits on.
+ * It is the logo rather than an abstract blob on purpose: a shape that means
+ * something is worth looking at twice, and the silhouette is already the most
+ * recognisable object the brand owns. `mono` in `currentColor`, so it takes
+ * the ink of whatever band it lands in and never fights the ground it sits on.
+ *
+ * This used to be described here as "the page's one repeating background
+ * device", and `Band` duly stamped it on every flat band at the same corner,
+ * the same size and the same angle. Repeated identically down a page it stops
+ * being a signature and becomes wallpaper — on `/pricing` you could see the
+ * same silhouette three times in one scroll, once of them sitting behind the
+ * comparison table's numbers. It is opt-in now (see `Band`), and `tilt` exists
+ * so that the few places which do use it are not stamped from one plate.
  */
 export function MarkWatermark({
   className,
   opacity = 0.07,
+  tilt = 0,
 }: {
   className?: string;
   opacity?: number;
+  /** Degrees. The mark is a soft silhouette; past about 25 it reads as fallen. */
+  tilt?: number;
 }) {
   return (
     <svg
       aria-hidden
       viewBox="0 0 32 32"
       fill="none"
-      style={{ opacity }}
+      style={{ opacity, transform: tilt ? `rotate(${tilt}deg)` : undefined }}
       className={cn("pointer-events-none absolute", className)}
     >
       <path

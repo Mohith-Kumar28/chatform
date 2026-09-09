@@ -64,6 +64,30 @@ function groundStyle(tone: BandTone): React.CSSProperties | undefined {
   };
 }
 
+/**
+ * Where a mark may sit, and at what angle.
+ *
+ * Three, not one, and no default: a caller has to say which, which makes two
+ * marks on the same page a decision rather than an accident. The tilts are
+ * small and none of them is zero — an upright logo in a corner reads as a
+ * watermark stamped by software, and the whole device is meant to read as the
+ * page's own shape showing through.
+ */
+const MARK_PLACEMENTS = {
+  "bottom-right": {
+    className: "-right-24 -bottom-32 size-[26rem] sm:-right-12 sm:size-[32rem]",
+    tilt: -8,
+  },
+  "bottom-left": {
+    className: "-left-28 -bottom-36 size-[24rem] sm:-left-16 sm:size-[30rem]",
+    tilt: 14,
+  },
+  "top-right": {
+    className: "-right-28 -top-28 size-[22rem] sm:-right-16 sm:size-[27rem]",
+    tilt: -18,
+  },
+} as const;
+
 export function Band({
   id,
   tone = "paper",
@@ -71,6 +95,7 @@ export function Band({
   className,
   containerClassName,
   size = "default",
+  mark,
 }: {
   id?: string;
   tone?: BandTone;
@@ -79,19 +104,33 @@ export function Band({
   containerClassName?: string;
   /** `tight` for connective bands; `tall` for the two that carry the argument. */
   size?: "tight" | "default" | "tall";
+  /**
+   * Put the oversized mark behind this band, at a named corner.
+   *
+   * Off unless asked for, and asked for rarely — see the note below.
+   */
+  mark?: keyof typeof MARK_PLACEMENTS;
 }) {
   /**
    * The plain tones are the flat ones.
    *
    * `paper`, `sand` and `ink` have no hue to carry them, so at full width they
    * are large empty rectangles between the coloured bands — the page visibly
-   * running out of things to say. They get the two background devices: the
-   * mark at scale, bled off a corner, and a dot field that fades before it
-   * reaches the type. Both are `currentColor`, so one declaration works on
-   * cream and on charcoal, and both are cheap enough to be everywhere.
+   * running out of things to say. They get the dot field, which fades before
+   * it reaches the type, is `currentColor` so one declaration works on cream
+   * and on charcoal, and is cheap enough to be everywhere. Texture that reads
+   * as paper can repeat; that is what texture is.
    *
-   * The coloured bands get neither. They already have a ground doing this job,
-   * and a watermark on top of a saturated hue is texture on texture.
+   * The coloured bands get nothing. They already have a ground doing this job.
+   *
+   * The mark does NOT come with `flat` any more, and that is the point. Every
+   * flat band used to stamp it at the same corner, the same size and the same
+   * angle, so a long page showed one silhouette three or four times down its
+   * right edge — and on `/pricing` one of those landed behind the comparison
+   * table. A logo repeated on a schedule is not a signature, it is a tiled
+   * background, and the thing it costs is the reason the mark was worth using:
+   * that you notice it. It is opt-in per band now, and the few call sites that
+   * ask for it vary the corner and the tilt so no two are the same gesture.
    */
   const flat = tone === "paper" || tone === "sand" || tone === "ink";
 
@@ -110,18 +149,20 @@ export function Band({
       )}
     >
       {flat && (
-        <>
-          <DotField
-            className="[mask-image:radial-gradient(ellipse_80%_70%_at_50%_50%,black,transparent)]"
-            opacity={0.06}
-          />
-          {/* Bled off the right edge and cropped, so it reads as a shape the
-              page is standing on rather than a logo somebody placed. */}
-          <MarkWatermark
-            className="-right-24 -bottom-32 size-[26rem] sm:-right-12 sm:size-[32rem]"
-            opacity={0.05}
-          />
-        </>
+        <DotField
+          className="[mask-image:radial-gradient(ellipse_80%_70%_at_50%_50%,black,transparent)]"
+          opacity={0.06}
+        />
+      )}
+
+      {/* Bled off an edge and cropped, so it reads as a shape the page is
+          standing on rather than a logo somebody placed. */}
+      {mark && (
+        <MarkWatermark
+          className={MARK_PLACEMENTS[mark].className}
+          tilt={MARK_PLACEMENTS[mark].tilt}
+          opacity={0.05}
+        />
       )}
 
       <div className={cn("relative mx-auto max-w-6xl", containerClassName)}>{children}</div>

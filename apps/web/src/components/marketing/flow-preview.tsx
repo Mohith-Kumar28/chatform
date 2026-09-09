@@ -311,6 +311,11 @@ function Node({ x, y, index, title, type, tone, glyph, delay }: FlowNode) {
       {/* The chip. This is where the family colour lives — the whole point of
           the redraw. */}
       <rect x={x + 11} y={y + 15} width="24" height="24" rx="7" fill={soft} />
+      {/* `color` as well as `stroke`, because CircleDot's centre is a FILLED
+          shape and fills it with `currentColor`. Without this the glyph
+          inherits the page's text colour from outside the chip: a dark dot on
+          a pale chip in the light theme, which looked right by accident, and
+          nothing at all in the dark one. */}
       <svg
         x={x + 16.5}
         y={y + 20.5}
@@ -318,6 +323,7 @@ function Node({ x, y, index, title, type, tone, glyph, delay }: FlowNode) {
         height="13"
         viewBox="0 0 24 24"
         fill="none"
+        color={ink}
         stroke={ink}
         strokeWidth="2.4"
         strokeLinecap="round"

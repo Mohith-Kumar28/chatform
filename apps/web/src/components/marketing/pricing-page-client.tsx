@@ -142,7 +142,12 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
 
   return (
     <>
-      <Band size="tall">
+      {/* The page's one mark, and it is at the opposite corner and the opposite
+          tilt from the one `CtaBand` closes with — so the two read as the same
+          shape seen twice rather than as a repeated stamp. Nothing between them
+          carries it: the comparison table in particular had it sitting behind
+          the numbers. */}
+      <Band size="tall" mark="bottom-left">
         <div className="max-w-2xl">
           <BandTitle as="h1">Collect for free. Pay to look closer.</BandTitle>
           <BandLede>

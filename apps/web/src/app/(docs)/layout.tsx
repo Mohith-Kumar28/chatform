@@ -3,6 +3,7 @@ import { RootProvider } from "fumadocs-ui/provider/next";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { source } from "@/lib/source";
 import { DocsNav } from "@/components/docs/docs-nav";
+import { Logo } from "@/components/brand/logo";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
 /**
@@ -33,8 +34,38 @@ export default function DocsRootLayout({ children }: { children: ReactNode }) {
     >
       <DocsLayout
         tree={source.pageTree}
-        nav={{ component: <DocsNav /> }}
+        nav={{
+          /**
+           * The mark and the wordmark, at the top of the sidebar, where a docs
+           * site says whose docs these are. `component` replaces the header
+           * bar, so this is the only place the brand appears on wide screens —
+           * and it is the right one: the sidebar is the thing that persists
+           * while a reader moves between pages.
+           *
+           * `url: "/"` because the mark is the way back to the product, not a
+           * link to the page you are already on.
+           */
+          url: "/",
+          title: (
+            <>
+              <Logo />
+              <span className="text-fd-muted-foreground text-caption font-normal">
+                docs
+              </span>
+            </>
+          ),
+          component: <DocsNav />,
+        }}
         sidebar={{ tabs: false, collapsible: true }}
+        /**
+         * Fumadocs puts its theme switch in a row at the foot of the sidebar
+         * that it shares with `links` of type `icon`. We pass no icon links, so
+         * that row rendered as a full-width bordered box holding nothing but a
+         * sun and a moon pinned to its right edge — a control with no visible
+         * subject. `DocsNav` already draws the app's own toggle, so this is one
+         * duplicate removed and one piece of stray furniture with it.
+         */
+        themeSwitch={{ enabled: false }}
       >
         {children}
       </DocsLayout>
