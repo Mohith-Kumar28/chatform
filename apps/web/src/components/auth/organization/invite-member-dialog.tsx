@@ -26,6 +26,8 @@ import { toast } from "sonner"
 import { gateErrorFrom } from "@/lib/auth/paywalled"
 import { openPaywall } from "@/stores/paywall-store"
 import { buttonVariants } from "@/components/ui/button"
+import { LockedControl } from "@/components/billing/gate"
+import { useEntitlements } from "@/hooks/use-entitlements"
 import {
   Dialog,
   DialogClose,
@@ -179,6 +181,25 @@ export function InviteMemberDialog({
     (invitations.data?.filter((invitation) => invitation.status === "pending")
       .length ?? 0) >= invitationLimit
 
+  /**
+   * The seat ceiling is answered here, not on the control that opened this.
+   *
+   * Both entry points — the header's "Invite team" and the members table's
+   * "Invite member" — stay live at the ceiling and open this dialog. A padlock
+   * on the thing you press to *start* refuses before anyone has said what they
+   * want, and it costs the surface around it a second button and a chip. The
+   * refusal belongs on the submit button instead: by then the person has typed
+   * an address, which is the moment the offer is worth anything.
+   *
+   * `gauges.seats` is the server's own count: members plus invitations that
+   * could still be accepted. Recomputing it from the rows in the table is how
+   * this dialog and the endpoint end up disagreeing about whether there is room.
+   */
+  const ent = useEntitlements()
+  const seatLimit = ent.limit("seats")
+  const seatsUsed = ent.data?.gauges.seats ?? 0
+  const atSeatLimit = seatLimit !== null && seatsUsed >= seatLimit
+
   const form = useAuthForm({
     defaultValues: {
       additionalFields: getAdditionalFieldDefaultValues(invitationFields),
@@ -191,7 +212,8 @@ export function InviteMemberDialog({
         !activeOrganizationId ||
         !canInvite.data?.success ||
         value.roles.length === 0 ||
-        atInvitationLimit
+        atInvitationLimit ||
+        atSeatLimit
       )
         return
 
@@ -477,16 +499,26 @@ export function InviteMemberDialog({
                 {localization.settings.cancel}
               </DialogClose>
 
-              <form.AuthFormSubmitButton
-                disabled={
-                  isInviting ||
-                  atInvitationLimit ||
-                  canInvite.isPending ||
-                  !canInvite.data?.success
-                }
+              {/* Padlocked rather than merely disabled: a dead button explains
+                  nothing, and the chip is the only thing here that names the
+                  plan which would raise the ceiling. */}
+              <LockedControl
+                limit="seats"
+                used={seatsUsed}
+                locked={atSeatLimit}
+                chip="inline"
               >
-                {organizationLocalization.inviteMember}
-              </form.AuthFormSubmitButton>
+                <form.AuthFormSubmitButton
+                  disabled={
+                    isInviting ||
+                    atInvitationLimit ||
+                    canInvite.isPending ||
+                    !canInvite.data?.success
+                  }
+                >
+                  {organizationLocalization.inviteMember}
+                </form.AuthFormSubmitButton>
+              </LockedControl>
             </DialogFooter>
           </form.AuthFormRoot>
         </form.AppForm>

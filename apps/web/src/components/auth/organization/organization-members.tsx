@@ -43,7 +43,6 @@ import {
 } from "@/components/ui/table"
 import { organizationPlugin } from "@/lib/auth/organization-plugin"
 import { useEntitlements } from "@/hooks/use-entitlements"
-import { LockedControl, useUpgrade } from "@/components/billing/gate"
 import { cn } from "@/lib/utils"
 import { InviteMemberDialog } from "./invite-member-dialog"
 import { OrganizationMemberRow } from "./organization-member-row"
@@ -337,13 +336,21 @@ export function OrganizationMembers({
    * disagreeing about whether there is room.
    */
   const ent = useEntitlements()
-  const upgrade = useUpgrade()
   const seatLimit = ent.limit("seats")
   const seatsUsed = ent.data?.gauges.seats ?? total
-  const atSeatLimit = seatLimit !== null && seatsUsed >= seatLimit
 
+  /**
+   * The seat ceiling does not disable this button; the plugin's does.
+   *
+   * Running out of seats is a sales conversation, and a header row is the worst
+   * place to hold one: it had grown a second button and a padlock chip beside a
+   * control that still read "Invite member". The button now always opens the
+   * dialog, and the dialog — which has room for a sentence — is what says no
+   * and offers the upgrade. `membershipLimit` is a static plugin option with no
+   * upsell behind it, so that one still stops the click.
+   */
   const atMembershipLimit =
-    atSeatLimit || (membershipLimit !== undefined && total >= membershipLimit)
+    membershipLimit !== undefined && total >= membershipLimit
 
   /**
    * Chrome appears when it is needed, not always.
@@ -361,32 +368,20 @@ export function OrganizationMembers({
         {/* No "Members" heading: the section is already called People, and a
             table of people under a heading reading Members is the same word
             twice. The seat count is the only thing the left side owes — it is
-            what the buttons opposite are constrained by. */}
+            what the button opposite is constrained by. */}
         <p className="text-muted-foreground text-caption tabular min-w-0">
           {seatLimit !== null ? `${seatsUsed}/${seatLimit} seats` : null}
         </p>
 
         {(canInvite.isPending || canInvite.data?.success) && (
-          <div className="flex shrink-0 items-center gap-2">
-            {atSeatLimit && (
-              <Button size="sm" variant="outline" onClick={() => upgrade({ limit: "seats", used: seatsUsed }, { surface: "team" })}>
-                {"Add seats"}
-              </Button>
-            )}
-            {/* Padlocked rather than merely disabled: a dead button explains
-                nothing, and the chip is the only thing on this screen that says
-                which plan would raise the ceiling. */}
-            <LockedControl limit="seats" used={seatsUsed} locked={atSeatLimit} chip="inline">
-              <Button
-                className="shrink-0"
-                size="sm"
-                disabled={canInvite.isPending || atMembershipLimit}
-                onClick={() => setInviteOpen(true)}
-              >
-                {organizationLocalization.inviteMember}
-              </Button>
-            </LockedControl>
-          </div>
+          <Button
+            className="shrink-0"
+            size="sm"
+            disabled={canInvite.isPending || atMembershipLimit}
+            onClick={() => setInviteOpen(true)}
+          >
+            {organizationLocalization.inviteMember}
+          </Button>
         )}
       </div>
 
