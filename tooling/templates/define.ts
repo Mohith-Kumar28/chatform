@@ -3,19 +3,25 @@ import {
   FormDoc,
   hasErrors,
   lintFormDoc,
+  SettingsDoc,
+  ThemeDoc,
   type BlockInput,
   type ConditionOp,
   type DraftBranch,
 } from "@repo/form-schema";
+import type { z } from "zod";
 
 /**
- * The authoring shape for a template.
+ * The authoring shape for a form written in TypeScript rather than the builder.
  *
- * Templates are authored here in TypeScript and generated into
- * `tooling/seed-templates.sql`, the same way `@repo/entitlements` is generated
- * into `seed-plans.sql`. The catalogue is the authoring path and the
- * `form_templates` table is the runtime read path; writing the SQL by hand
- * would guarantee they drift.
+ * Templates are authored here and generated into `tooling/seed-templates.sql`,
+ * the same way `@repo/entitlements` is generated into `seed-plans.sql`. The
+ * catalogue is the authoring path and the `form_templates` table is the runtime
+ * read path; writing the SQL by hand would guarantee they drift.
+ *
+ * `buildAuthoredDoc` is the part of that which is not about templates at all —
+ * ids, option ids, branch resolution, lint — and `tooling/demo-form/` uses it to
+ * publish a real form. See `AuthoredForm` for where the two part company.
  *
  * What this buys over the array of docs that used to live inside the route:
  * every template is parsed by `FormDoc` at generation time, so a malformed one
@@ -120,18 +126,27 @@ export interface TemplateBranch {
   always?: boolean;
 }
 
-export interface TemplateInput {
+/**
+ * A whole form, written the way a person would describe one.
+ *
+ * This is the half of `TemplateInput` that is actually a *form* — the greeting,
+ * the questions, where the answers route and how it signs off. The catalogue
+ * fields a template also carries (category, blurb, tags, icon) describe the card
+ * in the gallery, not the document, and live on `TemplateInput` below.
+ *
+ * The split exists because the gallery is no longer the only thing authored this
+ * way. `tooling/demo-form/` publishes a real form from the same authoring shape,
+ * and it needs the two fields a template has no use for: `settings` and `theme`.
+ * A template deliberately ships neither — a starting point that arrived with
+ * somebody else's sign-in gate already switched on would be a trap — so both are
+ * optional, and omitting them yields the same document as before.
+ */
+export interface AuthoredForm {
   slug: string;
   title: string;
-  category: Category;
-  /** One line, on the card. */
+  /** One line. On a template it is also the card's subtitle. */
   description: string;
-  /** Two or three sentences, in the preview panel. */
-  blurb: string;
-  tags: string[];
-  /** A key into the web app's icon registry. */
-  icon: string;
-  /** The opening line. Every template has one — a conversation starts by speaking. */
+  /** The opening line. Every form has one — a conversation starts by speaking. */
   greeting: string;
   questions: Question[];
   /** The default sign-off, reached when nothing routes elsewhere. Ref `end_thanks`. */
@@ -146,6 +161,25 @@ export interface TemplateInput {
   endings?: { ref: string; title: string; body?: string }[];
   /** Conditional routing. Every arm of a decision, including the shared ones. */
   branches?: TemplateBranch[];
+  /**
+   * Anything the defaults do not already say.
+   *
+   * Passed to `FormDoc.parse` as-is, so it is a partial: every key `SettingsDoc`
+   * defaults stays defaulted. Omit it entirely and the document is byte-identical
+   * to one built without the field at all, which is what keeps the template
+   * catalogue unchanged by this shape existing.
+   */
+  settings?: z.input<typeof SettingsDoc>;
+  theme?: z.input<typeof ThemeDoc>;
+}
+
+export interface TemplateInput extends AuthoredForm {
+  category: Category;
+  /** Two or three sentences, in the preview panel. */
+  blurb: string;
+  tags: string[];
+  /** A key into the web app's icon registry. */
+  icon: string;
 }
 
 export interface TemplateSeed {
@@ -255,7 +289,14 @@ function longestPath(doc: FormDoc): number {
   return best[0] ?? 0;
 }
 
-export function defineTemplate(input: TemplateInput): TemplateSeed {
+/** What `buildAuthoredDoc` works out that a caller would otherwise have to recount. */
+export interface AuthoredDoc {
+  doc: FormDoc;
+  blockCount: number;
+  estMinutes: number;
+}
+
+export function buildAuthoredDoc(input: AuthoredForm): AuthoredDoc {
   const refs = new Set<string>(["welcome", "end_thanks"]);
   const code = slugify(input.slug, 2).replace(/_/g, "").slice(0, 8);
 
@@ -364,6 +405,13 @@ export function defineTemplate(input: TemplateInput): TemplateSeed {
     logic: [...jumps, ...buildFlowRules(branches, blocks as never, [...endingRefs], jumps)].map(
       (rule, i) => ({ ...rule, id: `rl_${code}${String(i + 1).padStart(2, "0")}` }),
     ),
+    // Spread only when present. `SettingsDoc`/`ThemeDoc` are `.prefault({})`, so
+    // an explicit `undefined` and an absent key parse to the same defaults — but
+    // writing the keys unconditionally would still be a change to this object,
+    // and `templates:verify` is the thing that proves this refactor changed
+    // nothing. Keep the parsed input identical for a caller that passes neither.
+    ...(input.settings ? { settings: input.settings } : {}),
+    ...(input.theme ? { theme: input.theme } : {}),
   });
 
   /**
@@ -390,7 +438,7 @@ export function defineTemplate(input: TemplateInput): TemplateSeed {
   const orphaned = endings.slice(1).filter((e) => !aimedAt.has(e.ref));
   if (orphaned.length > 0) {
     throw new Error(
-      `template "${input.slug}" declares endings nothing routes to: ${orphaned.map((e) => e.ref).join(", ")}`,
+      `form "${input.slug}" declares endings nothing routes to: ${orphaned.map((e) => e.ref).join(", ")}`,
     );
   }
 
@@ -400,10 +448,18 @@ export function defineTemplate(input: TemplateInput): TemplateSeed {
       .filter((i) => i.level === "error")
       .map((i) => `  ${i.code}: ${i.message}`)
       .join("\n");
-    throw new Error(`template "${input.slug}" has a broken flow:\n${said}`);
+    throw new Error(`form "${input.slug}" has a broken flow:\n${said}`);
   }
 
-  const blockCount = input.questions.filter((q) => q.type !== "statement").length;
+  return {
+    doc,
+    blockCount: input.questions.filter((q) => q.type !== "statement").length,
+    estMinutes: estimateMinutes(longestPath(doc)),
+  };
+}
+
+export function defineTemplate(input: TemplateInput): TemplateSeed {
+  const { doc, blockCount, estMinutes } = buildAuthoredDoc(input);
   return {
     slug: input.slug,
     title: input.title,
@@ -414,7 +470,7 @@ export function defineTemplate(input: TemplateInput): TemplateSeed {
     icon: input.icon,
     accent: CATEGORY_ACCENT[input.category],
     blockCount,
-    estMinutes: estimateMinutes(longestPath(doc)),
+    estMinutes,
     doc,
   };
 }
