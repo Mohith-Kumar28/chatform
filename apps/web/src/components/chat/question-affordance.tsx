@@ -1,9 +1,10 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { CornerDownLeft } from "lucide-react";
 import { isMeetingRoom, schedulingLabel, type PublicBlock } from "@repo/form-schema";
 import { Chip, KeyHint } from "./composers/primitives";
+import { useChoiceKeys, type Choice } from "./composers/choice-keys";
 import { RatingComposer, ScaleComposer } from "./composers/rating";
 import { DateComposer } from "./composers/date";
 import { SignatureComposer } from "./composers/signature";
@@ -121,14 +122,6 @@ function FollowUpOptOut({ onDecline }: { onDecline: () => void }) {
  * `block.options`, and a `yes_no` block has no options: its chips advertised
  * "1" and "2" and pressing 1 typed a literal "1" into the message box.
  */
-interface Choice {
-  id: string;
-  label: string;
-  value: unknown;
-  /** The character that picks it. Absent when there is no single key for it. */
-  key?: string;
-}
-
 function choicesFor(block: PublicBlock): Choice[] {
   const numbered = (list: { id: string; label: string }[]): Choice[] =>
     list.map((o, i) => ({ id: o.id, label: o.label, value: o.id, key: i < 9 ? String(i + 1) : undefined }));
@@ -176,59 +169,6 @@ function choicesFor(block: PublicBlock): Choice[] {
     default:
       return [];
   }
-}
-
-/**
- * Digit keys pick a choice, and they win over the message box.
- *
- * The composer takes focus on every question, so a shortcut that yielded to
- * "the event came from an INPUT" was a shortcut that never fired. Hijacking a
- * keystroke inside a text field is safe exactly while the field is empty —
- * someone typing "1 or 2 a week" keeps their digits — and only for a question
- * that has numbered choices on offer, which is why a `number`, `rating` or
- * `nps` answer is untouched.
- */
-function useChoiceKeys(choices: Choice[], onPick: (choice: Choice) => void, onEnter?: () => void) {
-  const latest = useRef({ choices, onPick, onEnter });
-  useEffect(() => {
-    latest.current = { choices, onPick, onEnter };
-  });
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target as HTMLElement | null;
-      if (target?.isContentEditable) return;
-      const tag = target?.tagName;
-      const inField = tag === "INPUT" || tag === "TEXTAREA";
-      // Safe only while the box is empty: someone writing "1 or 2 a week"
-      // keeps their digits.
-      if (inField && (target as HTMLInputElement).value !== "") return;
-      /*
-       * Enter finishes a multi-select, and has to win against the chip.
-       *
-       * Picking the last option leaves that chip focused, so the browser's own
-       * "Enter activates the focused button" would un-pick what was just
-       * picked — the exact opposite of what the ⏎ on the Continue button now
-       * promises. Inside the affordance we take the key and preventDefault so
-       * the chip never sees the click; Space still toggles. Outside it — the
-       * skip link, the send button — the focused control keeps its Enter.
-       */
-      if (e.key === "Enter") {
-        if (!latest.current.onEnter) return;
-        if (tag === "BUTTON" && !target?.closest("[data-affordance]")) return;
-        e.preventDefault();
-        latest.current.onEnter();
-        return;
-      }
-      const hit = latest.current.choices.find((c) => c.key === e.key);
-      if (!hit) return;
-      e.preventDefault();
-      latest.current.onPick(hit);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 }
 
 function AffordanceControls({
@@ -436,7 +376,7 @@ function AffordanceControls({
       );
 
     case "ranking":
-      return <RankingComposer items={block.items ?? []} onSubmit={onStructured} />;
+      return <RankingComposer items={block.items ?? []} disabled={disabled} onSubmit={onStructured} />;
 
     case "matrix":
       return (

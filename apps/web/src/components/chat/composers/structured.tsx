@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { GripVertical } from "lucide-react";
 import {
   DndContext,
@@ -20,6 +20,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
+import { KeyHint } from "./primitives";
+import { useChoiceKeys } from "./choice-keys";
 
 /**
  * Composers for the record-shaped block types.
@@ -97,23 +99,55 @@ export function FieldsComposer({
 }
 
 /**
- * Ranking — tap to place, drag to rearrange.
+ * Ranking — tap or press a key to place, drag to rearrange.
  *
  * The grip used to sit on the *unranked* chips, which are tap-only: it
  * advertised a drag in the one place nothing could be dragged, while the
  * ranked rows — the only things that have an order to change — offered no way
  * to change it short of removing an item and re-tapping everything after it.
  * The handle now lives where the reordering happens.
+ *
+ * The badge on an unranked chip used to be the slot the chip would land in —
+ * the same number on every chip, four "2"s in a row, drawn in the position of
+ * a key hint on a question where every other block type puts a real shortcut.
+ * It is now the option's own key, fixed to its place in the list so pressing 3
+ * means the third option however much of the ranking is already built.
  */
 export function RankingComposer({
   items,
   onSubmit,
+  disabled,
 }: {
   items: readonly { id: string; label: string }[];
   onSubmit: (order: string[], display: string) => void;
+  disabled?: boolean;
 }) {
   const [order, setOrder] = useState<string[]>([]);
-  const remaining = items.filter((i) => !order.includes(i.id));
+  // Keys come from the item's position in the *question*, not in what is left
+  // to rank: a shortcut that renumbers itself after every pick is one nobody
+  // can aim at twice.
+  const remaining = items
+    .map((item, i) => ({ ...item, hotkey: i < 9 ? String(i + 1) : undefined }))
+    .filter((i) => !order.includes(i.id));
+  const place = useCallback((id: string) => setOrder((o) => (o.includes(id) ? o : [...o, id])), []);
+  const display = useCallback(
+    (o: string[]) => o.map((id, i) => `${i + 1}. ${items.find((x) => x.id === id)?.label}`).join(", "),
+    [items],
+  );
+  const submit = useCallback(() => onSubmit(order, display(order)), [display, onSubmit, order]);
+
+  useChoiceKeys(
+    // Only what is still unranked answers to a key: pressing 3 twice should
+    // not move an item that is already placed.
+    disabled
+      ? []
+      : remaining.flatMap((item) =>
+          item.hotkey ? [{ id: item.id, label: item.label, value: item.id, key: item.hotkey }] : [],
+        ),
+    (choice) => place(choice.id),
+    // Enter confirms, but only once there is a complete ranking to confirm.
+    !disabled && remaining.length === 0 && order.length > 0 ? submit : undefined,
+  );
   const sensors = useSensors(
     // A short threshold so a tap on "Remove" is still a tap, not a drag.
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -157,25 +191,19 @@ export function RankingComposer({
             <button
               key={item.id}
               type="button"
-              onClick={() => setOrder((o) => [...o, item.id])}
+              disabled={disabled}
+              onClick={() => place(item.id)}
               className={cn(
-                "group flex items-center gap-2 rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)]",
-                "py-1.5 pr-4 pl-1.5 text-sm transition-colors hover:border-[var(--cf-accent)]",
+                "group flex min-h-[2.75rem] items-center gap-1.5 rounded-full border border-[var(--cf-chip-border)]",
+                "bg-[var(--cf-chip-bg)] px-3.5 py-2 text-sm transition-colors hover:border-[var(--cf-accent)]",
+                "disabled:pointer-events-none disabled:opacity-50 sm:min-h-0",
               )}
             >
-              {/* The slot this chip would land in. Showing the next position
-                  tells the respondent what the tap does — which is what the
-                  grip was pretending to do. */}
-              <span
-                className={cn(
-                  "grid size-6 shrink-0 place-items-center rounded-full border border-dashed border-[var(--cf-chip-border)]",
-                  "text-[0.625rem] font-semibold opacity-60 transition-colors",
-                  "group-hover:border-solid group-hover:border-[var(--cf-accent)] group-hover:bg-[var(--cf-accent)]",
-                  "group-hover:text-[var(--cf-accent-text)] group-hover:opacity-100",
-                )}
-              >
-                {order.length + 1}
-              </span>
+              {/* The key that places it, not the slot it lands in: a slot is
+                  the same number on every chip at once. `KeyHint` draws itself
+                  only where there is a keyboard, so a tap-only respondent gets
+                  the label and the "tap in order" line under it. */}
+              {item.hotkey && <KeyHint>{item.hotkey}</KeyHint>}
               {item.label}
             </button>
           ))}
@@ -192,16 +220,12 @@ export function RankingComposer({
 
       <button
         type="button"
-        disabled={remaining.length > 0}
-        onClick={() =>
-          onSubmit(
-            order,
-            order.map((id, i) => `${i + 1}. ${items.find((x) => x.id === id)?.label}`).join(", "),
-          )
-        }
-        className="h-11 w-full rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
+        disabled={disabled || remaining.length > 0}
+        onClick={submit}
+        className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
       >
         Confirm ranking
+        <KeyHint tone="inverse">↵</KeyHint>
       </button>
     </div>
   );
