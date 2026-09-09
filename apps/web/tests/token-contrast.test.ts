@@ -217,9 +217,30 @@ describe("status token contrast", () => {
    * by a control — `Button` variant `gradient`, the upgrade ask — rather than
    * by a band nobody hovers. The hovered state of a button is the state it is
    * read in most, so it is checked exactly as hard as the resting one.
+   *
+   * Six, now, and the last two are not gradient endpoints at all. `GradientField`
+   * drifts five blurred lobes across that same plate under that same single ink,
+   * and two of them are borrowed from the question-family palette — the pink and
+   * the amber — to give the motion a hue change to be visible as. Which means
+   * the ground under the closing band's headline is no longer either brand hue
+   * or anything between them: at any moment it can be a mix of any of these six.
+   *
+   * A convex mix cannot be darker than its darkest ingredient, so asserting the
+   * six is enough to hold the whole field. `gradient-field.tsx` cites this test
+   * as the reason its lobe palette is a constant rather than a prop; keep the
+   * two lists in step.
    */
+  const GRADIENT_FIELD_HUES = [
+    "brand-orange",
+    "brand-violet",
+    "primary-hover",
+    "brand-violet-hover",
+    "family-content",
+    "family-number",
+  ] as const;
+
   for (const [name, block] of Object.entries(themeBlocks())) {
-    for (const end of ["brand-orange", "brand-violet", "primary-hover", "brand-violet-hover"] as const) {
+    for (const end of GRADIENT_FIELD_HUES) {
       it(`the ${end} end of the brand gradient clears AA with on-primary in ${name}`, () => {
         const light = themeBlocks().light;
         const bg = readToken(block, end) ?? readToken(light, end);

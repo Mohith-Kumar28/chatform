@@ -54,13 +54,16 @@ export function Hero() {
            with a sixth following the cursor. The seam still sits on the mark's
            diagonal and the two hues still meet as a sweep rather than a plate —
            the rule that has always governed these two at full strength.
-           `strength={0.7}`, not 1: this is the one field on the site with a
-           headline, a lede, two buttons and a live chat demo sitting on top of
-           it, and at full strength the lobes start competing with the type they
-           are behind. The mask only softens the bottom edge into the page. */}
+           At full `strength`, and it was 0.7 for a while on the theory that a
+           field with a headline, a lede, two buttons and a live chat demo on
+           top of it should be quieter than one without. That theory was wrong
+           in a specific way: dimming the lobes does not make the type easier
+           to read — the ink clears AA against every hue in the field either
+           way — it only makes the drift too faint to notice, which leaves the
+           cost of the effect and none of it. The mask still softens the bottom
+           edge into the page. */}
       <GradientField
         tier="vivid"
-        strength={0.7}
         className="-top-32 [mask-image:linear-gradient(to_bottom,black_0%,black_78%,transparent_100%)]"
       />
       {/* The dot grid keeps the wash from reading as a flat panel. */}

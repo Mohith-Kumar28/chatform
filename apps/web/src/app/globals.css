@@ -1055,27 +1055,43 @@
    The drift behind `GradientField` — the brand sweep as a slow lava lamp
    rather than a fixed plate.
 
-   Five blobs, five different paths, and no two durations that divide evenly
-   into one another: 30 / 20 / 40 / 40 / 20 seconds with two of them reversed
-   and one linear. That is the whole trick. Periods that share a factor
-   re-align on a visible beat, and a background that visibly loops is a
-   background you start watching instead of reading past. These recombine on
-   the order of minutes, so the ground is never quite the shape it was.
+   Five lobes, five different paths, and five periods with no common factor at
+   all — 19 / 13 / 29 / 23 / 17 seconds, every one of them prime, two reversed
+   and two linear. That is the whole trick, and the primes are not a flourish:
+   periods that share a factor re-align on a beat you can feel, and a ground
+   that visibly loops is a ground you start watching instead of reading past.
+   These five return to their opening arrangement once every 19·13·29·23·17
+   seconds, which is about eighty years.
 
-   Slow on purpose. The fastest full cycle here is twenty seconds; nothing in
-   this vocabulary is a transition or an entrance, and anything quick enough to
-   catch the eye behind an `h1` is competing with the `h1`.
+   The reference runs 30 / 20 / 40 / 40 / 20, and so did this at first. It was
+   too slow to register as motion: over the ten or fifteen seconds someone
+   actually spends on a hero, a thirty-second orbit moves a lobe about a third
+   of the way round, under a 44px blur, in a hue two steps from the ground it
+   is crossing. Nothing about that is perceptible. Faster, and the same drift
+   becomes something you notice without being asked to look at it — which is
+   the entire point of the effect and was the one thing it was not doing.
+
+   There is still a ceiling. Nothing in this vocabulary is a transition or an
+   entrance, and anything quick enough to pull the eye is competing with the
+   `h1` in front of it. Thirteen seconds for a full orbit is the fastest thing
+   here and is still slower than any other animation in the product.
 
    `translate3d`/`rotate` only — no width, no background-position, nothing that
    lands in layout or paint. Each blob is a composited layer the GPU moves, and
    `will-change` is deliberately NOT set: five permanently-promoted full-bleed
    layers is a real memory cost on a phone for a decoration.
 
-   The global `prefers-reduced-motion` block collapses all five, and every
-   keyframe below opens and closes on the same frame — so what a visitor who
-   asked for less motion is left holding is the resting composition, not a
-   stalled midpoint. That is why `moveInCircle` runs 0 → 180 → 360 rather than
-   0 → 360: the pause frame has to be the start frame.                        */
+   The global `prefers-reduced-motion` block collapses all five to one 0.01ms
+   iteration with no fill mode, after which nothing is animating and every lobe
+   renders untransformed — a static arrangement of the same five colours in the
+   same four hues, which is exactly the right thing to be left holding. The
+   field does not depend on motion to look finished.
+
+   Every keyframe opens and closes on the same frame for a different reason: it
+   is what makes an infinite loop seamless. The 50% midpoints exist so that the
+   two `ease-in-out` orbits ease into and out of both halves rather than
+   slowing once per revolution at whatever angle the cycle happens to end on,
+   which is a beat you can see.                                               */
 @keyframes cf-field-vertical {
   0% {
     transform: translate3d(0, -50%, 0);
@@ -1090,13 +1106,13 @@
 
 @keyframes cf-field-horizontal {
   0% {
-    transform: translate3d(-50%, -10%, 0);
+    transform: translate3d(-55%, -18%, 0);
   }
   50% {
-    transform: translate3d(50%, 10%, 0);
+    transform: translate3d(55%, 18%, 0);
   }
   100% {
-    transform: translate3d(-50%, -10%, 0);
+    transform: translate3d(-55%, -18%, 0);
   }
 }
 
@@ -1113,19 +1129,19 @@
 }
 
 @utility field-drift-1 {
-  animation: cf-field-vertical 30s ease-in-out infinite;
+  animation: cf-field-vertical 19s ease-in-out infinite;
 }
 @utility field-drift-2 {
-  animation: cf-field-circle 20s linear infinite reverse;
+  animation: cf-field-circle 13s linear infinite reverse;
 }
 @utility field-drift-3 {
-  animation: cf-field-circle 40s linear infinite;
+  animation: cf-field-circle 29s linear infinite;
 }
 @utility field-drift-4 {
-  animation: cf-field-horizontal 40s ease-in-out infinite;
+  animation: cf-field-horizontal 23s ease-in-out infinite;
 }
 @utility field-drift-5 {
-  animation: cf-field-circle 20s ease-in-out infinite;
+  animation: cf-field-circle 17s ease-in-out infinite reverse;
 }
 
 @media (prefers-reduced-motion: reduce) {

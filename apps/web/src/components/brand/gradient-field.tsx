@@ -98,41 +98,64 @@ const GROUND: Record<GradientFieldTier, { angle: number; stops: string }> = {
 /**
  * The five lobes.
  *
- * Two things are load-bearing and neither is the colour.
+ * Three things are load-bearing here, and the first of them is the colour.
  *
- * The `origin`s are scattered far outside the box — ±400px, ±800px — so the
- * three that rotate swing on arcs much wider than the section. A lobe rotating
- * about its own centre goes nowhere; a lobe rotating about a point eight
- * hundred pixels away sweeps the whole surface. That is the difference between
- * a spinning blob and weather.
+ * The first version drew all five from the brand pair alone — orange, violet,
+ * and their two hover twins. It was correct and it was invisible: an orange
+ * lobe crossing the orange half of an orange-to-violet plate is a change of
+ * nothing, so four fifths of the motion did not survive to the screen. What
+ * makes the reference implementation legible is not that its blobs move, it is
+ * that they are six different hues, so every crossing is a hue change.
  *
- * The `drift` classes carry periods that share no useful factor (30 / 20 / 40 /
- * 40 / 20, two of them reversed, one linear) — see the note in `globals.css`.
- * Five lobes on commensurate orbits re-form the same picture on a beat you can
- * feel; these do not resolve for minutes.
+ * So there are four hues here, and the two additions come from the palette the
+ * page already scrolls through rather than from outside it. `--family-content`
+ * is the pink that sits almost exactly at the midpoint of the orange-to-violet
+ * sweep, which is to say it is the colour the seam already is — it deepens the
+ * middle rather than introducing anything. `--family-number` is the amber, the
+ * lightest hue in the whole palette, and it is what does the work the
+ * reference gets from `hard-light` on a dark ground: a lobe brighter than
+ * everything under it, so the field has highlights and not just hue.
  *
- * Opacities fall as the list goes on because they composite: five lobes at 0.5
+ * Every one of the four is asserted against the ink in `token-contrast.test.ts`
+ * — both brand hues and both families, in both themes. The floor is unchanged
+ * at `--brand-violet`'s 4.7:1, because both families are LIGHTER than it. That
+ * test is the reason this list is a constant and not a prop.
+ *
+ * Second: the `origin`s are scattered far outside the box — ±400px, ±800px —
+ * so the three that rotate swing on arcs much wider than the section. A lobe
+ * rotating about its own centre goes nowhere; a lobe rotating about a point
+ * eight hundred pixels away sweeps the whole surface. That is the difference
+ * between a spinning blob and weather.
+ *
+ * Third: the `drift` classes carry five prime periods — 19 / 13 / 29 / 23 / 17
+ * seconds, see the note in `globals.css`. Five lobes on commensurate orbits
+ * re-form the same picture on a beat you can feel.
+ *
+ * Opacities fall as the list goes on because they composite: five lobes at 0.6
  * is not five lobes, it is a flat sheet of the last one.
  */
 const LOBES = [
-  { color: "var(--brand-orange)", opacity: 0.5, origin: "center center", drift: "field-drift-1" },
-  { color: "var(--brand-violet)", opacity: 0.45, origin: "calc(50% - 400px)", drift: "field-drift-2" },
+  { color: "var(--brand-orange)", opacity: 0.6, origin: "center center", drift: "field-drift-1" },
+  { color: "var(--brand-violet)", opacity: 0.55, origin: "calc(50% - 400px)", drift: "field-drift-2" },
   {
-    color: "var(--brand-violet-hover)",
-    opacity: 0.4,
+    color: "var(--family-content)",
+    opacity: 0.5,
     origin: "calc(50% + 400px)",
     drift: "field-drift-3",
   },
-  { color: "var(--primary-hover)", opacity: 0.35, origin: "calc(50% - 200px)", drift: "field-drift-4" },
+  { color: "var(--family-number)", opacity: 0.5, origin: "calc(50% - 200px)", drift: "field-drift-4" },
   {
-    color: "var(--brand-orange)",
-    opacity: 0.35,
+    color: "var(--brand-violet-hover)",
+    opacity: 0.45,
     origin: "calc(50% - 800px) calc(50% + 800px)",
     drift: "field-drift-5",
   },
 ] as const;
 
-const POINTER_LOBE = { color: "var(--brand-violet)", opacity: 0.45 };
+/* The pink, because it is the one hue in the list that is neither end of the
+   plate: a cursor lobe in orange is invisible for half the width of the field
+   and a violet one is invisible for the other half. */
+const POINTER_LOBE = { color: "var(--family-content)", opacity: 0.5 };
 
 /** A lobe: one hue at the centre, gone by half the radius, transparent after. */
 function lobe(color: string, opacity: number): string {
@@ -143,7 +166,7 @@ function lobe(color: string, opacity: number): string {
 export function GradientField({
   tier = "vivid",
   angle,
-  size = "80%",
+  size = "70%",
   strength = 1,
   interactive = true,
   className,
