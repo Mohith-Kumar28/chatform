@@ -69,16 +69,42 @@ export function buildStablePrefix(doc: FormDoc, opts: { hasKnowledge?: boolean }
    */
   if (opts.hasKnowledge) {
     parts.push(
-      "WHAT YOU KNOW\nThis form has a knowledge base. When the respondent asks anything about the product, pricing, policy or the form itself, call `answer_from_knowledge` FIRST and answer from what it returns. Quote it faithfully; never invent details it does not contain.",
+      "WHAT YOU KNOW\n" +
+        "This form has a knowledge base, and you cannot see it. `answer_from_knowledge` is the only way to read it.\n" +
+        "You do NOT know this product's pricing, plans, policies, features or limits from memory. Anything you think you remember about them is a guess and is probably wrong.\n" +
+        "So: the moment a respondent asks about the product, pricing, plans, policy, privacy, the company or this form itself, call `answer_from_knowledge` BEFORE you reply. Then answer from what it returns, quoting it faithfully and inventing nothing it does not contain.",
     );
   }
 
   const guards = agent.guardrails;
   const guardLines: string[] = [];
+  /*
+   * The off-topic line has to know whether the knowledge base is inline.
+   *
+   * It used to say "outside the material above", which was true when the whole
+   * knowledge base sat a few lines up in this prompt. Once retrieval replaced
+   * inlining there was no material above — so the model read the set as empty,
+   * concluded that a pricing question was outside it, and took the explicit
+   * licence this line grants to answer from general knowledge. It never called
+   * the tool.
+   *
+   * That shipped, and the public demo spent it telling prospects our pricing
+   * did not exist yet. The retrieval stack was healthy the whole time: vectors
+   * indexed, namespaces matching, entitlement resolving. The prompt had simply
+   * stopped describing the world the tool lives in.
+   *
+   * So when there is a knowledge base, "outside" is defined by what the tool
+   * returned — which means the tool must have been called before this line can
+   * apply at all.
+   */
   guardLines.push(
-    guards.answerOffTopic
-      ? "If the respondent asks something outside the material above, answer briefly and honestly from general knowledge, and say when you are not certain."
-      : `If the respondent asks something the material above does not cover, do not guess. Say: "${guards.refusalMessage}"`,
+    opts.hasKnowledge
+      ? guards.answerOffTopic
+        ? "Only once `answer_from_knowledge` has come back with nothing relevant may you answer from general knowledge — and then briefly, and saying you are not certain. Never skip the lookup because you think you already know."
+        : `Only once \`answer_from_knowledge\` has come back with nothing relevant may you decline. Then say: "${guards.refusalMessage}" Never skip the lookup because you think you already know.`
+      : guards.answerOffTopic
+        ? "If the respondent asks something this form does not cover, answer briefly and honestly from general knowledge, and say when you are not certain."
+        : `If the respondent asks something this form does not cover, do not guess. Say: "${guards.refusalMessage}"`,
   );
   if (guards.forbiddenTopics.length > 0) {
     guardLines.push(
@@ -112,7 +138,11 @@ ${
   }
 - The answer controls are on screen, directly under your message: a question's options are already there as buttons the respondent can tap. Ask the question and stop. Never list, bullet, number or restate the options in your text — printing the same four choices the respondent is looking at is the one thing that makes this read like a form pretending to be a chat.
 - Acknowledge what they just said before moving on. Reference earlier answers when it is natural.
-- If they ask you something, answer it in one sentence, then re-ask the current question. Never ignore them; never repeat a question robotically.
+- If they ask you something, answer it in one sentence, then re-ask the current question. Never ignore them; never repeat a question robotically.${
+    opts.hasKnowledge
+      ? "\n- \"One sentence\" is about the LENGTH of your reply, never about skipping the lookup. Look it up first, then be brief about what came back."
+      : ""
+  }
 - If their message already answers the current question, confirm it briefly and move on.
 - Never ask about a ref other than the current objective. Never invent options.
 - Mirror the respondent's language. Be brief and human.`);

@@ -62,6 +62,53 @@ describe("knowledge base and guardrails reach the prompt", () => {
     expect(prefix).not.toContain("answer_from_knowledge");
   });
 
+  /*
+   * The regression these three exist for.
+   *
+   * When the knowledge base stopped being inlined, the prose around it still
+   * described a world where it was. BOUNDARIES said "outside the material
+   * above" — and with nothing above any more, the model read the set as empty,
+   * decided a pricing question fell outside it, and took the licence that line
+   * grants to answer from general knowledge. It never called the tool.
+   *
+   * It shipped, and the public demo told prospects our pricing did not exist.
+   * Every downstream part was healthy: vectors indexed, namespaces matching,
+   * entitlements resolving. Only the prompt was wrong, and nothing tested the
+   * prompt for whether it still made the tool mandatory.
+   */
+  it("does not license answering from memory when the form has a knowledge base", () => {
+    const prefix = buildStablePrefix(docWith({ guardrails: { answerOffTopic: true } }), { hasKnowledge: true });
+    // The phrase that caused it. There is no "material above" any more.
+    expect(prefix).not.toContain("outside the material above");
+    // Any permission to use general knowledge must be conditional on the
+    // lookup having already happened and come back empty.
+    expect(prefix).toMatch(/Only once `answer_from_knowledge` has come back with nothing relevant/);
+  });
+
+  it("tells the agent it does not know the product from memory", () => {
+    const prefix = buildStablePrefix(docWith({}), { hasKnowledge: true });
+    expect(prefix).toContain("you cannot see it");
+    expect(prefix).toMatch(/do NOT know this product's pricing/);
+  });
+
+  it("keeps the plain off-topic wording when there is no knowledge base", () => {
+    // Without retrieval there is no lookup to insist on, and a form that
+    // simply has no knowledge base must not tell the agent to call a tool that
+    // will only ever come back empty.
+    const prefix = buildStablePrefix(docWith({ guardrails: { answerOffTopic: true } }), { hasKnowledge: false });
+    expect(prefix).toContain("answer briefly and honestly from general knowledge");
+    expect(prefix).not.toContain("answer_from_knowledge");
+  });
+
+  it("still requires the lookup before refusing, when off-topic answering is off", () => {
+    const prefix = buildStablePrefix(
+      docWith({ guardrails: { answerOffTopic: false, refusalMessage: "Ask support." } }),
+      { hasKnowledge: true },
+    );
+    expect(prefix).toContain("Ask support.");
+    expect(prefix).toMatch(/Only once `answer_from_knowledge`/);
+  });
+
   it("stays byte-identical across turns, whatever the knowledge base holds", () => {
     // The prefix is the cacheable half of the system prompt. If retrieved
     // passages ever get spliced back into it, this is what fails.
