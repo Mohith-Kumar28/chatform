@@ -46,7 +46,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 7;
+export const DEMO_REVISION = 8;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -326,6 +326,34 @@ export const DEMO_FORM = buildAuthoredDoc({
         "You don't have to wait for us, though: [build one yourself](https://chatform.in/signin) and you'll have a form like this in about two minutes.",
     },
   ],
+
+  /**
+   * The "Warm" preset from the theme panel, set explicitly rather than left to
+   * the schema defaults.
+   *
+   * The defaults are the "Chatform" preset: orange accent, violet respondent
+   * bubbles. That pairing is the brand — the mark and the hero wash are both
+   * built from the two hues — but on this form the violet is the largest block
+   * of colour on screen, since every answer the visitor gives is one, and it
+   * ends up reading as a violet product with orange trim.
+   *
+   * This is the marketing demo, so it should look like the orange the rest of
+   * the site leads with. Same accent, same ground; only the respondent bubble
+   * changes, from violet to the peach that "Warm" pairs with it.
+   *
+   * Written out rather than imported: `PRESETS` lives in the builder's theme
+   * panel, which is a client component in `apps/web`, and `tooling` has no
+   * business importing from it. If the preset is ever retuned, this does not
+   * follow — which is the right trade for five hex values, but is why they are
+   * named here.
+   */
+  theme: {
+    background: "#faf7f2",
+    accent: "#FD6F29",
+    botBubble: "#ffffff",
+    userBubble: "#FFCBAA",
+    text: "#1c1917",
+  },
 
   settings: {
     /**
