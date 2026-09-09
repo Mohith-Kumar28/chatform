@@ -168,6 +168,7 @@ interface StoredSession {
   editingRef?: string | null;
   degraded?: boolean;
   pendingEndingRef?: string | null;
+  gatedAtRef?: string | null;
 }
 
 /**
@@ -271,6 +272,17 @@ export class SessionDO extends DurableObject<Bindings> {
   private suppressNextAsk = false;
   /** Ending awaiting an explicit submit, when `requireSubmit` is on. */
   private pendingEndingRef: string | null = null;
+  /**
+   * The block a deferred sign-in gate stopped us just short of asking.
+   *
+   * Set only when `requireAuth.afterBlocks` is past and the respondent has not
+   * verified yet. It is the resume point: `attachIdentity` reads it to carry on
+   * with the question the gate interrupted, which is the whole difference
+   * between a deferred gate and a lost conversation. Persisted for the same
+   * reason `pendingEndingRef` is — the isolate can die while the respondent is
+   * off in a Google popup, which is precisely when this is set.
+   */
+  private gatedAtRef: string | null = null;
   /**
    * The block a respondent went back to change, while they are changing it.
    *
@@ -427,10 +439,19 @@ export class SessionDO extends DurableObject<Bindings> {
 
   // ────────────────────────── respondent auth ──────────────────────────
 
-  /** True while the form requires a verified respondent and has not got one. */
+  /**
+   * True while the form requires a verified respondent and has not got one.
+   *
+   * `afterBlocks` moves *when* that becomes true, not what it means. At the
+   * default 0 this is the same predicate it has always been, so every existing
+   * form gates before the first question exactly as before; above 0 the gate
+   * stays open until that many answers are in.
+   */
   private authGateBlocks(): boolean {
     if (!this.doc || !this.meta) return false;
-    return this.doc.settings.requireAuth.enabled && !this.meta.identity;
+    const gate = this.doc.settings.requireAuth;
+    if (!gate.enabled || this.meta.identity) return false;
+    return this.collectedCount >= gate.afterBlocks;
   }
 
   private async emitAuthRequired(): Promise<void> {
@@ -528,6 +549,34 @@ export class SessionDO extends DurableObject<Bindings> {
         await this.emitMessage(resumeGreeting(this.doc, this.collectedCount));
         await this.appendMessage("assistant", resumeGreeting(this.doc, this.collectedCount));
       }
+    }
+
+    /**
+     * A deferred gate stopped us one question short; ask that question now.
+     *
+     * Checked before the `beginInterview` case below, and separate from it,
+     * because this session is mid-conversation: it has answers, it has a
+     * cursor's worth of history, and replaying from the top would ask everything
+     * again. `advanceTo` with no `fromRef` asks the stored block plainly — no
+     * `branch_jump` for a jump that already happened, and no "you just answered
+     * X" preamble, which would be a strange thing to say after a sign-in.
+     */
+    const gatedAt = this.gatedAtRef;
+    if (gatedAt) {
+      this.gatedAtRef = null;
+      await this.persistMeta();
+      const block = this.doc.blocks.find((b) => b.ref === gatedAt);
+      if (block) {
+        try {
+          await this.advanceTo({ kind: "block", block });
+        } catch (err) {
+          // As below: the verification stands. Do not report this as a failed
+          // sign-in, or they are sent back to a gate they have already cleared.
+          console.error("gated_resume_failed", { sessionId: this.meta.sessionId, err });
+          await this.failTurn("interview_resume_failed", "You're verified — give it another moment.");
+        }
+      }
+      return { accepted: true };
     }
 
     // Only start the flow if the gate is what was holding it. A session that
@@ -886,6 +935,7 @@ export class SessionDO extends DurableObject<Bindings> {
     this.editingRef = stored.editingRef ?? null;
     this.degraded = stored.degraded ?? false;
     this.pendingEndingRef = stored.pendingEndingRef ?? null;
+    this.gatedAtRef = stored.gatedAtRef ?? null;
     this.loaded = true;
     return true;
   }
@@ -907,6 +957,7 @@ export class SessionDO extends DurableObject<Bindings> {
       editingRef: this.editingRef,
       degraded: this.degraded,
       pendingEndingRef: this.pendingEndingRef,
+      gatedAtRef: this.gatedAtRef,
     } satisfies StoredSession);
   }
 
@@ -1754,6 +1805,29 @@ export class SessionDO extends DurableObject<Bindings> {
       this.editingRef = null;
       if (wasEditing) next = this.resumeAfterEdit(fromRef);
     }
+    /**
+     * A deferred gate closes here, between two questions.
+     *
+     * It has to be checked on the way *to* a question rather than on the way in
+     * with an answer. The four older call sites all refuse an incoming turn,
+     * which is the right shape for `afterBlocks: 0` — nothing has been asked
+     * yet, so there is nothing to interrupt. Once questions are already flowing,
+     * refusing the incoming turn would mean asking the question, letting them
+     * type an answer, and only then telling them to sign in: the answer is
+     * discarded and the sign-in card arrives underneath a question they have
+     * already dealt with. Stopping one question short instead means the gate is
+     * the last thing in the transcript, which is where a respondent will look.
+     *
+     * Endings are exempt on purpose. Somebody who reached the end has answered
+     * everything, and holding their completed response hostage to a sign-in
+     * would throw away the very thing the gate exists to collect.
+     */
+    if (next.kind === "block" && this.authGateBlocks()) {
+      this.gatedAtRef = next.block.ref;
+      await this.persistMeta();
+      await this.emitAuthRequired();
+      return;
+    }
     if (next.kind === "block") {
       const jumped = fromRef !== undefined && next.block.ref !== nextInSequence(this.doc, fromRef);
       if (jumped) {
@@ -2008,9 +2082,20 @@ export class SessionDO extends DurableObject<Bindings> {
    * headless contract cannot disagree with itself between endpoints.
    */
   private async projectTurn(journal: SSEEnvelope[]): Promise<Omit<SyncTurnResult, "accepted" | "error" | "timedOut" | "sinceSeq" | "events">> {
-    const block = this.meta?.currentRef
-      ? (this.doc?.blocks.find((b) => b.ref === this.meta!.currentRef) ?? null)
-      : null;
+    /**
+     * A gated session has no question outstanding, whatever the cursor says.
+     *
+     * When a deferred gate closes, `currentRef` is still the question they just
+     * answered — the flow stopped short of moving it on, which is the point.
+     * Reporting that block here would tell a headless caller to answer it a
+     * second time, and they would loop: the answer is accepted, the gate closes
+     * again, the same question comes back. The `auth_required` event in the same
+     * journal is what they should act on.
+     */
+    const block =
+      this.meta?.currentRef && !this.authGateBlocks()
+        ? (this.doc?.blocks.find((b) => b.ref === this.meta!.currentRef) ?? null)
+        : null;
     const endingRef = this.pendingEndingRef ?? this.meta?.endingRef ?? null;
     const ending = endingRef ? (this.doc?.endings.find((e) => e.ref === endingRef) ?? null) : null;
 
@@ -2319,6 +2404,9 @@ export class SessionDO extends DurableObject<Bindings> {
       this.collectedCount = 0;
       for (const v of this.doc.variables) this.state.variables[v.name] = v.initial;
       this.meta.status = "active";
+      // Starting over puts the deferred gate back in front of them too: the
+      // answers that had bought their way past it are gone.
+      this.gatedAtRef = null;
       const next = resolveNext(this.doc, null, this.state);
       await this.advanceTo(next);
       return { accepted: true };

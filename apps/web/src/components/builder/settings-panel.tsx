@@ -188,7 +188,7 @@ export function SettingsPanel({
               <LockedControl feature="respondent_auth_google">
                 <SettingRow
                   label="Require sign-in"
-                  description="Respondents verify who they are before the first question."
+                  description="Respondents verify who they are before they can finish."
                   checked={settings.requireAuth.enabled}
                   onCheckedChange={(v) => patch({ requireAuth: { ...settings.requireAuth, enabled: v } })}
                 />
@@ -227,6 +227,32 @@ export function SettingsPanel({
                         );
                       })}
                     </div>
+                  </SettingRow>
+                  {/*
+                    Where the gate sits, not whether there is one. Zero is the
+                    old behaviour and stays the default; above zero the
+                    respondent answers that many questions first, and what they
+                    already said is kept either way.
+                  */}
+                  <SettingRow
+                    label="Ask after"
+                    description="Questions to answer before signing in. 0 asks before the first one."
+                  >
+                    <Input
+                      type="number"
+                      min={0}
+                      max={20}
+                      className="w-32"
+                      value={settings.requireAuth.afterBlocks}
+                      onChange={(e) =>
+                        patch({
+                          requireAuth: {
+                            ...settings.requireAuth,
+                            afterBlocks: Math.max(0, Math.min(20, Number(e.target.value) || 0)),
+                          },
+                        })
+                      }
+                    />
                   </SettingRow>
                   <SettingRow
                     label="What the agent says"

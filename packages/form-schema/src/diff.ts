@@ -135,6 +135,7 @@ const SETTING_LABELS: Record<string, string> = {
   "requireAuth.enabled": "Sign-in requirement",
   "requireAuth.method": "Sign-in method",
   "requireAuth.message": "Sign-in message",
+  "requireAuth.afterBlocks": "Questions before sign-in",
   "password.enabled": "Password protection",
   "password.value": "Form password",
   "captcha.enabled": "CAPTCHA",

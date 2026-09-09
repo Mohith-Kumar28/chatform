@@ -67,6 +67,26 @@ export const SettingsDoc = z.object({
        * sidestepped by using another one; a verified identity cannot.
        */
       onePerIdentity: z.boolean().default(false),
+      /**
+       * How many answers to take before asking who they are.
+       *
+       * 0 asks before the first question, and that is right whenever the
+       * answers are only worth having from a known person — an application, a
+       * gated download, anything where an anonymous submission is waste.
+       *
+       * It is wrong for a form whose job is to be experienced. A sign-in card
+       * at interaction zero is the largest single drop-off a form can have,
+       * and someone who has not yet been asked anything has no reason to pay
+       * it. Letting them answer a few questions first costs nothing: the
+       * answers are recorded as they are given, so a respondent who stops at
+       * the gate leaves a partial response rather than nothing at all.
+       *
+       * This is not the ordering `emitAuthRequired` was written to avoid.
+       * Asking someone to answer and *then* telling them it did not count is
+       * the bad case; here the answers are kept, and the gate is the price of
+       * carrying on rather than the price of having started.
+       */
+      afterBlocks: z.number().int().min(0).max(20).default(0),
     })
     .prefault({}),
   password: z
