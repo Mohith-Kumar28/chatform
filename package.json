@@ -14,7 +14,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm plans:verify && pnpm templates:verify && pnpm api-docs:verify && pnpm spec:coverage",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm plans:verify && pnpm templates:verify && pnpm demo:verify && pnpm api-docs:verify && pnpm spec:coverage",
     "db:migrate": "pnpm --filter @repo/api d1:migrate:local",
     "db:migrate:remote": "pnpm --filter @repo/api d1:migrate:remote",
     "db:generate": "pnpm --filter @repo/db generate",
@@ -46,7 +46,11 @@
     "gen:api-docs": "pnpm --filter @repo/tooling gen:api-docs",
     "gen:docs": "pnpm gen:blocks && pnpm gen:api-docs",
     "api-docs:verify": "pnpm gen:api-docs && git diff --exit-code -- apps/web/content/docs/api apps/web/src/lib/openapi/spec.json",
-    "spec:coverage": "pnpm --filter @repo/tooling spec:coverage"
+    "spec:coverage": "pnpm --filter @repo/tooling spec:coverage",
+    "gen:demo": "pnpm --filter @repo/tooling gen:demo",
+    "demo:verify": "pnpm gen:demo && git diff --exit-code -- tooling/seed-demo-form.sql",
+    "seed:demo": "pnpm --filter @repo/api exec wrangler d1 execute chatform --local --file ../../tooling/seed-demo-form.sql",
+    "seed:demo:remote": "pnpm --filter @repo/api exec wrangler d1 execute chatform --remote --file ../../tooling/seed-demo-form.sql"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",

@@ -1,4 +1,4 @@
-import { sha256Hex } from "@repo/form-schema";
+import { sha256Hex, canonicalJson } from "@repo/form-schema";
 import type { PlanId } from "@repo/entitlements";
 
 /**
@@ -27,7 +27,7 @@ import type { PlanId } from "@repo/entitlements";
  *   ever tell someone that the branding they just paid for is not live yet.
  */
 export function publishFingerprint(workingSchema: string, planId: PlanId): string {
-  return sha256Hex(`${canonical(workingSchema)}\n${planId}`);
+  return sha256Hex(`${canonicalJson(workingSchema)}\n${planId}`);
 }
 
 /**
@@ -51,30 +51,4 @@ export function hasUnpublishedChanges(args: {
   */
   if (!/^[0-9a-f]{64}$/.test(args.activeChecksum)) return false;
   return publishFingerprint(args.workingSchema, args.planId) !== args.activeChecksum;
-}
-
-/**
- * Stable JSON, so that re-serialising an unchanged document produces an unchanged hash.
- *
- * `JSON.stringify` preserves insertion order, and the builder rebuilds block objects as
- * people drag and edit them. Without this, opening a form and saving it untouched could
- * report an unpublished change.
- */
-function canonical(json: string): string {
-  try {
-    return stringify(JSON.parse(json) as unknown);
-  } catch {
-    // Unparseable working schema is a different problem, and publish rejects it anyway.
-    return json;
-  }
-}
-
-function stringify(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-  if (Array.isArray(value)) return `[${value.map(stringify).join(",")}]`;
-  const entries = Object.entries(value as Record<string, unknown>)
-    // Undefined members vanish under JSON.stringify; drop them here too so the two agree.
-    .filter(([, v]) => v !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stringify(v)}`).join(",")}}`;
 }

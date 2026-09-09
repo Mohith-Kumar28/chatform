@@ -17,3 +17,4 @@ export * from "./migrations";
 export * from "./extraction";
 export * from "./diff";
 export * from "./followup-readiness";
+export * from "./canonical";

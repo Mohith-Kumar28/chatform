@@ -9,7 +9,8 @@
     "gen:blocks": "tsx gen-block-docs.ts",
     "gen:api-docs": "tsx gen-api-docs.ts",
     "spec:coverage": "tsx check-spec-coverage.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "gen:demo": "tsx gen-seed-demo-form.ts"
   },
   "dependencies": {
     "@repo/entitlements": "workspace:*",
