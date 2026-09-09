@@ -22,14 +22,24 @@ export { DEMO_KNOWLEDGE } from "./knowledge.js";
  * It does two jobs at once, and both constrain the questions:
  *
  * The visitor's job is to experience the product. That rules out a
- * questionnaire — they should meet branching, a ranking, a rating, an upload
- * and an agent that answers questions back, in about three minutes, because a
- * demo nobody finishes demonstrates nothing.
+ * questionnaire: in eight questions they should meet a grid, a drag-to-order
+ * ranking, stars, an upload, a consent they can actually refuse, a calendar,
+ * branching that reads their answers, and an agent that answers questions back
+ * — in about three minutes, because a demo nobody finishes demonstrates
+ * nothing.
+ *
+ * So the rule is one block type per question, and it is asserted in
+ * `demo-form.test.ts`. Two questions of the same type is a wasted screen: the
+ * second one shows the visitor nothing the first did not, on the one form whose
+ * job is to show them everything. It also rules out the three choice blocks
+ * between them — `single_select`, `multi_select`, `yes_no` are one idea with
+ * three sets of clothes, and a list of options is the part of a form a chat is
+ * least interesting at.
  *
  * Our job is to learn something. So the questions are the ones we actually want
- * answered — which tool they use, where it gets in their way, what would make them
- * switch — asked in the order a person would think about them rather than the
- * order a spreadsheet would want them.
+ * answered — what they do, where it gets in their way, how today is going and
+ * what would make them switch — asked in the order a person would think about
+ * them rather than the order a spreadsheet would want them.
  *
  * Not edited in the builder. The definition here is the source of truth and the
  * next `pnpm seed:demo` overwrites `working_schema` without warning.
@@ -46,7 +56,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 10;
+export const DEMO_REVISION = 11;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -75,103 +85,64 @@ export const DEMO_FORM = buildAuthoredDoc({
 
   greeting:
     "Hi — I'm the chatform agent, and this is a real chatform form, so you're seeing exactly what your own respondents would. " +
-    "I'd like to hear how forms are actually working out for you. Under two minutes, eight questions, and you can ask me anything about chatform as we go.",
+    "I'd like to hear how forms are actually working out for you. Eight questions, under three minutes, " +
+    "every one of them a different kind of question — and you can ask me anything about chatform as we go.",
 
   questions: [
     {
+      /*
+       * Typed, not tapped, and that is the rule for the whole form now.
+       *
+       * This used to be a list of six roles, which is the one thing a chat is
+       * worst at: a radio button wearing a speech bubble. Asked open, the agent
+       * gets "design lead at a two-person studio" — something to address them
+       * as for the next seven questions, and a far better answer than any list
+       * we could have guessed at.
+       */
       ref: "role",
-      type: "single_select",
+      type: "short_text",
       title: "First — what do you do?",
+      description: "A few words is plenty.",
+      placeholder: "Founder, growth at a SaaS, ops for a clinic…",
       required: true,
-      allowOther: true,
-      options: [
-        { label: "Founder, or a team of one" },
-        { label: "Product or design" },
-        { label: "Marketing or growth" },
-        { label: "Engineering" },
-        { label: "Research or data" },
-        { label: "Operations, people or HR" },
-      ],
+      maxLength: 120,
     },
     {
-      ref: "tools",
-      type: "multi_select",
-      title: "Which of these have you used to collect answers from people?",
-      description: "Pick every one you've actually used, not just heard of.",
-      required: true,
-      minSelections: 1,
-      maxSelections: 10,
-      options: [
-        { label: "Typeform" },
-        { label: "Google Forms" },
-        { label: "Tally" },
-        { label: "Youform" },
-        { label: "Jotform" },
-        { label: "Fillout" },
-        { label: "SurveyMonkey" },
-        { label: "Airtable Forms" },
-        { label: "Something we built ourselves" },
-        { label: "None yet — this is new to me" },
-      ],
-    },
-    {
-      /** The decision. Three of the six options get their own follow-up. */
-      ref: "biggest_problem",
-      type: "single_select",
+      /** The one question whose answer we would keep if we could keep only one. */
+      ref: "pain",
+      type: "long_text",
       title: "What's the most annoying thing about the way you collect answers today?",
-      required: true,
-      options: [
-        { label: "People don't finish" },
-        { label: "The answers are thin and useless" },
-        { label: "Building the logic is fiddly" },
-        { label: "It's not worth what it takes" },
-        { label: "It looks generic and off-brand" },
-        { label: "Getting the data where it needs to go" },
-      ],
-    },
-    {
-      ref: "dropoff_detail",
-      type: "long_text",
-      title: "Where do they drop off — and do you know why?",
-      description: "A guess is fine. Guesses are usually right about this.",
-      required: true,
-      maxLength: 700,
-    },
-    {
-      ref: "quality_detail",
-      type: "long_text",
-      title: "Give me a real example of an answer that was useless. What did you actually need instead?",
-      required: true,
-      maxLength: 700,
-    },
-    {
-      ref: "build_detail",
-      type: "long_text",
-      title: "What were you trying to build when it got fiddly?",
-      required: true,
-      maxLength: 700,
-    },
-    {
-      /** Where the other three options land, so every arm has somewhere to go. */
-      ref: "problem_detail",
-      type: "long_text",
-      title: "Say more about that — what does it get in the way of?",
+      description: "However it actually is. One line or five — I'll read it either way.",
       required: true,
       maxLength: 700,
     },
     {
       /*
-       * Ranks what would make them SWITCH, not what annoys them.
+       * A grid, in a conversation, and the most surprising thing here.
        *
-       * It used to rank the same six frustrations `biggest_problem` had just
-       * asked them to pick one of — the identical list, twice, once as "which
-       * is worst" and once as "put all six in order". That is the single most
-       * tedious thing this form did, and it collected almost nothing the
-       * previous question had not.
+       * Three readings in one question is why it is worth the screen: it
+       * replaces the "pick your biggest problem" list AND the three follow-ups
+       * that used to hang off it — eight questions' worth of flow in one — and
+       * what comes back is comparable across every respondent instead of being
+       * whichever arm they happened to land in.
+       */
+      ref: "today",
+      type: "matrix",
+      title: "And how are these going for you right now?",
+      required: true,
+      rows: [
+        "People finishing what they start",
+        "How useful the answers are",
+        "The time it takes you to build it",
+      ],
+      columns: ["Fine", "Could be better", "Actively painful"],
+    },
+    {
+      /*
+       * Ranks what would make them SWITCH, not what annoys them — the question
+       * above already has the annoyance, three ways.
        *
-       * Ranking what would move them keeps the block — it is the most
-       * distinctive control in the product — and asks something genuinely new.
-       * Four items rather than six: a ranking is one tap per item, and this is
+       * Four items rather than six: a ranking is one drag per item, and this is
        * the most expensive question here by a wide margin.
        */
       ref: "switch_rank",
@@ -186,7 +157,7 @@ export const DEMO_FORM = buildAuthoredDoc({
       ],
     },
     {
-      ref: "demo_reaction",
+      ref: "feels",
       type: "rating",
       title: "Level with me — how is answering this way compared with a normal form?",
       description: "One star if it's worse. Five if you'd rather answer this than a page of fields.",
@@ -201,7 +172,7 @@ export const DEMO_FORM = buildAuthoredDoc({
        * genuinely useful: a screenshot of a form that annoyed somebody is worth
        * more than a paragraph about it.
        */
-      ref: "screenshot",
+      ref: "specimen",
       type: "file_upload",
       title: "Got a form that annoyed you recently? Drop a screenshot — I collect specimens.",
       description: "Entirely optional. Skip it and we'll carry on.",
@@ -211,49 +182,74 @@ export const DEMO_FORM = buildAuthoredDoc({
       maxSizeMB: 3,
     },
     {
-      ref: "interested",
-      type: "single_select",
-      title: "Last one. Want us to follow up?",
-      description: "We already have your email from the sign-in, so there's nothing to type.",
+      /*
+       * The decision, and a consent block rather than a "would you like us to
+       * follow up?" list — because it is one. The wording is shown verbatim and
+       * what gets stored is which version of it they accepted.
+       *
+       * `allowDecline` is what makes it a question instead of a turnstile: "no
+       * thanks" is a real answer here, and it is the answer the flow below
+       * routes on. Without it a visitor who does not want our email has nowhere
+       * to go but away, on the second-to-last question of a demo they finished.
+       */
+      ref: "updates",
+      type: "legal_consent",
+      title: "Before we finish",
       required: true,
-      options: [
-        { label: "Yes — I'd like to try this properly" },
-        { label: "Maybe — send me something to read" },
-        { label: "No thanks, just looking" },
-      ],
+      consentText:
+        "Email me when chatform ships something that fixes what I just described. " +
+        "Nothing else, never more than once a month, and one click stops it.",
+      allowDecline: true,
+      agreeLabel: "Go on then",
+      declineLabel: "No, thanks",
+    },
+    {
+      /*
+       * A calendar, inside the conversation, and the last thing anyone sees —
+       * asked only of the people who just said they want to hear from us.
+       *
+       * Optional on purpose, and the flow reads the difference: a slot picked
+       * goes to `end_booked`, a slot skipped to the ordinary thank-you. That is
+       * also the whole of our lead capture on this page, which is the argument
+       * for it being here rather than a "book a demo" link in the footer.
+       *
+       * `date` with `includeTime`, not `scheduling`: the scheduling block is a
+       * hand-off to somebody else's booking page, and a demo should not send a
+       * visitor to cal.com to find out what our own product does.
+       */
+      ref: "slot",
+      type: "date",
+      title: "Last thing — want twenty minutes with us to see the builder side of this?",
+      description: "Pick a slot and it's yours. Or skip it: we've got your answers either way.",
+      required: false,
+      disablePast: true,
+      includeTime: true,
+      timeStepMinutes: 30,
+      timeMin: "10:00",
+      timeMax: "18:00",
     },
   ],
 
   /**
-   * Every arm of both decisions, including the ones that only rejoin.
+   * Four rules, all hanging off the two questions at the end.
    *
-   * `buildAuthoredDoc` derives the rejoins it can — it knows where the next arm
-   * begins, so it knows where the previous one ends — but it cannot guess which
-   * of six options is the fallthrough, so the three that have no follow-up of
-   * their own are routed explicitly past the three that do.
+   * The old flow branched six ways off "what's your biggest problem?" into
+   * three follow-up questions, which is a lot of canvas for one thing: asking
+   * the same "say more" in three different voices. The matrix collects all
+   * three readings without a branch, so what is left to route on is what
+   * somebody wants to happen next — which is the part a respondent can feel.
+   *
+   * Consent is routable because `answerOperand` unwraps the audit record to its
+   * `accepted` boolean; `is_checked` then does what it says.
    */
   branches: [
-    { when: "biggest_problem", is: "People don't finish", then: "dropoff_detail" },
-    { when: "biggest_problem", is: "The answers are thin and useless", then: "quality_detail" },
-    { when: "biggest_problem", is: "Building the logic is fiddly", then: "build_detail" },
-    { when: "biggest_problem", is: "It's not worth what it takes", then: "problem_detail" },
-    { when: "biggest_problem", is: "It looks generic and off-brand", then: "problem_detail" },
-    { when: "biggest_problem", is: "Getting the data where it needs to go", then: "problem_detail" },
+    { when: "updates", op: "is_checked", then: "slot" },
+    { when: "updates", op: "is_not_checked", then: "end_thanks" },
 
-    // Each detail arm rejoins the trunk rather than falling into the next arm.
-    { when: "dropoff_detail", always: true, then: "switch_rank" },
-    { when: "quality_detail", always: true, then: "switch_rank" },
-    { when: "build_detail", always: true, then: "switch_rank" },
-
-    /*
-     * Two conditions rather than one unconditional jump plus one exception:
-     * `buildAuthoredDoc` emits unconditional rules first and the first match
-     * wins, so an `always` here would swallow the condition meant to override
-     * it. Naming both interested answers leaves "just looking" to fall through
-     * to `end_thanks` on its own.
-     */
-    { when: "interested", is: "Yes — I'd like to try this properly", then: "end_followup" },
-    { when: "interested", is: "Maybe — send me something to read", then: "end_followup" },
+    // `slot` is optional, so both arms are live: a date picked is a booking, an
+    // empty one is somebody who read the question and passed.
+    { when: "slot", op: "is_not_empty", then: "end_booked" },
+    { when: "slot", op: "is_empty", then: "end_thanks" },
   ],
 
   ending: {
@@ -265,11 +261,11 @@ export const DEMO_FORM = buildAuthoredDoc({
   },
   endings: [
     {
-      ref: "end_followup",
-      title: "Brilliant — we'll be in touch 💛",
+      ref: "end_booked",
+      title: "Booked — see you then 📅",
       body:
-        "We've got your address from the sign-in, so there's nothing else to fill in.\n\n" +
-        "You don't have to wait for us, though: [build one yourself](https://chatform.in/signin) and you'll have a form like this in about two minutes.",
+        "The invite goes to the address you signed in with, so there's nothing else to fill in.\n\n" +
+        "Have a poke around before we talk, though: [build one yourself](https://chatform.in/signin) and you'll have a form like this in about two minutes.",
     },
   ],
 
@@ -376,7 +372,7 @@ export const DEMO_FORM = buildAuthoredDoc({
     /**
      * Finish the demo, land on pricing.
      *
-     * Someone who has just answered twelve questions has spent three minutes
+     * Someone who has just answered eight questions has spent three minutes
      * inside the product and is as warm as they will ever be. The ending
      * already offers "start a free form", but a link is a thing you have to
      * decide to click; the redirect makes the next step the default and still
@@ -423,8 +419,8 @@ export const DEMO_FORM = buildAuthoredDoc({
         "Learn how this person collects answers today and what specifically frustrates them, in their own words — " +
         "and answer any question they have about chatform accurately.",
       successCriteria:
-        "Their current tool, what they use forms for, and their single biggest frustration are captured as something " +
-        "they actually said rather than only as options they clicked.",
+        "What they do, what specifically frustrates them about collecting answers today, and what would make them " +
+        "switch are all captured — the frustration in their own words rather than only as a grid they clicked.",
       personaPrompt:
         "You are the chatform demo. You are the product demonstrating itself, so how you ask matters as much as what " +
         "you collect. Keep the asking tight and never restate the options they can already see — but when they ask about " +
@@ -440,10 +436,10 @@ export const DEMO_FORM = buildAuthoredDoc({
         /** Answering questions about chatform *is* the feature being demonstrated. */
         answerOffTopic: true,
         /**
-         * The real cap. Business would allow 200; twelve questions plus a
-         * clarification each plus a handful of questions back is about thirty,
-         * so this is generous to a respondent and stops a griefer at roughly
-         * three times a genuine run.
+         * The real cap. Business would allow 200; eight questions plus a
+         * clarification each plus a handful of questions back is about twenty
+         * five, so this is generous to a respondent and stops a griefer at
+         * roughly twice a genuine run.
          */
         maxTurns: 40,
         refusalMessage: "That one's outside what I'm here for — I'm a form, not a chatbot. Back to it:",

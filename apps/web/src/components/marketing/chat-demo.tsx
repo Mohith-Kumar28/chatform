@@ -11,6 +11,7 @@ import {
   FileUp,
   PartyPopper,
   RotateCcw,
+  ScrollText,
   Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -646,6 +647,87 @@ function DemoAffordance({ card, answered }: { card: DemoCard; answered: boolean 
             );
           })}
         </div>
+      );
+
+    /**
+     * The grid, drawn the way `MatrixComposer` draws it: a row of chips per
+     * row label, because a real HTML table does not survive a 380px phone and
+     * the product does not ship one either.
+     *
+     * Unanswered it is a neutral grid; answered, each row's choice lights up
+     * and the rest fade — the same "picked, and these were the others" reading
+     * the chip row gives, three times over in one control.
+     */
+    case "matrix":
+      return (
+        <CardShell>
+          <div className="space-y-2.5">
+            {card.rows.map((row) => (
+              <div key={row.label} className="space-y-1">
+                <p className="text-micro opacity-70">{row.label}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {card.columns.map((col) => {
+                    const chosen = answered && row.picked === col;
+                    return (
+                      <span
+                        key={col}
+                        className={cn(
+                          "text-micro rounded-full border px-2.5 py-1 transition-opacity",
+                          "duration-[var(--duration-standard)] ease-[var(--ease-out)]",
+                          chosen && "border-transparent",
+                          answered && !chosen && "opacity-35",
+                        )}
+                        style={
+                          chosen
+                            ? {
+                                background: "var(--cf-accent)",
+                                color: "var(--cf-accent-text)",
+                              }
+                            : {
+                                background: "var(--cf-chip-bg)",
+                                borderColor: "var(--cf-chip-border)",
+                              }
+                        }
+                      >
+                        {col}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardShell>
+      );
+
+    /**
+     * Consent: the wording verbatim, then accept and refuse at equal weight.
+     *
+     * Equal weight is the product's decision, not a styling one — see the note
+     * in `question-affordance.tsx`. The resolved state records which way it
+     * went, because that is the half of consent worth keeping.
+     */
+    case "consent":
+      return (
+        <CardShell>
+          <CardHead icon={ScrollText} title="Terms and contact" meta="Recorded with your answer" />
+          <p
+            className="text-caption mt-3 rounded-xl border px-3 py-2.5"
+            style={{ background: "var(--cf-bg)", borderColor: "var(--cf-chip-border)" }}
+          >
+            {card.text}
+          </p>
+          {answered ? (
+            <div className="mt-3">
+              <Settled>{card.accepted ? card.agreeLabel : card.declineLabel}</Settled>
+            </div>
+          ) : (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <GhostChip>{card.agreeLabel}</GhostChip>
+              <GhostChip>{card.declineLabel}</GhostChip>
+            </div>
+          )}
+        </CardShell>
       );
 
     case "scheduling":

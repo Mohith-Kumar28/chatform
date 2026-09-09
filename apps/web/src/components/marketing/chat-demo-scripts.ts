@@ -10,9 +10,16 @@
  * The hero script used to stop after three questions and start over, which
  * sold the greeting and nothing else. A form is not its first question — it is
  * the whole run: the free-text answer that gets read, the question asked back
- * mid-flow, the rating, the booking link, the file, the payment, and the
- * thank-you at the end. So the hero now plays a complete response, and every
- * affordance in it is a block type that exists in `BLOCK_LIBRARY`.
+ * mid-flow, the rating, the booking, the payment, and the thank-you at the end.
+ * So the hero plays a complete response, and every affordance in it is a block
+ * type that exists in `BLOCK_LIBRARY`.
+ *
+ * One control per turn, and never the same one twice — the same rule the demo
+ * form at `tooling/demo-form/` is built on. The hero used to spend two turns on
+ * chips, once picking one option and once picking two, which is a second screen
+ * of the reader's attention buying them nothing they had not already seen. The
+ * grid and the consent card took those slots: both are controls no other form
+ * builder puts inside a conversation, which is the argument the hero is making.
  */
 
 /**
@@ -25,6 +32,18 @@
  */
 export type DemoCard =
   | { kind: "rating"; max: number; picked: number }
+  /** The grid, one column picked per row — `matrix` in the real runtime. */
+  | {
+      kind: "matrix";
+      columns: readonly string[];
+      rows: readonly { label: string; picked: string }[];
+    }
+  /**
+   * Terms shown verbatim with an accept and a refuse, the way `legal_consent`
+   * renders. Both pills carry the same weight here for the same reason they do
+   * in the product: a refusal styled as the quiet option is a nudge.
+   */
+  | { kind: "consent"; text: string; agreeLabel: string; declineLabel: string; accepted: boolean }
   | {
       kind: "scheduling";
       buttonLabel: string;
@@ -73,30 +92,30 @@ export const HERO_SCRIPT: readonly DemoTurn[] = [
     text: "Good to meet you, Maya. How many people are you setting this up for?",
     waitMs: 450,
   },
+  // The free-text answer that gets read rather than validated. Nothing else in
+  // the transcript is as cheap to show or as hard for a form to do.
   { role: "user", text: "we're about a dozen right now", waitMs: 1200 },
   { role: "note", text: "Team size recorded as 12", waitMs: 250 },
+
   {
     role: "bot",
-    text: "Twelve — noted. What brings you to Northwind?",
-    waitMs: 400,
-    chips: ["Replacing a tool", "Starting fresh", "Just looking"],
-  },
-  { role: "user", text: "Replacing a tool", picked: "Replacing a tool", waitMs: 1000 },
-  {
-    role: "bot",
-    text: "Which of these matter most? Pick as many as you like.",
+    text: "Twelve — noted. How's the setup you're on now doing on these?",
     waitMs: 450,
-    chips: ["Speed", "Integrations", "Reporting", "Price"],
+    card: {
+      kind: "matrix",
+      columns: ["Fine", "Could be better", "Painful"],
+      rows: [
+        { label: "Getting people onboarded", picked: "Could be better" },
+        { label: "Keeping the data tidy", picked: "Painful" },
+        { label: "Cost", picked: "Fine" },
+      ],
+    },
   },
-  {
-    role: "user",
-    text: "Speed and integrations",
-    pickedAll: ["Speed", "Integrations"],
-    waitMs: 1100,
-  },
+  { role: "user", text: "Filled the grid in", waitMs: 1500 },
+
   {
     role: "bot",
-    text: "Fair. How would you rate the tool you're leaving?",
+    text: "Fair. And how would you rate the tool you're leaving?",
     waitMs: 450,
     card: { kind: "rating", max: 5, picked: 2 },
   },
@@ -128,24 +147,18 @@ export const HERO_SCRIPT: readonly DemoTurn[] = [
 
   {
     role: "bot",
-    text: "Locked in. If you've got an export of your current fields, drop it here and I'll map them.",
-    waitMs: 500,
+    text: "One bit of housekeeping before the last step.",
+    waitMs: 450,
     card: {
-      kind: "upload",
-      hint: "CSV, XLSX or JSON · up to 25 MB",
-      fileName: "northwind-members.csv",
-      fileSize: "24 KB",
+      kind: "consent",
+      text: "I agree to Northwind's terms of service, and to Northwind emailing me about my team's account.",
+      agreeLabel: "I agree",
+      declineLabel: "I do not agree",
+      accepted: true,
     },
   },
-  { role: "user", text: "northwind-members.csv", waitMs: 1500 },
-  { role: "note", text: "14 columns read · 12 rows · all mappable", waitMs: 250 },
-
-  {
-    role: "bot",
-    text: "Where should the invites go?",
-    waitMs: 450,
-  },
-  { role: "user", text: "maya@northwind.co", waitMs: 1300 },
+  { role: "user", text: "I agree", waitMs: 1100 },
+  { role: "note", text: "Accepted · v4 of the terms · timestamped", waitMs: 250 },
 
   {
     role: "bot",
@@ -165,7 +178,7 @@ export const HERO_SCRIPT: readonly DemoTurn[] = [
   {
     role: "end",
     text: "You're all set, Maya.",
-    body: "Twelve invites are on their way, and I'll see you Thursday at 10:30.",
+    body: "Twelve seats are live, and I'll see you Thursday at 10:30.",
     cta: "Open your workspace",
     waitMs: 700,
   },

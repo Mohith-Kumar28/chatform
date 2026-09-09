@@ -90,10 +90,18 @@ describe("short enough that people finish it", () => {
 });
 
 describe("shows the product off", () => {
-  it("branches, and every arm rejoins something", () => {
+  it("branches on what the respondent said", () => {
+    // Was five-or-more, when the form branched six ways off "what's your
+    // biggest problem?" into three follow-ups that all asked "say more". The
+    // matrix collects those three readings without a branch, so the routing
+    // that is left is the routing a respondent can feel: the consent answer
+    // decides whether they are offered a slot, and the slot decides which
+    // thank-you they land on. Three is the floor because the branching has to
+    // stay real — a demo of a conversational form that walks in a straight
+    // line is demonstrating a questionnaire.
     const gotos = doc.logic.filter((r) => r.action_kind === "goto");
     const conditional = gotos.filter((r) => (r.when?.conditions.length ?? 0) > 0);
-    expect(conditional.length).toBeGreaterThanOrEqual(5);
+    expect(conditional.length).toBeGreaterThanOrEqual(3);
   });
 
   it("routes to more than one ending", () => {
@@ -109,8 +117,43 @@ describe("shows the product off", () => {
 
   it("uses the block types the landing page is selling", () => {
     const types = new Set(doc.blocks.map((b) => b.type));
-    for (const wanted of ["single_select", "multi_select", "long_text", "ranking", "rating", "file_upload"]) {
+    // The showy ones, which is the point: a grid and a calendar inside a
+    // conversation, a drag-to-order ranking, stars, an upload, and a consent
+    // that can be refused. The three choice blocks are deliberately absent —
+    // see the note on `DEMO_FORM`.
+    for (const wanted of [
+      "short_text",
+      "long_text",
+      "matrix",
+      "ranking",
+      "rating",
+      "file_upload",
+      "legal_consent",
+      "date",
+    ]) {
       expect(types, `demo form no longer demonstrates ${wanted}`).toContain(wanted);
+    }
+  });
+
+  it("asks each question with a different block", () => {
+    // The rule this form is built on. Eight questions is the whole budget, so
+    // a repeated type spends a screen showing the visitor something they have
+    // already seen — and there are twenty-odd types it could have shown them
+    // instead. `welcome` is not a question and is not counted.
+    const asked = doc.blocks.filter((b) => b.type !== "welcome" && b.type !== "statement");
+    const types = asked.map((b) => b.type);
+    const repeated = types.filter((t, i) => types.indexOf(t) !== i);
+    expect(repeated, `repeated block types: ${repeated.join(", ")}`).toEqual([]);
+  });
+
+  it("leaves the three interchangeable choice blocks out", () => {
+    // `single_select`, `multi_select` and `yes_no` are one idea in three sets
+    // of clothes, and a list of options is the part of a form a conversation
+    // is least interesting at. Every answer here is typed, dragged, rated,
+    // uploaded, consented to or picked off a calendar.
+    const types = new Set(doc.blocks.map((b) => b.type));
+    for (const dull of ["single_select", "multi_select", "yes_no"]) {
+      expect(types, `the demo is back to asking a ${dull}`).not.toContain(dull);
     }
   });
 
