@@ -57,23 +57,30 @@ export function relativeDay(ms: number | null | undefined): string {
 /**
  * What the line under a KPI says about how the number moved.
  *
- * Pulled out of the tile because the wording is where this went wrong, not the
- * arithmetic. On a zero baseline the tile printed the word "new" and then, from
- * a separate span, "vs previous" — so it read **"new vs previous"**, which names
- * neither what is new nor what the previous period was. Three cases, and each
- * has to say something a reader can act on:
+ * **The line is always a percentage.** It used to print the raw move on a zero
+ * baseline — "+13" beside another tile's "+40%" — on the reasoning that a
+ * percentage of nothing is made up. That reasoning is right about the
+ * arithmetic and wrong about the tile: on a young product almost every
+ * baseline is zero, so the rule that was meant for an edge case governed the
+ * whole row, and six tiles that were supposed to show growth showed six copies
+ * of the number already printed above them in larger type. A row where each
+ * line means something different depending on a baseline the reader cannot see
+ * is a row nobody can read across.
  *
- *   - **No baseline to compare against** (a standing total like "block types in
- *     use"): no delta at all, because inventing one would be inventing a number.
- *   - **A zero baseline**: the move itself, against the same named window. A
- *     percentage of nothing is either "+∞%" or "+100%", and both are made up.
- *     This used to print "none before" as the trailing half, which reads as a
- *     different kind of comparison from the tile beside it and left the reader
- *     working out which — so the wording now differs only in the figure: "+12
- *     vs prev 30 days" beside "+40% vs prev 30 days".
- *   - **Anything else**: the percentage, against a *named* window. "vs prev 30
- *     days", never "vs previous", which leaves the reader guessing whether it
- *     means yesterday, last month or all time.
+ * So a first period counts as **+100%** — the whole of what is there arrived in
+ * it — and the tooltip says `(was 0)` so the convention is one hover from
+ * visible rather than silently baked in.
+ *
+ * The raw move did not disappear; it moved into the tooltip. "+13 vs prev 30
+ * days" is what the line used to be, and it is still the thing you want when a
+ * percentage looks implausible, so it rides on the hover with the window it is
+ * measured against.
+ *
+ * Two cases still say nothing at all:
+ *
+ *   - **No baseline** (a standing total like "block types in use"): no delta,
+ *     because inventing one would be inventing a number.
+ *   - **No movement**: the tile spends the line on its hint instead.
  */
 export function deltaLabel(
   value: number,
@@ -84,7 +91,22 @@ export function deltaLabel(
   if (previous === undefined) return null;
   const delta = value - previous;
   if (delta === 0) return null;
-  if (previous <= 0) return { change: `${delta > 0 ? "+" : ""}${format(delta)}`, against: `vs ${comparedTo}` };
-  const pct = Math.round((delta / previous) * 1000) / 10;
-  return { change: `${pct > 0 ? "+" : ""}${pct}%`, against: `vs ${comparedTo}` };
+
+  const sign = delta > 0 ? "+" : "";
+  // The absolute move, in the tile's own units, kept for the tooltip — a
+  // percentage is what you scan, but it is not what you check.
+  const moved = `${sign}${format(delta)} vs ${comparedTo}`;
+
+  /*
+    A first period is the whole of it.
+
+    Dividing by zero gives Infinity and dividing by a negative flips the sign,
+    so neither goes near the arithmetic: a zero baseline is answered by
+    convention, and `Math.abs` makes the sign of the percentage follow the
+    movement rather than the baseline it is measured from.
+  */
+  if (previous === 0) return { change: `${sign}100%`, against: `${moved} (was 0)` };
+
+  const pct = Math.round((delta / Math.abs(previous)) * 1000) / 10;
+  return { change: `${sign}${pct}%`, against: moved };
 }

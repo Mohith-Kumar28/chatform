@@ -6,11 +6,11 @@
 
 ## Context
 
-**What we are.** chatform is a Typeform/Youform competitor where the form-filling surface is an **agentic chatbot**, not a page of fields. Youform renders one question per screen; we render a conversation. The agent asks, listens, *answers the respondent's own questions from a knowledge base*, handles objections, validates conversationally, and drives toward completing the form. Everything Youform does in its builder we must also do — plus the agent layer, which is the only reason a customer picks us.
+**What we are.** chatform is a Typeform/Youform competitor where the form-filling surface is an **agentic chatbot**, not a page of fields. Youform renders one question per screen; we render a conversation. The agent asks, listens, _answers the respondent's own questions from a knowledge base_, handles objections, validates conversationally, and drives toward completing the form. Everything Youform does in its builder we must also do — plus the agent layer, which is the only reason a customer picks us.
 
 **Why this plan exists.** The backend is architecturally sound (D1 + Drizzle, Durable Object per session, SSE with durable replay, R2, Queues, OpenAPI→orval codegen) and ~80% of the API surface exists. But three things are broken:
 
-1. **The product isn't actually agentic.** `runAgentTurn`, `ToolSet`, `allowedNextRefs`, `buildValidationPrompt`, `long_text.aiQualityCheck` are all written and **nothing imports them**. The live agent is a *phrasing layer* over a deterministic FSM: it rewords questions and nothing else. There is no knowledge base, no goal, no persona depth, and free-text understanding is string matching (`["yes","y","yeah"]`), so 10+ of the 26 block types can only be answered through structured widget input. The one thing that differentiates us from Youform is the one thing that isn't built.
+1. **The product isn't actually agentic.** `runAgentTurn`, `ToolSet`, `allowedNextRefs`, `buildValidationPrompt`, `long_text.aiQualityCheck` are all written and **nothing imports them**. The live agent is a _phrasing layer_ over a deterministic FSM: it rewords questions and nothing else. There is no knowledge base, no goal, no persona depth, and free-text understanding is string matching (`["yes","y","yeah"]`), so 10+ of the 26 block types can only be answered through structured widget input. The one thing that differentiates us from Youform is the one thing that isn't built.
 
 2. **The UI is bad and shallow.** The block inspector edits exactly three fields (title, description, required) for all 26 block types — every other schema field is unreachable. Only 16 of 26 block types are even in the add-block library. All seven builder "tabs" are `useState` branches inside one 592-line client component, so there are no URLs, no back button, and `@xyflow/react` + 1,251 lines of workflow code ship in the initial builder bundle. `.dark` is fully defined in CSS and never activated (no `ThemeProvider`). `<Toaster/>` is mounted and `toast()` is never called. Three separate flows call `window.location.reload()` as their state-sync mechanism. There is no animation library, no charts, no auto-scroll in the chat, no progress bar, no typing indicator mid-conversation.
 
@@ -22,12 +22,12 @@
 
 ## Locked decisions (this session)
 
-| # | Decision | Consequence |
-|---|---|---|
-| D1 | **Blocks stay the source of truth; an agent layer sits on top.** The ordered, typed block list defines *what must be collected* (so Results stays a clean typed table and logic stays deterministic). A new form-level **Agent** config adds persona, tone, goal, knowledge base, and guardrails; each block gains **agent hints** (how to ask, how to retry, why we ask, examples). | `packages/form-schema` gets a `schemaVersion: 2` bump. New builder tab. New DO behavior. |
-| D2 | **Design system + IA first**, features second. | Phases 1–5 are foundations and surfaces; feature depth lands in 6–9. Do not start integrations before the shell is right. |
-| D3 | **Integrations = hardened webhooks + Google Sheets (OAuth) + email (Resend).** Zapier/Make/n8n ship as documented webhook presets, not bespoke code. | The unused `integrations` table finally gets used. `RESEND_API_KEY` finally gets a sender. No 77-logo marketplace. |
-| D4 | **Interview turns move to Claude Sonnet 5 via the existing OpenRouter gateway**, with a cheap model for extraction/classification and a per-form/per-plan model override. | `DEFAULT_MODEL` becomes a tiered map, not a constant. Do **not** rip out OpenRouter/Vercel AI SDK — HANDOFF §2 constraint 6 makes that the mandated gateway. |
+| #   | Decision                                                                                                                                                                                                                                                                                                                                                                             | Consequence                                                                                                                                                  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| D1  | **Blocks stay the source of truth; an agent layer sits on top.** The ordered, typed block list defines _what must be collected_ (so Results stays a clean typed table and logic stays deterministic). A new form-level **Agent** config adds persona, tone, goal, knowledge base, and guardrails; each block gains **agent hints** (how to ask, how to retry, why we ask, examples). | `packages/form-schema` gets a `schemaVersion: 2` bump. New builder tab. New DO behavior.                                                                     |
+| D2  | **Design system + IA first**, features second.                                                                                                                                                                                                                                                                                                                                       | Phases 1–5 are foundations and surfaces; feature depth lands in 6–9. Do not start integrations before the shell is right.                                    |
+| D3  | **Integrations = hardened webhooks + Google Sheets (OAuth) + email (Resend).** Zapier/Make/n8n ship as documented webhook presets, not bespoke code.                                                                                                                                                                                                                                 | The unused `integrations` table finally gets used. `RESEND_API_KEY` finally gets a sender. No 77-logo marketplace.                                           |
+| D4  | **Interview turns move to Claude Sonnet 5 via the existing OpenRouter gateway**, with a cheap model for extraction/classification and a per-form/per-plan model override.                                                                                                                                                                                                            | `DEFAULT_MODEL` becomes a tiered map, not a constant. Do **not** rip out OpenRouter/Vercel AI SDK — HANDOFF §2 constraint 6 makes that the mandated gateway. |
 
 **Model IDs.** Reasoning/interview tier → `anthropic/claude-sonnet-5`; extraction/classification/lint-repair tier → keep a small fast model (`openai/gpt-4o-mini` is fine, or `anthropic/claude-haiku-4-5`). Verify the exact OpenRouter slugs against `https://openrouter.ai/api/v1/models` before hardcoding — slugs change and a wrong one fails at runtime, not at build.
 
@@ -36,7 +36,7 @@
 ## Constraints inherited from HANDOFF.md §2 — do not violate
 
 1. **OpenAPI-first.** Routes declared with `hono-openapi` (`describeRoute` + `validator` + `resolver`). Spec at `/openapi.json`, Scalar at `/docs`.
-2. **No hand-written frontend API code.** All data fetching goes through orval-generated TanStack Query hooks in `apps/web/src/lib/api/`. Regenerate with `pnpm gen:api`; the output is committed. *(This is currently violated in ~8 files — fixing it is a task in this plan, not an exception to it.)*
+2. **No hand-written frontend API code.** All data fetching goes through orval-generated TanStack Query hooks in `apps/web/src/lib/api/`. Regenerate with `pnpm gen:api`; the output is committed. _(This is currently violated in ~8 files — fixing it is a task in this plan, not an exception to it.)_
 3. **Zod everywhere**, validation at every boundary.
 4. **shadcn/ui + Tailwind v4** mandatory.
 5. **Better Auth** owns orgs/members/invites/roles. Don't hand-roll.
@@ -65,21 +65,26 @@ $ git -C apps/web log --oneline -1
 `apps/web` was committed as a **gitlink** (submodule pointer) to the bare `create-next-app` commit, with no `.gitmodules`. Every line of frontend work since then — all 57 source files — is invisible to the parent repo. A `git clone` of chatform produces a project with no frontend.
 
 Fix:
+
 ```bash
 git rm --cached apps/web            # drop the gitlink entry
 rm -rf apps/web/.git                # absorb the nested repo (back it up first)
 git add apps/web
 git commit -m "fix(repo): absorb apps/web nested git repo into the monorepo"
 ```
+
 Keep `apps/web/AGENTS.md` committed — `next dev` regenerates it, and committing it is what stops it showing as a permanent uncommitted change.
 
 ### 0.2 Working docs
+
 Copy this plan to `/REBUILD.md`. Add a `## Progress log` section at the bottom and append one line per completed task — this is how a future session knows where it stopped.
 
 ### 0.3 Tenancy hotfix (do not defer to a "security phase")
+
 This is a live cross-tenant data leak; it ships in phase 0, not phase 9. Detail in **Backend B1**.
 
 ### 0.4 Verification gate
+
 `pnpm check` (typecheck + lint + test) must be green before and after every phase. Today `apps/api` has **zero tests** — B9 fixes that. Don't let the count go down.
 
 ---
@@ -133,13 +138,14 @@ coverPosition: z.enum(["left","right"]).default("left"),
 prefillParam: HiddenFieldName.optional(),                    // Youform "Auto fill via URL parameter"
 ```
 
-Add `buttonLabel` to every *answerable* block (today only `welcome`/`statement` have it) so the Youform "Button Text" field has a home everywhere.
+Add `buttonLabel` to every _answerable_ block (today only `welcome`/`statement` have it) so the Youform "Button Text" field has a home everywhere.
 
 ### S3. Migration chain — new `packages/form-schema/src/migrations.ts`
 
 ```ts
-export function migrateFormDoc(raw: unknown): FormDocInput   // v1 → v2, idempotent
+export function migrateFormDoc(raw: unknown): FormDocInput; // v1 → v2, idempotent
 ```
+
 v1→v2 is purely additive (every new field has a default), so the migration is `{...doc, schemaVersion: 2}` plus defaults. Call it in exactly two places: `routes/forms.ts` on read, and `SessionDO.ensureLoaded()` on hydrate. **Never** rewrite a `form_versions.schema_json` row in place — published versions are immutable.
 
 ### S4. Extraction schemas — new `packages/form-schema/src/extraction.ts`
@@ -147,9 +153,11 @@ v1→v2 is purely additive (every new field has a default), so the migration is 
 Per-block-type Zod schemas the LLM extractor targets (B4). One per block type, deriving bounds from the block itself (e.g. `number` → `z.number().min(block.min).max(block.max)`, `single_select` → `z.enum(optionIds)`). This is what turns free text into a validated `AnswerValue` for the 10 block types the current string-matching NLU can't handle.
 
 ### S5. Tests
+
 `packages/form-schema/tests/` currently holds the repo's only 22 tests. Add: migration idempotency (`migrate(migrate(x)) === migrate(x)`), every new default materializes, extraction schema per block type accepts good input and rejects out-of-bounds.
 
 ### S6. Regenerate the API contract
+
 Any schema change means: run `wrangler dev` from `apps/api`, `curl :8787/openapi.json > openapi.json` at the repo root, kill it, `pnpm gen:api`. Commit `openapi.json` and the generated client together.
 
 ---
@@ -189,21 +197,21 @@ Any schema change means: run `wrangler dev` from `apps/api`, `curl :8787/openapi
 
 ## B2. The agent, part 1 — real tool-calling loop
 
-**Problem.** `lib/ai.ts` exports `runAgentTurn({system, messages, tools: ToolSet})` which drains `result.fullStream` collecting `tool-call` parts. Its own comment says *"Tools are provided by SessionDO; guard() enforcement lives there."* Neither exists. `SessionDO.aiStreamMessage()` calls plain `streamText` with **no tools** and streams the text out. The FSM decides everything; the LLM only picks words.
+**Problem.** `lib/ai.ts` exports `runAgentTurn({system, messages, tools: ToolSet})` which drains `result.fullStream` collecting `tool-call` parts. Its own comment says _"Tools are provided by SessionDO; guard() enforcement lives there."_ Neither exists. `SessionDO.aiStreamMessage()` calls plain `streamText` with **no tools** and streams the text out. The FSM decides everything; the LLM only picks words.
 
-**Target architecture.** Keep the FSM as the *authority* — PLAN.md's "LLM is a constrained actor, never the controller" is correct and stays. But give the actor real verbs, and validate every one against the FSM before it takes effect.
+**Target architecture.** Keep the FSM as the _authority_ — PLAN.md's "LLM is a constrained actor, never the controller" is correct and stays. But give the actor real verbs, and validate every one against the FSM before it takes effect.
 
 **Toolset** (new `apps/api/src/do/agent-tools.ts`, built per-turn against the current block):
 
-| Tool | Args | Guard enforced in the DO |
-|---|---|---|
-| `record_answer` | `{ref, value}` | `ref` must equal `meta.currentRef`; `value` must pass `validateAnswer(block, value)`; on fail → `validation_error` and the model gets the failure as a tool result so it can re-ask in the same turn |
-| `ask_question` | `{ref}` | `ref ∈ allowedNextRefs(doc, state)` — the guard helper **already exists** in `engine/evaluate.ts`, unused. Wire it. |
-| `answer_from_knowledge` | `{query}` | Returns matching `settings.agent.knowledge` entries. Never advances state. |
-| `clarify` | `{reason}` | Capped by `settings.agent.maxClarificationsPerBlock` (parsed today, never read) |
-| `skip_current` | `{}` | Rejected unless `settings.navigation.allowSkip` and `!block.required` |
-| `request_upload` | `{ref}` | Only for `file_upload`; `signature` gets its own path (B5) |
-| `end_interview` | `{endingRef?}` | Must resolve through `resolveEnding(doc, state)` |
+| Tool                    | Args           | Guard enforced in the DO                                                                                                                                                                             |
+| ----------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `record_answer`         | `{ref, value}` | `ref` must equal `meta.currentRef`; `value` must pass `validateAnswer(block, value)`; on fail → `validation_error` and the model gets the failure as a tool result so it can re-ask in the same turn |
+| `ask_question`          | `{ref}`        | `ref ∈ allowedNextRefs(doc, state)` — the guard helper **already exists** in `engine/evaluate.ts`, unused. Wire it.                                                                                  |
+| `answer_from_knowledge` | `{query}`      | Returns matching `settings.agent.knowledge` entries. Never advances state.                                                                                                                           |
+| `clarify`               | `{reason}`     | Capped by `settings.agent.maxClarificationsPerBlock` (parsed today, never read)                                                                                                                      |
+| `skip_current`          | `{}`           | Rejected unless `settings.navigation.allowSkip` and `!block.required`                                                                                                                                |
+| `request_upload`        | `{ref}`        | Only for `file_upload`; `signature` gets its own path (B5)                                                                                                                                           |
+| `end_interview`         | `{endingRef?}` | Must resolve through `resolveEnding(doc, state)`                                                                                                                                                     |
 
 **Reliability floor (PLAN.md §4.3, keep it).** Three consecutive tool errors in one session ⇒ permanently drop that session to `template` mode and drive it with the deterministic `phrasing.ts` helpers. The product degrades; it never hangs.
 
@@ -220,7 +228,7 @@ Any schema change means: run `wrangler dev` from `apps/api`, `curl :8787/openapi
 `buildSystemPrompt(doc, currentBlock, answeredCount, context)` in `lib/agent-prompts.ts` is decent already (persona, current objective, a remaining-questions manifest, progress, transcript digest, six hard rules). Extend it:
 
 - **Goal + success criteria** near the top so the model knows what "done well" means, not just "done".
-- **Knowledge base.** ≤20 entries, ~20k chars total — small enough to inline; skip embeddings/Vectorize entirely for v1. Put the KB in a **stable prefix position** (system prompt, before any per-turn content) so OpenRouter's prompt caching can hit it. Volatile content — transcript, current block, progress — goes *after*.
+- **Knowledge base.** ≤20 entries, ~20k chars total — small enough to inline; skip embeddings/Vectorize entirely for v1. Put the KB in a **stable prefix position** (system prompt, before any per-turn content) so OpenRouter's prompt caching can hit it. Volatile content — transcript, current block, progress — goes _after_.
 - **Guardrails block** from `settings.agent.guardrails`: whether to answer off-topic, forbidden topics, the refusal line, `maxTurns`.
 - **Per-block agent hints** (S2) injected when that block is current: `askStyle`, `whyWeAsk`, `examples`, and `retryHint` on a retry.
 
@@ -237,7 +245,7 @@ Keep the existing hard rules — one question per turn, <40 words, answer their 
 **Do:**
 
 1. **Keep zero-LLM parsing where it already works** (PLAN.md commits to this, and it's right): choice / rating / NPS / yes-no / opinion-scale stay deterministic. Free, instant, no hallucination.
-2. **Add an extraction step for everything else** using S4's per-block Zod schemas and `generateObject` on the *cheap* model tier. `date` → ISO. `number` with currency → amount. `contact_info`/`address` → the record shape. `email`/`phone`/`url` keep `validateAnswer`'s existing canonicalization (E.164, lowercasing, `https://` prefixing) as the final step — extraction feeds it, it doesn't replace it.
+2. **Add an extraction step for everything else** using S4's per-block Zod schemas and `generateObject` on the _cheap_ model tier. `date` → ISO. `number` with currency → amount. `contact_info`/`address` → the record shape. `email`/`phone`/`url` keep `validateAnswer`'s existing canonicalization (E.164, lowercasing, `https://` prefixing) as the final step — extraction feeds it, it doesn't replace it.
 3. **Ambiguity → clarify, never guess.** If extraction confidence is low or the schema rejects, route to `clarify`, not to a silent bad answer.
 4. **`escalateAfterInvalid` still applies** — after N failures, emit `escalate_ui` with the block spec and let the client render a real widget. That escape hatch is good product design; keep it.
 5. **Fix `invalidCounts` durability.** It's a `Map` in DO memory; a DO eviction resets the escalation counter and the respondent can loop forever. Persist it into the `"session"` storage blob alongside `answers`/`variables`.
@@ -249,15 +257,15 @@ Keep the existing hard rules — one question per turn, <40 words, answer their 
 
 Concrete bugs in `src/do/session-do.ts`, each independently fixable:
 
-| # | Bug | Fix |
-|---|---|---|
-| 1 | `action()` doesn't re-arm the idle alarm — a session driven only by skip/restart gets abandoned mid-flow | Bump the alarm in `action()` like `handleUserTurn` does |
-| 2 | `action("restart")` resets answers/variables but **not** `meta.status`, `seq`, the `evt:`/`msg:` logs, or `submission_id` — so a restart replays the old transcript into the new conversation and writes into the old submission row | Full reset: new `seq` epoch, clear `evt:`/`msg:` keys, drop `submission_id`, reset status |
-| 3 | `signature` blocks emit `upload_request`, the upload path records a `FileDescriptor[]`, and `validateAnswer` wants `{fileId, r2Key, signedName?}` — signature answers **always** fail validation | Give signature its own confirm path that builds the right shape |
-| 4 | `evt:` and `msg:` DO storage keys are never pruned | Prune on `finalize`; keep the last `MAX_REPLAY` events for late reconnects |
-| 5 | `emit()` awaits every SSE writer — one slow client backpressures the whole turn for everyone on that session | `Promise.allSettled` with a per-writer timeout; drop writers that miss it |
-| 6 | `ai_generations.model` is hardcoded `"openrouter/auto"`; `cost_usd_micro` and `latency_ms` are never populated | Log the real model id, wall-clock latency, and computed cost — B7's metering depends on this being true |
-| 7 | Fake streaming in template mode chunks on `/\S+\s*/g` and flushes every ≥12 chars | Fine as-is; leave it |
+| #   | Bug                                                                                                                                                                                                                                  | Fix                                                                                                     |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| 1   | `action()` doesn't re-arm the idle alarm — a session driven only by skip/restart gets abandoned mid-flow                                                                                                                             | Bump the alarm in `action()` like `handleUserTurn` does                                                 |
+| 2   | `action("restart")` resets answers/variables but **not** `meta.status`, `seq`, the `evt:`/`msg:` logs, or `submission_id` — so a restart replays the old transcript into the new conversation and writes into the old submission row | Full reset: new `seq` epoch, clear `evt:`/`msg:` keys, drop `submission_id`, reset status               |
+| 3   | `signature` blocks emit `upload_request`, the upload path records a `FileDescriptor[]`, and `validateAnswer` wants `{fileId, r2Key, signedName?}` — signature answers **always** fail validation                                     | Give signature its own confirm path that builds the right shape                                         |
+| 4   | `evt:` and `msg:` DO storage keys are never pruned                                                                                                                                                                                   | Prune on `finalize`; keep the last `MAX_REPLAY` events for late reconnects                              |
+| 5   | `emit()` awaits every SSE writer — one slow client backpressures the whole turn for everyone on that session                                                                                                                         | `Promise.allSettled` with a per-writer timeout; drop writers that miss it                               |
+| 6   | `ai_generations.model` is hardcoded `"openrouter/auto"`; `cost_usd_micro` and `latency_ms` are never populated                                                                                                                       | Log the real model id, wall-clock latency, and computed cost — B7's metering depends on this being true |
+| 7   | Fake streaming in template mode chunks on `/\S+\s*/g` and flushes every ≥12 chars                                                                                                                                                    | Fine as-is; leave it                                                                                    |
 
 ---
 
@@ -266,6 +274,7 @@ Concrete bugs in `src/do/session-do.ts`, each independently fixable:
 `RESEND_API_KEY` is declared in `Bindings` and used nowhere. `settings.onComplete.notificationEmails[]` and `settings.onComplete.autoReplyEmail{enabled,subject,bodyMd}` are parsed, stored, editable in the UI, and **do nothing**. Youform's Settings → Email Settings (Email to Me / Email to Responder, Reply-To, subject with `@mention` interpolation, rich body) is a headline feature we simply don't have.
 
 **Do** — new `apps/api/src/lib/email.ts`:
+
 - `sendSubmissionNotification(env, {form, submission, answers})` → to `notificationEmails`, Reply-To resolved from a chosen email block's answer.
 - `sendAutoReply(env, {form, submission, answers})` → to the respondent's email answer, subject/body from settings.
 - **`@mention` interpolation**: `Hi @full_name, thanks!` → resolve `@<block.ref>` against the submission's answers. Same mechanism Youform uses in Email Subject. Escape HTML on every substitution.
@@ -277,7 +286,7 @@ Concrete bugs in `src/do/session-do.ts`, each independently fixable:
 
 ## B7. Webhooks, integrations, limits, analytics
 
-**B7.1 Webhook fidelity.** `retryFailedDeliveries` (the `*/5 * * * *` cron sweep) **deletes the delivery row and re-enqueues a hardcoded `{event: "submission.completed"}` with no `submissionId`** — so every retry delivers the wrong thing. Also: `consecutive_failures` is a column that's never incremented, and attempt counting does `COUNT(*) WHERE payload = ?`, an O(payload-length) string comparison. Fix all three: store the original event on the delivery row and re-enqueue *that*; increment `consecutive_failures` and auto-disable a webhook after N; count attempts by `delivery_id`. Emit the two declared-but-never-fired events, `session.started` and `form.published` — the UI already offers them as subscribable.
+**B7.1 Webhook fidelity.** `retryFailedDeliveries` (the `*/5 * * * *` cron sweep) **deletes the delivery row and re-enqueues a hardcoded `{event: "submission.completed"}` with no `submissionId`** — so every retry delivers the wrong thing. Also: `consecutive_failures` is a column that's never incremented, and attempt counting does `COUNT(*) WHERE payload = ?`, an O(payload-length) string comparison. Fix all three: store the original event on the delivery row and re-enqueue _that_; increment `consecutive_failures` and auto-disable a webhook after N; count attempts by `delivery_id`. Emit the two declared-but-never-fired events, `session.started` and `form.published` — the UI already offers them as subscribable.
 
 **B7.2 Google Sheets.** New `apps/api/src/routes/integrations.ts` + `src/lib/integrations/sheets.ts`. OAuth connect/callback, spreadsheet picker, header row derived from `blocks` (one column per answerable block, matching the CSV export's column logic in `results.ts` — reuse it), append on `submission.completed`, backfill action. Store tokens in the **`integrations` table, which already exists and has zero code touching it** (`provider`, `config_json`, `status`, `last_error`). Encrypt the refresh token with `FILE_ENCRYPTION_KEY` (also declared, also unused).
 
@@ -289,26 +298,26 @@ Concrete bugs in `src/do/session-do.ts`, each independently fixable:
 
 **B7.6 Analytics rollups.** `analytics_rollup_daily` has columns for sessions started/completed, avg/median/p90 completion, and `per_block_json` — **only `views` is ever written**, and `/api/forms/:id/analytics` computes everything live with N+1 queries per submission. Add a cron rollup on the existing `*/5 * * * *` trigger; serve dashboards from rollups (PLAN.md §4.4: "dashboards read rollups only"). Add the chat-native metrics that Youform structurally cannot have: **drop-off by conversational turn**, clarifications per block, off-topic-question rate, average turns per block, escalation rate.
 
-**B7.7 N+1 queries.** `GET /api/forms/:id/submissions` and `/export` issue two queries *per submission* (answers + transcript). At 10,000 rows that's 20,000 queries. Rewrite as two batched queries with an `IN (…)` over submission ids, grouped in memory.
+**B7.7 N+1 queries.** `GET /api/forms/:id/submissions` and `/export` issue two queries _per submission_ (answers + transcript). At 10,000 rows that's 20,000 queries. Rewrite as two batched queries with an `IN (…)` over submission ids, grouped in memory.
 
 ---
 
 ## B8. Endpoints to add (frontend depends on these)
 
-| Method | Path | Why |
-|---|---|---|
-| `GET` | `/api/dashboard/summary` | Dashboard KPIs without N round-trips |
-| `GET/POST` | `/api/workspaces` | Youform's workspace switcher; the `workspaces` table exists and is never listed |
-| `POST` | `/api/forms/:id/duplicate` | Youform has it |
-| `GET` | `/api/forms/:id/versions`, `POST /api/forms/:id/versions/:v/restore` | `form_versions` is written and never read back |
-| `GET/PUT` | `/api/forms/:id/agent` | Agent tab config (or fold into the doc PUT — decide once, consistently) |
-| `POST` | `/api/forms/:id/agent/dry-run` | "Test your agent" without creating a real submission |
-| `GET/POST/DELETE` | `/api/integrations/*` | B7.2 |
-| `POST` | `/api/uploads/asset` | Cover images, favicons, OG images, avatars — R2 assets owned by the *builder*, not a respondent session |
-| `GET/POST/DELETE` | `/api/domains` | Custom domain (Youform parity); CF for SaaS |
-| `GET` | `/api/forms/:id/submissions/:sid` | Per-submission permalink |
-| `POST` | `/api/forms/:id/translate` | Youform's translate button |
-| `GET` | `/api/templates` (real) | Templates are 4 hardcoded objects in `routes/templates.ts`; the `form_templates` table is unused |
+| Method            | Path                                                                 | Why                                                                                                     |
+| ----------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `GET`             | `/api/dashboard/summary`                                             | Dashboard KPIs without N round-trips                                                                    |
+| `GET/POST`        | `/api/workspaces`                                                    | Youform's workspace switcher; the `workspaces` table exists and is never listed                         |
+| `POST`            | `/api/forms/:id/duplicate`                                           | Youform has it                                                                                          |
+| `GET`             | `/api/forms/:id/versions`, `POST /api/forms/:id/versions/:v/restore` | `form_versions` is written and never read back                                                          |
+| `GET/PUT`         | `/api/forms/:id/agent`                                               | Agent tab config (or fold into the doc PUT — decide once, consistently)                                 |
+| `POST`            | `/api/forms/:id/agent/dry-run`                                       | "Test your agent" without creating a real submission                                                    |
+| `GET/POST/DELETE` | `/api/integrations/*`                                                | B7.2                                                                                                    |
+| `POST`            | `/api/uploads/asset`                                                 | Cover images, favicons, OG images, avatars — R2 assets owned by the _builder_, not a respondent session |
+| `GET/POST/DELETE` | `/api/domains`                                                       | Custom domain (Youform parity); CF for SaaS                                                             |
+| `GET`             | `/api/forms/:id/submissions/:sid`                                    | Per-submission permalink                                                                                |
+| `POST`            | `/api/forms/:id/translate`                                           | Youform's translate button                                                                              |
+| `GET`             | `/api/templates` (real)                                              | Templates are 4 hardcoded objects in `routes/templates.ts`; the `form_templates` table is unused        |
 
 Every one gets a `describeRoute` + zod `validator` + `resolver`, then `pnpm gen:api`.
 
@@ -317,6 +326,7 @@ Every one gets a `describeRoute` + zod `validator` + `resolver`, then `pnpm gen:
 ## B9. Tests
 
 `apps/api` has **no tests**. Add `vitest` + `@cloudflare/vitest-pool-workers`:
+
 - **Tenancy** (highest value): org A cannot touch org B, for every guarded route. This is the regression test for B1.
 - **DO FSM**: linear flow, branch, skip, invalid→escalate, restart, resume-after-eviction, idle abandon.
 - **Agent tools**: every guard rejection path — wrong ref, invalid value, out-of-order `ask_question`, skip on a required block, 3-error degradation to template mode.
@@ -335,11 +345,12 @@ Every one gets a `describeRoute` + zod `validator` + `resolver`, then `pnpm gen:
 
 ## F1. Design system foundation
 
-The tokens in `globals.css` (148 lines) are actually good — warm-cream OKLCH, coherent, well-commented. The problem is everything *around* them.
+The tokens in `globals.css` (148 lines) are actually good — warm-cream OKLCH, coherent, well-commented. The problem is everything _around_ them.
 
 **F1.1 Reconcile tokens with DESIGN.md §4.1.** Shipped values drifted (`--background: oklch(0.98 0.008 85)` vs spec `oklch(0.984 0.007 95)`; chart palette is orange/blue/green/amber/pink vs spec's orange/teal/violet/amber/rose/sky). Pick one and write it down — recommend **adopting the DESIGN.md values**, they're more considered. Add the four tokens the spec defines and the CSS omits: `--primary-hover`, `--primary-soft`, `--success`, `--warning`, `--info`.
 
 **F1.2 Add the missing token layers.** Today there is no spacing scale, no shadow tokens (every shadow is an ad-hoc `shadow-sm`), no typography scale (`text-3xl font-semibold tracking-tight` is copy-pasted across 6+ pages), no z-index scale, no motion tokens.
+
 - **Shadows**, warm-tinted per DESIGN.md §4.3: `--shadow-xs/sm/md/lg`.
 - **Typography**: a `@utility` per step of the DESIGN.md scale — `text-display-lg`, `text-h1`, `text-h2`, `text-body`, `text-body-lg`, `text-sm`, `text-xs`. Stop repeating raw utility triplets.
 - **Motion**: `--duration-micro: 120ms`, `--duration-standard: 180ms`, `--duration-enter: 220ms`, `--ease-out: cubic-bezier(0.2,0,0,1)`, `--ease-spring: cubic-bezier(0.32,0.72,0,1)`.
@@ -388,9 +399,10 @@ The tokens in `globals.css` (148 lines) are actually good — warm-cream OKLCH, 
   integrate/page.tsx
   settings/[section]/page.tsx
 ```
+
 `/forms/[id]` redirects to `/forms/[id]/build`. Tab order — **Build · Agent · Workflow · Design · Results · Share · Integrate · Settings**.
 
-**F3.2 One header, and it stops lying.** The current header's tab list and the running app disagree (screenshot shows *two* "Settings" entries and a "Theme" label where the code says "Design"). One `BuilderHeader` in the layout, one source of truth for tab definitions, active state from `usePathname()`. Below `lg` the tabs currently collapse to a **native `<select>`** — replace with a proper responsive treatment. Also: **Publish is disabled while `dirty`**, so a user who just typed must wait out the 800ms autosave debounce before they can publish. Make Publish flush the pending save instead.
+**F3.2 One header, and it stops lying.** The current header's tab list and the running app disagree (screenshot shows _two_ "Settings" entries and a "Theme" label where the code says "Design"). One `BuilderHeader` in the layout, one source of truth for tab definitions, active state from `usePathname()`. Below `lg` the tabs currently collapse to a **native `<select>`** — replace with a proper responsive treatment. Also: **Publish is disabled while `dirty`**, so a user who just typed must wait out the 800ms autosave debounce before they can publish. Make Publish flush the pending save instead.
 
 **F3.3 Real builder state.** `FormDoc` lives in one `useState` in `builder-client.tsx` and is prop-drilled into eight panels. There's no undo/redo, no keyboard shortcuts, no dirty-navigation guard. Add **zustand + immer + a temporal (undo) middleware** — DESIGN.md §5.3 specifies exactly this, cap 100, drag coalesced — in `src/stores/builder-store.ts`, provided from the builder layout so it survives tab navigation.
 
@@ -404,7 +416,7 @@ The tokens in `globals.css` (148 lines) are actually good — warm-cream OKLCH, 
 
 ## F4. Build tab — the block inspector
 
-This is the single biggest product gap. Today the inspector renders, for **all 26 block types**: title (Textarea), description (Input), required (Switch) — plus a conditional options list and a rating `scale` `<select>`. Everything else in the schema is unreachable: `minLength`/`maxLength`, `placeholder`, `min`/`max`, `integerOnly`, `currency`, `allowOther`, `minSelections`/`maxSelections`, `shape`, `steps`/`startAt`, `accept`/`maxFiles`/`maxSizeMB`, `amount`, `consentText`, `buttonLabel`, `yesLabel`/`noLabel`, `businessOnly`, `countryHint`, `disablePast`, `dateFormat`. Some of these *are* editable in `workflow-client.tsx`'s separate `BlockInspector` — **the two inspectors have drifted apart** and must be unified.
+This is the single biggest product gap. Today the inspector renders, for **all 26 block types**: title (Textarea), description (Input), required (Switch) — plus a conditional options list and a rating `scale` `<select>`. Everything else in the schema is unreachable: `minLength`/`maxLength`, `placeholder`, `min`/`max`, `integerOnly`, `currency`, `allowOther`, `minSelections`/`maxSelections`, `shape`, `steps`/`startAt`, `accept`/`maxFiles`/`maxSizeMB`, `amount`, `consentText`, `buttonLabel`, `yesLabel`/`noLabel`, `businessOnly`, `countryHint`, `disablePast`, `dateFormat`. Some of these _are_ editable in `workflow-client.tsx`'s separate `BlockInspector` — **the two inspectors have drifted apart** and must be unified.
 
 **F4.1 One inspector, per-type.** `src/components/builder/inspectors/<type>.tsx`, one file per block type, exporting a schema-driven form. A shared `<InspectorSection>` wrapper gives every type the common fields. Both the Build tab and the Workflow node inspector render the same component.
 
@@ -429,7 +441,7 @@ This is the single biggest product gap. Today the inspector renders, for **all 2
 - **Knowledge** — the KB entry list (title + markdown body), inline editor, char budget meter against the ~20k cap, plus a "paste a URL / paste text" import path.
 - **Guardrails** — `answerOffTopic`, `forbiddenTopics`, `refusalMessage`, `maxTurns`, `escalateAfterInvalid`, `maxClarificationsPerBlock`, `sessionTokenBudget`, `responseMaxTokens`.
 - **Model** — picker (Sonnet 5 default per D4), with a plan gate rendered as an **upsell popover rather than a hidden control** (DESIGN.md §5.8: gates should be discoverable).
-- **Test panel** — a live sandbox chat against `/api/forms/:id/agent/dry-run` (B8), showing tool calls and token spend inline so a builder can see *why* the agent did what it did. This is the debugging surface that makes the agent layer trustworthy.
+- **Test panel** — a live sandbox chat against `/api/forms/:id/agent/dry-run` (B8), showing tool calls and token spend inline so a builder can see _why_ the agent did what it did. This is the debugging surface that makes the agent layer trustworthy.
 
 ---
 
@@ -438,6 +450,7 @@ This is the single biggest product gap. Today the inspector renders, for **all 2
 The most complete surface we have, and still missing table stakes. `chat-client.tsx` (531) + `use-chat.ts` (232).
 
 **F6.1 Bugs to fix first.**
+
 - **No auto-scroll.** There is no `scrollIntoView` or scroll ref anywhere in the chat. Long conversations require manual scrolling. Add smooth auto-scroll, suppressed when the user has scrolled up, with a "jump to latest ↓" pill (DESIGN.md §4.5).
 - **`uploadSpec` is destructured and never referenced** — the `upload_request` SSE event drives nothing.
 - **`FileUploadControl`'s `onSubmit` is an empty function.** The "Send file" button clears local state and does nothing else.
@@ -448,6 +461,7 @@ The most complete surface we have, and still missing table stakes. `chat-client.
 - **On every reconnect `use-chat` calls `setMessages([])`** and relies on server replay. Correct given durable replay, but pair it with a visible reconnect state so it doesn't look like a wipe.
 
 **F6.2 Missing UX.**
+
 - **Progress bar.** `config.progressBar` supports `percent | steps | none`; only `percent` is implemented, and only as text in the header. No bar exists. Build both modes.
 - **Typing indicator during generation.** The bouncing dots render only while `status === "connecting"`, never while the assistant is actually thinking.
 - **Streaming caret** is a static `after:content-['▍']` — no blink.
@@ -467,7 +481,7 @@ The most complete surface we have, and still missing table stakes. `chat-client.
 `results-client.tsx` (364 lines): three sub-tabs on local state, a hand-built `<table>`, div-based bars, and **no charts at all** (no chart library is installed). `BLOCK_ICON` is a map of emoji glyphs (`"✉"`, `"📅"`, `"★"`) while everything else in the product uses lucide.
 
 - **Submissions** — `@tanstack/react-table`: sticky header, one column per question with a typed icon, column show/hide + resize, sort, pagination, row selection, bulk delete/export, per-row permalink. Completed/Partial pills with counts (Youform shows `Completed 2 / Partial 4`). Fullscreen toggle.
-- **Transcript-first detail.** DESIGN.md north star #3: *"Every response is stored and displayed as a transcript first, fields second."* Row click → a split view with the full conversation on the left, extracted answers on the right, and — new — which answers the agent had to clarify or re-ask. Youform structurally cannot show this.
+- **Transcript-first detail.** DESIGN.md north star #3: _"Every response is stored and displayed as a transcript first, fields second."_ Row click → a split view with the full conversation on the left, extracted answers on the right, and — new — which answers the agent had to clarify or re-ask. Youform structurally cannot show this.
 - **Summary** — real charts (install `recharts`, which PLAN.md already picked) driven by `--chart-1..6`, which are **defined in CSS and used nowhere**.
 - **Analytics** — the 6 KPI cards currently wrap badly; fix to a 3×2 grid. Add drop-off by conversational turn, completion funnel, time-to-complete distribution, device/country breakdown, and the agent metrics from B7.6.
 - **Export** — the download button is a raw `<a href={API_ORIGIN}/…/export} download>` styled as a button, bypassing the authenticated fetch layer entirely. Route it through the API client, add XLSX, add filtered export.
@@ -480,7 +494,7 @@ The most complete surface we have, and still missing table stakes. `chat-client.
 
 **Share** — the current page has a QR code fetched from **`api.qrserver.com`** (third-party, unstyled, with an eslint-disable) and a **stray orphan `<QrCode>` lucide icon rendered alone at the bottom** — leftover debris. Generate QR locally, offer PNG/SVG download, and build out the three Youform modes: share link (with social buttons), embed in website (inline / popup / side-tab / full-page, each with a live preview and a copyable snippet), embed in email.
 
-**Integrate** — Youform's layout is "Connected" over "Connect more tools". Ours is webhooks-only with a hardcoded snippet baked with `https://app.chatform.dev` and `localhost:8787`. Rebuild as a real registry: connected list with status, available grid (Webhook, Google Sheets, Zapier, Make, n8n, Slack-via-webhook), per-integration config drawer, and a **delivery log** — `useGetApiWebhooksByIdDeliveries` is generated and never used.
+**Integrate** — Youform's layout is "Connected" over "Connect more tools". Ours is webhooks-only with a hardcoded snippet baked with `https://app.chatform.in` and `localhost:8787`. Rebuild as a real registry: connected list with status, available grid (Webhook, Google Sheets, Zapier, Make, n8n, Slack-via-webhook), per-integration config drawer, and a **delivery log** — `useGetApiWebhooksByIdDeliveries` is generated and never used.
 
 **Design** — presets are fine. Fix: free-text `Input`s for heading/body font names with no picker, no validation, and **no font loading** (a typed font name simply won't render on the public page). Add a font picker with a curated list that actually loads, a live preview that isn't the current hardcoded fake (`ThemePreview` has literal strings "What's your email?" / "grace@hopper.dev" and is `lg:block`-only, disappearing entirely on smaller screens), avatar upload, background image, dark/light/auto scheme (`colorScheme`, `avatarKey`, and `backgroundImageKey` are all in `ThemeDoc` and all **ignored by the chat client** — HANDOFF §4 flagged this and it's still open).
 
@@ -497,7 +511,7 @@ The most complete surface we have, and still missing table stakes. `chat-client.
 
 ## F10. Data layer — stop bypassing orval
 
-HANDOFF §2 constraint 2 says all data fetching goes through generated hooks. Reality: orval generates ~30 hooks across four tag-split modules and **three are used**. Everything else hand-rolls `useQuery({ queryFn: () => customFetch<unknown>(...) })` with a locally-declared `interface FormRow` and an `as unknown as` cast — repeated in dashboard, templates, api-keys, usage, integrate-client, and results-client. Worse, the three hooks that *are* used in `results-client.tsx` are all called with `formId as never`, meaning the generated signatures don't match what the API actually accepts.
+HANDOFF §2 constraint 2 says all data fetching goes through generated hooks. Reality: orval generates ~30 hooks across four tag-split modules and **three are used**. Everything else hand-rolls `useQuery({ queryFn: () => customFetch<unknown>(...) })` with a locally-declared `interface FormRow` and an `as unknown as` cast — repeated in dashboard, templates, api-keys, usage, integrate-client, and results-client. Worse, the three hooks that _are_ used in `results-client.tsx` are all called with `formId as never`, meaning the generated signatures don't match what the API actually accepts.
 
 **Do:** fix the OpenAPI annotations so the generated signatures are right (that `as never` is a symptom of a bad spec, not a bad hook), regenerate, then migrate every hand-rolled query. Delete the duplicated local interfaces in favor of `generated.schemas.ts`. Add a `qk.*` query-key factory (DESIGN.md §5.2). Keep `customFetch` — it's solid; note that its `Headers`-instance construction is load-bearing (HANDOFF §5) and must not be "simplified".
 
@@ -529,18 +543,18 @@ No test runner in `apps/web` at all (`turbo run test` finds nothing). Add Vitest
 
 Phases are ordered by dependency and by D2 (foundations before features). Each ends with `pnpm check` green and a `## Progress log` line in `/REBUILD.md`.
 
-| Phase | Contents | Gate |
-|---|---|---|
-| **0** | Repo hygiene (0.1–0.2) · **B1 tenancy** · guards module | Cross-tenant test suite passes |
-| **1** | `form-schema` v2 (S1–S5) · migration · `pnpm gen:api` (S6) | Migration idempotency tests; existing forms still load |
-| **2** | F1 design system · F2 component layer · dark mode · motion | Every existing screen renders correctly in both themes |
-| **3** | F3 IA — builder route split, zustand store, header, app shell, autosave conflict | Deep links work; back button works; xyflow out of the initial bundle |
-| **4** | F4 inspector + complete block library · F5 Agent tab (UI against S1) | All 26 block types addable and fully editable |
-| **5** | F6 chat runtime rebuild · F10 data layer cleanup | Every block type answerable by widget; auto-scroll, progress, markdown, endings |
-| **6** | **B2 + B3 + B4** — tools, knowledge base, extraction, model tiering (D4) · B5 DO fixes | Off-topic question answered from KB then re-asked; free-text `date`/`address` extraction works; 3-tool-error degradation verified |
-| **7** | B6 email · B7 webhooks/Sheets/limits/rollups · B8 new endpoints · F8 Settings/Share/Integrate/Design | Real notification email delivered; Sheets row appended; a Free-plan overage hard-stops |
-| **8** | F7 Results + charts · F9 dashboard/templates/auth/landing | Analytics served from rollups; transcript-first detail view |
-| **9** | F11 responsive/a11y/perf · B9 + F12 tests · docs | Budgets met; E2E suite green |
+| Phase | Contents                                                                                             | Gate                                                                                                                              |
+| ----- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **0** | Repo hygiene (0.1–0.2) · **B1 tenancy** · guards module                                              | Cross-tenant test suite passes                                                                                                    |
+| **1** | `form-schema` v2 (S1–S5) · migration · `pnpm gen:api` (S6)                                           | Migration idempotency tests; existing forms still load                                                                            |
+| **2** | F1 design system · F2 component layer · dark mode · motion                                           | Every existing screen renders correctly in both themes                                                                            |
+| **3** | F3 IA — builder route split, zustand store, header, app shell, autosave conflict                     | Deep links work; back button works; xyflow out of the initial bundle                                                              |
+| **4** | F4 inspector + complete block library · F5 Agent tab (UI against S1)                                 | All 26 block types addable and fully editable                                                                                     |
+| **5** | F6 chat runtime rebuild · F10 data layer cleanup                                                     | Every block type answerable by widget; auto-scroll, progress, markdown, endings                                                   |
+| **6** | **B2 + B3 + B4** — tools, knowledge base, extraction, model tiering (D4) · B5 DO fixes               | Off-topic question answered from KB then re-asked; free-text `date`/`address` extraction works; 3-tool-error degradation verified |
+| **7** | B6 email · B7 webhooks/Sheets/limits/rollups · B8 new endpoints · F8 Settings/Share/Integrate/Design | Real notification email delivered; Sheets row appended; a Free-plan overage hard-stops                                            |
+| **8** | F7 Results + charts · F9 dashboard/templates/auth/landing                                            | Analytics served from rollups; transcript-first detail view                                                                       |
+| **9** | F11 responsive/a11y/perf · B9 + F12 tests · docs                                                     | Budgets met; E2E suite green                                                                                                      |
 
 **Do not reorder 0 before anything, or 1 before 2** — the schema shape drives every surface built afterward.
 
@@ -555,11 +569,12 @@ Phases are ordered by dependency and by D2 (foundations before features). Each e
 **Spec refresh ritual** (any route change): `wrangler dev` from `apps/api` → `curl :8787/openapi.json > openapi.json` at the repo root → kill → `pnpm gen:api` → commit spec and client together.
 
 **Manual E2E — the acceptance script.**
+
 1. Sign up → create a form from a template → open the builder.
 2. Add one block of **every** type; confirm each one's full inspector renders and edits round-trip.
 3. Agent tab: set a persona, a goal, and one KB entry ("Our Pro plan is $29/month").
 4. Preview: the agent greets, asks, and accepts a **typed** answer for `date`, `address`, and `single_select`.
-5. Type **"how much does the Pro plan cost?"** mid-form → the agent answers from the KB in one sentence and re-asks the current question. *This is the acceptance test for the entire product thesis.*
+5. Type **"how much does the Pro plan cost?"** mid-form → the agent answers from the KB in one sentence and re-asks the current question. _This is the acceptance test for the entire product thesis._
 6. Give three deliberately bad answers → escalation UI appears with a real widget.
 7. Publish → open `/f/[slug]` in a private window → complete the form.
 8. Results: submission appears; the transcript view shows the whole conversation including the off-topic exchange; CSV exports.
@@ -574,14 +589,14 @@ Phases are ordered by dependency and by D2 (foundations before features). Each e
 
 # Known risks
 
-| Risk | Mitigation |
-|---|---|
-| Schema v2 breaks already-published forms | `form_versions.schema_json` is immutable and read through `migrateFormDoc` on load; never rewritten in place. Migration is purely additive. |
-| Agent quality regresses vs. the deterministic FSM | The FSM stays authoritative; every tool call is guarded. Three tool errors ⇒ permanent template-mode fallback for that session. |
-| Sonnet 5 cost | KB + persona in a stable prompt prefix for cache hits; cheap tier for extraction; `sessionTokenBudget` made durable (B4.6) so it's a real cap; per-form model override. |
-| Route-splitting the builder loses state across tabs | zustand store provided from the builder `layout.tsx`, above the tab routes. |
-| Rebuilding `chatThemeVars` breaks preview≡production | It's one shared function consumed by both. Change it once; screenshot both surfaces every time. |
-| Scope | Phases are independently shippable. If time runs out, stopping after phase 6 still yields a genuinely better product than today. |
+| Risk                                                 | Mitigation                                                                                                                                                              |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Schema v2 breaks already-published forms             | `form_versions.schema_json` is immutable and read through `migrateFormDoc` on load; never rewritten in place. Migration is purely additive.                             |
+| Agent quality regresses vs. the deterministic FSM    | The FSM stays authoritative; every tool call is guarded. Three tool errors ⇒ permanent template-mode fallback for that session.                                         |
+| Sonnet 5 cost                                        | KB + persona in a stable prompt prefix for cache hits; cheap tier for extraction; `sessionTokenBudget` made durable (B4.6) so it's a real cap; per-form model override. |
+| Route-splitting the builder loses state across tabs  | zustand store provided from the builder `layout.tsx`, above the tab routes.                                                                                             |
+| Rebuilding `chatThemeVars` breaks preview≡production | It's one shared function consumed by both. Change it once; screenshot both surfaces every time.                                                                         |
+| Scope                                                | Phases are independently shippable. If time runs out, stopping after phase 6 still yields a genuinely better product than today.                                        |
 
 ---
 
@@ -595,6 +610,7 @@ Append one line per completed task. This is how a future session knows where exe
 - **P0.4** ✅ Test harness for `apps/api`: vitest 4 + `@cloudflare/vitest-pool-workers` 0.22 running in the real Workers runtime against real bindings and the real drizzle migrations. `tests/tenancy.test.ts` — 15 tests, verified to fail when a guard is removed. Monorepo total 37 tests.
 
 ### Deferred, deliberately
+
 - ~~**Password at rest**~~ — resolved in P1 below.
 
 ---
@@ -604,7 +620,7 @@ Append one line per completed task. This is how a future session knows where exe
 - **S1** ✅ Agent layer on `SettingsDoc.agent`: `model`, `goal`, `successCriteria`, `displayName`, `knowledge[]` (≤20 entries, `KNOWLEDGE_CHAR_BUDGET` 20k, `knowledgeSize()` helper), `guardrails{answerOffTopic,maxTurns,refusalMessage,forbiddenTopics}`. `mode` default flipped `hybrid` → **`ai`** (D1). `password.value` documented and now stored as a PBKDF2 hash.
 - **S2** ✅ `BlockBase` gains `agentHints{askStyle,retryHint,whyWeAsk,examples}`, `coverImageKey`/`coverLayout`/`coverPosition`, `prefillParam` (Youform "auto fill via URL parameter"), and `buttonLabel` on every block — applies to all 26 types.
 - **S3** ✅ `packages/form-schema/src/migrations.ts` — `migrateFormDoc`/`needsMigration`, `SCHEMA_VERSION` 1 → 2. Migration happens **on read, never as a rewrite**: published `form_versions` rows stay byte-identical. Wired into every read path — `routes/forms.ts` (get/publish/doc), `public.ts`, `v1.ts`, `preview.ts`, `ai.ts`, `results.ts` export, and `SessionDO.ensureLoaded`.
-- **S4** ✅ `packages/form-schema/src/extraction.ts` — per-block Zod extraction targets built *from* the block so the model is bounded by the same limits `validateAnswer` enforces, plus `DETERMINISTIC_TYPES` / `OUT_OF_BAND_TYPES` / `needsExtraction()` / `extractionGuidance()`. The `{value, confident, note}` envelope routes low confidence to a clarify turn instead of recording a guess.
+- **S4** ✅ `packages/form-schema/src/extraction.ts` — per-block Zod extraction targets built _from_ the block so the model is bounded by the same limits `validateAnswer` enforces, plus `DETERMINISTIC_TYPES` / `OUT_OF_BAND_TYPES` / `needsExtraction()` / `extractionGuidance()`. The `{value, confident, note}` envelope routes low confidence to a clarify turn instead of recording a guess.
 - **S5** ✅ `tests/schema-v2.test.ts` (17 tests): migration idempotency, future-version safety, every new default materializing, agent config round-trip, knowledge cap, per-block hints, and each extraction schema's accept/reject behavior. `apps/api/tests/schema-migration.test.ts` (4 tests): v1 rows read back as v2, stored rows unchanged by a read, password hashed on save, no double-hashing.
 - **S6** ✅ `openapi.json` regenerated (25 → 31 paths — the committed spec was stale) and orval client regenerated. Fixed the CSV export route's missing `responses`, which was failing orval's spec validation.
 - **Also** ✅ `SessionDO` now persists `invalidCounts` and `sessionTokensUsed` into the session blob. Both were memory-only, so a DO eviction reset the escalation counter (respondent could loop forever on a bad answer) and reset the token budget to zero (`sessionTokenBudget` was not actually a cap).
@@ -655,7 +671,7 @@ Monorepo tests: **58 passing** (was 22 at session start).
   - `f/[slug]` silently fell back to a hardcoded empty `PublicFormConfig` on API failure, so a bad slug rendered a plausible chat that would never ask anything. Now `notFound()`.
   - Bot-bubble border was decided by comparing the theme background to a literal hex; now derived in `chatThemeVars`.
   - Duplicate `inputRef` in the composer removed.
-- **F6.2 missing UX** ✅ Real **progress bar** (`percent` and `steps` — only the percent *text* existed, no bar anywhere); **typing indicator during generation** (previously shown only while connecting); blinking streaming caret; **markdown rendering** with a strict element allowlist (model output is untrusted); **ending CTA** (`ctaLabel`/`ctaUrl` were parsed and never rendered) and **redirect** honoured; resume banner; `aria-live` announcements; reconnect with exponential backoff + jitter and a visible "Reconnecting…" state; inline retry that reconnects the stream instead of reloading the page.
+- **F6.2 missing UX** ✅ Real **progress bar** (`percent` and `steps` — only the percent _text_ existed, no bar anywhere); **typing indicator during generation** (previously shown only while connecting); blinking streaming caret; **markdown rendering** with a strict element allowlist (model output is untrusted); **ending CTA** (`ctaLabel`/`ctaUrl` were parsed and never rendered) and **redirect** honoured; resume banner; `aria-live` announcements; reconnect with exponential backoff + jitter and a visible "Reconnecting…" state; inline retry that reconnects the stream instead of reloading the page.
 - **F6.3 composers** ✅ Every block type now has a real control. Rating uses fill-to-the-left lucide icons instead of emoji; NPS/opinion scales show anchor labels; **date gets a real calendar** with min/max/`disablePast` and quick options (it was a plain text input); **signature gets a real pointer-events pad** (it reused the file uploader, and the recorded shape was one `validateAnswer` rejects outright, so signatures could never succeed); ranking, matrix, contact_info and address get purpose-built composers (all four previously fell through to a text input that could not produce the required shape); payment shows an honest state rather than presenting "coming soon" as the control. Number-key shortcuts for choice lists, 44px touch targets.
 - **Schema** ✅ `toPublicBlock` now projects the fields the runtime needs (`minDate`/`maxDate`/`disablePast`, `url`, `drawnNameRequired`, number bounds, selection bounds, `allowOther`). `toPublicConfig` projects `settings.meta` — the hosted form previously had **no OG tags at all**, so every share preview was blank — plus the agent's display name.
 - **Verified E2E over HTTP**: session create → SSE greeting → conversational question → answer accepted → `answer_recorded` at 50% → contextual next question referencing the actual answer. `/f/<slug>` returns a real title and OG tags; an unknown slug 404s.
@@ -676,13 +692,13 @@ Monorepo tests: **58 passing** (was 22 at session start).
 
 ### Verified end to end against the running stack
 
-| Check | Result |
-|---|---|
-| Agent adopts persona + goal | "Great, glad to have you here! 🎉 To kick things off, what's your email address?" |
+| Check                                                                   | Result                                                                                                                                                                                                     |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent adopts persona + goal                                             | "Great, glad to have you here! 🎉 To kick things off, what's your email address?"                                                                                                                          |
 | **Answers an off-topic question from the KB, then returns to the form** | "Pro is $29/month, or $240/year if billed annually — that includes 1,000 responses/month, the AI agent, and no chatform branding. 😊 … Oops, that email didn't quite look right — could you double-check…" |
-| Free-text extraction | "we are about a dozen people right now" → stored as `12` with `value_number = 12` |
-| Model tiering | `ai_generations` shows `interview_turn` on `anthropic/claude-sonnet-5`, `extraction` on `openai/gpt-4o-mini`, with real latencies |
-| Full completion | `answer_recorded` 50% → 100% → `complete` with a submission id |
+| Free-text extraction                                                    | "we are about a dozen people right now" → stored as `12` with `value_number = 12`                                                                                                                          |
+| Model tiering                                                           | `ai_generations` shows `interview_turn` on `anthropic/claude-sonnet-5`, `extraction` on `openai/gpt-4o-mini`, with real latencies                                                                          |
+| Full completion                                                         | `answer_recorded` 50% → 100% → `complete` with a submission id                                                                                                                                             |
 
 The middle row is the acceptance test for the entire product thesis, and it is the thing Youform structurally cannot do.
 
@@ -699,12 +715,12 @@ The middle row is the acceptance test for the entire product thesis, and it is t
 
 ### Bugs found by actually using it
 
-| Bug | Cause | Fix |
-|---|---|---|
+| Bug                                                                     | Cause                                                                                                                                                                                                                        | Fix                                                                                                       |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Results showed "No responses yet" while the dashboard counted responses | `/api/forms/:id/submissions` 500'd. Moving the status filter off string interpolation mixed `?` and `?1`; SQLite renumbers `?` from the highest explicit index, so the statement wanted two bindings and three were supplied | All-positional placeholders; `tests/results.test.ts` added (the tenancy suite only asserted the 404 path) |
-| Agent answered with scripted fallback instead of the knowledge base | A tool call ends a step in AI SDK v7; without `stopWhen` the turn ended having said nothing | `stopWhen: stepCountIs(4)` |
-| Every extraction call returned 400 | An optional `note` in the envelope is rejected by strict structured output | Nullable-and-required |
-| Hand-written QR produced unscannable codes | Structurally valid but undecodable matrices | Replaced with `qrcode-generator`; `tests/qr.test.ts` round-trips through a real scanner |
+| Agent answered with scripted fallback instead of the knowledge base     | A tool call ends a step in AI SDK v7; without `stopWhen` the turn ended having said nothing                                                                                                                                  | `stopWhen: stepCountIs(4)`                                                                                |
+| Every extraction call returned 400                                      | An optional `note` in the envelope is rejected by strict structured output                                                                                                                                                   | Nullable-and-required                                                                                     |
+| Hand-written QR produced unscannable codes                              | Structurally valid but undecodable matrices                                                                                                                                                                                  | Replaced with `qrcode-generator`; `tests/qr.test.ts` round-trips through a real scanner                   |
 
 Test totals: **68 passing** (39 form-schema, 24 api, 5 web) — from 22 in one package at session start. `apps/web` had no test runner at all.
 
@@ -726,14 +742,14 @@ Driven by side-by-side comparison with Youform.
 
 **Question media.** New `BlockMedia` on every block — an image, a short video, or a downloadable file — with a `v2 → v3` migration folding the old image-only `coverImageKey`/`coverLayout`/`coverPosition` triple into it. New `POST /api/assets` (org-scoped, MIME-allowlisted, 25 MB) and `GET /p/assets/:id` for public serving; SVG stays off the allowlist so no uploaded asset can execute script.
 
-**Verbatim questions.** `settings.agent.rephraseQuestions` (default on). Off, the FSM emits the question text itself and the model is told not to ask it — so the exact wording is *guaranteed*, not merely requested. Matters for compliance and research instruments. Covered by `tests/agent-prompts.test.ts`.
+**Verbatim questions.** `settings.agent.rephraseQuestions` (default on). Off, the FSM emits the question text itself and the model is told not to ask it — so the exact wording is _guaranteed_, not merely requested. Matters for compliance and research instruments. Covered by `tests/agent-prompts.test.ts`.
 
 **Less text.** Explanatory subtext stripped from the inspector — only two hints survive, both about ISO date format. Section descriptions removed. Left-hand rows wrap to two lines instead of truncating after three words.
 
 ### Bugs found while testing this pass
 
-| Bug | Cause | Fix |
-|---|---|---|
+| Bug                                              | Cause                                                                                                                                                                                                               | Fix                                    |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
 | `POST /api/ai/add-blocks` 500'd on every request | `GenerationDraft.scale` required `min(2)`, but strict structured output forces the model to send the field for every block, and it sends `0` for non-scale types — one irrelevant field failed the whole generation | Accept `0–20`, clamp in the normalizer |
 
 Test totals: **75 passing** (40 form-schema, 30 api, 5 web).
@@ -752,7 +768,7 @@ Test totals: **75 passing** (40 form-schema, 30 api, 5 web).
 
 **Flow canvas.** Removed the permanent "How respondents move between questions" pill. The minimap now fades in while you pan, zoom or drag and fades out ~1.4s after you stop, instead of parking a panel in the corner forever.
 
-**One inspector, finally.** The Flow view had its own `BlockInspector` covering a *different, smaller* set of fields than the Questions view — the same block offered different settings depending on which view you opened it from. This was flagged as F4.1 in the plan and is now fixed: both views render the same component, and canvas selection syncs into the builder store so the selected block survives switching between views.
+**One inspector, finally.** The Flow view had its own `BlockInspector` covering a _different, smaller_ set of fields than the Questions view — the same block offered different settings depending on which view you opened it from. This was flagged as F4.1 in the plan and is now fixed: both views render the same component, and canvas selection syncs into the builder store so the selected block survives switching between views.
 
 Test totals: **75 passing.**
 
@@ -762,9 +778,9 @@ Test totals: **75 passing.**
 
 ### The agent was recording questions as answers
 
-Reported: the agent asked for a name, the respondent asked *"I'm actually a bit confused what this form is for?"*, and the agent answered — then asked for the **email**, silently skipping the name.
+Reported: the agent asked for a name, the respondent asked _"I'm actually a bit confused what this form is for?"_, and the agent answered — then asked for the **email**, silently skipping the name.
 
-Cause: `validateAnswer` accepts any non-empty string for `short_text`/`long_text`, so the FSM recorded *"I'm actually a bit confused what this form is for?"* **as the respondent's name** and advanced. Validation cannot tell an answer from a question, because both are valid strings.
+Cause: `validateAnswer` accepts any non-empty string for `short_text`/`long_text`, so the FSM recorded _"I'm actually a bit confused what this form is for?"_ **as the respondent's name** and advanced. Validation cannot tell an answer from a question, because both are valid strings.
 
 Fix: in AI mode the FSM no longer auto-records for block types where validation cannot decide. The agent gets the turn and records via `record_answer` — which is what the toolset was built for and was being bypassed. The deterministic path still covers template mode, degraded sessions, and any turn the model fails. Exact-match types (choices, yes/no, scales) stay deterministic and instant.
 
@@ -774,11 +790,11 @@ Then widened: the gate now also covers every type that needed extraction, and th
 
 Reported as far too slow. Three compounding causes, all now fixed:
 
-| Cause | Fix |
-|---|---|
-| Interview ran on `anthropic/claude-sonnet-5` | → `google/gemini-3.7-flash` (user's suggestion; ~5× cheaper, supports tools + structured outputs — verified against OpenRouter's live model list rather than assumed) |
-| **Reasoning tokens ate the whole reply budget.** At `responseMaxTokens: 400` the model spent all 576 output tokens thinking, emitted *no visible text*, so the turn was scored a failure and fell back to scripted phrasing — after ~19s | Reasoning capped at `effort: "minimal"`, excluded from the stream, and given `REASONING_HEADROOM_TOKENS` on top of the author's setting so it can never starve the reply. Reasoning **cannot** be disabled — the API answers `enabled: false` with *"Reasoning is mandatory for this endpoint and cannot be disabled"* |
-| Recording an answer fired **two** sequential model calls — one to interpret, one to ask the next question — which also produced the acknowledgement twice | One turn now records *and* asks; `suppressNextAsk` stops `advanceTo` firing a second |
+| Cause                                                                                                                                                                                                                                    | Fix                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Interview ran on `anthropic/claude-sonnet-5`                                                                                                                                                                                             | → `google/gemini-3.7-flash` (user's suggestion; ~5× cheaper, supports tools + structured outputs — verified against OpenRouter's live model list rather than assumed)                                                                                                                                                  |
+| **Reasoning tokens ate the whole reply budget.** At `responseMaxTokens: 400` the model spent all 576 output tokens thinking, emitted _no visible text_, so the turn was scored a failure and fell back to scripted phrasing — after ~19s | Reasoning capped at `effort: "minimal"`, excluded from the stream, and given `REASONING_HEADROOM_TOKENS` on top of the author's setting so it can never starve the reply. Reasoning **cannot** be disabled — the API answers `enabled: false` with _"Reasoning is mandatory for this endpoint and cannot be disabled"_ |
+| Recording an answer fired **two** sequential model calls — one to interpret, one to ask the next question — which also produced the acknowledgement twice                                                                                | One turn now records _and_ asks; `suppressNextAsk` stops `advanceTo` firing a second                                                                                                                                                                                                                                   |
 
 Output tokens per turn: **576 → ~90**. Typical turn: **~19s → 2–5s**. Occasional outliers remain (one 14s turn with an 859-token prompt and 25 output tokens) — that is OpenRouter routing variance, not our path.
 
@@ -788,17 +804,17 @@ Model tiers now: interview `google/gemini-3.7-flash`, extraction `google/gemini-
 
 ## Phase 11 — respondent experience
 
-**Auto-scroll fixed.** The chat container used `min-h-svh`, so it grew past the viewport and the *window* scrolled while `scrollRef` never did — auto-scroll silently did nothing, and `scrollIntoView` parked the anchor behind the sticky composer. Now `h-svh` with the container scrolled directly.
+**Auto-scroll fixed.** The chat container used `min-h-svh`, so it grew past the viewport and the _window_ scrolled while `scrollRef` never did — auto-scroll silently did nothing, and `scrollIntoView` parked the anchor behind the sticky composer. Now `h-svh` with the container scrolled directly.
 
-**The composer is always a text box.** Chips used to *replace* the input, which said "you may only click". Question controls moved into the thread under the agent's message as an offer (`question-affordance.tsx`); the input stays. Either route works — tap a chip, or type "weekly I guess" / "4 stars" and let the agent read it. Placeholders nudge that typing is allowed.
+**The composer is always a text box.** Chips used to _replace_ the input, which said "you may only click". Question controls moved into the thread under the agent's message as an offer (`question-affordance.tsx`); the input stays. Either route works — tap a chip, or type "weekly I guess" / "4 stars" and let the agent read it. Placeholders nudge that typing is allowed.
 
 **Free text is matched, then interpreted.** Exact matching runs first (free, instant, cannot invent an option). Only when it fails does the agent take the turn — so clean input stays fast and messy input still works.
 
-**Answering and asking in one breath.** *"Nothing else. And also, do I get any offers for this?"* recorded the answer and ignored the question. The turn objective now explicitly handles messages containing both: record what answers, reply to what asks, then move on. Verified: *"about a dozen. also, when do I get access if I sign up?"* → recorded `12` **and** answered from the knowledge base.
+**Answering and asking in one breath.** _"Nothing else. And also, do I get any offers for this?"_ recorded the answer and ignored the question. The turn objective now explicitly handles messages containing both: record what answers, reply to what asks, then move on. Verified: _"about a dozen. also, when do I get access if I sign up?"_ → recorded `12` **and** answered from the knowledge base.
 
 **No more empty bubbles.** A turn that spent itself on tool calls emitted an empty bubble followed by a raw block title. The bubble now opens lazily on the first token.
 
-**Upload errors say what to do.** "Over 10MB" became *"This one is 14.2 MB — the limit is 10MB. Try a smaller version, or a screenshot instead."* Wrong file types name the accepted formats. MIME types are translated to human words, errors are dismissible, and the row is tinted rather than crushing the message to the right.
+**Upload errors say what to do.** "Over 10MB" became _"This one is 14.2 MB — the limit is 10MB. Try a smaller version, or a screenshot instead."_ Wrong file types name the accepted formats. MIME types are translated to human words, errors are dismissible, and the row is tinted rather than crushing the message to the right.
 
 **Completion lands.** A small grey card became a confetti burst in the form's own colours, a large thank-you, and the CTA. Skipped under `prefers-reduced-motion`.
 
@@ -814,7 +830,7 @@ Test totals: **75 passing.**
 
 ## Phase 12 — flow layout, the third block list, and the design sheet
 
-**Dead space above the panels.** On the Flow view the toolbar spanned the full width *above* the editor, so both the library and the details panel started below it. It is now handed to the editor and rendered above the canvas column only — between the two panels, exactly where it sits on the Questions view.
+**Dead space above the panels.** On the Flow view the toolbar spanned the full width _above_ the editor, so both the library and the details panel started below it. It is now handed to the editor and rendered above the canvas column only — between the two panels, exactly where it sits on the Questions view.
 
 **Duplicate "DETAILS" chrome.** The panel had its own header bar above an inspector that already shows type, ref and delete. Removed; only the collapse control remains, floated. The negative-margin hack compensating for the two paddings went with it.
 
@@ -842,7 +858,7 @@ Verified: typing a brand name updates the preview live and autosaves.
 
 The conversation used to end itself: the last answer resolved an ending and the submission was written before the respondent had any say. There is now a **review step** — `settings.onComplete.requireSubmit`, on by default. Every answer is listed with a pencil to change it, and a **Submit form** button (never "Send") is what completes the response. Hovering any earlier answer in the thread offers the same re-answer, which retracts the answer, un-projects it, and rewinds progress.
 
-Returning to a form already answered on that device shows **"You've already answered this"** with *View my answers* and *Resubmit*, instead of silently opening a second empty session.
+Returning to a form already answered on that device shows **"You've already answered this"** with _View my answers_ and _Resubmit_, instead of silently opening a second empty session.
 
 **Bug found on the way:** `migrateFormDoc(...)` was being cast `as FormDoc` at seven call sites instead of parsed, so Zod defaults never materialized and any field added after a version was published came back `undefined` — `requireSubmit` and `duplicates` were missing from every public config for exactly this reason. `readFormDoc` / `safeReadFormDoc` parse; the casts are gone. Three regression tests.
 
@@ -859,7 +875,7 @@ Two decisions shaped the implementation:
 
 **Phone** — one entry, `provider: "phone"` with the E.164 number as the subject.
 
-*Firebase* sends the SMS and checks the code in the browser; we verify the ID token it returns (`verifyFirebasePhoneToken`) and never touch the message. That is the point of it — no rented number, no Indian DLT registration, no per-message bill, and no SMS provider of ours anywhere in the product. Verification is the Google ID token checks plus two that are specific to Firebase and easy to omit: `sign_in_provider` must be `"phone"`, since every other method enabled on the project is signed by the same key and would otherwise be accepted as a proven number, and `phone_number` must be present. `iss` and `aud` are both derived from `FIREBASE_PROJECT_ID`, which is the entire tenant boundary.
+_Firebase_ sends the SMS and checks the code in the browser; we verify the ID token it returns (`verifyFirebasePhoneToken`) and never touch the message. That is the point of it — no rented number, no Indian DLT registration, no per-message bill, and no SMS provider of ours anywhere in the product. Verification is the Google ID token checks plus two that are specific to Firebase and easy to omit: `sign_in_provider` must be `"phone"`, since every other method enabled on the project is signed by the same key and would otherwise be accepted as a proven number, and `phone_number` must be present. `iss` and `aud` are both derived from `FIREBASE_PROJECT_ID`, which is the entire tenant boundary.
 
 It is a browser flow with a reCAPTCHA step, so a `/v1` caller runs the same flow in their own page and posts the token to `auth/phone/token`. With `NEXT_PUBLIC_FIREBASE_*` unset there is nothing to fall back to and the card says phone verification is unavailable — which is the honest answer, since no number can be proved without it.
 
@@ -889,21 +905,21 @@ A settings-by-settings sweep of every field in `SettingsDoc` against the code th
 
 `public.ts` read `form_versions.settings_json`. **No write path has ever populated that column**: the doc PUT writes `working_schema` only, and publish copies the NULLs forward. So the parsed settings were always `{}` and every check passed unconditionally.
 
-| Setting | Was | Now |
-|---|---|---|
-| `password` | **Anyone could open a protected form** | Verified against the published doc |
-| `captcha` | Never ran | Runs |
-| `closeRules.closeAt` | Did nothing | Closes the form |
-| `closeRules.maxSubmissions` | Never implemented | Counts completed responses |
-| `closeRules.closedMessageMd` | Read under the wrong key (`settings.closedMessage`) | Shown when closed |
-| `branding.hidePoweredBy` | Always false — paid users could not remove branding | Honoured |
+| Setting                      | Was                                                 | Now                                |
+| ---------------------------- | --------------------------------------------------- | ---------------------------------- |
+| `password`                   | **Anyone could open a protected form**              | Verified against the published doc |
+| `captcha`                    | Never ran                                           | Runs                               |
+| `closeRules.closeAt`         | Did nothing                                         | Closes the form                    |
+| `closeRules.maxSubmissions`  | Never implemented                                   | Counts completed responses         |
+| `closeRules.closedMessageMd` | Read under the wrong key (`settings.closedMessage`) | Shown when closed                  |
+| `branding.hidePoweredBy`     | Always false — paid users could not remove branding | Honoured                           |
 
 Eight tests cover these, each publishing with `settings_json` NULL exactly as a real publish writes it, so a gate that only works on a populated column fails them.
 
 ### Other settings that did nothing
 
 - **`duplicates.strategy`** — offered in the builder, enforced nowhere. `ip_daily` now 409s a repeat, scoped to a day: an IP is a network, not a person, and an office behind one address would otherwise be locked out by whoever answered first. `requireAuth.onePerIdentity` remains the version that actually holds.
-- **`onComplete.redirectUrl` / `delaySec`** — the client only ever reads the *ending's* redirect. Now the default beneath a per-ending value, which also meant projecting through `toPublicEnding` in the DO, where the raw stored ending was being emitted complete with its internal id.
+- **`onComplete.redirectUrl` / `delaySec`** — the client only ever reads the _ending's_ redirect. Now the default beneath a per-ending value, which also meant projecting through `toPublicEnding` in the DO, where the raw stored ending was being emitted complete with its internal id.
 - **`meta.ogImageKey`** — `toPublicConfig` takes an `assetUrl` resolver and `public.ts` never passed one. Every share card was blank whatever you uploaded.
 - **Builder asset uploads** — `POST /assets` replied with `url: /p/assets/<id>` and **no route served that path**. Every logo, cover image, and social preview 404'd the moment the dialog closed. The route exists now; SVG is never served inline.
 - **Embed side-tab** — the Share tab offered four modes and `embed.js` read no mode at all, so a side-tab snippet produced a popup.
@@ -934,8 +950,8 @@ Test totals: **53 form-schema · 75 api · 5 web.**
 
 ## Phase 16 — the marketing site
 
-`F9`'s last open item: *"Landing `/` — the only real server component with content, and it
-**never shows the product**."* It was 118 lines — a nav, a centred hero, six identical icon
+`F9`'s last open item: _"Landing `/` — the only real server component with content, and it
+**never shows the product**."_ It was 118 lines — a nav, a centred hero, six identical icon
 cards, a three-step strip and a one-line footer. No pricing, no comparison, no motion, no
 mobile menu, no dark-mode control, and `text-white` on two orange chips, which is invisible in
 the dark theme where `--primary-foreground` is dark ink.
@@ -983,12 +999,12 @@ the rules and the re-check date.
 
 ### Bugs found while building it
 
-| Bug | Cause | Fix |
-|---|---|---|
-| Hydration mismatch on every reduced-motion visit — React discarded the tree and rebuilt it | `useReducedMotion()` is a browser-only reading used to *branch the render*. `FlowPreview` dropped `initial` under reduced motion, so the server wrote `pathLength`/`stroke-dasharray` onto four paths and the client wrote none. `Reveal` had the same shape | Same element and attributes in both passes; only the **transition** varies, and a transition never reaches the server HTML. New `usePrefersReducedMotion` (`useSyncExternalStore`, `false` server snapshot) replaces motion's hook, and `MarketingMotionConfig` turns motion's own half-degradation off so the decision is ours |
-| A conditional hook, introduced fixing the above | `useReducedMotion() === true && useHydrated()` short-circuits the second hook | Both called unconditionally |
-| The hero rendered an empty chat box for ~1s | The demo started from nothing and waited on the intersection callback plus typing dots | The first turn is seeded complete, so it is in the server HTML too. Messages also grow from the bottom now, as they do in the real chat |
-| Ten soft-fill pairings would have shipped with the wrong ink | Written before `--x-soft-foreground` landed | Repaired against the new token |
+| Bug                                                                                        | Cause                                                                                                                                                                                                                                                        | Fix                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hydration mismatch on every reduced-motion visit — React discarded the tree and rebuilt it | `useReducedMotion()` is a browser-only reading used to _branch the render_. `FlowPreview` dropped `initial` under reduced motion, so the server wrote `pathLength`/`stroke-dasharray` onto four paths and the client wrote none. `Reveal` had the same shape | Same element and attributes in both passes; only the **transition** varies, and a transition never reaches the server HTML. New `usePrefersReducedMotion` (`useSyncExternalStore`, `false` server snapshot) replaces motion's hook, and `MarketingMotionConfig` turns motion's own half-degradation off so the decision is ours |
+| A conditional hook, introduced fixing the above                                            | `useReducedMotion() === true && useHydrated()` short-circuits the second hook                                                                                                                                                                                | Both called unconditionally                                                                                                                                                                                                                                                                                                     |
+| The hero rendered an empty chat box for ~1s                                                | The demo started from nothing and waited on the intersection callback plus typing dots                                                                                                                                                                       | The first turn is seeded complete, so it is in the server HTML too. Messages also grow from the bottom now, as they do in the real chat                                                                                                                                                                                         |
+| Ten soft-fill pairings would have shipped with the wrong ink                               | Written before `--x-soft-foreground` landed                                                                                                                                                                                                                  | Repaired against the new token                                                                                                                                                                                                                                                                                                  |
 
 Also: `public/` held nothing but the five untouched Next starter SVGs, so every share of this
 site previewed blank. There is a real mark now (`components/brand/logo.tsx`, `public/logo.svg`,

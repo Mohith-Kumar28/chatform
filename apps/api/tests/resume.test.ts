@@ -255,6 +255,43 @@ describe("resuming a response the form has since outgrown", () => {
     await publish();
   });
 
+  /**
+   * What a returning respondent actually wants back is the thread.
+   *
+   * The summary line this replaces — "you'd already answered 2 questions" —
+   * asked them to take the form's word for what they had said. The questions
+   * and their answers, printed as ordinary chat, are the same information in
+   * the form they already know how to read, and each answer arrives carrying
+   * its `blockRef`, which is what puts "change this answer" on the bubble.
+   */
+  it("replays the earlier questions and answers as ordinary chat", async () => {
+    await publish();
+    await seedAbandoned("sbm_resume23");
+    const res = await open({ resumeToken: await token("sbm_resume23") });
+    const { sessionId } = (await res.json()) as { sessionId: string };
+    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+    const frames = await readFrames(await stub.stream());
+
+    // The thread reads exactly as it did before they left, with the question
+    // they stopped on at the bottom of it.
+    const said = frames.filter((f) => f.event === "token").map((f) => (f.data as { delta: string }).delta);
+    expect(said).toEqual(["Your name?", "Your email?", "Team size?"]);
+
+    const answers = frames
+      .filter((f) => f.event === "user_message")
+      .map((f) => f.data as { text: string; blockRef: string });
+    expect(answers).toEqual([
+      { messageId: expect.any(String), text: "Maya", blockRef: "q_name" },
+      { messageId: expect.any(String), text: "maya@northwind.example", blockRef: "q_email" },
+    ]);
+
+    // No banner, no count, no "welcome back" — and the conversation is sitting
+    // on the question they actually stopped on, under the replayed thread.
+    expect(JSON.stringify(frames)).not.toContain("Welcome back");
+    const question = frames.findLast((f) => f.event === "question");
+    expect((question?.data as { block: { ref: string } }).block.ref).toBe("q_team");
+  });
+
   it("greets them as a new arrival rather than welcoming them back", async () => {
     // Republished without the gate, so what is under test is the greeting and
     // not whatever the previous test left in `settings`.
@@ -538,4 +575,29 @@ async function readReady(res: Response): Promise<{ identity: unknown }> {
     await reader.cancel().catch(() => {});
   }
   throw new Error("no session_ready frame arrived");
+}
+
+/** Every frame the stream replays on connect, up to the readiness signal. */
+async function readFrames(res: Response): Promise<{ event: string; data: unknown }[]> {
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  try {
+    for (let i = 0; i < 50; i++) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      if (buf.includes("event: session_ready")) break;
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  return buf
+    .split("\n\n")
+    .map((frame) => {
+      const event = frame.split("\n").find((l) => l.startsWith("event: "))?.slice(7);
+      const data = frame.split("\n").find((l) => l.startsWith("data: "))?.slice(6);
+      return event && data ? { event, data: JSON.parse(data) as unknown } : null;
+    })
+    .filter((f): f is { event: string; data: unknown } => f !== null && f.event !== "session_ready");
 }

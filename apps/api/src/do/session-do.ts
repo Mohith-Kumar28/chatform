@@ -29,7 +29,7 @@ import {
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { ServerEvent, SSEEnvelope } from "../lib/events.js";
-import { asideText, clarifyText, closingText, codeExpectedText, codeSentText, codeVerifiedText, escalateText, greeting, looksLikeQuestion, questionText, resumeGreeting, transitionAck } from "../lib/phrasing.js";
+import { asideText, clarifyText, closingText, codeExpectedText, codeSentText, codeVerifiedText, escalateText, greeting, looksLikeQuestion, questionText, transitionAck } from "../lib/phrasing.js";
 import {
   chatModel,
   interviewModel,
@@ -353,6 +353,16 @@ export class SessionDO extends DurableObject<Bindings> {
   private loaded = false;
   /** This conversation continues a response somebody abandoned. */
   private resumed = false;
+  /**
+   * Whether the carried-over questions and answers have been put on the stream.
+   *
+   * In memory only, and that is enough: the replay and the question that
+   * follows it happen inside one request, so there is no eviction to survive.
+   * It exists because two paths can reach it — a resume link, and a sign-in
+   * that adopts the response at the door — and a respondent who came back must
+   * not watch their own transcript print twice.
+   */
+  private historyReplayed = false;
   private encoder = new TextEncoder();
   /**
    * Every token this session has spent: the org meter, and the backstop.
@@ -507,16 +517,17 @@ export class SessionDO extends DurableObject<Bindings> {
     }
 
     await this.persistMeta();
-    await this.appendMessage(
-      "assistant",
-      /*
-       * A resume that carried nothing over is a fresh start, and is greeted as
-       * one. "Let's pick up where you left off" in front of question one, with
-       * the progress bar reading 0%, describes a conversation that did not
-       * happen — see `liveAnswerCount`.
-       */
-      params.resume && this.collectedCount > 0 ? resumeGreeting(this.doc, this.collectedCount) : greeting(this.doc),
-    );
+    /*
+     * The same opening line whether or not anything was carried over.
+     *
+     * A resumed conversation used to be met with "Welcome back — you'd already
+     * answered 6 questions", which is a summary of a conversation standing in
+     * for the conversation itself. What a respondent expects on coming back is
+     * the thread they left: the questions, their answers, and the next question
+     * under them — exactly what they see after a refresh. `replayAnswerHistory`
+     * puts that thread back, so nothing here has to describe it.
+     */
+    await this.appendMessage("assistant", greeting(this.doc));
     await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
 
     // Sign-in comes before the first question, not after it. Asking someone to
@@ -552,6 +563,7 @@ export class SessionDO extends DurableObject<Bindings> {
        */
       const { state, cursor } = replayState(this.doc, this.state.answers, this.state.hidden);
       this.state.variables = state.variables;
+      await this.replayAnswerHistory();
       await this.advanceTo(cursor);
       return;
     }
@@ -691,9 +703,11 @@ export class SessionDO extends DurableObject<Bindings> {
       this.collectedCount = this.liveAnswerCount(resume.answers);
       this.resumed = true;
       await this.persistMeta();
-      if (this.collectedCount > 0) {
-        await this.emitMessage(resumeGreeting(this.doc, this.collectedCount));
-      }
+      // The thread they left, not a sentence about it. `beginInterview` below
+      // would replay it anyway; doing it here as well costs nothing, because
+      // the replay only ever runs once, and covers the branches that reach a
+      // question without going through `beginInterview` at all.
+      await this.replayAnswerHistory();
     }
 
     /**
@@ -1782,6 +1796,74 @@ export class SessionDO extends DurableObject<Bindings> {
     if (buf) await this.emit("token", { messageId, delta: buf });
     await this.emit("message_end", { messageId });
     return messageId;
+  }
+
+  /**
+   * Put a message on the stream whole, without the token-by-token reveal.
+   *
+   * `emitMessage` streams because the respondent is watching a sentence being
+   * written. History is not being written now — it was written on a previous
+   * visit — so it arrives complete, the way the rest of the thread does after
+   * a reload. One `token` frame collapses into the closing frame the same way
+   * fifty do, so replay after a reconnect is unaffected.
+   */
+  private async emitHistoryMessage(text: string): Promise<void> {
+    const messageId = crypto.randomUUID();
+    await this.emit("message_start", { messageId, role: "assistant" });
+    await this.emit("token", { messageId, delta: text });
+    await this.emit("message_end", { messageId });
+  }
+
+  /**
+   * Print the conversation they already had, as the conversation they had.
+   *
+   * A returning respondent gets the thread back — each question, their answer
+   * under it, the next question at the bottom — because that is what coming
+   * back to a chat means, and it is exactly what a refresh mid-form already
+   * shows. The alternative this replaces, a line counting the questions they
+   * had answered, asked them to take the form's word for what they had said
+   * and gave them nothing to check it against or to edit.
+   *
+   * Walks `replayState`'s path rather than the answer map, so the questions
+   * appear in the order they were asked, branches nobody took stay unasked,
+   * and answers left off-path by a later edit stay off the screen.
+   *
+   * Streamed, never appended to the transcript. These messages are already
+   * recorded against the response by the session that first asked them, and
+   * `results` stitches every session of a response together in time order — so
+   * writing them again would show the author each early question twice.
+   */
+  private async replayAnswerHistory(): Promise<void> {
+    if (!this.doc || this.historyReplayed) return;
+    this.historyReplayed = true;
+    const { path } = replayState(this.doc, this.state.answers, this.state.hidden);
+    for (const ref of path) {
+      const block = this.doc.blocks.find((b) => b.ref === ref);
+      if (!block) continue;
+      // Collects nothing, so it was read and walked past. It belongs in the
+      // thread — it is what the flow said between two questions — but it has
+      // no answer to put under it.
+      if (block.type === "welcome" || block.type === "statement") {
+        await this.emitHistoryMessage(questionText(block));
+        continue;
+      }
+      const value = this.state.answers[ref];
+      // The block the flow is waiting on. `advanceTo` asks it next, with its
+      // controls; printing it here would ask it twice.
+      if (value === undefined) break;
+      await this.emitHistoryMessage(questionText(block));
+      /*
+       * `blockRef` is what puts "change this answer" on the bubble: the client
+       * reads it straight off `user_message`. A replayed answer is editable for
+       * the same reason a live one is — it is on the path, and the response is
+       * still open.
+       */
+      await this.emit("user_message", {
+        messageId: `msg_${crypto.randomUUID().slice(0, 12)}`,
+        text: summarizeAnswer(block, value),
+        blockRef: block.ref,
+      });
+    }
   }
 
   // ────────────────────────── turns ──────────────────────────

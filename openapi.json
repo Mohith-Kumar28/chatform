@@ -450,6 +450,16 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "timeToValueMs": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -462,7 +472,8 @@
                     "mrrSeries",
                     "cohorts",
                     "actionCounts",
-                    "formStatsAsOf"
+                    "formStatsAsOf",
+                    "timeToValueMs"
                   ]
                 }
               }
@@ -677,6 +688,7 @@
               "enum": [
                 "created_form",
                 "published",
+                "form_opened",
                 "first_response",
                 "ten_responses",
                 "paid",

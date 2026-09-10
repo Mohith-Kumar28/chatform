@@ -18,14 +18,18 @@ import { cn } from "@/lib/utils";
  * shows AI cost next to signups, and a cost tile that turns green as it climbs
  * is worse than no colour at all.
  *
- * **The movement is a percentage; the window is a tooltip.** "+13 vs prev 30
- * days" spent most of the line restating the range picker sitting above it, so
- * the line now carries the figure alone and the comparison is named on hover.
+ * **The movement is a percentage; the window and the raw move are a tooltip.**
+ * "+13 vs prev 30 days" spent most of the line restating the range picker
+ * sitting above it, so the line carries the percentage alone and the hover
+ * carries both the absolute move and what it is measured against.
  *
- * **A move from a zero baseline is not a percentage.** "+∞%" and "+100%" are
- * both nonsense when last period was zero, so those tiles — and on a young
- * product that is most of them — print the move itself, "+12". A percentage
- * appears the moment there is a previous period to divide by. See `deltaLabel`.
+ * **Every tile's line is the same kind of figure**, including a tile whose
+ * previous period was zero — that reads as +100%, the whole of it having
+ * arrived in this period. Printing the raw move there instead made the row
+ * unreadable across: on a young product nearly every baseline is zero, so
+ * "+13" beside "+40%" was the common case rather than the edge one, and the
+ * "+13" only repeated the 13 already set above it in larger type. See
+ * `deltaLabel`.
  */
 export function KpiTile({
   label,

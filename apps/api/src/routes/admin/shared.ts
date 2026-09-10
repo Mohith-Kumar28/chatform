@@ -102,8 +102,28 @@ export const HAS_PUBLISHED = `
                   OR EXISTS (SELECT 1 FROM form_versions v WHERE v.form_id = f.id AND v.published_at IS NOT NULL)))`;
 
 /**
- * How far an organization got: 0 nothing, 1 built, 2 published, 3 collecting,
- * 4 collecting properly, 5 paying. Correlates on an outer `o`.
+ * Somebody who is not the account owner has opened one of its forms. Correlates
+ * on `o`.
+ *
+ * The step that separates the two failures a publish can lead to. An account
+ * that published and was never opened has a *distribution* problem — the link
+ * went nowhere, or nowhere anybody was. An account that was opened and got no
+ * response has a *form* problem: the first question is too much, the chat did
+ * not load, the thing asks for a phone number on line one. Those want opposite
+ * emails, and without this row they are one indistinguishable drop.
+ *
+ * `chat_sessions` rather than a view counter because a session is the durable
+ * record of a real, non-test respondent arriving — behind
+ * `idx_chat_sessions_org_created`, which the live tile added.
+ */
+export const HAS_BEEN_OPENED = `
+  EXISTS (SELECT 1 FROM chat_sessions cs
+           WHERE cs.organization_id = o.id AND cs.is_test = 0)`;
+
+/**
+ * How far an organization got: 0 nothing, 1 built, 2 published, 3 opened by
+ * somebody, 4 collecting, 5 collecting properly, 6 paying. Correlates on an
+ * outer `o`.
  *
  * The single definition behind both the activation funnel and the account
  * cohorts, and it has to be single or the two disagree in the most damaging
@@ -120,24 +140,35 @@ export const HAS_PUBLISHED = `
 export const STAGE_OF_ORG = `
   CASE
     WHEN EXISTS (SELECT 1 FROM subscriptions s WHERE s.organization_id = o.id
-                  AND s.status IN ('active','trialing') AND ${NOT_COMPED}) THEN 5
+                  AND s.status IN ('active','trialing') AND ${NOT_COMPED}) THEN 6
     WHEN (SELECT COUNT(*) FROM submissions s
-           WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed') >= 10 THEN 4
+           WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed') >= 10 THEN 5
     WHEN (SELECT COUNT(*) FROM submissions s
-           WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed') >= 1 THEN 3
+           WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed') >= 1 THEN 4
+    WHEN ${HAS_BEEN_OPENED} THEN 3
     WHEN ${HAS_PUBLISHED} THEN 2
     WHEN EXISTS (SELECT 1 FROM forms f WHERE f.organization_id = o.id AND f.deleted_at IS NULL) THEN 1
     ELSE 0
   END`;
 
-/** The funnel's steps, and the stage each one means. Read cumulatively. */
+/**
+ * The funnel's steps, and the stage each one means. Read cumulatively.
+ *
+ * Ordered so that each row is a *different question about the same account*,
+ * and no two rows can be answered by the same fix. That is the test a step has
+ * to pass to earn a row: "Someone opened it" earns one because publishing and
+ * being visited fail for opposite reasons; "verified their email" would not,
+ * because nothing downstream is reachable without it and the row would print
+ * 100% forever.
+ */
 export const FUNNEL_STAGES = [
   ["signed_up", "Signed up", 0],
   ["created_form", "Created a form", 1],
   ["published", "Published it", 2],
-  ["first_response", "First response", 3],
-  ["ten_responses", "10 responses", 4],
-  ["paid", "Paid", 5],
+  ["form_opened", "Someone opened it", 3],
+  ["first_response", "First response", 4],
+  ["ten_responses", "10 responses", 5],
+  ["paid", "Paid", 6],
 ] as const;
 
 /**

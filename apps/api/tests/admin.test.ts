@@ -457,6 +457,36 @@ describe("the overview", () => {
   });
 
   /**
+   * Active accounts is the tile that replaced "New accounts", which was Signups
+   * again — the sign-up creates the organization, so the two lines traced each
+   * other and the growth chart looked like it had plotted one series twice.
+   *
+   * The property worth pinning is that this one cannot be read off the daily
+   * rollup: an account that worked on Monday and again on Tuesday is one active
+   * account for the week, and summing the daily series would call it two.
+   */
+  it("counts an account active on two days once", async () => {
+    const now = Date.now();
+    await env.DB.prepare(`DELETE FROM form_activity WHERE organization_id = ?`).bind(customer.orgId).run();
+    for (const [i, at] of [now - 2 * 86_400_000, now - 86_400_000].entries()) {
+      await env.DB.prepare(
+        `INSERT INTO form_activity (id, form_id, organization_id, kind, summary, created_at, updated_at)
+         VALUES (?, ?, ?, 'updated', 'edited', ?, ?)`,
+      )
+        .bind(`act_active_${i}`, customer.formId, customer.orgId, at, at)
+        .run();
+    }
+    for (const range of Object.keys(RANGES)) await env.KV_CONFIG.delete(`admin:overview:${range}`);
+
+    const body = (await (
+      await fetchApi("/api/admin/overview?range=30d", { headers: { cookie: admin.cookie } })
+    ).json()) as { kpis: Record<string, { value: number }> };
+
+    // Two days of work by the one account: one active account, not two.
+    expect(body.kpis.active_orgs!.value).toBe(1);
+  });
+
+  /**
    * The console's largest blind spot before this table existed: every
    * transactional message shares one queue, and the only record of any of them
    * was a `console.log` in the consumer. An expired provider key takes sign-in

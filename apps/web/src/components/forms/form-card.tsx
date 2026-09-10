@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import {
   BarChart3,
+  Check as CheckIcon,
   Copy,
   ExternalLink,
   Link2,
@@ -478,9 +479,9 @@ export function FormCard({
           className={cn(
             thumbPill,
             // The one pill on this strip that never gives up width. If
-            // something has to truncate it is "Unpublished", which has a
-            // tooltip and a menu item behind it; "Live" has neither and is
-            // the more consequential of the two.
+            // something has to truncate it is "Unpublished changes", which
+            // has a tooltip and a menu item behind it; "Live" has neither and
+            // is the more consequential of the two.
             "shrink-0",
             published && "text-[var(--thumb-live)]",
           )}
@@ -505,8 +506,12 @@ export function FormCard({
           live is not what you last edited. Amber for the same reason the
           builder header uses it — a state to resolve, not a fault.
 
-          The word alone at these sizes; "Unpublished changes" is what the menu
-          item says, and the strip has a question count to fit beside this.
+          "Unpublished changes" in full, matching the menu item. The word alone
+          read as a second status — a form that was somehow *not published*,
+          sitting next to a Live pill that says it is — when what it means is
+          that the draft has changes the live form does not have. It is the
+          noun that carries the meaning, so it is the half that cannot be cut;
+          it truncates before the question count does instead.
         */}
         {published && form.hasUnpublishedChanges && (
           <span
@@ -517,7 +522,7 @@ export function FormCard({
               aria-hidden
               className="size-2 shrink-0 rounded-full bg-[var(--thumb-drift)]"
             />
-            <span className="truncate">Unpublished</span>
+            <span className="truncate">Unpublished changes</span>
           </span>
         )}
       </span>
@@ -686,30 +691,56 @@ export function FormCard({
                   : "opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100",
               )}
             >
-              <Checkbox
-                checked={selected}
-                onCheckedChange={(next) => onSelectedChange?.(next === true)}
-                aria-label={`Select ${form.title}`}
-                className={cn(
-                  /*
-                   * On `bg-card` this needs no fill of its own.
-                   *
-                   * Over the thumbnail it did: a form's background is whatever its
-                   * author chose, so the box had to be painted against it — dark
-                   * on light artwork, light on dark — and every one of those fills
-                   * was wrong on some card. The card surface is one colour per
-                   * theme, which is exactly what `Checkbox`'s own resting style is
-                   * drawn for.
-                   *
-                   * Kept from that version: 22px with a 2px accent edge, so it is
-                   * a real target and reads as ticked at a glance, and the accent
-                   * fill when checked — `--primary-foreground` ink clears AA on
-                   * the orange.
-                   */
-                  "size-[22px] border-2",
-                  "border-primary data-[state=checked]:border-primary",
+              <div className="relative">
+                <Checkbox
+                  checked={selected}
+                  onCheckedChange={(next) => onSelectedChange?.(next === true)}
+                  aria-label={`Select ${form.title}`}
+                  className={cn(
+                    /*
+                     * The resting box is painted in the theme's *opposite* ink.
+                     *
+                     * The stock resting style is `input/30` — a fill a shade off
+                     * whatever it sits on. On a dark card that is a black square
+                     * inside an orange outline, which is how it read: a rectangle
+                     * on the card rather than a control on it. `--foreground` is
+                     * the one colour guaranteed to oppose `--card` in either
+                     * theme, so the box is near-white on dark and near-black on
+                     * light and never has to guess. The `dark:` twin is not
+                     * redundant: the base component sets `dark:bg-input/30`, and
+                     * an unprefixed class does not override a prefixed one.
+                     *
+                     * Kept: 22px with a 2px edge, so it is a real target, and the
+                     * accent fill when checked — `--primary-foreground` ink
+                     * clears AA on the orange, and the flip from neutral to brand
+                     * is the state change you see from across the grid.
+                     */
+                    "size-[22px] border-2 shadow-sm",
+                    "border-foreground bg-foreground text-background dark:bg-foreground",
+                    "data-[state=checked]:border-primary data-[state=checked]:bg-primary",
+                  )}
+                />
+                {/*
+                  A ghost tick in the empty box.
+
+                  An empty rounded square is only legibly a checkbox once you
+                  have seen a ticked one beside it, and the first card you ever
+                  hover has nothing beside it. Drawing the mark it *would* take,
+                  faint, says what the control does before you use it. Same
+                  glyph and size as the real indicator, so ticking the box reads
+                  as the mark coming up to full strength rather than as one
+                  thing being swapped for another.
+
+                  `pointer-events-none` so the whole 22px stays the target, and
+                  gone the moment it is checked — the real tick draws there.
+                */}
+                {!selected && (
+                  <CheckIcon
+                    aria-hidden
+                    className="text-background pointer-events-none absolute inset-0 m-auto size-3.5 opacity-30"
+                  />
                 )}
-              />
+              </div>
             </div>
           )}
         </div>

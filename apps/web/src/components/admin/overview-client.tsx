@@ -25,6 +25,7 @@ interface Overview {
   mrrSeries: number[];
   cohorts: Cohort[];
   formStatsAsOf: number | null;
+  timeToValueMs: number | null;
 }
 
 /** Which cohort each funnel step drops you into on the accounts page. */
@@ -32,6 +33,7 @@ const FUNNEL_COHORT: Record<string, string | null> = {
   signed_up: null,
   created_form: "created_form",
   published: "published",
+  form_opened: "form_opened",
   first_response: "first_response",
   ten_responses: "ten_responses",
   paid: "paid",
@@ -48,11 +50,21 @@ const FUNNEL_COHORT: Record<string, string | null> = {
  * something to attach to — "Started" under "Answers" can only mean one thing.
  */
 const GROWTH_VIEWS = {
+  /**
+   * Arrivals against who is still here.
+   *
+   * The second series was "New accounts" — `orgs_created` — which is the same
+   * number as Signups by construction: signing up creates the organization, so
+   * the two lines traced each other exactly and the chart looked like it had
+   * plotted one series twice. Active accounts is the fact that pairs with
+   * signups and is not derivable from it: an account that collected a response
+   * or edited a form that day, new or not.
+   */
   people: {
     label: "People",
     series: [
       { key: "signups", label: "Signups" },
-      { key: "orgs_created", label: "New accounts" },
+      { key: "active_orgs", label: "Active accounts" },
     ],
     averageOf: "signups",
   },
@@ -112,7 +124,23 @@ export function OverviewClient() {
       {/* Where things stand. Deltas compare to the same length of time before. */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiTile label="Signups" {...kpi("signups")} series={o.series?.signups} comparedTo={comparedTo} />
-        <KpiTile label="New accounts" {...kpi("orgs_created")} series={o.series?.orgs_created} comparedTo={comparedTo} />
+        {/*
+          Not "New accounts", which was Signups again under a second name —
+          the sign-up creates the organization. The number worth the tile beside
+          arrivals is how many accounts actually did anything, which is the one
+          of the two that can fall while the other rises.
+
+          The headline counts each account once for the whole period; the
+          sparkline is the daily figure, so it will not add up to it. That is
+          the point of a distinct count, and the hint says so.
+        */}
+        <KpiTile
+          label="Active accounts"
+          {...kpi("active_orgs")}
+          series={o.series?.active_orgs}
+          comparedTo={comparedTo}
+          hint="Accounts that collected a response or edited a form in this period, counted once each. The sparkline is the daily count."
+        />
         <KpiTile
           label="Forms created"
           {...kpi("forms_created")}
@@ -206,6 +234,7 @@ export function OverviewClient() {
         >
           <FunnelShape
             steps={o.funnel ?? []}
+            timeToValueMs={o.timeToValueMs ?? null}
             hrefFor={(step) => {
               // Carry the period too, so the list is cohorted on the same window
               // the funnel counted — otherwise a 30-day bar links into an

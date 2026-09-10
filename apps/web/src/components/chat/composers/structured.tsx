@@ -48,6 +48,48 @@ const CONTACT_LABELS: Record<string, string> = {
   country: "Country",
 };
 
+/**
+ * Enter finishes one of these composers, and moves on when it cannot.
+ *
+ * Every other block type in the runtime answers to Enter — the message box
+ * sends, a multi-select continues, a ranking confirms — so the record-shaped
+ * blocks were the one place a keyboard stopped working, behind a Continue
+ * button that did not even claim the shortcut. Enter now submits as soon as
+ * the record is good, and until then jumps to the next cell still waiting on
+ * something, which is what a browser's own implicit submission does with a
+ * form it will not send yet.
+ *
+ * A textarea keeps its newline and a focused button keeps its own activation,
+ * so Add and Remove still do what pressing Enter on a button has always done.
+ */
+function enterSubmits(canSubmit: boolean, submit: () => void) {
+  return function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "Enter" || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+    const target = e.target as HTMLElement;
+    if (target.tagName === "TEXTAREA" || target.tagName === "BUTTON") return;
+    e.preventDefault();
+    if (canSubmit) {
+      submit();
+      return;
+    }
+    const cells = Array.from(
+      e.currentTarget.querySelectorAll<
+        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      >("input, select, textarea"),
+    );
+    const from = cells.indexOf(target as HTMLInputElement);
+    /*
+      Wraps back to the top rather than stopping at the last cell: on a roster
+      the empty one is as often above the row being typed in — an entry added
+      and then filled out of order — as below it.
+    */
+    const next = [...cells.slice(from + 1), ...cells.slice(0, Math.max(from, 0))].find(
+      (el) => !el.disabled && el.value.trim() === "",
+    );
+    next?.focus();
+  };
+}
+
 export function FieldsComposer({
   fields,
   required,
@@ -61,9 +103,18 @@ export function FieldsComposer({
   const [values, setValues] = useState<Record<string, string>>({});
   const filled = fields.filter((f) => values[f]?.trim());
   const missing = required ? fields.filter((f) => !values[f]?.trim()) : [];
+  const canSubmit = filled.length > 0 && missing.length === 0;
+
+  const submit = () => {
+    const clean = Object.fromEntries(
+      Object.entries(values).filter(([, v]) => v.trim()).map(([k, v]) => [k, v.trim()]),
+    );
+    onSubmit(clean, Object.values(clean).join(", "));
+  };
+  const onKeyDown = enterSubmits(canSubmit, submit);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" onKeyDown={onKeyDown}>
       <div className="grid gap-2 sm:grid-cols-2">
         {fields.map((f) => {
           /*
@@ -97,16 +148,12 @@ export function FieldsComposer({
       )}
       <button
         type="button"
-        disabled={filled.length === 0 || missing.length > 0}
-        onClick={() => {
-          const clean = Object.fromEntries(
-            Object.entries(values).filter(([, v]) => v.trim()).map(([k, v]) => [k, v.trim()]),
-          );
-          onSubmit(clean, Object.values(clean).join(", "));
-        }}
-        className="h-11 w-full rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
+        disabled={!canSubmit}
+        onClick={submit}
+        className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
       >
         Continue
+        <KeyHint tone="inverse">↵</KeyHint>
       </button>
     </div>
   );
@@ -482,8 +529,54 @@ export function GroupComposer({
   const canRemove = entries.length > floor;
   const fixed = floor === maxEntries;
 
+  const submit = () => {
+    const value = entries
+      .filter((row) => fields.some((f) => filled(row, f)))
+      .map((row) => {
+        const entry: Record<string, string | number | boolean> = {};
+        for (const f of fields) {
+          const raw = (row[f.key] ?? "").trim();
+          if (raw === "") continue;
+          // Sent as the type the block documents rather than as text.
+          // `validateAnswer` would coerce either way, but what leaves
+          // here is what a webhook receives.
+          if (f.kind === "number") {
+            const n = Number(raw);
+            entry[f.key] = Number.isFinite(n) ? n : raw;
+          } else if (f.kind === "yes_no") {
+            entry[f.key] = raw === "yes";
+          } else {
+            entry[f.key] = raw;
+          }
+        }
+        return entry;
+      });
+    onSubmit(
+      value,
+      value
+        .map((entry, i) => {
+          const parts = fields.flatMap((f) => {
+            const v = entry[f.key];
+            if (v === undefined) return [];
+            const text =
+              f.kind === "single_select"
+                ? (f.options?.find((o) => o.id === v)?.label ?? String(v))
+                : f.kind === "yes_no"
+                  ? v === true
+                    ? "Yes"
+                    : "No"
+                  : String(v);
+            return [`${f.label}: ${text}`];
+          });
+          return `${itemLabel} ${i + 1} — ${parts.join(", ")}`;
+        })
+        .join(" · "),
+    );
+  };
+  const onKeyDown = enterSubmits(canSubmit, submit);
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" onKeyDown={onKeyDown}>
       <div className="space-y-2">
         {entries.map((row, i) => (
           <div
@@ -548,53 +641,11 @@ export function GroupComposer({
       <button
         type="button"
         disabled={!canSubmit}
-        onClick={() => {
-          const value = entries
-            .filter((row) => fields.some((f) => filled(row, f)))
-            .map((row) => {
-              const entry: Record<string, string | number | boolean> = {};
-              for (const f of fields) {
-                const raw = (row[f.key] ?? "").trim();
-                if (raw === "") continue;
-                // Sent as the type the block documents rather than as text.
-                // `validateAnswer` would coerce either way, but what leaves
-                // here is what a webhook receives.
-                if (f.kind === "number") {
-                  const n = Number(raw);
-                  entry[f.key] = Number.isFinite(n) ? n : raw;
-                } else if (f.kind === "yes_no") {
-                  entry[f.key] = raw === "yes";
-                } else {
-                  entry[f.key] = raw;
-                }
-              }
-              return entry;
-            });
-          onSubmit(
-            value,
-            value
-              .map((entry, i) => {
-                const parts = fields.flatMap((f) => {
-                  const v = entry[f.key];
-                  if (v === undefined) return [];
-                  const text =
-                    f.kind === "single_select"
-                      ? (f.options?.find((o) => o.id === v)?.label ?? String(v))
-                      : f.kind === "yes_no"
-                        ? v === true
-                          ? "Yes"
-                          : "No"
-                        : String(v);
-                  return [`${f.label}: ${text}`];
-                });
-                return `${itemLabel} ${i + 1} — ${parts.join(", ")}`;
-              })
-              .join(" · "),
-          );
-        }}
-        className="h-11 w-full rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
+        onClick={submit}
+        className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
       >
         Continue
+        <KeyHint tone="inverse">↵</KeyHint>
       </button>
     </div>
   );

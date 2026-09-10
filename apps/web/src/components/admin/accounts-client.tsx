@@ -39,6 +39,7 @@ const COHORTS = [
   { value: "stalled", label: "Built, no responses" },
   { value: "created_form", label: "Built something" },
   { value: "published", label: "Published" },
+  { value: "form_opened", label: "Opened by someone" },
   { value: "first_response", label: "Collecting" },
   { value: "ten_responses", label: "10+ responses" },
   { value: "paid", label: "Paying" },

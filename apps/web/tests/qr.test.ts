@@ -6,7 +6,11 @@ describe("qr", () => {
     const size = m.length;
     expect((size - 17) % 4).toBe(0);
     const finder = (r: number, c: number) =>
-      m[r]![c] && m[r + 6]![c] && m[r]![c + 6] && !m[r + 1]![c + 1] && m[r + 2]![c + 2];
+      m[r]![c] &&
+      m[r + 6]![c] &&
+      m[r]![c + 6] &&
+      !m[r + 1]![c + 1] &&
+      m[r + 2]![c + 2];
     expect(finder(0, 0)).toBe(true);
     expect(finder(0, size - 7)).toBe(true);
     expect(finder(size - 7, 0)).toBe(true);
@@ -24,7 +28,7 @@ describe("qr decodes", () => {
   // valid matrix can still be undecodable.
   it.each([
     "http://localhost:3000/f/launch-survey-ec68e1",
-    "https://chatform.dev/f/a-much-longer-slug-than-usual-for-testing-1234567890",
+    "https://chatform.in/f/a-much-longer-slug-than-usual-for-testing-1234567890",
     "hi",
   ])("round-trips %s", (text) => {
     const m = qrMatrix(text);
@@ -40,7 +44,9 @@ describe("qr decodes", () => {
         if (!m[r]![c]) continue;
         for (let dy = 0; dy < scale; dy++) {
           for (let dx = 0; dx < scale; dx++) {
-            const i = (((r + quiet) * scale + dy) * dim + ((c + quiet) * scale + dx)) * 4;
+            const i =
+              (((r + quiet) * scale + dy) * dim + ((c + quiet) * scale + dx)) *
+              4;
             data[i] = 0;
             data[i + 1] = 0;
             data[i + 2] = 0;

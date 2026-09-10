@@ -724,7 +724,7 @@ export function ChatClient({
           {!config.brandingHidden && (
             <p className="pb-2 text-center text-[0.6875rem] opacity-40">
               Powered by{" "}
-              <a href="https://chatform.dev" target="_blank" rel="noreferrer" className="underline">
+              <a href="https://chatform.in" target="_blank" rel="noreferrer" className="underline">
                 chatform
               </a>
             </p>

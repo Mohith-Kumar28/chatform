@@ -263,20 +263,23 @@ export function Hero() {
             unpublished.
           */}
           {/*
-            The bottom padding is the margin note's room, and it exists because
-            the note cannot ask for any.
+            The note sits *beside* the buttons now, so the row needs no room
+            reserved under it.
 
-            `it's a real form — try it` is absolutely positioned under the white
-            pill so that it can sit off the grid at an angle — which also means
-            it reserves no height, and the caption line below was laid out as
-            though the arrow and the handwriting were not there. They landed on
-            top of each other: "No card" and "try it" occupied the same line.
+            It used to hang below the white pill, absolutely positioned so it
+            could sit off the grid at an angle — which meant it reserved no
+            height of its own and the row had to carry `sm:pb-14` on its behalf,
+            or the handwriting and "No card" landed on the same line. Fifty-six
+            pixels of nothing between the buttons and the caption, spent on a
+            mark that was hard to see anyway: under the pill it was below the
+            eye's path, on a ground that is brightest exactly there.
 
-            Padding on the row rather than a margin on the caption, because the
-            space belongs to the note: it is only drawn from `sm` up, and the
-            padding appears on exactly the same breakpoint.
+            A normal flex child costs nothing to lay out around, points at the
+            button from the side the eye is already travelling, and lets the
+            three free-forever facts come back up under the pills where they
+            belong.
           */}
-          <div className="mt-8 flex flex-wrap items-center gap-3 sm:pb-14">
+          <div className="mt-8 flex flex-wrap items-center gap-3">
             {/* Both pills are opaque, and they are told apart by which end of
                 the range they sit at rather than by one of them being faint.
 
@@ -315,7 +318,43 @@ export function Hero() {
                 it over the full-strength gradient, where the ink is
                 `--on-primary` and the calculus is different. */}
             {/*
-              The white pill and the hand pointing at it, as one unit.
+              The demo opens in its own tab, and only the demo does.
+
+              Sending someone to `/f/<slug>` is sending them out of the pitch
+              and into the product: they answer a few questions, and the page
+              that convinced them to is gone. A new tab keeps it behind them, so
+              coming back is a tab click rather than a back button and a
+              re-scroll to where they were.
+
+              `target` is conditional because the fallback is not a page at
+              all — `#how-it-works` is an anchor into this same document, and a
+              new tab for an anchor opens a second copy of the page you are
+              already on. `rel` is set with it: `noopener` for the usual reason,
+              and `noreferrer` alongside it because the two are only ever wanted
+              together here.
+            */}
+            <Button
+              asChild
+              size="lg"
+              shape="pill"
+              variant="on-brand"
+              className="h-12 bg-white px-7 text-[var(--on-band-vivid)] hover:bg-white/90"
+            >
+              <Link
+                href={DEMO_SLUG ? `/f/${DEMO_SLUG}` : "#how-it-works"}
+                {...(DEMO_SLUG ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+              >
+                {DEMO_SLUG ? "Try it yourself" : "See how it works"}
+                <ArrowRight className="size-4" strokeWidth={2.25} />
+                {/* The one thing about this link a screen reader cannot see
+                    coming. Inside the label rather than an `aria-label`, which
+                    would replace the visible text instead of adding to it. */}
+                {DEMO_SLUG ? <span className="sr-only"> (opens in a new tab)</span> : null}
+              </Link>
+            </Button>
+
+            {/*
+              The hand, pointing back at the pill from the right.
 
               `annotate.tsx` asks for one pen mark per section and this section
               already spends its allowance on the ring. This is the exception
@@ -326,56 +365,61 @@ export function Hero() {
               eye. Two is the ceiling; a third would make the page a design
               system made of pens.
 
-              The note sits *after* the pill in the DOM and is pulled back over
-              it, so a screen reader reaches the button first and the aside
-              second — which is the order they matter in. `aria-hidden`, because
-              "it's our own demo form" is a thing you see, not a thing you
-              need read out before a link.
-            */}
-            <div className="relative">
-              <Button
-                asChild
-                size="lg"
-                shape="pill"
-                variant="on-brand"
-                className="h-12 bg-white px-7 text-[var(--on-band-vivid)] hover:bg-white/90"
-              >
-                <Link href={DEMO_SLUG ? `/f/${DEMO_SLUG}` : "#how-it-works"}>
-                  {DEMO_SLUG ? "Try it yourself" : "See how it works"}
-                  <ArrowRight className="size-4" strokeWidth={2.25} />
-                </Link>
-              </Button>
+              Three things changed about it, and the position is the one that
+              mattered. Under the pill it sat at the point where this wash is
+              brightest and where nobody was looking — you read left to right
+              along a row of buttons and stop at the end of it, which is where
+              the note now is. Full-strength ink rather than 70/85%: the mark is
+              on the brand's two hues at full saturation, the one ground on this
+              site where a softened near-black has nothing left to be darker
+              than. And it is the same ink as the ring above, deliberately —
+              one pen was here, not two.
 
-              {/* Below the pill and tilted off it, on the two breakpoints that
-                  have the room. On a phone the buttons wrap and there is no
-                  margin left to write in, so the note simply is not there —
-                  a margin note squeezed into the column is not a margin note. */}
+              The words changed with the position. `it's a real form — try it`
+              spent half its length repeating the button it points at. The
+              button already says "try it yourself"; what it cannot say is that
+              the thing on the other end is the product rather than a recording
+              of it, and that nothing is asked for first.
+
+              Two short lines rather than one long one, because at `lg` this
+              column is 574px and the pills take most of it. It stays out of the
+              way below `sm`, where the buttons wrap and there is no margin left
+              to write in — a margin note squeezed into the column is not a
+              margin note — and it is not drawn at all without a demo to point
+              at, since the fallback button goes to a section of this page and
+              "a real form" would be a lie about an anchor.
+            */}
+            {DEMO_SLUG ? (
               <span
                 aria-hidden
-                className="pointer-events-none absolute top-full left-2 hidden select-none sm:block"
+                className="pointer-events-none hidden select-none items-center gap-1 sm:flex"
                 style={{ color: "var(--on-band-vivid)" }}
               >
                 {/* Armed here rather than by an `InView`: the hero is the top
                     of the document and is on screen at load, so waiting for an
                     intersection would only mean the mark is already finished
                     by the time anyone could have watched it draw. */}
-                <span data-armed="" data-inview="" className="relative block">
+                <span data-armed="" data-inview="" className="flex items-center gap-1">
+                  {/* Nudged down by a transform, not a margin: the arrowhead
+                      sits near the top of its own box, and the row is centred,
+                      so untouched it points past the pill's shoulder instead of
+                      at it. A transform moves the head without moving the box
+                      the row is aligning. */}
                   <ArrowMark
                     dir="up-left"
                     positioned={false}
                     draw
                     delay={1500}
-                    className="ms-6 size-12 opacity-70"
+                    className="size-11 shrink-0 translate-y-1.5"
                   />
-                  <HandNote
-                    tilt={-6}
-                    className="absolute top-7 left-14 whitespace-nowrap opacity-85"
-                  >
-                    it&rsquo;s a real form &mdash; try it
+                  <HandNote tilt={-5} className="text-[1.15rem] leading-tight">
+                    a real form,
+                    <br />
+                    no signup
                   </HandNote>
                 </span>
               </span>
-            </div>
+            ) : null}
           </div>
 
           {/* "200 AI conversations a month" is a metering detail nobody has

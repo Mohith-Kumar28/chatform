@@ -65,22 +65,47 @@ describe("deltaLabel", () => {
     expect(deltaLabel(12, 12, "prev 30 days")).toBeNull();
   });
 
-  it("spells out the move rather than a percentage of zero", () => {
-    expect(deltaLabel(3, 0, "prev 30 days")).toEqual({ change: "+3", against: "vs prev 30 days" });
+  /*
+    Every line on the row is a percentage, including the first period.
+
+    This used to print the raw move against a zero baseline, on the grounds
+    that a percentage of nothing is invented. It is — but the console's whole
+    top row sits at a zero baseline until the product has two periods of
+    history, so the exception was the rule, and each of those tiles printed the
+    number already set above it in larger type instead of a growth figure.
+  */
+  it("counts a first period as the whole of it", () => {
+    expect(deltaLabel(3, 0, "prev 30 days")?.change).toBe("+100%");
+    expect(deltaLabel(13, 0, "prev 30 days")?.change).toBe("+100%");
   });
 
-  it("names the same window on a zero baseline as on any other", () => {
-    // "none before" made a zero-baseline tile read as a different kind of
-    // comparison from the tile next to it. Only the figure should differ.
-    expect(deltaLabel(3, 0, "yesterday")?.against).toBe(deltaLabel(3, 2, "yesterday")?.against);
+  it("keeps the raw move and the zero baseline on the tooltip", () => {
+    // The percentage is what you scan; the move is what you check it against,
+    // and "(was 0)" is what stops +100% reading as arithmetic it is not.
+    expect(deltaLabel(13, 0, "prev 30 days")?.against).toBe("+13 vs prev 30 days (was 0)");
   });
 
-  it("formats a zero-baseline move in the tile's own units", () => {
-    expect(deltaLabel(10_900, 0, "prev 30 days", money)).toEqual({ change: "+$109", against: "vs prev 30 days" });
+  it("reads the same kind of figure whatever the baseline", () => {
+    // The bug this replaces: "+3" beside "+50%" on the same row, differing by
+    // a baseline the reader cannot see.
+    expect(deltaLabel(3, 0, "yesterday")?.change).toMatch(/%$/);
+    expect(deltaLabel(3, 2, "yesterday")?.change).toMatch(/%$/);
+  });
+
+  it("puts the move in the tile's own units on the tooltip", () => {
+    expect(deltaLabel(10_900, 0, "prev 30 days", money)).toEqual({
+      change: "+100%",
+      against: "+$109 vs prev 30 days (was 0)",
+    });
   });
 
   it("names the window it is comparing against", () => {
-    expect(deltaLabel(120, 100, "prev 30 days")).toEqual({ change: "+20%", against: "vs prev 30 days" });
-    expect(deltaLabel(80, 100, "yesterday")).toEqual({ change: "-20%", against: "vs yesterday" });
+    expect(deltaLabel(120, 100, "prev 30 days")).toEqual({ change: "+20%", against: "+20 vs prev 30 days" });
+    expect(deltaLabel(80, 100, "yesterday")).toEqual({ change: "-20%", against: "-20 vs yesterday" });
+  });
+
+  it("lets growth past doubling read as more than 100%", () => {
+    // The zero-baseline convention caps at +100%; a real baseline must not.
+    expect(deltaLabel(13, 1, "prev 30 days")?.change).toBe("+1200%");
   });
 });

@@ -68,6 +68,17 @@ export function LiveActivity({ className, height = 190 }: { className?: string; 
   const events = useMemo(() => live?.events ?? [], [live?.events]);
   const minutes = live?.minutes ?? 30;
 
+  /**
+   * How far apart the axis labels sit, in minutes.
+   *
+   * Read in fives, because that is how anyone reads a clock backwards: -5, -10,
+   * -15 lands without arithmetic, where the old every-tenth-minute labelling
+   * gave three marks across the whole window and left every bar between them to
+   * be counted by eye. Kept to multiples of five as the window grows, and
+   * widened once about six labels stop fitting the column.
+   */
+  const labelStep = Math.max(5, Math.ceil(minutes / 6 / 5) * 5);
+
   const rows = useMemo(
     () =>
       Array.from({ length: minutes }, (_, i) => {
@@ -106,9 +117,11 @@ export function LiveActivity({ className, height = 190 }: { className?: string; 
                     tickLine={false}
                     axisLine={false}
                     interval={0}
-                    // Every tenth minute, and "now" at the right edge. A label
+                    // Every fifth minute, and "now" at the right edge. A label
                     // per minute is thirty labels in a column this narrow.
-                    tickFormatter={(ago: number) => (ago % 10 !== 0 ? "" : ago === 0 ? "now" : `-${ago}m`)}
+                    tickFormatter={(ago: number) =>
+                      ago % labelStep !== 0 ? "" : ago === 0 ? "now" : `-${ago}m`
+                    }
                   />
                   <YAxis
                     tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}

@@ -99,6 +99,7 @@ export type GetApiAdminOverview200 = {
   cohorts: GetApiAdminOverview200CohortsItem[];
   actionCounts: GetApiAdminOverview200ActionCounts;
   formStatsAsOf: number | null;
+  timeToValueMs: number | null;
 };
 
 export type GetApiAdminLive200EventsItem = {
@@ -173,6 +174,7 @@ export type GetApiAdminAccountsCohort = typeof GetApiAdminAccountsCohort[keyof t
 export const GetApiAdminAccountsCohort = {
   created_form: 'created_form',
   published: 'published',
+  form_opened: 'form_opened',
   first_response: 'first_response',
   ten_responses: 'ten_responses',
   paid: 'paid',

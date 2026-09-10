@@ -59,7 +59,37 @@ const OverviewResponse = z.object({
   cohorts: z.array(z.object({ cohort: z.string(), size: z.number(), retention: z.array(z.number().nullable()) })),
   actionCounts: z.record(z.string(), z.number()),
   formStatsAsOf: z.number().nullable(),
+  /** Median ms from signup to a first completed response, or null if nobody got one. */
+  timeToValueMs: z.number().nullable(),
 });
+
+/**
+ * Accounts that did something in a window, counted once each.
+ *
+ * The same definition the daily rollup uses for `active_orgs` — collected a
+ * response, or edited a form — but over the whole period rather than one day,
+ * because the daily figures cannot be added up: an account that worked on
+ * Monday and again on Tuesday is one active account, not two.
+ *
+ * This is why the tile exists at all. "New accounts" sat here before and was
+ * the same number as Signups by construction: signing up creates the
+ * organization, so the two series traced each other exactly and one line hid
+ * the other. Arrivals and who is still here are the two facts worth a tile.
+ */
+async function activeAccounts(env: Bindings, from: number, to: number): Promise<number> {
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM (
+       SELECT organization_id FROM submissions
+        WHERE started_at >= ?1 AND started_at < ?2 AND is_test = 0
+        UNION
+       SELECT organization_id FROM form_activity
+        WHERE created_at >= ?1 AND created_at < ?2
+     )`,
+  )
+    .bind(from, to)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
 
 coreRouter.get(
   "/admin/overview",
@@ -127,12 +157,19 @@ coreRouter.get(
       ai_cost_micro: seriesOf(rows, "ai_cost_micro", window),
     };
 
-    const [funnel, cohorts, actionCounts, formStatsAsOf] = await Promise.all([
+    const [funnel, timeToValueMs, cohorts, actionCounts, formStatsAsOf, activeNow, activeBefore] = await Promise.all([
       activationFunnel(c.env, now - days * DAY_MS),
+      timeToValue(c.env, now - days * DAY_MS),
       retentionCohorts(c.env),
       actionQueueCounts(c.env),
       c.env.KV_CONFIG.get(FORM_ROLLUP_COMPLETED_KEY),
+      activeAccounts(c.env, now - days * DAY_MS, now),
+      activeAccounts(c.env, now - 2 * days * DAY_MS, now - days * DAY_MS),
     ]);
+    // Distinct over the period, so it lands after the rollup-derived KPIs
+    // rather than beside them: summing `active_orgs` day by day would count a
+    // returning account once per day it came back.
+    kpis.active_orgs = { value: activeNow, previous: activeBefore };
 
     const payload = {
       range,
@@ -145,6 +182,7 @@ coreRouter.get(
       cohorts,
       actionCounts,
       formStatsAsOf: formStatsAsOf ? Number(formStatsAsOf) : null,
+      timeToValueMs,
     };
     await c.env.KV_CONFIG.put(cacheKey, JSON.stringify(payload), { expirationTtl: 300 });
     return c.json(payload);
@@ -287,7 +325,7 @@ coreRouter.get(
 );
 
 /**
- * Signed up → built → published → collected → kept collecting → paid.
+ * Signed up → built → published → opened → collected → kept collecting → paid.
  *
  * Cohorted on organizations created inside the window, not on all organizations
  * ever: mixing a two-year-old account with one that signed up this morning makes
@@ -316,6 +354,41 @@ async function activationFunnel(env: Bindings, since: number) {
     const count = row?.[key] ?? 0;
     return { key, label, count, rate: top > 0 ? Math.round((count / top) * 1000) / 10 : 0 };
   });
+}
+
+/**
+ * How long the accounts that got somewhere took to get there.
+ *
+ * The funnel says how many made it; it cannot say how long they waited, and
+ * those are different problems with different fixes. A funnel that converts
+ * well over a fortnight is an onboarding you can afford to leave alone; the
+ * same funnel converting over a fortnight *because the first response lands on
+ * day nine* is a product that has not shown anyone what it does yet.
+ *
+ * The **median**, not the mean: one account that signed up in March and
+ * published in September drags an average into meaninglessness, and there is
+ * always one. Rows are the accounts that reached a first response at all —
+ * everybody still waiting is counted by the funnel above and would only bias
+ * this number downward if folded in at zero.
+ */
+async function timeToValue(env: Bindings, since: number): Promise<number | null> {
+  const res = await env.DB.prepare(
+    `SELECT MIN(s.completed_at) - o.created_at AS d
+       FROM organizations o
+       JOIN submissions s ON s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed'
+      WHERE o.created_at >= ?
+      GROUP BY o.id
+      HAVING d >= 0
+      ORDER BY d`,
+  )
+    .bind(since)
+    .all<{ d: number }>();
+
+  const gaps = (res.results ?? []).map((r) => r.d);
+  if (gaps.length === 0) return null;
+  // Lower middle on an even count: with two accounts, the faster one is the
+  // honest answer to "how long does this take" more often than their average.
+  return gaps[Math.floor((gaps.length - 1) / 2)] ?? null;
 }
 
 const WEEK_MS = 7 * DAY_MS;
@@ -521,7 +594,9 @@ coreRouter.get(
     z.object({
       q: z.string().max(120).optional(),
       plan: z.enum(["free", "pro", "business"]).optional(),
-      cohort: z.enum(["created_form", "published", "first_response", "ten_responses", "paid", "no_form", "stalled"]).optional(),
+      cohort: z
+        .enum(["created_form", "published", "form_opened", "first_response", "ten_responses", "paid", "no_form", "stalled"])
+        .optional(),
       /** Bound to accounts created in the last N days, matching the funnel that linked here. */
       since: z.coerce.number().int().min(1).max(3650).optional(),
       sort: z.enum(["created", "responses", "forms", "ai", "active", "mrr"]).default("created"),
@@ -594,8 +669,14 @@ coreRouter.get(
     const stage = FUNNEL_STAGES.find(([key]) => key === cohort)?.[2];
     if (stage !== undefined && stage > 0) filters.push(`(${STAGE_OF_ORG}) >= ${stage}`);
     if (cohort === "no_form") filters.push(`NOT EXISTS (SELECT 1 FROM forms f WHERE f.organization_id = o.id AND f.deleted_at IS NULL)`);
-    // Built something and then stopped: the cohort worth an email.
-    if (cohort === "stalled") filters.push(`(${STAGE_OF_ORG}) BETWEEN 1 AND 2`);
+    /*
+      Built something and then stopped: the cohort worth an email.
+
+      Runs to stage 3, not 2, now that "someone opened it" is its own step —
+      an account whose form was opened and never answered has still collected
+      nothing, which is what this cohort is named for.
+    */
+    if (cohort === "stalled") filters.push(`(${STAGE_OF_ORG}) BETWEEN 1 AND 3`);
     /**
      * The same window the funnel was cohorted on, when the caller came from it.
      * Without it a 30-day funnel links into an all-time list and the counts
