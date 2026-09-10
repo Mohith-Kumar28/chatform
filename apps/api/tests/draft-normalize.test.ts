@@ -482,6 +482,20 @@ describe("a repeating group from a draft", () => {
     expect(built("item=Team member; min=2")?.type).toBe("short_text");
   });
 
+  it("reads two crossed bounds the same way an edit does", () => {
+    // `min=6; max=3` used to build a group of exactly six here and a group of
+    // three-to-six through `applyBlockConfig`. One rule now answers both.
+    const group = built("fields=Name:short_text; min=6; max=3");
+    if (group?.type !== "field_group") throw new Error("not a field_group block");
+    expect([group.minEntries, group.maxEntries]).toEqual([3, 6]);
+  });
+
+  it("lets a stated floor push the unstated ceiling up", () => {
+    const group = built("fields=Name:short_text; min=8");
+    if (group?.type !== "field_group") throw new Error("not a field_group block");
+    expect([group.minEntries, group.maxEntries]).toEqual([8, 8]);
+  });
+
   it("gives duplicate labels distinct keys", () => {
     const group = built("fields=Email:email|Email:email");
     if (group?.type !== "field_group") throw new Error("not a field_group block");

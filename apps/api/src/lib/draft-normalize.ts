@@ -246,6 +246,41 @@ function groupFields(raw: string | undefined): Record<string, unknown>[] {
   return fields;
 }
 
+/**
+ * How many entries a group allows, from what the config wrote and what is
+ * already there.
+ *
+ * One function for both paths on purpose. Generation and editing had a rule
+ * each, and they disagreed about the one input that matters: `min=6; max=3`
+ * built a group of exactly six on generation and a group of three-to-six on
+ * edit. Same evidence, same obvious mistake by the writer, two answers — which
+ * is the failure mode this file's header is about.
+ *
+ * The rule: a bound the config states wins, and a bound it does not state
+ * bends around it. Two stated bounds that cross are two numbers the wrong way
+ * round, so they are swapped rather than collapsed — that keeps both numbers
+ * the writer actually chose, where forcing one onto the other throws one away.
+ *
+ * `current` is what the bounds are now: the schema's defaults for a block being
+ * built, the block's own for one being edited.
+ */
+function entryBounds(
+  config: Map<string, string>,
+  current: { min: number; max: number },
+): { min: number; max: number } {
+  const clamp = (v: number) => Math.min(Math.max(Math.round(v), 1), 20);
+  const wroteMin = config.has("min");
+  const wroteMax = config.has("max");
+  let min = wroteMin ? clamp(num(config.get("min")) ?? current.min) : current.min;
+  let max = wroteMax ? clamp(num(config.get("max")) ?? current.max) : current.max;
+  if (min > max) {
+    if (wroteMin && wroteMax) [min, max] = [max, min];
+    else if (wroteMax) min = max;
+    else max = min;
+  }
+  return { min, max };
+}
+
 /** What a model may call each group-field kind, mapped onto what we call it. */
 const GROUP_KIND_ALIASES: Record<string, string> = {
   ...Object.fromEntries(GROUP_FIELD_KINDS.map((k) => [k, k])),
@@ -576,8 +611,9 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
         if (fields.length === 0) {
           return done(BlockSchema.parse({ ...base, type: "short_text", minLength: 0, maxLength: 300 }));
         }
-        const min = Math.min(Math.max(Math.round(num(config.get("min")) ?? 1), 1), 20);
-        const max = Math.min(Math.max(Math.round(num(config.get("max")) ?? Math.max(min, 5)), min), 20);
+        // Against the schema's own defaults, which is what a block with
+        // nothing written about it would have had.
+        const { min, max } = entryBounds(config, { min: 1, max: 5 });
         return done(
           BlockSchema.parse({
             ...base,
@@ -758,28 +794,10 @@ export function applyBlockConfig(block: Block, raw: string | undefined): Block |
       if (config.has("item") || config.has("itemlabel")) {
         patch.itemLabel = (config.get("item") ?? config.get("itemlabel"))?.slice(0, 60);
       }
-      /**
-       * A bound the edit did not mention bends around one it did.
-       *
-       * "Allow up to one" on a group whose floor is two must end at one, not
-       * quietly stay at two — the written number is the request, and the other
-       * is what was already there. A floor above its own ceiling is a block the
-       * schema accepts and the composer cannot render, so one of them has to
-       * move, and it is never the one the author just typed.
-       */
-      const wroteMin = config.has("min");
-      const wroteMax = config.has("max");
-      if (wroteMin || wroteMax) {
-        const bound = (v: string | undefined, fallback: number) =>
-          Math.min(Math.max(Math.round(num(v) ?? fallback), 1), 20);
-        let min = wroteMin ? bound(config.get("min"), 1) : block.minEntries;
-        let max = wroteMax ? bound(config.get("max"), 5) : block.maxEntries;
-        // Both written and crossed reads as two numbers the wrong way round.
-        if (min > max) {
-          if (wroteMin && wroteMax) [min, max] = [max, min];
-          else if (wroteMax) min = max;
-          else max = min;
-        }
+      // Against what the block already allows, so an edit that states one
+      // bound moves the other only as far as it has to. See `entryBounds`.
+      if (config.has("min") || config.has("max")) {
+        const { min, max } = entryBounds(config, { min: block.minEntries, max: block.maxEntries });
         patch.minEntries = min;
         patch.maxEntries = max;
       }
