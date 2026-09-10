@@ -153,3 +153,35 @@ export function describeClosing(
 export function isUrgent(tier: ClosingTier): boolean {
   return tier === "imminent" || tier === "passed";
 }
+
+export interface CapacityDescription {
+  text: string;
+  /** Few enough places left that the number is the reason to hurry. */
+  urgent: boolean;
+}
+
+/**
+ * How many places are left, when the author asked for that to be shown.
+ *
+ * Null once the count is meaningless — no capacity projected, or a cap that
+ * cannot be read. Zero is not meaningless and gets said out loud: someone
+ * looking at a full form should be told it is full here, rather than finding
+ * out from a refusal after they have read the questions.
+ */
+export function describeCapacity(
+  capacity: { max: number; taken: number } | undefined,
+): CapacityDescription | null {
+  if (!capacity || !Number.isFinite(capacity.max) || capacity.max <= 0) return null;
+
+  const left = Math.max(0, capacity.max - capacity.taken);
+  if (left === 0) return { text: "No spots left", urgent: true };
+
+  /*
+   * Scarce in proportion or scarce in absolute terms, whichever is the larger
+   * number. A tenth of a 500-place intake is fifty, which is not scarce; five
+   * of fifty is. Taking the larger of the two means neither rule can make the
+   * other one lie.
+   */
+  const urgent = left <= Math.max(5, Math.floor(capacity.max * 0.1));
+  return { text: left === 1 ? "1 spot left" : `${left} spots left`, urgent };
+}

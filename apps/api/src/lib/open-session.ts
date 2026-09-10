@@ -164,6 +164,25 @@ function isClosed(doc: FormDoc, closeAtColumn: number | null): boolean {
 }
 
 /**
+ * Responses that finished, which is the only kind `maxSubmissions` counts.
+ *
+ * Shared with the public config route, which shows the respondent how many
+ * places are left. Two copies of this query would be two chances to disagree —
+ * and the way they would disagree is the worst one available: a form telling
+ * somebody there are places left and then refusing them, or holding places back
+ * that nobody is using. A started-and-abandoned response takes no place, so
+ * `status` narrows to completed here and must keep doing so in both readings.
+ */
+export async function completedSubmissions(env: Bindings, formId: string): Promise<number> {
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM submissions WHERE form_id = ?1 AND status = 'completed'`,
+  )
+    .bind(formId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/**
  * The monthly response ceiling. Its own function because a respondent hitting it
  * must be told the form is closed, never that somebody's plan is exhausted.
  */
@@ -230,12 +249,7 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
 
   const cap = settings.closeRules.maxSubmissions;
   if (cap && !input.resumeSubmissionId) {
-    const count = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM submissions WHERE form_id = ?1 AND status = 'completed'`,
-    )
-      .bind(form.id)
-      .first<{ n: number }>();
-    if ((count?.n ?? 0) >= cap) {
+    if ((await completedSubmissions(env, form.id)) >= cap) {
       return { ok: false, status: 403, body: { error: { code: "form_closed", message: "This form is closed" } } };
     }
   }

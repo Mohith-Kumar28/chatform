@@ -338,11 +338,28 @@ export interface PublicFormConfig {
   closedMessage?: string;
   /**
    * When the form stops accepting responses, ISO, when the author scheduled a
-   * close. Projected so the hosted page can say so before someone starts —
-   * the share card puts it on the unfurl, which is the only place a deadline
-   * reaches someone who has not opened the link yet.
+   * close and asked for it to be shown. Projected so the hosted page can say
+   * so before someone starts — the share card puts it on the unfurl, and the
+   * chat puts a live countdown at the top of the thread.
+   *
+   * Absent when `closeRules.showCountdown` is off, which is what makes that
+   * one switch govern both surfaces: everything respondent-facing reads the
+   * deadline from here, so withholding it here withholds it everywhere.
    */
   closeAt?: string;
+  /**
+   * How full the form is, when the author asked for that to be shown.
+   *
+   * `taken` is a snapshot from the moment the config was fetched, not a live
+   * feed, and that is the honest number rather than a stale one: the cap is
+   * enforced when a session opens, so this is the count that governed whether
+   * this respondent got in at all. A figure ticking down while they answer
+   * would be reporting a race they have already run.
+   *
+   * Absent unless `closeRules.showRemaining` is on and a cap is actually set —
+   * see the flag, which explains why a cap alone is not consent to publish it.
+   */
+  capacity?: { max: number; taken: number };
   /**
    * Social/SEO metadata. `settings.meta` existed but was never projected, so
    * the hosted form had no OG tags and every share preview was blank.
@@ -380,6 +397,16 @@ export function toPublicConfig(
     closedMessage?: string;
     /** Resolves `settings.meta.ogImageKey` to a public URL. */
     assetUrl?: (key: string) => string;
+    /**
+     * Completed responses so far, for the "spots left" count.
+     *
+     * Only the API knows this; it costs a query, so callers that have no
+     * respondent in front of them omit it. The builder preview is the one that
+     * matters — it renders this same config from a draft with no server behind
+     * it, and defaulting to zero shows the author their own form at full
+     * capacity rather than hiding the pill they just switched on.
+     */
+    submissionsTaken?: number;
   },
 ): PublicFormConfig {
   const metaSettings = doc.settings.meta;
@@ -416,7 +443,11 @@ export function toPublicConfig(
     embed: { allowedOrigins: doc.settings.embed?.allowedOrigins ?? [] },
     closed: opts.closed,
     closedMessage: opts.closedMessage,
-    closeAt: doc.settings.closeRules.closeAt,
+    closeAt: doc.settings.closeRules.showCountdown ? doc.settings.closeRules.closeAt : undefined,
+    capacity:
+      doc.settings.closeRules.showRemaining && doc.settings.closeRules.maxSubmissions
+        ? { max: doc.settings.closeRules.maxSubmissions, taken: opts.submissionsTaken ?? 0 }
+        : undefined,
   };
 }
 

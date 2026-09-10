@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeClosing, isUrgent } from "../src/components/chat/closing-time";
+import { describeCapacity, describeClosing, isUrgent } from "../src/components/chat/closing-time";
 
 /**
  * A fixed instant, so "9d left" means the same thing on every machine that runs
@@ -147,5 +147,58 @@ describe("isUrgent", () => {
     expect(isUrgent("hours")).toBe(false);
     expect(isUrgent("imminent")).toBe(true);
     expect(isUrgent("passed")).toBe(true);
+  });
+});
+
+describe("describeCapacity", () => {
+  it("says nothing without a projected capacity", () => {
+    expect(describeCapacity(undefined)).toBeNull();
+  });
+
+  it("says nothing for a cap that cannot mean anything", () => {
+    expect(describeCapacity({ max: 0, taken: 0 })).toBeNull();
+    expect(describeCapacity({ max: -5, taken: 0 })).toBeNull();
+    expect(describeCapacity({ max: Number.NaN, taken: 0 })).toBeNull();
+  });
+
+  it("counts down from the cap", () => {
+    expect(describeCapacity({ max: 50, taken: 12 })?.text).toBe("38 spots left");
+  });
+
+  it("drops the plural at one", () => {
+    expect(describeCapacity({ max: 50, taken: 49 })?.text).toBe("1 spot left");
+  });
+
+  it("says a full form is full rather than going quiet", () => {
+    // Somebody looking at a full form should learn it here, not from a refusal
+    // after they have read the questions.
+    expect(describeCapacity({ max: 50, taken: 50 })).toEqual({ text: "No spots left", urgent: true });
+  });
+
+  it("never counts below zero when the cap is already overshot", () => {
+    // The cap is enforced at session open and completions can outrun it, so
+    // `taken` above `max` is a real state and not a bug to render as "-3 spots".
+    expect(describeCapacity({ max: 50, taken: 53 })?.text).toBe("No spots left");
+  });
+
+  describe("when the number is the reason to hurry", () => {
+    /*
+     * The larger of a tenth and five, so neither rule can make the other lie:
+     * a tenth of a 500-place intake is fifty, which is not scarce, and five of
+     * fifty is.
+     */
+    it("uses a tenth on a large intake", () => {
+      expect(describeCapacity({ max: 500, taken: 449 })?.urgent).toBe(false); // 51 left
+      expect(describeCapacity({ max: 500, taken: 450 })?.urgent).toBe(true); // 50 left
+    });
+
+    it("uses the floor of five on a small one", () => {
+      expect(describeCapacity({ max: 20, taken: 14 })?.urgent).toBe(false); // 6 left
+      expect(describeCapacity({ max: 20, taken: 15 })?.urgent).toBe(true); // 5 left
+    });
+
+    it("is calm when the form is mostly empty", () => {
+      expect(describeCapacity({ max: 50, taken: 0 })?.urgent).toBe(false);
+    });
   });
 });

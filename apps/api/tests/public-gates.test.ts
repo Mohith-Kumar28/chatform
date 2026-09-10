@@ -194,6 +194,70 @@ describe("close rules", () => {
     expect(submit.status).toBe(202);
   });
 
+  /**
+   * What the respondent is told about the rules, as distinct from the rules.
+   *
+   * Both of these are opt-in per form and neither can be inferred from the rule
+   * being set: a cap is very often an internal spend guard, and a remaining
+   * count tells anyone holding the link how many people have answered. So the
+   * test that matters is the negative one — a form with a deadline and a cap
+   * that has not asked to publish either must project neither.
+   */
+  describe("what the config publishes", () => {
+    const configFor = async (slug: string) =>
+      (await (await fetchApi(`/p/forms/${slug}/config`)).json()) as {
+        closeAt?: string;
+        capacity?: { max: number; taken: number };
+      };
+
+    /*
+     * The two defaults are deliberately opposite, and this is the pair that
+     * says so. A deadline is already public — it goes out on the share card —
+     * so showing it costs nothing and hiding it only blinds the people who
+     * opened the link. A remaining count is not public until this makes it
+     * public, so it waits to be asked for.
+     */
+    it("publishes the deadline by default but not the count", async () => {
+      const closeAt = new Date(Date.now() + 3_600_000).toISOString();
+      const slug = await publish("quiet", { closeRules: { closeAt, maxSubmissions: 50 } });
+      const config = await configFor(slug);
+      expect(config.closeAt).toBe(closeAt);
+      expect(config.capacity).toBeUndefined();
+    });
+
+    it("withholds the deadline when the author turns the countdown off", async () => {
+      const slug = await publish("nocountdown", {
+        closeRules: { closeAt: new Date(Date.now() + 3_600_000).toISOString(), showCountdown: false },
+      });
+      // Everything respondent-facing reads the deadline from here, the share
+      // card included, so this is what makes one switch govern both.
+      expect((await configFor(slug)).closeAt).toBeUndefined();
+    });
+
+    it("publishes places left, counting only completed responses", async () => {
+      const slug = await publish("spots", {
+        closeRules: { maxSubmissions: 5, showRemaining: true },
+      });
+      const formId = "frm_gate_spots";
+      const insert = (n: number, status: string) =>
+        env.DB.prepare(
+          `INSERT INTO submissions (id, form_id, organization_id, status, started_at) VALUES (?1, ?2, ?3, ?4, ?5)`,
+        ).bind(`sbm_spots_${status}_${n}`, formId, t.orgId, status, Date.now());
+
+      await env.DB.batch([insert(1, "completed"), insert(2, "in_progress"), insert(3, "abandoned")]);
+
+      // Two of those three took no place, and the count the respondent sees has
+      // to agree with the one the gate enforces or the form offers a place it
+      // will then refuse.
+      expect((await configFor(slug)).capacity).toEqual({ max: 5, taken: 1 });
+    });
+
+    it("publishes no count without a cap to count against", async () => {
+      const slug = await publish("nocap", { closeRules: { showRemaining: true } });
+      expect((await configFor(slug)).capacity).toBeUndefined();
+    });
+  });
+
   it("closes once the response cap is reached, counting only completed responses", async () => {
     const slug = await publish("cap", { closeRules: { maxSubmissions: 2 } });
     const formId = "frm_gate_cap";

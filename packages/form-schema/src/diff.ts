@@ -130,8 +130,14 @@ const SETTING_LABELS: Record<string, string> = {
   "navigation.allowBack": "Going back",
   "navigation.allowSkip": "Skipping questions",
   "closeRules.closeAt": "Scheduled close",
-  "closeRules.maxResponses": "Response cap",
-  "closeRules.closedMessage": "Closed message",
+  // These two named fields that do not exist — the schema calls them
+  // `maxSubmissions` and `closedMessageMd` — so neither has ever matched, and
+  // changing either one has been showing the raw path in the history panel
+  // since the labels were written.
+  "closeRules.maxSubmissions": "Response cap",
+  "closeRules.closedMessageMd": "Closed message",
+  "closeRules.showCountdown": "Closing countdown",
+  "closeRules.showRemaining": "Spots left",
   "requireAuth.enabled": "Sign-in requirement",
   "requireAuth.method": "Sign-in method",
   "requireAuth.message": "Sign-in message",

@@ -327,6 +327,20 @@ export function SettingsPanel({
                   }
                 />
               </SettingRow>
+              {/*
+                Both of these appear only once the thing they qualify is set. A
+                switch for a countdown on a form with no closing date is a
+                control with nothing to control, and it would sit here on every
+                form in the product to be useful on the few that have one.
+              */}
+              {settings.closeRules.closeAt && (
+                <SettingRow
+                  label="Show a countdown"
+                  description="Respondents see how long they have left, at the top of the conversation. Also puts the date on the link preview."
+                  checked={settings.closeRules.showCountdown}
+                  onCheckedChange={(v) => patch({ closeRules: { ...settings.closeRules, showCountdown: v } })}
+                />
+              )}
               <SettingRow label="Close after N submissions" description="Cap the total number of responses.">
                 <Input
                   type="number"
@@ -344,6 +358,21 @@ export function SettingsPanel({
                   }
                 />
               </SettingRow>
+              {settings.closeRules.maxSubmissions !== undefined && (
+                <SettingRow
+                  label="Show spots left"
+                  /*
+                    Says what it publishes, not just what it does. A remaining
+                    count lets anyone holding the link work out how many people
+                    have responded — which is the point on a workshop signup and
+                    a leak on a hiring form, and the author is the only one who
+                    knows which of those this is.
+                  */
+                  description="Respondents see how many places remain — which also tells anyone with the link how many people have answered. Best for a genuinely limited intake."
+                  checked={settings.closeRules.showRemaining}
+                  onCheckedChange={(v) => patch({ closeRules: { ...settings.closeRules, showRemaining: v } })}
+                />
+              )}
               <SettingRow label="Closed message" description="Shown when the form is closed." stacked>
                 <Textarea
                   rows={2}

@@ -45,8 +45,35 @@ export const SettingsDoc = z.object({
       closeAt: z.string().optional(),
       maxSubmissions: z.number().int().min(1).optional(),
       closedMessageMd: z.string().max(5000).default("This form is no longer accepting responses."),
+      /**
+       * Show the respondent a live countdown to `closeAt`.
+       *
+       * On by default, because a deadline nobody can see creates no urgency and
+       * turns lateness into an unexplained error screen. It publishes nothing
+       * new either way: the close date already goes out on the share card, and
+       * this flag governs that projection too, so switching it off withdraws
+       * the date from both places at once rather than leaving it visible in the
+       * one place the author cannot see.
+       */
+      showCountdown: z.boolean().default(true),
+      /**
+       * Show the respondent how many places are left against `maxSubmissions`.
+       *
+       * Off by default, and deliberately not inferred from the cap being set. A
+       * cap is very often an internal guard rather than a scarcity offer — the
+       * demo form caps at 2000 to bound spend, and "1,987 spots left" would be
+       * absurd there and would publish a budget. It also discloses more than it
+       * appears to: a remaining count tells anyone holding the link how many
+       * people have answered, which is a scarcity nudge on a workshop signup
+       * and a leak on a hiring form. So the author turns it on per form.
+       */
+      showRemaining: z.boolean().default(false),
     })
-    .default({ closedMessageMd: "This form is no longer accepting responses." }),
+    // `prefault({})` rather than a literal default: the object default has to
+    // spell out every field, so each new one here silently became a second
+    // place to keep the same value in step. This defers to the field defaults
+    // above, which are the ones carrying the reasoning.
+    .prefault({}),
 
   /**
    * Make the respondent prove who they are before the first question.

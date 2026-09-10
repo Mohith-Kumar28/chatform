@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useRef, useSyncExternalStore } from "react";
-import { Clock } from "lucide-react";
+import { Clock, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { describeClosing, isUrgent } from "./closing-time";
+import { describeCapacity, describeClosing, isUrgent } from "./closing-time";
 
 /**
  * When this form stops accepting responses, said before anybody starts.
@@ -20,9 +20,12 @@ import { describeClosing, isUrgent } from "./closing-time";
  */
 export function ClosingNotice({
   closeAt,
+  capacity,
   started,
 }: {
   closeAt?: string;
+  /** Places against the cap, when the author asked for them to be shown. */
+  capacity?: { max: number; taken: number };
   /** Whether this respondent has already answered something. */
   started: boolean;
 }) {
@@ -89,35 +92,75 @@ export function ClosingNotice({
   );
 
   const desc = now === 0 ? null : describeClosing(closeAt, now, { started });
-  if (!desc) return null;
+  const spots = describeCapacity(capacity);
+  if (!desc && !spots) return null;
 
-  const urgent = isUrgent(desc.tier);
+  const timeUrgent = desc ? isUrgent(desc.tier) : false;
   return (
     <div className="flex justify-center">
       <div
         className={cn(
-          // The scroll-to-bottom chip's shape, which is this thread's
-          // established way of saying something that is not a message.
-          "flex max-w-full items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs",
+          /*
+            `rounded-2xl` rather than the scroll-to-bottom chip's `rounded-full`,
+            and wrapping allowed, because one of these strings is a sentence
+            rather than a clock — "you can still finish this response" is around
+            three hundred pixels and has to be able to take a second line on a
+            narrow phone. At one line the two shapes are barely distinguishable
+            at this height.
+          */
+          "flex max-w-full flex-wrap items-center justify-center gap-x-1.5 rounded-2xl border px-3 py-1.5 text-center text-xs",
           "bg-[var(--cf-chip-bg)]",
-          urgent
-            ? "border-[var(--cf-warning)]/40 text-[var(--cf-warning)]"
-            : "border-[var(--cf-chip-border)] opacity-60",
+          timeUrgent || spots?.urgent
+            ? "border-[var(--cf-warning)]/40"
+            : "border-[var(--cf-chip-border)]",
         )}
       >
-        <Clock className="size-3.5 shrink-0" strokeWidth={2} />
-        {/*
-          `tabular-nums` because the digits change once a second and
-          proportional figures make the whole row twitch sideways as they do.
+        {/* The clock earns the icon slot; without a deadline the count takes it. */}
+        {desc ? (
+          <Clock className="size-3.5 shrink-0" strokeWidth={2} />
+        ) : (
+          <Users className="size-3.5 shrink-0" strokeWidth={2} />
+        )}
 
-          Hidden from assistive tech, with the absolute time announced in its
-          place — a live counter read out once a second is unusable, and the
-          date is the form somebody can act on anyway.
+        {desc && (
+          <>
+            {/*
+              `tabular-nums` because the digits change once a second and
+              proportional figures make the whole row twitch sideways as they do.
+
+              Hidden from assistive tech, with the absolute time announced in its
+              place — a live counter read out once a second is unusable, and the
+              date is the form somebody can act on anyway.
+            */}
+            <span
+              className={cn(
+                "tabular-nums",
+                timeUrgent ? "text-[var(--cf-warning)]" : "text-[var(--cf-muted)]",
+              )}
+              aria-hidden="true"
+            >
+              {desc.text}
+            </span>
+            <span className="sr-only">{desc.srText}</span>
+          </>
+        )}
+
+        {/*
+          Coloured on its own account. Few places left is a reason to hurry even
+          when the deadline is a fortnight off, and a deadline in the last hour
+          says nothing about how full the form is — so one being urgent must not
+          drag the other into a colour its own numbers do not justify.
         */}
-        <span className="tabular-nums" aria-hidden="true">
-          {desc.text}
-        </span>
-        <span className="sr-only">{desc.srText}</span>
+        {desc && spots && (
+          <span className="text-[var(--cf-muted)]" aria-hidden="true">
+            ·
+          </span>
+        )}
+        {spots && (
+          <span className={spots.urgent ? "text-[var(--cf-warning)]" : "text-[var(--cf-muted)]"}>
+            {spots.text}
+          </span>
+        )}
       </div>
     </div>
   );

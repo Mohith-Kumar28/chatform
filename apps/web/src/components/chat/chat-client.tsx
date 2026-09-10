@@ -402,7 +402,11 @@ export function ChatClient({
             this". Nothing else here distinguishes those two.
           */}
           {!chat.ending && !chat.submitted && (
-            <ClosingNotice closeAt={config.closeAt} started={chat.messages.length > 0} />
+            <ClosingNotice
+              closeAt={config.closeAt}
+              capacity={config.capacity}
+              started={chat.messages.length > 0}
+            />
           )}
 
           {/* Screen readers announce new agent messages without stealing focus.

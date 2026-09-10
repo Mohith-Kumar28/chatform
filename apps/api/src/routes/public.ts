@@ -8,7 +8,7 @@ import type { Bindings } from "../env.js";
 import { timingSafeEqual, isHashedPassword, verifyPassword } from "../lib/crypto.js";
 import { SessionDO } from "../do/session-do.js";
 import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
-import { openSession, type FormRow } from "../lib/open-session.js";
+import { completedSubmissions, openSession, type FormRow } from "../lib/open-session.js";
 import { respondentKey } from "../lib/respondent-key.js";
 import { findDeviceResumable } from "../lib/respondent-history.js";
 import { mountRespondentAuth } from "./respondent-auth.js";
@@ -174,12 +174,19 @@ sessionsRouter.get(
   async (c) => {
   const { slug } = c.req.param();
   const formRow = await c.env.DB.prepare(
-    `SELECT f.slug, f.status, f.close_at, f.organization_id, fv.schema_json
+    `SELECT f.id, f.slug, f.status, f.close_at, f.organization_id, fv.schema_json
      FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
      WHERE f.slug = ? AND f.deleted_at IS NULL LIMIT 1`,
   )
     .bind(slug)
-    .first<{ slug: string; status: string; close_at: number | null; organization_id: string; schema_json: string }>();
+    .first<{
+      id: string;
+      slug: string;
+      status: string;
+      close_at: number | null;
+      organization_id: string;
+      schema_json: string;
+    }>();
 
   if (!formRow || formRow.status !== "published") {
     return c.json({ error: { code: "form_not_found", message: "Form not found or not published" } }, 404);
@@ -192,8 +199,20 @@ sessionsRouter.get(
   // anyone republishing. See `clampForRuntime`.
   const doc = clampForRuntime(stored, ent);
   const closed = isClosed(doc, formRow.close_at) || (await ceilingReached(c.env, formRow.organization_id, ent));
+  /**
+   * Counted only when the author asked for the number to be shown.
+   *
+   * The cap gate in `openSession` counts on every session either way; this is
+   * the extra read that puts the figure in front of the respondent, and a form
+   * that has not turned the pill on should not pay for it. Same helper as the
+   * gate, so the count shown and the count enforced cannot disagree.
+   */
+  const { showRemaining, maxSubmissions } = doc.settings.closeRules;
+  const submissionsTaken =
+    showRemaining && maxSubmissions ? await completedSubmissions(c.env, formRow.id) : undefined;
   const config = toPublicConfig(doc, {
     slug: formRow.slug,
+    submissionsTaken,
     /**
      * The watermark decision, made here and nowhere else.
      *
