@@ -154,7 +154,16 @@ async function googleToken(): Promise<string> {
 async function signIn(body: Record<string, unknown> = {}): Promise<{
   sessionId: string;
   status: number;
-  body: { resumed?: boolean; error?: { code?: string } };
+  body: {
+    resumed?: boolean;
+    error?: {
+      code?: string;
+      message?: string;
+      outcome?: string;
+      ending?: { ref: string; kind: string; title: string; requirements: string[] } | null;
+      answers?: { ref: string; title: string; display: string }[];
+    };
+  };
 }> {
   const opened = await open(body);
   expect(opened.status).toBe(200);
@@ -167,7 +176,7 @@ async function signIn(body: Record<string, unknown> = {}): Promise<{
     headers: { "content-type": "application/json", "x-respondent-token": respondentToken },
     body: JSON.stringify({ idToken: await googleToken() }),
   });
-  return { sessionId, status: res.status, body: (await res.json()) as { resumed?: boolean } };
+  return { sessionId, status: res.status, body: (await res.json()) as Awaited<ReturnType<typeof signIn>>["body"] };
 }
 
 beforeAll(async () => {
@@ -313,5 +322,127 @@ describe("the device match", () => {
       .bind(b.sessionId)
       .first<{ submission_id: string | null }>();
     expect(started?.submission_id).toBeNull();
+  });
+});
+
+/**
+ * Coming back to a form that turned you away.
+ *
+ * `onePerIdentity` refuses the second attempt, and it is right to: a
+ * screen-out that could be undone by signing in again and answering
+ * differently is not a screen-out. What it must not do is lie about which of
+ * the two things happened. The refusal used to come back word for word the
+ * same as a completion — "you have already answered this" — over a blank
+ * screen, so somebody stopped at the last question of an eleven-answer
+ * registration was told they had submitted it and shown nothing to prove
+ * anything had survived.
+ */
+describe("returning after being screened out", () => {
+  const SCREEN_OUT = {
+    ...GATED,
+    requireAuth: { ...GATED.requireAuth, onePerIdentity: true },
+  };
+  const DOC_WITH_REFUSAL = {
+    endings: [
+      { id: "end_so000001", ref: "end_thanks", title: "Done", bodyMd: "Thanks." },
+      {
+        id: "end_so000002",
+        ref: "end_ineligible",
+        title: "Team composition requirement not met",
+        bodyMd: "At least two women per team.",
+        kind: "screen_out",
+        requirements: [{ id: "req_so000001", label: "Minimum of 2 female participants per team" }],
+      },
+    ],
+  };
+
+  const publishWithRefusal = async () => {
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT OR REPLACE INTO form_versions (id, form_id, version, schema_json, checksum, published_at, created_by, created_at)
+       VALUES (?1, ?2, 1, ?3, 'ck', ?4, ?5, ?4)`,
+    )
+      .bind(
+        VERSION_ID,
+        t.formId,
+        JSON.stringify({ ...DOC, ...DOC_WITH_REFUSAL, settings: SCREEN_OUT }),
+        now,
+        t.userId,
+      )
+      .run();
+  };
+
+  /** A response the form refused, filed under this person. */
+  const seedRefused = async (id: string) => {
+    await seedTheirs(id, { status: "disqualified" });
+    await env.DB.prepare(
+      `UPDATE submissions
+          SET completed_at = ?1,
+              meta = json_set(coalesce(meta,'{}'), '$.endingRef', 'end_ineligible')
+        WHERE id = ?2`,
+    )
+      .bind(Date.now() - 600_000, id)
+      .run();
+  };
+
+  beforeEach(publishWithRefusal);
+  afterAll(() => publish(GATED));
+
+  it("is still refused a second response, because that is the author's rule", async () => {
+    await seedRefused("sbm_so_out1");
+    const { status, body } = await signIn();
+    expect(status).toBe(409);
+    expect(body.error?.code).toBe("already_answered");
+  });
+
+  it("is told it was refused, not that it was answered", async () => {
+    await seedRefused("sbm_so_out2");
+    const { body } = await signIn();
+    expect(body.error?.outcome).toBe("screened_out");
+    expect(body.error?.message).not.toMatch(/already answered/i);
+  });
+
+  it("gets the ending that refused them, with its requirements", async () => {
+    await seedRefused("sbm_so_out3");
+    const { body } = await signIn();
+    // The reason is the whole content of the screen they came back to read.
+    expect(body.error?.ending?.ref).toBe("end_ineligible");
+    expect(body.error?.ending?.kind).toBe("screen_out");
+    expect(body.error?.ending?.requirements).toEqual(["Minimum of 2 female participants per team"]);
+  });
+
+  it("gets their answers back, so the screen is not blank", async () => {
+    await seedRefused("sbm_so_out4");
+    const { body } = await signIn();
+    expect(body.error?.answers).toEqual([{ ref: "q_name", title: "Your name?", display: "Maya" }]);
+  });
+
+  it("still calls a completion a completion", async () => {
+    await seedTheirs("sbm_so_done2", { status: "completed" });
+    const { status, body } = await signIn();
+    expect(status).toBe(409);
+    expect(body.error?.outcome).toBe("completed");
+    expect(body.error?.message).toMatch(/already answered/i);
+  });
+
+  /**
+   * A completion is a blank screen too, without this.
+   *
+   * The same 409 carries both outcomes, and the reason the accepted
+   * respondent saw one grey line on returning is the reason the refused one
+   * did: nothing but a code and a timestamp came back with it.
+   */
+  it("hands a completed respondent their answers and their thank-you back", async () => {
+    await seedTheirs("sbm_so_done3", { status: "completed" });
+    await env.DB.prepare(
+      `UPDATE submissions SET meta = json_set(coalesce(meta,'{}'), '$.endingRef', 'end_thanks') WHERE id = ?`,
+    )
+      .bind("sbm_so_done3")
+      .run();
+
+    const { body } = await signIn();
+    expect(body.error?.answers).toEqual([{ ref: "q_name", title: "Your name?", display: "Maya" }]);
+    expect(body.error?.ending?.ref).toBe("end_thanks");
+    expect(body.error?.ending?.kind).toBe("success");
   });
 });

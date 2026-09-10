@@ -2,7 +2,17 @@ import type { Context, Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { readFormDoc, type FormDoc, type RespondentIdentity } from "@repo/form-schema";
+import {
+  readFormDoc,
+  toPublicEnding,
+  displayAnswer,
+  isRequirementUnmet,
+  type AnswerMap,
+  type ConditionGroup,
+  type FormDoc,
+  type PublicEnding,
+  type RespondentIdentity,
+} from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { SessionDO } from "../do/session-do.js";
 import { verifyGoogleIdToken, verifyFirebasePhoneToken } from "../lib/respondent-auth.js";
@@ -66,7 +76,26 @@ interface Options {
  * off. `clampForRuntime` is what the rest of the runtime reads.
  */
 interface SignInVerdict {
-  blocked: { code: "already_answered"; message: string; completedAt: number | null } | null;
+  blocked: {
+    code: "already_answered";
+    message: string;
+    completedAt: number | null;
+    /**
+     * Which of the two things actually happened to their last response.
+     *
+     * The block is the same either way — the author's rule is "one per
+     * person", and a person the form turned away has still had their one — but
+     * the screen the respondent gets is not. "You already answered this today"
+     * in front of somebody who was refused at the last question is simply
+     * false, and it is false in the way that makes people think the form ate
+     * their work.
+     */
+    outcome: "completed" | "screened_out";
+    /** On a screen-out, the ending that refused them, so the page can say why. */
+    ending: PublicEnding | null;
+    /** What they told the form, so the page has a transcript to show. */
+    answers: { ref: string; title: string; display: string }[];
+  } | null;
   resume: { submissionId: string; answers: Record<string, unknown> } | null;
 }
 
@@ -93,16 +122,17 @@ async function assessIdentity(
     }>();
   if (!sess?.schema_json) return NOTHING;
 
-  let settings: FormDoc["settings"];
+  let doc: FormDoc;
   try {
     const ent = await getEntitlements(env, sess.organization_id);
-    settings = clampForRuntime(readFormDoc(JSON.parse(sess.schema_json)), ent).settings;
+    doc = clampForRuntime(readFormDoc(JSON.parse(sess.schema_json)), ent);
   } catch (err) {
     // A document we cannot read must not become a lockout, and must not stop
     // somebody signing in either.
     console.error("signin_settings_unreadable", sess.form_id, err);
     return NOTHING;
   }
+  const settings = doc.settings;
 
   const history = await findIdentityHistory(env, sess.form_id, identity, sessionId);
 
@@ -116,11 +146,46 @@ async function assessIdentity(
      */
     const oncePerPerson = settings.requireAuth.onePerIdentity || !settings.allowResubmissions;
     if (!oncePerPerson) return NOTHING;
+
+    const screenedOut = history.finished.status === "disqualified";
+    /*
+     * The ending is replayed rather than summarised, whichever one it was.
+     *
+     * The respondent is looking at this screen because they came back, and a
+     * single grey line saying they have "already answered" is the least of
+     * what the server knows. Rebuilding the ending here — from the same
+     * `toPublicEnding` the live conversation uses, with the requirements
+     * narrowed against their own stored answers — means the return visit
+     * shows the card they saw the first time: which rule a refusal missed, or
+     * the thank-you and its link on a response that was accepted.
+     */
+    const answers = history.finished.answers;
+    /*
+     * Cast rather than re-parsed: every value in `submission_answers` was
+     * written by `validateAnswer`, so it is already an `AnswerMap` — and a
+     * requirement that fails to evaluate must not cost the respondent the
+     * screen, which is what re-parsing and throwing would do.
+     */
+    const state = { answers: answers as AnswerMap, variables: {}, hidden: {} };
+    const ending = doc.endings.find((e) => e.ref === history.finished!.endingRef) ?? null;
+
     return {
       blocked: {
         code: "already_answered",
-        message: "This form takes one response per person, and you have already answered it.",
+        message: screenedOut
+          ? "This form takes one response per person, and yours was not accepted."
+          : "This form takes one response per person, and you have already answered it.",
         completedAt: history.finished.completedAt,
+        outcome: screenedOut ? "screened_out" : "completed",
+        ending: ending
+          ? toPublicEnding(ending, settings.onComplete, (when: ConditionGroup) =>
+              isRequirementUnmet(when, state),
+            )
+          : null,
+        answers: doc.blocks
+          .filter((b) => !["welcome", "statement"].includes(b.type))
+          .filter((b) => answers[b.ref] !== undefined)
+          .map((b) => ({ ref: b.ref, title: b.title, display: displayAnswer(b, answers[b.ref]) })),
       },
       resume: null,
     };
@@ -160,6 +225,9 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
             code: verdict.blocked.code,
             message: verdict.blocked.message,
             completedAt: verdict.blocked.completedAt,
+            outcome: verdict.blocked.outcome,
+            ending: verdict.blocked.ending,
+            answers: verdict.blocked.answers,
           },
         },
         409,

@@ -10,6 +10,7 @@ import {
   RotateCcw,
   ShieldAlert,
   TriangleAlert,
+  Undo2,
   X,
 } from "lucide-react";
 import Markdown from "react-markdown";
@@ -317,9 +318,23 @@ export function ChatClient({
         answered={chat.question?.progress.answered ?? 0}
         total={chat.question?.progress.totalEstimate ?? 0}
         status={chat.status}
-        // Always offered once anything has been said, rather than only in a
-        // "welcome back" banner that appeared once and then vanished.
-        onStartOver={chat.messages.length > 0 && !chat.ending ? () => void chat.startOver() : undefined}
+        /*
+          Always offered once anything has been said, rather than only in a
+          "welcome back" banner that appeared once and then vanished.
+
+          Withdrawn on a response the *server* has refused by identity. Start
+          over does exactly what it says — a new session, a blank thread — and
+          the new session then signs in, is recognised as the same person and
+          is refused again, landing on the identical screen. A control whose
+          only possible outcome is the screen you are already looking at is
+          worse than no control: it reads as the page being broken, which is
+          precisely how it was reported.
+        */
+        onStartOver={
+          chat.messages.length > 0 && !chat.ending && chat.submitted?.canRepeat !== false
+            ? () => void chat.startOver()
+            : undefined
+        }
         onClose={canClose ? () => void requestEmbedClose() : undefined}
       />
 
@@ -446,6 +461,11 @@ export function ChatClient({
               theme={config.theme}
               allowRepeat={config.allowResubmissions}
               onRestart={() => void chat.startOver()}
+              /*
+                Not offered in the preview, which has no server session to
+                reopen — its "session" is owned by the builder around it.
+              */
+              onUndoScreenOut={previewMode ? undefined : () => void chat.undoScreenOut()}
             />
           )}
 
@@ -460,6 +480,7 @@ export function ChatClient({
             <AlreadySubmittedCard
               submitted={chat.submitted}
               title={agentName}
+              theme={config.theme}
               /*
                 A form with resubmissions switched off is not expecting a second
                 answer. `canRepeat` overrides it when the *server* refused this
@@ -470,13 +491,20 @@ export function ChatClient({
               allowRepeat={chat.submitted.canRepeat ?? config.allowResubmissions}
               onResubmit={() => void chat.startOver()}
               /*
-                Whether this session still holds the conversation. It does when
-                they finished just now and were told mid-session; it does not
-                when they came back later and the server recognised them at the
-                door, which is the common case — and the one that needs the
-                answers replayed to have a thread at all.
+                Whether this session still holds the conversation.
+
+                Measured in *user* messages, not messages. It does hold it when
+                they answered several questions here and only then hit a
+                deferred sign-in gate that refused them — replaying on top of
+                that would print everything twice, which is what this guard is
+                for. It does not hold it when they came back later and the
+                server recognised them at the door: that session has said
+                exactly one thing, "could you verify who you are?", and counting
+                messages called that a transcript. So the replay was suppressed
+                by the greeting, and a respondent returning to eleven answers
+                got a blank page with a grey line on it.
               */
-              hasTranscript={chat.messages.length > 0}
+              hasTranscript={chat.messages.some((m) => m.role === "user")}
             />
           )}
 
@@ -823,26 +851,37 @@ function TypingDots() {
 }
 
 /**
- * What a respondent sees on returning to a form they already completed.
+ * What a respondent sees on returning to a form they have already been through.
  *
  * Silently starting a blank conversation made it look like the first response
- * had been lost. This says plainly that it landed, shows what was sent, and
- * only offers a repeat when the form actually accepts one.
+ * had been lost. This says plainly what happened to it, shows what was sent,
+ * and only offers a repeat when the form actually accepts one.
+ *
+ * "What happened to it" has two answers and this used to give only one. A form
+ * that screens people out sends the refused ones back here too, and they were
+ * met with "you already answered this today" — which is false twice over:
+ * nothing was submitted, and the thing they actually want to know is which
+ * rule they missed. So a screen-out gets its own ending card, rebuilt from the
+ * one the server recorded, above the same replayed transcript.
  */
 function AlreadySubmittedCard({
   submitted,
   title,
+  theme,
   allowRepeat,
   onResubmit,
   hasTranscript,
 }: {
   submitted: NonNullable<ReturnType<typeof useChat>["submitted"]>;
   title: string;
+  /** Only for the screen-out branch, which renders a full `EndingCard`. */
+  theme: PublicFormConfig["theme"];
   allowRepeat: boolean;
   onResubmit: () => void;
   hasTranscript: boolean;
 }) {
   const answers = submitted.answers;
+  const screenedOut = submitted.outcome === "screened_out";
 
   return (
     <>
@@ -891,6 +930,30 @@ function AlreadySubmittedCard({
         ))}
 
       {/*
+        The ending they reached, replayed under the transcript.
+
+        Both outcomes get one, and both used to get the same grey footnote
+        instead. A refusal needs it because the reason is the whole content of
+        the screen — "at least two female members per team" is what they came
+        back to check. A completion needs it because a form that ended with
+        "Registration submitted — here is the group to join" and then greets
+        the same person with one line of grey text looks like it lost the
+        response, and the link they came back for is in that card.
+
+        `allowRepeat` is false: the restart link belongs to a live
+        conversation, and this is a return visit to a decision.
+      */}
+      {submitted.ending && (
+        <EndingCard
+          ending={submitted.ending}
+          theme={theme}
+          allowRepeat={false}
+          onRestart={() => {}}
+          replay
+        />
+      )}
+
+      {/*
         And the status under it, sized like a footnote rather than a screen.
 
         There is no "view my answers" button any more: the answers are the
@@ -900,9 +963,27 @@ function AlreadySubmittedCard({
       */}
       <div className="animate-message-in flex flex-col items-center gap-3 pt-6 pb-2 text-center">
         <div className="flex items-center gap-2 text-sm opacity-60">
-          <CheckCheck className="size-4 shrink-0" strokeWidth={2} />
+          {screenedOut ? (
+            <ShieldAlert className="size-4 shrink-0" strokeWidth={2} />
+          ) : (
+            <CheckCheck className="size-4 shrink-0" strokeWidth={2} />
+          )}
           <span>
-            You already answered {title} {relativeDay(submitted.at)}
+            {screenedOut ? (
+              /*
+                Deliberately not "you already answered". They did not — the form
+                stopped them — and the sentence has to leave them in no doubt
+                that the answers above are still on file.
+              */
+              <>
+                {title} did not accept this registration {relativeDay(submitted.at)}. Your answers are
+                saved.
+              </>
+            ) : (
+              <>
+                You already answered {title} {relativeDay(submitted.at)}
+              </>
+            )}
           </span>
         </div>
 
@@ -1115,17 +1196,38 @@ function EndingCard({
   theme,
   allowRepeat,
   onRestart,
+  onUndoScreenOut,
+  replay,
 }: {
   ending: NonNullable<ReturnType<typeof useChat>["ending"]>;
   theme: PublicFormConfig["theme"];
   allowRepeat: boolean;
   onRestart: () => void;
+  /**
+   * Take back a screen-out and reopen the answer that caused it.
+   *
+   * Omitted where there is nothing live to reopen — the replay on a return
+   * visit, and the builder preview.
+   */
+  onUndoScreenOut?: (() => void) | undefined;
+  /**
+   * This is a return visit to an ending, not the moment it happened.
+   *
+   * Two things have to go. The confetti, because it celebrates an event that
+   * happened yesterday — a burst every time somebody opens the link to check
+   * what they sent is a party for nothing. And the "taking you to the next
+   * step in 5s" line, because nothing is: the redirect is fired from the live
+   * `ending` state, which a replay does not set, so the sentence would be a
+   * countdown to an event that never comes. The CTA link stays — a return
+   * visit is exactly when somebody is looking for it again.
+   */
+  replay?: boolean;
 }) {
   const screenedOut = ending.kind === "screen_out";
   const requirements = ending.requirements ?? [];
   return (
     <>
-      {!screenedOut && <Confetti colors={[theme.accent, theme.userBubble, "#ffffff", theme.text]} />}
+      {!screenedOut && !replay && <Confetti colors={[theme.accent, theme.userBubble, "#ffffff", theme.text]} />}
 
       <div className="animate-message-in flex flex-col items-center px-6 py-10 text-center">
         {/*
@@ -1188,6 +1290,39 @@ function EndingCard({
           </div>
         )}
 
+        {/*
+          The way out of a wrong answer, and the most important control on
+          this screen.
+
+          A screen-out is a rule failing, and the overwhelmingly common way to
+          fail one is to tap the wrong chip on a yes/no. Until now that cost
+          the respondent everything: the card said what was wrong and offered
+          nothing to do about it, and reloading only brought the same card
+          back — so somebody eleven answers into a registration lost all of it
+          to one mis-tap. This reopens exactly that question and keeps every
+          other answer.
+
+          A button rather than the quiet underline "Start over" beside it,
+          because they are not the same offer: this one costs nothing, and
+          starting over costs the whole form.
+        */}
+        {screenedOut && onUndoScreenOut && (
+          <>
+            <button
+              type="button"
+              onClick={onUndoScreenOut}
+              className="mt-6 inline-flex h-11 items-center gap-2 rounded-full px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
+              style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+            >
+              <Undo2 className="size-4" strokeWidth={2} />
+              I answered that by mistake
+            </button>
+            <p className="mt-2 max-w-xs text-xs opacity-50">
+              Takes you back to that one question. Everything else you have answered is kept.
+            </p>
+          </>
+        )}
+
         {ending.ctaLabel && ending.ctaUrl && (
           <a
             href={ending.ctaUrl}
@@ -1198,7 +1333,7 @@ function EndingCard({
           </a>
         )}
 
-        {ending.redirectUrl && (
+        {ending.redirectUrl && !replay && (
           <p className="mt-4 text-xs opacity-50">
             Taking you to the next step in {ending.redirectDelaySec ?? 5}s…
           </p>

@@ -55,6 +55,7 @@ import {
   recordAnswerRow,
   deleteAnswerRow,
   finalizeResponse,
+  reopenResponse,
   findDuplicateAnswer,
   type ResponseOwner,
 } from "../lib/submissions.js";
@@ -130,6 +131,17 @@ interface DoSessionMeta {
   isTest?: boolean;
   /** Which ending the conversation reached, once it has. */
   endingRef?: string | null;
+  /**
+   * The question whose answer sent this response to a screen-out.
+   *
+   * Remembered so a refusal has a way back. A screen-out is almost always one
+   * answer's doing — and often a mis-tap on a yes/no — so "I answered that by
+   * mistake" needs to know which question to reopen, and the cursor has
+   * already been cleared by the time the respondent reads the card.
+   *
+   * Null on a completion, and cleared the moment the undo is taken.
+   */
+  screenedOutFrom?: string | null;
 }
 
 /**
@@ -2202,7 +2214,7 @@ export class SessionDO extends DurableObject<Bindings> {
       return;
     }
 
-    await this.completeWith(ending);
+    await this.completeWith(ending, fromRef);
   }
 
   /**
@@ -2221,11 +2233,28 @@ export class SessionDO extends DurableObject<Bindings> {
     return toPublicEnding(ending, this.doc!.settings.onComplete, this.isRequirementUnmet);
   }
 
-  /** Finalize against an ending and tell the client. */
-  private async completeWith(ending: Ending): Promise<void> {
+  /** The ending this conversation ended on, projected — or null while it is still going. */
+  private finishedEnding(): PublicEnding | null {
+    if (!this.doc || !this.meta) return null;
+    if (this.meta.status !== "completed" && this.meta.status !== "disqualified") return null;
+    const ending =
+      (this.meta.endingRef && this.doc.endings.find((e) => e.ref === this.meta!.endingRef)) ||
+      defaultEnding(this.doc);
+    return ending ? this.projectEnding(ending) : null;
+  }
+
+  /**
+   * Finalize against an ending and tell the client.
+   *
+   * `fromRef` is the question answered on the way here, when there was one.
+   * Only a screen-out keeps it, and only so the refusal can be undone — see
+   * `screenedOutFrom`.
+   */
+  private async completeWith(ending: Ending, fromRef?: string): Promise<void> {
     if (!this.meta || !this.doc) return;
     const screenedOut = ending.kind === "screen_out";
     this.meta.currentRef = null;
+    this.meta.screenedOutFrom = screenedOut ? (fromRef ?? this.lastAnsweredRef()) : null;
     this.meta.status = screenedOut ? "disqualified" : "completed";
     this.meta.completedAt = Date.now();
     // Recorded before `pendingEndingRef` is cleared: without it a headless
@@ -2246,6 +2275,18 @@ export class SessionDO extends DurableObject<Bindings> {
      */
     await this.emit("complete", { submissionId, durationMs: Date.now() - this.meta.startedAt });
     await this.persistMeta();
+  }
+
+  /**
+   * The last question in document order that has an answer.
+   *
+   * The fallback for `screenedOutFrom` on the one path that reaches an ending
+   * without coming from a question — an explicit `submit` whose ending
+   * resolves to a screen-out. Document order rather than answer order because
+   * nothing records the latter, and on that path the two agree.
+   */
+  private lastAnsweredRef(): string | null {
+    return this.answerSummary().at(-1)?.ref ?? null;
   }
 
   /** Everything answered so far, in question order, for the review step. */
@@ -2283,10 +2324,10 @@ export class SessionDO extends DurableObject<Bindings> {
     return this.runSync(() => this.handleUserTurn(input), opts);
   }
 
-  /** The same, for skip / stop / restart / edit / submit. */
+  /** The same, for skip / stop / restart / edit / submit / undo. */
   async actionSync(
     input: {
-      action: "skip" | "stop" | "restart" | "edit" | "submit" | "resend_code" | "change_answer";
+      action: "skip" | "stop" | "restart" | "edit" | "submit" | "resend_code" | "change_answer" | "undo_screen_out";
       ref?: string;
     },
     opts: { deadlineMs?: number } = {},
@@ -2556,7 +2597,7 @@ export class SessionDO extends DurableObject<Bindings> {
   }
 
   async action(input: {
-    action: "skip" | "stop" | "restart" | "edit" | "submit" | "resend_code" | "change_answer";
+    action: "skip" | "stop" | "restart" | "edit" | "submit" | "resend_code" | "change_answer" | "undo_screen_out";
     /** For `edit`: the block to go back and re-answer. */
     ref?: string;
   }): Promise<{ accepted: boolean; error?: string }> {
@@ -2578,11 +2619,19 @@ export class SessionDO extends DurableObject<Bindings> {
   }
 
   private async runAction(input: {
-    action: "skip" | "stop" | "restart" | "edit" | "submit" | "resend_code" | "change_answer";
+    action: "skip" | "stop" | "restart" | "edit" | "submit" | "resend_code" | "change_answer" | "undo_screen_out";
     ref?: string;
   }): Promise<{ accepted: boolean; error?: string }> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta || !this.doc) return { accepted: false, error: "session_not_found" };
+    /*
+     * The one action a closed session accepts, because it is the action that
+     * closed it. Checked ahead of the `active` guard rather than inside it:
+     * by the time a respondent reads "you were turned away" the session is
+     * already `disqualified`, so an undo that required an open session could
+     * never run.
+     */
+    if (input.action === "undo_screen_out") return this.undoScreenOut();
     if (this.meta.status !== "active") return { accepted: false, error: "session_closed" };
     // `stop` and `restart` stay open while gated — someone who cannot sign in
     // must still be able to walk away or start over.
@@ -2701,6 +2750,83 @@ export class SessionDO extends DurableObject<Bindings> {
     return { accepted: false, error: "unknown_action" };
   }
 
+  /**
+   * Take back a refusal, and reopen the answer that caused it.
+   *
+   * A screen-out used to be the end of the road with no road back. The card
+   * said what was wrong — "at least two female members per team" — and offered
+   * nothing to do about it, which is the wrong shape for a rule that a
+   * respondent fails by mis-tapping "No" on a yes/no question. Their only
+   * recourse was to reload, and reloading is worse than useless: the session
+   * is terminal, so `resync` puts the same card back, and on a form with
+   * `onePerIdentity` signing in again is refused outright. One wrong tap,
+   * eleven answers, no way out.
+   *
+   * So the refusal is reversible, in the one direction that makes sense: back
+   * to the question that triggered it, with that answer discarded and every
+   * other one kept. It is deliberately not "start over" — a respondent who
+   * filled in five team members does not want to be handed a blank form
+   * because of the question after them.
+   *
+   * The response row is reopened first, and the reopen is what authorises the
+   * rest: if another writer has since moved that row on, the D1 guard says so
+   * and we leave both the row and the session alone rather than resurrecting a
+   * conversation whose response has been finished elsewhere.
+   */
+  private async undoScreenOut(): Promise<{ accepted: boolean; error?: string }> {
+    if (!this.meta || !this.doc) return { accepted: false, error: "session_not_found" };
+    if (this.meta.status !== "disqualified") return { accepted: false, error: "not_screened_out" };
+
+    const ref = this.meta.screenedOutFrom ?? this.lastAnsweredRef();
+    const target = ref ? this.doc.blocks.find((b) => b.ref === ref) : undefined;
+    // Nothing to reopen means nothing to correct — a form that screens out on
+    // a hidden field or a variable, before anybody answered anything.
+    if (!target) return { accepted: false, error: "nothing_to_change" };
+
+    const submissionId = await this.ctx.storage.get<string>("submission_id");
+    if (submissionId) {
+      const { changed } = await reopenResponse(this.owner(), submissionId);
+      if (!changed) return { accepted: false, error: "session_closed" };
+    }
+
+    this.meta.status = "active";
+    this.meta.completedAt = null;
+    this.meta.endingRef = null;
+    this.meta.screenedOutFrom = null;
+    // Reopened, so it can go idle again — and must, or a conversation walked
+    // away from here would never be swept up as abandoned.
+    await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
+    await this.persistMeta();
+
+    /*
+     * The session row follows the response row.
+     *
+     * `finalizeResponse` wrote `disqualified` here as well, and the
+     * `allowResubmissions` gate in `openSession` reads exactly this column: a
+     * live conversation left claiming to be a finished one would lock its own
+     * respondent out of the form they are still filling in. It converges
+     * anyway at the next finalize, but "eventually" is not good enough for a
+     * window a respondent can sit in for half an hour.
+     */
+    try {
+      await this.env.DB.prepare(
+        `UPDATE chat_sessions SET status = 'active', last_activity_at = ?1 WHERE id = ?2`,
+      )
+        .bind(Date.now(), this.meta.sessionId)
+        .run();
+    } catch (err) {
+      console.error("reopen_session_row_failed", { sessionId: this.meta.sessionId, ...errorInfo(err) });
+    }
+
+    /*
+     * And then it is an ordinary edit. Everything that makes the pencil work —
+     * discarding the answer, unprojecting its row, `resumeAfterEdit` walking
+     * the flow forward without re-asking the tail — is the behaviour wanted
+     * here too, so this does not reimplement any of it.
+     */
+    return this.runAction({ action: "edit", ref: target.ref });
+  }
+
   private async abandon(reason: string): Promise<void> {
     if (!this.meta) return;
     this.meta.status = "abandoned";
@@ -2742,6 +2868,14 @@ export class SessionDO extends DurableObject<Bindings> {
     summary: { ref: string; title: string; display: string }[];
     awaitingSubmit: boolean;
     completedAt: number | null;
+    /**
+     * The ending this conversation reached, once it has reached one.
+     *
+     * So a client that comes back to a finished session — a reload, a second
+     * tab — can render the screen it ended on rather than inferring one from
+     * `status`. Null while the conversation is still going.
+     */
+    ending: PublicEnding | null;
     /** Null when the form is open to anyone. */
     auth: {
       method: RespondentAuthMethod;
@@ -2772,6 +2906,7 @@ export class SessionDO extends DurableObject<Bindings> {
         this.meta.status === "completed" || this.meta.status === "disqualified"
           ? (this.meta.completedAt ?? null)
           : null,
+      ending: this.finishedEnding(),
       auth: this.doc?.settings.requireAuth.enabled
         ? {
             method: this.doc.settings.requireAuth.method,

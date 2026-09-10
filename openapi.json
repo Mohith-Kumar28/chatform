@@ -11835,7 +11835,8 @@
                       "edit",
                       "submit",
                       "resend_code",
-                      "change_answer"
+                      "change_answer",
+                      "undo_screen_out"
                     ]
                   },
                   "ref": {
@@ -11852,7 +11853,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "Skip, edit, restart, stop, submit, or resend a verification code",
+        "summary": "Skip, edit, restart, stop, submit, undo a screen-out, or resend a verification code",
         "responses": {
           "200": {
             "description": "The turn's result"
@@ -12230,7 +12231,8 @@
                       "edit",
                       "submit",
                       "resend_code",
-                      "change_answer"
+                      "change_answer",
+                      "undo_screen_out"
                     ]
                   },
                   "ref": {
@@ -12247,7 +12249,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "Skip, edit, restart, stop, submit, or resend a verification code",
+        "summary": "Skip, edit, restart, stop, submit, undo a screen-out, or resend a verification code",
         "responses": {
           "200": {
             "description": "The turn's result"

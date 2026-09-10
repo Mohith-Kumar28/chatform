@@ -82,6 +82,17 @@ export interface SubmittedState {
   at: number;
   answers: { ref: string; title: string; display: string }[];
   /**
+   * Whether the form accepted that response or refused it.
+   *
+   * Defaults to `completed`, which is what every path but the sign-in gate can
+   * tell. A screen-out is a different screen and a different sentence: nothing
+   * was submitted, so "you already answered this" is the wrong word for it,
+   * and the reason they were turned away is the thing they came back to read.
+   */
+  outcome?: "completed" | "screened_out";
+  /** On a screen-out, the ending that refused them — title, body, requirements. */
+  ending?: EndingState | null;
+  /**
    * Whether starting another response is on the table.
    *
    * Undefined means "ask the form's settings", which is the device-local case:
@@ -831,11 +842,40 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
             status?: string;
             summary?: SubmittedState["answers"];
             completedAt?: number | null;
+            ending?: EndingState | null;
           };
           if (state.status === "completed") {
-            setSubmitted({ at: state.completedAt ?? done.at, answers: state.summary ?? [] });
+            setSubmitted({
+              at: state.completedAt ?? done.at,
+              answers: state.summary ?? [],
+              // The screen they finished on, so a return visit shows the
+              // thank-you and its link rather than one line of grey text.
+              ending: state.ending ?? null,
+            });
             setStatus("ended");
             setResolving(false);
+            return;
+          }
+          /*
+           * A refusal is reconnected to, not summarised.
+           *
+           * `complete` fires on a screen-out too, so this session is recorded
+           * here exactly as a finished one is — and because it is not
+           * `completed`, the old code fell through, threw the session away and
+           * started a blank one. On a form with `onePerIdentity` that blank
+           * one signs in, is recognised, and is refused at the door: reloading
+           * after being screened out wiped the entire conversation off the
+           * screen and replaced it with "you already answered this", which is
+           * both false and the exact opposite of reassuring.
+           *
+           * The session is still there and still reopenable, so we reattach to
+           * it. The stream replays the whole transcript and the `ending` event
+           * with it, which puts the respondent back on the card they were
+           * looking at — including the way out of it.
+           */
+          if (state.status === "disqualified") {
+            sessionRef.current = done;
+            connectStream(done.sessionId, done.token, 0);
             return;
           }
         }
@@ -1189,6 +1229,38 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     [post],
   );
 
+  /**
+   * "I answered that by mistake."
+   *
+   * The way out of a screen-out, and the reason a refusal is no longer a dead
+   * end. It is emphatically not `startOver`: somebody turned away over one
+   * answer wants that answer back, not a blank form and eleven questions to
+   * retype.
+   *
+   * The stream is reopened before the action is posted, because `complete`
+   * closed it. Reconnecting with the same session id replays what the client
+   * has already applied — the seq ratchet makes that a no-op — so the thread
+   * stays exactly where it is and only the new events, the re-asked question
+   * among them, actually land. Posting first would race the reconnect and
+   * lose them.
+   */
+  const undoScreenOut = useCallback(async () => {
+    const session = sessionRef.current as { sessionId: string; token: string } | null;
+    if (!session) return;
+    // The conversation is live again, so it is resumable again — and it is no
+    // longer a device that has answered.
+    clearSubmitted(slug);
+    saveSession(slug, session);
+    setEnding(null);
+    setSubmitted(null);
+    setError(null);
+    setThinking(true);
+    setAnswering(true);
+    setStatus("connecting");
+    connectStream(session.sessionId, session.token, 0);
+    await post("actions", { action: "undo_screen_out" });
+  }, [connectStream, post, slug]);
+
   /** Abandon this attempt and begin a fresh one. */
   const startOver = useCallback(async () => {
     if (ephemeral) {
@@ -1307,18 +1379,35 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
    * before setting an error state that would sit behind the card.
    */
   const settledAsAnswered = useCallback((data: Record<string, unknown>): boolean => {
-    const err = data.error as { code?: string; completedAt?: number | null } | undefined;
+    const err = data.error as
+      | {
+          code?: string;
+          completedAt?: number | null;
+          outcome?: "completed" | "screened_out";
+          ending?: EndingState | null;
+          answers?: SubmittedState["answers"];
+        }
+      | undefined;
     if (err?.code !== "already_answered") return false;
     setThinking(false);
     setAuth(null);
     setSubmitted({
       at: err.completedAt ?? Date.now(),
       /*
-       * Left empty deliberately. The card hides the "view my answers" button
-       * when there are none, and fetching a past response over a session that
-       * has just been refused is a lookup we should not be doing here.
+       * The answers ride on the refusal itself.
+       *
+       * They used to be left empty on the reasoning that fetching a past
+       * response over a session that had just been refused was a lookup we
+       * should not do — but the lookup that found the response is the same one
+       * that decides the block, so it costs nothing to bring the answers back
+       * with it. What it bought instead was the worst screen in the product:
+       * somebody who filled in eleven questions comes back, is told they have
+       * "already answered", and is shown a blank page with no evidence that any
+       * of it survived.
        */
-      answers: [],
+      answers: err.answers ?? [],
+      outcome: err.outcome ?? "completed",
+      ending: err.ending ?? null,
       canRepeat: false,
     });
     setStatus("ended");
@@ -1625,6 +1714,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     send,
     sendStructured,
     sendAction,
+    undoScreenOut,
     editAnswer,
     startOver,
     retry,

@@ -2630,6 +2630,7 @@ export const PostV1SessionsBySidActionsBodyAction = {
   submit: 'submit',
   resend_code: 'resend_code',
   change_answer: 'change_answer',
+  undo_screen_out: 'undo_screen_out',
 } as const;
 
 export type PostV1SessionsBySidActionsBody = {
@@ -2661,6 +2662,7 @@ export const PostV1ChatSessionsBySidActionsBodyAction = {
   submit: 'submit',
   resend_code: 'resend_code',
   change_answer: 'change_answer',
+  undo_screen_out: 'undo_screen_out',
 } as const;
 
 export type PostV1ChatSessionsBySidActionsBody = {

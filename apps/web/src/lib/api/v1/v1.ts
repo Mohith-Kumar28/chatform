@@ -5525,7 +5525,7 @@ export const getPostV1SessionsBySidActionsUrl = (sid: string,) => {
 }
 
 /**
- * @summary Skip, edit, restart, stop, submit, or resend a verification code
+ * @summary Skip, edit, restart, stop, submit, undo a screen-out, or resend a verification code
  */
 export const postV1SessionsBySidActions = async (sid: string,
     postV1SessionsBySidActionsBody: PostV1SessionsBySidActionsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidActionsResponse> => {
@@ -5582,7 +5582,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostV1SessionsBySidActionsMutationVariables = {sid: string;data: PostV1SessionsBySidActionsBody}
 
     /**
- * @summary Skip, edit, restart, stop, submit, or resend a verification code
+ * @summary Skip, edit, restart, stop, submit, undo a screen-out, or resend a verification code
  */
 export const usePostV1SessionsBySidActions = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidActions>>, TError,PostV1SessionsBySidActionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -6282,7 +6282,7 @@ export const getPostV1ChatSessionsBySidActionsUrl = (sid: string,) => {
 }
 
 /**
- * @summary Skip, edit, restart, stop, submit, or resend a verification code
+ * @summary Skip, edit, restart, stop, submit, undo a screen-out, or resend a verification code
  */
 export const postV1ChatSessionsBySidActions = async (sid: string,
     postV1ChatSessionsBySidActionsBody: PostV1ChatSessionsBySidActionsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatSessionsBySidActionsResponse> => {
@@ -6339,7 +6339,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostV1ChatSessionsBySidActionsMutationVariables = {sid: string;data: PostV1ChatSessionsBySidActionsBody}
 
     /**
- * @summary Skip, edit, restart, stop, submit, or resend a verification code
+ * @summary Skip, edit, restart, stop, submit, undo a screen-out, or resend a verification code
  */
 export const usePostV1ChatSessionsBySidActions = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidActions>>, TError,PostV1ChatSessionsBySidActionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}

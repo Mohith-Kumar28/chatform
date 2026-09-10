@@ -104,8 +104,21 @@ const actionSchema = z.object({
    * `resend_code` and `change_answer` only mean anything while a `verify`
    * question is waiting on a code: send another, or give up on this one and
    * answer the question again.
+   *
+   * `undo_screen_out` is the only action a finished session accepts. It takes
+   * back a refusal and reopens the answer that caused it — see
+   * `undoScreenOut` in the session object.
    */
-  action: z.enum(["skip", "stop", "restart", "edit", "submit", "resend_code", "change_answer"]),
+  action: z.enum([
+    "skip",
+    "stop",
+    "restart",
+    "edit",
+    "submit",
+    "resend_code",
+    "change_answer",
+    "undo_screen_out",
+  ]),
   /** Required for `edit`: which question to go back to. */
   ref: z.string().optional(),
 });

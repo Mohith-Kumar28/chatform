@@ -17,7 +17,13 @@ export type SessionAction =
   /** Only while `pendingVerification` is set: another code to the same place. */
   | "resend_code"
   /** Only while `pendingVerification` is set: drop it and re-ask the question. */
-  | "change_answer";
+  | "change_answer"
+  /**
+   * Only on a session that reached a `screen_out` ending: take the refusal
+   * back and reopen the answer that caused it. The response returns to
+   * `in_progress` and the conversation carries on from that question.
+   */
+  | "undo_screen_out";
 
 export class Sessions {
   constructor(private readonly http: HttpClient) {}

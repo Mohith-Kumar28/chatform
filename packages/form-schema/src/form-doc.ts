@@ -258,6 +258,17 @@ export interface PublicEnding {
  * reached the respondent, because the client only ever reads the ending's own
  * redirect — so setting it did nothing. A per-ending value still wins; this is
  * the default beneath it.
+ *
+ * It is a *completion* redirect, so a screen-out does not inherit it. The
+ * setting is where an author puts the page that follows a successful response
+ * — a thank-you, a payment link, the WhatsApp group the accepted teams join —
+ * and handing it to somebody the form has just turned away sends them
+ * somewhere the author explicitly decided they do not belong. It also gave a
+ * refusal a five-second fuse: the one screen a screened-out respondent needs
+ * to read, and the one they most often reach by mis-tapping a single answer,
+ * navigated itself away before they could do anything about it. A screen-out
+ * ending with a redirect of its own still redirects — that is the author
+ * saying where a refusal goes, which is a different decision.
  */
 export function toPublicEnding(
   e: Ending,
@@ -279,8 +290,11 @@ export function toPublicEnding(
     bodyMd: e.bodyMd,
     ctaLabel: e.ctaLabel,
     ctaUrl: e.ctaUrl,
-    redirectUrl: e.redirectUrl ?? fallback?.redirectUrl,
-    redirectDelaySec: e.redirectUrl ? e.redirectDelaySec : (fallback?.delaySec ?? e.redirectDelaySec),
+    redirectUrl: e.redirectUrl ?? (e.kind === "screen_out" ? undefined : fallback?.redirectUrl),
+    redirectDelaySec:
+      e.redirectUrl || e.kind === "screen_out"
+        ? e.redirectDelaySec
+        : (fallback?.delaySec ?? e.redirectDelaySec),
     showSummary: e.showSummary,
     kind: e.kind,
     requirements: e.requirements

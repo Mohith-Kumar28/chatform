@@ -288,15 +288,27 @@ const actionsRoute = (base: string) =>
        * question is holding an answer until a code comes back: send the code
        * again, or drop it and ask the question afresh. The code itself is an
        * ordinary message.
+       *
+       * `undo_screen_out` is the only action a finished session accepts: it
+       * takes back a refusal and reopens the answer that caused it.
        */
-      action: z.enum(["skip", "stop", "restart", "edit", "submit", "resend_code", "change_answer"]),
+      action: z.enum([
+        "skip",
+        "stop",
+        "restart",
+        "edit",
+        "submit",
+        "resend_code",
+        "change_answer",
+        "undo_screen_out",
+      ]),
       /** For `edit`: the question to go back to. */
       ref: z.string().optional(),
     }),
   ),
   describeRoute({
     tags: ["v1"],
-    summary: "Skip, edit, restart, stop, submit, or resend a verification code",
+    summary: "Skip, edit, restart, stop, submit, undo a screen-out, or resend a verification code",
     responses: {
       200: { description: "The turn's result" },
       202: { description: "Still running" },

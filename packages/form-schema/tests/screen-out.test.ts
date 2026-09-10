@@ -166,6 +166,36 @@ describe("the screen-out ending", () => {
     expect(pub.requirements).toEqual(["A team of 2 to 5 people"]);
   });
 
+  /**
+   * The completion redirect is a completion redirect.
+   *
+   * `settings.onComplete.redirectUrl` is where an author sends somebody who
+   * succeeded — a thank-you page, a payment link, the WhatsApp group the
+   * accepted teams join. Inheriting it on a refusal walked the respondent the
+   * form had just turned away straight into the place reserved for the ones it
+   * accepted, and did it on a five-second timer, over the top of the one
+   * screen they needed to read.
+   */
+  it("does not inherit the completion redirect", () => {
+    const doc = shell([success, screenOut()]);
+    const onComplete = { redirectUrl: "https://example.com/welcome", delaySec: 5 };
+
+    expect(toPublicEnding(doc.endings[0]!, onComplete).redirectUrl).toBe("https://example.com/welcome");
+    expect(toPublicEnding(doc.endings[1]!, onComplete).redirectUrl).toBeUndefined();
+  });
+
+  it("still honours a redirect the author put on the refusal itself", () => {
+    // Naming one here is the author saying where a refusal goes, which is a
+    // different decision from where a completion goes.
+    const doc = shell([
+      success,
+      screenOut({ redirectUrl: "https://example.com/eligibility", redirectDelaySec: 12 }),
+    ]);
+    const pub = toPublicEnding(doc.endings[1]!, { redirectUrl: "https://example.com/welcome", delaySec: 5 });
+    expect(pub.redirectUrl).toBe("https://example.com/eligibility");
+    expect(pub.redirectDelaySec).toBe(12);
+  });
+
   it("shows only the requirements this response actually missed", () => {
     const doc = shell([
       success,

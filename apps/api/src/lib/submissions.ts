@@ -289,6 +289,45 @@ export async function deleteAnswerRow(o: ResponseOwner, responseId: string, ref:
   ]);
 }
 
+/**
+ * Put a screened-out response back to `in_progress`.
+ *
+ * The mirror of `finalizeResponse` for the one terminal state a respondent is
+ * allowed to walk out of. A screen-out is finalized the instant it is reached
+ * — the answers are worth keeping and the author's screen-out count has to be
+ * true even if the tab closes a second later — but it is also the state people
+ * land in by mis-tapping one answer, so it has to be reversible.
+ *
+ * Guarded on `status = 'disqualified'` and reported through `changed` for the
+ * same reason `finalizeResponse` is: a second caller must not resurrect a
+ * response that has since been finished properly, and must not clear a
+ * completion's `completed_at`.
+ *
+ * `active_ms` is deliberately left alone. The sitting that ended in the
+ * refusal was time the respondent really spent, and the next `finalizeResponse`
+ * adds its own on top — the same accumulation a resumed abandonment gets.
+ *
+ * No webhook. `response.disqualified` has already been delivered and cannot be
+ * recalled; whatever this response becomes will announce itself when it gets
+ * there. A consumer that saw the refusal and then sees a completion for the
+ * same `submissionId` is reading a true sequence of events.
+ */
+export async function reopenResponse(
+  o: ResponseOwner,
+  responseId: string,
+): Promise<{ changed: boolean }> {
+  if (isPreview(o)) return { changed: false };
+  const res = await o.env.DB.prepare(
+    `UPDATE submissions
+        SET status = 'in_progress', completed_at = NULL, updated_at = ?1,
+            meta = json_set(coalesce(meta,'{}'), '$.endingRef', NULL, '$.abandonReason', NULL)
+      WHERE id = ?2 AND status = 'disqualified'`,
+  )
+    .bind(Date.now(), responseId)
+    .run();
+  return { changed: (res.meta?.changes ?? 0) > 0 };
+}
+
 /** Every answer flattened into one lowercase haystack for the dashboard's search box. */
 export function buildSearchText(answers: AnswerMap): string {
   return Object.entries(answers)

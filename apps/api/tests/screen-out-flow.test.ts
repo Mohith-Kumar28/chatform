@@ -328,3 +328,132 @@ describe("the same form driven over the response API", () => {
     expect(body.status).toBe("disqualified");
   });
 });
+
+/**
+ * Taking a refusal back.
+ *
+ * A screen-out is a rule failing, and the ordinary way to fail one is to tap
+ * the wrong chip: "No, we don't have two women on the team" answered by
+ * somebody who does. Until `undo_screen_out` existed that cost them the whole
+ * form — the card said what was wrong and offered nothing to do about it, and
+ * reloading only brought the same card back, because the session was terminal.
+ *
+ * So the refusal is reversible in exactly one direction: back to the question
+ * that caused it, with that answer discarded and every other one kept.
+ */
+describe("a respondent who was screened out by mistake", () => {
+  const act = (sessionId: string, action: string) =>
+    api(`/v1/sessions/${sessionId}/actions`, { method: "POST", body: JSON.stringify({ action }) });
+
+  it("is put back on the question that refused them", async () => {
+    const s = await open();
+    await answer(s, "q_size", 3);
+    await answer(s, "q_conduct", false);
+
+    const res = await act(s, "undo_screen_out");
+    expect(res.status).toBe(200);
+    const turn = (await res.json()) as TurnResult;
+    expect(turn.accepted).toBe(true);
+    expect(turn.question?.ref).toBe("q_conduct");
+    expect(turn.ending).toBeNull();
+    expect(turn.complete).toBe(false);
+  });
+
+  it("keeps everything they answered before it", async () => {
+    const s = await open();
+    await answer(s, "q_size", 3);
+    await answer(s, "q_conduct", false);
+    await act(s, "undo_screen_out");
+
+    // The whole point of not calling this "start over": three answers in, one
+    // wrong tap must not cost the other two.
+    const rows = await env.DB.prepare(
+      `SELECT a.block_ref FROM submission_answers a
+         JOIN submissions s ON s.id = a.submission_id
+        WHERE s.session_id = ?`,
+    )
+      .bind(s)
+      .all<{ block_ref: string }>();
+    const refs = (rows.results ?? []).map((r) => r.block_ref);
+    expect(refs).toContain("q_size");
+    // The retracted one is gone, not merely overwritten later.
+    expect(refs).not.toContain("q_conduct");
+  });
+
+  it("puts the response row back to in_progress", async () => {
+    const s = await open();
+    await answer(s, "q_size", 3);
+    await answer(s, "q_conduct", false);
+    expect(await rowFor(s)).toMatchObject({ status: "disqualified" });
+
+    await act(s, "undo_screen_out");
+
+    const row = await rowFor(s);
+    expect(row?.status).toBe("in_progress");
+    // A response that is open again must not still claim a moment it ended,
+    // or the results table reports a completion time for a live conversation.
+    expect(row?.completed_at).toBeNull();
+    expect(row?.ending).toBeNull();
+  });
+
+  it("puts the chat session row back to active as well", async () => {
+    const s = await open();
+    await answer(s, "q_size", 9);
+    await act(s, "undo_screen_out");
+
+    // The `allowResubmissions` gate reads this column. A live conversation
+    // still claiming to be a finished one locks its own respondent out of the
+    // form they are in the middle of.
+    const row = await env.DB.prepare(`SELECT status FROM chat_sessions WHERE id = ?`)
+      .bind(s)
+      .first<{ status: string }>();
+    expect(row?.status).toBe("active");
+  });
+
+  it("can then finish the form properly", async () => {
+    const s = await open();
+    await answer(s, "q_size", 3);
+    await answer(s, "q_conduct", false);
+    await act(s, "undo_screen_out");
+
+    const fixed = await answer(s, "q_conduct", true);
+    // `resumeAfterEdit` walks forward rather than re-asking the tail, so the
+    // next thing wanted is the one question still unanswered.
+    expect(fixed.question?.ref).toBe("q_project");
+
+    const last = await answer(s, "q_project", "A better kettle");
+    expect(last.awaitingSubmit).toBe(true);
+
+    const submit = await act(s, "submit");
+    const done = (await submit.json()) as TurnResult;
+    expect(done.ending?.ref).toBe("end_thanks");
+    expect(await rowFor(s)).toMatchObject({ status: "completed" });
+  });
+
+  it("is refused on a response that was accepted", async () => {
+    const s = await open();
+    await answer(s, "q_size", 3);
+    await answer(s, "q_conduct", true);
+    await answer(s, "q_project", "A better kettle");
+    await act(s, "submit");
+    expect(await rowFor(s)).toMatchObject({ status: "completed" });
+
+    // Only a refusal is reversible. A completion is the respondent's own
+    // decision and reopening it would un-submit a response the owner has
+    // already been told about.
+    const res = await act(s, "undo_screen_out");
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("not_screened_out");
+    expect(await rowFor(s)).toMatchObject({ status: "completed" });
+  });
+
+  it("is refused twice over — the second undo has nothing to undo", async () => {
+    const s = await open();
+    await answer(s, "q_size", 9);
+    expect((await act(s, "undo_screen_out")).status).toBe(200);
+
+    const again = await act(s, "undo_screen_out");
+    expect(again.status).toBe(400);
+    expect(await rowFor(s)).toMatchObject({ status: "in_progress" });
+  });
+});

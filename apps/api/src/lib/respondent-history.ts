@@ -28,6 +28,20 @@ import type { RespondentKeySource } from "./respondent-key.js";
 export interface PriorResponse {
   submissionId: string;
   completedAt: number | null;
+  /**
+   * Which of the two terminal states this is.
+   *
+   * They are both "finished" to every gate that counts responses, and they are
+   * nothing alike to the person who left them. `completed` is a response the
+   * form accepted; `disqualified` is one it refused. Telling somebody the form
+   * turned away that they "already answered it" is not a rounding error in the
+   * wording — it is the wrong fact, and it is the one they will argue with.
+   */
+  status: "completed" | "disqualified";
+  /** The ending they reached, so a refusal can say why it refused. */
+  endingRef: string | null;
+  /** Their answers, so a return visit has a transcript rather than a blank screen. */
+  answers: Record<string, unknown>;
 }
 
 export interface ResumableResponse {
@@ -79,14 +93,15 @@ export async function findIdentityHistory(
   try {
     const [finishedRow, openRow] = await Promise.all([
       env.DB.prepare(
-        `SELECT id, completed_at FROM submissions
+        `SELECT id, completed_at, status, json_extract(meta, '$.endingRef') AS ending_ref
+           FROM submissions
           WHERE form_id = ?1 AND respondent_provider = ?2 AND respondent_subject = ?3
             AND status IN ('completed', 'disqualified') AND is_test = 0
             AND (session_id IS NULL OR session_id != ?4)
           ORDER BY completed_at DESC LIMIT 1`,
       )
         .bind(formId, identity.provider, identity.subject, currentSessionId)
-        .first<{ id: string; completed_at: number | null }>(),
+        .first<{ id: string; completed_at: number | null; status: string; ending_ref: string | null }>(),
 
       /*
        * Most recently touched, not most recently started. Somebody who opened
@@ -104,8 +119,22 @@ export async function findIdentityHistory(
         .first<{ id: string }>(),
     ]);
 
+    /*
+     * The answers come back with it, and they are the respondent's own — this
+     * lookup is only ever reached by somebody who has just proved the identity
+     * the rows are filed under. A return visit that says "you have already
+     * been here" and shows an empty screen is the thing this is for: the
+     * answers are the only evidence the respondent has that their work was not
+     * thrown away.
+     */
     const finished: PriorResponse | null = finishedRow
-      ? { submissionId: finishedRow.id, completedAt: finishedRow.completed_at }
+      ? {
+          submissionId: finishedRow.id,
+          completedAt: finishedRow.completed_at,
+          status: finishedRow.status === "disqualified" ? "disqualified" : "completed",
+          endingRef: finishedRow.ending_ref,
+          answers: (await loadAnswers(env, finishedRow.id)).answers,
+        }
       : null;
 
     /*
