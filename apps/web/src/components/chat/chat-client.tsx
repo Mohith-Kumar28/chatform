@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExterna
 import {
   Check,
   ArrowDown,
+  ArrowUpRight,
   CheckCheck,
   PartyPopper,
   Pencil,
@@ -187,12 +188,36 @@ export function ChatClient({
   }, []);
   useViewportLock(!previewMode, onViewportChange);
 
-  // Honour the ending's redirect, which was parsed and then ignored.
+  /**
+   * Honour the ending's redirect — in a new tab, leaving this one where it is.
+   *
+   * It used to be `location.assign`, which threw the finished form away. What
+   * a redirect points at is almost always somewhere to go *next* (a WhatsApp
+   * group, a payment page, a schedule), and the respondent still wants what is
+   * on this screen when they come back from it: the confirmation, the link
+   * spelled out in the body, the "you already answered this" record.
+   *
+   * A pop-up opened five seconds after the last tap has no user gesture behind
+   * it, and Safari in particular will refuse it. That is not a failure worth
+   * hiding — `blocked` puts a real button on the ending, and a tap on that is a
+   * gesture no browser argues with.
+   */
+  const [redirectBlocked, setRedirectBlocked] = useState(false);
   useEffect(() => {
     const target = chat.ending?.redirectUrl;
     if (!target || previewMode) return;
     const delay = (chat.ending?.redirectDelaySec ?? 5) * 1000;
-    const t = setTimeout(() => window.location.assign(target), delay);
+    const t = setTimeout(() => {
+      /*
+       * `noopener` goes on the handle, not in the feature string. Passing it
+       * as a feature makes `window.open` return null *by specification* — no
+       * reference is the whole point — which is indistinguishable from being
+       * blocked, and would show the fallback button every single time.
+       */
+      const opened = window.open(target, "_blank");
+      if (opened) opened.opener = null;
+      else setRedirectBlocked(true);
+    }, delay);
     return () => clearTimeout(t);
   }, [chat.ending, previewMode]);
 
@@ -338,9 +363,27 @@ export function ChatClient({
         onClose={canClose ? () => void requestEmbedClose() : undefined}
       />
 
+      {/*
+        `overflow-x-hidden` is a floor, not the fix.
+
+        A non-visible `overflow-y` forces the computed `overflow-x` from
+        `visible` to `auto` — so `overflow-y-auto` alone quietly made this a
+        horizontal scroller too, and one unbreakable string anywhere in the
+        thread was enough to give a respondent a sideways-sliding page. That
+        cause is fixed where it belongs (`overflow-wrap` on `.chat-prose`), and
+        this is the guard for the next one: an author can put arbitrary text in
+        a question title, an ending body or a chip label, and a respondent is
+        the last person who should discover it.
+
+        It clips nothing that wants to scroll: `pre` and `table` carry their own
+        `overflow-x: auto` inside the prose, so wide code and wide tables still
+        scroll within themselves. `overscroll-contain` beside it governs chaining
+        on both axes and never the overflow itself, which is why it was no help
+        here.
+      */}
       <div
         ref={scrollRef}
-        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
       >
         <div ref={contentRef} className="mx-auto w-full max-w-2xl space-y-3 px-4 pt-6 pb-10">
           {/* Screen readers announce new agent messages without stealing focus.
@@ -466,6 +509,7 @@ export function ChatClient({
                 reopen — its "session" is owned by the builder around it.
               */
               onUndoScreenOut={previewMode ? undefined : () => void chat.undoScreenOut()}
+              redirectBlocked={redirectBlocked}
             />
           )}
 
@@ -954,37 +998,56 @@ function AlreadySubmittedCard({
       )}
 
       {/*
-        And the status under it, sized like a footnote rather than a screen.
+        And the status under it — a receipt, not a footnote.
+
+        Why it exists at all: this screen is a *return visit*. Somebody who has
+        already answered opened the link again, and without this line the page
+        is indistinguishable from having just submitted — so the natural reading
+        is that they submitted a second time. It is the one piece of information
+        on this screen that the ending card above cannot carry.
+
+        It used to be a line of 60%-opacity grey with a tick floating beside two
+        centred lines of ragged text, which is how you make the one sentence
+        that answers "did this go through?" look like small print. It is a
+        chip now, in outcome colour, with the tick on the first line and the
+        form and the day under it — left-aligned inside a centred chip, because
+        centred text that wraps has no edge for the eye to come back to.
 
         There is no "view my answers" button any more: the answers are the
         thread above, so a control to reveal them would be a control to reveal
         what is already on screen. What is left is the one thing they might
         actually want, which is to go again.
       */}
-      <div className="animate-message-in flex flex-col items-center gap-3 pt-6 pb-2 text-center">
-        <div className="flex items-center gap-2 text-sm opacity-60">
+      <div className="animate-message-in flex flex-col items-center gap-4 px-5 pt-6 pb-2 sm:px-6">
+        <div
+          className="flex max-w-full min-w-0 items-start gap-2.5 rounded-2xl border px-4 py-3 text-left"
+          style={{
+            // Mixed against `transparent` rather than against the page, so one
+            // pair of values works on a white theme and a black one.
+            color: `var(--cf-${screenedOut ? "warning" : "success"})`,
+            background: `color-mix(in srgb, var(--cf-${screenedOut ? "warning" : "success"}) 11%, transparent)`,
+            borderColor: `color-mix(in srgb, var(--cf-${screenedOut ? "warning" : "success"}) 26%, transparent)`,
+          }}
+        >
           {screenedOut ? (
-            <ShieldAlert className="size-4 shrink-0" strokeWidth={2} />
+            <ShieldAlert className="mt-px size-4 shrink-0" strokeWidth={2} />
           ) : (
-            <CheckCheck className="size-4 shrink-0" strokeWidth={2} />
+            <CheckCheck className="mt-px size-4 shrink-0" strokeWidth={2} />
           )}
-          <span>
-            {screenedOut ? (
-              /*
-                Deliberately not "you already answered". They did not — the form
-                stopped them — and the sentence has to leave them in no doubt
-                that the answers above are still on file.
-              */
-              <>
-                {title} did not accept this registration {relativeDay(submitted.at)}. Your answers are
-                saved.
-              </>
-            ) : (
-              <>
-                You already answered {title} {relativeDay(submitted.at)}
-              </>
-            )}
-          </span>
+          <div className="min-w-0">
+            <p className="text-sm leading-snug font-medium">
+              {/*
+                Deliberately not "you already answered" on a refusal. They did
+                not — the form stopped them — and the sentence has to leave them
+                in no doubt that the answers above are still on file.
+              */}
+              {screenedOut ? "This wasn't accepted" : "You've already answered this"}
+            </p>
+            <p className="mt-0.5 text-xs leading-snug break-words opacity-80">
+              {title} · {relativeDay(submitted.at)}
+              {screenedOut && " · your answers are saved"}
+            </p>
+          </div>
         </div>
 
         {allowRepeat && (
@@ -1198,6 +1261,7 @@ function EndingCard({
   onRestart,
   onUndoScreenOut,
   replay,
+  redirectBlocked = false,
 }: {
   ending: NonNullable<ReturnType<typeof useChat>["ending"]>;
   theme: PublicFormConfig["theme"];
@@ -1222,6 +1286,8 @@ function EndingCard({
    * visit is exactly when somebody is looking for it again.
    */
   replay?: boolean;
+  /** The new tab was refused, so the respondent has to open it themselves. */
+  redirectBlocked?: boolean;
 }) {
   const screenedOut = ending.kind === "screen_out";
   const requirements = ending.requirements ?? [];
@@ -1229,7 +1295,14 @@ function EndingCard({
     <>
       {!screenedOut && !replay && <Confetti colors={[theme.accent, theme.userBubble, "#ffffff", theme.text]} />}
 
-      <div className="animate-message-in flex flex-col items-center px-6 py-10 text-center">
+      {/*
+        `min-w-0` and `max-w-full`: this card is a flex child, and a flex child's
+        floor is its content's min-content width unless it is told otherwise. One
+        long word — see `.chat-prose` — is enough to push it past the viewport
+        and give the whole page a horizontal scrollbar, taking the side padding
+        off screen with it. The two together make the viewport the ceiling.
+      */}
+      <div className="animate-message-in flex w-full max-w-full min-w-0 flex-col items-center px-5 py-10 text-center sm:px-6">
         {/*
           The brand mark stays on a refusal — being turned away by an unbranded
           grey page reads as an error, and this is not an error. Only the icon
@@ -1260,7 +1333,7 @@ function EndingCard({
         </h2>
 
         {ending.bodyMd && (
-          <div className="chat-prose mt-2 max-w-sm text-[0.9375rem] opacity-75">
+          <div className="chat-prose mt-2 w-full max-w-sm min-w-0 text-[0.9375rem] opacity-75">
             <Markdown remarkPlugins={[remarkGfm]} allowedElements={SAFE_ELEMENTS} unwrapDisallowed>
               {ending.bodyMd}
             </Markdown>
@@ -1333,11 +1406,29 @@ function EndingCard({
           </a>
         )}
 
-        {ending.redirectUrl && !replay && (
-          <p className="mt-4 text-xs opacity-50">
-            Taking you to the next step in {ending.redirectDelaySec ?? 5}s…
-          </p>
-        )}
+        {ending.redirectUrl &&
+          !replay &&
+          (redirectBlocked ? (
+            /*
+              The browser refused the new tab. Saying so is pointless — "pop-up
+              blocked" is our problem, not theirs — so this is just the next
+              step, offered as the button it should have been.
+            */
+            <a
+              href={ending.redirectUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-6 inline-flex h-11 items-center gap-2 rounded-full px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
+              style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+            >
+              Continue to the next step
+              <ArrowUpRight className="size-4" strokeWidth={2} />
+            </a>
+          ) : (
+            <p className="mt-4 text-xs opacity-50">
+              Opening the next step in a new tab in {ending.redirectDelaySec ?? 5}s…
+            </p>
+          ))}
 
         {/*
           Only the "you've already answered this" screen offered this, which is

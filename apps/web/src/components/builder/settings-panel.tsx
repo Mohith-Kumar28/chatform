@@ -401,7 +401,10 @@ export function SettingsPanel({
                 />
               </SettingRow>
               <LockedControl feature="completion_redirect">
-              <SettingRow label="Redirect after completion" description="Send respondents to your own thank-you page.">
+              <SettingRow
+                label="Redirect after completion"
+                description="Opens your own page in a new tab when they finish. The confirmation stays open behind it."
+              >
                 <Input
                   className="max-w-md"
                   value={settings.onComplete.redirectUrl ?? ""}

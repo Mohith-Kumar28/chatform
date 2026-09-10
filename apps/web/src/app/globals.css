@@ -1182,6 +1182,18 @@
 
 /* Markdown inside a bubble. Tight rhythm: a chat message is not an article,
    so paragraph spacing is minimal and headings barely differ in size. */
+
+/* A pasted URL is one word to the line breaker.
+   `remark-gfm` auto-links anything that looks like an address, and a WhatsApp
+   invite is ~60 unbreakable characters — wider than a phone. `anywhere` rather
+   than `break-word` because only `anywhere` counts towards min-content width:
+   under `break-word` the URL still sets the floor for its container, so the
+   card grows past the viewport and takes the whole page's horizontal scroll
+   with it. The visible symptom is a thank-you screen whose text touches both
+   edges and slides sideways. */
+.chat-prose {
+  overflow-wrap: anywhere;
+}
 .chat-prose > :first-child {
   margin-top: 0;
 }

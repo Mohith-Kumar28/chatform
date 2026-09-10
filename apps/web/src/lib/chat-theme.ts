@@ -117,6 +117,19 @@ export function chatThemeVars(theme: ThemeDoc): CSSProperties {
     "--cf-user-bubble": theme.userBubble,
     "--cf-user-bubble-text": inkFor(theme.userBubble, theme.userBubbleText),
     "--cf-composer-bg": theme.surface,
+    /*
+     * Outcome colour, which the palette does not supply.
+     *
+     * A theme names one accent, and "this went through" cannot borrow it: on a
+     * form whose accent is red a green receipt is the only thing that reads as
+     * a receipt, and on a form whose accent is green a red refusal is the only
+     * thing that reads as a refusal. So these two are fixed hues, lightened for
+     * a dark page and darkened for a light one, which is the whole of what a
+     * theme can legitimately change about them. Used at low opacity for fills —
+     * see the return-visit chip — so they sit on any background the author picks.
+     */
+    "--cf-success": darkSurface ? "oklch(0.8 0.15 155)" : "oklch(0.52 0.13 152)",
+    "--cf-warning": darkSurface ? "oklch(0.84 0.14 80)" : "oklch(0.56 0.13 62)",
     "--cf-chip-bg": theme.surface,
     "--cf-chip-border": shift(theme.text, 0.82, darkSurface ? "dark" : "light"),
     "--cf-radius": RADIUS_PX[theme.radius],
