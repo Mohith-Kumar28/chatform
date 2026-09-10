@@ -1460,25 +1460,6 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
   const getRespondentToken = useCallback(() => sessionRef.current?.token ?? null, []);
 
   /**
-   * "Don't email me about this", from beside the question asking for an address.
-   *
-   * Fire-and-forget on purpose. The respondent is mid-conversation and this is
-   * a preference about mail that may never be sent; blocking their next answer
-   * on it, or showing them an error about it, would make declining feel more
-   * expensive than accepting — which is the opposite of what an opt-out is for.
-   * A failure means they may get one reminder, and every reminder carries its
-   * own one-click unsubscribe.
-   */
-  const declineFollowUps = useCallback(() => {
-    const s = sessionRef.current;
-    if (!s) return;
-    void fetch(`${apiOrigin}/p/sessions/${s.sessionId}/followup-optout`, {
-      method: "POST",
-      headers: { "x-respondent-token": s.token },
-    }).catch(() => {});
-  }, [apiOrigin]);
-
-  /**
    * The boot screen is a decision, not a wait. See BOOT_MAX_MS.
    */
   useEffect(() => {
@@ -1641,7 +1622,6 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     uploadSpec,
     getUploadBase,
     getRespondentToken,
-    declineFollowUps,
     send,
     sendStructured,
     sendAction,

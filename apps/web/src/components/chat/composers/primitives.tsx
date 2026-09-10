@@ -2,6 +2,7 @@
 
 import { SkipForward } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { InputSemantics } from "./input-semantics";
 
 /**
  * Chat composer primitives, themed entirely from the runtime `--cf-*` variables
@@ -47,6 +48,18 @@ export function KeyHint({
       {children}
     </kbd>
   );
+}
+
+/**
+ * A button that must not take the caret off the message box.
+ *
+ * Send and Skip both finish the current question and hand straight back to the
+ * box for the next one, so the browser's default — focus follows the mousedown
+ * — is a keyboard torn down and rebuilt between every pair of questions. The
+ * affordance does the same thing for its chips; see `keepComposerFocus`.
+ */
+export function keepFocus(e: React.MouseEvent) {
+  e.preventDefault();
 }
 
 export function Chip({
@@ -138,6 +151,7 @@ export function SkipButton({ onSkip }: { onSkip: () => void }) {
     <button
       type="button"
       onClick={onSkip}
+      onMouseDown={keepFocus}
       className={cn(
         "inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-medium",
         "border-[var(--cf-accent)] bg-[color-mix(in_oklch,var(--cf-accent)_8%,transparent)] text-[var(--cf-accent)]",
@@ -175,6 +189,7 @@ export function SendRow({
       <button
         type="button"
         onClick={onSend}
+        onMouseDown={keepFocus}
         disabled={disabled}
         className={cn(
           "inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium",
@@ -199,22 +214,38 @@ export function TextInput({
   onChange,
   onSubmit,
   placeholder,
-  type = "text",
+  semantics,
   autoFocus,
   multiline,
-  inputMode,
 }: {
   value: string;
   onChange: (v: string) => void;
   onSubmit: () => void;
   placeholder?: string;
-  type?: string;
+  /**
+   * What this question is asking for, in the browser's own vocabulary — the
+   * keyboard, the autofill token, whether to capitalise. See
+   * `input-semantics.ts`.
+   */
+  semantics: InputSemantics;
   autoFocus?: boolean;
   multiline?: boolean;
-  inputMode?: "text" | "email" | "tel" | "url" | "numeric" | "decimal";
 }) {
   const shared =
     "w-full rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 py-3 text-[0.9375rem] outline-none transition-colors placeholder:opacity-50 focus:border-[var(--cf-accent)]";
+
+  /* Enter sends here, so the phone's return key should say so rather than
+     drawing a newline it will not insert. */
+  const shell = {
+    placeholder,
+    autoFocus,
+    enterKeyHint: "send" as const,
+    autoComplete: semantics.autoComplete,
+    autoCapitalize: semantics.autoCapitalize,
+    autoCorrect: semantics.autoCorrect,
+    spellCheck: semantics.spellCheck,
+    name: semantics.name,
+  };
 
   if (multiline) {
     return (
@@ -229,9 +260,9 @@ export function TextInput({
             onSubmit();
           }
         }}
-        placeholder={placeholder}
-        autoFocus={autoFocus}
         rows={3}
+        inputMode={semantics.inputMode}
+        {...shell}
         className={cn(shared, "resize-none")}
       />
     );
@@ -247,10 +278,9 @@ export function TextInput({
           onSubmit();
         }
       }}
-      placeholder={placeholder}
-      type={type}
-      inputMode={inputMode}
-      autoFocus={autoFocus}
+      type={semantics.type}
+      inputMode={semantics.inputMode}
+      {...shell}
       className={cn(shared, "h-11 py-0")}
     />
   );

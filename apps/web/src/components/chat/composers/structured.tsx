@@ -21,6 +21,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { KeyHint } from "./primitives";
+import { FIELD_SEMANTICS } from "./input-semantics";
 import { useChoiceKeys } from "./choice-keys";
 
 /**
@@ -31,16 +32,16 @@ import { useChoiceKeys } from "./choice-keys";
  * shape `validateAnswer` requires — so they were unanswerable in practice.
  */
 
-const CONTACT_LABELS: Record<string, { label: string; type: string; inputMode?: "email" | "tel" }> = {
-  first_name: { label: "First name", type: "text" },
-  last_name: { label: "Last name", type: "text" },
-  email: { label: "Email", type: "email", inputMode: "email" },
-  phone: { label: "Phone", type: "tel", inputMode: "tel" },
-  street: { label: "Street", type: "text" },
-  city: { label: "City", type: "text" },
-  state: { label: "State / region", type: "text" },
-  postal: { label: "Postal code", type: "text" },
-  country: { label: "Country", type: "text" },
+const CONTACT_LABELS: Record<string, string> = {
+  first_name: "First name",
+  last_name: "Last name",
+  email: "Email",
+  phone: "Phone",
+  street: "Street",
+  city: "City",
+  state: "State / region",
+  postal: "Postal code",
+  country: "Country",
 };
 
 export function FieldsComposer({
@@ -61,14 +62,23 @@ export function FieldsComposer({
     <div className="space-y-2">
       <div className="grid gap-2 sm:grid-cols-2">
         {fields.map((f) => {
-          const meta = CONTACT_LABELS[f] ?? { label: f, type: "text" };
+          /*
+            The autofill token is the whole point of naming these fields. A
+            browser holding somebody's address will fill all five of these in
+            one tap — but only if each one says which part it is, in the
+            vocabulary the spec defines. See `input-semantics.ts`.
+          */
+          const meta = FIELD_SEMANTICS[f];
           return (
             <label key={f} className="space-y-1">
-              <span className="block text-xs opacity-60">{meta.label}</span>
+              <span className="block text-xs opacity-60">{CONTACT_LABELS[f] ?? f}</span>
               <input
                 value={values[f] ?? ""}
-                type={meta.type}
-                inputMode={meta.inputMode}
+                name={f}
+                type={meta?.type ?? "text"}
+                inputMode={meta?.inputMode}
+                autoComplete={meta?.autoComplete ?? "off"}
+                autoCapitalize={meta?.autoCapitalize ?? "sentences"}
                 onChange={(e) => setValues((v) => ({ ...v, [f]: e.target.value }))}
                 className="h-11 w-full rounded-xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-3 text-[0.9375rem] outline-none focus:border-[var(--cf-accent)]"
               />
@@ -78,7 +88,7 @@ export function FieldsComposer({
       </div>
       {missing.length > 0 && filled.length > 0 && (
         <p className="px-1 text-xs opacity-55">
-          Still needed: {missing.map((f) => (CONTACT_LABELS[f]?.label ?? f).toLowerCase()).join(", ")}.
+          Still needed: {missing.map((f) => (CONTACT_LABELS[f] ?? f).toLowerCase()).join(", ")}.
         </p>
       )}
       <button

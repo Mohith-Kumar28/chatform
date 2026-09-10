@@ -24,9 +24,11 @@ import { VerifyCard } from "./verify-card";
 import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
 import { useChat, type ChatMessage } from "./use-chat";
 import { SendRow, SkipButton, TextInput } from "./composers/primitives";
+import { inputSemanticsFor } from "./composers/input-semantics";
 import { QuestionAffordance } from "./question-affordance";
 import { QuestionMedia } from "./question-media";
 import { ChatBoot } from "./chat-boot";
+import { useViewportLock } from "./use-viewport-lock";
 import { Confetti } from "./confetti";
 import { cn } from "@/lib/utils";
 import { API_ORIGIN } from "@/lib/api/mutator";
@@ -169,6 +171,21 @@ export function ChatClient({
     return () => ro.disconnect();
   }, [chat.resolving, chat.submitted]);
 
+  /**
+   * Keep the newest turn above the keyboard.
+   *
+   * The shell shrinks the instant the keyboard opens, and the bottom of the
+   * thread — the question being answered — is what goes under the fold. This
+   * runs on the same measurement that resized the shell, so the two happen in
+   * one frame.
+   */
+  const onViewportChange = useCallback(() => {
+    if (!pinnedRef.current) return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, []);
+  useViewportLock(!previewMode, onViewportChange);
+
   // Honour the ending's redirect, which was parsed and then ignored.
   useEffect(() => {
     const target = chat.ending?.redirectUrl;
@@ -255,7 +272,10 @@ export function ChatClient({
   if (chat.resolving) {
     return (
       <div
-        className={cn("chat-surface flex flex-col", previewMode ? "h-full min-h-0" : "h-svh")}
+        className={cn(
+          "chat-surface flex flex-col",
+          previewMode ? "h-full min-h-0" : "cf-chat-viewport",
+        )}
         style={themeVars}
       >
         <ChatBoot title={config.agentName || config.title} logoUrl={config.theme.logoUrl} />
@@ -277,10 +297,15 @@ export function ChatClient({
 
   return (
     <div
-      // h-svh, not min-h-svh: with a minimum the container grew past the
-      // viewport and the WINDOW scrolled, so the inner div never scrolled and
-      // auto-scroll silently did nothing.
-      className={cn("chat-surface flex flex-col", previewMode ? "h-full min-h-0" : "h-svh")}
+      // A fixed shell, not `h-svh`: with a viewport unit the container was the
+      // wrong height whenever the address bar collapsed or the keyboard came
+      // up, and the document behind it stayed scrollable — so the first swipe
+      // of every gesture went into the browser's chrome instead of the thread.
+      // `use-viewport-lock` measures what is really visible; this is that.
+      className={cn(
+        "chat-surface flex flex-col",
+        previewMode ? "h-full min-h-0" : "cf-chat-viewport",
+      )}
       style={themeVars}
     >
       <ChatHeader
@@ -298,7 +323,10 @@ export function ChatClient({
         onClose={canClose ? () => void requestEmbedClose() : undefined}
       />
 
-      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto">
+      <div
+        ref={scrollRef}
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
+      >
         <div ref={contentRef} className="mx-auto w-full max-w-2xl space-y-3 px-4 pt-6 pb-10">
           {/* Screen readers announce new agent messages without stealing focus.
               Memoised: this walked the whole thread on every render, and a
@@ -373,8 +401,6 @@ export function ChatClient({
                 respondentToken={respondentToken}
                 onStructured={onStructured}
                 onSkip={onSkip}
-                followUpEnabled={config.followUpEnabled}
-                onDeclineFollowUps={chat.declineFollowUps}
               />
             </div>
           )}
@@ -1337,18 +1363,14 @@ const Composer = memo(function Composer({
           autoFocus
           multiline={block.type === "long_text"}
           placeholder={block.placeholder || placeholderFor(block.type)}
-          type={block.type === "email" ? "email" : "text"}
-          inputMode={
-            block.type === "email"
-              ? "email"
-              : block.type === "phone"
-                ? "tel"
-                : block.type === "url"
-                  ? "url"
-                  : block.type === "number"
-                    ? "decimal"
-                    : "text"
-          }
+          /*
+            The box declares what the question is asking for — keyboard,
+            capitalisation, and the autofill token that lets a browser offer the
+            address or number it already holds. One input serving thirty block
+            types used to declare "text" for all of them, so the one thing a
+            chat form asks for most was the one thing nothing could fill in.
+          */
+          semantics={inputSemanticsFor(block)}
         />
       </SendRow>
 

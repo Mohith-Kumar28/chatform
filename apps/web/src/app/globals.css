@@ -1317,6 +1317,33 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Chat viewport
+
+   See `use-viewport-lock.ts` for why the height is a custom property rather
+   than a viewport unit. The declarations below it are the fallbacks, in
+   increasing order of how much of the truth they know — a browser takes the
+   last one it understands, and `--cf-vh` is only ever set once a real
+   measurement exists.
+   ═════════════════════════════════════════════════════════════════════════ */
+.cf-chat-viewport {
+  position: fixed;
+  top: var(--cf-vv-top, 0px);
+  left: 0;
+  right: 0;
+  height: 100svh;
+  height: 100dvh;
+  height: var(--cf-vh, 100dvh);
+}
+
+/* One scrollable thing on the screen: the thread. */
+html.cf-viewport-locked,
+html.cf-viewport-locked body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Embedded mode
 
    A framed form is already inside someone else's layout, so it must not bring

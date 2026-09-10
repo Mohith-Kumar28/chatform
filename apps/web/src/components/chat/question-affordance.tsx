@@ -47,9 +47,6 @@ export const QuestionAffordance = memo(function QuestionAffordance(props: {
   respondentToken: string | null;
   onStructured: (value: unknown, display: string) => void;
   onSkip: () => void;
-  /** The form emails people who leave part-way. Shows the opt-out. */
-  followUpEnabled?: boolean;
-  onDeclineFollowUps?: () => void;
 }) {
   return (
     <div
@@ -58,6 +55,9 @@ export const QuestionAffordance = memo(function QuestionAffordance(props: {
       /* Read by `useChoiceKeys`: inside this subtree Enter means "continue",
          even when a chip has focus. */
       data-affordance=""
+      /* Tapping a chip, a star or a calendar day must not dismiss the phone
+         keyboard. See `keepComposerFocus`. */
+      onMouseDown={keepComposerFocus}
       className={cn(
         "space-y-2 transition-opacity duration-[var(--duration-standard)] ease-[var(--ease-out)]",
         props.disabled && "opacity-55",
@@ -68,50 +68,33 @@ export const QuestionAffordance = memo(function QuestionAffordance(props: {
           question. `chat-client` now renders it in the one place both agree
           on. */}
       <AffordanceControls {...props} />
-      {props.followUpEnabled && collectsAddress(props.block) && props.onDeclineFollowUps && (
-        <FollowUpOptOut onDecline={props.onDeclineFollowUps} />
-      )}
     </div>
   );
 });
 
-/** The block types the follow-up address resolver reads. Kept in step with `respondent-address.ts`. */
-function collectsAddress(block: PublicBlock): boolean {
-  return block.type === "email" || block.type === "contact_info";
-}
-
 /**
- * "Don't email me about this", beside the question that asks for the address.
+ * A tap on a control in here leaves the caret where it was.
  *
- * Here rather than in a footer or on a final step because this is a form people
- * abandon — that is the entire premise of the feature — so the moment we ask
- * for their address is the last moment they are reliably still present to
- * decline. An opt-out offered only in the reminder arrives after the thing it
- * exists to prevent, and one on a step they never reach is not offered at all.
+ * Every chip, star and calendar day is a `<button>`, and focusing a button is
+ * what a browser does on mousedown — which on a phone tears the keyboard down.
+ * The respondent then answers the next question, the keyboard comes back up,
+ * they pick an option, and it goes again: the screen resizes twice per
+ * question for the whole form. No chat app does this, because none of them
+ * moves focus off the message box to acknowledge a tap.
  *
- * Deliberately a quiet checkbox rather than a prominent one. It has to be
- * genuinely findable and genuinely work; it does not have to compete with the
- * question for attention.
+ * Delegated from the wrapper rather than bolted onto twenty buttons, so a
+ * composer added later cannot forget it. `mousedown` and not `pointerdown`:
+ * suppressing the default on mousedown is what cancels the focus, and the
+ * compatibility mousedown fires on touch too — while `click` still fires, so
+ * every handler underneath is untouched.
+ *
+ * Anything that takes text is exempt: a `contact_info` field has to be able to
+ * take the caret when it is tapped.
  */
-function FollowUpOptOut({ onDecline }: { onDecline: () => void }) {
-  const [declined, setDeclined] = useState(false);
-  return (
-    <label className="text-muted-foreground flex cursor-pointer items-center gap-2 pt-1 pl-0.5 text-xs select-none">
-      <input
-        type="checkbox"
-        checked={declined}
-        className="size-3.5 cursor-pointer rounded-sm border-current accent-current"
-        onChange={(e) => {
-          setDeclined(e.target.checked);
-          // Only ever sent on the way *in* to declining. Unticking the box is
-          // rare enough, and re-subscribing somebody automatically is a worse
-          // failure than leaving them opted out.
-          if (e.target.checked) onDecline();
-        }}
-      />
-      Don’t email me reminders about this form
-    </label>
-  );
+function keepComposerFocus(e: React.MouseEvent<HTMLElement>) {
+  const el = e.target as HTMLElement | null;
+  if (!el || el.closest("input, textarea, select, [contenteditable]")) return;
+  if (el.closest("button, [role='button']")) e.preventDefault();
 }
 
 /**

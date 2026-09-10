@@ -416,14 +416,18 @@ function NumberForm({
             inputMode="tel"
             autoComplete="tel"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            // Guarded rather than `disabled`: see the code box below. A number
+            // the server turns down re-enables an input nobody is in, so the
+            // correction starts with a tap to get the keyboard back.
+            onChange={(e) => !pending && setPhone(e.target.value)}
             placeholder="+1 415 555 0132"
-            disabled={pending}
+            aria-busy={pending}
             className="h-11 w-full rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-bg)] pr-3 pl-9 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--cf-accent)]"
           />
         </div>
         <button
           type="submit"
+          onMouseDown={(e) => e.preventDefault()}
           disabled={pending || !phone.trim()}
           className="h-11 shrink-0 rounded-full px-4 text-sm font-medium transition-transform active:scale-[0.98] disabled:opacity-50 motion-reduce:active:scale-100"
           style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
@@ -538,17 +542,29 @@ export function CodeForm({
           maxLength={6}
           value={code}
           onChange={(e) => {
+            /*
+              Ignored rather than `disabled` while the code is in flight.
+              Disabling a focused input makes the browser blur it, which on a
+              phone tears the keyboard down — and the sixth digit submits, so
+              that happened every single time. A wrong code then re-enabled an
+              input nobody was in: the respondent got their keyboard back only
+              by tapping the box again, on the one screen where they are
+              already copying digits from another app.
+            */
+            if (pending) return;
             const next = e.target.value.replace(/\D/g, "").slice(0, 6);
             setCode(next);
             // Six digits is the whole code, so submit rather than making them
             // reach for a button they can already see is redundant.
             if (next.length === 6) submit(next);
           }}
-          disabled={pending}
+          aria-busy={pending}
           className="h-11 w-32 rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-bg)] px-4 text-center font-mono text-lg tracking-[0.3em] outline-none focus-visible:ring-2 focus-visible:ring-[var(--cf-accent)]"
         />
         <button
           type="submit"
+          // Same reason as the box above: verifying must not close the keyboard.
+          onMouseDown={(e) => e.preventDefault()}
           disabled={pending || code.length < 4}
           className="h-11 flex-1 rounded-full text-sm font-medium transition-transform active:scale-[0.98] disabled:opacity-50 motion-reduce:active:scale-100"
           style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
@@ -568,6 +584,7 @@ export function CodeForm({
           <button
             type="button"
             onClick={onResend}
+            onMouseDown={(e) => e.preventDefault()}
             disabled={pending}
             className="underline opacity-55 hover:opacity-100 disabled:opacity-30"
           >
