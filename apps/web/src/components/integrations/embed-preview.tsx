@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Lock, MessageCircle, RotateCcw } from "lucide-react";
+import { Lock, MessageCircle, RotateCcw, X } from "lucide-react";
 import type { Block, ThemeDoc } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { isOverlay, type EmbedConfig } from "@/lib/embed-snippet";
@@ -127,6 +127,7 @@ export function EmbedPreview({
                       theme={theme}
                       blocks={blocks}
                       compact={device === "mobile"}
+                      phone={device === "mobile"}
                     />
                   </div>
                 ) : null
@@ -141,6 +142,7 @@ export function EmbedPreview({
                 theme={theme}
                 blocks={blocks}
                 compact={device === "mobile"}
+                phone={device === "mobile"}
               />
             </div>
           )}
@@ -151,13 +153,14 @@ export function EmbedPreview({
                 <div
                   className="absolute overflow-hidden"
                   style={{ ...panelBox, boxShadow: "0 12px 48px rgba(0,0,0,.22)" }}
-                  aria-hidden
                 >
                   <MockConversation
                     title={formTitle}
                     theme={theme}
                     blocks={blocks}
                     compact={takeover || config.width < 380}
+                    phone={device === "mobile"}
+                    onClose={onToggle}
                   />
                 </div>
               )}
@@ -166,28 +169,42 @@ export function EmbedPreview({
                 A real button, so the corner can be checked by clicking it rather
                 than by reading the snippet and imagining the result. Its metrics
                 are `embed.js`'s `.cf-launcher` rule, to the pixel.
+
+                Gone while the panel is up, because that is what `.cf-away` does
+                on a real page. A side tab runs the full height of the same edge
+                and a phone panel covers the corner outright, so a launcher left
+                where it started is a pill sitting on top of the sheet it just
+                opened, over the composer, still saying "open me". The way out
+                is the one the respondent is actually given: the panel's own
+                close, in its header.
               */}
-              <button
-                type="button"
-                onClick={onToggle}
-                aria-label={open ? "Close the panel" : "Open the panel"}
-                className={cn(
-                  "absolute inline-flex cursor-pointer items-center gap-2 border-0 text-white",
-                  config.label ? "rounded-full px-[18px] py-3" : "size-14 justify-center rounded-full",
-                )}
-                style={{
-                  [vertical]: config.offset,
-                  [horizontal]: config.offset,
-                  background: config.color,
-                  boxShadow: "0 6px 24px rgba(0,0,0,.18)",
-                  fontSize: 15,
-                  fontWeight: 500,
-                  lineHeight: 1,
-                }}
-              >
-                {config.icon && <MessageCircle className="size-[18px] shrink-0" strokeWidth={2} />}
-                {config.label}
-              </button>
+              {!open && (
+                <button
+                  type="button"
+                  onClick={onToggle}
+                  aria-label="Open the panel"
+                  className={cn(
+                    "absolute inline-flex cursor-pointer items-center gap-2 border-0 text-white",
+                    config.label
+                      ? "rounded-full px-[18px] py-3"
+                      : "size-14 justify-center rounded-full",
+                  )}
+                  style={{
+                    [vertical]: config.offset,
+                    [horizontal]: config.offset,
+                    background: config.color,
+                    boxShadow: "0 6px 24px rgba(0,0,0,.18)",
+                    fontSize: 15,
+                    fontWeight: 500,
+                    lineHeight: 1,
+                  }}
+                >
+                  {config.icon && (
+                    <MessageCircle className="size-[18px] shrink-0" strokeWidth={2} />
+                  )}
+                  {config.label}
+                </button>
+              )}
             </>
           )}
         </Chrome>
@@ -347,16 +364,37 @@ function MockConversation({
   theme,
   blocks,
   compact,
+  phone,
+  onClose,
 }: {
   title: string;
   theme: ThemeDoc;
   blocks: Block[];
   compact: boolean;
+  /**
+   * Whether the stage is a phone. `kbd-hint` — the rule every key chip in the
+   * runtime is gated on — asks the *real* pointer, and the real pointer here is
+   * the desktop the studio is open on, so left to itself it would draw an Enter
+   * key onto a phone that has no keyboard.
+   */
+  phone: boolean;
+  /**
+   * Overlay modes only: the close the panel carries itself.
+   *
+   * `chat-client` draws this the moment the embed handshake lands, and
+   * `embed.js` hides the launcher while the panel is open precisely because it
+   * is there. Leaving it out of the picture showed a way in and no way out.
+   */
+  onClose?: () => void;
 }) {
   const script = useMemo(() => conversationScript(blocks), [blocks]);
   const pad = compact ? "px-4" : "px-5";
   const { can } = useEntitlements();
   const logoUrl = can("brand_logo") ? theme.logoUrl : null;
+  // One question answered of the estimate, as a percentage — which is what
+  // `progressBar` defaults to and what the runtime header actually says. It
+  // read "Question 2 of 9" here, a mode the form has to be switched into.
+  const pct = Math.round((1 / Math.max(script.total, 2)) * 100);
 
   return (
     <div className="chat-surface flex h-full flex-col overflow-hidden" style={chatThemeVars(theme)}>
@@ -371,16 +409,33 @@ function MockConversation({
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{title}</p>
-            <p className="text-xs opacity-60">Question 2 of {Math.max(script.total, 2)}</p>
+            <p className="truncate text-sm font-semibold">
+              {title}
+              {theme.brandName && (
+                <span className="ml-1.5 font-normal opacity-50">· {theme.brandName}</span>
+              )}
+            </p>
+            <p className="text-xs opacity-60">{pct}% complete</p>
           </div>
-          <RotateCcw className="size-4 shrink-0 opacity-40" />
+          {/* Labelled, like the runtime's — a bare rotate glyph is exactly what
+              "Start over" stopped being, because nobody found it. */}
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium opacity-45">
+            <RotateCcw className="size-3.5 shrink-0" />
+            Start over
+          </span>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close the panel"
+              className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-full opacity-45 transition-opacity hover:opacity-90"
+            >
+              <X className="size-4" />
+            </button>
+          )}
         </div>
         <div className="h-0.5 bg-[var(--cf-chip-border)]/40">
-          <div
-            className="h-full bg-[var(--cf-accent)]"
-            style={{ width: `${Math.round((1 / Math.max(script.total, 2)) * 100)}%` }}
-          />
+          <div className="h-full bg-[var(--cf-accent)]" style={{ width: `${Math.max(2, pct)}%` }} />
         </div>
       </header>
 
@@ -408,16 +463,26 @@ function MockConversation({
         )}
       </div>
 
+      {/* `SendRow`, to the pixel: a labelled pill carrying the Enter chip, not
+          the circular arrow this drew — a control the runtime has never
+          shipped, on the one row of the panel everybody looks at. */}
       <footer className="shrink-0">
-        <div className={cn("flex items-center gap-2 py-3", pad)}>
-          <div className="h-11 flex-1 rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 text-[0.9375rem] leading-[2.75rem] opacity-50">
+        <div className={cn("flex items-end py-3", pad)}>
+          <div className="h-11 min-w-0 flex-1 rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 text-[0.9375rem] leading-[2.75rem] opacity-50">
             {script.placeholder}
           </div>
-          <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[var(--cf-accent)] text-[var(--cf-accent-text)]">
-            <ArrowUp className="size-4" strokeWidth={2.5} />
+          <span className="ml-2 inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-[var(--cf-accent)] px-4 text-sm font-medium text-[var(--cf-accent-text)]">
+            Send
+            {!phone && (
+              <kbd className="grid size-4 shrink-0 place-items-center rounded bg-[color-mix(in_oklch,var(--cf-accent-text)_25%,transparent)] font-sans text-[0.625rem] leading-none font-medium">
+                ↵
+              </kbd>
+            )}
           </span>
         </div>
-        <p className="pb-2 text-center text-[0.6875rem] opacity-40">Powered by chatform</p>
+        <p className="pb-2 text-center text-[0.6875rem] opacity-40">
+          Powered by <span className="underline">chatform</span>
+        </p>
       </footer>
     </div>
   );

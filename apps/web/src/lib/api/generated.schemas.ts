@@ -101,6 +101,20 @@ export type GetApiAdminOverview200 = {
   formStatsAsOf: number | null;
 };
 
+export type GetApiAdminLive200EventsItem = {
+  key: string;
+  label: string;
+  total: number;
+  counts: number[];
+};
+
+export type GetApiAdminLive200 = {
+  minutes: number;
+  until: number;
+  total: number;
+  events: GetApiAdminLive200EventsItem[];
+};
+
 export type GetApiAdminActions200DunningItem = {[key: string]: unknown};
 
 export type GetApiAdminActions200FailedPaymentsItem = {[key: string]: unknown};

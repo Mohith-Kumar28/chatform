@@ -1355,6 +1355,42 @@ html.cf-viewport-locked body {
   overscroll-behavior: none;
 }
 
+/*
+   The header, out of the way while the keyboard is up.
+
+   `cf-keyboard-open` is set by `use-viewport-lock` when the visible rectangle
+   loses more than an address bar's worth of height on a touch device, which is
+   the only thing an on-screen keyboard can be. What is left of the screen then
+   is barely two questions tall, and a brand row that says nothing about the
+   answer being typed is the first thing that should give up its space. The
+   progress bar under it is two pixels and stays.
+
+   Collapsed rather than removed: `display: none` would snap, and the row comes
+   straight back when the composer loses focus. `max-height` animates, and the
+   height it animates from only has to be more than the row can ever be.
+*/
+[data-chat-header-row] {
+  overflow: hidden;
+  max-height: 6rem;
+  transition:
+    max-height var(--duration-standard, 200ms) var(--ease-out, ease),
+    opacity var(--duration-standard, 200ms) var(--ease-out, ease),
+    padding-block var(--duration-standard, 200ms) var(--ease-out, ease);
+}
+
+html.cf-keyboard-open [data-chat-header-row] {
+  max-height: 0;
+  opacity: 0;
+  padding-block: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-chat-header-row] {
+    transition: none;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Embedded mode
 

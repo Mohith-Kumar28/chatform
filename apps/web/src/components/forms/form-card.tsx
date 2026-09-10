@@ -121,34 +121,17 @@ export function FormCard({
     toast.success("Link copied");
   };
 
-  const status = (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        aria-hidden
-        className={cn(
-          "size-1.5 rounded-full",
-          published ? "bg-[var(--success)]" : "bg-muted-foreground/40",
-        )}
-      />
-      <span
-        className={cn(
-          "text-xs",
-          published ? "text-[var(--success)]" : "text-muted-foreground",
-        )}
-      >
-        {published ? "Live" : "Draft"}
-      </span>
-    </span>
-  );
-
+  /*
+   * What the footer keeps.
+   *
+   * Status and question count moved up onto the thumbnail (see `thumbPills`),
+   * because they are what you scan a grid *for* — is this one live, how long is
+   * it — and the footer had them fourth and second in a run of four grey spans
+   * that all looked alike. What is left is the pair that only matters once you
+   * have already found the form: how much has come in, and when it last moved.
+   */
   const meta = (
     <>
-      {status}
-      {form.questionCount !== undefined && (
-        <span className="text-muted-foreground tabular text-xs">
-          {form.questionCount} question{form.questionCount === 1 ? "" : "s"}
-        </span>
-      )}
       <span className="text-muted-foreground tabular text-xs">
         {form.responses} response{form.responses === 1 ? "" : "s"}
       </span>
@@ -251,25 +234,99 @@ export function FormCard({
   const selectable = Boolean(onSelectedChange);
 
   /**
-   * Controls that sit on the thumbnail take their surface from the thumbnail.
+   * Controls that sit on the thumbnail *oppose* the thumbnail.
    *
-   * They used to use `bg-card`, which is the *app's* surface — so in dark mode
-   * a near-black pill sat on a form whose own background is cream, and the
-   * corner of every card grew a grey blob. The card's chrome and the form's
-   * artwork are two different surfaces, and only one of them is under these
-   * buttons.
+   * Two wrong answers came before this one. `bg-card` was the app's surface, so
+   * in dark mode a near-black pill sat on a form whose own background is cream
+   * and every card grew a grey blob in the corner. Deriving the pill from the
+   * artwork fixed the theme mismatch and introduced a worse one: a white pill
+   * on a pale lavender form is a white shape on a white shape, and the icons
+   * inside it went with it. Matching the surface is camouflage.
    *
-   * `null` means the form has no colours of its own and the thumbnail is the
-   * brand band, which is mixed toward `--background` and so already follows the
-   * app theme — there the app tokens are the right answer.
+   * So the plate is the artwork's opposite — dark on a light form, light on a
+   * dark one — which is the rule the tick box below already follows, and the
+   * only one that cannot fail, because it is derived from the surface rather
+   * than guessed at. Ink follows the plate, not the app.
+   *
+   * As custom properties rather than classes because three consumers need
+   * them: this pill, the status strip along the bottom of the thumbnail, and
+   * the hover wash on the buttons inside the pill — whose `ghost` variant
+   * otherwise flips to `--accent-foreground` on hover and lands app-theme ink
+   * on a plate that has nothing to do with the app theme.
+   *
+   * `null` — no theme of its own, so the thumbnail is the brand band, which is
+   * mixed toward `--background` and follows the app. There the app's own
+   * foreground/background pair *is* the opposition, and it stays theme-aware
+   * without a `dark:` twin for every value.
    */
   const thumbIsDark = form.theme ? isDarkColor(form.theme.background) : null;
-  const onThumb =
+  const thumbPlate: Record<string, string> =
     thumbIsDark === null
-      ? "bg-card/80 text-foreground"
+      ? {
+          "--thumb-plate":
+            "color-mix(in oklab, var(--foreground) 88%, transparent)",
+          "--thumb-plate-ink": "var(--background)",
+          "--thumb-plate-wash":
+            "color-mix(in oklab, var(--background) 20%, transparent)",
+        }
       : thumbIsDark
-        ? "bg-black/45 text-white"
-        : "bg-white/85 text-stone-900";
+        ? {
+            "--thumb-plate": "rgb(255 255 255 / 0.92)",
+            "--thumb-plate-ink": "oklch(0.216 0.006 56.043)",
+            "--thumb-plate-wash": "rgb(0 0 0 / 0.10)",
+          }
+        : {
+            "--thumb-plate": "oklch(0.216 0.006 56.043 / 0.85)",
+            "--thumb-plate-ink": "oklch(0.985 0.001 106.423)",
+            "--thumb-plate-wash": "rgb(255 255 255 / 0.20)",
+          };
+  const onThumb = "bg-[var(--thumb-plate)] text-[var(--thumb-plate-ink)]";
+
+  /*
+   * Status and length, on the artwork.
+   *
+   * Same plate as the quick actions above, and for the same reason: these are
+   * always visible, so a fill that happens to match the form behind it is a
+   * pill you cannot read on exactly the forms whose colours are subtle.
+   *
+   * They sit on their own row along the bottom of the thumbnail rather than
+   * floating over it. The two top corners are already spoken for — the tick box
+   * on the left, the quick actions on the right — and the bubbles fill the
+   * middle, so anything overlaid would have collided with one of the three on
+   * some card. A dedicated strip collides with nothing and reads as part of the
+   * thumbnail, which is what the band already is.
+   *
+   * Split to the two ends: the state on the left, where the eye lands first and
+   * where the dot gives it a shape you can scan without reading, and the size
+   * on the right, so a column of cards lines its counts up.
+   */
+  const thumbPill = cn(
+    "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5",
+    "text-[0.625rem] leading-none font-medium backdrop-blur-sm",
+    onThumb,
+  );
+  const thumbPills = (
+    <>
+      <span className={thumbPill}>
+        <span
+          aria-hidden
+          className={cn(
+            "size-1.5 rounded-full",
+            // Live is the one state worth a colour. Draft borrows the pill's
+            // own ink at low opacity, so it stays legible on both fills
+            // without a second token that only works on one of them.
+            published ? "bg-[var(--success)]" : "bg-current opacity-40",
+          )}
+        />
+        {published ? "Live" : "Draft"}
+      </span>
+      {form.questionCount !== undefined && (
+        <span className={cn(thumbPill, "tabular")}>
+          {form.questionCount} question{form.questionCount === 1 ? "" : "s"}
+        </span>
+      )}
+    </>
+  );
 
   /*
    * Nothing on this card moves, and nothing on it changes size.
@@ -293,6 +350,7 @@ export function FormCard({
    */
   return (
     <div
+      style={{ ...thumbPlate }}
       className={cn(
         "bg-card border-border group relative flex h-full flex-col overflow-hidden rounded-2xl border",
         "shadow-xs transition-[box-shadow,outline-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
@@ -382,6 +440,7 @@ export function FormCard({
           answer={asks[0]}
           theme={form.theme}
           logoAlt={form.title}
+          pills={thumbPills}
         />
 
         {/*
@@ -406,6 +465,12 @@ export function FormCard({
           "absolute top-2 right-2 flex items-center gap-0.5 rounded-full",
           "p-0.5 backdrop-blur-sm",
           onThumb,
+          // `ghost` resting has no colour of its own, so the icons inherit the
+          // plate's ink — but its hover *does*, and `--accent-foreground` on a
+          // plate the app theme did not choose is how an icon disappears at the
+          // moment you reach for it. Both halves come from the plate instead.
+          "[&_[data-slot=button]]:hover:bg-[var(--thumb-plate-wash)]",
+          "[&_[data-slot=button]]:hover:text-[var(--thumb-plate-ink)]",
           "opacity-0 transition-opacity duration-[var(--duration-micro)]",
           "group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100",
         )}
@@ -461,11 +526,15 @@ function ChatThumb({
   answer,
   theme,
   logoAlt,
+  pills,
 }: {
   opener: string;
   answer?: string;
   theme?: FormRow["theme"];
   logoAlt: string;
+  /** The strip along the bottom edge. Built by the card, which is where the
+   *  thumbnail's surface is already worked out for the quick actions. */
+  pills: React.ReactNode;
 }) {
   /*
    * Unthemed forms keep the brand band.
@@ -479,6 +548,7 @@ function ChatThumb({
   if (!theme) {
     return (
       <ThumbFrame
+        pills={pills}
         style={{
           backgroundImage:
             "linear-gradient(115deg, var(--brand-orange-band) 0%, var(--brand-violet-band) 100%)",
@@ -510,7 +580,7 @@ function ChatThumb({
    * somebody picks a pale accent.
    */
   return (
-    <ThumbFrame style={{ backgroundColor: theme.background }}>
+    <ThumbFrame pills={pills} style={{ backgroundColor: theme.background }}>
       <ThumbBubbles
         opener={opener}
         answer={answer}
@@ -551,16 +621,37 @@ function ChatThumb({
   );
 }
 
+/**
+ * The thumbnail: bubbles above, a strip of pills along the bottom edge.
+ *
+ * A column rather than an overlay, and the four extra pixels of height (h-28 →
+ * h-32) are what pays for the strip. Absolutely positioning the pills would
+ * have put them under a two-line opener plus an answer bubble on exactly the
+ * cards that have the most to say — the bubbles fill this box top-down and a
+ * fixed height has no give. Giving the bubbles `flex-1` and the strip its own
+ * row means the strip is never covered and never pushed out; a bubble stack
+ * that would have overrun clips against the strip instead of through it.
+ */
 function ThumbFrame({
   style,
+  pills,
   children,
 }: {
   style: CSSProperties;
+  pills: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative h-28 shrink-0 overflow-hidden p-3" style={style}>
-      {children}
+    <div
+      className="relative flex h-32 shrink-0 flex-col overflow-hidden p-3 pb-2"
+      style={style}
+    >
+      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+      {/* `justify-between` with one child leaves it at the start, so a form
+          with no question count keeps the status where it always was. */}
+      <div className="flex shrink-0 items-center justify-between gap-2 pt-1.5">
+        {pills}
+      </div>
     </div>
   );
 }

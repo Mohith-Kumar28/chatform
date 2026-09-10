@@ -761,7 +761,17 @@ function ChatHeader({
 }) {
   return (
     <header className="sticky top-0 z-10 bg-[var(--cf-bg)]/95 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-2xl items-center gap-3 px-4 py-3">
+      {/*
+        Folded away while the on-screen keyboard is up — see `cf-keyboard-open`
+        in globals.css. A phone typing into a form has a third of its screen
+        left, and a logo and a title are the least of what belongs in it. The
+        progress bar underneath stays: it is two pixels, and it is the one part
+        of this header that is about the answer being typed.
+      */}
+      <div
+        data-chat-header-row
+        className="mx-auto flex w-full max-w-2xl items-center gap-3 px-4 py-3"
+      >
         {/* The brand logo takes the avatar slot when there is one; otherwise
             the chatform mark, so an unbranded form still looks deliberate. */}
         {logoUrl ? (

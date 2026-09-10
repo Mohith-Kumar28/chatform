@@ -5,12 +5,13 @@ import { useGetApiAdminOverview } from "@/lib/api/admin/admin";
 import { ChartCard, Legend, SERIES } from "@/components/charts/chart-kit";
 import { PieChart } from "@/components/charts/pie-chart";
 import { TrendChart } from "@/components/charts/trend-chart";
-import { FunnelBars, type FunnelStep } from "@/components/charts/funnel-bars";
+import { FunnelShape, type FunnelStep } from "@/components/charts/funnel-shape";
 import { CohortGrid, NOISE_FLOOR, type Cohort } from "@/components/charts/cohort-grid";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiTile } from "./kpi-tile";
 import { ActionQueue } from "./action-queue";
+import { LiveActivity } from "./live-activity";
 import { COMPARED_TO, RANGE_DAYS, RangePicker, useRange } from "./range-picker";
 import { apiData } from "@/lib/api/payload";
 import { money, usd, relativeDay } from "./format";
@@ -36,30 +37,40 @@ const FUNNEL_COHORT: Record<string, string | null> = {
   paid: "paid",
 };
 
+/**
+ * The three things that grow, named as the things themselves.
+ *
+ * These were "Acquisition", "Building" and "Collecting" — the funnel stage each
+ * one belongs to rather than what is being counted. That reads fine to whoever
+ * drew the funnel and to nobody else: "Collecting" plotting a series called
+ * "Started" leaves the reader working out whether the subject is forms,
+ * sessions or answers. Say the noun. The verb tenses on the series then have
+ * something to attach to — "Started" under "Answers" can only mean one thing.
+ */
 const GROWTH_VIEWS = {
-  acquisition: {
-    label: "Acquisition",
+  people: {
+    label: "People",
     series: [
       { key: "signups", label: "Signups" },
       { key: "orgs_created", label: "New accounts" },
     ],
     averageOf: "signups",
   },
-  building: {
-    label: "Building",
+  forms: {
+    label: "Forms",
     series: [
-      { key: "forms_created", label: "Forms created" },
+      { key: "forms_created", label: "Created" },
       { key: "forms_published", label: "Published" },
     ],
     averageOf: "forms_created",
   },
-  collecting: {
-    label: "Collecting",
+  answers: {
+    label: "Answers",
     series: [
-      { key: "responses_completed", label: "Completed" },
       { key: "responses_started", label: "Started" },
+      { key: "responses_completed", label: "Finished" },
     ],
-    averageOf: "responses_completed",
+    averageOf: "responses_started",
   },
 } as const;
 
@@ -69,7 +80,7 @@ const PLAN_LABEL: Record<string, string> = { free: "Free", pro: "Pro", business:
 
 export function OverviewClient() {
   const range = useRange();
-  const [view, setView] = useState<GrowthView>("acquisition");
+  const [view, setView] = useState<GrowthView>("people");
   const { data, isPending } = useGetApiAdminOverview({ range });
 
   if (isPending) {
@@ -85,6 +96,9 @@ export function OverviewClient() {
   const days = o.days ?? [];
   const kpi = (key: string) => o.kpis?.[key] ?? { value: 0, previous: 0 };
   const planTotal = (o.planMix ?? []).reduce((n, p) => n + p.orgs, 0);
+  // Started in this window and still unfinished when their day ended — the same
+  // union the results table calls partial, counted in the rollup.
+  const partials = kpi("responses_partial").value;
   const growth = GROWTH_VIEWS[view];
   const comparedTo = COMPARED_TO[range];
 
@@ -105,11 +119,21 @@ export function OverviewClient() {
           series={o.series?.forms_created}
           comparedTo={comparedTo}
         />
+        {/*
+          Finished responses, with the unfinished ones beside them.
+
+          The tile counted completions only, so a form that half the world
+          walked out of reported the same number as one nobody abandoned — and
+          the abandonment is the more actionable half. The partials ride in the
+          same tile rather than taking a seventh: they are not a measure of
+          their own, they are the rest of this one.
+        */}
         <KpiTile
           label="Responses collected"
           {...kpi("responses_completed")}
           series={o.series?.responses_completed}
           comparedTo={comparedTo}
+          sub={partials > 0 ? `+${partials.toLocaleString()} partial` : undefined}
         />
         <KpiTile label="MRR" {...kpi("mrr_cents")} series={o.mrrSeries} format={money} comparedTo={comparedTo} />
         <KpiTile
@@ -137,7 +161,7 @@ export function OverviewClient() {
           title="From signup to paying"
           subtitle="Accounts that signed up in this period, and how far each one got."
         >
-          <FunnelBars
+          <FunnelShape
             steps={o.funnel ?? []}
             hrefFor={(step) => {
               // Carry the period too, so the list is cohorted on the same window
@@ -172,28 +196,41 @@ export function OverviewClient() {
         </ChartCard>
       </div>
 
-      <ChartCard
-        title="Growth"
-        aside={
-          <div className="flex items-center gap-3">
-            <Legend items={growth.series.map((s, i) => ({ label: s.label, color: SERIES[i]! }))} />
-            <SegmentedControl
-              size="sm"
-              value={view}
-              onChange={setView}
-              options={Object.entries(GROWTH_VIEWS).map(([value, v]) => ({ value: value as GrowthView, label: v.label }))}
-              ariaLabel="What to plot"
-            />
-          </div>
-        }
-      >
-        <TrendChart
-          days={days}
-          series={growth.series.map((s) => ({ ...s }))}
-          data={o.series ?? {}}
-          averageOf={growth.averageOf}
-        />
-      </ChartCard>
+      {/*
+        Growth gives up two columns to the live tile.
+
+        A 30-day trend is a chart you study; "is anything happening right now"
+        is a chart you glance at, and they are wanted at the same moment — after
+        a launch or a deploy. Side by side, the slow picture keeps the width it
+        needs to be read and the fast one stops being a page of its own.
+      */}
+      <div className="grid gap-3 lg:grid-cols-5">
+        <ChartCard
+          className="lg:col-span-3"
+          title="Growth"
+          aside={
+            <div className="flex items-center gap-3">
+              <Legend items={growth.series.map((s, i) => ({ label: s.label, color: SERIES[i]! }))} />
+              <SegmentedControl
+                size="sm"
+                value={view}
+                onChange={setView}
+                options={Object.entries(GROWTH_VIEWS).map(([value, v]) => ({ value: value as GrowthView, label: v.label }))}
+                ariaLabel="What to plot"
+              />
+            </div>
+          }
+        >
+          <TrendChart
+            days={days}
+            series={growth.series.map((s) => ({ ...s }))}
+            data={o.series ?? {}}
+            averageOf={growth.averageOf}
+          />
+        </ChartCard>
+
+        <LiveActivity className="lg:col-span-2" />
+      </div>
 
       <div className="grid gap-3 lg:grid-cols-5">
         {/* The triangle grows a column per week, so it takes the wider half. */}

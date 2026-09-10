@@ -480,6 +480,82 @@
         ]
       }
     },
+    "/api/admin/live": {
+      "get": {
+        "operationId": "getApiAdminLive",
+        "tags": [
+          "admin"
+        ],
+        "summary": "Per-minute event counts for the last half hour",
+        "responses": {
+          "200": {
+            "description": "Live activity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "minutes": {
+                      "type": "number"
+                    },
+                    "until": {
+                      "type": "number"
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "total": {
+                            "type": "number"
+                          },
+                          "counts": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "label",
+                          "total",
+                          "counts"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "minutes",
+                    "until",
+                    "total",
+                    "events"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/admin/actions": {
       "get": {
         "operationId": "getApiAdminActions",

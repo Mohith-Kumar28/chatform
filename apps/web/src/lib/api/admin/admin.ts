@@ -32,6 +32,7 @@ import type {
   GetApiAdminFormsParams,
   GetApiAdminHealth200,
   GetApiAdminHealthParams,
+  GetApiAdminLive200,
   GetApiAdminMe200,
   GetApiAdminOverview200,
   GetApiAdminOverviewParams,
@@ -261,6 +262,101 @@ export function useGetApiAdminOverview<TData = Awaited<ReturnType<typeof getApiA
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetApiAdminOverviewQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAdminLiveResponse200 = {
+  data: GetApiAdminLive200
+  status: 200
+}
+
+export type getApiAdminLiveResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminLiveResponseSuccess = (getApiAdminLiveResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminLiveResponseError = (getApiAdminLiveResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminLiveResponse = (getApiAdminLiveResponseSuccess | getApiAdminLiveResponseError)
+
+export const getGetApiAdminLiveUrl = () => {
+
+
+
+
+  return `/api/admin/live`
+}
+
+/**
+ * @summary Per-minute event counts for the last half hour
+ */
+export const getApiAdminLive = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminLiveResponse> => {
+
+  return customFetch<getApiAdminLiveResponse>(getGetApiAdminLiveUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminLiveQueryKey = () => {
+    return [
+    `/api/admin/live`
+    ] as const;
+    }
+
+
+export const getGetApiAdminLiveQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminLive>>, TError = void>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminLive>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminLiveQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminLive>>> = ({ signal }) => getApiAdminLive({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminLive>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminLiveQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminLive>>>
+export type GetApiAdminLiveQueryError = void
+
+
+/**
+ * @summary Per-minute event counts for the last half hour
+ */
+
+export function useGetApiAdminLive<TData = Awaited<ReturnType<typeof getApiAdminLive>>, TError = void>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminLive>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminLiveQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

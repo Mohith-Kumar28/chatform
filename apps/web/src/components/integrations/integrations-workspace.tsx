@@ -84,7 +84,7 @@ export function IntegrationsWorkspace({
         <div>
           <h2 className="text-h2">Put it on your site</h2>
           <p className="text-muted-foreground text-body">
-            One tag. No API key, no package, no backend — a published form is public.
+            One tag on your page. The preview is what a visitor gets.
           </p>
         </div>
         <EmbedStudio

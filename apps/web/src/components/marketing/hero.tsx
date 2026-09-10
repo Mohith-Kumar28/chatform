@@ -167,8 +167,14 @@ export function Hero() {
                   one being circled, which is the opposite of what a pen does:
                   you ring the thing that is hard to believe. With a figure in
                   the line, the figure is that thing. */}
-              <span className="relative me-3 inline-block">
-                2.3&#215;
+              <span className="relative mx-3 inline-block">
+                {/* Tilted off the baseline, and only the figure — the ring
+                    stays level. A number written at a slight angle inside a
+                    level pen mark reads as the one word in the line somebody
+                    leaned in to write; tilting the pair instead would just
+                    look like the headline had slipped. `transform` does not
+                    change the layout box, so the ring keeps its geometry. */}
+                <span className="inline-block -rotate-[4deg]">2.3&#215;</span>
                 {/* Drawn on, and last. The words rise first; the ring starts once
                     they have landed, which is the order it would happen if
                     somebody were actually marking up the page. It needs no
@@ -182,11 +188,15 @@ export function Hero() {
                   />
                 </span>
               </span>{" "}
-              {/* `me-3` above because the ring is drawn `-inset-x-4` — a whole
+              {/* `mx-3` above because the ring is drawn `-inset-x-4` — a whole
                   rem wider than the word on each side, which is what makes it
                   read as a pen going round something rather than as a border.
-                  Mid-sentence that overhang lands on the next word, so the
-                  number keeps its normal space and the mark gets its own. */}
+                  Mid-sentence that overhang eats the word space on BOTH sides,
+                  so the number keeps its normal space and the mark gets its
+                  own, symmetrically. It was `me-3`: the overhang was paid for
+                  after the number and not before it, so the ring cleared
+                  "more" by a comfortable margin and very nearly touched the
+                  "t" of "get". */}
               more submissions.
             </span>
           </h1>
@@ -252,7 +262,21 @@ export function Hero() {
             set — local dev, previews, and production if the demo is ever
             unpublished.
           */}
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          {/*
+            The bottom padding is the margin note's room, and it exists because
+            the note cannot ask for any.
+
+            `it's a real form — try it` is absolutely positioned under the white
+            pill so that it can sit off the grid at an angle — which also means
+            it reserves no height, and the caption line below was laid out as
+            though the arrow and the handwriting were not there. They landed on
+            top of each other: "No card" and "try it" occupied the same line.
+
+            Padding on the row rather than a margin on the caption, because the
+            space belongs to the note: it is only drawn from `sm` up, and the
+            padding appears on exactly the same breakpoint.
+          */}
+          <div className="mt-8 flex flex-wrap items-center gap-3 sm:pb-14">
             {/* Both pills are opaque, and they are told apart by which end of
                 the range they sit at rather than by one of them being faint.
 

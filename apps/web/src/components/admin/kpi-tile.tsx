@@ -19,11 +19,10 @@ import { cn } from "@/lib/utils";
  * is worse than no colour at all.
  *
  * **A move from a zero baseline is not a percentage.** "+∞%" and "+100%" are
- * both nonsense when last period was zero. This used to print "new" and then,
- * because the trailing text was a separate span, follow it with "vs previous" —
- * so the tile read "new vs previous", which names neither what is new nor what
- * the previous period was. It now spells out the move itself: "+3 · none
- * before".
+ * both nonsense when last period was zero, so the tile prints the move itself —
+ * "+12" — against the same named window every other tile compares to. The
+ * trailing half stays the same sentence whatever the baseline was; only the
+ * figure changes. See `deltaLabel`.
  */
 export function KpiTile({
   label,
@@ -34,6 +33,7 @@ export function KpiTile({
   series,
   lowerIsBetter = false,
   hint,
+  sub,
 }: {
   label: string;
   value: number;
@@ -58,6 +58,16 @@ export function KpiTile({
   series?: number[];
   lowerIsBetter?: boolean;
   hint?: string;
+  /**
+   * A second figure that qualifies the first, beside it — "+8 partial".
+   *
+   * For the case where the headline number is true but incomplete on its own.
+   * "Responses collected: 12" is the finished ones, and read alone it says
+   * nobody abandoned anything; the partials belong in the same glance, not on
+   * another page. Deliberately not a second tile: it is not a measure of its
+   * own, it is the rest of this one.
+   */
+  sub?: string;
 }) {
   const delta = value - (previous ?? value);
   const flat = delta === 0;
@@ -82,7 +92,14 @@ export function KpiTile({
         {label}
       </p>
       <div className="mt-1 flex items-end justify-between gap-2">
-        <p className="tabular text-[1.75rem] leading-none font-semibold">{format(value)}</p>
+        <p className="tabular flex items-baseline gap-1.5 text-[1.75rem] leading-none font-semibold">
+          {format(value)}
+          {sub && (
+            <span className="text-muted-foreground text-micro truncate font-normal" title={sub}>
+              {sub}
+            </span>
+          )}
+        </p>
         {series && series.length > 1 && (
           <Sparkline
             values={series}

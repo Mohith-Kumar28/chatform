@@ -73,7 +73,10 @@ export const EMBED_DEFAULTS: EmbedConfig = {
   // which attributes to spell out, so a drift here writes `data-color` into
   // every snippet for a value the loader would have used anyway.
   color: "#FD6F29",
-  label: "Questions?",
+  // "Questions?" is a support-widget default, and this is a form: the bubble
+  // read as a help desk nobody was staffing. Must stay in step with the same
+  // default in `public/embed.js`, for the reason given on `color` above.
+  label: "Fill this form",
   icon: true,
   theme: "auto",
   openOn: "click",

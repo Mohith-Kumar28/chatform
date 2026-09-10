@@ -239,6 +239,31 @@ export async function rollupPlatformDaily(env: Bindings, date = utcDay()): Promi
       to,
     ),
   );
+  /**
+   * Started that day and still unfinished when the day ended.
+   *
+   * The same union the results table calls "partial" — everything that is not
+   * `completed` — so the console and the customer-facing count cannot disagree
+   * about what a partial is.
+   *
+   * Bucketed by `started_at`, not by when it was abandoned, because nothing
+   * records that moment. Today's figure therefore falls as people finish, and
+   * the last run before midnight is the one that sticks: a past day means
+   * "started then, unfinished by the end of it". A follow-up that brings
+   * somebody back on Thursday does not retract Tuesday's partial, and should
+   * not — Tuesday is still the day they walked away.
+   */
+  push(
+    "responses_partial",
+    await countForDay(
+      env,
+      `SELECT '' AS dimension, COUNT(*) AS n
+         FROM submissions
+        WHERE started_at >= ?1 AND started_at < ?2 AND is_test = 0 AND status != 'completed'`,
+      from,
+      to,
+    ),
+  );
   push(
     "responses_by_source",
     await countForDay(

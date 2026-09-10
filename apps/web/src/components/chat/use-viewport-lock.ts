@@ -47,13 +47,31 @@ export function useViewportLock(active: boolean, onViewportChange?: () => void) 
     if (!vv) return () => root.classList.remove("cf-viewport-locked");
 
     let frame = 0;
+    /*
+      The tallest this viewport has been, which is the same thing as "no
+      keyboard". There is no event for the keyboard and no property that
+      reports it; what there is, is a rectangle that suddenly loses a third of
+      itself. Comparing against the peak rather than against `innerHeight`
+      covers both behaviours — iOS shrinks only the visual viewport, Android
+      may shrink the layout one with it — because in either case the number we
+      already measure is what drops.
+    */
+    let peak = 0;
+    // Only where a keyboard can cover the screen. A desktop window being
+    // dragged smaller is the same measurement and must not read as one.
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
     const apply = () => {
       frame = 0;
-      root.style.setProperty("--cf-vh", `${Math.round(vv.height)}px`);
+      const height = Math.round(vv.height);
+      root.style.setProperty("--cf-vh", `${height}px`);
       // iOS keeps the layout viewport still and slides the visible rectangle
       // around inside it, and a fixed element is placed against the former.
       // Without this the shell is the right height in the wrong place.
       root.style.setProperty("--cf-vv-top", `${Math.round(vv.offsetTop)}px`);
+      if (height > peak) peak = height;
+      // Comfortably more than a collapsing address bar (~60-100px) and
+      // comfortably less than any on-screen keyboard.
+      root.classList.toggle("cf-keyboard-open", coarse && peak - height > 140);
       notify.current?.();
     };
     // Coalesced: the keyboard animating produces a burst of these, and writing
@@ -61,6 +79,11 @@ export function useViewportLock(active: boolean, onViewportChange?: () => void) 
     const schedule = () => {
       if (frame) return;
       frame = requestAnimationFrame(apply);
+    };
+    /** A rotation is a new screen; the old peak belongs to the old one. */
+    const rebase = () => {
+      peak = 0;
+      schedule();
     };
 
     apply();
@@ -85,16 +108,17 @@ export function useViewportLock(active: boolean, onViewportChange?: () => void) 
      * of them costs a single frame.
      */
     window.addEventListener("resize", schedule);
-    window.addEventListener("orientationchange", schedule);
+    window.addEventListener("orientationchange", rebase);
     window.addEventListener("pageshow", schedule);
     return () => {
       if (frame) cancelAnimationFrame(frame);
       vv.removeEventListener("resize", schedule);
       vv.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
-      window.removeEventListener("orientationchange", schedule);
+      window.removeEventListener("orientationchange", rebase);
       window.removeEventListener("pageshow", schedule);
       root.classList.remove("cf-viewport-locked");
+      root.classList.remove("cf-keyboard-open");
       root.style.removeProperty("--cf-vh");
       root.style.removeProperty("--cf-vv-top");
     };

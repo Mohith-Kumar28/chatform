@@ -169,6 +169,13 @@
       "when": 1789747200000,
       "tag": "0023_working_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1789833600000,
+      "tag": "0024_live_activity_indexes",
+      "breakpoints": true
     }
   ]
 }

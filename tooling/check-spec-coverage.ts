@@ -207,6 +207,7 @@ const DASHBOARD_ONLY: Record<string, string> = {
    */
   "/api/admin/me": "platform console — cross-tenant, never reachable by a key",
   "/api/admin/overview": "see /api/admin/me",
+  "/api/admin/live": "see /api/admin/me",
   "/api/admin/actions": "see /api/admin/me",
   "/api/admin/accounts": "see /api/admin/me",
   "/api/admin/accounts/{orgId}": "see /api/admin/me",

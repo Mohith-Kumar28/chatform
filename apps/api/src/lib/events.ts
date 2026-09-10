@@ -21,7 +21,29 @@ export interface EscalatePayload {
 }
 
 export type ServerEvent =
-  | { type: "session_ready"; data: { sessionId: string; formTitle: string; agentMode: string; brandingHidden: boolean } }
+  | {
+      type: "session_ready";
+      data: {
+        sessionId: string;
+        formTitle: string;
+        agentMode: string;
+        brandingHidden: boolean;
+        /**
+         * Who the session already knows this respondent to be.
+         *
+         * `auth_verified` announces the *moment* somebody verifies, and is
+         * therefore silent about every session that arrived already knowing —
+         * a follow-up link carries the identity proved against that response
+         * forward (`loadResumable`), and the gate then never fires at all. A
+         * respondent coming back through an email had no way to tell whether
+         * they were signed in, as whom, or how to be somebody else.
+         *
+         * Sent per connection rather than persisted, so a reload past the
+         * replay window recovers it too.
+         */
+        identity: { provider: string; label: string; name: string | null; pictureUrl: string | null } | null;
+      };
+    }
   | { type: "user_message"; data: { messageId: string; text: string } }
   | { type: "message_start"; data: { messageId: string; role: "assistant" } }
   /**

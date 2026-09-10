@@ -218,6 +218,43 @@ describe("resuming a response the form has since outgrown", () => {
     await publish();
   });
 
+  /**
+   * The gate is silent for somebody who arrives already verified — that is the
+   * point of carrying the identity forward — and silence used to be all the
+   * respondent got. `auth_verified` announces a sign-in as it happens, so a
+   * session that never signs in never emits one, and the form gave no sign of
+   * who was answering it or that anyone was signed in at all.
+   *
+   * `session_ready` is per connection, so it answers that on the first frame
+   * and again after every reload, however old the conversation is.
+   */
+  it("tells the connecting client who the resumed session already is", async () => {
+    await publish({ ...DOC.settings, requireAuth: { enabled: true, method: "google" } });
+    await seedAbandoned("sbm_resume22");
+    await env.DB.prepare(
+      `UPDATE submissions
+          SET respondent_provider = 'google', respondent_subject = 'sub_maya',
+              respondent_email = 'maya@northwind.example', respondent_name = 'Maya'
+        WHERE id = ?`,
+    )
+      .bind("sbm_resume22")
+      .run();
+
+    const res = await open({ resumeToken: await token("sbm_resume22") });
+    expect(res.status).toBe(200);
+    const { sessionId } = (await res.json()) as { sessionId: string };
+
+    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+    const ready = await readReady(await stub.stream());
+    expect(ready.identity).toEqual({
+      provider: "google",
+      label: "maya@northwind.example",
+      name: "Maya",
+      pictureUrl: null,
+    });
+    await publish();
+  });
+
   it("greets them as a new arrival rather than welcoming them back", async () => {
     // Republished without the gate, so what is under test is the greeting and
     // not whatever the previous test left in `settings`.
@@ -474,3 +511,31 @@ describe("one response in progress per person", () => {
     expect(rows.results).toHaveLength(2);
   });
 });
+
+/**
+ * The `session_ready` payload, and then let go of the stream.
+ *
+ * The connection is deliberately endless — a ping every fifteen seconds keeps
+ * it that way — so this reads only until the frame it came for and cancels,
+ * rather than draining a body that has no end.
+ */
+async function readReady(res: Response): Promise<{ identity: unknown }> {
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  try {
+    for (let i = 0; i < 50; i++) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const frame = buf.split("\n\n").find((f) => f.includes("event: session_ready"));
+      if (frame) {
+        const line = frame.split("\n").find((l) => l.startsWith("data: "))!;
+        return JSON.parse(line.slice(6)) as { identity: unknown };
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  throw new Error("no session_ready frame arrived");
+}

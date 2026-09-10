@@ -549,11 +549,54 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
         });
       };
 
-      es.addEventListener("session_ready", () => {
+      es.addEventListener("session_ready", (raw) => {
         alive();
         setStatus("ready");
         setError(null);
         setResolving(false);
+        /*
+          Who this session already knows we are.
+
+          `auth_verified` fires the once, at the moment somebody signs in, and
+          a session that arrived already verified never fires it: a follow-up
+          link carries the identity proved against that response forward, and
+          the gate stays quiet. The respondent was then signed in with nothing
+          on screen saying so and no way to be somebody else.
+
+          Set rather than merged, and only when this device has nothing: an
+          identity learned from a live sign-in in this tab is the fresher fact,
+          and a reconnect mid-conversation must not walk it backwards.
+        */
+        try {
+          const { identity: who } = JSON.parse((raw as MessageEvent).data ?? "{}") as {
+            identity?: VerifiedIdentity | null;
+          };
+          if (who) {
+            setIdentity((prev) => prev ?? who);
+            /*
+              The same note the gate writes, at the top of the thread.
+
+              `auth_verified` appends it where it happened, which is right: it
+              is a thing that occurred at that point in the conversation. This
+              one did not occur here at all — it was proved on an earlier
+              visit and carried in — so it belongs above everything, as the
+              standing fact the transcript opens on rather than an event in
+              the middle of it. Scrolling past it is fine; it is a note, not a
+              status bar.
+            */
+            setMessages((prev) =>
+              prev.some((m) => m.id === "sys_verified")
+                ? prev
+                : [
+                    { id: "sys_verified", role: "system", text: `Verified as ${who.label}` },
+                    ...prev,
+                  ],
+            );
+          }
+        } catch {
+          // Older server, or a payload we cannot read — the connection is
+          // ready either way, which is what this event is for.
+        }
       });
 
       on("user_message", (e) => {

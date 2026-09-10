@@ -24,7 +24,7 @@
  *   data-target      CSS selector for inline mode                default appends
  *   data-app         the Chatform origin                         default this script's origin
  *   data-color       launcher colour                             default #FD6F29
- *   data-label       launcher text; "" for an icon-only bubble   default "Questions?"
+ *   data-label       launcher text; "" for an icon-only bubble   default "Fill this form"
  *   data-icon        chat | none                                 default chat
  *   data-theme       light | dark | auto                         default auto
  *   data-open-on     click | load | exit-intent | scroll:<pct>   default click
@@ -55,7 +55,7 @@
   var mode = script.getAttribute("data-mode") || "popup";
   var color = script.getAttribute("data-color") || "#FD6F29";
   var labelAttr = script.getAttribute("data-label");
-  var label = labelAttr === null ? "Questions?" : labelAttr;
+  var label = labelAttr === null ? "Fill this form" : labelAttr;
   var showIcon = script.getAttribute("data-icon") !== "none";
   var theme = script.getAttribute("data-theme") || "auto";
   var openOn = script.getAttribute("data-open-on") || "click";

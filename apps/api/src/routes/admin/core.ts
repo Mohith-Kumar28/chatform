@@ -105,6 +105,7 @@ coreRouter.get(
       orgs_created: kpiFor("orgs_created"),
       forms_created: kpiFor("forms_created"),
       responses_completed: kpiFor("responses_completed"),
+      responses_partial: kpiFor("responses_partial"),
       ai_cost_micro: kpiFor("ai_cost_micro"),
       // Snapshots, not sums: "MRR over the last 30 days" is not a number. The
       // comparison is where it stood a period ago.
@@ -119,6 +120,7 @@ coreRouter.get(
       forms_published: seriesOf(rows, "forms_published", window),
       responses_started: seriesOf(rows, "responses_started", window),
       responses_completed: seriesOf(rows, "responses_completed", window),
+      responses_partial: seriesOf(rows, "responses_partial", window),
       active_orgs: seriesOf(rows, "active_orgs", window),
       views: seriesOf(rows, "views", window),
       ai_tokens: seriesOf(rows, "ai_tokens", window),
@@ -146,6 +148,141 @@ coreRouter.get(
     };
     await c.env.KV_CONFIG.put(cacheKey, JSON.stringify(payload), { expirationTtl: 300 });
     return c.json(payload);
+  },
+);
+
+// ───────────────────────────── live activity ─────────────────────────────
+
+/**
+ * The last half hour, a minute at a time.
+ *
+ * Everything else on this console is yesterday's arithmetic: the rollup runs on
+ * the cron, the overview is cached for five minutes, and the shortest range the
+ * date picker offers is a whole day. None of that answers the question you
+ * actually have after a launch tweet or a deploy — *is anything happening right
+ * now* — and the honest answer to that cannot come from a table that is
+ * recomputed every five minutes.
+ *
+ * So this one reads the source tables directly. Three things keep that
+ * defensible:
+ *
+ *   - **It is bounded by time, not by tenancy.** Thirty minutes of rows, behind
+ *     the timestamp indexes added in `0024`, on every table it touches.
+ *   - **It is counts only.** Buckets and totals — never a row, an answer, an
+ *     email or an org name. "Something happened" is a platform signal; what was
+ *     typed is not ours to watch.
+ *   - **It is not cached.** A live tile served from a five-minute cache is a
+ *     dead tile that looks live, which is worse than no tile: KV's floor for
+ *     `expirationTtl` is sixty seconds, and sixty seconds is two of these
+ *     buckets.
+ */
+const LIVE_MINUTES = 30;
+const MINUTE_MS = 60_000;
+
+const LiveResponse = z.object({
+  minutes: z.number(),
+  /** End of the newest bucket, epoch ms — the client labels its axis from this. */
+  until: z.number(),
+  total: z.number(),
+  events: z.array(
+    z.object({
+      key: z.string(),
+      label: z.string(),
+      total: z.number(),
+      /** One count per minute, oldest first. The last entry is the minute in progress. */
+      counts: z.array(z.number()),
+    }),
+  ),
+});
+
+/** What the live tile plots, in the order it stacks them. */
+const LIVE_EVENTS: { key: string; label: string; column: string; from: string }[] = [
+  {
+    key: "form_opened",
+    label: "Forms opened",
+    column: "created_at",
+    from: "chat_sessions WHERE is_test = 0",
+  },
+  {
+    key: "responses_started",
+    label: "Answers started",
+    column: "started_at",
+    from: "submissions WHERE is_test = 0",
+  },
+  {
+    key: "responses_completed",
+    label: "Answers finished",
+    column: "completed_at",
+    from: "submissions WHERE is_test = 0 AND status = 'completed'",
+  },
+  {
+    key: "signups",
+    label: "Signups",
+    column: "created_at",
+    from: "users WHERE 1 = 1",
+  },
+  {
+    key: "forms_created",
+    label: "Forms created",
+    column: "created_at",
+    from: "forms WHERE deleted_at IS NULL",
+  },
+];
+
+/**
+ * One event stream, bucketed into minutes.
+ *
+ * Grouped in SQLite rather than fetched and counted here: a busy minute on a
+ * launch day is thousands of rows, and none of them need to cross the wire to
+ * become a bar height.
+ */
+async function liveBuckets(env: Bindings, event: (typeof LIVE_EVENTS)[number], from: number, to: number) {
+  const res = await env.DB.prepare(
+    `SELECT CAST((${event.column} - ?1) / ${MINUTE_MS} AS INTEGER) AS bucket, COUNT(*) AS n
+       FROM ${event.from} AND ${event.column} >= ?1 AND ${event.column} < ?2
+      GROUP BY bucket`,
+  )
+    .bind(from, to)
+    .all<{ bucket: number; n: number }>();
+
+  const counts = new Array<number>(LIVE_MINUTES).fill(0);
+  for (const row of res.results ?? []) {
+    const i = Number(row.bucket);
+    // A clock skew between the row's writer and this query would otherwise
+    // throw the count into a bucket the chart does not have.
+    if (i >= 0 && i < LIVE_MINUTES) counts[i] = (counts[i] ?? 0) + row.n;
+  }
+  return counts;
+}
+
+coreRouter.get(
+  "/admin/live",
+  describeRoute({
+    tags: ["admin"],
+    summary: "Per-minute event counts for the last half hour",
+    responses: {
+      200: { description: "Live activity", content: { "application/json": { schema: resolver(LiveResponse) } } },
+      404: { description: "Not an admin" },
+    },
+  }),
+  async (c) => {
+    // Snapped to the minute so the buckets do not slide under the reader
+    // between polls: the newest bucket is always the minute in progress.
+    const until = Math.floor(Date.now() / MINUTE_MS) * MINUTE_MS + MINUTE_MS;
+    const from = until - LIVE_MINUTES * MINUTE_MS;
+
+    const counted = await Promise.all(LIVE_EVENTS.map((e) => liveBuckets(c.env, e, from, until)));
+    const events = LIVE_EVENTS.map((e, i) => {
+      const counts = counted[i]!;
+      return { key: e.key, label: e.label, total: counts.reduce((a, b) => a + b, 0), counts };
+    });
+
+    return c.json({
+      minutes: LIVE_MINUTES,
+      until,
+      total: events.reduce((n, e) => n + e.total, 0),
+      events,
+    });
   },
 );
 

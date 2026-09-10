@@ -394,16 +394,22 @@ export function EmbedStudio({
           <code>{snippet}</code>
         </pre>
 
-        <p className="text-muted-foreground text-micro flex items-start gap-1.5">
-          <ShieldCheck className="mt-0.5 size-3 shrink-0" />
-          {target === "email"
-            ? "Email clients block iframes and scripts, so this is a styled link to the hosted form."
-            : "No API key, no package, no backend. A published form is public — the frame talks to the API itself."}
-        </p>
+        {/* Kept only where it explains something the snippet cannot: an email
+            "embed" that is visibly a link owes a reason. The other half of this
+            line answered a question about keys and packages that a single
+            script tag had already answered. */}
+        {target === "email" && (
+          <p className="text-muted-foreground text-micro flex items-start gap-1.5">
+            <ShieldCheck className="mt-0.5 size-3 shrink-0" />
+            Email clients block iframes and scripts, so this is a styled link to the hosted form.
+          </p>
+        )}
 
         {target !== "email" && (
           <details className="group">
-            <summary className="text-muted-foreground hover:text-foreground text-micro cursor-pointer list-none">
+            {/* Underlined, because it opens something. Undecorated it read as a
+                caption sitting under the snippet rather than as a control. */}
+            <summary className="text-muted-foreground hover:text-foreground text-micro cursor-pointer list-none underline underline-offset-2">
               Your site sets a Content Security Policy?
             </summary>
             <pre className="bg-muted text-caption mt-2 overflow-x-auto rounded-xl p-3 font-mono">

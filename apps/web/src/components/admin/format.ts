@@ -65,8 +65,12 @@ export function relativeDay(ms: number | null | undefined): string {
  *
  *   - **No baseline to compare against** (a standing total like "block types in
  *     use"): no delta at all, because inventing one would be inventing a number.
- *   - **A zero baseline**: the move itself, spelled out — "+3", "none before" —
- *     rather than a percentage of nothing.
+ *   - **A zero baseline**: the move itself, against the same named window. A
+ *     percentage of nothing is either "+∞%" or "+100%", and both are made up.
+ *     This used to print "none before" as the trailing half, which reads as a
+ *     different kind of comparison from the tile beside it and left the reader
+ *     working out which — so the wording now differs only in the figure: "+12
+ *     vs prev 30 days" beside "+40% vs prev 30 days".
  *   - **Anything else**: the percentage, against a *named* window. "vs prev 30
  *     days", never "vs previous", which leaves the reader guessing whether it
  *     means yesterday, last month or all time.
@@ -80,7 +84,7 @@ export function deltaLabel(
   if (previous === undefined) return null;
   const delta = value - previous;
   if (delta === 0) return null;
-  if (previous <= 0) return { change: `${delta > 0 ? "+" : ""}${format(delta)}`, against: "none before" };
+  if (previous <= 0) return { change: `${delta > 0 ? "+" : ""}${format(delta)}`, against: `vs ${comparedTo}` };
   const pct = Math.round((delta / previous) * 1000) / 10;
   return { change: `${pct > 0 ? "+" : ""}${pct}%`, against: `vs ${comparedTo}` };
 }

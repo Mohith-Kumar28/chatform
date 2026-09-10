@@ -1135,6 +1135,21 @@ export class SessionDO extends DurableObject<Bindings> {
           formTitle: this.doc?.title ?? "",
           agentMode: this.doc?.settings.agent.mode ?? "template",
           brandingHidden: this.meta.brandingHidden,
+          // The same shape `auth_verified` carries, so the client has one way
+          // of reading an identity whether it watched one arrive or was simply
+          // handed one on connect.
+          identity: this.meta.identity
+            ? {
+                provider: this.meta.identity.provider,
+                label:
+                  this.meta.identity.email ??
+                  this.meta.identity.phone ??
+                  this.meta.identity.name ??
+                  "Verified",
+                name: this.meta.identity.name ?? null,
+                pictureUrl: this.meta.identity.pictureUrl ?? null,
+              }
+            : null,
         },
       };
       void writer.write(this.encoder.encode(this.serialize(ready)));

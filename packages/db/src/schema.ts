@@ -6,15 +6,21 @@ const bool = (name: string) => integer(name, { mode: "boolean" });
 
 // ───────────────────────── Better Auth core ─────────────────────────
 
-export const users = sqliteTable("users", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email").notNull().unique(),
-  emailVerified: bool("email_verified").notNull().default(false),
-  image: text("image"),
-  createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
-  updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
-});
+export const users = sqliteTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    email: text("email").notNull().unique(),
+    emailVerified: bool("email_verified").notNull().default(false),
+    image: text("image"),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+    updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
+  },
+  // Signups in a window — the daily rollup and the console's live tile both ask
+  // for exactly this and nothing else on the row.
+  (t) => [index("idx_users_created").on(t.createdAt)],
+);
 
 export const sessions = sqliteTable(
   "sessions",
@@ -238,6 +244,7 @@ export const forms = sqliteTable(
     index("idx_forms_workspace").on(t.workspaceId),
     index("idx_forms_org").on(t.organizationId),
     index("idx_forms_status").on(t.status),
+    index("idx_forms_created").on(t.createdAt),
   ],
 );
 
@@ -383,6 +390,13 @@ export const submissions = sqliteTable(
     index("idx_submissions_form_source").on(t.formId, t.source, t.startedAt),
     index("idx_submissions_expiry").on(t.status, t.expiresAt),
     index("idx_submissions_org_started").on(t.organizationId, t.startedAt),
+    /**
+     * Platform-wide time windows, which every other index here cannot serve:
+     * they all lead with a form or an org, so a range over the timestamp alone
+     * reads the table. The rollup asks per day, the live tile per minute.
+     */
+    index("idx_submissions_started").on(t.startedAt),
+    index("idx_submissions_completed").on(t.completedAt),
     index("idx_submissions_form_fp").on(t.formId, t.fingerprint),
     // Backs `requireAuth.onePerIdentity`: one lookup, not a table scan.
     index("idx_submissions_form_respondent").on(t.formId, t.respondentProvider, t.respondentSubject),
@@ -511,6 +525,7 @@ export const chatSessions = sqliteTable(
     index("idx_chat_sessions_status").on(t.status),
     index("idx_chat_sessions_org_created").on(t.organizationId, t.createdAt),
     index("idx_chat_sessions_expiry").on(t.status, t.expiresAt),
+    index("idx_chat_sessions_created").on(t.createdAt),
   ],
 );
 

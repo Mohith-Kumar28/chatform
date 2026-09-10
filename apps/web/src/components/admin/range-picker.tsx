@@ -26,13 +26,20 @@ const LABELS: Record<Range, string> = {
 
 export const RANGE_DAYS: Record<Range, number> = { "1d": 1, "7d": 7, "30d": 30, "90d": 90, "365d": 365 };
 
-/** What a tile's `previous` figure is, said in words. */
+/**
+ * What a tile's `previous` figure is, said in words — and said short.
+ *
+ * Six tiles across a laptop leaves each about 200px, and the delta line has to
+ * fit an arrow, a figure and this phrase. "vs prev 30 days" truncated to "vs
+ * prev 30 d…" on every tile at that width, which spends the space and delivers
+ * nothing. Abbreviated, the whole line fits: "↗ +13 vs prev 30d".
+ */
 export const COMPARED_TO: Record<Range, string> = {
   "1d": "yesterday",
-  "7d": "prev 7 days",
-  "30d": "prev 30 days",
-  "90d": "prev 90 days",
-  "365d": "prev 12 months",
+  "7d": "prev 7d",
+  "30d": "prev 30d",
+  "90d": "prev 90d",
+  "365d": "prev 12mo",
 };
 
 /** The range in the URL, defaulted and validated. Never trust a hand-typed param. */

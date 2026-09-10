@@ -66,11 +66,17 @@ describe("deltaLabel", () => {
   });
 
   it("spells out the move rather than a percentage of zero", () => {
-    expect(deltaLabel(3, 0, "prev 30 days")).toEqual({ change: "+3", against: "none before" });
+    expect(deltaLabel(3, 0, "prev 30 days")).toEqual({ change: "+3", against: "vs prev 30 days" });
+  });
+
+  it("names the same window on a zero baseline as on any other", () => {
+    // "none before" made a zero-baseline tile read as a different kind of
+    // comparison from the tile next to it. Only the figure should differ.
+    expect(deltaLabel(3, 0, "yesterday")?.against).toBe(deltaLabel(3, 2, "yesterday")?.against);
   });
 
   it("formats a zero-baseline move in the tile's own units", () => {
-    expect(deltaLabel(10_900, 0, "prev 30 days", money)).toEqual({ change: "+$109", against: "none before" });
+    expect(deltaLabel(10_900, 0, "prev 30 days", money)).toEqual({ change: "+$109", against: "vs prev 30 days" });
   });
 
   it("names the window it is comparing against", () => {

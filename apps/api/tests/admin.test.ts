@@ -143,6 +143,7 @@ describe("the gate", () => {
 const EVERY_ADMIN_ROUTE = [
   "/api/admin/me",
   "/api/admin/overview",
+  "/api/admin/live",
   "/api/admin/actions",
   "/api/admin/accounts",
   "/api/admin/accounts/org_anything",
@@ -259,6 +260,71 @@ describe("the daily rollup", () => {
 
     // The real one moved the number; the test one never did.
     expect(after?.value).toBe((before?.value ?? 0) + 1);
+  });
+
+  /**
+   * The console counted completions only, so a form everybody walked out of
+   * reported the same number as one nobody abandoned.
+   *
+   * The two metrics are bucketed by different columns on purpose — completions
+   * by `completed_at`, partials by `started_at` — so this checks the same row
+   * cannot land in both.
+   */
+  it("counts an unfinished response as partial and not as completed", async () => {
+    const today = utcDay();
+    const now = Date.now();
+    const read = async (metric: string) =>
+      (
+        await DB()
+          .DB.prepare(`SELECT value FROM platform_metrics_daily WHERE date = ? AND metric = ? AND dimension = ''`)
+          .bind(today, metric)
+          .first<{ value: number }>()
+      )?.value ?? 0;
+
+    await rollupPlatformDaily(DB(), today);
+    const [partialBefore, completedBefore] = [await read("responses_partial"), await read("responses_completed")];
+
+    await DB()
+      .DB.prepare(
+        `INSERT INTO submissions (id, form_id, organization_id, status, source, is_test, started_at)
+         VALUES (?, ?, ?, 'abandoned', 'chat', 0, ?)`,
+      )
+      .bind(`sub_partial_${now}`, customer.formId, customer.orgId, now)
+      .run();
+    await rollupPlatformDaily(DB(), today);
+
+    expect(await read("responses_partial")).toBe(partialBefore + 1);
+    expect(await read("responses_completed")).toBe(completedBefore);
+  });
+
+  it("stops counting a partial once it is finished", async () => {
+    const today = utcDay();
+    const now = Date.now();
+    const id = `sub_resumed_${now}`;
+    await DB()
+      .DB.prepare(
+        `INSERT INTO submissions (id, form_id, organization_id, status, source, is_test, started_at)
+         VALUES (?, ?, ?, 'in_progress', 'chat', 0, ?)`,
+      )
+      .bind(id, customer.formId, customer.orgId, now)
+      .run();
+    await rollupPlatformDaily(DB(), today);
+    const while_open = await DB()
+      .DB.prepare(`SELECT value FROM platform_metrics_daily WHERE date = ? AND metric = 'responses_partial' AND dimension = ''`)
+      .bind(today)
+      .first<{ value: number }>();
+
+    await DB()
+      .DB.prepare(`UPDATE submissions SET status = 'completed', completed_at = ? WHERE id = ?`)
+      .bind(now, id)
+      .run();
+    await rollupPlatformDaily(DB(), today);
+    const after = await DB()
+      .DB.prepare(`SELECT value FROM platform_metrics_daily WHERE date = ? AND metric = 'responses_partial' AND dimension = ''`)
+      .bind(today)
+      .first<{ value: number }>();
+
+    expect(after?.value).toBe((while_open?.value ?? 0) - 1);
   });
 });
 
@@ -597,6 +663,61 @@ describe("the overview", () => {
       expect(row.retention.length).toBeGreaterThan(0);
     }
   });
+});
+
+/**
+ * The one tile on the console that does not read the rollup.
+ *
+ * Its whole claim is "right now", so the two things worth pinning down are that
+ * a row written this minute is visible without waiting for a cron, and that the
+ * buckets stay a fixed-length window whatever the traffic is.
+ */
+describe("live activity", () => {
+  it("puts an event from this minute in the newest bucket", async () => {
+    const now = Date.now();
+    await DB()
+      .DB.prepare(
+        `INSERT INTO submissions (id, form_id, organization_id, status, source, is_test, started_at)
+         VALUES (?, ?, ?, 'in_progress', 'chat', 0, ?)`,
+      )
+      .bind(`sub_live_${now}`, customer.formId, customer.orgId, now)
+      .run();
+
+    const res = await fetchApi("/api/admin/live", { headers: { cookie: admin.cookie } });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      minutes: number;
+      total: number;
+      events: { key: string; label: string; total: number; counts: number[] }[];
+    };
+
+    expect(body.minutes).toBe(30);
+    for (const event of body.events) expect(event.counts).toHaveLength(30);
+    const started = body.events.find((e) => e.key === "responses_started")!;
+    // The last bucket is the minute in progress, which is the one just written.
+    expect(started.counts.at(-1)).toBeGreaterThanOrEqual(1);
+    expect(started.total).toBeGreaterThanOrEqual(1);
+    expect(body.total).toBeGreaterThanOrEqual(started.total);
+  });
+
+  it("does not count test-mode traffic", async () => {
+    const now = Date.now();
+    const before = await liveTotal("responses_started");
+    await DB()
+      .DB.prepare(
+        `INSERT INTO submissions (id, form_id, organization_id, status, source, is_test, started_at)
+         VALUES (?, ?, ?, 'in_progress', 'chat', 1, ?)`,
+      )
+      .bind(`sub_live_test_${now}`, customer.formId, customer.orgId, now)
+      .run();
+    expect(await liveTotal("responses_started")).toBe(before);
+  });
+
+  async function liveTotal(key: string): Promise<number> {
+    const res = await fetchApi("/api/admin/live", { headers: { cookie: admin.cookie } });
+    const body = (await res.json()) as { events: { key: string; total: number }[] };
+    return body.events.find((e) => e.key === key)?.total ?? 0;
+  }
 });
 
 describe("the accounts explorer", () => {
