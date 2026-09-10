@@ -328,6 +328,45 @@ export async function reopenResponse(
   return { changed: (res.meta?.changes ?? 0) > 0 };
 }
 
+/**
+ * Put an abandoned response back to `in_progress`, because somebody is writing
+ * to it again.
+ *
+ * Adoption and reopening have to happen together, and for a long time only one
+ * of the three adoption paths did both. The resume *link* reopened the row
+ * (`routes/public.ts`); signing in did not, and neither did the device match
+ * inside `ensureSubmissionRow`. So a respondent who came back after their last
+ * sitting timed out carried on answering into a row that every writer below
+ * refuses to touch: `finalizeResponse` guards on `status = 'in_progress'`, so
+ * their completion was a no-op — no ending, no `completed_at`, no transcript,
+ * no webhook, no submission email — and the response sat in the Partial tab
+ * with a full set of answers in it. `reopenResponse` then had no `disqualified`
+ * row to take back, which is how "I answered that by mistake" came to answer
+ * "this conversation has expired".
+ *
+ * `abandonReason` is cleared as well. The row is live again, and a response
+ * that reads as in progress *and* abandoned-for-idle-timeout is a row nothing
+ * downstream can describe honestly.
+ *
+ * `changed` is false when there was nothing to reopen — almost always because
+ * the row is already `in_progress`, which is the normal case and not a
+ * problem. Callers use it for logging, not for control flow.
+ */
+export async function reopenAbandonedResponse(
+  env: Bindings,
+  responseId: string,
+): Promise<{ changed: boolean }> {
+  const res = await env.DB.prepare(
+    `UPDATE submissions
+        SET status = 'in_progress', completed_at = NULL, updated_at = ?1,
+            meta = json_set(coalesce(meta,'{}'), '$.abandonReason', NULL)
+      WHERE id = ?2 AND status = 'abandoned'`,
+  )
+    .bind(Date.now(), responseId)
+    .run();
+  return { changed: (res.meta?.changes ?? 0) > 0 };
+}
+
 /** Every answer flattened into one lowercase haystack for the dashboard's search box. */
 export function buildSearchText(answers: AnswerMap): string {
   return Object.entries(answers)
@@ -418,6 +457,24 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
        * `abandonReason` is cleared on anything that is not an abandonment,
        * because `json_set` only ever writes and a recovered response would
        * otherwise read as completed *and* abandoned-for-idle-timeout.
+       *
+       * An abandonment may be finished on top of, which is the whole of the
+       * asymmetry in the guard below.
+       *
+       * `in_progress` alone was the guard, and it silently ate completions. A
+       * respondent whose last sitting timed out comes back to a row marked
+       * `abandoned`, carries on answering into it — every adoption path now
+       * reopens it, but a lost race, an alarm firing a second late, or an
+       * orphaned duplicate session can put it back — and the finalize that
+       * should have recorded their submission matched nothing. No ending, no
+       * `completed_at`, no transcript, no webhook, no submission email: the
+       * response stayed a partial with a full set of answers in it, and the
+       * respondent was told it had gone through.
+       *
+       * Nothing is delivered twice by allowing it. `abandoned` fires
+       * `response.abandoned`, never a completion, and a row that has already
+       * reached `completed` or `disqualified` still matches neither branch —
+       * so the second writer is still the no-op this guard exists to make it.
        */
       `UPDATE submissions
           SET status = ?1, completed_at = ?2, updated_at = ?3,
@@ -428,7 +485,9 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
                               '$.variables', json(?8)),
               respondent_provider = ?9, respondent_subject = ?10,
               respondent_email = ?11, respondent_phone = ?12, respondent_name = ?13
-        WHERE id = ?14 AND status = 'in_progress'`,
+        WHERE id = ?14
+          AND (status = 'in_progress'
+               OR (status = 'abandoned' AND ?1 IN ('completed', 'disqualified')))`,
     ).bind(
       a.status,
       a.status === "abandoned" ? null : now,
@@ -467,7 +526,27 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
 
   const results = await o.env.DB.batch(stmts);
   const changed = (results[0]?.meta?.changes ?? 0) > 0;
-  if (!changed) return { changed: false, durationMs };
+  if (!changed) {
+    /*
+     * Loud on purpose, and only for the two statuses that mean somebody
+     * finished something.
+     *
+     * A lost abandonment is ordinary — the idle alarm reaching a row that has
+     * since been completed is exactly what the guard is for. A lost completion
+     * is a response that a respondent believes they sent and that this system
+     * has no record of, and it went unremarked for as long as it existed. The
+     * rate this fires at is the honesty of the responses table.
+     */
+    if (a.status !== "abandoned") {
+      console.error("finalize_lost", {
+        responseId: a.responseId,
+        sessionId: a.chatSession?.sessionId ?? o.sessionId,
+        status: a.status,
+        endingRef: a.endingRef,
+      });
+    }
+    return { changed: false, durationMs };
+  }
 
   await o.env.Q_WEBHOOKS.send({
     /**

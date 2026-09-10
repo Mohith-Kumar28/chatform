@@ -11,6 +11,7 @@ import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
 import { completedSubmissions, openSession, type FormRow } from "../lib/open-session.js";
 import { respondentKey } from "../lib/respondent-key.js";
 import { findDeviceResumable } from "../lib/respondent-history.js";
+import { reopenAbandonedResponse } from "../lib/submissions.js";
 import { mountRespondentAuth } from "./respondent-auth.js";
 import { sessionStartLimit, respondentAuthLimit } from "../lib/ratelimit.js";
 import { getEntitlements, meter, checkQuota } from "../lib/entitlements.js";
@@ -334,18 +335,18 @@ sessionsRouter.post(
     /**
      * Put the response back in progress *after* the gates passed.
      *
-     * `finalizeResponse` guards on `status = 'in_progress'`, so this is what
-     * makes a second, real completion possible for a row that was already
-     * finalised as abandoned. Doing it before the gates would leave a response
-     * reopened for a session that was then refused.
+     * A response somebody is answering into is a response in progress, and
+     * every reader downstream depends on that being true: the partials tab, the
+     * follow-up sequence, the resume gates, and `finalizeResponse`. Doing it
+     * before the gates would leave a response reopened for a session that was
+     * then refused.
+     *
+     * Shared with the other two adoption paths — signing in, and the device
+     * match inside the session object — because for a long time this route was
+     * the only one of the three that did it. See `reopenAbandonedResponse`.
      */
     if (resume) {
-      await c.env.DB.prepare(
-        `UPDATE submissions SET status = 'in_progress', completed_at = NULL, updated_at = ?2
-          WHERE id = ?1 AND status = 'abandoned'`,
-      )
-        .bind(resume.submissionId, Date.now())
-        .run();
+      await reopenAbandonedResponse(c.env, resume.submissionId);
       /**
        * Credit the click before cancelling the rest of the sequence — the
        * cancel is what makes this row stop being `scheduled`, and doing it

@@ -58,6 +58,7 @@ import {
   deleteAnswerRow,
   finalizeResponse,
   reopenResponse,
+  reopenAbandonedResponse,
   findDuplicateAnswer,
   type ResponseOwner,
 } from "../lib/submissions.js";
@@ -696,9 +697,19 @@ export class SessionDO extends DurableObject<Bindings> {
      *
      * Guarded on this session having no answers of its own: adopting one on top
      * of another would silently discard whichever lost.
+     *
+     * And reopened, which this path did not do and the resume-link route did.
+     * `findIdentityHistory` hands back rows that are `in_progress` OR
+     * `abandoned` — coming back after a sitting timed out is the ordinary way
+     * to reach this — so without the reopen the respondent carried on
+     * answering into a row `finalizeResponse` refuses to touch. Their
+     * submission then went nowhere, and `undoScreenOut` had no `disqualified`
+     * row to take back, which is what turned "I answered that by mistake" into
+     * "this conversation has expired".
      */
     if (resume && this.collectedCount === 0 && !this.meta.currentRef) {
       await this.ctx.storage.put("submission_id", resume.submissionId);
+      await this.reopenAdopted(resume.submissionId);
       this.state.answers = { ...(resume.answers as EvalState["answers"]) };
       this.collectedCount = this.liveAnswerCount(resume.answers);
       this.resumed = true;
@@ -3052,9 +3063,8 @@ export class SessionDO extends DurableObject<Bindings> {
     if (!target) return { accepted: false, error: "nothing_to_change" };
 
     const submissionId = await this.ctx.storage.get<string>("submission_id");
-    if (submissionId) {
-      const { changed } = await reopenResponse(this.owner(), submissionId);
-      if (!changed) return { accepted: false, error: "session_closed" };
+    if (submissionId && !(await this.reopenForUndo(submissionId))) {
+      return { accepted: false, error: "session_closed" };
     }
 
     this.meta.status = "active";
@@ -3108,6 +3118,47 @@ export class SessionDO extends DurableObject<Bindings> {
      * `resumeAfterEdit` walking the flow forward without re-asking the tail.
      */
     return this.runAction({ action: "edit", ref: target.ref });
+  }
+
+  /**
+   * Put the response row back for an undo — and decide what a refusal means.
+   *
+   * The row disagreeing with this object is not, on its own, a reason to tell
+   * somebody their conversation is over. It was: `reopenResponse` guards on
+   * `status = 'disqualified'`, anything else came back as `session_closed`, and
+   * the client renders that as "this conversation has expired" and throws the
+   * session away — so a respondent who had mis-tapped one answer lost eleven,
+   * pressed retry, and was screened out again by the answers the retry resumed.
+   * The row was not even finished: it was `abandoned`, because an earlier
+   * sitting had timed out and no adoption path had reopened it, so the
+   * screen-out had never been recorded against it in the first place.
+   *
+   * This object is the authority on the conversation. So the only refusal left
+   * is the one that is genuinely about the response: another writer finished it
+   * properly, and resurrecting it would clear a real completion. Every other
+   * state — abandoned, still in progress, or a row that has since been deleted
+   * — reopens and carries on, because the respondent is right here asking to.
+   */
+  private async reopenForUndo(submissionId: string): Promise<boolean> {
+    const { changed } = await reopenResponse(this.owner(), submissionId);
+    if (changed) return true;
+
+    const row = await this.env.DB.prepare(`SELECT status FROM submissions WHERE id = ?`)
+      .bind(submissionId)
+      .first<{ status: string }>()
+      .catch(() => null);
+
+    if (row?.status === "completed") return false;
+
+    // Loud: reaching here means the refusal the respondent is taking back was
+    // never written down, which is a hole somewhere upstream of this method.
+    console.warn("undo_reopen_mismatch", {
+      sessionId: this.meta?.sessionId,
+      submissionId,
+      rowStatus: row?.status ?? "missing",
+    });
+    if (row?.status === "abandoned") await this.reopenAdopted(submissionId);
+    return true;
   }
 
   private async abandon(reason: string): Promise<void> {
@@ -3267,6 +3318,34 @@ export class SessionDO extends DurableObject<Bindings> {
   }
 
   /**
+   * A response this session has just adopted is a response in progress.
+   *
+   * Adoption reaches this object three ways — the resume link, the sign-in
+   * lookup, and the device match inside `ensureSubmissionRow` — and all three
+   * are allowed to hand back a row that was abandoned when its last sitting
+   * timed out. Every writer below guards on `status = 'in_progress'`, so the
+   * status has to be put back at the moment the row is picked up, not left for
+   * whatever finishes the conversation to discover it cannot write.
+   *
+   * Never throws and never blocks the adoption: the answers still land, and
+   * `finalizeResponse` now accepts an abandoned row for a completion anyway.
+   * This is what keeps the row honest *while* the conversation is live — the
+   * partials tab, the follow-up sequence and the resume gates all read it.
+   */
+  private async reopenAdopted(submissionId: string): Promise<void> {
+    if (!this.meta || this.meta.formVersionId === "preview") return;
+    try {
+      await reopenAbandonedResponse(this.env, submissionId);
+    } catch (err) {
+      console.error("reopen_adopted_failed", {
+        sessionId: this.meta.sessionId,
+        submissionId,
+        ...errorInfo(err),
+      });
+    }
+  }
+
+  /**
    * In flight, so two callers in one turn cannot open two rows.
    *
    * The storage key alone was not enough, and the gap is not theoretical: the
@@ -3323,6 +3402,11 @@ export class SessionDO extends DurableObject<Bindings> {
           });
       if (reusable) {
         await this.ctx.storage.put("submission_id", reusable);
+        // `findOpenResponseId` matches `abandoned` rows as well, so adoption
+        // here has the same obligation the sign-in and resume-link paths have:
+        // a row somebody is answering into is in progress, whatever it was
+        // when they walked away from it. See `reopenAdopted`.
+        await this.reopenAdopted(reusable);
         return reusable;
       }
 

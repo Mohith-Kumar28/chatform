@@ -457,3 +457,77 @@ describe("a respondent who was screened out by mistake", () => {
     expect(await rowFor(s)).toMatchObject({ status: "in_progress" });
   });
 });
+
+/**
+ * The same undo, on a response that was marked abandoned under it.
+ *
+ * This is what a respondent who comes back the next day gets. Their last
+ * sitting timed out, so the row reads `abandoned`; signing in — or the device
+ * match — hands it back and they carry on answering into it. Every writer here
+ * guards on `status = 'in_progress'`, and for a long time only the resume-*link*
+ * path put the status back, so:
+ *
+ *   - the screen-out was never recorded against the row, and
+ *   - `reopenResponse` then found no `disqualified` row to take back and said
+ *     so as `session_closed`, which the browser renders as "this conversation
+ *     has expired" before throwing the whole conversation away.
+ *
+ * One mis-tapped chip, eleven answers, and a form that claims to have expired.
+ * The `UPDATE` below stands in for the idle alarm; everything after it is the
+ * respondent's own live session.
+ */
+describe("a screen-out on a response that had been abandoned", () => {
+  const act = (sessionId: string, action: string) =>
+    api(`/v1/sessions/${sessionId}/actions`, { method: "POST", body: JSON.stringify({ action }) });
+
+  const abandon = (sessionId: string) =>
+    env.DB.prepare(
+      `UPDATE submissions
+          SET status = 'abandoned', completed_at = NULL,
+              meta = json_set(coalesce(meta,'{}'), '$.abandonReason', 'idle_timeout')
+        WHERE session_id = ?`,
+    )
+      .bind(sessionId)
+      .run();
+
+  it("is still recorded as a refusal rather than silently lost", async () => {
+    const s = await open();
+    await answer(s, "q_size", 3);
+    await abandon(s);
+
+    const turn = await answer(s, "q_conduct", false);
+    expect(turn.ending?.ref).toBe("end_ineligible");
+
+    const row = await rowFor(s);
+    expect(row?.status).toBe("disqualified");
+    expect(row?.ending).toBe("end_ineligible");
+  });
+
+  it("can still be taken back", async () => {
+    const s = await open();
+    await answer(s, "q_size", 3);
+    await abandon(s);
+    await answer(s, "q_conduct", false);
+
+    const res = await act(s, "undo_screen_out");
+    expect(res.status).toBe(200);
+    const turn = (await res.json()) as TurnResult;
+    expect(turn.question?.ref).toBe("q_conduct");
+    expect(await rowFor(s)).toMatchObject({ status: "in_progress" });
+  });
+
+  it("reaches a real completion instead of staying a partial forever", async () => {
+    const s = await open();
+    await answer(s, "q_size", 3);
+    await abandon(s);
+    await answer(s, "q_conduct", true);
+    await answer(s, "q_project", "A better kettle");
+    await act(s, "submit");
+
+    // The failure this pins is quiet: the respondent is shown the thank-you,
+    // and the response sits in the Partial tab with every answer in it.
+    const row = await rowFor(s);
+    expect(row?.status).toBe("completed");
+    expect(row?.ending).toBe("end_thanks");
+  });
+});
