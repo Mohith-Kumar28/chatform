@@ -32,6 +32,7 @@ import {
 } from "../../lib/submissions.js";
 import { meter } from "../../lib/entitlements.js";
 import { decodeCursor, paginate } from "../../lib/cursor.js";
+import { bindChunks, holesFor } from "../../lib/d1-bindings.js";
 import { entitlementsFor } from "../../lib/authorize.js";
 
 /**
@@ -856,14 +857,26 @@ responsesRouter.get(
     let answersByResponse = new Map<string, AnswerMap>();
     if (include.has("answers") && page.data.length > 0) {
       const ids = page.data.map((r) => r.id);
-      const answerRows = await c.env.DB.prepare(
-        `SELECT submission_id, block_ref, value_json FROM submission_answers
-          WHERE submission_id IN (${ids.map(() => "?").join(",")})`,
-      )
-        .bind(...ids)
-        .all<{ submission_id: string; block_ref: string; value_json: string }>();
+      /**
+       * Still one round trip, now within the binding ceiling.
+       *
+       * `limit` goes to a hundred and this bound one parameter per id, which is
+       * exactly D1's maximum for a statement — correct, and one off from
+       * `too many SQL variables` if the page size ever grew. Chunked, the batch
+       * costs the same single hop.
+       */
+      const pages = (await c.env.DB.batch(
+        bindChunks(ids).map((chunk) =>
+          c.env.DB
+            .prepare(
+              `SELECT submission_id, block_ref, value_json FROM submission_answers
+                WHERE submission_id IN (${holesFor(chunk)})`,
+            )
+            .bind(...chunk),
+        ),
+      )) as D1Result<{ submission_id: string; block_ref: string; value_json: string }>[];
       answersByResponse = new Map(ids.map((id) => [id, {} as AnswerMap]));
-      for (const row of answerRows.results ?? []) {
+      for (const row of pages.flatMap((p) => p.results ?? [])) {
         try {
           answersByResponse.get(row.submission_id)![row.block_ref] = JSON.parse(row.value_json);
         } catch {

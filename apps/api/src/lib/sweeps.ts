@@ -2,6 +2,7 @@ import type { Bindings } from "../env.js";
 import { pruneIdempotencyKeys } from "./idempotency.js";
 import { knowledgeStore } from "./knowledge/index.js";
 import { enqueueMany } from "./knowledge-service.js";
+import { bindChunks, holesFor } from "./d1-bindings.js";
 
 /**
  * Periodic work, from the cron that already runs every five minutes.
@@ -50,13 +51,20 @@ export async function sweepExpiredResponses(env: Bindings, limit = 200): Promise
    */
   const answersBySub = new Map<string, Record<string, unknown>>(rows.map((r) => [r.id, {}]));
   if (rows.length > 0) {
-    const answers = await env.DB.prepare(
-      `SELECT submission_id, block_ref, value_json FROM submission_answers
-        WHERE submission_id IN (${rows.map(() => "?").join(",")})`,
-    )
-      .bind(...rows.map((r) => r.id))
-      .all<{ submission_id: string; block_ref: string; value_json: string }>();
-    for (const a of answers.results ?? []) {
+    // Chunked: the sweep takes two hundred at a time and D1 binds a hundred
+    // parameters per statement, so the list goes over as several statements in
+    // the one batch rather than as one statement D1 refuses.
+    const pages = (await env.DB.batch(
+      bindChunks(rows.map((r) => r.id)).map((chunk) =>
+        env.DB
+          .prepare(
+            `SELECT submission_id, block_ref, value_json FROM submission_answers
+              WHERE submission_id IN (${holesFor(chunk)})`,
+          )
+          .bind(...chunk),
+      ),
+    )) as D1Result<{ submission_id: string; block_ref: string; value_json: string }>[];
+    for (const a of pages.flatMap((p) => p.results ?? [])) {
       try {
         answersBySub.get(a.submission_id)![a.block_ref] = JSON.parse(a.value_json);
       } catch {
@@ -167,11 +175,15 @@ export async function sweepPartialNotifications(env: Bindings, limit = 200): Pro
         },
       })),
     );
-    await env.DB.prepare(
-      `UPDATE submissions SET partial_notified_at = ? WHERE id IN (${slice.map(() => "?").join(",")})`,
-    )
-      .bind(now, ...slice.map((r) => r.id))
-      .run();
+    // One statement per fifty ids: the queue's batch is a hundred, D1's binding
+    // ceiling is a hundred *including* the timestamp, so the stamp splits.
+    await env.DB.batch(
+      bindChunks(slice.map((r) => r.id)).map((chunk) =>
+        env.DB
+          .prepare(`UPDATE submissions SET partial_notified_at = ? WHERE id IN (${holesFor(chunk)})`)
+          .bind(now, ...chunk),
+      ),
+    );
   }
   return rows.length;
 }
@@ -288,12 +300,14 @@ export async function sweepFollowUps(env: Bindings, limit = 100): Promise<number
   // One statement per reason, however many rows share it.
   if (skips.size > 0) {
     await env.DB.batch(
-      [...skips].map(([reason, ids]) =>
-        env.DB
-          .prepare(
-            `UPDATE followups SET status = 'skipped', reason = ? WHERE id IN (${ids.map(() => "?").join(",")})`,
-          )
-          .bind(reason, ...ids),
+      [...skips].flatMap(([reason, ids]) =>
+        bindChunks(ids).map((chunk) =>
+          env.DB
+            .prepare(
+              `UPDATE followups SET status = 'skipped', reason = ? WHERE id IN (${holesFor(chunk)})`,
+            )
+            .bind(reason, ...chunk),
+        ),
       ),
     );
   }
@@ -443,13 +457,11 @@ export async function sweepDeletedFormKnowledge(env: Bindings, limit = 20): Prom
       // index of what is in R2, so it goes last. One batch, still in that order.
       await env.DB.batch([
         env.DB.prepare(`DELETE FROM knowledge_sources WHERE form_id = ?`).bind(formId),
-        ...(files.length > 0
-          ? [
-              env.DB
-                .prepare(`DELETE FROM files WHERE id IN (${files.map(() => "?").join(",")})`)
-                .bind(...files.map((f) => f.id)),
-            ]
-          : []),
+        // However many files a form accumulated — the list is unbounded here, and
+        // this is the query that taught the codebase about the binding ceiling.
+        ...bindChunks(files.map((f) => f.id)).map((chunk) =>
+          env.DB.prepare(`DELETE FROM files WHERE id IN (${holesFor(chunk)})`).bind(...chunk),
+        ),
       ]);
       cleared += 1;
     } catch (err) {

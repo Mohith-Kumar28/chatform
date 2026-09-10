@@ -115,6 +115,13 @@ export async function isSuppressedIn(
    * the organization in memory costs at most a few extra rows for an address
    * some other tenant also suppressed, and the pair matching below is what
    * decides the answer either way.
+   *
+   * Those extra rows are the one thing to be careful about: a suppression that
+   * belongs to another organization can be read here. It is discarded on the
+   * next line — the lookup key is built from the *caller's* `orgId`, so another
+   * tenant's row cannot match one of the pairs asked about — and nothing read
+   * here leaves this function. Only a global suppression, which is deliberately
+   * org-independent, ever answers for someone else's row.
    */
   const pages = (await env.DB.batch(
     bindChunks(addresses).map((chunk) =>
@@ -545,6 +552,9 @@ const CATCHUP_LIMIT = 100;
  * than a hundred, with the rest of the page unaffected. Four batches of reads
  * and four of writes for a full page is still two orders of magnitude fewer
  * round trips than asking per response.
+ *
+ * Deliberately below `BIND_CHUNK`: here the chunk is also the blast radius of a
+ * failed write batch, which is a stricter thing to size for than the bind limit.
  */
 const CATCHUP_CHUNK = 25;
 
@@ -648,7 +658,9 @@ async function scheduleChunk(
   rows: { id: string; updated_at: number }[],
 ): Promise<number> {
   const ids = rows.map((r) => r.id);
-  const holes = ids.map(() => "?").join(",");
+  // `CATCHUP_CHUNK` is already under `BIND_CHUNK`, so this is one slice — the
+  // helper is here to say where the number comes from, not to split anything.
+  const holes = holesFor(ids);
 
   const [subsRes, answersRes] = (await env.DB.batch([
     env.DB.prepare(

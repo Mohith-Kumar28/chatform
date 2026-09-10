@@ -10,6 +10,7 @@ import { resolveRetiredBlocks } from "../lib/retired-columns.js";
 import { computeAnalytics } from "../lib/analytics-service.js";
 import { computeFollowUpStats } from "../lib/followup-analytics.js";
 import { buildXlsx } from "../lib/xlsx.js";
+import { bindChunks, holesFor } from "../lib/d1-bindings.js";
 
 export const resultsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
@@ -624,33 +625,41 @@ resultsRouter.delete(
     if (denied) return denied;
 
     const { ids } = c.req.valid("json");
-    const holes = ids.map(() => "?").join(",");
 
-    // Scoped to this form as well as to the ids: `requireFormAccess` proves the
-    // caller owns the form, and this is what stops an id from another form —
-    // or another tenant — riding along in the list.
-    const owned = await c.env.DB.prepare(
-      `SELECT id, session_id FROM submissions WHERE form_id = ? AND id IN (${holes})`,
-    )
-      .bind(formId, ...ids)
-      .all<{ id: string; session_id: string | null }>();
+    /**
+     * Chunked, because the body accepts two hundred ids and D1 binds a hundred
+     * parameters per statement — batch or no batch. Naming all two hundred in
+     * one `IN (…)` was `too many SQL variables`, and only in production: the
+     * local D1 does not enforce the cap, so no test here could have failed.
+     * Selecting every row on a page of a hundred and pressing Delete was
+     * already enough to reach it.
+     *
+     * Scoped to this form as well as to the ids: `requireFormAccess` proves the
+     * caller owns the form, and this is what stops an id from another form —
+     * or another tenant — riding along in the list.
+     */
+    const ownedPages = (await c.env.DB.batch(
+      bindChunks(ids).map((chunk) =>
+        c.env.DB
+          .prepare(`SELECT id, session_id FROM submissions WHERE form_id = ? AND id IN (${holesFor(chunk)})`)
+          .bind(formId, ...chunk),
+      ),
+    )) as D1Result<{ id: string; session_id: string | null }>[];
 
-    const rows = owned.results ?? [];
+    const rows = ownedPages.flatMap((p) => p.results ?? []);
     if (rows.length === 0) return c.json({ deleted: 0 });
 
     const sessionIds = rows.map((r) => r.session_id).filter((s): s is string => s !== null);
     const stmts = [
-      c.env.DB.prepare(
-        `DELETE FROM submissions WHERE form_id = ? AND id IN (${rows.map(() => "?").join(",")})`,
-      ).bind(formId, ...rows.map((r) => r.id)),
+      ...bindChunks(rows.map((r) => r.id)).map((chunk) =>
+        c.env.DB
+          .prepare(`DELETE FROM submissions WHERE form_id = ? AND id IN (${holesFor(chunk)})`)
+          .bind(formId, ...chunk),
+      ),
+      ...bindChunks(sessionIds).map((chunk) =>
+        c.env.DB.prepare(`DELETE FROM chat_sessions WHERE id IN (${holesFor(chunk)})`).bind(...chunk),
+      ),
     ];
-    if (sessionIds.length > 0) {
-      stmts.push(
-        c.env.DB.prepare(
-          `DELETE FROM chat_sessions WHERE id IN (${sessionIds.map(() => "?").join(",")})`,
-        ).bind(...sessionIds),
-      );
-    }
     await c.env.DB.batch(stmts);
     return c.json({ deleted: rows.length });
   },

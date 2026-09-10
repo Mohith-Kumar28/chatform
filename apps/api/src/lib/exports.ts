@@ -1,6 +1,7 @@
 import { readFormDoc, displayAnswer, type Block, type FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { resolveRetiredBlocks } from "./retired-columns.js";
+import { BIND_CHUNK, bindChunks, holesFor } from "./d1-bindings.js";
 
 /**
  * Asynchronous response exports.
@@ -19,8 +20,6 @@ import { resolveRetiredBlocks } from "./retired-columns.js";
 
 /** The ceiling on one export. Above this the caller pages the read API instead. */
 const MAX_ROWS = 100_000;
-/** How many submissions' answers are fetched per round trip. */
-const CHUNK = 500;
 /** Exports hold respondent data, so the object is not kept indefinitely. */
 const RETENTION_HOURS = 24;
 
@@ -135,13 +134,16 @@ type AnswerRow = { submission_id: string; block_ref: string; value_json: string 
 /**
  * How many chunk statements ride in one `DB.batch()`.
  *
- * The chunk itself is what bounds memory — five hundred responses' answers in
- * flight at a time — but it used to bound round trips too: one hop per chunk
- * meant an export of a hundred thousand responses spent two hundred sequential
- * trips to D1 waiting. Ten statements per batch is the same memory ceiling and
- * a tenth of the latency.
+ * Two ceilings meet here and they pull in opposite directions. A statement can
+ * bind a hundred parameters, so a chunk names at most `BIND_CHUNK` responses —
+ * the old five hundred was five times over the limit and would have thrown
+ * `too many SQL variables` on the first export big enough to reach it, in
+ * production only, since the local D1 does not enforce the cap. And a round
+ * trip is expensive, so a batch carries forty of those statements: two thousand
+ * responses' answers in flight, which is what bounds memory, and a fiftieth of
+ * the round trips a chunk-per-hop export used to make.
  */
-const CHUNKS_PER_BATCH = 10;
+const CHUNKS_PER_BATCH = 40;
 
 /**
  * Walk a window of responses' answers, chunk by chunk, in order.
@@ -155,17 +157,15 @@ async function eachAnswerChunk(
   ids: string[],
   onChunk: (chunkIds: string[], rows: AnswerRow[]) => void,
 ): Promise<void> {
-  for (let i = 0; i < ids.length; i += CHUNK * CHUNKS_PER_BATCH) {
-    const group: string[][] = [];
-    for (let j = i; j < Math.min(ids.length, i + CHUNK * CHUNKS_PER_BATCH); j += CHUNK) {
-      group.push(ids.slice(j, j + CHUNK));
-    }
+  const chunks = bindChunks(ids, BIND_CHUNK);
+  for (let i = 0; i < chunks.length; i += CHUNKS_PER_BATCH) {
+    const group = chunks.slice(i, i + CHUNKS_PER_BATCH);
     const res = (await env.DB.batch(
       group.map((chunk) =>
         env.DB
           .prepare(
             `SELECT submission_id, block_ref, value_json FROM submission_answers
-              WHERE submission_id IN (${chunk.map(() => "?").join(",")})`,
+              WHERE submission_id IN (${holesFor(chunk)})`,
           )
           .bind(...chunk),
       ),
@@ -415,10 +415,11 @@ export async function pruneExpiredExports(env: Bindings): Promise<number> {
   // The objects in parallel, the rows in one statement: two hundred expired
   // exports used to be four hundred awaits in a row.
   await Promise.all(list.filter((r) => r.r2_key).map((r) => env.R2.delete(r.r2_key!).catch(() => {})));
-  await env.DB.prepare(
-    `DELETE FROM exports WHERE id IN (${list.map(() => "?").join(",")})`,
-  )
-    .bind(...list.map((r) => r.id))
-    .run();
+  // Two hundred rows a pass, fifty ids a statement, one batch.
+  await env.DB.batch(
+    bindChunks(list.map((r) => r.id)).map((chunk) =>
+      env.DB.prepare(`DELETE FROM exports WHERE id IN (${holesFor(chunk)})`).bind(...chunk),
+    ),
+  );
   return list.length;
 }
