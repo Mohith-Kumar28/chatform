@@ -54,6 +54,47 @@ describe("withoutSubmissions", () => {
     expect(withoutSubmissions(odd, new Set(["a"]))).toBe(odd);
   });
 
+  /**
+   * The counters the footer and the tab badges read.
+   *
+   * The list is paged, so "of 312" and "Completed 312" come from the server
+   * rather than from the array; a delete that took rows out and left the
+   * numbers alone would have the page insisting on responses it had just
+   * removed until the refetch landed.
+   */
+  it("brings the totals down with the rows", () => {
+    const next = withoutSubmissions(
+      {
+        submissions: [
+          { id: "a", status: "completed" },
+          { id: "b", status: "abandoned" },
+          { id: "c", status: "completed" },
+        ],
+        total: 312,
+        counts: { total: 312, completed: 300, partial: 12 },
+      },
+      new Set(["a", "b"]),
+    ) as { total: number; counts: { total: number; completed: number; partial: number } };
+    expect(next.total).toBe(310);
+    expect(next.counts).toEqual({ total: 310, completed: 299, partial: 11 });
+  });
+
+  it("never counts a total below zero", () => {
+    const next = withoutSubmissions(
+      { submissions: [{ id: "a", status: "completed" }], total: 0, counts: { total: 0, completed: 0, partial: 0 } },
+      new Set(["a"]),
+    ) as { total: number; counts: { completed: number } };
+    expect(next.total).toBe(0);
+    expect(next.counts.completed).toBe(0);
+  });
+
+  it("leaves an envelope with no counters alone", () => {
+    // The paramless cache entry, or a response from before the endpoint paged.
+    const next = withoutSubmissions(payload(["a", "b"]), new Set(["a"])) as Record<string, unknown>;
+    expect("total" in next).toBe(false);
+    expect("counts" in next).toBe(false);
+  });
+
   it("is a no-op for ids that are not there", () => {
     const next = withoutSubmissions(payload(["a", "b"]), new Set(["zzz"])) as {
       submissions: { id: string }[];

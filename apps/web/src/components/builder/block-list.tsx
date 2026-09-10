@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
@@ -9,6 +10,7 @@ import {
   CornerDownRight,
   Copy,
   Flag,
+  ShieldAlert,
   GripVertical,
   Hash,
   Plus,
@@ -52,15 +54,8 @@ import {
 } from "@/components/ui/tooltip";
 import { useBuilderStore } from "@/stores/builder-store";
 import { computeQuestionFlow, type QuestionFlow } from "./branch-layout";
-import {
-  ConditionRow,
-  choicesFor,
-  conditionalRule,
-  deciderFor,
-  opsFor,
-  type DraftCondition,
-} from "./condition-row";
-import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
+import { blockMeta, TONE_ACCENT, TONE_CLASSES, type CatalogItem } from "./block-library";
+import { NodeCatalog, firstCatalogMatch } from "./node-catalog";
 import { defaultBlock } from "./default-block";
 import { KEY } from "./use-builder-shortcuts";
 import { cn } from "@/lib/utils";
@@ -81,6 +76,7 @@ export function BlockList() {
   const selectEnding = useBuilderStore((s) => s.selectEnding);
   const moveBlock = useBuilderStore((s) => s.moveBlock);
   const addBlock = useBuilderStore((s) => s.addBlock);
+  const addEnding = useBuilderStore((s) => s.addEnding);
   const duplicateBlock = useBuilderStore((s) => s.duplicateBlock);
   const removeBlock = useBuilderStore((s) => s.removeBlock);
   /**
@@ -170,27 +166,44 @@ export function BlockList() {
               Ending
             </p>
             <ol className="space-y-0.5">
-              {doc.endings.map((ending) => (
-                <li key={ending.ref}>
-                  <button
-                    type="button"
-                    onClick={() => selectEnding(ending.ref)}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left",
-                      "bg-primary-soft text-primary transition-opacity duration-[var(--duration-micro)]",
-                      selectedEndingRef === ending.ref ? "opacity-100" : "opacity-[0.82] hover:opacity-100",
-                    )}
-                    style={
-                      selectedEndingRef === ending.ref
-                        ? { boxShadow: "inset 3px 0 0 0 var(--primary)" }
-                        : undefined
-                    }
-                  >
-                    <Flag className="size-3.5 shrink-0" strokeWidth={2} />
-                    <span className="line-clamp-1 min-w-0 flex-1 text-xs">{ending.title}</span>
-                  </button>
-                </li>
-              ))}
+              {/*
+                Green accepts, red refuses — the same pairing the canvas node
+                and the ending inspector use. Every ending was the same orange
+                flag here, so the row that turns people away looked exactly
+                like the one that thanks them.
+              */}
+              {doc.endings.map((ending) => {
+                const screenOut = ending.kind === "screen_out";
+                const isSelected = selectedEndingRef === ending.ref;
+                const accent = screenOut ? "var(--destructive)" : "var(--success)";
+                const Icon = screenOut ? ShieldAlert : Flag;
+                return (
+                  <li key={ending.ref}>
+                    <button
+                      type="button"
+                      onClick={() => selectEnding(ending.ref)}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left",
+                        "transition-opacity duration-[var(--duration-micro)]",
+                        isSelected ? "opacity-100" : "opacity-[0.82] hover:opacity-100",
+                      )}
+                      style={{
+                        background: screenOut ? "var(--destructive-soft)" : "var(--success-soft)",
+                        color: screenOut
+                          ? "var(--destructive-soft-foreground)"
+                          : "var(--success-soft-foreground)",
+                        boxShadow: isSelected ? `inset 3px 0 0 0 ${accent}` : undefined,
+                      }}
+                    >
+                      <Icon className="size-3.5 shrink-0" strokeWidth={2} style={{ color: accent }} />
+                      <span className="line-clamp-1 min-w-0 flex-1 text-xs">{ending.title}</span>
+                      <span className="text-micro shrink-0 font-medium tracking-wide uppercase opacity-70">
+                        {screenOut ? "Can't submit" : "Done"}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ol>
           </div>
         </div>
@@ -198,18 +211,14 @@ export function BlockList() {
         {pickerIndex !== null && (
           <BlockPicker
             onClose={closePicker}
-            decider={deciderFor(doc.blocks, pickerIndex)}
-            onPick={(type, condition) => {
-              const refs = new Set(doc.blocks.map((b) => b.ref));
-              const block = defaultBlock(type, refs);
-              const decider = condition ? deciderFor(doc.blocks, pickerIndex) : null;
-              // Only the positive branch is written. `repairFlow`, which every
-              // structural edit runs through, derives the complement that skips
-              // the question when the condition fails — the half that actually
-              // does the skipping, and the half people forget.
-              const rule =
-                condition && decider ? conditionalRule(decider, condition, block.ref) : undefined;
-              addBlock(block, pickerIndex, rule);
+            branchFrom={doc.blocks[pickerIndex - 1] ?? null}
+            onPick={(item) => {
+              if (item.kind === "ending") {
+                addEnding();
+              } else if (item.blockType) {
+                const refs = new Set(doc.blocks.map((b) => b.ref));
+                addBlock(defaultBlock(item.blockType, refs), pickerIndex);
+              }
               closePicker();
             }}
           />
@@ -521,40 +530,43 @@ function RowMenu({
 }
 
 /**
- * Block picker. All 25 addable types, grouped and searchable — the old palette
- * was a cramped scrolling grid of 16 tiny buttons pinned to the bottom of the
- * sidebar, and nine schema types had no entry at all.
+ * The picker: everything a form is made of, grouped and searchable.
+ *
+ * It draws `NodeCatalog` — the same component, the same items, the same order
+ * as the Flow view's node library — so the two palettes cannot drift again.
+ * Which is how Ending got here: it existed on the canvas and nowhere else.
+ *
+ * What left is the "Only ask this sometimes" checkbox that used to sit along
+ * the bottom. It put a whole branching UI — a checkbox, an operator select and
+ * a value field — inside a dialog whose only job is "which kind of block?",
+ * and it appeared only when the question above happened to be one you could
+ * branch on, so the dialog changed shape depending on where you had clicked.
+ * A branch is a node in the catalogue like anything else, and picking it goes
+ * to the canvas, which is the one place a branch can be seen.
  */
 function BlockPicker({
   onPick,
   onClose,
-  decider,
+  branchFrom,
 }: {
-  onPick: (type: Block["type"], condition: DraftCondition | null) => void;
+  onPick: (item: CatalogItem) => void;
   onClose: () => void;
-  /**
-   * The question directly above the insertion point, when there is one that
-   * could decide whether the new question is asked at all.
-   */
-  decider: Block | null;
+  /** The question a branch added here would leave from, if there is one. */
+  branchFrom: Block | null;
 }) {
   const [query, setQuery] = useState("");
-  const [conditional, setConditional] = useState(false);
-  const [condition, setCondition] = useState<DraftCondition | null>(null);
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
 
-  // Default the condition to the decider's first answer, which is the one
-  // people mean nine times out of ten.
-  const draft: DraftCondition =
-    condition ??
-    (decider
-      ? { ref: decider.ref, op: opsFor(decider)[0]!.value, value: choicesFor(decider)[0]?.value ?? "" }
-      : { ref: "", op: "is_not_empty", value: "" });
-
-  const pick = (type: Block["type"]) => onPick(type, conditional && decider ? draft : null);
-  const q = query.trim().toLowerCase();
-  const matches = BLOCK_LIBRARY.filter(
-    (b) => !q || b.label.toLowerCase().includes(q) || b.description.toLowerCase().includes(q),
-  );
+  const pick = (item: CatalogItem) => {
+    if (item.kind === "branch") {
+      if (!branchFrom) return;
+      onClose();
+      router.push(`/forms/${params.id}/workflow?focus=${branchFrom.ref}`);
+      return;
+    }
+    onPick(item);
+  };
 
   return (
     <div
@@ -573,7 +585,13 @@ function BlockPicker({
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") onClose();
-              if (e.key === "Enter" && matches[0]) pick(matches[0].type);
+              // Only with something typed. Empty, the "first match" is the
+              // first item in the catalogue — Branch — and ↵ on an untouched
+              // picker would leave the page for the flow canvas.
+              if (e.key === "Enter" && query.trim()) {
+                const first = firstCatalogMatch(query);
+                if (first) pick(first);
+              }
             }}
             placeholder="Search blocks…"
             className="h-8 border-0 shadow-none focus-visible:ring-0"
@@ -581,72 +599,17 @@ function BlockPicker({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
-          {matches.length === 0 ? (
-            <p className="text-muted-foreground py-8 text-center text-sm">
-              No block type matches “{query}”.
-            </p>
-          ) : (
-            BLOCK_GROUPS.map((group) => {
-              const items = matches.filter((b) => b.group === group);
-              if (!items.length) return null;
-              return (
-                <div key={group} className="mb-2">
-                  <p className="text-muted-foreground text-micro px-2 py-1 font-medium tracking-wide uppercase">
-                    {group}
-                  </p>
-                  {items.map((b) => (
-                    <button
-                      key={b.type}
-                      type="button"
-                      onClick={() => pick(b.type)}
-                      className="hover:bg-muted/70 flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors"
-                    >
-                      <div className={cn("grid size-7 shrink-0 place-items-center rounded-lg", TONE_CLASSES[b.tone])}>
-                        <b.icon className="size-3.5" strokeWidth={1.75} />
-                      </div>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-medium">{b.label}</span>
-                        <span className="text-muted-foreground block truncate text-xs">
-                          {b.description}
-                        </span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              );
-            })
-          )}
+          <NodeCatalog
+            variant="detailed"
+            query={query}
+            onPick={pick}
+            reason={(item) =>
+              item.kind === "branch" && !branchFrom
+                ? "Add a question first — a branch has to leave from one."
+                : undefined
+            }
+          />
         </div>
-
-        {/*
-          The condition lives with the insert, not in a second dialog.
-          Making a question conditional after the fact meant going to the Flow
-          view, finding the node and wiring an edge — so in practice questions
-          got added unconditionally and the branching was fixed up later, or
-          not at all.
-        */}
-        {decider && (
-          <div className="bg-muted/40 space-y-2 px-3 py-2.5">
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={conditional}
-                onChange={(e) => setConditional(e.target.checked)}
-                className="accent-[var(--primary)]"
-              />
-              <GitBranch className="text-muted-foreground size-3.5" />
-              Only ask this sometimes
-            </label>
-            {conditional && (
-              <>
-                <ConditionRow decider={decider} condition={draft} onChange={setCondition} />
-                <p className="text-muted-foreground text-xs">
-                  Everyone else skips straight past it.
-                </p>
-              </>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

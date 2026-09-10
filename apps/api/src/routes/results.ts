@@ -109,6 +109,30 @@ const SubmissionList = z.object({
   submissions: z.array(SubmissionRow),
   /** Empty for the overwhelming majority of forms. Ordered oldest-deletion-last. */
   retiredColumns: z.array(RetiredColumn),
+  /**
+   * One page of a form's responses, and how many there are in total.
+   *
+   * The endpoint used to return the newest fifty and say nothing about the rest,
+   * so a form with three thousand responses had two thousand nine hundred and
+   * fifty of them simply missing from the only screen that shows them. `total`
+   * counts every row the current `status` filter matches — not the page — which
+   * is what lets the table say "51–100 of 3,214" and offer a page after this
+   * one.
+   */
+  total: z.number(),
+  limit: z.number(),
+  offset: z.number(),
+  /**
+   * Both tabs' counts, so neither badge is counted from a page.
+   *
+   * `completed` and `partial` do not have to add up to `total`: a `spam` row is
+   * in neither.
+   */
+  counts: z.object({
+    total: z.number(),
+    completed: z.number(),
+    partial: z.number(),
+  }),
 });
 
 const Summary = z.object({
@@ -199,13 +223,31 @@ resultsRouter.get(
   validator(
     "query",
     z.object({
-      status: z.enum(["all", "completed", "disqualified", "abandoned", "in_progress"]).default("all"),
+      /**
+       * `partial` is the union the table actually offers: a response that was
+       * started and not completed, whether it was abandoned, is still open, or
+       * was screened out. The three exact statuses stay addressable for callers
+       * that want one of them, and `spam` is in none of these — it is not a
+       * response an author is being shown a tab for.
+       */
+      status: z
+        .enum(["all", "completed", "partial", "disqualified", "abandoned", "in_progress"])
+        .default("all"),
+      /** Rows per page. The table offers 25/50/100; 200 is the ceiling. */
       limit: z.coerce.number().int().min(1).max(200).default(50),
+      /**
+       * Where the page starts. Offset rather than a cursor, deliberately: this
+       * table has numbered pages and a rows-per-page control, which a cursor
+       * cannot serve — you cannot jump to page nine of an opaque chain. The
+       * public API keeps its cursor (`GET /v1/responses`), where the caller is
+       * walking a list rather than looking at one.
+       */
+      offset: z.coerce.number().int().min(0).default(0),
     }),
   ),
   async (c) => {
     const id = c.get("form")!.id;
-    const { status, limit } = c.req.valid("query");
+    const { status, limit, offset } = c.req.valid("query");
 
     /**
      * The gate that pays for everything.
@@ -232,7 +274,13 @@ resultsRouter.get(
      * are Pro". Somebody the form turned away did not arrive.
      */
     let effectiveStatus: typeof status = status;
-    if (status === "abandoned" || status === "in_progress" || status === "disqualified" || status === "all") {
+    if (
+      status === "abandoned" ||
+      status === "in_progress" ||
+      status === "disqualified" ||
+      status === "partial" ||
+      status === "all"
+    ) {
       const roleDenied = await assertPermission(c, "submission", "read_partial");
       // A viewer is not trusted with unfinished responses whatever the plan, but `all`
       // still degrades rather than erroring, for the same reason.
@@ -255,94 +303,192 @@ resultsRouter.get(
         }
       }
     }
-    // Bound, never interpolated. All placeholders are positional: SQLite
-    // continues auto-numbering `?` from the highest explicit index, so mixing
-    // `?` with `?1` silently changes how many bindings the statement wants.
-    const subs = await c.env.DB.prepare(
-      `SELECT s.id, s.status, s.started_at, s.completed_at, s.duration_ms, s.session_id,
-              s.respondent_provider, s.respondent_email, s.respondent_phone, s.respondent_name,
-              -- Why no reminder was ever scheduled for this response. Written by
-              -- \`scheduleFollowUps\`, which otherwise makes that decision in silence.
-              json_extract(s.meta, '$.followUpSkip') AS followup_skip
-       FROM submissions s WHERE s.form_id = ? AND (? = 'all' OR s.status = ?)
-       ORDER BY s.started_at DESC LIMIT ?`,
-    )
-      .bind(id, effectiveStatus, effectiveStatus, limit)
-      .all<{
-        id: string;
-        status: string;
-        started_at: number;
-        completed_at: number | null;
-        duration_ms: number | null;
-        session_id: string | null;
-        respondent_provider: string | null;
-        respondent_email: string | null;
-        respondent_phone: string | null;
-        respondent_name: string | null;
-        followup_skip: string | null;
-      }>();
+    type SubRow = {
+      id: string;
+      status: string;
+      started_at: number;
+      completed_at: number | null;
+      duration_ms: number | null;
+      session_id: string | null;
+      respondent_provider: string | null;
+      respondent_email: string | null;
+      respondent_phone: string | null;
+      respondent_name: string | null;
+      followup_skip: string | null;
+    };
+    type AnswerRow = { submission_id: string; block_ref: string; block_type: string; value_json: string };
+    type MessageRow = { session_id: string; role: string; content: string; created_at: number };
+    type FollowUpRow = {
+      submission_id: string;
+      sent: number;
+      scheduled: number;
+      queued: number;
+      holdout: number;
+      next_scheduled_at: number | null;
+      last_sent_at: number | null;
+      stopped_reason: string | null;
+      stopped_status: string | null;
+    };
 
     /**
-     * Follow-up state, for the whole page in one query.
+     * The whole page in one round trip.
      *
-     * Per-row would be one more round trip each on a list that already does two
-     * — and this is a summary badge, not a schedule the author edits here.
-     * `sent` counts nudges that actually went out; `holdout` marks the ones we
-     * deliberately kept quiet so the recovery number means something.
+     * `DB.batch()` puts every statement into a single request to D1, so this costs
+     * one network hop no matter how many responses come back. It used to cost two
+     * per row — a query for the answers and a query for the transcript, awaited
+     * inside the loop below — which on a form with 26 responses was 56 sequential
+     * hops and twelve seconds of pure latency for four milliseconds of SQL.
+     *
+     * The answers and the transcripts cannot wait to learn the ids the list
+     * returns, so each joins the *same* window the list selects: identical
+     * predicate, identical ORDER BY, identical LIMIT. A single flat join across
+     * all three instead would multiply answers by messages and return a row for
+     * every pair.
+     *
+     * Bound, never interpolated. All placeholders are explicit and positional:
+     * SQLite continues auto-numbering `?` from the highest explicit index, so
+     * mixing `?` with `?1` silently changes how many bindings a statement wants.
      */
-    const followUps = await c.env.DB.prepare(
-      `SELECT submission_id,
-              SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
-              SUM(CASE WHEN status = 'scheduled' THEN 1 ELSE 0 END) AS scheduled,
-              SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
-              MAX(CASE WHEN status = 'holdout' THEN 1 ELSE 0 END) AS holdout,
-              -- When the next one is due. Only the steps still waiting count:
-              -- this is the number the results table renders as "Reminder in 1h",
-              -- and it has to be a time in the future or nothing at all.
-              MIN(CASE WHEN status IN ('scheduled','queued') THEN scheduled_at END) AS next_scheduled_at,
-              MAX(sent_at) AS last_sent_at,
-              -- Why the sequence stopped, if it did. Newest step wins, because a
-              -- later step's verdict supersedes an earlier one's.
-              (SELECT reason FROM followups x
-                WHERE x.submission_id = followups.submission_id
-                  AND x.status IN ('skipped','failed','cancelled')
-                ORDER BY x.step DESC LIMIT 1) AS stopped_reason,
-              (SELECT status FROM followups x
-                WHERE x.submission_id = followups.submission_id
-                  AND x.status IN ('skipped','failed','cancelled')
-                ORDER BY x.step DESC LIMIT 1) AS stopped_status
-         FROM followups WHERE form_id = ? GROUP BY submission_id`,
-    )
-      .bind(id)
-      .all<{
-        submission_id: string;
-        sent: number;
-        scheduled: number;
-        queued: number;
-        holdout: number;
-        next_scheduled_at: number | null;
-        last_sent_at: number | null;
-        stopped_reason: string | null;
-        stopped_status: string | null;
-      }>();
-    const byId = new Map(followUps.results?.map((r) => [r.submission_id, r]) ?? []);
+    /**
+     * The filter, written once.
+     *
+     * Every statement below has to select exactly the same rows — the page, its
+     * answers, its transcripts and the count that decides whether there is
+     * another page. Repeating the predicate four times was four chances for one
+     * of them to drift.
+     */
+    const MATCHES = `(?2 = 'all'
+                      OR (?2 = 'partial' AND status IN ('abandoned','in_progress','disqualified'))
+                      OR status = ?2)`;
+    const WINDOW = `SELECT id, session_id FROM submissions
+                     WHERE form_id = ?1 AND ${MATCHES}
+                     ORDER BY started_at DESC LIMIT ?3 OFFSET ?4`;
+    const [subs, answerRows, transcriptRows, followUps, formRow, totalRow, countsRow] = (await c.env.DB.batch([
+      c.env.DB.prepare(
+        `SELECT s.id, s.status, s.started_at, s.completed_at, s.duration_ms, s.session_id,
+                s.respondent_provider, s.respondent_email, s.respondent_phone, s.respondent_name,
+                -- Why no reminder was ever scheduled for this response. Written by
+                -- \`scheduleFollowUps\`, which otherwise makes that decision in silence.
+                json_extract(s.meta, '$.followUpSkip') AS followup_skip
+           FROM submissions s WHERE s.form_id = ?1 AND ${MATCHES}
+          ORDER BY s.started_at DESC LIMIT ?3 OFFSET ?4`,
+      ).bind(id, effectiveStatus, limit, offset),
+      c.env.DB.prepare(
+        `SELECT a.submission_id, a.block_ref, a.block_type, a.value_json
+           FROM submission_answers a
+           JOIN (${WINDOW}) w ON w.id = a.submission_id`,
+      ).bind(id, effectiveStatus, limit, offset),
+      // A NULL `session_id` — a response that never had a chat — joins to nothing,
+      // which is exactly the empty transcript the old per-row branch produced.
+      c.env.DB.prepare(
+        `SELECT m.session_id, m.role, m.content, m.created_at
+           FROM chat_messages m
+           JOIN (${WINDOW}) w ON w.session_id = m.session_id
+          ORDER BY m.created_at`,
+      ).bind(id, effectiveStatus, limit, offset),
+      /**
+       * Follow-up state, for the whole page in one query — and only for the page.
+       *
+       * Per-row would be one more round trip each on a list that already does two
+       * — and this is a summary badge, not a schedule the author edits here.
+       * `sent` counts nudges that actually went out; `holdout` marks the ones we
+       * deliberately kept quiet so the recovery number means something.
+       *
+       * Scoped to the same window as the rows: aggregating every follow-up the
+       * form ever scheduled to badge fifty of them is work whose size has
+       * nothing to do with what is on screen.
+       */
+      c.env.DB.prepare(
+        `SELECT submission_id,
+                SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
+                SUM(CASE WHEN status = 'scheduled' THEN 1 ELSE 0 END) AS scheduled,
+                SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
+                MAX(CASE WHEN status = 'holdout' THEN 1 ELSE 0 END) AS holdout,
+                -- When the next one is due. Only the steps still waiting count:
+                -- this is the number the results table renders as "Reminder in 1h",
+                -- and it has to be a time in the future or nothing at all.
+                MIN(CASE WHEN status IN ('scheduled','queued') THEN scheduled_at END) AS next_scheduled_at,
+                MAX(sent_at) AS last_sent_at,
+                -- Why the sequence stopped, if it did. Newest step wins, because a
+                -- later step's verdict supersedes an earlier one's.
+                (SELECT reason FROM followups x
+                  WHERE x.submission_id = followups.submission_id
+                    AND x.status IN ('skipped','failed','cancelled')
+                  ORDER BY x.step DESC LIMIT 1) AS stopped_reason,
+                (SELECT status FROM followups x
+                  WHERE x.submission_id = followups.submission_id
+                    AND x.status IN ('skipped','failed','cancelled')
+                  ORDER BY x.step DESC LIMIT 1) AS stopped_status
+           FROM followups
+          WHERE form_id = ?1 AND submission_id IN (SELECT id FROM (${WINDOW}))
+          GROUP BY submission_id`,
+      ).bind(id, effectiveStatus, limit, offset),
+      // Rides along for the retired-column pass at the bottom. One row, and it
+      // saves the trip that pass used to make on its own.
+      c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?1`).bind(id),
+      /**
+       * How many responses the filter matches, page aside.
+       *
+       * Counted here rather than inferred from the page, because "fifty rows
+       * came back" cannot tell the table whether there is a page fifty-one. It
+       * counts the *effective* status, so a Free plan looking at `all` is told
+       * how many completed responses it can page through and never a number it
+       * is not allowed to open.
+       */
+      c.env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM submissions WHERE form_id = ?1 AND ${MATCHES}`,
+      ).bind(id, effectiveStatus),
+      /**
+       * Both tabs' counts, whichever one is being read.
+       *
+       * The page cannot be counted from itself — fifty rows says nothing about
+       * how many there are — and the other tab's badge cannot be counted from
+       * this tab's rows at all. The client used to do both from the array it
+       * had, which was only ever right while the array was the whole table.
+       *
+       * Not withheld when the plan is not entitled to partial rows, for the
+       * reason the gate above gives: the count is what makes the upsell
+       * truthful, and it is the answers that are being sold.
+       */
+      c.env.DB.prepare(
+        `SELECT COUNT(*) AS total,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+                SUM(CASE WHEN status IN ('abandoned','in_progress','disqualified') THEN 1 ELSE 0 END) AS partial
+           FROM submissions WHERE form_id = ?1`,
+      ).bind(id),
+      // Typed as a tuple because `batch()` returns a positional array: the names
+      // above are the only thing keeping a statement matched to its shape.
+    ])) as [
+      D1Result<SubRow>,
+      D1Result<AnswerRow>,
+      D1Result<MessageRow>,
+      D1Result<FollowUpRow>,
+      D1Result<{ working_schema: string }>,
+      D1Result<{ n: number }>,
+      D1Result<{ total: number; completed: number | null; partial: number | null }>,
+    ];
+
+    /** Regrouped in memory, in the order each statement already returned. */
+    const answersBySub = new Map<string, AnswerRow[]>();
+    for (const a of answerRows.results ?? []) {
+      const list = answersBySub.get(a.submission_id);
+      if (list) list.push(a);
+      else answersBySub.set(a.submission_id, [a]);
+    }
+    const transcriptBySession = new Map<string, MessageRow[]>();
+    for (const m of transcriptRows.results ?? []) {
+      const list = transcriptBySession.get(m.session_id);
+      if (list) list.push(m);
+      else transcriptBySession.set(m.session_id, [m]);
+    }
+    const byId = new Map((followUps.results ?? []).map((r) => [r.submission_id, r]));
 
     const out = [];
     /** Every ref these rows answered, and what it was answered as. */
     const seen = new Map<string, string>();
     for (const s of subs.results ?? []) {
-      const answers = await c.env.DB.prepare(
-        `SELECT block_ref, block_type, value_json FROM submission_answers WHERE submission_id = ?`,
-      )
-        .bind(s.id)
-        .all<{ block_ref: string; block_type: string; value_json: string }>();
-      const transcript = s.session_id
-        ? await c.env.DB.prepare(
-            `SELECT role, content, created_at FROM chat_messages WHERE session_id = ? ORDER BY created_at`,
-          )
-            .bind(s.session_id)
-            .all<{ role: string; content: string; created_at: number }>()
-        : { results: [] };
+      const answers = answersBySub.get(s.id) ?? [];
+      const transcript = s.session_id ? transcriptBySession.get(s.session_id) ?? [] : [];
       out.push({
         id: s.id,
         status: s.status,
@@ -357,7 +503,7 @@ resultsRouter.get(
               name: s.respondent_name,
             }
           : null,
-        answers: (answers.results ?? []).map((a) => {
+        answers: answers.map((a) => {
           seen.set(a.block_ref, a.block_type);
           return {
             blockRef: a.block_ref,
@@ -365,7 +511,7 @@ resultsRouter.get(
             value: JSON.parse(a.value_json),
           };
         }),
-        transcript: (transcript.results ?? []).map((t) => ({
+        transcript: transcript.map((t) => ({
           role: t.role,
           content: t.content,
           createdAt: t.created_at,
@@ -415,23 +561,34 @@ resultsRouter.get(
     /**
      * The columns the current document cannot account for.
      *
-     * Only asked for when the rows actually answered something, which keeps the
-     * document read off the path for a form with no responses yet — and only
-     * ever names refs present in the rows above, so the table never grows a
-     * column with nothing under it.
+     * Only resolved when the rows actually answered something, and only ever
+     * naming refs present in the rows above, so the table never grows a column
+     * with nothing under it. The document itself rode in on the batch; the
+     * version scan below is the one query that cannot — it is asked for only
+     * when a ref has no live block to explain it, which is rare.
      */
     let retiredColumns: unknown[] = [];
     if (seen.size > 0) {
-      const form = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`)
-        .bind(id)
-        .first<{ working_schema: string }>();
+      const form = (formRow.results ?? [])[0];
       const doc = form ? safeReadFormDoc(JSON.parse(form.working_schema)) : null;
       if (doc) {
         retiredColumns = await resolveRetiredBlocks(c.env, id, seen, new Set(doc.blocks.map((b) => b.ref)));
       }
     }
 
-    return c.json({ submissions: out, retiredColumns });
+    const counts = (countsRow.results ?? [])[0];
+    return c.json({
+      submissions: out,
+      retiredColumns,
+      total: (totalRow.results ?? [])[0]?.n ?? 0,
+      limit,
+      offset,
+      counts: {
+        total: counts?.total ?? 0,
+        completed: counts?.completed ?? 0,
+        partial: counts?.partial ?? 0,
+      },
+    });
   },
 );
 

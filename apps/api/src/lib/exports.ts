@@ -130,6 +130,50 @@ function whereFor(formId: string, orgId: string, filters: ExportFilters): { sql:
 
 const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
 
+type AnswerRow = { submission_id: string; block_ref: string; value_json: string };
+
+/**
+ * How many chunk statements ride in one `DB.batch()`.
+ *
+ * The chunk itself is what bounds memory — five hundred responses' answers in
+ * flight at a time — but it used to bound round trips too: one hop per chunk
+ * meant an export of a hundred thousand responses spent two hundred sequential
+ * trips to D1 waiting. Ten statements per batch is the same memory ceiling and
+ * a tenth of the latency.
+ */
+const CHUNKS_PER_BATCH = 10;
+
+/**
+ * Walk a window of responses' answers, chunk by chunk, in order.
+ *
+ * `onChunk` is handed each chunk's ids and its rows exactly as a per-chunk
+ * query would have returned them, so a caller that writes output as it reads
+ * keeps writing it in response order.
+ */
+async function eachAnswerChunk(
+  env: Bindings,
+  ids: string[],
+  onChunk: (chunkIds: string[], rows: AnswerRow[]) => void,
+): Promise<void> {
+  for (let i = 0; i < ids.length; i += CHUNK * CHUNKS_PER_BATCH) {
+    const group: string[][] = [];
+    for (let j = i; j < Math.min(ids.length, i + CHUNK * CHUNKS_PER_BATCH); j += CHUNK) {
+      group.push(ids.slice(j, j + CHUNK));
+    }
+    const res = (await env.DB.batch(
+      group.map((chunk) =>
+        env.DB
+          .prepare(
+            `SELECT submission_id, block_ref, value_json FROM submission_answers
+              WHERE submission_id IN (${chunk.map(() => "?").join(",")})`,
+          )
+          .bind(...chunk),
+      ),
+    )) as D1Result<AnswerRow>[];
+    group.forEach((chunk, k) => onChunk(chunk, res[k]?.results ?? []));
+  }
+}
+
 /**
  * One column per answerable block, one row per response.
  *
@@ -193,20 +237,12 @@ export async function buildCsv(
   ];
   const out: string[] = [header.map(esc).join(",")];
 
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const slice = rows.slice(i, i + CHUNK);
-    const ids = slice.map((r) => r.id);
-    const answers = await env.DB.prepare(
-      `SELECT submission_id, block_ref, value_json FROM submission_answers
-        WHERE submission_id IN (${ids.map(() => "?").join(",")})`,
-    )
-      .bind(...ids)
-      .all<{ submission_id: string; block_ref: string; value_json: string }>();
-
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  await eachAnswerChunk(env, rows.map((r) => r.id), (ids, answers) => {
     const byResponse = new Map<string, Map<string, string>>(ids.map((id) => [id, new Map()]));
-    for (const a of answers.results ?? []) byResponse.get(a.submission_id)?.set(a.block_ref, a.value_json);
+    for (const a of answers) byResponse.get(a.submission_id)?.set(a.block_ref, a.value_json);
 
-    for (const s of slice) {
+    for (const s of ids.map((id) => byId.get(id)!)) {
       const map = byResponse.get(s.id)!;
       out.push(
         [
@@ -233,7 +269,7 @@ export async function buildCsv(
           .join(","),
       );
     }
-  }
+  });
 
   return { body: out.join("\n"), rowCount: rows.length };
 }
@@ -262,18 +298,10 @@ export async function buildJsonl(
   const rows = subs.results ?? [];
   const lines: string[] = [];
 
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const slice = rows.slice(i, i + CHUNK);
-    const ids = slice.map((r) => r.id);
-    const answers = await env.DB.prepare(
-      `SELECT submission_id, block_ref, value_json FROM submission_answers
-        WHERE submission_id IN (${ids.map(() => "?").join(",")})`,
-    )
-      .bind(...ids)
-      .all<{ submission_id: string; block_ref: string; value_json: string }>();
-
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  await eachAnswerChunk(env, rows.map((r) => r.id), (ids, answers) => {
     const byResponse = new Map<string, Record<string, unknown>>(ids.map((id) => [id, {}]));
-    for (const a of answers.results ?? []) {
+    for (const a of answers) {
       try {
         byResponse.get(a.submission_id)![a.block_ref] = JSON.parse(a.value_json);
       } catch {
@@ -281,7 +309,7 @@ export async function buildJsonl(
       }
     }
 
-    for (const s of slice) {
+    for (const s of ids.map((id) => byId.get(id)!)) {
       let meta: Record<string, unknown> = {};
       try {
         meta = s.meta ? (JSON.parse(s.meta) as Record<string, unknown>) : {};
@@ -301,7 +329,7 @@ export async function buildJsonl(
         }),
       );
     }
-  }
+  });
 
   return { body: lines.join("\n"), rowCount: rows.length };
 }
@@ -383,9 +411,14 @@ export async function pruneExpiredExports(env: Bindings): Promise<number> {
     .bind(Date.now())
     .all<{ id: string; r2_key: string | null }>();
   const list = rows.results ?? [];
-  for (const row of list) {
-    if (row.r2_key) await env.R2.delete(row.r2_key).catch(() => {});
-    await env.DB.prepare(`DELETE FROM exports WHERE id = ?`).bind(row.id).run();
-  }
+  if (list.length === 0) return 0;
+  // The objects in parallel, the rows in one statement: two hundred expired
+  // exports used to be four hundred awaits in a row.
+  await Promise.all(list.filter((r) => r.r2_key).map((r) => env.R2.delete(r.r2_key!).catch(() => {})));
+  await env.DB.prepare(
+    `DELETE FROM exports WHERE id IN (${list.map(() => "?").join(",")})`,
+  )
+    .bind(...list.map((r) => r.id))
+    .run();
   return list.length;
 }

@@ -6515,11 +6515,43 @@
                         ],
                         "additionalProperties": {}
                       }
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "limit": {
+                      "type": "number"
+                    },
+                    "offset": {
+                      "type": "number"
+                    },
+                    "counts": {
+                      "type": "object",
+                      "properties": {
+                        "total": {
+                          "type": "number"
+                        },
+                        "completed": {
+                          "type": "number"
+                        },
+                        "partial": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "total",
+                        "completed",
+                        "partial"
+                      ]
                     }
                   },
                   "required": [
                     "submissions",
-                    "retiredColumns"
+                    "retiredColumns",
+                    "total",
+                    "limit",
+                    "offset",
+                    "counts"
                   ]
                 }
               }
@@ -6536,6 +6568,7 @@
               "enum": [
                 "all",
                 "completed",
+                "partial",
                 "disqualified",
                 "abandoned",
                 "in_progress"
@@ -6550,6 +6583,16 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
             }
           },
           {

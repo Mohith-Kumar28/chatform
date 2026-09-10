@@ -105,27 +105,22 @@ export async function computeAnalytics(
   options: AnalyticsOptions = {},
 ): Promise<AnalyticsAggregate> {
   /**
-   * The published document, falling back to the draft only when nothing has been
-   * published — an unpublished form's draft is the only thing its (preview)
-   * answers could have come from.
+   * The whole page in one round trip.
+   *
+   * Fourteen statements, one `DB.batch()`, one network hop. They used to be
+   * fourteen awaits in a row: every one of them a hop to D1 for a query that
+   * runs in under a millisecond, which is how a page of aggregates came to take
+   * three and a half seconds.
+   *
+   * Nothing here waits on anything else. The two per-question queries used to
+   * need the document first — to list the refs of the choice questions and the
+   * refs of the text ones — so they are selected by the `block_type` stored on
+   * the answer instead, which is a column, not a document read. Classification
+   * still happens against the *current* document below, so a question that
+   * changed type since it was answered is treated exactly as it was before:
+   * the rows arrive, and the loop that consumes them ignores the ones whose
+   * live block is a different shape.
    */
-  const form = await env.DB.prepare(
-    `SELECT COALESCE(fv.schema_json, f.working_schema) AS schema_json
-       FROM forms f LEFT JOIN form_versions fv ON fv.id = f.active_version_id
-      WHERE f.id = ?`,
-  )
-    .bind(formId)
-    .first<{ schema_json: string }>();
-
-  let blocks: Block[] = [];
-  try {
-    blocks = ((form ? JSON.parse(form.schema_json) : { blocks: [] }).blocks ?? []) as Block[];
-  } catch {
-    // A document we cannot parse yields an empty funnel rather than a 500.
-  }
-  const answerable = blocks.filter((b) => !PASSIVE_TYPES.has(b.type));
-  const byRef = new Map(answerable.map((b) => [b.ref, b]));
-
   const filters: string[] = ["form_id = ?"];
   const binds: unknown[] = [formId];
   if (options.source && options.source !== "all") {
@@ -140,28 +135,154 @@ export async function computeAnalytics(
     .replace(/\bsource\b/g, "s.source")
     .replace(/\bis_test\b/g, "s.is_test");
 
-  const counts = await env.DB.prepare(
-    `SELECT COUNT(*) AS starts,
-            SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
-            SUM(CASE WHEN status = 'abandoned' THEN 1 ELSE 0 END) AS abandoned,
-            AVG(duration_ms) AS avg_duration
-       FROM submissions WHERE ${where}`,
-  )
-    .bind(...binds)
-    .first<{ starts: number; completed: number | null; abandoned: number | null; avg_duration: number | null }>();
+  const days = Math.min(Math.max(options.days ?? 30, 7), 90);
+  const since = Date.now() - days * DAY_MS;
+  const sinceDate = new Date(since).toISOString().slice(0, 10);
 
+  const groupedTypes = [...CHOICE_TYPES, "ranking", "matrix", "date"];
+  const nonTextTypes = [...groupedTypes, ...NUMERIC_TYPES, ...PASSIVE_TYPES];
+  const holes = (n: number) => Array.from({ length: n }, () => "?").join(",");
+
+  const [formRes, countsRes, answeredRes, groupedRes, numericRes, textsRes, dailyRes, viewRes, sourceRes, countryRes, deviceRes, bucketRes, medianRes, viewsRes] =
+    (await env.DB.batch([
+      /**
+       * The published document, falling back to the draft only when nothing has
+       * been published — an unpublished form's draft is the only thing its
+       * (preview) answers could have come from.
+       */
+      env.DB.prepare(
+        `SELECT COALESCE(fv.schema_json, f.working_schema) AS schema_json
+           FROM forms f LEFT JOIN form_versions fv ON fv.id = f.active_version_id
+          WHERE f.id = ?`,
+      ).bind(formId),
+      env.DB.prepare(
+        `SELECT COUNT(*) AS starts,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+                SUM(CASE WHEN status = 'abandoned' THEN 1 ELSE 0 END) AS abandoned,
+                AVG(duration_ms) AS avg_duration
+           FROM submissions WHERE ${where}`,
+      ).bind(...binds),
+      env.DB.prepare(
+        `SELECT a.block_ref, COUNT(DISTINCT a.submission_id) AS answered
+           FROM submission_answers a JOIN submissions s ON s.id = a.submission_id
+          WHERE ${joined}
+          GROUP BY a.block_ref`,
+      ).bind(...binds),
+      // Choices, rankings, matrices and dates: one row per distinct value.
+      env.DB.prepare(
+        `SELECT a.block_ref, a.value_json, COUNT(*) AS n
+           FROM submission_answers a JOIN submissions s ON s.id = a.submission_id
+          WHERE ${joined} AND a.block_type IN (${holes(groupedTypes.length)})
+          GROUP BY a.block_ref, a.value_json`,
+      ).bind(...binds, ...groupedTypes),
+      env.DB.prepare(
+        `SELECT a.block_ref, a.value_number AS v, COUNT(*) AS n
+           FROM submission_answers a JOIN submissions s ON s.id = a.submission_id
+          WHERE ${joined} AND a.value_number IS NOT NULL
+          GROUP BY a.block_ref, v ORDER BY v`,
+      ).bind(...binds),
+      /**
+       * Free text gets a sample, not a chart.
+       *
+       * Two hundred rows, newest first, is enough to show the eight most recent
+       * answers to every text question on the form without reading a column that
+       * has no upper bound.
+       */
+      env.DB.prepare(
+        `SELECT a.block_ref, a.value_json, a.updated_at
+           FROM submission_answers a JOIN submissions s ON s.id = a.submission_id
+          WHERE ${joined} AND a.block_type NOT IN (${holes(nonTextTypes.length)})
+          ORDER BY a.updated_at DESC LIMIT 200`,
+      ).bind(...binds, ...nonTextTypes),
+      env.DB.prepare(
+        `SELECT strftime('%Y-%m-%d', started_at / 1000, 'unixepoch') AS d,
+                COUNT(*) AS starts,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed
+           FROM submissions WHERE ${where} AND started_at >= ?
+          GROUP BY d ORDER BY d`,
+      ).bind(...binds, since),
+      env.DB.prepare(
+        `SELECT date, views FROM analytics_rollup_daily WHERE form_id = ? AND date >= ? ORDER BY date`,
+      ).bind(formId, sinceDate),
+      env.DB.prepare(
+        `SELECT source, COUNT(*) AS n FROM submissions WHERE ${where} GROUP BY source ORDER BY n DESC`,
+      ).bind(...binds),
+      env.DB.prepare(
+        `SELECT json_extract(meta, '$.country') AS country, COUNT(*) AS n
+           FROM submissions WHERE ${where} AND json_extract(meta, '$.country') IS NOT NULL
+          GROUP BY country ORDER BY n DESC LIMIT 8`,
+      ).bind(...binds),
+      /**
+       * Phone or laptop, from the user agent already stored on the response.
+       *
+       * `Mobi` is the token every mobile browser carries and no desktop one does,
+       * which is as much as a substring match can honestly tell you — so the answer
+       * is two buckets, not a device table pretending to know more.
+       */
+      env.DB.prepare(
+        `SELECT SUM(CASE WHEN json_extract(meta, '$.userAgent') LIKE '%Mobi%' THEN 1 ELSE 0 END) AS mobile,
+                COUNT(*) AS total
+           FROM submissions WHERE ${where} AND json_extract(meta, '$.userAgent') IS NOT NULL`,
+      ).bind(...binds),
+      env.DB.prepare(
+        `SELECT SUM(CASE WHEN duration_ms < 30000 THEN 1 ELSE 0 END) AS b1,
+                SUM(CASE WHEN duration_ms >= 30000 AND duration_ms < 60000 THEN 1 ELSE 0 END) AS b2,
+                SUM(CASE WHEN duration_ms >= 60000 AND duration_ms < 180000 THEN 1 ELSE 0 END) AS b3,
+                SUM(CASE WHEN duration_ms >= 180000 AND duration_ms < 600000 THEN 1 ELSE 0 END) AS b4,
+                SUM(CASE WHEN duration_ms >= 600000 THEN 1 ELSE 0 END) AS b5
+           FROM submissions WHERE ${where} AND status = 'completed' AND duration_ms IS NOT NULL`,
+      ).bind(...binds),
+      /**
+       * The median, by asking for the middle row.
+       *
+       * SQLite has no percentile function, and the average alone is a poor summary
+       * of how long a form takes: one person who left the tab open for an hour
+       * moves it by minutes. The offset used to be computed in JS from the
+       * completed count, which forced this query to wait for that one; as a
+       * subquery over the very rows being ordered it both rides in the same batch
+       * and stops counting completions that never recorded a duration.
+       */
+      env.DB.prepare(
+        `SELECT duration_ms FROM submissions
+          WHERE ${where} AND status = 'completed' AND duration_ms IS NOT NULL
+          ORDER BY duration_ms
+          LIMIT 1 OFFSET (SELECT (COUNT(*) - 1) / 2 FROM submissions
+                           WHERE ${where} AND status = 'completed' AND duration_ms IS NOT NULL)`,
+      ).bind(...binds, ...binds),
+      env.DB.prepare(`SELECT SUM(views) AS v FROM analytics_rollup_daily WHERE form_id = ?`).bind(formId),
+      // Typed as a tuple because `batch()` returns a positional array: the names
+      // above are the only thing keeping a statement matched to its shape.
+    ])) as [
+      D1Result<{ schema_json: string }>,
+      D1Result<{ starts: number; completed: number | null; abandoned: number | null; avg_duration: number | null }>,
+      D1Result<{ block_ref: string; answered: number }>,
+      D1Result<{ block_ref: string; value_json: string; n: number }>,
+      D1Result<{ block_ref: string; v: number; n: number }>,
+      D1Result<{ block_ref: string; value_json: string; updated_at: number }>,
+      D1Result<{ d: string; starts: number; completed: number | null }>,
+      D1Result<{ date: string; views: number }>,
+      D1Result<{ source: string; n: number }>,
+      D1Result<{ country: string; n: number }>,
+      D1Result<{ mobile: number | null; total: number | null }>,
+      D1Result<{ b1: number | null; b2: number | null; b3: number | null; b4: number | null; b5: number | null }>,
+      D1Result<{ duration_ms: number }>,
+      D1Result<{ v: number | null }>,
+    ];
+
+  const form = (formRes.results ?? [])[0];
+  let blocks: Block[] = [];
+  try {
+    blocks = ((form ? JSON.parse(form.schema_json) : { blocks: [] }).blocks ?? []) as Block[];
+  } catch {
+    // A document we cannot parse yields an empty funnel rather than a 500.
+  }
+  const answerable = blocks.filter((b) => !PASSIVE_TYPES.has(b.type));
+  const byRef = new Map(answerable.map((b) => [b.ref, b]));
+
+  const counts = (countsRes.results ?? [])[0];
   const starts = counts?.starts ?? 0;
   const completed = counts?.completed ?? 0;
-
-  const answeredRows = await env.DB.prepare(
-    `SELECT a.block_ref, COUNT(DISTINCT a.submission_id) AS answered
-       FROM submission_answers a JOIN submissions s ON s.id = a.submission_id
-      WHERE ${joined}
-      GROUP BY a.block_ref`,
-  )
-    .bind(...binds)
-    .all<{ block_ref: string; answered: number }>();
-  const answeredBy = new Map((answeredRows.results ?? []).map((r) => [r.block_ref, r.answered]));
+  const answeredBy = new Map((answeredRes.results ?? []).map((r) => [r.block_ref, r.answered]));
 
   const perBlock: BlockFunnel[] = answerable.map((b, i) => {
     const answered = answeredBy.get(b.ref) ?? 0;
@@ -179,48 +300,6 @@ export async function computeAnalytics(
       dropOff: Math.max(0, prevRate - answerRate),
     };
   });
-
-  // ── the three per-question queries ─────────────────────────────────────────
-  const groupedRefs = answerable.filter((b) => shapeOf(b.type) === "grouped").map((b) => b.ref);
-  const textRefs = answerable.filter((b) => shapeOf(b.type) === "text").map((b) => b.ref);
-
-  const grouped = groupedRefs.length
-    ? await env.DB.prepare(
-        `SELECT a.block_ref, a.value_json, COUNT(*) AS n
-           FROM submission_answers a JOIN submissions s ON s.id = a.submission_id
-          WHERE ${joined} AND a.block_ref IN (${groupedRefs.map(() => "?").join(",")})
-          GROUP BY a.block_ref, a.value_json`,
-      )
-        .bind(...binds, ...groupedRefs)
-        .all<{ block_ref: string; value_json: string; n: number }>()
-    : { results: [] };
-
-  const numeric = await env.DB.prepare(
-    `SELECT a.block_ref, a.value_number AS v, COUNT(*) AS n
-       FROM submission_answers a JOIN submissions s ON s.id = a.submission_id
-      WHERE ${joined} AND a.value_number IS NOT NULL
-      GROUP BY a.block_ref, v ORDER BY v`,
-  )
-    .bind(...binds)
-    .all<{ block_ref: string; v: number; n: number }>();
-
-  /**
-   * Free text gets a sample, not a chart.
-   *
-   * Two hundred rows, newest first, is enough to show the eight most recent
-   * answers to every text question on the form without reading a column that
-   * has no upper bound.
-   */
-  const texts = textRefs.length
-    ? await env.DB.prepare(
-        `SELECT a.block_ref, a.value_json, a.updated_at
-           FROM submission_answers a JOIN submissions s ON s.id = a.submission_id
-          WHERE ${joined} AND a.block_ref IN (${textRefs.map(() => "?").join(",")})
-          ORDER BY a.updated_at DESC LIMIT 200`,
-      )
-        .bind(...binds, ...textRefs)
-        .all<{ block_ref: string; value_json: string; updated_at: number }>()
-    : { results: [] };
 
   const distributions: BlockDistribution[] = answerable.map((b) => ({
     blockRef: b.ref,
@@ -242,9 +321,11 @@ export async function computeAnalytics(
   const tallies = new Map<string, Map<string, number>>();
   const rankSums = new Map<string, Map<string, { sum: number; n: number }>>();
   const matrixCells = new Map<string, Map<string, Map<string, number>>>();
-  for (const row of grouped.results ?? []) {
+  for (const row of groupedRes.results ?? []) {
     const block = byRef.get(row.block_ref);
-    if (!block) continue;
+    // Selected by the type stored on the answer; kept only if the question is
+    // still that shape, which is what the old ref-list query enforced in SQL.
+    if (!block || shapeOf(block.type) !== "grouped") continue;
     let parsed: unknown = row.value_json;
     try {
       parsed = JSON.parse(row.value_json);
@@ -367,7 +448,7 @@ export async function computeAnalytics(
 
   // Numbers, ratings and scales.
   const numericBy = new Map<string, { value: number; count: number }[]>();
-  for (const row of numeric.results ?? []) {
+  for (const row of numericRes.results ?? []) {
     const list = numericBy.get(row.block_ref) ?? [];
     list.push({ value: row.v, count: row.n });
     numericBy.set(row.block_ref, list);
@@ -396,10 +477,10 @@ export async function computeAnalytics(
     };
   }
 
-  for (const row of texts.results ?? []) {
+  for (const row of textsRes.results ?? []) {
     const dist = distByRef.get(row.block_ref);
     const block = byRef.get(row.block_ref);
-    if (!dist || !block || dist.samples.length >= 8) continue;
+    if (!dist || !block || shapeOf(block.type) !== "text" || dist.samples.length >= 8) continue;
     let parsed: unknown = row.value_json;
     try {
       parsed = JSON.parse(row.value_json);
@@ -411,28 +492,8 @@ export async function computeAnalytics(
   }
 
   // ── how the form did over time, and who filled it in ───────────────────────
-  const days = Math.min(Math.max(options.days ?? 30, 7), 90);
-  const since = Date.now() - days * DAY_MS;
-  const sinceDate = new Date(since).toISOString().slice(0, 10);
-
-  const dailyRows = await env.DB.prepare(
-    `SELECT strftime('%Y-%m-%d', started_at / 1000, 'unixepoch') AS d,
-            COUNT(*) AS starts,
-            SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed
-       FROM submissions WHERE ${where} AND started_at >= ?
-      GROUP BY d ORDER BY d`,
-  )
-    .bind(...binds, since)
-    .all<{ d: string; starts: number; completed: number | null }>();
-
-  const viewRows = await env.DB.prepare(
-    `SELECT date, views FROM analytics_rollup_daily WHERE form_id = ? AND date >= ? ORDER BY date`,
-  )
-    .bind(formId, sinceDate)
-    .all<{ date: string; views: number }>();
-
-  const startsByDay = new Map((dailyRows.results ?? []).map((r) => [r.d, r]));
-  const viewsByDay = new Map((viewRows.results ?? []).map((r) => [r.date, r.views]));
+  const startsByDay = new Map((dailyRes.results ?? []).map((r) => [r.d, r]));
+  const viewsByDay = new Map((viewRes.results ?? []).map((r) => [r.date, r.views]));
   const daily: AnalyticsAggregate["daily"] = [];
   // Gaps filled, because a line drawn straight from Monday to Friday says the
   // form was ticking over all week.
@@ -447,67 +508,10 @@ export async function computeAnalytics(
     });
   }
 
-  const sourceRows = await env.DB.prepare(
-    `SELECT source, COUNT(*) AS n FROM submissions WHERE ${where} GROUP BY source ORDER BY n DESC`,
-  )
-    .bind(...binds)
-    .all<{ source: string; n: number }>();
-
-  const countryRows = await env.DB.prepare(
-    `SELECT json_extract(meta, '$.country') AS country, COUNT(*) AS n
-       FROM submissions WHERE ${where} AND json_extract(meta, '$.country') IS NOT NULL
-      GROUP BY country ORDER BY n DESC LIMIT 8`,
-  )
-    .bind(...binds)
-    .all<{ country: string; n: number }>();
-
-  /**
-   * Phone or laptop, from the user agent already stored on the response.
-   *
-   * `Mobi` is the token every mobile browser carries and no desktop one does,
-   * which is as much as a substring match can honestly tell you — so the answer
-   * is two buckets, not a device table pretending to know more.
-   */
-  const deviceRow = await env.DB.prepare(
-    `SELECT SUM(CASE WHEN json_extract(meta, '$.userAgent') LIKE '%Mobi%' THEN 1 ELSE 0 END) AS mobile,
-            COUNT(*) AS total
-       FROM submissions WHERE ${where} AND json_extract(meta, '$.userAgent') IS NOT NULL`,
-  )
-    .bind(...binds)
-    .first<{ mobile: number | null; total: number | null }>();
-
-  const bucketRow = await env.DB.prepare(
-    `SELECT SUM(CASE WHEN duration_ms < 30000 THEN 1 ELSE 0 END) AS b1,
-            SUM(CASE WHEN duration_ms >= 30000 AND duration_ms < 60000 THEN 1 ELSE 0 END) AS b2,
-            SUM(CASE WHEN duration_ms >= 60000 AND duration_ms < 180000 THEN 1 ELSE 0 END) AS b3,
-            SUM(CASE WHEN duration_ms >= 180000 AND duration_ms < 600000 THEN 1 ELSE 0 END) AS b4,
-            SUM(CASE WHEN duration_ms >= 600000 THEN 1 ELSE 0 END) AS b5
-       FROM submissions WHERE ${where} AND status = 'completed' AND duration_ms IS NOT NULL`,
-  )
-    .bind(...binds)
-    .first<{ b1: number | null; b2: number | null; b3: number | null; b4: number | null; b5: number | null }>();
-
-  /**
-   * The median, by asking for the middle row.
-   *
-   * SQLite has no percentile function, and the average alone is a poor summary
-   * of how long a form takes: one person who left the tab open for an hour
-   * moves it by minutes.
-   */
-  const medianRow =
-    completed > 0
-      ? await env.DB.prepare(
-          `SELECT duration_ms FROM submissions
-            WHERE ${where} AND status = 'completed' AND duration_ms IS NOT NULL
-            ORDER BY duration_ms LIMIT 1 OFFSET ?`,
-        )
-          .bind(...binds, Math.floor(Math.max(0, completed - 1) / 2))
-          .first<{ duration_ms: number }>()
-      : null;
-
-  const views = await env.DB.prepare(`SELECT SUM(views) AS v FROM analytics_rollup_daily WHERE form_id = ?`)
-    .bind(formId)
-    .first<{ v: number | null }>();
+  const deviceRow = (deviceRes.results ?? [])[0];
+  const bucketRow = (bucketRes.results ?? [])[0];
+  const medianRow = (medianRes.results ?? [])[0];
+  const views = (viewsRes.results ?? [])[0];
 
   return {
     views: views?.v ?? starts,
@@ -520,8 +524,8 @@ export async function computeAnalytics(
     perBlock,
     distributions,
     daily,
-    bySource: (sourceRows.results ?? []).map((r) => ({ source: r.source, count: r.n })),
-    byCountry: (countryRows.results ?? []).map((r) => ({ country: r.country, count: r.n })),
+    bySource: (sourceRes.results ?? []).map((r) => ({ source: r.source, count: r.n })),
+    byCountry: (countryRes.results ?? []).map((r) => ({ country: r.country, count: r.n })),
     byDevice: {
       mobile: deviceRow?.mobile ?? 0,
       desktop: Math.max(0, (deviceRow?.total ?? 0) - (deviceRow?.mobile ?? 0)),

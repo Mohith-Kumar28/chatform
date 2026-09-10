@@ -53,3 +53,58 @@
     transform: none;
   }
 }
+
+/*
+ * Zoom controls, in the app's colours.
+ *
+ * React Flow ships them as near-white buttons with near-white icons — its
+ * stylesheet paints `#fefefe` on the button and leaves the glyph to a `fill`
+ * that Tailwind's preflight has already reset. On the dark canvas that reads
+ * as a blank white domino: three buttons you can see and three icons you
+ * cannot. They are the only always-on control on the canvas, so they take the
+ * card surface, the app border and the app's ink like every other control.
+ */
+.react-flow__controls {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 0.75rem);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.react-flow__controls-button {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0.375rem;
+  background: var(--card);
+  color: var(--foreground);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  transition: background-color var(--duration-micro, 120ms) var(--ease-out, ease);
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--muted);
+}
+
+.react-flow__controls-button:disabled {
+  opacity: 0.4;
+}
+
+/* The glyph is an inline SVG path with no stroke, so `fill` is the only thing
+   that can colour it. */
+.react-flow__controls-button svg {
+  fill: currentColor;
+  max-width: 0.875rem;
+  max-height: 0.875rem;
+}
+
+/* The minimap is the same white slab for the same reason. */
+.react-flow__minimap {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 0.75rem);
+}

@@ -67,6 +67,42 @@ export async function isSuppressed(env: Bindings, orgId: string, address: string
   return !!row;
 }
 
+/**
+ * The same question for a whole batch, in one query.
+ *
+ * Returns the `orgId|address` pairs that are suppressed, so a caller sweeping a
+ * hundred follow-ups asks once instead of a hundred times. A global suppression
+ * — `organization_id IS NULL` — matches every organization that asked about the
+ * address, exactly as the single-row version reads it.
+ */
+export async function isSuppressedIn(
+  env: Bindings,
+  pairs: { orgId: string; address: string }[],
+): Promise<Set<string>> {
+  const hits = new Set<string>();
+  if (pairs.length === 0) return hits;
+  const addresses = [...new Set(pairs.map((p) => p.address.toLowerCase()))];
+  const orgIds = [...new Set(pairs.map((p) => p.orgId))];
+  const rows = await env.DB.prepare(
+    `SELECT address, organization_id FROM email_suppressions
+      WHERE address IN (${addresses.map(() => "?").join(",")})
+        AND (organization_id IS NULL OR organization_id IN (${orgIds.map(() => "?").join(",")}))`,
+  )
+    .bind(...addresses, ...orgIds)
+    .all<{ address: string; organization_id: string | null }>();
+  const global = new Set<string>();
+  const scoped = new Set<string>();
+  for (const r of rows.results ?? []) {
+    if (r.organization_id === null) global.add(r.address.toLowerCase());
+    else scoped.add(`${r.organization_id}|${r.address.toLowerCase()}`);
+  }
+  for (const p of pairs) {
+    const address = p.address.toLowerCase();
+    if (global.has(address) || scoped.has(`${p.orgId}|${address}`)) hits.add(`${p.orgId}|${address}`);
+  }
+  return hits;
+}
+
 /** Record an opt-out. Idempotent: opting out twice is not an error. */
 export async function suppress(
   env: Bindings,

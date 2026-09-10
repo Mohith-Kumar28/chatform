@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useBuilderStore, useSelectedBlock } from "@/stores/builder-store";
+import { EndingInspector } from "./ending-inspector";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_CLASSES } from "../block-library";
 import { defaultBlock } from "../default-block";
 import { Field, SelectField, SwitchField, TextField } from "./fields";
@@ -70,8 +71,40 @@ export function BlockInspector() {
   const updateBlock = useBuilderStore((s) => s.updateBlock);
   const removeBlock = useBuilderStore((s) => s.removeBlock);
   const doc = useBuilderStore((s) => s.doc);
+  const edit = useBuilderStore((s) => s.edit);
+  const selectedEndingRef = useBuilderStore((s) => s.selectedEndingRef);
   const params = useParams<{ id: string }>();
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  /*
+    An ending is a selection too.
+
+    The store has held one selection with two halves — `selectedRef` for a
+    block, `selectedEndingRef` for an ending — since the canvas and the
+    Questions list started sharing it, but this panel only ever asked for the
+    block half. So clicking an ending in the Questions list selected it, tinted
+    its row, cleared `selectedRef`... and drew "Nothing selected" beside it,
+    while the very same click on the canvas opened the ending's settings.
+    Same document, same selection, so the same panel answers for both.
+  */
+  const ending = doc && selectedEndingRef
+    ? doc.endings.find((e) => e.ref === selectedEndingRef)
+    : undefined;
+  if (ending && doc) {
+    return (
+      <div className="h-full overflow-y-auto p-4">
+        <EndingInspector
+          ending={ending}
+          doc={doc}
+          onChange={(next) =>
+            edit((d) => {
+              d.endings = next.endings as typeof d.endings;
+            })
+          }
+        />
+      </div>
+    );
+  }
 
   if (!block) {
     return (

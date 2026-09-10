@@ -848,8 +848,10 @@ responsesRouter.get(
     /**
      * One query for the whole page, never one per row.
      *
-     * The dashboard's equivalent handler runs two queries per submission, so a
-     * 50-row page is 101 round trips. This is the same data in one.
+     * The dashboard's equivalent handler used to run two queries per submission
+     * — a 50-row page was 101 round trips, and twelve seconds on a form with
+     * twenty-six responses. It reads its page in one `DB.batch()` now, for the
+     * same reason this has always been one query.
      */
     let answersByResponse = new Map<string, AnswerMap>();
     if (include.has("answers") && page.data.length > 0) {

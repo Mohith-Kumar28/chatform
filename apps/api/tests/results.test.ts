@@ -75,6 +75,10 @@ interface Row {
 interface ListBody {
   submissions: Row[];
   retiredColumns: { ref: string; title: string; type: string }[];
+  total: number;
+  limit: number;
+  offset: number;
+  counts: { total: number; completed: number; partial: number };
 }
 
 describe("submissions list", () => {
@@ -114,6 +118,59 @@ describe("submissions list", () => {
     const { submissions: rows } = await res.json<ListBody>();
     expect(rows.some((r) => r.id === "sbm_done")).toBe(true);
     expect(rows.some((r) => r.id === "sbm_partial")).toBe(true);
+  });
+
+  /**
+   * The page, and how much of the table it is.
+   *
+   * The endpoint used to return the newest fifty rows and say nothing about the
+   * rest, so a form with thousands of responses had all but fifty of them
+   * missing from the only screen that shows them.
+   */
+  it("pages, and says how many rows there are in total", async () => {
+    await subscribePro(t.orgId);
+    const first = await fetchApi(`/api/forms/${t.formId}/submissions?status=all&limit=1&offset=0`, {
+      headers: auth(),
+    });
+    expect(first.status).toBe(200);
+    const one = await first.json<ListBody>();
+    expect(one.submissions.length).toBe(1);
+    expect(one.total).toBeGreaterThanOrEqual(2);
+    expect(one.limit).toBe(1);
+    expect(one.offset).toBe(0);
+
+    const second = await fetchApi(`/api/forms/${t.formId}/submissions?status=all&limit=1&offset=1`, {
+      headers: auth(),
+    });
+    const two = await second.json<ListBody>();
+    expect(two.submissions.length).toBe(1);
+    // A different row, and the same total — newest first, so the offset walks back.
+    expect(two.submissions[0]?.id).not.toBe(one.submissions[0]?.id);
+    expect(two.total).toBe(one.total);
+    // The answers and the transcript still belong to the row on *this* page.
+    expect(two.submissions[0]?.answers).toBeDefined();
+  });
+
+  it("counts both tabs whichever one is being read", async () => {
+    await subscribePro(t.orgId);
+    const res = await fetchApi(`/api/forms/${t.formId}/submissions?status=completed&limit=1`, {
+      headers: auth(),
+    });
+    const body = await res.json<ListBody>();
+    // `total` is the filter's, `counts` is the table's — the completed tab must
+    // still be able to badge the partial one.
+    expect(body.total).toBe(body.counts.completed);
+    expect(body.counts.partial).toBeGreaterThanOrEqual(1);
+  });
+
+  it("status=partial is every started-and-unfinished response", async () => {
+    await subscribePro(t.orgId);
+    const res = await fetchApi(`/api/forms/${t.formId}/submissions?status=partial`, { headers: auth() });
+    expect(res.status).toBe(200);
+    const body = await res.json<ListBody>();
+    expect(body.submissions.every((r) => r.status !== "completed")).toBe(true);
+    expect(body.submissions.some((r) => r.id === "sbm_partial")).toBe(true);
+    expect(body.total).toBe(body.counts.partial);
   });
 
   it("analytics responds", async () => {

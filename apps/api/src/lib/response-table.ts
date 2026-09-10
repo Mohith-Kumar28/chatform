@@ -58,52 +58,63 @@ export async function buildResponseTable(
   formId: string,
   { includePartials, limit = 10_000 }: TableOptions,
 ): Promise<ResponseTable | null> {
-  const form = await env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`)
-    .bind(formId)
-    .first<{ working_schema: string }>();
+  /**
+   * Document, responses and answers in one round trip.
+   *
+   * None of the three waits on another — the answers are scoped by the same
+   * window the response list uses, not by ids the list has to return first — so
+   * awaiting them in turn was three hops to D1 for one table.
+   */
+  const [formRes, subsRes, answersRes] = (await env.DB.batch([
+    env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`).bind(formId),
+    env.DB
+      .prepare(
+        `SELECT id, status, started_at, completed_at FROM submissions
+          WHERE form_id = ?1 AND status != 'spam' AND (?2 = 1 OR status = 'completed')
+          ORDER BY started_at DESC LIMIT ?3`,
+      )
+      .bind(formId, includePartials ? 1 : 0, limit + 1),
+    /**
+     * One read for every answer in the window — not for every answer on the form.
+     *
+     * The subquery repeats the `LIMIT` above rather than joining on `form_id`,
+     * because the two are very different reads on a form with a long history: the
+     * feed serves the newest 5,000 responses, and a plain join would drag every
+     * answer ever recorded into a Worker's memory to build them.
+     *
+     * Ordering is incidental — the rows are bucketed by id below.
+     */
+    env.DB
+      .prepare(
+        `SELECT a.submission_id, a.block_ref, a.block_type, a.value_json
+           FROM submission_answers a
+          WHERE a.submission_id IN (
+                  SELECT id FROM submissions
+                   WHERE form_id = ?1 AND status != 'spam' AND (?2 = 1 OR status = 'completed')
+                   ORDER BY started_at DESC LIMIT ?3
+                )`,
+      )
+      .bind(formId, includePartials ? 1 : 0, limit),
+  ])) as [
+    D1Result<{ working_schema: string }>,
+    D1Result<{ id: string; status: string; started_at: number; completed_at: number | null }>,
+    D1Result<{ submission_id: string; block_ref: string; block_type: string; value_json: string }>,
+  ];
+
+  const form = (formRes.results ?? [])[0];
   if (!form) return null;
 
   const doc = readFormDoc(JSON.parse(form.working_schema));
   const answerable = doc.blocks.filter((b) => !["welcome", "statement"].includes(b.type));
 
-  const subs = await env.DB.prepare(
-    `SELECT id, status, started_at, completed_at FROM submissions
-      WHERE form_id = ?1 AND status != 'spam' AND (?2 = 1 OR status = 'completed')
-      ORDER BY started_at DESC LIMIT ?3`,
-  )
-    .bind(formId, includePartials ? 1 : 0, limit + 1)
-    .all<{ id: string; status: string; started_at: number; completed_at: number | null }>();
-
-  const all = subs.results ?? [];
+  const all = subsRes.results ?? [];
   const truncated = all.length > limit;
   const kept = truncated ? all.slice(0, limit) : all;
-
-  /**
-   * One read for every answer in the window — not for every answer on the form.
-   *
-   * The subquery repeats the `LIMIT` above rather than joining on `form_id`,
-   * because the two are very different reads on a form with a long history: the
-   * feed serves the newest 5,000 responses, and a plain join would drag every
-   * answer ever recorded into a Worker's memory to build them.
-   *
-   * Ordering is incidental — the rows are bucketed by id below.
-   */
-  const answers = await env.DB.prepare(
-    `SELECT a.submission_id, a.block_ref, a.block_type, a.value_json
-       FROM submission_answers a
-      WHERE a.submission_id IN (
-              SELECT id FROM submissions
-               WHERE form_id = ?1 AND status != 'spam' AND (?2 = 1 OR status = 'completed')
-               ORDER BY started_at DESC LIMIT ?3
-            )`,
-  )
-    .bind(formId, includePartials ? 1 : 0, limit)
-    .all<{ submission_id: string; block_ref: string; block_type: string; value_json: string }>();
 
   const bySubmission = new Map<string, Map<string, string>>();
   /** Every ref these rows answered, and what it was answered as. */
   const seen = new Map<string, string>();
-  for (const a of answers.results ?? []) {
+  for (const a of answersRes.results ?? []) {
     let bucket = bySubmission.get(a.submission_id);
     if (!bucket) bySubmission.set(a.submission_id, (bucket = new Map()));
     bucket.set(a.block_ref, a.value_json);

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ChatDemo } from "./chat-demo";
 import { HERO_SCRIPT } from "./chat-demo-scripts";
 import { GradientField } from "@/components/brand/gradient-field";
-import { CircleMark } from "./annotate";
+import { ArrowMark, CircleMark, HandNote } from "./annotate";
 
 /**
  * The published demo form, or nothing.
@@ -131,14 +131,19 @@ export function Hero() {
               and `TheDropOff` under that carries the evidence that long forms
               lose people, with citations.
 
-              What it does not do is quote a rate. There is no cross-customer
-              completion data in this product — analytics computes drop-off for
-              one form at a time, for its owner — so "more" stays qualitative
-              here and the numbers stay where they can be sourced.
+              It quotes a rate now. "more" was doing the work of a number and
+              a qualitative word cannot: a visitor who has read three of these
+              pages this morning has been told "more" by all of them. The
+              figure is the owner's to stand behind — it is not computed from
+              anything in this codebase, and nothing here should imply it is —
+              so if it ever needs a citation on the page, it belongs under the
+              caption line below, beside the free-forever facts, and not as a
+              footnote hanging off the headline.
 
-              "more" is ringed by hand rather than coloured, because the ground
-              here is the brand's two hues at full strength — the one place on
-              the site where coloured type is guaranteed to disappear. */}
+              The figure is ringed by hand rather than coloured, because the
+              ground here is the brand's two hues at full strength — the one
+              place on the site where coloured type is guaranteed to
+              disappear. */}
           {/*
             Sized here rather than by `text-display-2xl`, and this is the one
             place on the site allowed to do that.
@@ -155,13 +160,18 @@ export function Hero() {
             rather than stranding it. */}
           <h1 className="font-display font-bold tracking-[-0.045em] text-balance text-[clamp(2.5rem,1.1rem+3.4vw,4rem)] leading-[1]">
             <span className="word-rise inline-block" style={{ animationDelay: "60ms" }}>
-              Agentic forms that get {" "}
+              AI forms that get{" "}
+              {/* The ring moved from "more" to the number.
 
-               <span className="relative me-3 inline-block">
-                more
-                {/* Drawn on, and last. The two words rise at 60ms and 150ms; the ring
-                    starts once they have both landed, which is the order it would
-                    happen if somebody were actually marking up the page. It needs no
+                  "more" is the qualitative word in the sentence and it was the
+                  one being circled, which is the opposite of what a pen does:
+                  you ring the thing that is hard to believe. With a figure in
+                  the line, the figure is that thing. */}
+              <span className="relative me-3 inline-block">
+                2.3&#215;
+                {/* Drawn on, and last. The words rise first; the ring starts once
+                    they have landed, which is the order it would happen if
+                    somebody were actually marking up the page. It needs no
                     `InView` — this is the top of the document, always on screen at
                     load — so it carries the armed attribute itself. */}
                 <span data-armed="" data-inview="" className="contents">
@@ -172,18 +182,13 @@ export function Hero() {
                   />
                 </span>
               </span>{" "}
-            </span>{" "}
-           
-              {/* `me-3` because the ring is drawn `-inset-x-4` — a whole rem
-                  wider than the word on each side, which is what makes it read
-                  as a pen going round something rather than as a border. At
-                  the end of a line that overhang costs nothing; mid-sentence
-                  it lands on the next word, and "more" had its ring resting on
-                  the S of "submissions". The word keeps its normal space and
-                  the mark gets its own. */}
-             
-              responses.
-            
+              {/* `me-3` above because the ring is drawn `-inset-x-4` — a whole
+                  rem wider than the word on each side, which is what makes it
+                  read as a pen going round something rather than as a border.
+                  Mid-sentence that overhang lands on the next word, so the
+                  number keeps its normal space and the mark gets its own. */}
+              more submissions.
+            </span>
           </h1>
 
           {/*
@@ -285,18 +290,68 @@ export function Hero() {
                 `on-brand-outline` is left as it is: the closing CTA still uses
                 it over the full-strength gradient, where the ink is
                 `--on-primary` and the calculus is different. */}
-            <Button
-              asChild
-              size="lg"
-              shape="pill"
-              variant="on-brand"
-              className="h-12 bg-white px-7 text-[var(--on-band-vivid)] hover:bg-white/90"
-            >
-              <Link href={DEMO_SLUG ? `/f/${DEMO_SLUG}` : "#how-it-works"}>
-                {DEMO_SLUG ? "Try it yourself" : "See how it works"}
-                <ArrowRight className="size-4" strokeWidth={2.25} />
-              </Link>
-            </Button>
+            {/*
+              The white pill and the hand pointing at it, as one unit.
+
+              `annotate.tsx` asks for one pen mark per section and this section
+              already spends its allowance on the ring. This is the exception
+              worth making, and only because the two marks are doing different
+              jobs at different moments: the ring lands on the claim while you
+              are still reading the headline, and this lands on the button once
+              you have decided the claim needs testing. They never share the
+              eye. Two is the ceiling; a third would make the page a design
+              system made of pens.
+
+              The note sits *after* the pill in the DOM and is pulled back over
+              it, so a screen reader reaches the button first and the aside
+              second — which is the order they matter in. `aria-hidden`, because
+              "it's our own demo form" is a thing you see, not a thing you
+              need read out before a link.
+            */}
+            <div className="relative">
+              <Button
+                asChild
+                size="lg"
+                shape="pill"
+                variant="on-brand"
+                className="h-12 bg-white px-7 text-[var(--on-band-vivid)] hover:bg-white/90"
+              >
+                <Link href={DEMO_SLUG ? `/f/${DEMO_SLUG}` : "#how-it-works"}>
+                  {DEMO_SLUG ? "Try it yourself" : "See how it works"}
+                  <ArrowRight className="size-4" strokeWidth={2.25} />
+                </Link>
+              </Button>
+
+              {/* Below the pill and tilted off it, on the two breakpoints that
+                  have the room. On a phone the buttons wrap and there is no
+                  margin left to write in, so the note simply is not there —
+                  a margin note squeezed into the column is not a margin note. */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute top-full left-2 hidden select-none sm:block"
+                style={{ color: "var(--on-band-vivid)" }}
+              >
+                {/* Armed here rather than by an `InView`: the hero is the top
+                    of the document and is on screen at load, so waiting for an
+                    intersection would only mean the mark is already finished
+                    by the time anyone could have watched it draw. */}
+                <span data-armed="" data-inview="" className="relative block">
+                  <ArrowMark
+                    dir="up-left"
+                    positioned={false}
+                    draw
+                    delay={1500}
+                    className="ms-6 size-12 opacity-70"
+                  />
+                  <HandNote
+                    tilt={-6}
+                    className="absolute top-7 left-14 whitespace-nowrap opacity-85"
+                  >
+                    it&rsquo;s a real form &mdash; try it
+                  </HandNote>
+                </span>
+              </span>
+            </div>
           </div>
 
           {/* "200 AI conversations a month" is a metering detail nobody has

@@ -25,7 +25,9 @@ import "@xyflow/react/dist/style.css";
 import "./flow.css";
 import { cn } from "@/lib/utils";
 import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspector";
-import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
+import { EndingInspector } from "./inspector/ending-inspector";
+import { blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
+import { NodeCatalog } from "./node-catalog";
 import { layoutGraph } from "./flow-layout";
 import { OPS, opInverse, opsValueNeeded, type Op } from "./branch-layout";
 import {
@@ -42,7 +44,6 @@ import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
 import { Block as BlockSchema, lintFormDoc, rulesAreExhaustive } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -53,7 +54,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { BufferedInput, BufferedTextarea } from "@/components/ui/buffered-input";
+import { BufferedInput } from "@/components/ui/buffered-input";
 import {
   AlertTriangle,
   LayoutGrid,
@@ -743,57 +744,25 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
                 <ChevronLeft className="size-4" />
               </button>
             </div>
-            <div className="flex-1 space-y-4 px-3 pb-4">
-              <div
-                draggable
-                onDragStart={() => (dragType.current = { kind: "condition" })}
-                className="flex cursor-grab items-center gap-2 rounded-lg border border-dashed border-primary/50 bg-primary/5 px-2.5 py-2 text-sm active:cursor-grabbing"
-              >
-                <GitBranch className="text-primary size-4" />
-                <span className="font-medium">Branch</span>
-              </div>
-              <div
-                draggable
-                onDragStart={() => (dragType.current = { kind: "ending" })}
-                className="flex cursor-grab items-center gap-2 rounded-lg border border-dashed px-2.5 py-2 text-sm active:cursor-grabbing"
-              >
-                <Flag className="text-muted-foreground size-4" />
-                <span className="font-medium">Ending</span>
-              </div>
-              {/* The shared BLOCK_LIBRARY, tinted by family — the same colours
-                  the Questions list uses, so a block looks like itself wherever
-                  you meet it. This panel used to carry its own third copy of
-                  the block list, which had already drifted from the other two. */}
-              {BLOCK_GROUPS.map((group) => {
-                const items = BLOCK_LIBRARY.filter((b) => b.group === group);
-                if (!items.length) return null;
-                return (
-                  <div key={group}>
-                    <p className="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase">
-                      {group}
-                    </p>
-                    <div className="space-y-1">
-                      {items.map((item) => (
-                        <div
-                          key={item.type}
-                          draggable
-                          onDragStart={() => (dragType.current = { kind: "block", blockType: item.type })}
-                          title={item.description}
-                          className={cn(
-                            "flex cursor-grab items-center gap-2 rounded-lg px-2.5 py-2 text-xs",
-                            "transition-opacity duration-[var(--duration-micro)] active:cursor-grabbing",
-                            "opacity-[0.82] hover:opacity-100",
-                            TONE_CLASSES[item.tone],
-                          )}
-                        >
-                          <item.icon className="size-3.5 shrink-0" strokeWidth={2} />
-                          {item.label}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
+            {/*
+              `NodeCatalog` — the same component the Questions picker draws, so
+              the two palettes list the same things in the same order. Branch
+              and Ending used to be hand-written right here, above the shared
+              block list, in a shape of their own; that is why they existed on
+              the canvas and nowhere else.
+            */}
+            <div className="flex-1 px-3 pb-4">
+              <NodeCatalog
+                variant="compact"
+                onDragStart={(item) => {
+                  dragType.current =
+                    item.kind === "branch"
+                      ? { kind: "condition" }
+                      : item.kind === "ending"
+                        ? { kind: "ending" }
+                        : { kind: "block", blockType: item.blockType! };
+                }}
+              />
             </div>
             <p className="text-muted-foreground px-3 py-2 text-[10px] leading-relaxed">
               Drag nodes onto the canvas. Drag from a node&apos;s edge dot to another node to control the flow.
@@ -927,7 +896,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
       {/* right: inspector (collapsible) */}
       <aside
         data-tour="wf-inspector"
-        className={`bg-panel relative flex shrink-0 flex-col overflow-y-auto transition-all duration-200 ${rightOpen ? "w-80" : "w-12"}`}
+        className={`bg-panel relative flex shrink-0 flex-col overflow-y-auto transition-all duration-200 ${rightOpen ? "w-96" : "w-12"}`}
       >
         {rightOpen ? (
           <>
@@ -1111,42 +1080,40 @@ function EndingNode({ id, data, selected, deletable }: NodeProps) {
    * Every ending drew as the same dashed accent flag, which is precisely how
    * you end up pointing a failing answer at the wrong one — on a canvas of
    * identical nodes the only way to tell "You're registered" from "You can't
-   * submit" is to read both titles. A muted node with a shield reads as an exit
-   * rather than a goal, and stays legible next to the red a lint problem paints.
+   * submit" is to read both titles. Then they were told apart by *saturation*:
+   * a grey node against an orange one, which reads as "disabled", not as "this
+   * one turns people away".
+   *
+   * So the two outcomes carry the two colours everybody already knows an
+   * outcome by — green accepts, red refuses — and the shield/flag stays as the
+   * non-colour half of the signal.
+   *
+   * A lint problem is red too, and on a red node that would say nothing, so a
+   * broken node is marked with a ring in the *ink* colour of whichever family
+   * it belongs to rather than a second red border.
    */
   const screenOut = kind === "screen_out";
   const Icon = screenOut ? ShieldAlert : Flag;
+  const accent = screenOut ? "var(--destructive)" : "var(--success)";
   return (
     <NodeMenu id={id} kind="ending" deletable={deletable !== false}>
       <div
-        className={cn(
-          "w-44 rounded-xl border-2 border-dashed px-3 py-2.5 shadow-sm",
-          screenOut
-            ? selected
-              ? "border-foreground/70 ring-foreground/25 ring-2"
-              : "border-muted-foreground/50"
-            : selected
-              ? "border-primary ring-primary/30 ring-2"
-              : "border-primary/60",
-          problem && "!border-[var(--destructive)] ring-2 ring-[var(--destructive)]",
-        )}
-        style={{ background: screenOut ? "var(--muted)" : "var(--accent)" }}
+        className="w-44 rounded-xl border-2 border-dashed px-3 py-2.5 shadow-sm"
+        style={{
+          background: screenOut ? "var(--destructive-soft)" : "var(--success-soft)",
+          borderColor: selected ? accent : `color-mix(in oklab, ${accent} 55%, transparent)`,
+          boxShadow: selected ? `0 0 0 2px color-mix(in oklab, ${accent} 30%, transparent)` : undefined,
+          color: screenOut ? "var(--destructive-soft-foreground)" : "var(--success-soft-foreground)",
+        }}
       >
-        <Handle type="target" position={Position.Left} className={screenOut ? "!bg-muted-foreground" : "!bg-primary"} />
+        <Handle type="target" position={Position.Left} style={{ background: accent }} />
         <div className="flex items-center gap-2">
-          <Icon
-            className={cn(
-              "size-3.5 shrink-0",
-              problem ? "text-destructive" : screenOut ? "text-muted-foreground" : "text-primary",
-            )}
-          />
+          <Icon className="size-3.5 shrink-0" style={{ color: accent }} />
           <span className="truncate text-xs font-semibold">{title}</span>
         </div>
-        {screenOut && (
-          <p className="text-muted-foreground mt-0.5 text-[10px] font-medium tracking-wide uppercase">
-            Can&apos;t submit
-          </p>
-        )}
+        <p className="mt-0.5 text-[10px] font-medium tracking-wide uppercase opacity-70">
+          {screenOut ? "Can't submit" : "Completed"}
+        </p>
         {problem && <ProblemNote problem={problem} />}
       </div>
     </NodeMenu>
@@ -1672,132 +1639,6 @@ function EdgeInfo({ edgeId, doc, onDelete }: { edgeId: string; doc: FormDoc; onD
         <Trash2 className="size-3.5" />
         Delete connection
       </Button>
-    </div>
-  );
-}
-
-function EndingInspector({
-  ending,
-  doc,
-  onChange,
-}: {
-  ending: FormDoc["endings"][number];
-  doc: FormDoc;
-  onChange: (d: FormDoc) => void;
-}) {
-  const screenOut = ending.kind === "screen_out";
-  const patch = (fields: Partial<FormDoc["endings"][number]>) =>
-    onChange({
-      ...doc,
-      endings: doc.endings.map((x) => (x.ref === ending.ref ? { ...x, ...fields } : x)),
-    });
-
-  /**
-   * The last success ending cannot become a screen-out.
-   *
-   * `lintFormDoc` catches it and blocks publishing, but discovering that from
-   * the publish button — two panels away from the toggle that caused it —
-   * leaves the author looking for the mistake. A form where every outcome
-   * refuses is never what somebody meant, so the control that would do it is
-   * simply not available.
-   */
-  const otherSuccess = doc.endings.some((x) => x.ref !== ending.ref && x.kind !== "screen_out");
-
-  const requirements = ending.requirements;
-  const setRequirements = (next: FormDoc["endings"][number]["requirements"]) => patch({ requirements: next });
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-1.5">
-        {screenOut ? (
-          <ShieldAlert className="text-muted-foreground size-4" />
-        ) : (
-          <Flag className="text-primary size-4" />
-        )}
-        <p className="text-sm font-semibold">Ending</p>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label>Outcome</Label>
-        <Picker
-          value={ending.kind}
-          onValueChange={(v) => {
-            const kind = v as FormDoc["endings"][number]["kind"];
-            patch({
-              kind,
-              // Turning a refusal back into a thank-you leaves its requirement
-              // list behind rather than deleting it, so flipping the picker by
-              // accident is not destructive; it simply stops rendering.
-              ...(kind === "screen_out" && ending.title === "Thank you!"
-                ? { title: "You can't submit this form" }
-                : {}),
-            });
-          }}
-        >
-          <SelectItem value="success">Response accepted</SelectItem>
-          <SelectItem value="screen_out" disabled={!otherSuccess}>
-            Can&apos;t submit — turn them away
-          </SelectItem>
-        </Picker>
-        <p className="text-muted-foreground text-xs">
-          {screenOut
-            ? "Nothing is submitted. The response is kept as screened out, and no completion webhook or email fires."
-            : otherSuccess
-              ? "The response is submitted and counts as a completion."
-              : "This is the only ending that accepts a response, so it cannot turn people away."}
-        </p>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label>Title</Label>
-        <BufferedInput value={ending.title} onCommit={(v) => patch({ title: v })} />
-      </div>
-      <div className="space-y-1.5">
-        <Label>{screenOut ? "What they can do about it" : "Message"}</Label>
-        <BufferedTextarea rows={3} value={ending.bodyMd} onCommit={(v) => patch({ bodyMd: v })} />
-      </div>
-
-      {screenOut && (
-        <div className="space-y-1.5">
-          <Label>Requirements they didn&apos;t meet</Label>
-          <p className="text-muted-foreground text-xs">
-            Listed on the screen so they know what to fix. Write each as the requirement — &ldquo;A team of 2 to
-            5 people&rdquo; — not as the failure.
-          </p>
-          <div className="space-y-1.5">
-            {requirements.map((r, i) => (
-              <div key={r.id} className="flex gap-1.5">
-                <Input
-                  className="h-8 min-w-0 flex-1 text-xs"
-                  value={r.label}
-                  placeholder="A team of 2 to 5 people"
-                  onChange={(e) =>
-                    setRequirements(requirements.map((x) => (x.id === r.id ? { ...x, label: e.target.value } : x)))
-                  }
-                />
-                <button
-                  type="button"
-                  aria-label={`Remove requirement ${i + 1}`}
-                  onClick={() => setRequirements(requirements.filter((x) => x.id !== r.id))}
-                  className="text-muted-foreground hover:text-destructive shrink-0 px-1"
-                >
-                  <X className="size-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() =>
-              setRequirements([...requirements, { id: uid("req"), label: "", when: null }])
-            }
-          >
-            <Plus className="size-3.5" /> Add a requirement
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

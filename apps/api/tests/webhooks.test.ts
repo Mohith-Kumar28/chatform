@@ -62,7 +62,11 @@ describe("the retry sweep", () => {
     const sent: unknown[] = [];
     const fakeEnv = {
       ...env,
-      Q_WEBHOOKS: { send: async (m: unknown) => void sent.push(m) },
+      // `sendBatch`, because the sweep enqueues every due retry in one call.
+      Q_WEBHOOKS: {
+        send: async (m: unknown) => void sent.push(m),
+        sendBatch: async (ms: { body: unknown }[]) => void sent.push(...ms.map((m) => m.body)),
+      },
     } as unknown as Parameters<typeof retryFailedDeliveries>[0];
 
     expect(await retryFailedDeliveries(fakeEnv)).toBe(1);
@@ -92,7 +96,11 @@ describe("the retry sweep", () => {
     const sent: unknown[] = [];
     const fakeEnv = {
       ...env,
-      Q_WEBHOOKS: { send: async (m: unknown) => void sent.push(m) },
+      // `sendBatch`, because the sweep enqueues every due retry in one call.
+      Q_WEBHOOKS: {
+        send: async (m: unknown) => void sent.push(m),
+        sendBatch: async (ms: { body: unknown }[]) => void sent.push(...ms.map((m) => m.body)),
+      },
     } as unknown as Parameters<typeof retryFailedDeliveries>[0];
 
     // Its event cannot be reconstructed honestly, so redelivering it as

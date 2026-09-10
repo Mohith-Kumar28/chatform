@@ -2,7 +2,7 @@ import {
   AlignLeft, AtSign, Baseline, Calendar, CheckSquare, ChevronDownSquare, CircleDot,
   CreditCard, FileUp, Gauge, Hash, Heart, Image, Link2, ListOrdered, MapPin,
   MessageSquare, PenTool, Phone, ScrollText, Sparkles, Star, Table2, ToggleLeft,
-  User, CalendarClock, Rows3,
+  User, CalendarClock, Rows3, Flag, GitBranch,
 } from "lucide-react";
 import type { Block } from "@repo/form-schema";
 
@@ -114,3 +114,77 @@ export const TONE_ACCENT: Record<BlockTone, string> = {
   scale: "var(--family-scale)",
   advanced: "var(--family-advanced)",
 };
+
+
+/* ────────────────────────── the node catalogue ──────────────────────────
+   Everything a form is made of, in one order.
+
+   The Questions picker offered blocks and nothing else; the Flow palette
+   offered blocks *plus* Branch and Ending, hand-written above the shared list
+   in a different shape. So the two palettes disagreed about what a form is
+   made of, and the disagreement was invisible until you went looking for an
+   ending in the Questions picker and found nothing.
+
+   `welcome` is still not here, and deliberately: every form has exactly one,
+   seeded when the form is created, and there is nowhere sensible to put a
+   second greeting. It is in `blockMeta` so it can be *drawn*, not added.       */
+
+export type CatalogGroup = "Flow" | BlockGroup;
+
+export const CATALOG_GROUPS: CatalogGroup[] = ["Flow", ...BLOCK_GROUPS];
+
+export interface CatalogItem {
+  id: string;
+  /** What picking or dropping this makes. */
+  kind: "block" | "branch" | "ending";
+  /** Set when `kind` is `"block"`. */
+  blockType?: Block["type"];
+  label: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  group: CatalogGroup;
+  /** Soft fill + readable ink, for the icon chip and the compact row. */
+  toneClass: string;
+}
+
+export const CATALOG: CatalogItem[] = [
+  {
+    id: "branch",
+    kind: "branch",
+    label: "Branch",
+    description: "Send different answers different ways.",
+    icon: GitBranch,
+    group: "Flow",
+    toneClass: "bg-primary-soft text-primary-soft-foreground",
+  },
+  {
+    id: "ending",
+    kind: "ending",
+    label: "Ending",
+    description: "Where a finished response lands, or where one is turned away.",
+    icon: Flag,
+    group: "Flow",
+    toneClass: "bg-[var(--success-soft)] text-[var(--success-soft-foreground)]",
+  },
+  ...BLOCK_LIBRARY.map(
+    (b): CatalogItem => ({
+      id: b.type,
+      kind: "block",
+      blockType: b.type,
+      label: b.label,
+      description: b.description,
+      icon: b.icon,
+      group: b.group,
+      toneClass: TONE_CLASSES[b.tone],
+    }),
+  ),
+];
+
+/** The catalogue narrowed to a search box's contents. Empty query, everything. */
+export function filterCatalog(query: string, items: CatalogItem[] = CATALOG): CatalogItem[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return items;
+  return items.filter(
+    (i) => i.label.toLowerCase().includes(q) || i.description.toLowerCase().includes(q),
+  );
+}

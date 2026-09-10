@@ -12,14 +12,13 @@ import {
   FileClock,
   Link2,
   Loader2,
-  MoreHorizontal,
+  MoreVertical,
   Pencil,
   Play,
   PowerOff,
   Redo2,
   Undo2,
 } from "lucide-react";
-import { motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -35,10 +34,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TooltipHint } from "@/components/ui/kbd";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -161,49 +162,31 @@ export function BuilderHeader({
             </div>
           </div>
 
-          {/* center: tabs */}
-          <nav
-            aria-label="Builder sections"
-            className="bg-muted/60 hidden items-center gap-0.5 rounded-full p-1 lg:flex"
-          >
-            {BUILDER_TABS.map((tab) => {
-              const href = `/forms/${formId}/${tab.segment}`;
-              const active = tabMatches(tab, pathname);
-              return (
-                <Tooltip key={tab.segment}>
-                  <TooltipTrigger asChild>
-                    <Link
-                      href={href}
-                      // Six tabs over one form: prefetch them all, so the tab
-                      // strip behaves like a tab strip and not like six pages.
-                      prefetch
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "relative isolate flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
-                        "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
-                        active
-                          ? "text-foreground"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {active && (
-                        <motion.span
-                          layoutId="builder-tab-pill"
-                          className="bg-card shadow-xs absolute inset-0 -z-10 rounded-full"
-                          transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                        />
-                      )}
-                      <tab.icon className="size-3.5" strokeWidth={1.75} />
-                      <span className="hidden xl:inline">{tab.label}</span>
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <TooltipHint label={tab.label} hint={tab.hint} keys={KEY.tab(tab.segment)} />
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
-          </nav>
+          {/*
+            center: tabs.
+
+            `SegmentedControl`, not a hand-rolled strip. This was the same
+            markup with a `bg-card` pill — a lighter grey on a grey track,
+            which on the dark theme leaves the tab you are on barely different
+            from the five you are not. The violet pill is the product's one
+            selection colour and it now reaches here too, because there is one
+            component drawing it rather than three copies.
+          */}
+          <SegmentedControl
+            ariaLabel="Builder sections"
+            size="sm"
+            className="hidden lg:inline-flex"
+            value={BUILDER_TABS.find((t) => tabMatches(t, pathname))?.segment ?? "build"}
+            options={BUILDER_TABS.map((tab) => ({
+              value: tab.segment,
+              label: tab.label,
+              icon: tab.icon,
+              href: `/forms/${formId}/${tab.segment}`,
+              // Six tabs is more than a header can spell out until it is wide.
+              labelClassName: "hidden xl:inline",
+              tooltip: <TooltipHint label={tab.label} hint={tab.hint} keys={KEY.tab(tab.segment)} />,
+            }))}
+          />
 
           {/* Below lg the tab strip collapses. A select is a poor nav control,
               but it beats a horizontally scrolling icon row on a phone. */}
@@ -237,32 +220,6 @@ export function BuilderHeader({
               <IconAction label="Undo" shortcut={KEY.undo()} icon={Undo2} disabled={!canUndo} onClick={undo} />
               <IconAction label="Redo" shortcut={KEY.redo()} icon={Redo2} disabled={!canRedo} onClick={redo} />
             </div>
-
-            {/*
-              History, beside undo and redo because that is what it is: the same
-              timeline, at a longer range. It opens a sheet over the builder
-              rather than navigating to a page — you ask history a question
-              about the form in front of you, so taking the form away to answer
-              it was the wrong trade.
-
-              Outside the `md` group above on purpose — undo and redo are hidden
-              on a phone because you rarely reach for them there, but "what
-              changed, and who published it" is exactly the question you get on
-              a phone, and hiding it would leave no way to answer it.
-            */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={showHistory}
-                  aria-label="Version history"
-                  className="text-muted-foreground hover:text-foreground hover:bg-muted mr-0.5 grid size-8 place-items-center rounded-lg transition-colors"
-                >
-                  <FileClock className="size-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">History</TooltipContent>
-            </Tooltip>
 
             <Tooltip>
               <TooltipTrigger asChild>
@@ -312,32 +269,6 @@ export function BuilderHeader({
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Open live</TooltipContent>
                 </Tooltip>
-
-                {/*
-                  Taking a form off the air, kept out of the primary row.
-
-                  There was no way to do this at all: a live form could only be
-                  stopped by a close date set in advance or by deleting it, and
-                  neither is what somebody wants when a registration has to stop
-                  now. It sits behind an overflow rather than beside Publish
-                  because the two are not peers — one is the thing you do all
-                  day and the other is the thing you do once, and a destructive
-                  sibling next to the button you press constantly is how it gets
-                  pressed by mistake.
-                */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon-sm" aria-label="More form actions">
-                      <MoreHorizontal className="size-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem variant="destructive" onSelect={() => setConfirmOffline(true)}>
-                      <PowerOff className="size-3.5" />
-                      Take offline
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
               </>
             )}
 
@@ -400,6 +331,49 @@ export function BuilderHeader({
                 )}
               </TooltipContent>
             </Tooltip>
+
+            {/*
+              The overflow, last in the row and vertical.
+
+              It used to be a horizontal ⋯ sitting *before* Publish, and only
+              when the form was live — so the menu moved depending on the
+              form's state, and the one control whose whole job is "everything
+              else" was not where everything else lives. A kebab at the end of
+              a toolbar is the convention because it is the only position that
+              cannot be confused with an action: nothing comes after it.
+
+              History moved in here from its own header slot. It is not a thing
+              you reach for while working — it answers "what changed, and who
+              published it", asked perhaps once a week — and a permanent slot
+              beside Publish is expensive for a once-a-week question.
+
+              Take offline stays destructive and stays behind this menu, not
+              beside Publish: one is the thing you do all day and the other is
+              the thing you do once, and a destructive sibling next to the
+              button you press constantly is how it gets pressed by mistake.
+            */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon-sm" aria-label="More form actions">
+                  <MoreVertical className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={showHistory}>
+                  <FileClock className="size-3.5" />
+                  Version history
+                </DropdownMenuItem>
+                {slug && published && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem variant="destructive" onSelect={() => setConfirmOffline(true)}>
+                      <PowerOff className="size-3.5" />
+                      Take offline
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>

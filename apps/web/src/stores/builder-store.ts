@@ -162,6 +162,14 @@ export interface BuilderState {
 
   // ── endings ──
   updateEnding: (ref: string, patch: Partial<Ending>, coalesceKey?: string) => void;
+  /**
+   * Add an ending and select it.
+   *
+   * The canvas has been able to do this since it had a node library; the
+   * Questions view could not, because its picker only knew about blocks. Both
+   * palettes are now the one catalogue, so both need the operation.
+   */
+  addEnding: () => void;
 }
 
 /**
@@ -448,6 +456,24 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       if (i === -1) return;
       Object.assign(d.endings[i]!, patch);
     }, coalesceKey),
+
+  addEnding: () => {
+    const ref = `end_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
+    get().edit((d) => {
+      d.endings.push({
+        id: ref,
+        ref,
+        title: "Thank you!",
+        bodyMd: "",
+        imageUrl: null,
+        redirectDelaySec: 5,
+        showSummary: false,
+        kind: "success",
+        requirements: [],
+      } as never);
+    });
+    set({ selectedEndingRef: ref, selectedRef: null });
+  },
 }));
 
 /** Currently selected block, or null. */

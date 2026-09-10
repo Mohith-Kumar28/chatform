@@ -84,6 +84,16 @@ const SPIN_MS = 600;
 export function ResultsClient({ formId }: ResultsClientProps) {
   const [tab, setTab] = useState<"submissions" | "summary" | "analytics">("submissions");
   const [statusFilter, setStatusFilter] = useState<"completed" | "abandoned">("completed");
+  /**
+   * The page, and how big it is.
+   *
+   * Both live here rather than in the table because they are query parameters:
+   * the rows come from the server one page at a time, and the request has to be
+   * re-issued — under its own cache key — when either changes. The table gets
+   * them back as props and reports clicks.
+   */
+  const [rowsPerPage, setRowsPerPage] = useState(50);
+  const [offset, setOffset] = useState(0);
 
   /**
    * The one page that refetches when you come back to the window.
@@ -105,8 +115,26 @@ export function ResultsClient({ formId }: ResultsClientProps) {
   const { data: rawAnalytics } = useGetApiFormsByIdAnalytics(formId as never, {
     query: { queryKey: getGetApiFormsByIdAnalyticsQueryKey(formId as never), ...LIVE },
   });
-  const { data: rawSubs, isLoading } = useGetApiFormsByIdSubmissions(formId as never, undefined, {
-    query: { queryKey: getGetApiFormsByIdSubmissionsQueryKey(formId as never), ...LIVE },
+  /**
+   * The filter is the server's now, not the array's.
+   *
+   * This page used to fetch every response and filter the array in the browser,
+   * which only works while the array is the whole table — and the endpoint sends
+   * one page. `partial` is the union the Partial tab shows: started and not
+   * completed, whatever became of it. On a plan without partial responses the
+   * tab renders the paywall instead of rows, so the request stays on `completed`
+   * rather than asking for a 402.
+   */
+  const ent = useEntitlements();
+  const canPartials = ent.can("partial_responses");
+  const canAnalytics = ent.can("advanced_analytics");
+  const subsParams = {
+    status: statusFilter === "abandoned" && canPartials ? ("partial" as const) : ("completed" as const),
+    limit: rowsPerPage,
+    offset,
+  };
+  const { data: rawSubs, isLoading, isFetching } = useGetApiFormsByIdSubmissions(formId as never, subsParams, {
+    query: { queryKey: getGetApiFormsByIdSubmissionsQueryKey(formId as never, subsParams), ...LIVE },
   });
   const { data: rawForm } = useGetApiFormsById(formId as never, {
     query: { queryKey: getGetApiFormsByIdQueryKey(formId as never), ...LIVE },
@@ -134,7 +162,12 @@ export function ResultsClient({ formId }: ResultsClientProps) {
    * multiple-choice sent as a bare title would render `opt_founder001`.
    */
   const payload = rawSubs as
-    | { submissions?: SubmissionRecord[]; retiredColumns?: Block[] }
+    | {
+        submissions?: SubmissionRecord[];
+        retiredColumns?: Block[];
+        total?: number;
+        counts?: { total: number; completed: number; partial: number };
+      }
     | undefined;
   const subs = (payload?.submissions ?? []) as SubmissionRecord[];
   const retired = useMemo(() => payload?.retiredColumns ?? [], [payload]);
@@ -142,10 +175,6 @@ export function ResultsClient({ formId }: ResultsClientProps) {
     | { workingSchema?: FormDoc; status?: string; hasUnpublishedChanges?: boolean }
     | undefined;
   const doc = form?.workingSchema;
-  const ent = useEntitlements();
-
-  const canPartials = ent.can("partial_responses");
-  const canAnalytics = ent.can("advanced_analytics");
 
   /**
    * The form's questions, then the ones it used to have.
@@ -163,19 +192,40 @@ export function ResultsClient({ formId }: ResultsClientProps) {
     [doc, retired],
   );
 
-  const completedCount = subs.filter((s) => s.status === "completed").length;
   /**
-   * The real number of unfinished responses, even when the rows themselves are locked.
+   * Both badges, counted by the server over the whole table.
    *
-   * Read from analytics rather than counted from `subs`, because on Free the server sends
-   * completed rows only — so counting the array would say zero and the badge would lie.
-   * `abandoned` is basic analytics and free on every plan, which is what lets the gate say
-   * "3 people started and didn't finish" truthfully while holding none of what they said.
+   * They used to be counted from the array on screen, which the moment the list
+   * became one page meant "Completed 50" on a form with three thousand. The
+   * endpoint returns both counts on every read, whichever tab asked, so the tab
+   * you are not looking at is still badged truthfully.
+   *
+   * The fallback is analytics — free on every plan, which is what lets the
+   * paywall say "3 people started and didn't finish" while holding none of what
+   * they said — and covers the first render, before any page has arrived.
    */
-  const partialCount = canPartials ? subs.length - completedCount : (analytics?.abandoned ?? 0);
-  const rows = subs.filter((s) =>
-    statusFilter === "completed" ? s.status === "completed" : s.status !== "completed",
-  );
+  const completedCount = payload?.counts?.completed ?? analytics?.completed ?? 0;
+  const partialCount = payload?.counts?.partial ?? analytics?.abandoned ?? 0;
+  /** The page. Filtered by the request, so every row on it belongs to the tab. */
+  const rows = subs;
+  const total = payload?.total ?? rows.length;
+
+  /**
+   * A filter or a page size change starts again at the top.
+   *
+   * Staying on offset 600 while switching to a tab with four rows in it would
+   * show an empty table with a pager insisting there are hundreds — the classic
+   * way a paginated list lies about being empty.
+   */
+  const goToFilter = (next: "completed" | "abandoned") => {
+    setStatusFilter(next);
+    setOffset(0);
+  };
+  const changeRowsPerPage = (n: number) => {
+    setRowsPerPage(n);
+    setOffset(0);
+  };
+
 
   /**
    * Fetching this page again, because responses arrive while you are reading it.
@@ -240,7 +290,7 @@ export function ResultsClient({ formId }: ResultsClientProps) {
           { value: "abandoned", label: "Partial", badge: partialCount },
         ]}
         value={statusFilter}
-        onChange={setStatusFilter}
+        onChange={goToFilter}
         ariaLabel="Submission status"
       />
       <Button
@@ -348,15 +398,39 @@ export function ResultsClient({ formId }: ResultsClientProps) {
           ) : rows.length === 0 ? (
             <>
               {statusSwitcher}
-              <EmptyState
-                icon={Inbox}
-                title={statusFilter === "completed" ? "No responses yet" : "No partial responses"}
-                description={
-                  statusFilter === "completed"
-                    ? "Share your form and answers will appear here — with the whole conversation, not just the fields."
-                    : "Partial responses are conversations someone started but didn't finish. They show up here once someone answers at least one question."
-                }
-              />
+              {/*
+                An empty page is not the same as an empty table.
+
+                Deleting the last rows of the final page, or a filter that
+                shrank while it was being read, leaves an offset with nothing
+                behind it — and the table, which is what carries the pager, is
+                not rendered. Without this the only way back to the responses
+                that are still there is a browser reload.
+              */}
+              {offset > 0 ? (
+                <EmptyState
+                  icon={Inbox}
+                  title="Nothing on this page"
+                  description={`There ${total === 1 ? "is" : "are"} ${total.toLocaleString()} ${
+                    total === 1 ? "response" : "responses"
+                  } in this tab — this page is past the end of them.`}
+                  action={
+                    <Button variant="outline" size="sm" shape="pill" onClick={() => setOffset(0)}>
+                      Back to the first page
+                    </Button>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  icon={Inbox}
+                  title={statusFilter === "completed" ? "No responses yet" : "No partial responses"}
+                  description={
+                    statusFilter === "completed"
+                      ? "Share your form and answers will appear here — with the whole conversation, not just the fields."
+                      : "Partial responses are conversations someone started but didn't finish. They show up here once someone answers at least one question."
+                  }
+                />
+              )}
             </>
           ) : (
             <SubmissionsTable
@@ -379,6 +453,16 @@ export function ResultsClient({ formId }: ResultsClientProps) {
                 statusFilter === "abandoned" &&
                 (Boolean(doc?.settings.followUp?.enabled) || rows.some((r) => r.followUp))
               }
+              page={{
+                offset,
+                limit: rowsPerPage,
+                total,
+                // A page in flight disables the arrows rather than letting a
+                // second click queue a jump the reader never sees land.
+                loading: isFetching,
+                onOffset: setOffset,
+                onLimit: changeRowsPerPage,
+              }}
             />
           )}
         </div>

@@ -1,11 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "motion/react";
 import { Cloud, CloudAlert, CloudCheck, CloudOff, Loader2, Palette, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TooltipHint } from "@/components/ui/kbd";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   Tooltip,
   TooltipContent,
@@ -92,50 +91,24 @@ export function BuildToolbar() {
           )}
         </div>
 
-        {/* Questions and Flow are two views of one thing. On the Design route
-            neither is active, so the pill simply isn't rendered. */}
-        <div className="bg-muted/60 inline-flex shrink-0 items-center rounded-full p-1">
-          {BUILD_VIEWS.map((view) => {
-            const href = `/forms/${formId}/${view.segment}`;
-            const active = pathname.endsWith(`/${view.segment}`);
-            return (
-              <Tooltip key={view.segment}>
-                <TooltipTrigger asChild>
-                  <Link
-                    href={href}
-                    /**
-                     * Fully prefetched, not just down to a loading boundary.
-                     * These two are one view with a switch on it as far as
-                     * anyone using them is concerned, and a switch that goes to
-                     * the server is a switch that feels broken.
-                     */
-                    prefetch
-                    aria-current={active ? "page" : undefined}
-                    className={cn(
-                      "relative isolate inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium",
-                      "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
-                      active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {active && (
-                      <motion.span
-                        layoutId="build-view-pill"
-                        className="bg-card shadow-xs absolute inset-0 -z-10 rounded-full"
-                        transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                      />
-                    )}
-                    <view.icon className="size-3.5" strokeWidth={1.75} />
-                    {view.label}
-                  </Link>
-                </TooltipTrigger>
-                {/* One key toggles the pair, so it is named on both halves. */}
-                <TooltipContent side="bottom">
-                  <TooltipHint label={`Switch to ${view.label}`} keys={KEY.flow} />
-                </TooltipContent>
-              </Tooltip>
-            );
-          })}
-        </div>
+        {/* Questions and Flow are two views of one thing — the same
+            `SegmentedControl` as every other tab strip in the product, so the
+            selected view wears the same violet as the header above it. On the
+            Design route neither is active and the pill simply isn't drawn. */}
+        <SegmentedControl
+          ariaLabel="Build view"
+          size="sm"
+          className="shrink-0"
+          value={BUILD_VIEWS.find((v) => pathname.endsWith(`/${v.segment}`))?.segment ?? ""}
+          options={BUILD_VIEWS.map((view) => ({
+            value: view.segment,
+            label: view.label,
+            icon: view.icon,
+            href: `/forms/${formId}/${view.segment}`,
+            // One key toggles the pair, so it is named on both halves.
+            tooltip: <TooltipHint label={`Switch to ${view.label}`} keys={KEY.flow} />,
+          }))}
+        />
 
         <div className="flex flex-1 items-center justify-end gap-3">
           {showSaveStatus && <SaveStatusCloud />}

@@ -25,18 +25,23 @@ import type { Bindings } from "../env.js";
  * account is worse than one that reported an error and asked to try again.
  */
 export async function purgeUserData(env: Bindings, userId: string): Promise<void> {
-  const memberships = await env.DB.prepare(`SELECT organization_id AS org FROM members WHERE user_id = ?`)
+  /**
+   * Every membership, and whether anyone else is in that organization.
+   *
+   * The count used to be a query per membership, asked one at a time inside the
+   * loop; as a correlated subquery it comes back with the list.
+   */
+  const memberships = await env.DB.prepare(
+    `SELECT m.organization_id AS org,
+            (SELECT COUNT(*) FROM members x
+              WHERE x.organization_id = m.organization_id AND x.user_id <> ?1) AS others
+       FROM members m WHERE m.user_id = ?1`,
+  )
     .bind(userId)
-    .all<{ org: string }>();
+    .all<{ org: string; others: number }>();
 
-  for (const { org } of memberships.results ?? []) {
-    const others = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM members WHERE organization_id = ? AND user_id <> ?`,
-    )
-      .bind(org, userId)
-      .first<{ n: number }>();
-
-    if ((others?.n ?? 0) > 0) {
+  for (const { org, others } of memberships.results ?? []) {
+    if (others > 0) {
       // Shared. Their authorship is anonymised; the work belongs to the team.
       // These columns are nullable precisely so a person can leave.
       await env.DB.batch([

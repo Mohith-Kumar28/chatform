@@ -81,33 +81,59 @@ export async function hmac(secret: string, payload: string): Promise<string> {
 export async function deliverWebhookEvent(env: Bindings, evt: WebhookEvent): Promise<void> {
   // resolve payload once
   let payload: Record<string, unknown> = { event: evt.event, formId: evt.formId, timestamp: Date.now() };
+
+  /**
+   * The payload and the endpoints in one round trip.
+   *
+   * The response, its answers and the matching webhooks are three independent
+   * reads; awaited in turn they were three hops to D1 before the first delivery
+   * left, on the path a queue consumer runs for every event.
+   */
+  const [hooksRes, subRes, answersRes] = (await env.DB.batch([
+    // Form-specific and org-wide, in one list.
+    env.DB
+      .prepare(
+        `SELECT id, url, secret, events FROM webhooks WHERE organization_id = ? AND active = 1 AND (form_id = ? OR form_id IS NULL)`,
+      )
+      .bind(evt.organizationId, evt.formId),
+    ...(evt.submissionId
+      ? [
+          env.DB
+            .prepare(
+              `SELECT id, status, started_at, completed_at, duration_ms, hidden_fields, meta FROM submissions WHERE id = ?`,
+            )
+            .bind(evt.submissionId),
+          env.DB
+            .prepare(`SELECT block_ref, block_type, value_json FROM submission_answers WHERE submission_id = ?`)
+            .bind(evt.submissionId),
+        ]
+      : []),
+  ])) as [
+    D1Result<{ id: string; url: string; secret: string; events: string }>,
+    D1Result<Record<string, unknown>>?,
+    D1Result<{ block_ref: string; block_type: string; value_json: string }>?,
+  ];
+
   if (evt.submissionId) {
-    const sub = await env.DB.prepare(
-      `SELECT id, status, started_at, completed_at, duration_ms, hidden_fields, meta FROM submissions WHERE id = ?`,
-    )
-      .bind(evt.submissionId)
-      .first<Record<string, unknown>>();
-    const answers = await env.DB.prepare(
-      `SELECT block_ref, block_type, value_json FROM submission_answers WHERE submission_id = ?`,
-    )
-      .bind(evt.submissionId)
-      .all<{ block_ref: string; block_type: string; value_json: string }>();
-    payload.submission = sub;
-    payload.answers = (answers.results ?? []).map((a) => ({
+    payload.submission = (subRes?.results ?? [])[0] ?? null;
+    payload.answers = (answersRes?.results ?? []).map((a) => ({
       ref: a.block_ref,
       type: a.block_type,
       value: JSON.parse(a.value_json),
     }));
   }
 
-  // find matching webhooks (form-specific first, then org-wide)
-  const hooks = await env.DB.prepare(
-    `SELECT id, url, secret, events FROM webhooks WHERE organization_id = ? AND active = 1 AND (form_id = ? OR form_id IS NULL)`,
-  )
-    .bind(evt.organizationId, evt.formId)
-    .all<{ id: string; url: string; secret: string; events: string }>();
+  /**
+   * Every row this delivery run writes, applied in one batch at the end.
+   *
+   * Per hook it used to be an insert and then one or two updates, each awaited
+   * before the next endpoint was even called. Order inside the batch is the
+   * order it was appended in, which the failure counter depends on: the
+   * increment has to land before the statement that reads it to auto-disable.
+   */
+  const writes: D1PreparedStatement[] = [];
 
-  for (const hook of hooks.results ?? []) {
+  for (const hook of hooksRes.results ?? []) {
     const events = JSON.parse(hook.events) as string[];
     const names = eventNames(evt.event);
     if (!events.some((e) => names.includes(e))) continue;
@@ -175,11 +201,13 @@ export async function deliverWebhookEvent(env: Bindings, evt: WebhookEvent): Pro
       }
     }
 
-    await env.DB.prepare(
-      `INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, message_json, attempt, status, response_status, last_error, next_retry_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-      .bind(
+    writes.push(
+      env.DB
+        .prepare(
+          `INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, message_json, attempt, status, response_status, last_error, next_retry_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
         deliveryId,
         hook.id,
         evt.event,
@@ -190,17 +218,17 @@ export async function deliverWebhookEvent(env: Bindings, evt: WebhookEvent): Pro
         status,
         responseStatus,
         lastError,
-        nextRetryAt,
-        Date.now(),
-      )
-      .run();
+          nextRetryAt,
+          Date.now(),
+        ),
+    );
 
     if (status === "failed" || status === "dead") {
-      await env.DB.prepare(
-        `UPDATE webhooks SET consecutive_failures = consecutive_failures + 1 WHERE id = ?`,
-      )
-        .bind(hook.id)
-        .run();
+      writes.push(
+        env.DB
+          .prepare(`UPDATE webhooks SET consecutive_failures = consecutive_failures + 1 WHERE id = ?`)
+          .bind(hook.id),
+      );
       /**
        * Stop delivering to an endpoint that has been gone for a day.
        *
@@ -209,15 +237,19 @@ export async function deliverWebhookEvent(env: Bindings, evt: WebhookEvent): Pro
        * continuing to retry every event forever is how a dead integration turns
        * into an outage report.
        */
-      await env.DB.prepare(
-        `UPDATE webhooks SET active = 0 WHERE id = ? AND consecutive_failures >= ?`,
-      )
-        .bind(hook.id, AUTO_DISABLE_AFTER)
-        .run();
+      writes.push(
+        env.DB
+          .prepare(`UPDATE webhooks SET active = 0 WHERE id = ? AND consecutive_failures >= ?`)
+          .bind(hook.id, AUTO_DISABLE_AFTER),
+      );
     } else {
-      await env.DB.prepare(`UPDATE webhooks SET consecutive_failures = 0 WHERE id = ?`).bind(hook.id).run();
+      writes.push(
+        env.DB.prepare(`UPDATE webhooks SET consecutive_failures = 0 WHERE id = ?`).bind(hook.id),
+      );
     }
   }
+
+  if (writes.length > 0) await env.DB.batch(writes);
 }
 
 /** Retry sweep — cron re-enqueues failed deliveries past next_retry_at. */
@@ -230,26 +262,32 @@ export async function retryFailedDeliveries(env: Bindings): Promise<number> {
     .bind(Date.now())
     .all<{ id: string; webhook_id: string; message_json: string | null; organization_id: string; form_id: string | null }>();
 
-  let n = 0;
-  for (const d of due.results ?? []) {
-    /**
-     * Re-enqueue the original message.
-     *
-     * This used to rebuild one from the delivery row and get it wrong twice
-     * over: it hardcoded `submission.completed` and dropped the submission id,
-     * so a retried abandonment was redelivered as a completion with no payload
-     * at all. `message_json` is the message that was actually sent.
-     */
-    const message = d.message_json ? (JSON.parse(d.message_json) as WebhookEvent) : null;
-    await env.DB.prepare(`DELETE FROM webhook_deliveries WHERE id = ?`).bind(d.id).run();
-    if (!message) {
-      // A delivery from before message_json existed. Its event cannot be
-      // reconstructed honestly, so it is dropped rather than redelivered as
-      // something it was not.
-      continue;
-    }
-    await env.Q_WEBHOOKS.send({ ...message, retryOfDeliveryId: d.id });
-    n++;
-  }
-  return n;
+  const rows = due.results ?? [];
+  if (rows.length === 0) return 0;
+
+  /**
+   * Re-enqueue the original message.
+   *
+   * This used to rebuild one from the delivery row and get it wrong twice
+   * over: it hardcoded `submission.completed` and dropped the submission id,
+   * so a retried abandonment was redelivered as a completion with no payload
+   * at all. `message_json` is the message that was actually sent.
+   */
+  const retries = rows.flatMap((d) => {
+    // A delivery from before message_json existed. Its event cannot be
+    // reconstructed honestly, so it is dropped rather than redelivered as
+    // something it was not.
+    if (!d.message_json) return [];
+    const message = JSON.parse(d.message_json) as WebhookEvent;
+    return [{ body: { ...message, retryOfDeliveryId: d.id } }];
+  });
+
+  // Fifty deliveries were a hundred awaits: a delete and an enqueue each.
+  await env.DB.prepare(
+    `DELETE FROM webhook_deliveries WHERE id IN (${rows.map(() => "?").join(",")})`,
+  )
+    .bind(...rows.map((d) => d.id))
+    .run();
+  if (retries.length > 0) await env.Q_WEBHOOKS.sendBatch(retries);
+  return retries.length;
 }

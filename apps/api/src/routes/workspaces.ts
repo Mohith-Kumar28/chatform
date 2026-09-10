@@ -95,14 +95,21 @@ workspacesRouter.get(
  */
 async function freeSlug(env: Bindings, orgId: string, name: string, excludeId?: string): Promise<string | null> {
   const base = workspaceSlug(name);
+  /**
+   * Every slug that could collide, in one query rather than one per candidate:
+   * counting up used to mean up to fifty sequential round trips to D1 to answer
+   * a question the organization's own slug list already contains.
+   */
+  const taken = await env.DB.prepare(
+    `SELECT slug FROM workspaces
+      WHERE organization_id = ?1 AND id IS NOT ?2 AND (slug = ?3 OR slug LIKE ?3 || '-%')`,
+  )
+    .bind(orgId, excludeId ?? null, base)
+    .all<{ slug: string }>();
+  const used = new Set((taken.results ?? []).map((r) => r.slug));
   for (let n = 1; n <= 50; n++) {
     const candidate = n === 1 ? base : `${base}-${n}`;
-    const clash = await env.DB.prepare(
-      `SELECT 1 AS n FROM workspaces WHERE organization_id = ? AND slug = ? AND id IS NOT ? LIMIT 1`,
-    )
-      .bind(orgId, candidate, excludeId ?? null)
-      .first<{ n: number }>();
-    if (!clash) return candidate;
+    if (!used.has(candidate)) return candidate;
   }
   return null;
 }
@@ -159,9 +166,15 @@ workspacesRouter.patch(
     const userId = c.get("userId")!;
     const id = c.req.param("id");
     const { name } = c.req.valid("json");
-    const row = await c.env.DB.prepare(`SELECT id, created_at FROM workspaces WHERE id = ? AND organization_id = ?`)
+    // The form count comes back with the row rather than in a second trip after
+    // the rename: it cannot change under a statement that only touches names.
+    const row = await c.env.DB.prepare(
+      `SELECT w.id, w.created_at,
+              (SELECT COUNT(*) FROM forms f WHERE f.workspace_id = w.id AND f.deleted_at IS NULL) AS form_count
+         FROM workspaces w WHERE w.id = ? AND w.organization_id = ?`,
+    )
       .bind(id, orgId)
-      .first<{ id: string; created_at: number }>();
+      .first<{ id: string; created_at: number; form_count: number }>();
     if (!row) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
     const slug = await freeSlug(c.env, orgId, name, id);
     if (!slug) return c.json({ error: { code: "slug_unavailable", message: "Pick a different name" } }, 409);
@@ -177,12 +190,7 @@ workspacesRouter.patch(
       resourceId: id,
       meta: { name: name.trim(), slug },
     }).catch(() => {});
-    const count = await c.env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM forms WHERE workspace_id = ? AND deleted_at IS NULL`,
-    )
-      .bind(id)
-      .first<{ n: number }>();
-    return c.json({ id, name: name.trim(), slug, formCount: count?.n ?? 0, createdAt: row.created_at });
+    return c.json({ id, name: name.trim(), slug, formCount: row.form_count, createdAt: row.created_at });
   },
 );
 
@@ -197,9 +205,17 @@ workspacesRouter.delete(
     const orgId = c.get("orgId")!;
     const userId = c.get("userId")!;
     const id = c.req.param("id");
-    const row = await c.env.DB.prepare(`SELECT id, name FROM workspaces WHERE id = ? AND organization_id = ?`)
-      .bind(id, orgId)
-      .first<{ id: string; name: string }>();
+    /**
+     * The row, the organization's workspace count and this workspace's form
+     * count in one round trip: none of the three depends on another, and the
+     * two refusals below need all of them.
+     */
+    const [rowRes, remainingRes, formsRes] = (await c.env.DB.batch([
+      c.env.DB.prepare(`SELECT id, name FROM workspaces WHERE id = ? AND organization_id = ?`).bind(id, orgId),
+      c.env.DB.prepare(`SELECT COUNT(*) AS n FROM workspaces WHERE organization_id = ?`).bind(orgId),
+      c.env.DB.prepare(`SELECT COUNT(*) AS n FROM forms WHERE workspace_id = ? AND deleted_at IS NULL`).bind(id),
+    ])) as [D1Result<{ id: string; name: string }>, D1Result<{ n: number }>, D1Result<{ n: number }>];
+    const row = (rowRes.results ?? [])[0];
     if (!row) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
 
     /**
@@ -215,20 +231,14 @@ workspacesRouter.delete(
      * the last one stays. Better Auth's teams feature guards its own last team
      * the same way, for the same reason.
      */
-    const remaining = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM workspaces WHERE organization_id = ?`)
-      .bind(orgId)
-      .first<{ n: number }>();
+    const remaining = (remainingRes.results ?? [])[0];
     if ((remaining?.n ?? 0) <= 1) {
       return c.json(
         { error: { code: "last_workspace", message: "An organization needs at least one workspace." } },
         409,
       );
     }
-    const forms = await c.env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM forms WHERE workspace_id = ? AND deleted_at IS NULL`,
-    )
-      .bind(id)
-      .first<{ n: number }>();
+    const forms = (formsRes.results ?? [])[0];
     if ((forms?.n ?? 0) > 0) {
       return c.json(
         {

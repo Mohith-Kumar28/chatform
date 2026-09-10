@@ -1,7 +1,7 @@
 import type { Bindings } from "../env.js";
 import { pruneIdempotencyKeys } from "./idempotency.js";
 import { knowledgeStore } from "./knowledge/index.js";
-import { enqueue } from "./knowledge-service.js";
+import { enqueueMany } from "./knowledge-service.js";
 
 /**
  * Periodic work, from the cron that already runs every five minutes.
@@ -39,21 +39,35 @@ export async function sweepExpiredResponses(env: Bindings, limit = 200): Promise
     }>();
 
   const { finalizeResponse } = await import("./submissions.js");
-  let n = 0;
-  for (const row of due.results ?? []) {
+  const rows = due.results ?? [];
+
+  /**
+   * Every due response's answers in one query, not one query per response.
+   *
+   * The sweep takes two hundred at a time, and finalising each one already
+   * costs writes it cannot share; reading their answers one at a time added two
+   * hundred round trips before the first of them was finalised.
+   */
+  const answersBySub = new Map<string, Record<string, unknown>>(rows.map((r) => [r.id, {}]));
+  if (rows.length > 0) {
     const answers = await env.DB.prepare(
-      `SELECT block_ref, value_json FROM submission_answers WHERE submission_id = ?`,
+      `SELECT submission_id, block_ref, value_json FROM submission_answers
+        WHERE submission_id IN (${rows.map(() => "?").join(",")})`,
     )
-      .bind(row.id)
-      .all<{ block_ref: string; value_json: string }>();
-    const map: Record<string, unknown> = {};
+      .bind(...rows.map((r) => r.id))
+      .all<{ submission_id: string; block_ref: string; value_json: string }>();
     for (const a of answers.results ?? []) {
       try {
-        map[a.block_ref] = JSON.parse(a.value_json);
+        answersBySub.get(a.submission_id)![a.block_ref] = JSON.parse(a.value_json);
       } catch {
         // one unparseable answer must not stop the sweep
       }
     }
+  }
+
+  let n = 0;
+  for (const row of rows) {
+    const map = answersBySub.get(row.id)!;
 
     const { changed } = await finalizeResponse(
       {
@@ -130,23 +144,36 @@ export async function sweepPartialNotifications(env: Bindings, limit = 200): Pro
       is_test: number;
     }>();
 
-  let n = 0;
-  for (const row of due.results ?? []) {
-    await env.Q_WEBHOOKS.send({
-      event: "response.partial",
-      organizationId: row.organization_id,
-      formId: row.form_id,
-      submissionId: row.id,
-      ...(row.session_id ? { sessionId: row.session_id } : {}),
-      source: row.source,
-      isTest: false,
-    });
-    await env.DB.prepare(`UPDATE submissions SET partial_notified_at = ? WHERE id = ?`)
-      .bind(now, row.id)
+  const rows = due.results ?? [];
+  /**
+   * A hundred at a time: the queue's own batch ceiling, and the unit the stamp
+   * follows so a failure part-way through leaves the responses it already
+   * notified marked as notified. Per row this was two awaits — an enqueue and
+   * an update — for as many as two hundred rows.
+   */
+  const QUEUE_BATCH = 100;
+  for (let i = 0; i < rows.length; i += QUEUE_BATCH) {
+    const slice = rows.slice(i, i + QUEUE_BATCH);
+    await env.Q_WEBHOOKS.sendBatch(
+      slice.map((row) => ({
+        body: {
+          event: "response.partial",
+          organizationId: row.organization_id,
+          formId: row.form_id,
+          submissionId: row.id,
+          ...(row.session_id ? { sessionId: row.session_id } : {}),
+          source: row.source,
+          isTest: false,
+        },
+      })),
+    );
+    await env.DB.prepare(
+      `UPDATE submissions SET partial_notified_at = ? WHERE id IN (${slice.map(() => "?").join(",")})`,
+    )
+      .bind(now, ...slice.map((r) => r.id))
       .run();
-    n++;
   }
-  return n;
+  return rows.length;
 }
 
 /**
@@ -185,18 +212,57 @@ export async function sweepFollowUps(env: Bindings, limit = 100): Promise<number
   const rows = due.results ?? [];
   if (rows.length === 0) return 0;
 
-  const { isSuppressed } = await import("./followups.js");
+  const { isSuppressedIn } = await import("./followups.js");
   const { getEntitlements, checkQuota } = await import("./entitlements.js");
   const { can } = await import("@repo/entitlements");
 
-  let sent = 0;
-  for (const row of rows) {
-    const skip = async (reason: string) => {
-      await env.DB.prepare(`UPDATE followups SET status = 'skipped', reason = ?2 WHERE id = ?1`)
-        .bind(row.id, reason)
-        .run();
-    };
+  /**
+   * Every precondition that is not per-row, resolved once per organization.
+   *
+   * A sweep of a hundred follow-ups is usually a handful of organizations, and
+   * this used to ask each of them the same four questions once per row —
+   * entitlements, the email quota, the shared-domain cap, the sending domain —
+   * each an await of its own. Suppressions are per address, so they come back
+   * in a single query for the whole sweep rather than one lookup per row.
+   */
+  const suppressed = await isSuppressedIn(
+    env,
+    rows.map((r) => ({ orgId: r.organization_id, address: r.address })),
+  );
+  const orgChecks = new Map<string, Promise<{ reason: string | null }>>();
+  const checkOrg = (orgId: string) => {
+    const cached = orgChecks.get(orgId);
+    if (cached) return cached;
+    const pending = (async () => {
+      const ent = await getEntitlements(env, orgId);
+      if (!can(ent, "followup_email")) return { reason: "not_entitled" };
+      const quota = await checkQuota(env, orgId, "emails_sent", ent);
+      if (!quota.ok) return { reason: "email_quota" };
+      /**
+       * The shared-domain cap. It only applies while the customer is sending
+       * from our domain — once they have verified their own, their volume is
+       * their own reputation to spend.
+       */
+      if (!(await hasVerifiedSendingDomain(env, orgId))) {
+        const shared = await checkQuota(env, orgId, "followups_shared_domain", ent);
+        if (!shared.ok) return { reason: "shared_domain_cap" };
+      }
+      return { reason: null };
+    })();
+    orgChecks.set(orgId, pending);
+    return pending;
+  };
 
+  /** Row ids to skip, by the reason they are being skipped. */
+  const skips = new Map<string, string[]>();
+  const skip = (id: string, reason: string) => {
+    const list = skips.get(reason);
+    if (list) list.push(id);
+    else skips.set(reason, [id]);
+  };
+  const sendable: typeof rows = [];
+
+  for (const row of rows) {
     /**
      * The race this exists for: the respondent finished, or was screened out,
      * in the window between scheduling and now. `cancelFollowUps` already runs
@@ -204,63 +270,66 @@ export async function sweepFollowUps(env: Bindings, limit = 100): Promise<number
      * somebody who has already completed the form.
      */
     if (row.sub_status !== "abandoned" && row.sub_status !== "in_progress") {
-      await skip("response_settled");
+      skip(row.id, "response_settled");
       continue;
     }
-
-    if (await isSuppressed(env, row.organization_id, row.address)) {
-      await skip("suppressed");
+    if (suppressed.has(`${row.organization_id}|${row.address.toLowerCase()}`)) {
+      skip(row.id, "suppressed");
       continue;
     }
-
-    const ent = await getEntitlements(env, row.organization_id);
-    if (!can(ent, "followup_email")) {
-      await skip("not_entitled");
+    const org = await checkOrg(row.organization_id);
+    if (org.reason) {
+      skip(row.id, org.reason);
       continue;
     }
-
-    const quota = await checkQuota(env, row.organization_id, "emails_sent", ent);
-    if (!quota.ok) {
-      await skip("email_quota");
-      continue;
-    }
-
-    /**
-     * The shared-domain cap. It only applies while the customer is sending
-     * from our domain — once they have verified their own, their volume is
-     * their own reputation to spend.
-     */
-    if (!(await hasVerifiedSendingDomain(env, row.organization_id))) {
-      const shared = await checkQuota(env, row.organization_id, "followups_shared_domain", ent);
-      if (!shared.ok) {
-        await skip("shared_domain_cap");
-        continue;
-      }
-    }
-
-    await env.Q_EMAIL.send({ kind: "followup", followupId: row.id });
-    /**
-     * `queued`, not `sent` — the message has been handed to a queue, which is
-     * not the same as having reached anybody.
-     *
-     * Marketing mail takes the Resend path or no path at all (see `MailClass`),
-     * and it sends from a different subdomain than transactional mail does. An
-     * unverified sending domain therefore fails every follow-up while leaving
-     * password resets working, five retries deep into the dead-letter queue —
-     * and the row used to say `sent` throughout. The results table is about to
-     * show this state to authors, so it has to be true: `runFollowUpJob` moves
-     * it to `sent` once the send actually returns, and the queue consumer moves
-     * it to `failed` when the retries are exhausted.
-     *
-     * Safe against a double send: the query above selects `status = 'scheduled'`
-     * only, so a `queued` row is never picked up again.
-     */
-    await env.DB.prepare(`UPDATE followups SET status = 'queued', reason = NULL WHERE id = ?1`)
-      .bind(row.id)
-      .run();
-    sent++;
+    sendable.push(row);
   }
-  return sent;
+
+  // One statement per reason, however many rows share it.
+  if (skips.size > 0) {
+    await env.DB.batch(
+      [...skips].map(([reason, ids]) =>
+        env.DB
+          .prepare(
+            `UPDATE followups SET status = 'skipped', reason = ? WHERE id IN (${ids.map(() => "?").join(",")})`,
+          )
+          .bind(reason, ...ids),
+      ),
+    );
+  }
+
+  /**
+   * Enqueued and marked in chunks, in that order.
+   *
+   * `queued`, not `sent` — the message has been handed to a queue, which is
+   * not the same as having reached anybody.
+   *
+   * Marketing mail takes the Resend path or no path at all (see `MailClass`),
+   * and it sends from a different subdomain than transactional mail does. An
+   * unverified sending domain therefore fails every follow-up while leaving
+   * password resets working, five retries deep into the dead-letter queue —
+   * and the row used to say `sent` throughout. The results table is about to
+   * show this state to authors, so it has to be true: `runFollowUpJob` moves
+   * it to `sent` once the send actually returns, and the queue consumer moves
+   * it to `failed` when the retries are exhausted.
+   *
+   * Safe against a double send: the query above selects `status = 'scheduled'`
+   * only, so a `queued` row is never picked up again. The chunk is what keeps
+   * that true if the sweep dies mid-way — a message is enqueued and its row
+   * marked within the same small group, rather than every message going out
+   * before the first row is marked.
+   */
+  const SEND_CHUNK = 25;
+  for (let i = 0; i < sendable.length; i += SEND_CHUNK) {
+    const slice = sendable.slice(i, i + SEND_CHUNK);
+    await env.Q_EMAIL.sendBatch(slice.map((row) => ({ body: { kind: "followup", followupId: row.id } })));
+    await env.DB.prepare(
+      `UPDATE followups SET status = 'queued', reason = NULL WHERE id IN (${slice.map(() => "?").join(",")})`,
+    )
+      .bind(...slice.map((r) => r.id))
+      .run();
+  }
+  return sendable.length;
 }
 
 /**
@@ -336,29 +405,52 @@ export async function sweepDeletedFormKnowledge(env: Bindings, limit = 20): Prom
   const store = knowledgeStore(env);
   let cleared = 0;
 
+  /**
+   * Which files belong to which of these forms, for all of them at once.
+   *
+   * Per form this was a query of its own, and then one `DELETE` per file on top
+   * — twenty forms with ten sources each was hundreds of round trips to tear
+   * down a few dozen rows.
+   */
+  const fileRows = await env.DB.prepare(
+    `SELECT s.form_id AS form_id, f.id AS id, f.r2_key AS r2_key
+       FROM knowledge_sources s JOIN files f ON f.id = s.file_id
+      WHERE s.form_id IN (${formIds.map(() => "?").join(",")})`,
+  )
+    .bind(...formIds)
+    .all<{ form_id: string; id: string; r2_key: string }>();
+  const filesByForm = new Map<string, { id: string; r2_key: string }[]>();
+  for (const row of fileRows.results ?? []) {
+    const list = filesByForm.get(row.form_id);
+    if (list) list.push(row);
+    else filesByForm.set(row.form_id, [row]);
+  }
+
   for (const formId of formIds) {
     try {
       await store.deleteForm(formId);
+      const files = filesByForm.get(formId) ?? [];
 
-      const { results: files } = await env.DB.prepare(
-        `SELECT f.id AS id, f.r2_key AS r2_key
-           FROM knowledge_sources s JOIN files f ON f.id = s.file_id
-          WHERE s.form_id = ?`,
-      )
-        .bind(formId)
-        .all<{ id: string; r2_key: string }>();
+      await Promise.all(
+        files.map((file) =>
+          env.R2.delete(file.r2_key).catch((err: unknown) =>
+            console.error("knowledge_sweep_r2_failed", file.id, err),
+          ),
+        ),
+      );
 
-      for (const file of files ?? []) {
-        await env.R2.delete(file.r2_key).catch((err: unknown) =>
-          console.error("knowledge_sweep_r2_failed", file.id, err),
-        );
-      }
-
-      await env.DB.prepare(`DELETE FROM knowledge_sources WHERE form_id = ?`).bind(formId).run();
-
-      for (const file of files ?? []) {
-        await env.DB.prepare(`DELETE FROM files WHERE id = ?`).bind(file.id).run();
-      }
+      // The sources first, then the files that backed them — `files` is the only
+      // index of what is in R2, so it goes last. One batch, still in that order.
+      await env.DB.batch([
+        env.DB.prepare(`DELETE FROM knowledge_sources WHERE form_id = ?`).bind(formId),
+        ...(files.length > 0
+          ? [
+              env.DB
+                .prepare(`DELETE FROM files WHERE id IN (${files.map(() => "?").join(",")})`)
+                .bind(...files.map((f) => f.id)),
+            ]
+          : []),
+      ]);
       cleared += 1;
     } catch (err) {
       // One form's teardown failing must not stop the others'.
@@ -394,7 +486,7 @@ export async function sweepStuckKnowledgeIngest(env: Bindings, limit = 25): Prom
     .all<{ id: string }>();
 
   const ids = (results ?? []).map((r) => r.id);
-  for (const id of ids) await enqueue(env, id);
+  await enqueueMany(env, ids);
   return ids.length;
 }
 

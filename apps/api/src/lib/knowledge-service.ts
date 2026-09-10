@@ -138,6 +138,24 @@ export async function enqueue(env: Bindings, sourceId: string): Promise<void> {
 }
 
 /**
+ * The same thing for a list, in one call per hundred rather than one per source.
+ *
+ * A hundred is the queue's own batch ceiling. Failure is reported the same way:
+ * the rows stay `pending` and the next sweep tries again.
+ */
+export async function enqueueMany(env: Bindings, sourceIds: string[]): Promise<void> {
+  const QUEUE_BATCH = 100;
+  for (let i = 0; i < sourceIds.length; i += QUEUE_BATCH) {
+    const slice = sourceIds.slice(i, i + QUEUE_BATCH);
+    try {
+      await env.Q_KNOWLEDGE.sendBatch(slice.map((sourceId) => ({ body: { sourceId } })));
+    } catch (err) {
+      console.error("knowledge_enqueue_failed", slice.join(","), err);
+    }
+  }
+}
+
+/**
  * Do the work for one source: read it, index it, record what happened.
  *
  * Never throws for a source it simply could not read — that is a `failed` row

@@ -83,9 +83,11 @@ export async function computeFollowUpStats(
    * One pass per shape rather than one row per follow-up.
    *
    * A busy form has tens of thousands of these, and the page needs four numbers
-   * and a short series. Everything below aggregates in SQLite.
+   * and a short series. Everything below aggregates in SQLite, and all five
+   * statements go over in one `DB.batch()` — they used to be four parallel
+   * requests plus one more awaited after them.
    */
-  const [totals, steps, daily, holdout] = await Promise.all([
+  const [totalsRes, stepsRes, dailyRes, holdoutRes, treatedRes] = (await env.DB.batch([
     env.DB.prepare(
       `SELECT
          COUNT(*) AS total,
@@ -99,8 +101,7 @@ export async function computeFollowUpStats(
          SUM(CASE WHEN recovered_at IS NOT NULL THEN 1 ELSE 0 END) AS recovered
        FROM followups WHERE form_id = ?`,
     )
-      .bind(formId)
-      .first<{ total: number; sent: number | null; pending: number | null; clicked: number | null; recovered: number | null }>(),
+      .bind(formId),
 
     env.DB.prepare(
       `SELECT step,
@@ -109,8 +110,7 @@ export async function computeFollowUpStats(
               SUM(CASE WHEN recovered_at IS NOT NULL THEN 1 ELSE 0 END) AS recovered
          FROM followups WHERE form_id = ? GROUP BY step ORDER BY step`,
     )
-      .bind(formId)
-      .all<{ step: number; sent: number | null; clicked: number | null; recovered: number | null }>(),
+      .bind(formId),
 
     /**
      * Two dates in one row would be wrong: a message sent on Monday and acted
@@ -127,8 +127,7 @@ export async function computeFollowUpStats(
            FROM followups WHERE form_id = ?1 AND recovered_at IS NOT NULL AND recovered_at >= ?2
        ) GROUP BY day ORDER BY day`,
     )
-      .bind(formId, Date.now() - days * DAY_MS)
-      .all<{ day: string; sent: number; recovered: number }>(),
+      .bind(formId, Date.now() - days * DAY_MS),
 
     /**
      * The control arm.
@@ -144,9 +143,36 @@ export async function computeFollowUpStats(
          JOIN submissions s ON s.id = fu.submission_id
         WHERE fu.form_id = ? AND fu.status = 'holdout'`,
     )
-      .bind(formId)
-      .first<{ people: number; recovered: number }>(),
-  ]);
+      .bind(formId),
+
+    /**
+     * Lift, measured per *person* on both sides.
+     *
+     * The treated arm's denominator is the number of people who were mailed at
+     * all, not the number of messages: someone who got three reminders is one
+     * person, and dividing recoveries by messages would deflate the treated rate
+     * by roughly the length of the sequence while the control side counted people
+     * — comparing two different units and calling the difference an effect.
+     */
+    env.DB.prepare(
+      `SELECT COUNT(DISTINCT submission_id) AS people FROM followups
+        WHERE form_id = ? AND status = 'sent'`,
+    ).bind(formId),
+    // Typed as a tuple because `batch()` returns a positional array: the names
+    // above are the only thing keeping a statement matched to its shape.
+  ])) as [
+    D1Result<{ total: number; sent: number | null; pending: number | null; clicked: number | null; recovered: number | null }>,
+    D1Result<{ step: number; sent: number | null; clicked: number | null; recovered: number | null }>,
+    D1Result<{ day: string; sent: number; recovered: number }>,
+    D1Result<{ people: number; recovered: number }>,
+    D1Result<{ people: number }>,
+  ];
+
+  const totals = (totalsRes.results ?? [])[0];
+  const steps = stepsRes.results ?? [];
+  const daily = dailyRes.results ?? [];
+  const holdout = (holdoutRes.results ?? [])[0];
+  const treatedPeople = (treatedRes.results ?? [])[0];
 
   const sent = totals?.sent ?? 0;
   const clicked = totals?.clicked ?? 0;
@@ -162,21 +188,6 @@ export async function computeFollowUpStats(
         }
       : null;
 
-  /**
-   * Lift, measured per *person* on both sides.
-   *
-   * The treated arm's denominator is the number of people who were mailed at
-   * all, not the number of messages: someone who got three reminders is one
-   * person, and dividing recoveries by messages would deflate the treated rate
-   * by roughly the length of the sequence while the control side counted people
-   * — comparing two different units and calling the difference an effect.
-   */
-  const treatedPeople = await env.DB.prepare(
-    `SELECT COUNT(DISTINCT submission_id) AS people FROM followups
-      WHERE form_id = ? AND status = 'sent'`,
-  )
-    .bind(formId)
-    .first<{ people: number }>();
   const treatedRate = pct(recovered, treatedPeople?.people ?? 0);
 
   const liftPoints =
@@ -192,13 +203,13 @@ export async function computeFollowUpStats(
     recovered,
     clickRate: pct(clicked, sent),
     recoveryRate: pct(recovered, sent),
-    byStep: (steps.results ?? []).map((r) => ({
+    byStep: steps.map((r) => ({
       step: r.step,
       sent: r.sent ?? 0,
       clicked: r.clicked ?? 0,
       recovered: r.recovered ?? 0,
     })),
-    daily: fillDays(daily.results ?? [], days),
+    daily: fillDays(daily, days),
     holdout: holdoutStats,
     liftPoints,
   };

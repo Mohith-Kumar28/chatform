@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Clock,
   Download,
@@ -30,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogBody, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDateTime, formatDuration, formatRelative, formatShortDateTime, isPast } from "@/lib/format";
 import { useClientValue } from "@/hooks/use-client-value";
@@ -70,9 +73,42 @@ import { cn } from "@/lib/utils";
  * the old behaviour of waiting for the refetch rather than a blank table.
  */
 export function withoutSubmissions(payload: unknown, ids: ReadonlySet<string>): unknown {
-  const list = payload as { submissions?: SubmissionRecord[] } | undefined;
+  const list = payload as
+    | {
+        submissions?: SubmissionRecord[];
+        total?: number;
+        counts?: { total: number; completed: number; partial: number };
+      }
+    | undefined;
   if (!list?.submissions) return payload;
-  return { ...list, submissions: list.submissions.filter((s) => !ids.has(s.id)) };
+  const gone = list.submissions.filter((s) => ids.has(s.id));
+  /*
+    The counters come down with the rows.
+
+    The footer reads "1–25 of 312" from `total` and the tabs badge from
+    `counts`; leaving them alone would have the page say "of 312" over 311 rows
+    until the refetch lands, which is the same lie the analytics invalidation
+    below exists to prevent.
+  */
+  const completedGone = gone.filter((s) => s.status === "completed").length;
+  const partialGone = gone.filter((s) =>
+    ["abandoned", "in_progress", "disqualified"].includes(s.status),
+  ).length;
+  const down = (n: number, by: number) => Math.max(0, n - by);
+  return {
+    ...list,
+    submissions: list.submissions.filter((s) => !ids.has(s.id)),
+    ...(typeof list.total === "number" ? { total: down(list.total, gone.length) } : {}),
+    ...(list.counts
+      ? {
+          counts: {
+            total: down(list.counts.total, gone.length),
+            completed: down(list.counts.completed, completedGone),
+            partial: down(list.counts.partial, partialGone),
+          },
+        }
+      : {}),
+  };
 }
 
 export interface SubmissionRecord {
@@ -402,6 +438,87 @@ function FollowUpDetail({ row }: { row: SubmissionRecord }) {
  */
 export type ResultColumn = Pick<Block, "ref" | "title" | "type"> & { retired?: boolean };
 
+/** The rows-per-page choices. 200 is the endpoint's ceiling and not offered. */
+const ROWS_PER_PAGE = [25, 50, 100] as const;
+
+/**
+ * Where in the table you are, and how to move.
+ *
+ * Rendered whenever the table is bigger than the *smallest* page — not bigger
+ * than the current one. Hiding it whenever everything fit on the page in front
+ * of you sounds right and is a trap: choosing 100 rows on a table of 48 made
+ * the control that had just been used disappear, with no way back to 25. On a
+ * form with nine responses there is genuinely nothing to page and nothing to
+ * choose, so it stays hidden there.
+ *
+ * The range reads "26–50 of 312" rather than "page 2 of 13" because the numbers
+ * an author is looking for are response counts, not page ordinals — and because
+ * changing the page size renumbers pages while leaving the range meaningful.
+ */
+function Pager({
+  offset,
+  limit,
+  total,
+  loading,
+  onOffset,
+  onLimit,
+}: {
+  offset: number;
+  limit: number;
+  total: number;
+  loading?: boolean;
+  onOffset: (offset: number) => void;
+  onLimit: (limit: number) => void;
+}) {
+  if (total <= ROWS_PER_PAGE[0] && offset === 0) return null;
+  const from = total === 0 ? 0 : offset + 1;
+  const to = Math.min(total, offset + limit);
+  return (
+    <div className="flex items-center gap-2">
+      <label className="text-muted-foreground text-micro flex items-center gap-1.5">
+        Rows
+        <Select value={String(limit)} onValueChange={(v) => onLimit(Number(v))}>
+          <SelectTrigger size="sm" className="h-7 w-[4.5rem] rounded-full text-xs" aria-label="Rows per page">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ROWS_PER_PAGE.map((n) => (
+              <SelectItem key={n} value={String(n)}>
+                {n}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </label>
+      <span className="text-muted-foreground text-caption tabular whitespace-nowrap">
+        {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}
+      </span>
+      <div className="flex items-center gap-0.5">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          shape="pill"
+          aria-label="Previous page"
+          disabled={offset === 0 || loading}
+          onClick={() => onOffset(Math.max(0, offset - limit))}
+        >
+          <ChevronLeft className="size-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          shape="pill"
+          aria-label="Next page"
+          disabled={offset + limit >= total || loading}
+          onClick={() => onOffset(offset + limit)}
+        >
+          <ChevronRight className="size-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * The mark on a question that is no longer part of the form.
  *
@@ -434,12 +551,29 @@ export function SubmissionsTable({
    * of width spent saying that a feature is switched off.
    */
   showFollowUp = false,
+  /**
+   * Which slice of the table this is, and how to ask for another.
+   *
+   * The list is paged on the server — a form with three thousand responses used
+   * to render the newest fifty and silently drop the rest — so the table has to
+   * say where it is and offer the page either side of it. Absent, the footer is
+   * just the scroll hint, which is what every other caller wants.
+   */
+  page,
 }: {
   formId: string;
   rows: SubmissionRecord[];
   columns: ResultColumn[];
   filters?: React.ReactNode;
   showFollowUp?: boolean;
+  page?: {
+    offset: number;
+    limit: number;
+    total: number;
+    loading?: boolean;
+    onOffset: (offset: number) => void;
+    onLimit: (limit: number) => void;
+  };
 }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   /**
@@ -568,10 +702,19 @@ export function SubmissionsTable({
       usual case — this is not what makes the click feel slow.
     */
     await queryClient.cancelQueries({ queryKey: submissionsKey });
-    const snapshot = queryClient.getQueryData(submissionsKey);
+    /*
+      `setQueriesData`, not `setQueryData`: the list is keyed by its page now
+      — `[url, { status, limit, offset }]` — so writing to the bare key would
+      update an entry nothing is reading and leave the deleted rows on screen.
+      The bare key still *matches* every page, which is what makes one call
+      enough.
+    */
+    const snapshot = queryClient.getQueriesData({ queryKey: submissionsKey });
     const previouslyPicked = picked;
 
-    queryClient.setQueryData(submissionsKey, (old: unknown) => withoutSubmissions(old, doomed));
+    queryClient.setQueriesData({ queryKey: submissionsKey }, (old: unknown) =>
+      withoutSubmissions(old, doomed),
+    );
     setPicked(new Set());
     // The drawer cannot stay open over a row that is no longer there.
     if (openId && doomed.has(openId)) setOpenId(null);
@@ -586,7 +729,7 @@ export function SubmissionsTable({
         retry from, having to pick all three again to find out whether the
         second attempt works.
       */
-      queryClient.setQueryData(submissionsKey, snapshot);
+      for (const [key, data] of snapshot) queryClient.setQueryData(key, data);
       setPicked(previouslyPicked);
       toast.error("Could not delete", { description: "Nothing was removed — try again." });
     } finally {
@@ -797,9 +940,12 @@ export function SubmissionsTable({
         </div>
       </div>
 
-      <p className="text-muted-foreground text-micro px-0.5">
-        Scroll sideways for the rest of the columns. Click a row to read the whole response.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
+        <p className="text-muted-foreground text-micro">
+          Scroll sideways for the rest of the columns. Click a row to read the whole response.
+        </p>
+        {page && <Pager {...page} />}
+      </div>
     </div>
   );
 

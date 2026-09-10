@@ -84,18 +84,20 @@ export async function upsertFeed(
     )
       .bind(JSON.stringify(config), hash, now, existing.id)
       .run();
-  } else {
-    await env.DB.prepare(
-      `INSERT INTO integrations
-         (id, organization_id, form_id, provider, config_json, status, secret_hash, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'connected', ?, ?, ?)`,
-    )
-      .bind(crypto.randomUUID(), form.organization_id, form.id, FEED_PROVIDER, JSON.stringify(config), hash, now, now)
-      .run();
+    // Returned from what was just written rather than read back out of D1: a
+    // third round trip to be told the row we authored says what we authored.
+    return { id: existing.id, status: "connected", created_at: existing.created_at, config, token };
   }
 
-  const saved = (await readFeed(env, form.id))!;
-  return { ...saved, token };
+  const id = crypto.randomUUID();
+  await env.DB.prepare(
+    `INSERT INTO integrations
+       (id, organization_id, form_id, provider, config_json, status, secret_hash, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'connected', ?, ?, ?)`,
+  )
+    .bind(id, form.organization_id, form.id, FEED_PROVIDER, JSON.stringify(config), hash, now, now)
+    .run();
+  return { id, status: "connected", created_at: now, config, token };
 }
 
 export async function deleteFeed(env: Bindings, formId: string): Promise<void> {

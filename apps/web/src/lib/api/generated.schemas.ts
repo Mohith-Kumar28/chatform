@@ -1539,6 +1539,11 @@ status?: GetApiFormsByIdSubmissionsStatus;
  * @maximum 200
  */
 limit?: number;
+/**
+ * @minimum 0
+ * @maximum 9007199254740991
+ */
+offset?: number;
 };
 
 export type GetApiFormsByIdSubmissionsStatus = typeof GetApiFormsByIdSubmissionsStatus[keyof typeof GetApiFormsByIdSubmissionsStatus];
@@ -1547,6 +1552,7 @@ export type GetApiFormsByIdSubmissionsStatus = typeof GetApiFormsByIdSubmissions
 export const GetApiFormsByIdSubmissionsStatus = {
   all: 'all',
   completed: 'completed',
+  partial: 'partial',
   disqualified: 'disqualified',
   abandoned: 'abandoned',
   in_progress: 'in_progress',
@@ -1602,9 +1608,19 @@ export type GetApiFormsByIdSubmissions200RetiredColumnsItem = {
   [key: string]: unknown;
 };
 
+export type GetApiFormsByIdSubmissions200Counts = {
+  total: number;
+  completed: number;
+  partial: number;
+};
+
 export type GetApiFormsByIdSubmissions200 = {
   submissions: GetApiFormsByIdSubmissions200SubmissionsItem[];
   retiredColumns: GetApiFormsByIdSubmissions200RetiredColumnsItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  counts: GetApiFormsByIdSubmissions200Counts;
 };
 
 export type DeleteApiFormsByIdSubmissionsBody = {

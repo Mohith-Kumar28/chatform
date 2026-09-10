@@ -91,33 +91,65 @@ export async function findIdentityHistory(
   currentSessionId: string,
 ): Promise<IdentityHistory> {
   try {
-    const [finishedRow, openRow] = await Promise.all([
-      env.DB.prepare(
-        `SELECT id, completed_at, status, json_extract(meta, '$.endingRef') AS ending_ref
-           FROM submissions
-          WHERE form_id = ?1 AND respondent_provider = ?2 AND respondent_subject = ?3
-            AND status IN ('completed', 'disqualified') AND is_test = 0
-            AND (session_id IS NULL OR session_id != ?4)
-          ORDER BY completed_at DESC LIMIT 1`,
-      )
-        .bind(formId, identity.provider, identity.subject, currentSessionId)
-        .first<{ id: string; completed_at: number | null; status: string; ending_ref: string | null }>(),
+    /**
+     * Both halves, answers included, in one round trip.
+     *
+     * The answers used to be a third query awaited after whichever row won —
+     * and on the sign-in path, where a respondent is waiting on the result, two
+     * parallel requests plus one more in series was three hops to D1. Each
+     * statement now joins its own answers, so `batch()` settles the whole
+     * question at once. The join repeats the response's columns on every answer
+     * row, which `collectAnswers` folds back up.
+     */
+    const [finishedRes, openRes] = (await env.DB.batch([
+      env.DB
+        .prepare(
+          `SELECT s.id, s.completed_at, s.status, json_extract(s.meta, '$.endingRef') AS ending_ref,
+                  a.block_ref, a.value_json
+             FROM submissions s LEFT JOIN submission_answers a ON a.submission_id = s.id
+            WHERE s.id = (
+                    SELECT id FROM submissions
+                     WHERE form_id = ?1 AND respondent_provider = ?2 AND respondent_subject = ?3
+                       AND status IN ('completed', 'disqualified') AND is_test = 0
+                       AND (session_id IS NULL OR session_id != ?4)
+                     ORDER BY completed_at DESC LIMIT 1
+                  )`,
+        )
+        .bind(formId, identity.provider, identity.subject, currentSessionId),
 
       /*
        * Most recently touched, not most recently started. Somebody who opened
        * the form twice and carried on in the second sitting should be given
        * back the one they were actually working in.
        */
-      env.DB.prepare(
-        `SELECT id FROM submissions
-          WHERE form_id = ?1 AND respondent_provider = ?2 AND respondent_subject = ?3
-            AND status IN ('in_progress', 'abandoned') AND is_test = 0
-            AND (session_id IS NULL OR session_id != ?4)
-          ORDER BY updated_at DESC LIMIT 1`,
-      )
-        .bind(formId, identity.provider, identity.subject, currentSessionId)
-        .first<{ id: string }>(),
-    ]);
+      env.DB
+        .prepare(
+          `SELECT s.id, a.block_ref, a.value_json
+             FROM submissions s LEFT JOIN submission_answers a ON a.submission_id = s.id
+            WHERE s.id = (
+                    SELECT id FROM submissions
+                     WHERE form_id = ?1 AND respondent_provider = ?2 AND respondent_subject = ?3
+                       AND status IN ('in_progress', 'abandoned') AND is_test = 0
+                       AND (session_id IS NULL OR session_id != ?4)
+                     ORDER BY updated_at DESC LIMIT 1
+                  )`,
+        )
+        .bind(formId, identity.provider, identity.subject, currentSessionId),
+    ])) as [
+      D1Result<{
+        id: string;
+        completed_at: number | null;
+        status: string;
+        ending_ref: string | null;
+        block_ref: string | null;
+        value_json: string | null;
+      }>,
+      D1Result<{ id: string; block_ref: string | null; value_json: string | null }>,
+    ];
+    const finishedRows = finishedRes.results ?? [];
+    const finishedRow = finishedRows[0];
+    const openRows = openRes.results ?? [];
+    const openRow = openRows[0];
 
     /*
      * The answers come back with it, and they are the respondent's own — this
@@ -133,7 +165,7 @@ export async function findIdentityHistory(
           completedAt: finishedRow.completed_at,
           status: finishedRow.status === "disqualified" ? "disqualified" : "completed",
           endingRef: finishedRow.ending_ref,
-          answers: (await loadAnswers(env, finishedRow.id)).answers,
+          answers: collectAnswers(finishedRows),
         }
       : null;
 
@@ -147,7 +179,7 @@ export async function findIdentityHistory(
      */
     if (finished || !openRow) return { finished, resumable: null };
 
-    return { finished: null, resumable: await loadAnswers(env, openRow.id) };
+    return { finished: null, resumable: { submissionId: openRow.id, answers: collectAnswers(openRows) } };
   } catch (err) {
     console.error("identity_history_failed", formId, err);
     return { finished: null, resumable: null };
@@ -184,38 +216,48 @@ export async function findDeviceResumable(
 ): Promise<ResumableResponse | null> {
   if (key.source !== "device" || !key.value) return null;
   try {
-    const row = await env.DB.prepare(
-      `SELECT id FROM submissions
-        WHERE form_id = ?1 AND fingerprint = ?2
-          AND status IN ('in_progress', 'abandoned') AND is_test = 0
-          AND respondent_subject IS NULL
-        ORDER BY updated_at DESC LIMIT 1`,
+    // The row and its answers together: the two were sequential, and this is
+    // the first thing a returning respondent waits on.
+    const res = await env.DB.prepare(
+      `SELECT s.id, a.block_ref, a.value_json
+         FROM submissions s LEFT JOIN submission_answers a ON a.submission_id = s.id
+        WHERE s.id = (
+                SELECT id FROM submissions
+                 WHERE form_id = ?1 AND fingerprint = ?2
+                   AND status IN ('in_progress', 'abandoned') AND is_test = 0
+                   AND respondent_subject IS NULL
+                 ORDER BY updated_at DESC LIMIT 1
+              )`,
     )
       .bind(formId, key.value)
-      .first<{ id: string }>();
-    return row ? { ...(await loadAnswers(env, row.id)), identity: null } : null;
+      .all<{ id: string; block_ref: string | null; value_json: string | null }>();
+    const rows = res.results ?? [];
+    const row = rows[0];
+    return row ? { submissionId: row.id, answers: collectAnswers(rows), identity: null } : null;
   } catch (err) {
     console.error("device_resumable_failed", formId, err);
     return null;
   }
 }
 
-async function loadAnswers(env: Bindings, submissionId: string): Promise<ResumableResponse> {
-  const rows = await env.DB.prepare(
-    `SELECT block_ref, value_json FROM submission_answers WHERE submission_id = ?`,
-  )
-    .bind(submissionId)
-    .all<{ block_ref: string; value_json: string }>();
-
+/**
+ * The answers out of a response-joined-answers result.
+ *
+ * A left join repeats the response's own columns on every answer row and gives
+ * one all-null answer row when there are none, so a caller reads the response
+ * from the first row and its answers from all of them.
+ */
+function collectAnswers(rows: { block_ref: string | null; value_json: string | null }[]): Record<string, unknown> {
   const answers: Record<string, unknown> = {};
-  for (const r of rows.results ?? []) {
+  for (const r of rows) {
+    if (r.block_ref === null || r.value_json === null) continue;
     try {
       answers[r.block_ref] = JSON.parse(r.value_json);
     } catch {
       // One unreadable answer must not cost them the rest.
     }
   }
-  return { submissionId, answers };
+  return answers;
 }
 
 /**
@@ -265,28 +307,53 @@ export async function findOpenResponseId(
 ): Promise<string | null> {
   const open = `status IN ('in_progress', 'abandoned') AND is_test = ?2
                 AND (session_id IS NULL OR session_id != ?3)`;
+  const byIdentity = Boolean(who.identity?.provider && who.identity.subject);
+  const byDevice = who.fingerprintSource === "device" && Boolean(who.fingerprint);
+  if (!byIdentity && !byDevice) return null;
   try {
-    if (who.identity?.provider && who.identity.subject) {
-      const row = await env.DB.prepare(
-        `SELECT id FROM submissions
-          WHERE form_id = ?1 AND ${open}
-            AND respondent_provider = ?4 AND respondent_subject = ?5
-          ORDER BY updated_at DESC LIMIT 1`,
-      )
-        .bind(formId, who.isTest ? 1 : 0, who.sessionId, who.identity.provider, who.identity.subject)
-        .first<{ id: string }>();
-      if (row) return row.id;
+    /**
+     * Both ways of being the same person, in one round trip — but not in one
+     * query.
+     *
+     * They were two lookups awaited in turn, and a respondent with no prior
+     * identity row paid for both before writing their first answer. `batch()`
+     * costs one hop for the pair, which is the win; folding them into a single
+     * statement with `OR` would have thrown it away, because the two halves
+     * read different indexes (`idx_submissions_form_respondent` and
+     * `idx_submissions_form_fp`) and a disjunction across both leaves SQLite
+     * scanning the form's responses and sorting them.
+     *
+     * The identity answer is still authoritative: it is read first, exactly as
+     * the sequential version returned it first.
+     */
+    const statements = [];
+    if (byIdentity) {
+      statements.push(
+        env.DB
+          .prepare(
+            `SELECT id FROM submissions
+              WHERE form_id = ?1 AND ${open}
+                AND respondent_provider = ?4 AND respondent_subject = ?5
+              ORDER BY updated_at DESC LIMIT 1`,
+          )
+          .bind(formId, who.isTest ? 1 : 0, who.sessionId, who.identity!.provider, who.identity!.subject),
+      );
     }
-
-    if (who.fingerprintSource === "device" && who.fingerprint) {
-      const row = await env.DB.prepare(
-        `SELECT id FROM submissions
-          WHERE form_id = ?1 AND ${open}
-            AND fingerprint = ?4 AND respondent_subject IS NULL
-          ORDER BY updated_at DESC LIMIT 1`,
-      )
-        .bind(formId, who.isTest ? 1 : 0, who.sessionId, who.fingerprint)
-        .first<{ id: string }>();
+    if (byDevice) {
+      statements.push(
+        env.DB
+          .prepare(
+            `SELECT id FROM submissions
+              WHERE form_id = ?1 AND ${open}
+                AND fingerprint = ?4 AND respondent_subject IS NULL
+              ORDER BY updated_at DESC LIMIT 1`,
+          )
+          .bind(formId, who.isTest ? 1 : 0, who.sessionId, who.fingerprint),
+      );
+    }
+    const res = (await env.DB.batch(statements)) as D1Result<{ id: string }>[];
+    for (const one of res) {
+      const row = (one.results ?? [])[0];
       if (row) return row.id;
     }
     return null;
