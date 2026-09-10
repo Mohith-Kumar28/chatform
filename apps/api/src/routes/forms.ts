@@ -9,6 +9,7 @@ import { requireSession, requireOrg, requireFormAccess, type GuardVars } from ".
 import { requirePermission, requireGauge, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
 import { stripForPublish, checkDocLimits } from "../lib/doc-entitlements.js";
 import { publishFingerprint, hasUnpublishedChanges } from "../lib/publish-state.js";
+import { backfillFollowUps } from "../lib/followups.js";
 import { afterResponse, parseStoredDoc, recordDocChange, recordFormEvent, stampVersionStatement } from "../lib/form-activity.js";
 import { audit } from "../lib/gate-log.js";
 import { apiError, describeSchemaError } from "../lib/api-error.js";
@@ -704,7 +705,7 @@ formsRouter.post(
           summary: publishNote ? `Published v${version} — ${publishNote}` : `Published version ${version}`,
           versionId: verId,
           actor: { type: "user", id: userId },
-        }),
+        }).catch((err) => console.error("form_activity_failed", err)),
         // The org-wide activity log had no idea forms existed. A publish is exactly the
         // kind of thing the admin reading that log is trying to account for.
         audit(c.env, {
@@ -715,8 +716,19 @@ formsRouter.post(
           resourceType: "form",
           resourceId: id,
           meta: { version, note: publishNote, stripped: stripped.length },
-        }),
-      ]).catch((err) => console.error("form_activity_failed", err)),);
+        }).catch((err) => console.error("form_audit_failed", err)),
+        /**
+         * The people who already walked away, now that the sequence covers them.
+         *
+         * Follow-ups are otherwise decided once, at the instant a response is
+         * abandoned, against the settings live at that instant — so turning the
+         * feature on reached nobody who was already sitting unfinished, which is
+         * precisely the group the author could see when they turned it on. This
+         * is a no-op on the overwhelming majority of publishes; see
+         * `backfillFollowUps` for what it will and will not reach.
+         */
+        backfillFollowUps(c.env, id, orgId),
+      ]),);
 
     return c.json({ ok: true, version, stripped });
   },

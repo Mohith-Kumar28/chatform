@@ -36,6 +36,15 @@ export interface ScheduleInput {
    */
   abandonedAt: number;
   isTest?: boolean;
+  /**
+   * Start the sequence from now rather than from `abandonedAt`, where
+   * `abandonedAt` has already gone by.
+   *
+   * Set only by `backfillFollowUps`. See the scheduling loop in `scheduleOne`
+   * for what it does to the step times, and why they are not simply all made
+   * due at once.
+   */
+  catchUp?: boolean;
 }
 
 interface FormRow {
@@ -199,13 +208,26 @@ async function noteSkip(
   return 0;
 }
 
-async function scheduleInner(input: ScheduleInput): Promise<number> {
-  const { env, submissionId, formId, organizationId, abandonedAt } = input;
+/**
+ * Everything that is true of the *form* rather than of one response.
+ *
+ * Split out of `scheduleInner` because a backfill asks these same four
+ * questions once for a hundred responses that all share a form. Inline they
+ * were four D1 round trips per submission, which stops being a query plan and
+ * becomes a subrequest budget the moment more than a handful are scheduled in
+ * one go.
+ */
+interface FormGate {
+  doc: FormDoc;
+  cfg: NonNullable<FormDoc["settings"]["followUp"]>;
+  closeAt: number | null;
+}
 
-  // Test-mode responses are real rows excluded from every count, and mailing a
-  // real person about one would be the exception that proves it wrong.
-  if (input.isTest) return 0;
-
+async function openFormGate(
+  env: Bindings,
+  formId: string,
+  organizationId: string,
+): Promise<FormGate | { skip: SkipReason }> {
   const form = await env.DB.prepare(
     `SELECT fv.schema_json, f.close_at
        FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
@@ -215,18 +237,18 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
     .first<FormRow>();
   // No published version means nobody could have answered it through the
   // hosted form; nothing to schedule.
-  if (!form) return noteSkip(env, submissionId, "unpublished");
+  if (!form) return { skip: "unpublished" };
 
   let doc: FormDoc;
   try {
     doc = readFormDoc(JSON.parse(form.schema_json));
   } catch (err) {
     console.error("followup_doc_unreadable", formId, err);
-    return noteSkip(env, submissionId, "unreadable");
+    return { skip: "unreadable" };
   }
 
   const cfg = doc.settings.followUp;
-  if (!cfg?.enabled || cfg.steps.length === 0) return noteSkip(env, submissionId, "disabled");
+  if (!cfg?.enabled || cfg.steps.length === 0) return { skip: "disabled" };
 
   /**
    * The entitlement is checked here as well as at publish.
@@ -235,7 +257,7 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
    * published document does not change when it does.
    */
   const ent = await getEntitlements(env, organizationId);
-  if (!can(ent, "followup_email")) return noteSkip(env, submissionId, "not_entitled");
+  if (!can(ent, "followup_email")) return { skip: "not_entitled" };
 
   /**
    * No postal address, no reminders.
@@ -252,8 +274,29 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
     .first<{ postal_address: string | null }>();
   if (!org?.postal_address?.trim()) {
     console.log("followup_skipped_no_postal_address", organizationId);
-    return noteSkip(env, submissionId, "no_postal_address");
+    return { skip: "no_postal_address" };
   }
+
+  return { doc, cfg, closeAt: closingTime(doc, form.close_at) };
+}
+
+async function scheduleInner(input: ScheduleInput): Promise<number> {
+  // Test-mode responses are real rows excluded from every count, and mailing a
+  // real person about one would be the exception that proves it wrong.
+  if (input.isTest) return 0;
+
+  const gate = await openFormGate(input.env, input.formId, input.organizationId);
+  if ("skip" in gate) return noteSkip(input.env, input.submissionId, gate.skip);
+  return scheduleOne(gate, input);
+}
+
+/**
+ * The half of the decision that is about one response, given a form whose gates
+ * have already been opened.
+ */
+async function scheduleOne(gate: FormGate, input: ScheduleInput): Promise<number> {
+  const { env, submissionId, formId, organizationId, abandonedAt } = input;
+  const { doc, cfg, closeAt } = gate;
 
   /**
    * The opt-out the respondent was offered beside the address question.
@@ -331,21 +374,44 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
    */
   const held = cfg.holdoutPercent > 0 && bucketOf(submissionId) < cfg.holdoutPercent;
 
-  const closeAt = closingTime(doc, form.close_at);
   const now = Date.now();
   const rows: { step: number; at: number }[] = [];
+  /**
+   * Where the sequence starts.
+   *
+   * Normally at the moment they walked away, which is the instant the author's
+   * delays are written against. `catchUp` is the case where that instant is
+   * already behind us — the sequence was switched on today for somebody who
+   * left yesterday — and there every step is overdue at once, so the whole
+   * thing would arrive in a single tick of the sweep. Two messages landing
+   * together reads as a bug to the person receiving them, and as spam to their
+   * provider.
+   *
+   * So each step is pulled forward only as far as it must be, and never closer
+   * to the step before it than the gap the author put between them. A reminder
+   * pair written four hours and twenty-four hours out still arrives twenty
+   * hours apart, however late the sequence starts.
+   */
+  let earliest = now;
   cfg.steps.forEach((step, i) => {
-    const at = abandonedAt + step.delayHours * 3_600_000;
+    const configured = abandonedAt + step.delayHours * 3_600_000;
+    const at = input.catchUp ? Math.max(configured, earliest) : configured;
+    if (input.catchUp) {
+      const next = cfg.steps[i + 1];
+      // Clamped non-negative: nothing in the schema stops an author putting
+      // step two sooner than step one, and a negative gap would walk backwards.
+      earliest = at + (next ? Math.max(0, (next.delayHours - step.delayHours) * 3_600_000) : 0);
+    }
     // A nudge that lands after the form stops accepting answers is worse than
     // no nudge: it invites somebody to a door we already locked.
     if (closeAt !== null && at >= closeAt) return;
     /**
-     * The intended time is stored as-is, even when it is already in the past —
-     * which happens whenever a response is abandoned by a sweep that ran long
-     * after the respondent actually left. Clamping it forward to `now` would
-     * both misreport when the nudge was meant to go and, because the sweep
-     * selects on `scheduled_at < now`, hold an already-overdue message back for
-     * another tick.
+     * Outside a catch-up the intended time is stored as-is, even when it is
+     * already in the past — which happens whenever a response is abandoned by a
+     * sweep that ran long after the respondent actually left. Clamping it
+     * forward to `now` would both misreport when the nudge was meant to go and,
+     * because the sweep selects on `scheduled_at < now`, hold an already-overdue
+     * message back for another tick.
      */
     rows.push({ step: i + 1, at });
   });
@@ -378,6 +444,104 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
   // an earlier attempt no longer applies.
   await noteSkip(env, submissionId, null);
   return held ? 0 : rows.length;
+}
+
+/**
+ * How far back a catch-up reaches.
+ *
+ * Seven days, bounded by two different things. The resume link in a nudge is
+ * only good for `RESUME_TTL_DAYS`, so anything older than a month links to a
+ * dead page — that is the hard ceiling. The real limit is lower and is about
+ * the recipient: "you started this last week" is a true sentence somebody
+ * recognises, and "you started this last month" is a cold mail from a stranger.
+ * The complaints that follow the second one land on a sending domain shared
+ * with every other tenant.
+ */
+export const CATCHUP_LOOKBACK_DAYS = 7;
+
+/**
+ * The most responses one call will schedule.
+ *
+ * Each one costs about five D1 round trips, and this runs inside the publish
+ * request's `waitUntil` — against a Worker subrequest budget of a thousand.
+ * A form with more than this many recent abandonments catches the rest on the
+ * next publish, which is the right failure: it under-sends rather than
+ * over-sends, and it never blows the budget out from under the audit and
+ * activity writes sharing the same request.
+ */
+const CATCHUP_LIMIT = 100;
+
+/**
+ * Schedule the reminders for people who walked away *before* the sequence
+ * covered them.
+ *
+ * Scheduling is otherwise decided once, at the instant a response is abandoned,
+ * against the settings live at that instant — so an author who collects twenty
+ * partials and only then turns follow-ups on used to get nothing for those
+ * twenty. Which is backwards: turning the feature on is exactly the moment they
+ * are asking us to chase the people they can already see sitting unfinished.
+ *
+ * Runs on every publish rather than only on the off→on transition. It is
+ * idempotent — `NOT EXISTS` skips anything already scheduled, so the second
+ * publish finds nothing — and running it unconditionally means it also repairs
+ * the other ways a response ends up with no schedule: a plan that lapsed and
+ * was renewed, a postal address filled in late, a bug fixed in this file.
+ *
+ * Never throws. A publish that failed because we could not arrange to nag
+ * somebody later would be a much worse trade than a missing nudge.
+ */
+export async function backfillFollowUps(
+  env: Bindings,
+  formId: string,
+  organizationId: string,
+): Promise<number> {
+  try {
+    const gate = await openFormGate(env, formId, organizationId);
+    // Not an error and not worth a log line: most publishes are of forms with
+    // no follow-up sequence at all.
+    if ("skip" in gate) return 0;
+
+    const since = Date.now() - CATCHUP_LOOKBACK_DAYS * 86_400_000;
+    const candidates = await env.DB.prepare(
+      /*
+        `updated_at` is the last touch, which on an abandoned response is the
+        moment it was marked abandoned. Backed by `idx_submissions_form_updated`,
+        so this seeks the recent tail of one form rather than scanning the table.
+
+        Only `abandoned`: an `in_progress` response is somebody who may still be
+        typing, and its session object's idle alarm owns the decision about when
+        that stops being true.
+      */
+      `SELECT s.id, s.updated_at
+         FROM submissions s
+        WHERE s.form_id = ?1
+          AND s.status = 'abandoned'
+          AND s.is_test = 0
+          AND s.updated_at > ?2
+          AND NOT EXISTS (SELECT 1 FROM followups fu WHERE fu.submission_id = s.id)
+        ORDER BY s.updated_at DESC
+        LIMIT ?3`,
+    )
+      .bind(formId, since, CATCHUP_LIMIT)
+      .all<{ id: string; updated_at: number }>();
+
+    let scheduled = 0;
+    for (const row of candidates.results ?? []) {
+      scheduled += await scheduleOne(gate, {
+        env,
+        submissionId: row.id,
+        formId,
+        organizationId,
+        abandonedAt: row.updated_at,
+        catchUp: true,
+      });
+    }
+    if (scheduled > 0) console.log("followup_backfill_scheduled", formId, scheduled);
+    return scheduled;
+  } catch (err) {
+    console.error("followup_backfill_failed", formId, err);
+    return 0;
+  }
 }
 
 /**

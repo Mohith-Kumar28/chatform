@@ -8,6 +8,8 @@ import {
   isSuppressed,
   recordFollowUpClick,
   creditFollowUpRecovery,
+  backfillFollowUps,
+  CATCHUP_LOOKBACK_DAYS,
 } from "../src/lib/followups.js";
 import { finalizeResponse, type ResponseOwner } from "../src/lib/submissions.js";
 import { computeFollowUpStats } from "../src/lib/followup-analytics.js";
@@ -868,5 +870,193 @@ describe("follow-up attribution", () => {
     expect(stats.everScheduled).toBe(false);
     expect(stats.sent).toBe(0);
     expect(stats.holdout).toBeNull();
+  });
+});
+
+/**
+ * Catching up the people who left before the sequence covered them.
+ *
+ * Scheduling is decided once, at the instant a response is abandoned, against
+ * the settings live at that instant. So an author who collects twenty partials
+ * and only then turns follow-ups on used to get nothing for those twenty —
+ * which is backwards, because those twenty are exactly who they were looking at
+ * when they turned it on. These are the rules for reaching back, and the two
+ * that matter most are about how far (not far) and how fast (not all at once).
+ */
+describe("backfillFollowUps", () => {
+  const HOUR = 3_600_000;
+  const DAY = 86_400_000;
+
+  /** An abandoned response that went quiet `agoMs` ago. */
+  async function seedAbandonedAt(id: string, agoMs: number): Promise<string> {
+    await seedAbandoned(id);
+    await env.DB.prepare(`UPDATE submissions SET updated_at = ?, started_at = ? WHERE id = ?`)
+      .bind(Date.now() - agoMs, Date.now() - agoMs - HOUR, id)
+      .run();
+    return id;
+  }
+
+  it("schedules a response abandoned two days ago, starting now", async () => {
+    await seedAbandonedAt("sbm_catchup_old", 2 * DAY);
+    const before = Date.now();
+
+    expect(await backfillFollowUps(env as never, t.formId, t.orgId)).toBe(2);
+
+    const { results } = await rowsFor("sbm_catchup_old");
+    expect(results.map((r) => r.status)).toEqual(["scheduled", "scheduled"]);
+    /*
+      Both configured times — abandonment + 4h and + 24h — are a day in the past.
+      Written as configured they would both be due, and the next sweep would put
+      two messages in one inbox in one tick.
+    */
+    expect(results[0]!.scheduled_at).toBeGreaterThanOrEqual(before);
+    expect(results[0]!.scheduled_at).toBeLessThanOrEqual(Date.now());
+    // And the second still arrives the configured 20 hours after the first.
+    expect(results[1]!.scheduled_at - results[0]!.scheduled_at).toBe(20 * HOUR);
+  });
+
+  it("leaves a step that is still in the future where the author put it", async () => {
+    // Six hours ago: step one (+4h) is two hours overdue, step two (+24h) is not.
+    const abandonedAt = Date.now() - 6 * HOUR;
+    await seedAbandonedAt("sbm_catchup_partial", 6 * HOUR);
+    const before = Date.now();
+
+    expect(await backfillFollowUps(env as never, t.formId, t.orgId)).toBe(2);
+
+    const { results } = await rowsFor("sbm_catchup_partial");
+    expect(results[0]!.scheduled_at).toBeGreaterThanOrEqual(before);
+    /*
+      Step two is pushed out only as far as the configured gap requires. It is
+      never pulled *backwards* to its original time, which would land it closer
+      to step one than the author ever wrote.
+    */
+    expect(results[1]!.scheduled_at - results[0]!.scheduled_at).toBe(20 * HOUR);
+    expect(results[1]!.scheduled_at).toBeGreaterThan(abandonedAt + 24 * HOUR - HOUR);
+  });
+
+  it("does not reach past the lookback window", async () => {
+    await seedAbandonedAt("sbm_catchup_stale", (CATCHUP_LOOKBACK_DAYS + 1) * DAY);
+
+    expect(await backfillFollowUps(env as never, t.formId, t.orgId)).toBe(0);
+    expect((await rowsFor("sbm_catchup_stale")).results).toHaveLength(0);
+  });
+
+  it("is idempotent — a second publish finds nothing left to do", async () => {
+    await seedAbandonedAt("sbm_catchup_twice", 2 * DAY);
+    expect(await backfillFollowUps(env as never, t.formId, t.orgId)).toBe(2);
+
+    expect(await backfillFollowUps(env as never, t.formId, t.orgId)).toBe(0);
+    expect((await rowsFor("sbm_catchup_twice")).results).toHaveLength(2);
+  });
+
+  it("does not touch a response that already has a schedule", async () => {
+    await seedAbandonedAt("sbm_catchup_scheduled", 2 * HOUR);
+    await scheduleFollowUps({
+      env: env as never,
+      submissionId: "sbm_catchup_scheduled",
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt: Date.now() - 2 * HOUR,
+    });
+    const original = (await rowsFor("sbm_catchup_scheduled")).results.map((r) => r.scheduled_at);
+
+    expect(await backfillFollowUps(env as never, t.formId, t.orgId)).toBe(0);
+    expect((await rowsFor("sbm_catchup_scheduled")).results.map((r) => r.scheduled_at)).toEqual(original);
+  });
+
+  it("clears the note explaining why nothing was scheduled", async () => {
+    await seedAbandonedAt("sbm_catchup_note", DAY);
+    await env.DB.prepare(`UPDATE submissions SET meta = json_object('followUpSkip', 'disabled') WHERE id = ?`)
+      .bind("sbm_catchup_note")
+      .run();
+
+    await backfillFollowUps(env as never, t.formId, t.orgId);
+
+    const row = await env.DB.prepare(
+      `SELECT json_extract(meta, '$.followUpSkip') AS skip FROM submissions WHERE id = ?`,
+    )
+      .bind("sbm_catchup_note")
+      .first<{ skip: string | null }>();
+    // The results table reads this to explain a "Not sent" badge. It is now a lie.
+    expect(row?.skip).toBeNull();
+  });
+
+  it("ignores responses that are not abandoned, and test-mode ones", async () => {
+    await seedAbandonedAt("sbm_catchup_live", DAY);
+    await seedAbandonedAt("sbm_catchup_done", DAY);
+    await env.DB.prepare(`UPDATE submissions SET status = 'completed' WHERE id = ?`).bind("sbm_catchup_done").run();
+    await seedAbandonedAt("sbm_catchup_test", DAY);
+    await env.DB.prepare(`UPDATE submissions SET is_test = 1 WHERE id = ?`).bind("sbm_catchup_test").run();
+
+    expect(await backfillFollowUps(env as never, t.formId, t.orgId)).toBe(2);
+    expect((await rowsFor("sbm_catchup_done")).results).toHaveLength(0);
+    expect((await rowsFor("sbm_catchup_test")).results).toHaveLength(0);
+    expect((await rowsFor("sbm_catchup_live")).results).toHaveLength(2);
+  });
+
+  it("schedules nothing while the sequence is switched off", async () => {
+    await publish({ ...DOC, settings: { followUp: { ...DOC.settings.followUp, enabled: false } } });
+    await seedAbandonedAt("sbm_catchup_off", DAY);
+    try {
+      expect(await backfillFollowUps(env as never, t.formId, t.orgId)).toBe(0);
+      expect((await rowsFor("sbm_catchup_off")).results).toHaveLength(0);
+    } finally {
+      await publish();
+    }
+  });
+
+  it("still refuses everyone the per-response gates refuse", async () => {
+    await seedAbandonedAt("sbm_catchup_suppressed", DAY);
+    await suppress(env as never, t.orgId, "maya@northwind.example", "unsubscribe");
+
+    expect(await backfillFollowUps(env as never, t.formId, t.orgId)).toBe(0);
+    expect((await rowsFor("sbm_catchup_suppressed")).results).toHaveLength(0);
+  });
+});
+
+/**
+ * The wiring, rather than the decision.
+ *
+ * `backfillFollowUps` is tested above against every reason it declines. This is
+ * the one assertion that the publish path actually calls it — the whole feature
+ * is a no-op if turning the sequence on does not reach it, and that is a
+ * one-line mistake that no unit test of the function itself would catch.
+ */
+describe("publishing catches up the people already waiting", () => {
+  it("schedules for a response abandoned before the sequence was switched on", async () => {
+    const { publishForm } = await import("../src/lib/forms-service.js");
+    const { getEntitlements } = await import("../src/lib/entitlements.js");
+
+    // Live with follow-ups off, and somebody leaves.
+    const off = { ...DOC, settings: { followUp: { ...DOC.settings.followUp, enabled: false } } };
+    await publish(off);
+    await seedAbandoned("sbm_publish_catchup");
+    await env.DB.prepare(`UPDATE submissions SET updated_at = ? WHERE id = ?`)
+      .bind(Date.now() - 2 * 3_600_000, "sbm_publish_catchup")
+      .run();
+    await scheduleFollowUps({
+      env: env as never,
+      submissionId: "sbm_publish_catchup",
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt: Date.now() - 2 * 3_600_000,
+    });
+    expect((await rowsFor("sbm_publish_catchup")).results).toHaveLength(0);
+
+    // The author turns the sequence on and publishes.
+    await env.DB.prepare(`UPDATE forms SET working_schema = ? WHERE id = ?`)
+      .bind(JSON.stringify(DOC), t.formId)
+      .run();
+    const res = await publishForm(env as never, {
+      formId: t.formId,
+      userId: null,
+      ent: await getEntitlements(env as never, t.orgId),
+      orgId: t.orgId,
+    });
+    expect(res.ok).toBe(true);
+
+    const { results } = await rowsFor("sbm_publish_catchup");
+    expect(results).toHaveLength(2);
+    expect(results.every((r) => r.status === "scheduled")).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 import { FormDoc, lintFormDoc, hasErrors, migrateFormDoc, type FormDoc as FormDocT } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { stripForPublish, checkDocLimits } from "./doc-entitlements.js";
+import { backfillFollowUps } from "./followups.js";
 import { limitReached, type Entitlements } from "@repo/entitlements";
 import { describeSchemaError, type ApiIssue } from "./api-error.js";
 import {
@@ -169,6 +170,18 @@ export async function publishForm(
     actor: { type: args.source === "api" ? "api_key" : "user", id: args.userId },
     source: args.source ?? "api",
   }).catch((err) => console.error("form_activity_failed", err));
+
+  /**
+   * The people who walked away before the sequence covered them.
+   *
+   * The same call the dashboard's publish route makes, for the same reason: a
+   * follow-up is decided once, at the instant a response is abandoned, so
+   * switching the feature on reaches nobody already sitting unfinished unless
+   * something goes back for them. Awaited rather than fired and forgotten
+   * because this function has no request to hang work off, and it is bounded
+   * and a no-op for every form without a sequence.
+   */
+  await backfillFollowUps(env, args.formId, args.orgId ?? row.organization_id);
 
   return { ok: true, version, versionId, stripped: stripped as unknown[] };
 }
