@@ -6279,216 +6279,248 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "status": {
-                        "type": "string"
-                      },
-                      "startedAt": {
-                        "type": "number"
-                      },
-                      "completedAt": {
-                        "anyOf": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "durationMs": {
-                        "anyOf": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "respondent": {
-                        "anyOf": [
-                          {
-                            "type": "object",
-                            "properties": {
-                              "provider": {
-                                "type": "string"
-                              },
-                              "label": {
-                                "type": "string"
-                              },
-                              "name": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              }
-                            },
-                            "required": [
-                              "provider",
-                              "label",
-                              "name"
-                            ]
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "answers": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "blockRef": {
-                              "type": "string"
-                            },
-                            "blockType": {
-                              "type": "string"
-                            },
-                            "value": {}
-                          },
-                          "required": [
-                            "blockRef",
-                            "blockType",
-                            "value"
-                          ]
-                        }
-                      },
-                      "transcript": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "role": {
-                              "type": "string"
-                            },
-                            "content": {
-                              "type": "string"
-                            },
-                            "createdAt": {
-                              "type": "number"
-                            }
-                          },
-                          "required": [
-                            "role",
-                            "content",
-                            "createdAt"
-                          ]
-                        }
-                      },
-                      "followUp": {
-                        "anyOf": [
-                          {
-                            "type": "object",
-                            "properties": {
-                              "sent": {
-                                "type": "number"
-                              },
-                              "scheduled": {
-                                "type": "number"
-                              },
-                              "queued": {
-                                "type": "number"
-                              },
-                              "holdout": {
-                                "type": "boolean"
-                              },
-                              "recovered": {
-                                "type": "boolean"
-                              },
-                              "nextScheduledAt": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              },
-                              "lastSentAt": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              },
-                              "stoppedStatus": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              },
-                              "stoppedReason": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              }
-                            },
-                            "required": [
-                              "sent",
-                              "scheduled",
-                              "queued",
-                              "holdout",
-                              "recovered",
-                              "nextScheduledAt",
-                              "lastSentAt",
-                              "stoppedStatus",
-                              "stoppedReason"
-                            ]
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "followUpSkip": {
-                        "anyOf": [
-                          {
+                  "type": "object",
+                  "properties": {
+                    "submissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
                             "type": "string"
                           },
-                          {
-                            "type": "null"
+                          "status": {
+                            "type": "string"
+                          },
+                          "startedAt": {
+                            "type": "number"
+                          },
+                          "completedAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "durationMs": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "respondent": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "provider",
+                                  "label",
+                                  "name"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "answers": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "blockRef": {
+                                  "type": "string"
+                                },
+                                "blockType": {
+                                  "type": "string"
+                                },
+                                "value": {}
+                              },
+                              "required": [
+                                "blockRef",
+                                "blockType",
+                                "value"
+                              ]
+                            }
+                          },
+                          "transcript": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "role": {
+                                  "type": "string"
+                                },
+                                "content": {
+                                  "type": "string"
+                                },
+                                "createdAt": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "role",
+                                "content",
+                                "createdAt"
+                              ]
+                            }
+                          },
+                          "followUp": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "sent": {
+                                    "type": "number"
+                                  },
+                                  "scheduled": {
+                                    "type": "number"
+                                  },
+                                  "queued": {
+                                    "type": "number"
+                                  },
+                                  "holdout": {
+                                    "type": "boolean"
+                                  },
+                                  "recovered": {
+                                    "type": "boolean"
+                                  },
+                                  "nextScheduledAt": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "lastSentAt": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "stoppedStatus": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "stoppedReason": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "sent",
+                                  "scheduled",
+                                  "queued",
+                                  "holdout",
+                                  "recovered",
+                                  "nextScheduledAt",
+                                  "lastSentAt",
+                                  "stoppedStatus",
+                                  "stoppedReason"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "followUpSkip": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "startedAt",
+                          "completedAt",
+                          "durationMs",
+                          "respondent",
+                          "answers",
+                          "transcript",
+                          "followUp",
+                          "followUpSkip"
                         ]
                       }
                     },
-                    "required": [
-                      "id",
-                      "status",
-                      "startedAt",
-                      "completedAt",
-                      "durationMs",
-                      "respondent",
-                      "answers",
-                      "transcript",
-                      "followUp",
-                      "followUpSkip"
-                    ]
-                  }
+                    "retiredColumns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "ref": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "ref",
+                          "title",
+                          "type"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "submissions",
+                    "retiredColumns"
+                  ]
                 }
               }
             }

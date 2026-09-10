@@ -93,7 +93,7 @@ describe("partial responses — the gate that pays for everything", () => {
   it("serves completed responses free", async () => {
     const res = await fetchApi(`/api/forms/${org.formId}/submissions?status=completed`, { headers: auth(org) });
     expect(res.status).toBe(200);
-    expect(await res.json<unknown[]>()).toHaveLength(2);
+    expect((await res.json<{ submissions: unknown[] }>()).submissions).toHaveLength(2);
   });
 
   it("refuses the unfinished ones on Free, and says how many there are", async () => {
@@ -113,7 +113,7 @@ describe("partial responses — the gate that pays for everything", () => {
     // The results page must still render on Free.
     const res = await fetchApi(`/api/forms/${org.formId}/submissions?status=all`, { headers: auth(org) });
     expect(res.status).toBe(200);
-    const rows = await res.json<{ status: string }[]>();
+    const { submissions: rows } = await res.json<{ submissions: { status: string }[] }>();
     expect(rows).toHaveLength(2);
     expect(rows.every((r) => r.status === "completed")).toBe(true);
   });
@@ -130,7 +130,7 @@ describe("partial responses — the gate that pays for everything", () => {
     await setPlan(org.orgId, "pro");
     const res = await fetchApi(`/api/forms/${org.formId}/submissions?status=abandoned`, { headers: auth(org) });
     expect(res.status).toBe(200);
-    expect(await res.json<unknown[]>()).toHaveLength(2);
+    expect((await res.json<{ submissions: unknown[] }>()).submissions).toHaveLength(2);
   });
 
   it("keeps the count free even while the rows are locked", async () => {
@@ -684,7 +684,7 @@ describe("entitlements after a lapse", () => {
     expect((await fetchApi(`/api/forms/${org.formId}/submissions?status=abandoned`, { headers: auth(org) })).status).toBe(402);
     // …and the completed ones are still entirely theirs.
     const res = await fetchApi(`/api/forms/${org.formId}/submissions?status=completed`, { headers: auth(org) });
-    expect(await res.json<unknown[]>()).toHaveLength(2);
+    expect((await res.json<{ submissions: unknown[] }>()).submissions).toHaveLength(2);
     // Nothing was deleted from the database either.
     const count = await DB()
       .DB.prepare(`SELECT COUNT(*) AS n FROM submissions WHERE form_id = ?`)

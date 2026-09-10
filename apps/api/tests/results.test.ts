@@ -72,11 +72,16 @@ interface Row {
   transcript: unknown[];
 }
 
+interface ListBody {
+  submissions: Row[];
+  retiredColumns: { ref: string; title: string; type: string }[];
+}
+
 describe("submissions list", () => {
   it("returns rows with their answers", async () => {
     const res = await fetchApi(`/api/forms/${t.formId}/submissions`, { headers: auth() });
     expect(res.status).toBe(200);
-    const rows = await res.json<Row[]>();
+    const { submissions: rows } = await res.json<ListBody>();
     expect(rows.length).toBeGreaterThan(0);
     const done = rows.find((r) => r.id === "sbm_done");
     expect(done?.answers[0]?.value).toBe("grace@hopper.dev");
@@ -87,7 +92,7 @@ describe("submissions list", () => {
       headers: auth(),
     });
     expect(completed.status).toBe(200);
-    const rows = await completed.json<Row[]>();
+    const { submissions: rows } = await completed.json<ListBody>();
     expect(rows.every((r) => r.status === "completed")).toBe(true);
     expect(rows.some((r) => r.id === "sbm_done")).toBe(true);
     expect(rows.some((r) => r.id === "sbm_partial")).toBe(false);
@@ -98,7 +103,7 @@ describe("submissions list", () => {
     // default, so it narrows instead of failing — the results page must still render.
     const res = await fetchApi(`/api/forms/${t.formId}/submissions?status=all`, { headers: auth() });
     expect(res.status).toBe(200);
-    const rows = await res.json<Row[]>();
+    const { submissions: rows } = await res.json<ListBody>();
     expect(rows.some((r) => r.id === "sbm_done")).toBe(true);
     expect(rows.some((r) => r.id === "sbm_partial")).toBe(false);
   });
@@ -106,7 +111,7 @@ describe("submissions list", () => {
   it("status=all returns both once the plan includes partials", async () => {
     await subscribePro(t.orgId);
     const res = await fetchApi(`/api/forms/${t.formId}/submissions?status=all`, { headers: auth() });
-    const rows = await res.json<Row[]>();
+    const { submissions: rows } = await res.json<ListBody>();
     expect(rows.some((r) => r.id === "sbm_done")).toBe(true);
     expect(rows.some((r) => r.id === "sbm_partial")).toBe(true);
   });

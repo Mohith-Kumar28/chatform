@@ -97,7 +97,19 @@ export function ResultsClient({ formId }: ResultsClientProps) {
   const { data: rawFollowUps } = useGetApiFormsByIdFollowupAnalytics(formId as never);
 
   const analytics = rawAnalytics as Analytics | undefined;
-  const subs = (Array.isArray(rawSubs) ? rawSubs : []) as SubmissionRecord[];
+  /**
+   * Rows, and the questions the current form cannot account for.
+   *
+   * `retiredColumns` carries whole blocks for questions that were deleted while
+   * their answers stayed — see `apps/api/src/lib/retired-columns.ts`. Whole
+   * blocks because `displayCell` resolves option ids against them; a retired
+   * multiple-choice sent as a bare title would render `opt_founder001`.
+   */
+  const payload = rawSubs as
+    | { submissions?: SubmissionRecord[]; retiredColumns?: Block[] }
+    | undefined;
+  const subs = (payload?.submissions ?? []) as SubmissionRecord[];
+  const retired = useMemo(() => payload?.retiredColumns ?? [], [payload]);
   const form = rawForm as
     | { workingSchema?: FormDoc; status?: string; hasUnpublishedChanges?: boolean }
     | undefined;
@@ -107,9 +119,20 @@ export function ResultsClient({ formId }: ResultsClientProps) {
   const canPartials = ent.can("partial_responses");
   const canAnalytics = ent.can("advanced_analytics");
 
+  /**
+   * The form's questions, then the ones it used to have.
+   *
+   * Retired columns sit at the far end rather than in the position the question
+   * once held: the live form is what the author is reading the table against,
+   * and a deleted question reappearing in the middle of it would read as a
+   * question that is still being asked. They are last, and they are labelled.
+   */
   const columns = useMemo(
-    () => (doc?.blocks ?? []).filter((b) => !["welcome", "statement"].includes(b.type)),
-    [doc],
+    () => [
+      ...(doc?.blocks ?? []).filter((b) => !["welcome", "statement"].includes(b.type)),
+      ...retired.map((b) => ({ ...b, retired: true })),
+    ],
+    [doc, retired],
   );
 
   const completedCount = subs.filter((s) => s.status === "completed").length;

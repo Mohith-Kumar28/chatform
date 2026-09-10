@@ -1,11 +1,12 @@
 import { Hono, type Context } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { displayAnswer, type Block } from "@repo/form-schema";
+import { displayAnswer, safeReadFormDoc, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 import { requirePermission, assertPermission, assertFeature, hasFeature, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
 import { buildResponseTable, toCsv } from "../lib/response-table.js";
+import { resolveRetiredBlocks } from "../lib/retired-columns.js";
 import { computeAnalytics } from "../lib/analytics-service.js";
 import { computeFollowUpStats } from "../lib/followup-analytics.js";
 import { buildXlsx } from "../lib/xlsx.js";
@@ -81,6 +82,33 @@ const SubmissionRow = z.object({
     .nullable(),
   /** Why no sequence was ever scheduled. Null when one was, or when nothing tried. */
   followUpSkip: z.string().nullable(),
+});
+
+/**
+ * A question the form no longer asks, for responses that answered it before it
+ * was deleted.
+ *
+ * The whole block, not a label: `displayAnswer` resolves option ids against it,
+ * so a retired `multiple_choice` sent as `{ref, title, type}` alone would
+ * render a column of `opt_founder001`. Declared loosely for the same reason —
+ * every field of every block type has to survive the trip.
+ */
+const RetiredColumn = z
+  .object({ ref: z.string(), title: z.string(), type: z.string() })
+  .catchall(z.unknown());
+
+/**
+ * Rows, and the columns the current form cannot account for.
+ *
+ * This used to be a bare array. It grew a wrapper when deleting a question
+ * stopped meaning losing sight of its answers: the table's column list is now
+ * the document's questions *plus* `retiredColumns`, and the two have to arrive
+ * together or the page renders answers it has no header for.
+ */
+const SubmissionList = z.object({
+  submissions: z.array(SubmissionRow),
+  /** Empty for the overwhelming majority of forms. Ordered oldest-deletion-last. */
+  retiredColumns: z.array(RetiredColumn),
 });
 
 const Summary = z.object({
@@ -166,7 +194,7 @@ resultsRouter.get(
   describeRoute({
     tags: ["dashboard"],
     summary: "List submissions (with answers + transcripts)",
-    responses: { 200: { description: "Submissions", content: { "application/json": { schema: resolver(z.array(SubmissionRow)) } } } },
+    responses: { 200: { description: "Submissions", content: { "application/json": { schema: resolver(SubmissionList) } } } },
   }),
   validator(
     "query",
@@ -300,6 +328,8 @@ resultsRouter.get(
     const byId = new Map(followUps.results?.map((r) => [r.submission_id, r]) ?? []);
 
     const out = [];
+    /** Every ref these rows answered, and what it was answered as. */
+    const seen = new Map<string, string>();
     for (const s of subs.results ?? []) {
       const answers = await c.env.DB.prepare(
         `SELECT block_ref, block_type, value_json FROM submission_answers WHERE submission_id = ?`,
@@ -327,11 +357,14 @@ resultsRouter.get(
               name: s.respondent_name,
             }
           : null,
-        answers: (answers.results ?? []).map((a) => ({
-          blockRef: a.block_ref,
-          blockType: a.block_type,
-          value: JSON.parse(a.value_json),
-        })),
+        answers: (answers.results ?? []).map((a) => {
+          seen.set(a.block_ref, a.block_type);
+          return {
+            blockRef: a.block_ref,
+            blockType: a.block_type,
+            value: JSON.parse(a.value_json),
+          };
+        }),
         transcript: (transcript.results ?? []).map((t) => ({
           role: t.role,
           content: t.content,
@@ -378,7 +411,27 @@ resultsRouter.get(
         followUpSkip: s.followup_skip,
       });
     }
-    return c.json(out);
+
+    /**
+     * The columns the current document cannot account for.
+     *
+     * Only asked for when the rows actually answered something, which keeps the
+     * document read off the path for a form with no responses yet — and only
+     * ever names refs present in the rows above, so the table never grows a
+     * column with nothing under it.
+     */
+    let retiredColumns: unknown[] = [];
+    if (seen.size > 0) {
+      const form = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`)
+        .bind(id)
+        .first<{ working_schema: string }>();
+      const doc = form ? safeReadFormDoc(JSON.parse(form.working_schema)) : null;
+      if (doc) {
+        retiredColumns = await resolveRetiredBlocks(c.env, id, seen, new Set(doc.blocks.map((b) => b.ref)));
+      }
+    }
+
+    return c.json({ submissions: out, retiredColumns });
   },
 );
 

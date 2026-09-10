@@ -375,7 +375,33 @@ function FollowUpDetail({ row }: { row: SubmissionRecord }) {
   );
 }
 
-export type ResultColumn = Pick<Block, "ref" | "title" | "type">;
+/**
+ * A column of the responses table.
+ *
+ * Structurally a block, and in practice the whole block: `displayCell` resolves
+ * option ids against it. `retired` marks a question the form no longer asks —
+ * its answers are still here, and hiding the column because the question was
+ * deleted is what this flag exists to stop.
+ */
+export type ResultColumn = Pick<Block, "ref" | "title" | "type"> & { retired?: boolean };
+
+/**
+ * The mark on a question that is no longer part of the form.
+ *
+ * Small and quiet on purpose. It is not a warning — nothing is wrong with the
+ * data under it — it answers the one question the column raises: "why is this
+ * here when I deleted it?"
+ */
+function RemovedTag() {
+  return (
+    <span
+      className="bg-muted text-muted-foreground/80 shrink-0 rounded px-1 py-px text-[0.625rem] font-medium tracking-wide uppercase"
+      title="This question was removed from the form. Its answers are kept."
+    >
+      Removed
+    </span>
+  );
+}
 
 export function SubmissionsTable({
   formId,
@@ -591,6 +617,7 @@ export function SubmissionsTable({
                           <meta.icon className="size-2.5" strokeWidth={2} />
                         </span>
                         <span className="block max-w-[13rem] truncate">{b.title}</span>
+                        {b.retired && <RemovedTag />}
                       </span>
                     </th>
                   );
@@ -982,7 +1009,10 @@ function SubmissionDialog({
                     <meta.icon className="size-3" strokeWidth={2} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <dt className="text-muted-foreground text-caption leading-snug">{b.title}</dt>
+                    <dt className="text-muted-foreground text-caption flex items-center gap-1.5 leading-snug">
+                      <span className="min-w-0 break-words">{b.title}</span>
+                      {b.retired && <RemovedTag />}
+                    </dt>
                     <dd
                       className={cn(
                         "mt-1 break-words whitespace-pre-wrap",
@@ -1072,7 +1102,10 @@ function downloadCsv(rows: SubmissionRecord[], columns: ResultColumn[], withResp
     "Submitted",
     "Status",
     ...(withRespondent ? ["Respondent"] : []),
-    ...columns.map((c) => c.title),
+    // Marked here as well as in the server-side export: a file outlives the
+    // screen it was downloaded from, and by then "Team member 3" being a
+    // question the form no longer asks is not recoverable from the header.
+    ...columns.map((c) => (c.retired ? `${c.title} (removed)` : c.title)),
   ];
   const lines = [header.map(esc).join(",")];
   for (const row of rows) {

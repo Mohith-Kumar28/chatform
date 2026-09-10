@@ -39,7 +39,7 @@ import type {
   GetApiFormsByIdHistoryParams,
   GetApiFormsByIdIntegrations200Item,
   GetApiFormsByIdKnowledge200,
-  GetApiFormsByIdSubmissions200Item,
+  GetApiFormsByIdSubmissions200,
   GetApiFormsByIdSubmissionsParams,
   GetApiFormsByIdVersions200Item,
   GetApiFormsByIdVersionsByVersion200,
@@ -2492,7 +2492,7 @@ export const usePostApiAiAddBlocks = <TError = void,
       return useMutation(getPostApiAiAddBlocksMutationOptions(options));
     }
     export type getApiFormsByIdSubmissionsResponse200 = {
-  data: GetApiFormsByIdSubmissions200Item[]
+  data: GetApiFormsByIdSubmissions200
   status: 200
 }
 

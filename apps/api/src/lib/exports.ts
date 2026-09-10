@@ -1,5 +1,6 @@
 import { readFormDoc, displayAnswer, type Block, type FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
+import { resolveRetiredBlocks } from "./retired-columns.js";
 
 /**
  * Asynchronous response exports.
@@ -155,6 +156,28 @@ export async function buildCsv(
     .all<{ id: string; status: string; source: string | null; started_at: number; completed_at: number | null }>();
   const rows = subs.results ?? [];
 
+  /**
+   * Questions these responses answered that the document no longer asks.
+   *
+   * Unlike the other surfaces this one cannot collect the refs as it goes: the
+   * header is written before the first chunk of answers is read. One `DISTINCT`
+   * over the same window buys the column list up front, which is a fair price
+   * in a background job and the difference between an archived file that holds
+   * every answer and one that quietly holds only the current questions'.
+   */
+  const seen = new Map<string, string>();
+  if (rows.length > 0) {
+    const refs = await env.DB.prepare(
+      `SELECT DISTINCT block_ref, block_type FROM submission_answers
+        WHERE submission_id IN (SELECT id FROM submissions WHERE ${sql} ORDER BY started_at DESC LIMIT ?)`,
+    )
+      .bind(...binds, MAX_ROWS)
+      .all<{ block_ref: string; block_type: string }>();
+    for (const r of refs.results ?? []) seen.set(r.block_ref, r.block_type);
+  }
+  const retired = await resolveRetiredBlocks(env, formId, seen, new Set(doc.blocks.map((b) => b.ref)));
+  const columns = [...answerable, ...retired];
+
   // The question, not its ref: `b_short` means nothing to whoever opens the
   // file. The ref follows in brackets so a column can still be matched back.
   const header = [
@@ -164,6 +187,9 @@ export async function buildCsv(
     "started_at",
     "completed_at",
     ...answerable.map((b) => `${b.title} (${b.ref})`),
+    // Marked: a column the form no longer has must explain itself to whoever
+    // opens the file a year from now.
+    ...retired.map((b) => `${b.title} (${b.ref}) [removed]`),
   ];
   const out: string[] = [header.map(esc).join(",")];
 
@@ -191,7 +217,7 @@ export async function buildCsv(
           s.completed_at ? new Date(s.completed_at).toISOString() : "",
           // Labels, not ids. A file full of `opt_founder001` is an export of
           // our primary keys, not of anyone's data.
-          ...answerable.map((b) => {
+          ...columns.map((b) => {
             const raw = map.get(b.ref);
             // An unanswered cell is empty, not "(skipped)" — a spreadsheet
             // already has a way to say nothing is there.

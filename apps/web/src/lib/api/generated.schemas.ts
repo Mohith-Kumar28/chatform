@@ -1552,25 +1552,25 @@ export const GetApiFormsByIdSubmissionsStatus = {
   in_progress: 'in_progress',
 } as const;
 
-export type GetApiFormsByIdSubmissions200ItemRespondent = {
+export type GetApiFormsByIdSubmissions200SubmissionsItemRespondent = {
   provider: string;
   label: string;
   name: string | null;
 } | null;
 
-export type GetApiFormsByIdSubmissions200ItemAnswersItem = {
+export type GetApiFormsByIdSubmissions200SubmissionsItemAnswersItem = {
   blockRef: string;
   blockType: string;
   value: unknown;
 };
 
-export type GetApiFormsByIdSubmissions200ItemTranscriptItem = {
+export type GetApiFormsByIdSubmissions200SubmissionsItemTranscriptItem = {
   role: string;
   content: string;
   createdAt: number;
 };
 
-export type GetApiFormsByIdSubmissions200ItemFollowUp = {
+export type GetApiFormsByIdSubmissions200SubmissionsItemFollowUp = {
   sent: number;
   scheduled: number;
   queued: number;
@@ -1582,17 +1582,29 @@ export type GetApiFormsByIdSubmissions200ItemFollowUp = {
   stoppedReason: string | null;
 } | null;
 
-export type GetApiFormsByIdSubmissions200Item = {
+export type GetApiFormsByIdSubmissions200SubmissionsItem = {
   id: string;
   status: string;
   startedAt: number;
   completedAt: number | null;
   durationMs: number | null;
-  respondent: GetApiFormsByIdSubmissions200ItemRespondent;
-  answers: GetApiFormsByIdSubmissions200ItemAnswersItem[];
-  transcript: GetApiFormsByIdSubmissions200ItemTranscriptItem[];
-  followUp: GetApiFormsByIdSubmissions200ItemFollowUp;
+  respondent: GetApiFormsByIdSubmissions200SubmissionsItemRespondent;
+  answers: GetApiFormsByIdSubmissions200SubmissionsItemAnswersItem[];
+  transcript: GetApiFormsByIdSubmissions200SubmissionsItemTranscriptItem[];
+  followUp: GetApiFormsByIdSubmissions200SubmissionsItemFollowUp;
   followUpSkip: string | null;
+};
+
+export type GetApiFormsByIdSubmissions200RetiredColumnsItem = {
+  ref: string;
+  title: string;
+  type: string;
+  [key: string]: unknown;
+};
+
+export type GetApiFormsByIdSubmissions200 = {
+  submissions: GetApiFormsByIdSubmissions200SubmissionsItem[];
+  retiredColumns: GetApiFormsByIdSubmissions200RetiredColumnsItem[];
 };
 
 export type DeleteApiFormsByIdSubmissionsBody = {

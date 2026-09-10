@@ -1,5 +1,6 @@
 import { displayAnswer, readFormDoc, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
+import { resolveRetiredBlocks } from "./retired-columns.js";
 
 /**
  * Responses, flattened to a table.
@@ -88,7 +89,7 @@ export async function buildResponseTable(
    * Ordering is incidental — the rows are bucketed by id below.
    */
   const answers = await env.DB.prepare(
-    `SELECT a.submission_id, a.block_ref, a.value_json
+    `SELECT a.submission_id, a.block_ref, a.block_type, a.value_json
        FROM submission_answers a
       WHERE a.submission_id IN (
               SELECT id FROM submissions
@@ -97,14 +98,27 @@ export async function buildResponseTable(
             )`,
   )
     .bind(formId, includePartials ? 1 : 0, limit)
-    .all<{ submission_id: string; block_ref: string; value_json: string }>();
+    .all<{ submission_id: string; block_ref: string; block_type: string; value_json: string }>();
 
   const bySubmission = new Map<string, Map<string, string>>();
+  /** Every ref these rows answered, and what it was answered as. */
+  const seen = new Map<string, string>();
   for (const a of answers.results ?? []) {
     let bucket = bySubmission.get(a.submission_id);
     if (!bucket) bySubmission.set(a.submission_id, (bucket = new Map()));
     bucket.set(a.block_ref, a.value_json);
+    seen.set(a.block_ref, a.block_type);
   }
+
+  /**
+   * Questions these responses answered that the form no longer asks.
+   *
+   * An export that silently drops them is the worst version of this bug: the
+   * table on screen at least still has the data behind it, but a spreadsheet
+   * someone downloads and archives is the record. See `retired-columns.ts`.
+   */
+  const retired = await resolveRetiredBlocks(env, formId, seen, new Set(doc.blocks.map((b) => b.ref)));
+  const columns = [...answerable, ...retired];
 
   // The question, not its ref. `b_short` means nothing to whoever opens this;
   // the ref follows in brackets so a column can still be matched to the doc.
@@ -114,6 +128,10 @@ export async function buildResponseTable(
     "started_at",
     "completed_at",
     ...answerable.map((b) => `${b.title} (${b.ref})`),
+    // Marked, because a column the form no longer has needs to explain itself
+    // to whoever opens the file — and because the same question re-added later
+    // gets a new ref, so both columns can be present and neither is a mistake.
+    ...retired.map((b) => `${b.title} (${b.ref}) [removed]`),
   ];
 
   const rows = kept.map((s) => {
@@ -127,7 +145,7 @@ export async function buildResponseTable(
       // `{"row_ui000001":"col_bad00001"}` is not an export of anyone's data —
       // it is an export of our primary keys, and whoever opens it has no way
       // to decode them.
-      ...answerable.map((b) => {
+      ...columns.map((b) => {
         const v = map.get(b.ref);
         // An unanswered cell is empty, not "(skipped)" — a spreadsheet already
         // has a way to say nothing is there.
