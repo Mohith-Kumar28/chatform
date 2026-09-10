@@ -40,6 +40,7 @@ export function KpiTile({
   series,
   lowerIsBetter = false,
   hint,
+  caption,
   sub,
 }: {
   label: string;
@@ -65,6 +66,18 @@ export function KpiTile({
   series?: number[];
   lowerIsBetter?: boolean;
   hint?: string;
+  /**
+   * The short form of `hint`, for the line that is actually printed.
+   *
+   * `hint` does two jobs — the caption beside the movement, and the tooltip
+   * behind it — and they want different lengths. A sentence that explains a
+   * definition properly is a hundred characters; the line it has to fit on is
+   * about a hundred and forty pixels once the percentage has taken its share.
+   * So the tile printed "Accounts tha…", which is the half that says nothing.
+   * Give a caption of three or four words and the full sentence still arrives
+   * on hover.
+   */
+  caption?: string;
   /**
    * A second figure that qualifies the first, beside it — "+8 partial".
    *
@@ -126,13 +139,15 @@ export function KpiTile({
       */}
       <p
         className={cn(
-          "text-micro mt-1.5 flex items-center gap-1",
+          // A notch under `text-micro`: this line is a footnote to the figure
+          // above it, and every pixel it gives up is a pixel the caption keeps.
+          "mt-1.5 flex items-center gap-1 text-[0.6875rem] leading-[1.45]",
           flat ? "text-muted-foreground" : good ? "text-[var(--success)]" : "text-[var(--warning-soft-foreground)]",
         )}
       >
         {moved === null ? (
           <span className="truncate" title={hint}>
-            {hint ?? (previous !== undefined ? "no change" : "")}
+            {caption ?? hint ?? (previous !== undefined ? "no change" : "")}
           </span>
         ) : (
           <>
@@ -150,9 +165,9 @@ export function KpiTile({
               on the figure — but the line itself is now the movement and, where
               a tile has one, the caption that says what it counts.
             */}
-            {hint && (
+            {(caption ?? hint) && (
               <span className="text-muted-foreground truncate" title={hint}>
-                {hint}
+                {caption ?? hint}
               </span>
             )}
           </>

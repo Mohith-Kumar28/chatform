@@ -707,10 +707,10 @@ describe("live activity", () => {
     const now = Date.now();
     await DB()
       .DB.prepare(
-        `INSERT INTO submissions (id, form_id, organization_id, status, source, is_test, started_at)
-         VALUES (?, ?, ?, 'in_progress', 'chat', 0, ?)`,
+        `INSERT INTO submissions (id, form_id, organization_id, status, source, is_test, started_at, completed_at)
+         VALUES (?, ?, ?, 'completed', 'chat', 0, ?, ?)`,
       )
-      .bind(`sub_live_${now}`, customer.formId, customer.orgId, now)
+      .bind(`sub_live_${now}`, customer.formId, customer.orgId, now, now)
       .run();
 
     const res = await fetchApi("/api/admin/live", { headers: { cookie: admin.cookie } });
@@ -723,24 +723,40 @@ describe("live activity", () => {
 
     expect(body.minutes).toBe(30);
     for (const event of body.events) expect(event.counts).toHaveLength(30);
-    const started = body.events.find((e) => e.key === "responses_started")!;
+    const done = body.events.find((e) => e.key === "responses_completed")!;
     // The last bucket is the minute in progress, which is the one just written.
-    expect(started.counts.at(-1)).toBeGreaterThanOrEqual(1);
-    expect(started.total).toBeGreaterThanOrEqual(1);
-    expect(body.total).toBeGreaterThanOrEqual(started.total);
+    expect(done.counts.at(-1)).toBeGreaterThanOrEqual(1);
+    expect(done.total).toBeGreaterThanOrEqual(1);
+    expect(body.total).toBeGreaterThanOrEqual(done.total);
+  });
+
+  /**
+   * The tile plots one answer row, not two.
+   *
+   * "Answers started" and "Answers done" were both on it, and on a *live* tile
+   * they were the same row drawn twice — a respondent opens a form and starts
+   * answering within seconds, so "Forms opened" already carried the arrival.
+   * Pinned because the tempting fix when the pulse looks quiet is to add the
+   * started line back.
+   */
+  it("plots one answer row, not a started and a finished one", async () => {
+    const res = await fetchApi("/api/admin/live", { headers: { cookie: admin.cookie } });
+    const body = (await res.json()) as { events: { key: string }[] };
+    expect(body.events.map((e) => e.key)).not.toContain("responses_started");
+    expect(body.events.map((e) => e.key)).toContain("responses_completed");
   });
 
   it("does not count test-mode traffic", async () => {
     const now = Date.now();
-    const before = await liveTotal("responses_started");
+    const before = await liveTotal("responses_completed");
     await DB()
       .DB.prepare(
-        `INSERT INTO submissions (id, form_id, organization_id, status, source, is_test, started_at)
-         VALUES (?, ?, ?, 'in_progress', 'chat', 1, ?)`,
+        `INSERT INTO submissions (id, form_id, organization_id, status, source, is_test, started_at, completed_at)
+         VALUES (?, ?, ?, 'completed', 'chat', 1, ?, ?)`,
       )
-      .bind(`sub_live_test_${now}`, customer.formId, customer.orgId, now)
+      .bind(`sub_live_test_${now}`, customer.formId, customer.orgId, now, now)
       .run();
-    expect(await liveTotal("responses_started")).toBe(before);
+    expect(await liveTotal("responses_completed")).toBe(before);
   });
 
   async function liveTotal(key: string): Promise<number> {

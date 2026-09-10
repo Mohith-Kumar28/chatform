@@ -23,7 +23,6 @@ interface Overview {
   mrrSeries: number[];
   cohorts: Cohort[];
   formStatsAsOf: number | null;
-  timeToValueMs: number | null;
 }
 
 /** Which cohort each funnel step drops you into on the accounts page. */
@@ -135,6 +134,7 @@ export function OverviewClient() {
           {...kpi("active_orgs")}
           series={o.series?.active_orgs}
           comparedTo={comparedTo}
+          caption="collected or edited"
           hint="Accounts that collected a response or edited a form in this period, counted once each. The sparkline is the daily count."
         />
         <KpiTile
@@ -227,10 +227,11 @@ export function OverviewClient() {
       <ChartCard
         title="From signup to paying"
         subtitle="Accounts that signed up in this period, and how far each one got."
+        hint="Reached is the share of signups that got this far — the gap between two rows is what that stage lost. Continued is the share of the stage above that carried on. Colour runs on one scale: green above 80%, amber above 50%, red below. Under each figure is how it moved against the same length of time immediately before, signed. The rates move in percentage points — the plain difference, so 66.7% against 85.7% is −19pp — and the median moves in per cent of itself, because a duration is not a percentage to begin with. The arrow is green when the move is the good direction, which for the median means faster. Hover any of them for both figures. On a small cohort they swing hard. 'Median time' is the middle gap between signing up and getting this far — half the accounts that reached the stage took less, half took more. Accounts still on their way are not counted, so it never includes a wait that has not finished."
       >
         <FunnelShape
           steps={o.funnel ?? []}
-          timeToValueMs={o.timeToValueMs ?? null}
+          comparedTo={comparedTo}
           hrefFor={(step) => {
             // Carry the period too, so the list is cohorted on the same window
             // the funnel counted — otherwise a 30-day bar links into an

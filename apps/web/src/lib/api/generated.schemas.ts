@@ -73,6 +73,9 @@ export type GetApiAdminOverview200FunnelItem = {
   label: string;
   count: number;
   rate: number;
+  previous: number;
+  medianMs: number | null;
+  previousMedianMs: number | null;
 };
 
 export type GetApiAdminOverview200PlanMixItem = {
@@ -99,7 +102,6 @@ export type GetApiAdminOverview200 = {
   cohorts: GetApiAdminOverview200CohortsItem[];
   actionCounts: GetApiAdminOverview200ActionCounts;
   formStatsAsOf: number | null;
-  timeToValueMs: number | null;
 };
 
 export type GetApiAdminLive200EventsItem = {

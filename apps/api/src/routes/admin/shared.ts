@@ -152,6 +152,38 @@ export const STAGE_OF_ORG = `
   END`;
 
 /**
+ * When an organization first reached each stage. Correlates on an outer `o`.
+ *
+ * The counterpart to `STAGE_OF_ORG`: that says how far an account got, this
+ * says when it got there, and the funnel needs both to answer "where does it
+ * slow down" as well as "where does it leak". Keyed by the same stage names, so
+ * the two cannot drift apart without the compiler noticing.
+ *
+ * `ten_responses` is the tenth completed submission rather than the tenth row —
+ * `OFFSET 9` on a date-ordered read, which is the only one of these that is not
+ * a `MIN`. `published` reads `form_versions.published_at` alone, unlike
+ * `HAS_PUBLISHED`: an undated publish is a state we can count but not time, and
+ * a median that quietly treats "unknown" as "instant" is worse than a median
+ * over the accounts we do have dates for.
+ */
+export const STAGE_REACHED_AT: Record<string, string> = {
+  created_form: `(SELECT MIN(f.created_at) FROM forms f
+                   WHERE f.organization_id = o.id AND f.deleted_at IS NULL)`,
+  published: `(SELECT MIN(v.published_at) FROM form_versions v
+                JOIN forms f ON f.id = v.form_id
+               WHERE f.organization_id = o.id AND f.deleted_at IS NULL AND v.published_at IS NOT NULL)`,
+  form_opened: `(SELECT MIN(cs.created_at) FROM chat_sessions cs
+                  WHERE cs.organization_id = o.id AND cs.is_test = 0)`,
+  first_response: `(SELECT MIN(s.completed_at) FROM submissions s
+                     WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed')`,
+  ten_responses: `(SELECT s.completed_at FROM submissions s
+                    WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed'
+                    ORDER BY s.completed_at LIMIT 1 OFFSET 9)`,
+  paid: `(SELECT MIN(s.created_at) FROM subscriptions s
+           WHERE s.organization_id = o.id AND s.status IN ('active','trialing') AND ${NOT_COMPED})`,
+};
+
+/**
  * The funnel's steps, and the stage each one means. Read cumulatively.
  *
  * Ordered so that each row is a *different question about the same account*,

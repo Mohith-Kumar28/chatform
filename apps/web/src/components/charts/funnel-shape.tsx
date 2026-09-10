@@ -2,7 +2,7 @@
 
 import { useId } from "react";
 import Link from "next/link";
-import { ArrowRight, TrendingDown } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Minus } from "lucide-react";
 import { Empty } from "./chart-kit";
 import { cn } from "@/lib/utils";
 
@@ -77,17 +77,29 @@ export interface FunnelStep {
   count: number;
   /** Share of the top of the funnel, 0–100. */
   rate: number;
+  /** The same stage in the preceding window of equal length. Absent means no comparison. */
+  previous?: number;
+  /** Median ms from signup to first reaching this stage. Null where nobody has. */
+  medianMs?: number | null;
+  /** The same median over the preceding window of equal length. */
+  previousMedianMs?: number | null;
 }
 
 /**
- * The band a step's own width is drawn at, and the band the shape narrows
- * across. Both in CSS pixels, and both are load-bearing: the SVG's viewBox
- * height is the sum of them, drawn at exactly that height, so one viewBox unit
- * is one pixel vertically and the shape lines up with the rows beside it
- * without measuring anything at runtime.
+ * One stage, one band, in CSS pixels — and load-bearing: the SVG's viewBox
+ * height is `rows × ROW`, drawn at exactly that height, so one viewBox unit is
+ * one pixel vertically and the shape lines up with the table beside it without
+ * measuring anything at runtime.
+ *
+ * There used to be a second constant here, a shorter band *between* the stages
+ * for the drop to be printed in. It is gone, and the reason it is gone is the
+ * whole redesign: a row of numbers between two rows of numbers is read as a
+ * third row of numbers. See the component for the rest.
  */
-const SLAB = 48;
-const NECK = 30;
+const ROW = 58;
+
+/** The column headings, and the width each column gets. */
+const HEAD = 32;
 
 /**
  * The narrowest the shape is ever drawn, as a half-width in viewBox units —
@@ -99,6 +111,101 @@ const NECK = 30;
  * ghost continues at it, so the bottom of the funnel is always a base.
  */
 const MIN_HALF = 2.5;
+
+/**
+ * How a stage's conversion reads at a glance: fine, middling, or bleeding.
+ *
+ * The bands are a judgement and they are worth being honest about — no funnel
+ * arrives with its own thresholds. Eighty percent is where a step stops being
+ * the thing you would look at first, and fifty is where half of everyone who
+ * got there turned around, which is a fact about the step rather than about the
+ * market. They are printed beside the number they colour, never instead of it,
+ * so a reader who disagrees with the bands can still read the table.
+ */
+function verdict(kept: number | null): "good" | "ok" | "bad" | null {
+  if (kept === null) return null;
+  if (kept >= 80) return "good";
+  if (kept >= 50) return "ok";
+  return "bad";
+}
+
+/*
+  The `-soft-foreground` inks, not the solid ones.
+
+  `--success` and `--warning` are surface colours: they sit at lightness 0.63
+  and 0.78, which is fine behind white text on a badge and about 2.5:1 as 14px
+  type on a pale card. The soft foregrounds are the same three hues tuned to be
+  *read* — dark on light, light on dark — so a stage's verdict survives the
+  theme it is shown in.
+*/
+/**
+ * How a figure moved, set under the figure itself.
+ *
+ * This was a column of its own — "vs prev 30d" — and it could not work there,
+ * because by then the table had three numbers per row and one movement, and
+ * nothing said which of the three it moved. The change belongs to the thing it
+ * changed, so it sits beneath it in every column that has one.
+ *
+ * Grey, with only the arrow carrying colour. The figure above it is already on a
+ * three-colour scale; a second full-strength signal in the same cell would
+ * compete with it rather than qualify it.
+ *
+ * **Signed, and the sign is not the arrow's job alone.** The arrow points and it
+ * is coloured, which is two ways of saying the same thing and neither of them
+ * survives being read quickly in grey at eleven pixels — and for the median the
+ * colour is deliberately *inverted*, so an arrow on its own is the one signal a
+ * reader cannot safely infer direction from. A leading + or − says it in the
+ * same characters as the number, and costs one glyph.
+ */
+function Movement({
+  change,
+  render,
+  lowerIsBetter = false,
+  title,
+}: {
+  /** Signed. Null where there is nothing comparable in the previous window. */
+  change: number | null;
+  /** How to write the size of the move, given its unsigned magnitude. */
+  render: (magnitude: number) => string;
+  /** For durations, where getting bigger is getting worse. */
+  lowerIsBetter?: boolean;
+  title?: string;
+}) {
+  if (change === null) {
+    return <span className="text-muted-foreground/40 text-[0.6875rem] leading-[1.35]">—</span>;
+  }
+
+  const good = lowerIsBetter ? change < 0 : change > 0;
+  const Icon = change === 0 ? Minus : change > 0 ? ArrowUpRight : ArrowDownRight;
+
+  return (
+    <span
+      className="text-muted-foreground tabular flex items-center justify-end gap-0.5 text-[0.6875rem] leading-[1.35]"
+      title={title}
+    >
+      <Icon
+        className={cn(
+          "size-2.5 shrink-0",
+          change === 0
+            ? "text-muted-foreground/60"
+            : good
+              ? "text-[var(--success-soft-foreground)]"
+              : "text-[var(--destructive-soft-foreground)]",
+        )}
+        strokeWidth={2.5}
+        aria-hidden
+      />
+      {change > 0 ? "+" : change < 0 ? "−" : ""}
+      {render(Math.abs(change))}
+    </span>
+  );
+}
+
+const TONE = {
+  good: "text-[var(--success-soft-foreground)]",
+  ok: "text-[var(--warning-soft-foreground)]",
+  bad: "text-[var(--destructive-soft-foreground)]",
+} as const;
 
 /** Where the whole drawing is worked out, once, from nothing but the counts. */
 export interface FunnelGeometry {
@@ -124,8 +231,8 @@ export interface FunnelGeometry {
 export function funnelGeometry(counts: number[]): FunnelGeometry {
   const n = counts.length;
   const top = counts[0] ?? 0;
-  const tops = Array.from({ length: n }, (_, i) => i * (SLAB + NECK));
-  const totalH = n * SLAB + (n - 1) * NECK;
+  const tops = Array.from({ length: n }, (_, i) => i * ROW);
+  const totalH = n * ROW;
 
   /*
     Half-width of a step, in viewBox units measured from the centre line — so a
@@ -169,15 +276,24 @@ function duration(ms: number): string {
 export function FunnelShape({
   steps,
   hrefFor,
-  timeToValueMs,
+  comparedTo = "the previous period",
 }: {
   steps: FunnelStep[];
   hrefFor?: (step: FunnelStep) => string | null;
-  /** Median signup → first response, for the footer. Omitted when unknown. */
-  timeToValueMs?: number | null;
+  /**
+   * What `previous` is, named — "prev 30d", "yesterday".
+   *
+   * The comparison window is the page's date range, which this component cannot
+   * see. The column was headed "Last period" while it could not say which one,
+   * and a reader looking at a duration column two places to its left has every
+   * reason to wonder whether that means yesterday or last quarter. Naming it in
+   * the heading costs nothing and closes the question.
+   */
+  comparedTo?: string;
 }) {
   const gradientId = useId();
   const top = steps[0]?.count ?? 0;
+  const prevTop = steps[0]?.previous ?? 0;
   const n = steps.length;
 
   if (top === 0 || n === 0) {
@@ -192,24 +308,56 @@ export function FunnelShape({
   const worst = drops.indexOf(Math.max(...drops.slice(1)));
   const hasWorst = worst > 0 && drops[worst]! > 0 && n > 2;
 
+  /*
+    Column widths in one place, because five things have to agree on them: the
+    heading row, every body row, the rule that crosses the whole card, the
+    shape's left edge, and the hover target. `--fx-l` is the table; everything
+    right of it is the drawing.
+  */
+  const cells =
+    "grid grid-cols-[minmax(0,1fr)_4.5rem_5.5rem] sm:grid-cols-[minmax(0,1fr)_4.5rem_5.5rem_5.5rem_6rem] items-center gap-x-5";
+
   return (
-    /*
-      The lane geometry lives here as variables and nowhere else, because the
-      rows read them as grid columns and the shape reads them as an inset — and
-      the moment those two disagree the drawing stops lining up with the names
-      beside it.
-    */
-    <div className="[--fx-gap:0.75rem] [--fx-l:13.5rem] sm:[--fx-l:16rem]">
+    <div className="[--fx-l:100%] sm:[--fx-l:37rem]">
       <div className="relative">
         {/*
-          The shape, floated over the lane between the gutters. `pointer-events-none`
-          so the rows underneath stay clickable across their whole width, and a
+          Headings, which is the fix the last two attempts were both missing.
+
+          Every earlier version printed four kinds of number down the left edge
+          — a count, a share of the top, a share of the previous step, and a
+          loss — in rows that alternated between two different *kinds* of row,
+          and expected the reader to infer which was which from position alone.
+          They could not, and nor could I when I looked at it cold. Named
+          columns cost one line of small type and remove the entire question.
+        */}
+        <div
+          className={cn(cells, "text-micro text-muted-foreground/80 items-end pb-2 [&>span]:whitespace-nowrap")}
+          style={{ height: HEAD, width: "var(--fx-l)" }}
+        >
+          <span>Stage</span>
+          <span className="text-right">Accounts</span>
+          <span className="text-right">Reached</span>
+          <span className="hidden text-right sm:block">Continued</span>
+          {/*
+            "Median time", not "Time to reach", because the heading has to name
+            the statistic. A column of durations with no qualifier is read as an
+            average, and the two differ by a lot here: one account that signed up
+            in March and published in September moves a mean by weeks and the
+            median not at all. The hover says the same thing without the word —
+            "half the accounts that got here did so within…".
+          */}
+          <span className="hidden text-right sm:block">Median time</span>
+        </div>
+
+        {/*
+          The shape, in the lane the table leaves it. `pointer-events-none` so
+          the rows underneath stay clickable across their whole width, and a
           wrapper rather than a rounded `<svg>` because a div's overflow clip is
           the one that is guaranteed to round SVG content in every engine.
         */}
         <div
-          className="bg-muted/70 pointer-events-none absolute top-0 z-10 overflow-hidden rounded-xl"
-          style={{ height: totalH, left: "calc(var(--fx-l) + var(--fx-gap))", right: 0 }}
+          className="bg-muted/70 pointer-events-none absolute right-0 z-10 hidden overflow-hidden rounded-lg sm:block"
+          style={{ top: HEAD, height: totalH, left: "calc(var(--fx-l) + 0.75rem)" }}
           aria-hidden
         >
           <svg
@@ -227,9 +375,9 @@ export function FunnelShape({
           >
             <defs>
               {/*
-                One gradient down the whole funnel, held flat across each slab
-                and turned over only inside the necks — so a step still has "its"
-                colour, and no two of them meet at an edge.
+                One gradient down the whole funnel, held flat across each band
+                and turned over only at the boundaries — so a stage still has
+                "its" colour, and no two of them meet at an edge.
               */}
               <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2={totalH}>
                 {steps.flatMap((_, i) => {
@@ -246,17 +394,18 @@ export function FunnelShape({
                   const color = `color-mix(in oklch, var(--chart-1) ${mix}%, var(--chart-5))`;
                   return [
                     <stop key={`${i}a`} offset={tops[i]! / totalH} stopColor={color} />,
-                    <stop key={`${i}b`} offset={(tops[i]! + SLAB) / totalH} stopColor={color} />,
+                    <stop key={`${i}b`} offset={(tops[i]! + ROW) / totalH} stopColor={color} />,
                   ];
                 })}
               </linearGradient>
             </defs>
 
             {d && <path d={d} fill={`url(#${gradientId})`} />}
+
             {ghostFrom !== null && (
               <>
-                {/* Faint body, so the empty steps are a continuation of the shape
-                    rather than a pair of loose lines under it. */}
+                {/* Faint body, so the empty stages are a continuation of the
+                    shape rather than a pair of loose lines under it. */}
                 <rect
                   x={50 - MIN_HALF}
                   y={ghostFrom}
@@ -285,61 +434,198 @@ export function FunnelShape({
         </div>
 
         {/*
-          The stage boundaries, carried across the drawing.
+          One rule per stage boundary, across the table *and* the drawing.
 
-          Without them the shape is one continuous ribbon and the rows beside it
-          are seven separate things, so reading "this width is that name" means
-          running a finger across an unmarked field. Above the shape rather than
-          under it (`z-20` against the shape's `z-10`) and in the same ink as the
-          rules in the label column, so a boundary is one line across the whole
-          card instead of two that happen to meet.
+          The previous version drew these too and they still did not land,
+          because they marked the gap between two rows while the drop for that
+          gap was printed inside it — so the line separated a row from its own
+          caption. Now a boundary is a boundary: everything above it belongs to
+          one stage, everything below it to the next, on both sides of the card.
         */}
-        {steps.slice(0, -1).map((step, i) => (
+        {steps.map((step, i) => (
           <div
             key={step.key}
-            className="bg-border/70 pointer-events-none absolute right-0 z-20 h-px"
-            style={{ top: tops[i]! + SLAB + NECK / 2, left: "var(--fx-l)" }}
+            className={cn("pointer-events-none absolute inset-x-0 z-20 h-px", i === 0 ? "bg-border" : "bg-border/75")}
+            style={{ top: HEAD + tops[i]! }}
             aria-hidden
           />
         ))}
 
         <ol>
           {steps.map((step, i) => {
-            const next = steps[i + 1];
-            // The fall *out of* this step, because the caption sits under it.
-            // Null when nothing entered the step: no share of nobody.
-            const kept = next && step.count > 0 ? Math.round((next.count / step.count) * 1000) / 10 : null;
-            const lost = next ? step.count - next.count : 0;
+            const prev = steps[i - 1];
+            // The drop *into* this stage, which is where it belongs: it is the
+            // thing that produced this row's number, not a fact of its own.
+            const kept = prev && prev.count > 0 ? Math.round((step.count / prev.count) * 1000) / 10 : null;
             const href = hrefFor?.(step) ?? null;
-            const leaks = hasWorst && worst === i + 1;
+            const leaks = hasWorst && worst === i;
+            const tone = verdict(kept);
 
             /*
-              Name, count and share, in that order and touching.
+              The same stage, last period — as a rate, never as a count.
 
-              They used to sit at opposite ends of the card with the drawing
-              between them, which worked at half width and failed completely at
-              full width: a thousand pixels of funnel between "Published it" and
-              the 5 that belongs to it, with six other numbers stacked in the
-              same column. The dotted leader is the old table-of-contents trick
-              and it is here for the old reason — the eye needs something to ride
-              along, and the alternative is counting rows.
+              Comparing "6 created a form" against last period's 4 tells you the
+              cohort grew, which the Signups tile above already said. What is not
+              on the page anywhere else is whether this *step* got better at its
+              job, and that only shows in the rate: 66.7% against last period's
+              80% is conversion lost, whatever either cohort's size.
+
+              And it prints the old rate, not the difference between the two.
+              The difference has no honest short unit: "2.4%" reads as 2.4% *of*
+              90%, which is a different number, and "2.4pp" is correct and means
+              nothing to anyone who has not met the abbreviation. A reader given
+              92.4% in one column and 90% in the next does the comparison
+              themselves, in the units they already understand, and the arrow
+              has already told them which way it went.
+
+              Blank rather than zero when last period's stage above was empty: a
+              rate out of nothing is not a rate, and printing 0 would put a
+              reassuring grey dash on the row that has no evidence at all.
             */
+            const prevKept =
+              prev && (prev.previous ?? 0) > 0 ? Math.round(((step.previous ?? 0) / prev.previous!) * 1000) / 10 : null;
+
+            /*
+              Three movements, one per figure, each against the same window.
+
+              `Reached` and `Continued` move in percentage *points* — the plain
+              difference between two rates, because 66.7 against 85.7 is nineteen
+              points down and twenty-two percent down, and only one of those is
+              the number anybody means. The median moves in time, and moves the
+              other way: a stage that takes longer than it used to is a stage
+              that got worse, which is why it is the one that reads `lowerIsBetter`.
+            */
+            const prevRate = prevTop > 0 ? Math.round(((step.previous ?? 0) / prevTop) * 1000) / 10 : null;
+            const reachedShift = prevRate === null ? null : Math.round((step.rate - prevRate) * 10) / 10;
+            const keptShift = kept !== null && prevKept !== null ? Math.round((kept - prevKept) * 10) / 10 : null;
+            /*
+              The median moves in per cent, and per cent is the honest unit here
+              — unlike the two rates beside it, which move in *points*.
+
+              A rate is already a percentage, so the gap between two of them can
+              only be stated in points: 66.7 against 85.7 is nineteen points, and
+              calling it 22% would be a second, different, true statement about
+              the same pair that nobody means. A duration is not a percentage, so
+              the gap between two of them is an ordinary ratio and per cent is
+              exactly right. Same shape on the page, different units underneath,
+              and the difference is real rather than a style choice.
+
+              The size in minutes and hours has not gone anywhere; it is on the
+              hover, where a number you occasionally want belongs.
+            */
+            const timeShift =
+              step.medianMs != null && step.previousMedianMs != null && step.previousMedianMs > 0
+                ? Math.round(((step.medianMs - step.previousMedianMs) / step.previousMedianMs) * 100)
+                : null;
+
             const row = (
-              <span className="col-start-1 flex min-w-0 items-baseline gap-2">
-                <span className="truncate text-sm font-medium" title={step.label}>
-                  {step.label}
+              <>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate text-sm font-medium" title={step.label}>
+                    {step.label}
+                  </span>
+                  {href && (
+                    <ArrowRight
+                      className="text-muted-foreground size-3.5 shrink-0 opacity-0 transition-opacity duration-[var(--duration-micro)] group-hover:opacity-100"
+                      strokeWidth={2}
+                      aria-hidden
+                    />
+                  )}
                 </span>
-                {href && (
-                  <ArrowRight
-                    className="text-muted-foreground size-3.5 shrink-0 self-center opacity-0 transition-opacity duration-[var(--duration-micro)] group-hover:opacity-100"
-                    strokeWidth={2}
-                    aria-hidden
-                  />
-                )}
-                <span className="border-border/70 min-w-2 flex-1 translate-y-[-0.28rem] border-b border-dotted" aria-hidden />
-                <span className="tabular shrink-0 text-sm font-semibold">{step.count.toLocaleString()}</span>
-                <span className="text-muted-foreground tabular text-micro w-10 shrink-0 text-right">{step.rate}%</span>
-              </span>
+                <span className="tabular text-right text-sm font-semibold">{step.count.toLocaleString()}</span>
+                {/*
+                  The top row is 100% by definition, so it takes no colour: a
+                  cell that is green whatever happens is a cell that has stopped
+                  carrying information, and it sets the eye's baseline wrongly
+                  for the six below it that mean something.
+                */}
+                <span className="flex flex-col items-end">
+                  <span className={cn("tabular text-sm", i === 0 ? "text-muted-foreground" : TONE[verdict(step.rate) ?? "good"])}>
+                    {step.rate}%
+                  </span>
+                  {i > 0 && (
+                    <Movement
+                      change={reachedShift}
+                      render={(n) => `${n}pp`}
+                      title={
+                        reachedShift === null
+                          ? `Nobody signed up in ${comparedTo}, so there is nothing to compare against.`
+                          : `${step.rate}% of signups reached this stage, against ${prevRate}% in ${comparedTo}.`
+                      }
+                    />
+                  )}
+                </span>
+
+                {/*
+                  Two rate columns, and there was briefly a third.
+
+                  `Lost` printed the share of all signups that stopped at this
+                  stage, on the argument that it measures a leak's *cost* while
+                  `Continued` measures a step's *quality* — which is true, and
+                  which missed that `Reached` already carries it. Reached falls by
+                  exactly the loss each row, so the third column was the second
+                  column's own first difference, set one place to the right. It
+                  also invited the reading that it and `Continued` should sum to
+                  100 and read as broken when they did not, because the two are
+                  shares of different denominators. Where the biggest loss is
+                  belongs in one sentence in the footer, and that is where it is.
+                */}
+                <span className="hidden flex-col items-end sm:flex">
+                  <span className={cn("tabular text-sm", tone ? TONE[tone] : "text-muted-foreground", leaks && "font-semibold")}>
+                    {kept === null ? <span className="text-muted-foreground opacity-40">—</span> : `${kept}%`}
+                  </span>
+                  {kept !== null && (
+                    <Movement
+                      change={keptShift}
+                      render={(n) => `${n}pp`}
+                      title={
+                        keptShift === null
+                          ? `Nobody reached the stage above this one in ${comparedTo}, so there is nothing to compare against.`
+                          : `${kept}% continued this period, against ${prevKept}% in ${comparedTo}.`
+                      }
+                    />
+                  )}
+                </span>
+
+                {/*
+                  The one column that is not about volume.
+
+                  Everything left of it counts accounts; this one counts hours,
+                  and it answers the question the rest of the table cannot: a
+                  stage that converts at 90% over nine days is an onboarding you
+                  can leave alone right up until you notice the nine days. Read
+                  down it and it is a schedule — publish within the hour, first
+                  response the next morning, paid a fortnight later.
+
+                  Median over the accounts that reached the stage, so it is blank
+                  where nobody has: a duration averaged over nobody is not a
+                  duration, and printing a dash is the honest version of it.
+                */}
+                <span className="hidden flex-col items-end sm:flex">
+                  <span
+                    className="text-muted-foreground tabular text-sm"
+                    title={
+                      step.medianMs == null
+                        ? "No account has reached this stage yet"
+                        : `Half the accounts that reached this stage did so within ${duration(step.medianMs)} of signing up`
+                    }
+                  >
+                    {step.medianMs == null ? <span className="opacity-40">—</span> : duration(step.medianMs)}
+                  </span>
+                  {step.medianMs != null && (
+                    <Movement
+                      change={timeShift}
+                      render={(n) => `${n}%`}
+                      lowerIsBetter
+                      title={
+                        timeShift === null
+                          ? `No account reached this stage in ${comparedTo}, so there is nothing to compare against.`
+                          : `${duration(step.medianMs)} this period, against ${duration(step.previousMedianMs!)} in ${comparedTo}.`
+                      }
+                    />
+                  )}
+                </span>
+              </>
             );
 
             return (
@@ -350,64 +636,72 @@ export function FunnelShape({
                     // Sits *under* the shape (which is z-10), so the hover wash
                     // reads as the row lighting up behind the funnel rather than
                     // as a panel dropped on top of it.
-                    className="hover:bg-muted/50 group relative grid grid-cols-[var(--fx-l)_1fr] items-center gap-[var(--fx-gap)] rounded-lg transition-colors duration-[var(--duration-micro)]"
-                    style={{ height: SLAB }}
+                    // The hit area is the whole width — the drawing is part of
+                    // the row — while the cells stay inside the table's own lane.
+                    className="hover:bg-muted/50 group relative flex items-center rounded-md transition-colors duration-[var(--duration-micro)]"
+                    style={{ height: ROW }}
                   >
-                    {row}
+                    <span className={cn(cells, "w-[var(--fx-l)]")}>{row}</span>
+
+                    {/*
+                      What the drawing does when you point at a row.
+
+                      The row already lit up on hover, but only in the table half
+                      — the shape sat above it at `z-10` and answered nothing, so
+                      pointing at the funnel highlighted a row somewhere off to
+                      the left and pointing at a row left the funnel inert. Both
+                      directions work already, because the drawing is
+                      `pointer-events-none` and the hit test falls through to the
+                      row underneath; what was missing was the drawing admitting
+                      it. This band is that admission: it rides above the shape,
+                      so a stage's slice of the funnel is picked out of a
+                      continuous ribbon by the two rules that bound it.
+
+                      Sized off the same `--fx-l` as everything else, and the row
+                      is exactly one stage tall, so the band needs no arithmetic
+                      of its own to line up with the drawing.
+                    */}
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-y-0 right-0 z-30 hidden opacity-0 transition-opacity duration-[var(--duration-micro)] group-hover:opacity-100 sm:block"
+                      style={{ left: "calc(var(--fx-l) + 0.75rem)" }}
+                    >
+                      {/*
+                        Two rules and no wash.
+
+                        There was a six-percent tint here as well, and in the
+                        light theme it was the worst thing on the card: the row's
+                        own hover wash tinted the table half, this one tinted the
+                        lane half over a track that is already grey, and the two
+                        greys met at the lane edge in a visible seam — a hover
+                        state that looked like a rendering fault. A tint also
+                        cannot win both grounds at once, since six percent reads
+                        over the pale track and disappears over a saturated fill,
+                        so the part of the band that *is* the measurement was the
+                        part that stayed unmarked. A bracket at each edge is one
+                        mark, on one ground, and it lands on both.
+                      */}
+                      <span className="bg-foreground/50 absolute inset-x-0 top-0 h-px" />
+                      <span className="bg-foreground/50 absolute inset-x-0 bottom-0 h-px" />
+                      {/*
+                        The click, said out loud, in the empty track the funnel
+                        leaves at the edge. The arrow beside the label is three
+                        pixels of affordance for a whole row that navigates; this
+                        is the one thing worth adding on hover that the table does
+                        not already print. Withheld on an empty stage, because
+                        "View 0 accounts" is a link to a blank page.
+                      */}
+                      {step.count > 0 && (
+                        <span className="bg-background/85 text-muted-foreground text-micro absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1 rounded-md border px-1.5 py-0.5 backdrop-blur-[2px]">
+                          View {step.count.toLocaleString()} {step.count === 1 ? "account" : "accounts"}
+                          <ArrowRight className="size-3 shrink-0" strokeWidth={2} aria-hidden />
+                        </span>
+                      )}
+                    </span>
                   </Link>
                 ) : (
-                  <div
-                    className="relative grid grid-cols-[var(--fx-l)_1fr] items-center gap-[var(--fx-gap)]"
-                    style={{ height: SLAB }}
-                  >
-                    {row}
-                  </div>
-                )}
-
-                {/*
-                  The step-over-step numbers, riding the boundary rule rather
-                  than floating between two rows.
-
-                  One sentence in one place, where it used to be split across
-                  both gutters — "83.3% continued" on the left and "−1 −16.7%"
-                  a card's width away on the right, which looked exactly like a
-                  step's own count and share and was read as one. Kept and lost
-                  are the same fact twice, and a fact said twice belongs on one
-                  line or it becomes two facts.
-                */}
-                {i < n - 1 && (
-                  <div
-                    className="relative grid grid-cols-[var(--fx-l)_1fr] items-center gap-[var(--fx-gap)]"
-                    style={{ height: NECK }}
-                  >
-                    <span
-                      className={cn(
-                        "text-micro col-start-1 flex min-w-0 items-center gap-1.5 whitespace-nowrap",
-                        leaks ? "text-[var(--warning)]" : "text-muted-foreground",
-                      )}
-                    >
-                      {kept !== null ? (
-                        <>
-                          <TrendingDown className="size-3 shrink-0" strokeWidth={2} aria-hidden />
-                          <span className="tabular">{kept}% continued</span>
-                          {lost > 0 && (
-                            <span className={cn("tabular", leaks ? "opacity-90" : "opacity-75")}>
-                              · −{lost.toLocaleString()}
-                              {/* The same drop as a share, which is the form the
-                                  number is compared in. First to go when the
-                                  column is a phone's width. */}
-                              <span className="hidden sm:inline"> (−{Math.round((100 - kept) * 10) / 10}%)</span>
-                            </span>
-                          )}
-                        </>
-                      ) : null}
-                      {/* Meets the line drawn across the shape, so the boundary
-                          is one rule across the whole card and not two. */}
-                      <span
-                        className={cn("min-w-2 flex-1 border-b", leaks ? "border-[var(--warning)]/40" : "border-border/70")}
-                        aria-hidden
-                      />
-                    </span>
+                  <div className="relative flex items-center" style={{ height: ROW }}>
+                    <span className={cn(cells, "w-[var(--fx-l)]")}>{row}</span>
                   </div>
                 )}
               </li>
@@ -417,35 +711,27 @@ export function FunnelShape({
       </div>
 
       {/*
-        What the drawing cannot say. The worst step is named in words rather than
-        flagged on the row, because "the biggest fall" is a sentence about two
-        steps and a caption sitting beside one of them keeps implying it belongs
-        to that one alone. Time-to-value rides along because the funnel counts
-        who arrived and never how long they took, and a fortnight-long path to a
-        first response is a different problem from a leaky one.
+        The one sentence the table cannot make.
+
+        "Biggest fall" is a claim about two stages at once, and a caption sitting
+        beside one of them keeps implying it belongs to that one alone. The
+        time-to-value line that used to sit here has gone into the table as
+        `Time to reach`, where it is one row of a column rather than a fact
+        floating under the chart — and where the other six stages get the same
+        treatment instead of the first response being singled out.
       */}
-      {(hasWorst || timeToValueMs != null) && (
-        <dl className="text-micro text-muted-foreground mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t pt-3">
-          {hasWorst && (
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
-              <dt className="shrink-0">Biggest fall</dt>
-              <dd className="text-foreground min-w-0 font-medium">
-                {steps[worst - 1]!.label} → {steps[worst]!.label}
-                <span className="text-muted-foreground ml-1 font-normal">
-                  ({drops[worst]!.toLocaleString()} of {steps[worst - 1]!.count.toLocaleString()} stopped)
-                </span>
-              </dd>
-            </div>
-          )}
-          {timeToValueMs != null && (
-            <div className="flex items-baseline gap-1.5">
-              <dt className="shrink-0">Signup → first response</dt>
-              <dd className="text-foreground font-medium">{duration(timeToValueMs)}</dd>
-              <span className="text-muted-foreground/70">median</span>
-            </div>
-          )}
-        </dl>
+      {hasWorst && (
+        <p className="text-micro text-muted-foreground mt-3 flex flex-wrap items-baseline gap-x-1.5 border-t pt-3">
+          <span className="shrink-0">Biggest fall</span>
+          <span className="text-foreground font-medium">
+            {steps[worst - 1]!.label} → {steps[worst]!.label}
+          </span>
+          <span>
+            ({drops[worst]!.toLocaleString()} of {steps[worst - 1]!.count.toLocaleString()} stopped)
+          </span>
+        </p>
       )}
+
     </div>
   );
 }
@@ -484,7 +770,7 @@ export function FunnelShape({
  */
 function outline(halves: number[], tops: number[], lastLive: number, ghostAt: number | null, totalH: number): string {
   /** One sample per live step, at the vertical middle of its row. */
-  const pts = halves.slice(0, lastLive + 1).map((x, i) => ({ x, y: tops[i]! + SLAB / 2 }));
+  const pts = halves.slice(0, lastLive + 1).map((x, i) => ({ x, y: tops[i]! + ROW / 2 }));
   // Where the shape hands over to the ghost, if it does: the taper has to land
   // on exactly the ghost's width, or the two draw a step between them.
   if (ghostAt !== null) pts.push({ x: MIN_HALF, y: ghostAt });

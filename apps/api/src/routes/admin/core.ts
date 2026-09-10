@@ -8,6 +8,7 @@ import {
   DAY_MS,
   FUNNEL_STAGES,
   OWNER_OF_ORG,
+  STAGE_REACHED_AT,
   OpsRows,
   PLAN_OF_ORG,
   RANGES,
@@ -47,7 +48,18 @@ coreRouter.get(
 
 // ─────────────────────────────── overview ───────────────────────────────
 
-const FunnelStep = z.object({ key: z.string(), label: z.string(), count: z.number(), rate: z.number() });
+const FunnelStep = z.object({
+  key: z.string(),
+  label: z.string(),
+  count: z.number(),
+  rate: z.number(),
+  /** The same stage, for accounts that signed up in the preceding window of equal length. */
+  previous: z.number(),
+  /** Median ms from signup to first reaching this stage, or null where nobody has. */
+  medianMs: z.number().nullable(),
+  /** The same median over the preceding window of equal length. */
+  previousMedianMs: z.number().nullable(),
+});
 const OverviewResponse = z.object({
   range: z.string(),
   days: z.array(z.string()),
@@ -59,8 +71,6 @@ const OverviewResponse = z.object({
   cohorts: z.array(z.object({ cohort: z.string(), size: z.number(), retention: z.array(z.number().nullable()) })),
   actionCounts: z.record(z.string(), z.number()),
   formStatsAsOf: z.number().nullable(),
-  /** Median ms from signup to a first completed response, or null if nobody got one. */
-  timeToValueMs: z.number().nullable(),
 });
 
 /**
@@ -157,9 +167,8 @@ coreRouter.get(
       ai_cost_micro: seriesOf(rows, "ai_cost_micro", window),
     };
 
-    const [funnel, timeToValueMs, cohorts, actionCounts, formStatsAsOf, activeNow, activeBefore] = await Promise.all([
-      activationFunnel(c.env, now - days * DAY_MS),
-      timeToValue(c.env, now - days * DAY_MS),
+    const [funnel, cohorts, actionCounts, formStatsAsOf, activeNow, activeBefore] = await Promise.all([
+      activationFunnel(c.env, now - days * DAY_MS, now - 2 * days * DAY_MS),
       retentionCohorts(c.env),
       actionQueueCounts(c.env),
       c.env.KV_CONFIG.get(FORM_ROLLUP_COMPLETED_KEY),
@@ -182,7 +191,6 @@ coreRouter.get(
       cohorts,
       actionCounts,
       formStatsAsOf: formStatsAsOf ? Number(formStatsAsOf) : null,
-      timeToValueMs,
     };
     await c.env.KV_CONFIG.put(cacheKey, JSON.stringify(payload), { expirationTtl: 300 });
     return c.json(payload);
@@ -241,15 +249,16 @@ const LIVE_EVENTS: { key: string; label: string; column: string; from: string }[
     column: "created_at",
     from: "chat_sessions WHERE is_test = 0",
   },
-  {
-    key: "responses_started",
-    label: "Answers started",
-    column: "started_at",
-    from: "submissions WHERE is_test = 0",
-  },
+  /*
+    Started and finished used to be two rows here, and on a live tile they were
+    one row drawn twice: a respondent opens a form and starts answering it in
+    the same breath, so "Forms opened" above already carries the arrival, and
+    the started line traced it a few pixels lower. What the pulse is actually
+    for is whether anything is *completing* — so that is the row that stays.
+  */
   {
     key: "responses_completed",
-    label: "Answers finished",
+    label: "Answers done",
     column: "completed_at",
     from: "submissions WHERE is_test = 0 AND status = 'completed'",
   },
@@ -336,59 +345,101 @@ coreRouter.get(
  * see `STAGE_OF_ORG`, which the account cohorts read too so the chart and the
  * list it links into cannot disagree.
  */
-async function activationFunnel(env: Bindings, since: number) {
+async function stageCounts(env: Bindings, from: number, to?: number): Promise<Record<string, number>> {
   const columns = FUNNEL_STAGES.filter(([, , n]) => n > 0)
     .map(([key, , n]) => `SUM(CASE WHEN stage >= ${n} THEN 1 ELSE 0 END) AS ${key}`)
     .join(",\n       ");
 
-  const row = await env.DB.prepare(
+  const where = to === undefined ? "o.created_at >= ?1" : "o.created_at >= ?1 AND o.created_at < ?2";
+  const stmt = env.DB.prepare(
     `SELECT COUNT(*) AS signed_up,
        ${columns}
-     FROM (SELECT ${STAGE_OF_ORG} AS stage FROM organizations o WHERE o.created_at >= ?)`,
-  )
-    .bind(since)
-    .first<Record<string, number>>();
+     FROM (SELECT ${STAGE_OF_ORG} AS stage FROM organizations o WHERE ${where})`,
+  );
+  const row = await (to === undefined ? stmt.bind(from) : stmt.bind(from, to)).first<Record<string, number>>();
+  return row ?? {};
+}
 
-  const top = row?.signed_up ?? 0;
+/**
+ * The window, and the one before it.
+ *
+ * A funnel with no yesterday tells you where the leak is and never whether it
+ * is getting worse, which is the question you actually have after shipping
+ * something. The previous window is the same *length* immediately before —
+ * cohorted the same way, so the comparison is between two sets of accounts that
+ * each had the same amount of time to get somewhere. Anything else compares a
+ * month-old cohort against one that signed up on Tuesday.
+ *
+ * Counts, not rates, come back: the client already divides, and sending the
+ * previous count lets it work out both the share of signups and the
+ * step-over-step rate without a second contract to keep in step.
+ */
+async function activationFunnel(env: Bindings, since: number, previousSince: number) {
+  const [current, before, medians, beforeMedians] = await Promise.all([
+    stageCounts(env, since),
+    stageCounts(env, previousSince, since),
+    stageMedians(env, since),
+    stageMedians(env, previousSince, since),
+  ]);
+
+  const top = current.signed_up ?? 0;
   return FUNNEL_STAGES.map(([key, label]) => {
-    const count = row?.[key] ?? 0;
-    return { key, label, count, rate: top > 0 ? Math.round((count / top) * 1000) / 10 : 0 };
+    const count = current[key] ?? 0;
+    return {
+      key,
+      label,
+      count,
+      rate: top > 0 ? Math.round((count / top) * 1000) / 10 : 0,
+      previous: before[key] ?? 0,
+      medianMs: medians[key] ?? null,
+      previousMedianMs: beforeMedians[key] ?? null,
+    };
   });
 }
 
 /**
- * How long the accounts that got somewhere took to get there.
+ * How long each stage takes to arrive, for the accounts that got there.
  *
- * The funnel says how many made it; it cannot say how long they waited, and
- * those are different problems with different fixes. A funnel that converts
- * well over a fortnight is an onboarding you can afford to leave alone; the
- * same funnel converting over a fortnight *because the first response lands on
- * day nine* is a product that has not shown anyone what it does yet.
+ * The funnel counts who made it and never how long they waited, and those are
+ * different problems with different fixes: a step that converts at 90% over
+ * nine days is an onboarding you can afford to leave alone right up until you
+ * notice the nine days. Read down the column and it is a schedule — publish in
+ * an hour, first response the next morning, paid a fortnight later.
  *
- * The **median**, not the mean: one account that signed up in March and
- * published in September drags an average into meaninglessness, and there is
- * always one. Rows are the accounts that reached a first response at all —
- * everybody still waiting is counted by the funnel above and would only bias
- * this number downward if folded in at zero.
+ * **Medians, over the accounts that reached the stage.** One account that signed
+ * up in March and published in September drags a mean into meaninglessness, and
+ * there is always one. Everybody still on their way is excluded rather than
+ * counted at infinity — the count columns already say how many those are, and
+ * folding them in would make a slow stage look fast the moment it stopped
+ * converting.
+ *
+ * Six correlated subqueries over the window's organizations, which is the one
+ * expensive thing on this endpoint. It is bounded by *accounts created in the
+ * window* rather than by all history, it runs behind the same five-minute cache
+ * as the rest of the payload, and the alternative — a per-stage timestamp
+ * column maintained on write — is six more things to keep true.
  */
-async function timeToValue(env: Bindings, since: number): Promise<number | null> {
-  const res = await env.DB.prepare(
-    `SELECT MIN(s.completed_at) - o.created_at AS d
-       FROM organizations o
-       JOIN submissions s ON s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed'
-      WHERE o.created_at >= ?
-      GROUP BY o.id
-      HAVING d >= 0
-      ORDER BY d`,
-  )
-    .bind(since)
-    .all<{ d: number }>();
+async function stageMedians(env: Bindings, from: number, to?: number): Promise<Record<string, number | null>> {
+  const keys = Object.keys(STAGE_REACHED_AT);
+  const columns = keys.map((key) => `${STAGE_REACHED_AT[key]} - o.created_at AS ${key}`).join(",\n       ");
 
-  const gaps = (res.results ?? []).map((r) => r.d);
-  if (gaps.length === 0) return null;
-  // Lower middle on an even count: with two accounts, the faster one is the
-  // honest answer to "how long does this take" more often than their average.
-  return gaps[Math.floor((gaps.length - 1) / 2)] ?? null;
+  const where = to === undefined ? "o.created_at >= ?1" : "o.created_at >= ?1 AND o.created_at < ?2";
+  const stmt = env.DB.prepare(`SELECT ${columns} FROM organizations o WHERE ${where}`);
+  const res = await (to === undefined ? stmt.bind(from) : stmt.bind(from, to)).all<Record<string, number | null>>();
+
+  const out: Record<string, number | null> = {};
+  for (const key of keys) {
+    // Negative gaps are clock skew or a backfilled row, not a stage reached
+    // before the account existed; they would only drag the median downward.
+    const gaps = (res.results ?? [])
+      .map((row) => row[key])
+      .filter((gap): gap is number => typeof gap === "number" && gap >= 0)
+      .sort((a, b) => a - b);
+    // Lower middle on an even count: with two accounts, the faster one is the
+    // honest answer to "how long does this take" more often than their average.
+    out[key] = gaps.length > 0 ? (gaps[Math.floor((gaps.length - 1) / 2)] ?? null) : null;
+  }
+  return out;
 }
 
 const WEEK_MS = 7 * DAY_MS;
