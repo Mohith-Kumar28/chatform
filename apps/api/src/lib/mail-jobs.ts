@@ -9,7 +9,15 @@ import {
   type FormDoc,
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
-import { sendMail, type MailJob, type MailMessage } from "./mail.js";
+import {
+  mailTally,
+  sendMail,
+  NO_MAIL,
+  type MailJob,
+  type MailJobOutcome,
+  type MailMessage,
+  type MailResult,
+} from "./mail.js";
 import {
   autoReplyEmail,
   escapeHtml,
@@ -40,8 +48,13 @@ import { meter } from "./entitlements.js";
  * re-sends the successful ones too. That is the right trade at this size: a
  * duplicate notification is noise, a missing one is a lost response, and
  * per-recipient delivery tracking is a table this feature does not yet earn.
+ *
+ * Returns what was sent rather than how much, because the consumer writes that
+ * down and a bare count cannot distinguish a job that mailed nobody from one
+ * that mailed somebody through a transport that does not exist. See
+ * `MailJobOutcome`.
  */
-export async function runMailJob(env: Bindings, job: MailJob): Promise<number> {
+export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOutcome> {
   switch (job.kind) {
     case "invitation": {
       const msg = invitationEmail({
@@ -54,20 +67,22 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<number> {
       });
       // Replies go to the person who invited them, not to `noreply@`. Someone
       // who answers an invitation with a question should reach a human.
-      await sendMail(env, { to: job.to, ...msg, ...(job.inviterEmail ? { replyTo: job.inviterEmail } : {}) });
-      return 1;
+      const res = await sendMail(env, {
+        to: job.to,
+        ...msg,
+        ...(job.inviterEmail ? { replyTo: job.inviterEmail } : {}),
+      });
+      return oneMessage(job.to, res);
     }
 
     case "password_reset": {
       const msg = passwordResetEmail({ name: job.name, resetUrl: job.resetUrl });
-      await sendMail(env, { to: job.to, ...msg });
-      return 1;
+      return oneMessage(job.to, await sendMail(env, { to: job.to, ...msg }));
     }
 
     case "otp": {
       const msg = otpEmail({ code: job.code, purpose: job.purpose, formTitle: job.formTitle });
-      await sendMail(env, { to: job.to, ...msg });
-      return 1;
+      return oneMessage(job.to, await sendMail(env, { to: job.to, ...msg }));
     }
 
     case "submission":
@@ -76,6 +91,13 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<number> {
     case "followup":
       return runFollowUpJob(env, job);
   }
+}
+
+/** The single-recipient jobs, which are every job except the two below. */
+function oneMessage(to: string, res: MailResult): MailJobOutcome {
+  const tally = mailTally();
+  tally.record(to, res);
+  return tally.outcome();
 }
 
 interface FollowUpRow {
@@ -133,7 +155,7 @@ async function settleFollowUp(
 async function runFollowUpJob(
   env: Bindings,
   job: Extract<MailJob, { kind: "followup" }>,
-): Promise<number> {
+): Promise<MailJobOutcome> {
   const row = await env.DB.prepare(
     `SELECT fu.id, fu.submission_id, fu.form_id, fu.organization_id, fu.address, fu.step, fu.status,
             s.respondent_email, s.respondent_name, s.hidden_fields, s.status AS sub_status,
@@ -148,7 +170,7 @@ async function runFollowUpJob(
     .first<FollowUpRow>();
   // Deleted between the sweep and delivery — a real possibility with a retrying
   // queue and a customer exercising their delete button. Ack rather than retry.
-  if (!row) return 0;
+  if (!row) return NO_MAIL;
 
   /**
    * The last gate, and the one that matters most.
@@ -160,7 +182,7 @@ async function runFollowUpJob(
    */
   if (row.sub_status !== "abandoned" && row.sub_status !== "in_progress") {
     await settleFollowUp(env, row.id, "skipped", "response_settled");
-    return 0;
+    return NO_MAIL;
   }
 
   let doc: FormDoc;
@@ -169,7 +191,7 @@ async function runFollowUpJob(
   } catch (err) {
     console.error("followup_doc_unreadable", row.form_id, err);
     await settleFollowUp(env, row.id, "skipped", "unreadable");
-    return 0;
+    return NO_MAIL;
   }
 
   const cfg = doc.settings.followUp;
@@ -178,7 +200,7 @@ async function runFollowUpJob(
   // recent intent wins.
   if (!cfg?.enabled || !step) {
     await settleFollowUp(env, row.id, "skipped", cfg?.enabled ? "step_removed" : "disabled");
-    return 0;
+    return NO_MAIL;
   }
 
   const answers = await env.DB.prepare(
@@ -265,7 +287,7 @@ async function runFollowUpJob(
     showPoweredBy: !doc.settings.branding?.hidePoweredBy,
   });
 
-  await sendMail(env, {
+  const res = await sendMail(env, {
     to: row.address,
     ...msg,
     // Never the transactional binding. See `MailClass`.
@@ -310,7 +332,7 @@ async function runFollowUpJob(
     isTest: false,
   }).catch((err: unknown) => console.error("followup_webhook_failed", row.id, err));
 
-  return 1;
+  return oneMessage(row.address, res);
 }
 
 /**
@@ -381,7 +403,7 @@ interface AnswerRow {
 async function runSubmissionJob(
   env: Bindings,
   job: Extract<MailJob, { kind: "submission" }>,
-): Promise<number> {
+): Promise<MailJobOutcome> {
   const sub = await env.DB.prepare(
     `SELECT id, form_id, organization_id, status, completed_at, respondent_email, respondent_name
        FROM submissions WHERE id = ?1 AND organization_id = ?2`,
@@ -391,7 +413,7 @@ async function runSubmissionJob(
   // Deleted between finalize and delivery — a real possibility with a retrying
   // queue and a customer exercising their delete button. Nothing to send, and
   // nothing wrong: ack rather than retry forever.
-  if (!sub || sub.status !== "completed") return 0;
+  if (!sub || sub.status !== "completed") return NO_MAIL;
 
   const form = await env.DB.prepare(
     `SELECT f.title AS form_title, fv.schema_json
@@ -400,7 +422,7 @@ async function runSubmissionJob(
   )
     .bind(job.formId, job.organizationId)
     .first<{ form_title: string; schema_json: string }>();
-  if (!form) return 0;
+  if (!form) return NO_MAIL;
 
   let doc: FormDoc;
   try {
@@ -408,13 +430,18 @@ async function runSubmissionJob(
   } catch (err) {
     // A document we cannot parse is not going to parse on the fifth retry.
     console.error("mail_form_doc_unreadable", job.formId, err);
-    return 0;
+    return NO_MAIL;
   }
 
   const onComplete = doc.settings.onComplete;
   const recipients = onComplete.notificationEmails ?? [];
   const autoReply = onComplete.autoReplyEmail;
-  if (recipients.length === 0 && !autoReply?.enabled) return 0;
+  /**
+   * Nothing to send, and that is a fact worth recording rather than a zero to
+   * shrug at: it is what a form whose author typed an address into the *draft*
+   * and never published looks like from here.
+   */
+  if (recipients.length === 0 && !autoReply?.enabled) return NO_MAIL;
 
   const answers = await env.DB.prepare(
     `SELECT block_ref, value_json FROM submission_answers WHERE submission_id = ?1`,
@@ -443,7 +470,7 @@ async function runSubmissionJob(
   const origin = webOrigins(env)[0]!;
   const responseUrl = `${origin}/forms/${job.formId}/results`;
   const errors: unknown[] = [];
-  let sent = 0;
+  const tally = mailTally();
 
   if (recipients.length > 0) {
     const msg = submissionNotificationEmail({
@@ -459,8 +486,12 @@ async function runSubmissionJob(
         // Reply-To is the respondent where we know it, so answering the
         // notification answers the person — the single most useful thing this
         // email can do beyond existing.
-        await sendMail(env, { to, ...msg, ...(sub.respondent_email ? { replyTo: sub.respondent_email } : {}) });
-        sent++;
+        const res = await sendMail(env, {
+          to,
+          ...msg,
+          ...(sub.respondent_email ? { replyTo: sub.respondent_email } : {}),
+        });
+        tally.record(to, res);
       } catch (err) {
         console.error("mail_notification_failed", job.responseId, to, err);
         errors.push(err);
@@ -495,8 +526,8 @@ async function runSubmissionJob(
       try {
         // Replies reach the form's owner, where they gave us an address to use.
         const ownerReply = recipients[0];
-        await sendMail(env, { to, ...msg, ...(ownerReply ? { replyTo: ownerReply } : {}) });
-        sent++;
+        const res = await sendMail(env, { to, ...msg, ...(ownerReply ? { replyTo: ownerReply } : {}) });
+        tally.record(to, res);
       } catch (err) {
         console.error("mail_autoreply_failed", job.responseId, err);
         errors.push(err);
@@ -505,8 +536,9 @@ async function runSubmissionJob(
   }
 
   if (errors.length > 0) throw errors[0];
-  if (sent > 0) await meterEmail(env, job.organizationId, sent);
-  return sent;
+  const outcome = tally.outcome();
+  if (outcome.messages > 0) await meterEmail(env, job.organizationId, outcome.messages);
+  return outcome;
 }
 
 /**

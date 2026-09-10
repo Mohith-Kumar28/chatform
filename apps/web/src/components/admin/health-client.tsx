@@ -56,7 +56,11 @@ interface Health {
     jobs: number;
     messages: number;
     failed: number;
+    /** Jobs that ran and mailed nobody — usually an unconfigured form. */
+    skipped: number;
     gaveUp: number;
+    /** Messages rendered and never sent, because no provider was configured. */
+    noop: number;
     deliveryRate: number;
     byKind: Row[];
     recentFailures: Row[];
@@ -272,7 +276,13 @@ export function HealthClient() {
               value={mail.deliveryRate}
               label="accepted by the provider"
               caption={`${compact(mail.messages)} message${mail.messages === 1 ? "" : "s"} in ${compact(mail.jobs)} job${mail.jobs === 1 ? "" : "s"}`}
-              tone={mail.gaveUp > 0 ? "danger" : mail.deliveryRate >= 99 ? "success" : "warning"}
+              tone={
+                mail.gaveUp > 0 || (mail.noop ?? 0) > 0
+                  ? "danger"
+                  : mail.deliveryRate >= 99
+                    ? "success"
+                    : "warning"
+              }
               size={124}
             />
             <div>
@@ -282,7 +292,18 @@ export function HealthClient() {
                 queue, which means somebody is waiting for a sign-in code that
                 is never going to arrive.
               */}
-              {mail.gaveUp > 0 ? (
+              {/*
+                Above the retry ceiling in severity, because it is silent: a
+                noop message was rendered, counted and never handed to anyone.
+                It is what an unconfigured provider looks like, and every other
+                number on this card reads as healthy while it happens.
+              */}
+              {(mail.noop ?? 0) > 0 ? (
+                <p className="text-destructive text-sm font-medium">
+                  {compact(mail.noop)} message{mail.noop === 1 ? "" : "s"} went nowhere — no mail provider is
+                  configured, so they were rendered and dropped.
+                </p>
+              ) : mail.gaveUp > 0 ? (
                 <p className="text-destructive text-sm font-medium">
                   {mail.gaveUp} gave up after every retry — these are in the dead-letter queue and will not be sent.
                 </p>
@@ -294,6 +315,17 @@ export function HealthClient() {
               {mail.failed > 0 && (
                 <p className="text-muted-foreground text-micro mt-2">
                   {mail.failed} attempt{mail.failed === 1 ? "" : "s"} failed and were retried.
+                </p>
+              )}
+              {/*
+                Not a failure, so it is not in the rate — but it is the answer to
+                "the notification email never arrived" often enough to be worth a
+                line: the job ran and the form had nobody to mail.
+              */}
+              {(mail.skipped ?? 0) > 0 && (
+                <p className="text-muted-foreground text-micro mt-2">
+                  {mail.skipped} job{mail.skipped === 1 ? "" : "s"} had nobody to mail — no notification address on
+                  the published form.
                 </p>
               )}
             </div>

@@ -299,8 +299,16 @@ describe("submission notifications", () => {
       isTest: false,
     });
 
-    expect(n).toBe(2);
+    expect(n.messages).toBe(2);
     expect(sent.map((m) => m.to)).toEqual(["one@example.com", "two@example.com"]);
+    /*
+      The evidence the consumer writes down. Without it a notification job that
+      sent nothing and one that sent two messages left identical rows, which is
+      what made "the notification never arrived" unanswerable from our side.
+    */
+    expect(n.domains).toEqual(["example.com"]);
+    expect(n.messageIds).toEqual(["msg_1", "msg_2"]);
+    expect(n.transports).toEqual(["cloudflare"]);
     const html = sent[0]!.html;
     expect(html).toContain("Your name");
     expect(html).toContain("Ada");
@@ -325,7 +333,7 @@ describe("submission notifications", () => {
       responseId: "sbm_mail_quiet",
       isTest: false,
     });
-    expect(n).toBe(0);
+    expect(n.messages).toBe(0);
     expect(sent).toHaveLength(0);
   });
 
@@ -347,7 +355,7 @@ describe("submission notifications", () => {
       isTest: false,
     });
 
-    expect(n).toBe(1);
+    expect(n.messages).toBe(1);
     // The address they typed into the email block, with no notification list
     // and nothing switched on by hand.
     expect(sent[0]!.to).toBe("ada@example.com");
@@ -398,8 +406,31 @@ describe("submission notifications", () => {
       responseId: "sbm_mail_confirm_off",
       isTest: false,
     });
-    expect(n).toBe(0);
+    expect(n.messages).toBe(0);
     expect(sent).toHaveLength(0);
+  });
+
+  /**
+   * The case behind this whole shape: a published form with no notification
+   * address. The job runs perfectly and mails nobody, and the consumer must be
+   * able to tell that apart from a delivery — it used to be recorded as `sent`.
+   */
+  it("reports a job that had nobody to mail", async () => {
+    await publish({
+      ...DOC,
+      settings: { onComplete: { notificationEmails: [], autoReplyEmail: { enabled: false } } },
+    });
+    await seedResponse("sbm_mail_nobody");
+    const { sent, binding } = captureBinding();
+    const n = await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_nobody",
+      isTest: false,
+    });
+    expect(sent).toHaveLength(0);
+    expect(n).toEqual({ messages: 0, domains: [], messageIds: [], transports: [] });
   });
 
   /**
@@ -419,7 +450,7 @@ describe("submission notifications", () => {
       responseId: "sbm_mail_partial",
       isTest: false,
     });
-    expect(n).toBe(0);
+    expect(n.messages).toBe(0);
     expect(sent).toHaveLength(0);
   });
 

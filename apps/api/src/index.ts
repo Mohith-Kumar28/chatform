@@ -90,15 +90,25 @@ export default {
          */
         const job = msg.body as MailJob;
         try {
-          const n = await runMailJob(env, job);
+          const result = await runMailJob(env, job);
           /**
-           * Recorded on both outcomes, because a delivery rate needs its
+           * Recorded on every outcome, because a delivery rate needs its
            * denominator. `msg.attempts` is the queue's own counter, so a
            * failure at the ceiling is distinguishable from one that went on to
            * succeed — the first is a message in the dead-letter queue, the
            * second is a blip.
+           *
+           * `skipped` rather than `sent` when the job ran and mailed nobody —
+           * a form with no notification addresses, a follow-up whose step the
+           * author deleted. Both used to be written down as deliveries, which
+           * is how "the notification email never arrives" could look, from
+           * here, exactly like a form that had never been configured at all.
            */
-          await recordMailDelivery(env, job, { status: "sent", messages: n, attempt: msg.attempts });
+          await recordMailDelivery(env, job, {
+            status: result.messages > 0 ? "sent" : "skipped",
+            attempt: msg.attempts,
+            result,
+          });
           msg.ack();
         } catch (err) {
           console.error("mail_job_failed", job.kind, err);

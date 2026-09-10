@@ -67,6 +67,68 @@ export interface MailResult {
 }
 
 /**
+ * What a job actually did, as opposed to whether it threw.
+ *
+ * `runMailJob` used to return a count, and a count cannot tell three very
+ * different stories apart: a job that sent mail, a job that had nobody to mail
+ * because the form carries no notification addresses, and a job that "sent"
+ * through the noop transport because no provider is configured. All three
+ * returned without throwing and all three were recorded as `sent`.
+ *
+ * So the consumer is handed the evidence instead. `transports` is what makes a
+ * silently unconfigured deployment visible; `messageIds` is what makes one of
+ * our rows findable in the provider's own delivery log, which is the difference
+ * between "we sent it" and "they accepted it and then dropped it".
+ */
+export interface MailJobOutcome {
+  /** Messages that actually left. Zero is a real and reportable answer. */
+  messages: number;
+  /** Deduped recipient domains. Never an address — see `mail_deliveries`. */
+  domains: string[];
+  /** Provider message ids, one per message that left, in send order. */
+  messageIds: string[];
+  /** Deduped, because a single job is one class of mail and one provider. */
+  transports: MailTransport[];
+}
+
+/** A job that had nothing to send, which is not the same as one that failed. */
+export const NO_MAIL: MailJobOutcome = Object.freeze({
+  messages: 0,
+  domains: [],
+  messageIds: [],
+  transports: [],
+});
+
+export interface MailTally {
+  /**
+   * One message that left, and what the provider said about it.
+   *
+   * Called after the `await`, never before: a tally that counts intent rather
+   * than delivery is the bug this whole type exists to remove.
+   */
+  record(to: string, res: MailResult): void;
+  outcome(): MailJobOutcome;
+}
+
+/** Accumulates what a job sent, so the consumer can write it down. */
+export function mailTally(): MailTally {
+  const domains = new Set<string>();
+  const transports = new Set<MailTransport>();
+  const messageIds: string[] = [];
+  let messages = 0;
+  return {
+    record(to, res) {
+      messages++;
+      const d = domainOfAddress(to);
+      if (d) domains.add(d);
+      transports.add(res.transport);
+      if (res.messageId) messageIds.push(res.messageId);
+    },
+    outcome: () => ({ messages, domains: [...domains], messageIds, transports: [...transports] }),
+  };
+}
+
+/**
  * The From address.
  *
  * `EMAIL_FROM` when set. Otherwise `noreply@` at the apex of `APP_ORIGIN` —
@@ -355,10 +417,24 @@ export async function enqueueMail(env: Bindings, job: MailJob): Promise<void> {
  * rejecting us — without putting a customer's or a respondent's address on a
  * cross-tenant screen.
  */
-function domainOf(job: MailJob): string {
-  const to = "to" in job ? job.to : "";
+function domainOfAddress(to: string): string {
   const at = to.lastIndexOf("@");
   return at === -1 ? "" : to.slice(at + 1).toLowerCase();
+}
+
+/**
+ * The best guess at a domain when the job never got as far as sending.
+ *
+ * Only the auth jobs carry their recipient in the message; `submission` and
+ * `followup` carry identifiers and the consumer looks the addresses up. That is
+ * why every notification row in this table had an empty `domain` — the one
+ * column meant to answer "is Gmail rejecting us" was blank for exactly the mail
+ * anybody asks that question about. A successful job now reports its own
+ * domains through `MailTally`; this remains the fallback for a job that failed
+ * before it wrote to anyone.
+ */
+function domainOf(job: MailJob): string {
+  return "to" in job ? domainOfAddress(job.to) : "";
 }
 
 /**
@@ -373,24 +449,43 @@ function domainOf(job: MailJob): string {
  * Never throws, for the same reason `enqueueMail` does not: a bookkeeping write
  * that fails must not turn a delivered message into a retried one, which is how
  * an observability table starts sending duplicates.
+ *
+ * `skipped` is the third status and the reason this signature changed. A form
+ * with no notification addresses produces a job that runs perfectly and sends
+ * nothing; recording that as `sent` put a phantom delivery on the health page
+ * and, worse, made a real "nothing was sent" indistinguishable from a real
+ * "something was". The distinction is now the caller's to make, from a count it
+ * is actually given.
  */
 export async function recordMailDelivery(
   env: Bindings,
   job: MailJob,
-  outcome: { status: "sent" | "failed"; messages?: number; attempt: number; error?: unknown },
+  outcome: {
+    status: "sent" | "skipped" | "failed";
+    attempt: number;
+    /** What the job did. Absent on a failure, which did nothing by definition. */
+    result?: MailJobOutcome;
+    error?: unknown;
+  },
 ): Promise<void> {
   try {
+    const result = outcome.result;
     await env.DB.prepare(
-      `INSERT INTO mail_deliveries (id, kind, status, messages, attempt, domain, error, organization_id, created_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+      `INSERT INTO mail_deliveries
+         (id, kind, status, messages, attempt, domain, transport, message_ids, error, organization_id, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
     )
       .bind(
         crypto.randomUUID(),
         job.kind,
         outcome.status,
-        outcome.messages ?? 0,
+        result?.messages ?? 0,
         outcome.attempt,
-        domainOf(job),
+        // What the job actually wrote to, falling back to what the job asked
+        // for when it never got that far.
+        result && result.domains.length > 0 ? result.domains.join(",") : domainOf(job),
+        result && result.transports.length > 0 ? result.transports.join(",") : null,
+        result && result.messageIds.length > 0 ? JSON.stringify(result.messageIds) : null,
         outcome.error === undefined ? null : String(outcome.error).slice(0, 300),
         "organizationId" in job ? job.organizationId : null,
         Date.now(),

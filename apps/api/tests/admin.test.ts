@@ -12,7 +12,7 @@ import {
 } from "../src/lib/platform-rollup.js";
 import { costUsdMicro } from "../src/lib/ai-pricing.js";
 import { IMPERSONATION_HEADER, signImpersonation, verifyImpersonation } from "../src/lib/impersonation.js";
-import { recordMailDelivery } from "../src/lib/mail.js";
+import { NO_MAIL, recordMailDelivery } from "../src/lib/mail.js";
 import { getEntitlements } from "../src/lib/entitlements.js";
 import { PLANS, effectivePlan } from "@repo/entitlements";
 
@@ -403,14 +403,27 @@ describe("the overview", () => {
 
     it("counts jobs, messages and the ones the queue gave up on", async () => {
       const otp = { kind: "otp", to: "someone@gmail.com", code: "123456", purpose: "sign-in" } as const;
-      await recordMailDelivery(DB(), otp, { status: "sent", messages: 1, attempt: 1 });
+      await recordMailDelivery(DB(), otp, {
+        status: "sent",
+        attempt: 1,
+        result: { messages: 1, domains: ["gmail.com"], messageIds: ["cf-1"], transports: ["cloudflare"] },
+      });
       await recordMailDelivery(DB(), otp, { status: "failed", attempt: 1, error: new Error("transient") });
       // At the queue's `max_retries`, so this one is in the dead-letter queue.
       await recordMailDelivery(DB(), otp, { status: "failed", attempt: 5, error: new Error("sender unverified") });
 
       const res = await fetchApi("/api/admin/health?range=30d", { headers: { cookie: admin.cookie } });
       const { mail } = (await res.json()) as {
-        mail: { jobs: number; messages: number; failed: number; gaveUp: number; deliveryRate: number; byKind: unknown[] };
+        mail: {
+          jobs: number;
+          messages: number;
+          failed: number;
+          skipped: number;
+          gaveUp: number;
+          noop: number;
+          deliveryRate: number;
+          byKind: unknown[];
+        };
       };
 
       expect(mail.jobs).toBe(3);
@@ -419,6 +432,60 @@ describe("the overview", () => {
       expect(mail.gaveUp).toBe(1);
       expect(mail.deliveryRate).toBe(33.3);
       expect(mail.byKind).toHaveLength(1);
+    });
+
+    /**
+     * A job that ran and mailed nobody is neither a delivery nor a failure, and
+     * counting it as either is how "we sent it" became a claim this table could
+     * not support. It stays out of the rate and gets its own number.
+     */
+    it("keeps jobs that had nobody to mail out of the delivery rate", async () => {
+      const sub = {
+        kind: "submission",
+        organizationId: "org_x",
+        formId: "frm_x",
+        responseId: "sbm_x",
+        isTest: false,
+      } as const;
+      await recordMailDelivery(DB(), sub, {
+        status: "sent",
+        attempt: 1,
+        result: { messages: 1, domains: ["gmail.com"], messageIds: ["cf-9"], transports: ["cloudflare"] },
+      });
+      await recordMailDelivery(DB(), sub, { status: "skipped", attempt: 1, result: NO_MAIL });
+
+      const res = await fetchApi("/api/admin/health?range=30d", { headers: { cookie: admin.cookie } });
+      const { mail } = (await res.json()) as {
+        mail: { jobs: number; skipped: number; deliveryRate: number; noop: number };
+      };
+
+      expect(mail.jobs).toBe(2);
+      expect(mail.skipped).toBe(1);
+      // One job had something to send and sent it. The skipped one is not a
+      // 50% delivery rate.
+      expect(mail.deliveryRate).toBe(100);
+      expect(mail.noop).toBe(0);
+    });
+
+    /**
+     * A message rendered, counted and handed to nobody, because no provider is
+     * configured. Every other number on the health card reads as healthy while
+     * this happens, which is why it gets its own.
+     */
+    it("counts messages that went out over the noop transport", async () => {
+      await recordMailDelivery(
+        DB(),
+        { kind: "otp", to: "someone@gmail.com", code: "123456", purpose: "sign-in" },
+        {
+          status: "sent",
+          attempt: 1,
+          result: { messages: 1, domains: ["gmail.com"], messageIds: [], transports: ["noop"] },
+        },
+      );
+
+      const res = await fetchApi("/api/admin/health?range=30d", { headers: { cookie: admin.cookie } });
+      const { mail } = (await res.json()) as { mail: { noop: number } };
+      expect(mail.noop).toBe(1);
     });
 
     /**

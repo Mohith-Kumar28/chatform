@@ -214,17 +214,32 @@ healthRouter.get(
         `SELECT COUNT(*) AS jobs,
                 COALESCE(SUM(messages), 0) AS messages,
                 COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
-                COALESCE(SUM(CASE WHEN status = 'failed' AND attempt >= ?2 THEN 1 ELSE 0 END), 0) AS gave_up
+                COALESCE(SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END), 0) AS skipped,
+                COALESCE(SUM(CASE WHEN status = 'failed' AND attempt >= ?2 THEN 1 ELSE 0 END), 0) AS gave_up,
+                /*
+                  Messages that were rendered, counted and never sent, because
+                  no provider was configured. A deployment in this state looks
+                  perfectly healthy by every other number on this page.
+                */
+                COALESCE(SUM(CASE WHEN transport = 'noop' THEN messages ELSE 0 END), 0) AS noop
            FROM mail_deliveries WHERE created_at >= ?1`,
       )
         .bind(since, MAIL_RETRY_CEILING)
-        .first<{ jobs: number; messages: number; failed: number; gave_up: number }>(),
+        .first<{
+          jobs: number;
+          messages: number;
+          failed: number;
+          skipped: number;
+          gave_up: number;
+          noop: number;
+        }>(),
       rows(
         c.env.DB.prepare(
           `SELECT kind,
                   COUNT(*) AS jobs,
                   COALESCE(SUM(messages), 0) AS messages,
-                  COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed
+                  COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
+                  COALESCE(SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END), 0) AS skipped
              FROM mail_deliveries WHERE created_at >= ?
             GROUP BY kind ORDER BY jobs DESC`,
         ).bind(since),
@@ -236,7 +251,7 @@ healthRouter.get(
        */
       rows(
         c.env.DB.prepare(
-          `SELECT kind, domain, attempt, error, created_at
+          `SELECT kind, domain, transport, attempt, error, created_at
              FROM mail_deliveries WHERE status = 'failed' AND created_at >= ?
             ORDER BY created_at DESC LIMIT 12`,
         ).bind(since),
@@ -277,14 +292,24 @@ healthRouter.get(
         jobs: mailTotals?.jobs ?? 0,
         messages: mailTotals?.messages ?? 0,
         failed: mailTotals?.failed ?? 0,
+        // Jobs that ran and mailed nobody. Not a failure and not a delivery —
+        // usually a form whose author has not filled in a notification address,
+        // which is worth seeing rather than counting as a success.
+        skipped: mailTotals?.skipped ?? 0,
         gaveUp: mailTotals?.gave_up ?? 0,
-        // Jobs that ended in a send, against every job the consumer handled. A
-        // retry that succeeds counts as one of each, which is honest: the
-        // message arrived, and something went wrong on the way.
-        deliveryRate:
-          (mailTotals?.jobs ?? 0) > 0
-            ? Math.round(((mailTotals!.jobs - mailTotals!.failed) / mailTotals!.jobs) * 1000) / 10
-            : 100,
+        noop: mailTotals?.noop ?? 0,
+        // Jobs that ended in a send, against every job that had something to
+        // send. A retry that succeeds counts as one of each, which is honest:
+        // the message arrived, and something went wrong on the way. Skipped
+        // jobs are out of the denominator — a form with no notification address
+        // is not a delivery problem, and leaving them in made the rate go *up*
+        // the more forms were misconfigured.
+        deliveryRate: (() => {
+          const attempted = (mailTotals?.jobs ?? 0) - (mailTotals?.skipped ?? 0);
+          return attempted > 0
+            ? Math.round(((attempted - (mailTotals?.failed ?? 0)) / attempted) * 1000) / 10
+            : 100;
+        })(),
         byKind: mailByKind,
         recentFailures: mailFailures,
       },

@@ -1224,7 +1224,14 @@ export const mailDeliveries = sqliteTable(
     id: text("id").primaryKey(),
     /** `invitation` | `password_reset` | `otp` | `submission` | `followup` */
     kind: text("kind").notNull(),
-    /** `sent` | `failed` */
+    /**
+     * `sent` | `skipped` | `failed`
+     *
+     * `skipped` is a job that ran correctly and mailed nobody — a form with no
+     * notification addresses, a follow-up step the author deleted. It used to
+     * be written down as `sent`, which made a delivery that never happened
+     * indistinguishable from one that did.
+     */
     status: text("status").notNull(),
     /**
      * How many messages the job produced.
@@ -1241,8 +1248,32 @@ export const mailDeliveries = sqliteTable(
      * much worse fact than a first attempt that failed and then succeeded.
      */
     attempt: integer("attempt").notNull().default(1),
-    /** The recipient's domain. Never the address. */
+    /**
+     * The domains a job actually wrote to, deduped and comma-separated. Never
+     * an address.
+     *
+     * Empty on a job that failed before it reached anybody, and on the auth
+     * jobs only as far as their single recipient — everything else reports its
+     * own, because `submission` and `followup` carry identifiers rather than
+     * addresses and this column was blank for all of them.
+     */
     domain: text("domain").notNull().default(""),
+    /**
+     * `cloudflare` | `resend` | `noop`, comma-separated across a job.
+     *
+     * `noop` is why this exists: it is a message that was rendered, counted and
+     * never sent because no provider was configured, which otherwise looks
+     * exactly like a delivery.
+     */
+    transport: text("transport"),
+    /**
+     * The provider's ids for the messages this job sent, as a JSON array.
+     *
+     * What makes one of these rows findable in Cloudflare's
+     * `emailSendingAdaptive` log or Resend's dashboard — the only place that
+     * knows whether the recipient's server accepted the message or dropped it.
+     */
+    messageIds: text("message_ids"),
     error: text("error"),
     organizationId: text("organization_id"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
