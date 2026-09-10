@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import {
   getGetApiFormsQueryKey,
   useDeleteApiFormsById,
+  usePostApiFormsByIdUnpublish,
   useGetApiForms,
   useGetApiWorkspaces,
   usePatchApiFormsByIdWorkspace,
@@ -109,6 +110,12 @@ export function DashboardContent() {
   // ?new=1 lets the command palette open the create dialog.
   const [createOpen, setCreateOpen] = useState(searchParams.get("new") === "1");
   const [pendingDelete, setPendingDelete] = useState<FormRow | null>(null);
+  /*
+    Confirmed like a delete, and worded so the two cannot be confused. Taking a
+    form offline is reversible and deleting it is not, but both stop the link
+    working, so the dialog's job is to say which of the two is about to happen.
+  */
+  const [pendingOffline, setPendingOffline] = useState<FormRow | null>(null);
   /**
    * The ticked forms, by id.
    *
@@ -236,6 +243,18 @@ export function DashboardContent() {
       },
       onError: (e) =>
         toast.error("Couldn't delete", { description: e.message }),
+    },
+  });
+
+  const unpublish = usePostApiFormsByIdUnpublish<Error>({
+    mutation: {
+      onSuccess: () => {
+        void invalidateForms(queryClient);
+        toast.success("Form taken offline", {
+          description: "The link no longer works. Publish again to put it back.",
+        });
+      },
+      onError: (e) => toast.error("Couldn't take it offline", { description: e.message }),
     },
   });
 
@@ -455,6 +474,9 @@ export function DashboardContent() {
                   }
                   anySelected={selectedCount > 0}
                   onDelete={() => setPendingDelete(form)}
+                  onUnpublish={
+                    form.status === "published" ? () => setPendingOffline(form) : undefined
+                  }
                   workspaces={workspaces}
                   currentWorkspaceId={currentWorkspaceId}
                   onMove={(workspaceId) => {
@@ -504,6 +526,17 @@ export function DashboardContent() {
         */
         onConfirm={() => {
           if (pendingDelete) remove.mutate({ id: pendingDelete.id });
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingOffline !== null}
+        onOpenChange={(open) => !open && setPendingOffline(null)}
+        title={`Take “${pendingOffline?.title}” offline?`}
+        description="The link stops working immediately and nobody new can start a response. Nothing is deleted — your responses stay, and the live version goes straight back up when you publish again. Anyone part-way through right now can still finish."
+        confirmLabel="Take offline"
+        onConfirm={() => {
+          if (pendingOffline) unpublish.mutate({ id: pendingOffline.id });
         }}
       />
     </div>

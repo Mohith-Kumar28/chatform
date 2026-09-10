@@ -32,6 +32,9 @@ formsRouter.use("/forms/:id/*", requireFormAccess);
 formsRouter.post("/forms", requirePermission("form", "create"), requireGauge("forms_count", "forms.create"));
 formsRouter.put("/forms/:id/doc", requirePermission("form", "update"));
 formsRouter.post("/forms/:id/publish", requirePermission("form", "publish"));
+// Taking a form off the air is the same authority as putting it on. Anyone who
+// can publish can unpublish; nobody else can do either.
+formsRouter.post("/forms/:id/unpublish", requirePermission("form", "publish"));
 formsRouter.delete("/forms/:id", requirePermission("form", "delete"));
 formsRouter.patch("/forms/:id/workspace", requirePermission("form", "update"));
 
@@ -458,6 +461,86 @@ formsRouter.put(
       }).catch((err) => console.error("form_activity_failed", err)),);
 
     return c.json({ ok: true, issues });
+  },
+);
+
+/**
+ * Take a live form off the air without deleting anything.
+ *
+ * The only way to stop a published form accepting responses used to be a close
+ * date in the future or deleting the form, and neither is what somebody wants
+ * when a registration has to stop *now* — one needs planning ahead and the
+ * other throws the responses away with the form.
+ *
+ * `active_version_id` is deliberately left alone. The version is still the
+ * form's live document, it is simply not being served; that is what makes
+ * republishing a single click that puts the same version back rather than
+ * cutting a new one, and it keeps every response still pointing at the version
+ * it was collected under.
+ *
+ * Both respondent-facing entry points gate on `status = 'published'` — the
+ * config route and session creation, in `routes/public.ts` — so this closes
+ * the public link the moment it lands. Conversations already open are not
+ * thrown out mid-sentence: like the close date, this is checked when a session
+ * is created and never again.
+ */
+formsRouter.post(
+  "/forms/:id/unpublish",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Take a published form off the air, keeping its version and responses",
+    responses: {
+      200: { description: "Unpublished", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } },
+      404: { description: "Form not found", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
+      409: { description: "The form is not published", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
+    },
+  }),
+  async (c) => {
+    const id = c.get("form")!.id;
+    const userId = c.get("userId") as string;
+    const orgId = c.get("form")!.organization_id;
+
+    const row = await c.env.DB.prepare(
+      `SELECT status FROM forms WHERE id = ? AND deleted_at IS NULL`,
+    )
+      .bind(id)
+      .first<{ status: string }>();
+    if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    /*
+      Said rather than silently succeeding, because "unpublish a draft" is
+      almost always a stale tab acting on a form somebody else already took
+      down, and a cheerful 200 would tell them they did something they did not.
+    */
+    if (row.status !== "published") {
+      return c.json({ error: { code: "not_published", message: "This form is not live" } }, 409);
+    }
+
+    await c.env.DB.prepare(`UPDATE forms SET status = 'draft', updated_at = ?2 WHERE id = ?1`)
+      .bind(id, Date.now())
+      .run();
+
+    await afterResponse(
+      c,
+      Promise.all([
+        recordFormEvent(c.env, {
+          formId: id,
+          orgId,
+          kind: "unpublished",
+          summary: "Taken off the air",
+          actor: { type: "user", id: userId },
+        }),
+        audit(c.env, {
+          orgId,
+          action: "form.unpublished",
+          actorType: "user",
+          actorId: userId,
+          resourceType: "form",
+          resourceId: id,
+        }),
+      ]).catch((err) => console.error("form_activity_failed", err)),
+    );
+
+    return c.json({ ok: true });
   },
 );
 

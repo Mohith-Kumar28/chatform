@@ -139,6 +139,67 @@ describe("publish", () => {
   });
 });
 
+/**
+ * Taking a form off the air.
+ *
+ * The assertion that carries the feature is the third one: the public door has
+ * to actually shut. Flipping a status column is easy to get right in isolation
+ * and useless if the respondent-facing routes read something else, which is
+ * precisely how the close date managed to do nothing at all for a while.
+ */
+describe("unpublish", () => {
+  async function livingForm(title: string): Promise<string> {
+    const created = (await (
+      await api("/v1/forms", { method: "POST", body: JSON.stringify({ title }) })
+    ).json()) as { id: string };
+    await api(`/v1/forms/${created.id}/doc`, { method: "PUT", body: JSON.stringify({ doc: GOOD_DOC }) });
+    await api(`/v1/forms/${created.id}/publish`, { method: "POST" });
+    return created.id;
+  }
+
+  it("closes the public door and keeps the version", async () => {
+    const id = await livingForm("Retractable");
+    expect((await api(`/v1/forms/${id}/sessions`, { method: "POST", body: "{}" })).status).toBe(200);
+
+    expect((await api(`/v1/forms/${id}/unpublish`, { method: "POST" })).status).toBe(200);
+
+    // Nobody new gets in…
+    expect((await api(`/v1/forms/${id}/sessions`, { method: "POST", body: "{}" })).status).toBe(404);
+
+    // …and nothing was thrown away: the version is still the form's, so
+    // publishing again puts the same one back rather than cutting a new one.
+    const row = await env.DB.prepare(`SELECT status, active_version_id FROM forms WHERE id = ?`)
+      .bind(id)
+      .first<{ status: string; active_version_id: string | null }>();
+    expect(row?.status).toBe("draft");
+    expect(row?.active_version_id).toBeTruthy();
+
+    const again = await api(`/v1/forms/${id}/publish`, { method: "POST" });
+    expect(again.status).toBe(200);
+    expect((await api(`/v1/forms/${id}/sessions`, { method: "POST", body: "{}" })).status).toBe(200);
+  });
+
+  it("says so rather than succeeding on a form that is not live", async () => {
+    const created = (await (
+      await api("/v1/forms", { method: "POST", body: JSON.stringify({ title: "Never live" }) })
+    ).json()) as { id: string };
+    const res = await api(`/v1/forms/${created.id}/unpublish`, { method: "POST" });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("not_published");
+  });
+
+  it("needs the same authority as publishing", async () => {
+    const writeOnly = (await seedKey(t, "v1formsunpub", { scopes: { form: ["read", "write"] } })).raw;
+    const id = await livingForm("Guarded");
+    const res = await fetchApi(`/v1/forms/${id}/unpublish`, {
+      method: "POST",
+      headers: { "x-api-key": writeOnly, "content-type": "application/json" },
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: { required: string } }).error.required).toBe("form:publish");
+  });
+});
+
 describe("scopes", () => {
   it("refuses to publish with a key that may only write", async () => {
     const writeOnly = (await seedKey(t, "v1formswrite", { scopes: { form: ["read", "write"] } })).raw;

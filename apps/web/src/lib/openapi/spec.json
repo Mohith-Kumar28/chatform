@@ -1011,6 +1011,45 @@
         ]
       }
     },
+    "/v1/forms/{id}/unpublish": {
+      "post": {
+        "operationId": "postV1FormsByIdUnpublish",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Take a published form off the air, keeping its version and responses",
+        "responses": {
+          "200": {
+            "description": "Unpublished"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "The form is not published"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-required-scope": "form:publish",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
     "/v1/forms/{id}/publish": {
       "post": {
         "operationId": "postV1FormsByIdPublish",

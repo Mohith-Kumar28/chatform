@@ -27,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogBody, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDateTime, formatDuration, formatRelative, formatShortDateTime, isPast } from "@/lib/format";
 import { useClientValue } from "@/hooks/use-client-value";
 import { useEntitlements } from "@/hooks/use-entitlements";
@@ -250,9 +251,8 @@ function FollowUpCell({ row, empty = "dash" }: { row: SubmissionRecord; empty?: 
   if (!label) {
     return empty === "dash" ? <span className="text-muted-foreground/60">—</span> : null;
   }
-  return (
+  const badge = (
     <span
-      title={label.detail}
       className={cn(
         "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
         // `--warning-soft` pairs with `--warning-soft-foreground`, never with
@@ -262,11 +262,40 @@ function FollowUpCell({ row, empty = "dash" }: { row: SubmissionRecord; empty?: 
           : label.tone === "warn"
             ? "bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)]"
             : "bg-muted text-muted-foreground",
+        // The affordance, without which the explanation may as well not exist.
+        "cursor-help",
       )}
     >
       <MailCheck className="size-3 shrink-0" />
-      <span className="whitespace-nowrap">{label.text}</span>
+      {/*
+        A dotted underline is the one convention that reads as "there is more
+        here" without spending a second icon on a badge that already has one.
+      */}
+      <span className="decoration-muted-foreground/50 underline decoration-dotted underline-offset-2 whitespace-nowrap">
+        {label.text}
+      </span>
     </span>
+  );
+  /*
+    A real tooltip rather than the `title` attribute this used to carry.
+    "Not sent" is the cell's whole vocabulary for five different causes, and the
+    reason was technically present the entire time — on a native tooltip that
+    takes a second of motionless hover, gives no hint it exists, and was
+    therefore never read. The author's question is "why did nothing arrive",
+    and an answer nobody can find does not answer it.
+
+    Still on the row dialog too, with absolute times: this is a phrase, that is
+    the account, and a touch device gets only the second one.
+  */
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>{badge}</TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[16rem]">
+          {label.detail}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

@@ -1055,6 +1055,50 @@ export type PutApiFormsByIdDoc200 = {
   issues: unknown[];
 };
 
+export type PostApiFormsByIdUnpublish200 = {
+  ok: boolean;
+};
+
+export type PostApiFormsByIdUnpublish404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdUnpublish404Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdUnpublish404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdUnpublish404 = {
+  error: PostApiFormsByIdUnpublish404Error;
+};
+
+export type PostApiFormsByIdUnpublish409ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdUnpublish409Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdUnpublish409ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdUnpublish409 = {
+  error: PostApiFormsByIdUnpublish409Error;
+};
+
 export type PostApiFormsByIdPublish200StrippedItem = {
   path: string;
   feature: string;

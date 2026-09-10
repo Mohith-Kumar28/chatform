@@ -10,6 +10,7 @@ import {
   getGetApiFormsByIdQueryKey,
   useGetApiFormsById,
   usePostApiFormsByIdPublish,
+  usePostApiFormsByIdUnpublish,
 } from "@/lib/api/dashboard/dashboard";
 import { AuthGuard } from "@/components/dashboard/auth-guard";
 import { CommandPalette } from "@/components/dashboard/command-palette";
@@ -41,6 +42,7 @@ export function BuilderShell({
   const queryClient = useQueryClient();
   const { data: form, isLoading, error } = useGetApiFormsById(formId as never);
   const publish = usePostApiFormsByIdPublish();
+  const unpublish = usePostApiFormsByIdUnpublish();
 
   const doc = useBuilderStore((s) => s.doc);
   const edit = useBuilderStore((s) => s.edit);
@@ -214,6 +216,32 @@ export function BuilderShell({
     }
   }
 
+  /**
+   * Take the live form off the air.
+   *
+   * Deliberately not `markPublished`'s opposite: the draft has not changed, so
+   * the builder's own dirty state is none of this function's business. What
+   * changes is the row — status Live → Draft — which is what decides whether
+   * the link works, whether the header offers this at all, and what the
+   * dashboard card says. Both are refetched for the same reason publishing
+   * refetches them: without it the toast reports something the screen contradicts.
+   */
+  async function onUnpublish() {
+    try {
+      await unpublish.mutateAsync({ id: formId as never });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getGetApiFormsByIdQueryKey(formId as never) }),
+        invalidateForms(queryClient),
+      ]);
+      toast.success("Form taken offline", {
+        description: "The link no longer works. Publish again to put it back.",
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not take the form offline";
+      toast.error("Could not take it offline", { description: message });
+    }
+  }
+
   return (
     <AuthGuard>
       <div className="bg-background flex min-h-svh flex-col">
@@ -235,6 +263,7 @@ export function BuilderShell({
             publishedAt={row.publishedAt}
             unpublished={unpublished}
             onPublish={onPublish}
+            onUnpublish={onUnpublish}
             publishing={publishing}
             onPreview={() => setPreviewOpen(true)}
             onCopyLink={copyLink}

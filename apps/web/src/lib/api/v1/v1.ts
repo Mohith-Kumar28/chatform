@@ -2046,6 +2046,101 @@ export const usePutV1FormsByIdDoc = <TError = void,
       > => {
       return useMutation(getPutV1FormsByIdDocMutationOptions(options));
     }
+    export type postV1FormsByIdUnpublishResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1FormsByIdUnpublishResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1FormsByIdUnpublishResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postV1FormsByIdUnpublishResponseSuccess = (postV1FormsByIdUnpublishResponse200) & {
+  headers: Headers;
+};
+export type postV1FormsByIdUnpublishResponseError = (postV1FormsByIdUnpublishResponse404 | postV1FormsByIdUnpublishResponse409) & {
+  headers: Headers;
+};
+
+export type postV1FormsByIdUnpublishResponse = (postV1FormsByIdUnpublishResponseSuccess | postV1FormsByIdUnpublishResponseError)
+
+export const getPostV1FormsByIdUnpublishUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/unpublish`
+}
+
+/**
+ * @summary Take a published form off the air, keeping its version and responses
+ */
+export const postV1FormsByIdUnpublish = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1FormsByIdUnpublishResponse> => {
+
+  return customFetch<postV1FormsByIdUnpublishResponse>(getPostV1FormsByIdUnpublishUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1FormsByIdUnpublishMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdUnpublish>>, TError,PostV1FormsByIdUnpublishMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdUnpublish>>, TError,PostV1FormsByIdUnpublishMutationVariables, TContext> => {
+
+const mutationKey = ['postV1FormsByIdUnpublish'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1FormsByIdUnpublish>>, PostV1FormsByIdUnpublishMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postV1FormsByIdUnpublish(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1FormsByIdUnpublishMutationResult = NonNullable<Awaited<ReturnType<typeof postV1FormsByIdUnpublish>>>
+
+    export type PostV1FormsByIdUnpublishMutationError = void
+    export type PostV1FormsByIdUnpublishMutationVariables = {id: string}
+
+    /**
+ * @summary Take a published form off the air, keeping its version and responses
+ */
+export const usePostV1FormsByIdUnpublish = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1FormsByIdUnpublish>>, TError,PostV1FormsByIdUnpublishMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1FormsByIdUnpublish>>,
+        TError,
+        PostV1FormsByIdUnpublishMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1FormsByIdUnpublishMutationOptions(options));
+    }
     export type postV1FormsByIdPublishResponse200 = {
   data: void
   status: 200

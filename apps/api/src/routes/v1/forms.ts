@@ -250,6 +250,59 @@ formsV1Router.put(
   },
 );
 
+/**
+ * Take a live form off the air, keeping its version and its responses.
+ *
+ * The headless twin of the dashboard route — the same authority as publishing,
+ * because being able to put a form up and not take it down is not a coherent
+ * permission. `active_version_id` is left alone: the version stays the form's
+ * document and republishing puts the same one back.
+ */
+formsV1Router.post(
+  "/forms/:id/unpublish",
+  requireScope("form", "publish"),
+  idempotent("POST /v1/forms/:id/unpublish"),
+  describeRoute({
+    tags: ["v1"],
+    summary: "Take a published form off the air, keeping its version and responses",
+    responses: {
+      200: { description: "Unpublished" },
+      404: { description: "Not found" },
+      409: { description: "The form is not published" },
+    },
+  }),
+  async (c) => {
+    const orgId = c.get("orgId")!;
+    const id = c.req.param("id");
+    if (!keyOwnsForm(c, id)) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+
+    const row = await c.env.DB.prepare(
+      `SELECT status FROM forms WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`,
+    )
+      .bind(id, orgId)
+      .first<{ status: string }>();
+    if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    if (row.status !== "published") {
+      return c.json({ error: { code: "not_published", message: "This form is not live" } }, 409);
+    }
+
+    await c.env.DB.prepare(`UPDATE forms SET status = 'draft', updated_at = ?2 WHERE id = ?1`)
+      .bind(id, Date.now())
+      .run();
+
+    await recordFormEvent(c.env, {
+      formId: id,
+      orgId,
+      kind: "unpublished",
+      summary: "Taken off the air",
+      actor: { type: "api_key", id: c.get("userId") ?? null, label: "API" },
+      source: "api",
+    }).catch((err) => console.error("form_activity_failed", err));
+
+    return c.json({ ok: true });
+  },
+);
+
 formsV1Router.post(
   "/forms/:id/publish",
   requireScope("form", "publish"),

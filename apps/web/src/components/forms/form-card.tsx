@@ -10,6 +10,7 @@ import {
   MessageSquare,
   MoreHorizontal,
   FolderInput,
+  PowerOff,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -67,6 +68,7 @@ export interface FormRow {
 export function FormCard({
   form,
   onDelete,
+  onUnpublish,
   workspaces = [],
   currentWorkspaceId,
   onMove,
@@ -76,6 +78,11 @@ export function FormCard({
 }: {
   form: FormRow;
   onDelete: () => void;
+  /**
+   * Takes a live form off the air. Absent on grids that cannot do it, which is
+   * what keeps the item out of the menu rather than showing one that fails.
+   */
+  onUnpublish?: () => void;
   /** Ticked. Only meaningful when `onSelectedChange` is supplied. */
   selected?: boolean;
   /**
@@ -182,6 +189,26 @@ export function FormCard({
                 Open live form
               </a>
             </DropdownMenuItem>
+            {/*
+              Stopping a form from the list, without opening it.
+
+              The builder has the same action, and this is not a duplicate of
+              it: a form that has to come down is usually one you are looking at
+              from the outside — a registration that filled up, a link that got
+              shared further than intended — and making somebody open the
+              builder to stop it adds a step to the one action nobody wants to
+              be slow.
+
+              Above the separator with the other live-form actions rather than
+              beside Delete: it is reversible and Delete is not, and putting
+              them together is how the wrong one gets clicked.
+            */}
+            {onUnpublish && (
+              <DropdownMenuItem onSelect={onUnpublish}>
+                <PowerOff className="size-3.5" />
+                Take offline
+              </DropdownMenuItem>
+            )}
           </>
         )}
         {/* A form is created in whichever workspace you were looking at, so

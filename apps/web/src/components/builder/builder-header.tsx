@@ -12,8 +12,10 @@ import {
   FileClock,
   Link2,
   Loader2,
+  MoreHorizontal,
   Pencil,
   Play,
+  PowerOff,
   Redo2,
   Undo2,
 } from "lucide-react";
@@ -33,6 +35,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TooltipHint } from "@/components/ui/kbd";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatDateTime, formatTime } from "@/lib/format";
 import { BUILDER_TABS, tabMatches } from "./builder-tabs";
 import { HistorySheet, showHistory } from "./history-sheet";
@@ -54,6 +63,7 @@ export function BuilderHeader({
   publishedAt,
   unpublished,
   onPublish,
+  onUnpublish,
   publishing,
   onPreview,
   onCopyLink,
@@ -75,6 +85,11 @@ export function BuilderHeader({
    */
   unpublished: boolean;
   onPublish: () => void | Promise<void>;
+  /**
+   * Takes the live form off the air. The shell owns it so it can report the
+   * outcome and refresh the row that decides whether this menu exists at all.
+   */
+  onUnpublish?: () => void | Promise<void>;
   publishing: boolean;
   /** Opens the full conversation preview. */
   onPreview: () => void;
@@ -104,6 +119,14 @@ export function BuilderHeader({
   const saveState = useBuilderStore((s) => s.saveState);
   const settled = saveState === "saved";
   const stale = published && unpublished;
+
+  /*
+    Confirmed rather than immediate. Unpublishing is reversible — the version
+    survives and Publish puts the same one back — but it is not *undoable* for
+    the person who opens the link in the thirty seconds it is down, and on a
+    form with a live audience that is the whole cost of the action.
+  */
+  const [confirmOffline, setConfirmOffline] = useState(false);
 
   const undo = useBuilderStore((s) => s.undo);
   const redo = useBuilderStore((s) => s.redo);
@@ -286,6 +309,32 @@ export function BuilderHeader({
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Open live</TooltipContent>
                 </Tooltip>
+
+                {/*
+                  Taking a form off the air, kept out of the primary row.
+
+                  There was no way to do this at all: a live form could only be
+                  stopped by a close date set in advance or by deleting it, and
+                  neither is what somebody wants when a registration has to stop
+                  now. It sits behind an overflow rather than beside Publish
+                  because the two are not peers — one is the thing you do all
+                  day and the other is the thing you do once, and a destructive
+                  sibling next to the button you press constantly is how it gets
+                  pressed by mistake.
+                */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon-sm" aria-label="More form actions">
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem variant="destructive" onSelect={() => setConfirmOffline(true)}>
+                      <PowerOff className="size-3.5" />
+                      Take offline
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </>
             )}
 
@@ -355,6 +404,24 @@ export function BuilderHeader({
       {/* Mounted here because the header persists across tab navigation, so the
           panel outlives whichever tab you opened it from. */}
       <HistorySheet formId={formId} />
+
+      <ConfirmDialog
+        open={confirmOffline}
+        onOpenChange={setConfirmOffline}
+        title="Take this form offline?"
+        description={
+          <>
+            The link stops working immediately and nobody new can start a response. Nothing is
+            deleted — your responses stay, and v{activeVersion ?? 1} goes straight back up when
+            you publish again.
+            <br />
+            <br />
+            Anyone part-way through right now can still finish and submit.
+          </>
+        }
+        confirmLabel="Take offline"
+        onConfirm={() => onUnpublish?.()}
+      />
     </TooltipProvider>
   );
 }

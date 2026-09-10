@@ -86,6 +86,9 @@ import type {
   PostApiFormsByIdPublish200,
   PostApiFormsByIdPublish402,
   PostApiFormsByIdPublish422,
+  PostApiFormsByIdUnpublish200,
+  PostApiFormsByIdUnpublish404,
+  PostApiFormsByIdUnpublish409,
   PostApiFormsByIdVersionsByVersionRestore200,
   PostApiFormsByIdVersionsByVersionRestore404,
   PostApiFormsByIdVersionsByVersionRestore422,
@@ -946,6 +949,101 @@ export const usePutApiFormsByIdDoc = <TError = unknown,
         TContext
       > => {
       return useMutation(getPutApiFormsByIdDocMutationOptions(options));
+    }
+    export type postApiFormsByIdUnpublishResponse200 = {
+  data: PostApiFormsByIdUnpublish200
+  status: 200
+}
+
+export type postApiFormsByIdUnpublishResponse404 = {
+  data: PostApiFormsByIdUnpublish404
+  status: 404
+}
+
+export type postApiFormsByIdUnpublishResponse409 = {
+  data: PostApiFormsByIdUnpublish409
+  status: 409
+}
+
+export type postApiFormsByIdUnpublishResponseSuccess = (postApiFormsByIdUnpublishResponse200) & {
+  headers: Headers;
+};
+export type postApiFormsByIdUnpublishResponseError = (postApiFormsByIdUnpublishResponse404 | postApiFormsByIdUnpublishResponse409) & {
+  headers: Headers;
+};
+
+export type postApiFormsByIdUnpublishResponse = (postApiFormsByIdUnpublishResponseSuccess | postApiFormsByIdUnpublishResponseError)
+
+export const getPostApiFormsByIdUnpublishUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/unpublish`
+}
+
+/**
+ * @summary Take a published form off the air, keeping its version and responses
+ */
+export const postApiFormsByIdUnpublish = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postApiFormsByIdUnpublishResponse> => {
+
+  return customFetch<postApiFormsByIdUnpublishResponse>(getPostApiFormsByIdUnpublishUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiFormsByIdUnpublishMutationOptions = <TError = PostApiFormsByIdUnpublish404 | PostApiFormsByIdUnpublish409,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdUnpublish>>, TError,PostApiFormsByIdUnpublishMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdUnpublish>>, TError,PostApiFormsByIdUnpublishMutationVariables, TContext> => {
+
+const mutationKey = ['postApiFormsByIdUnpublish'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFormsByIdUnpublish>>, PostApiFormsByIdUnpublishMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postApiFormsByIdUnpublish(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFormsByIdUnpublishMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFormsByIdUnpublish>>>
+
+    export type PostApiFormsByIdUnpublishMutationError = PostApiFormsByIdUnpublish404 | PostApiFormsByIdUnpublish409
+    export type PostApiFormsByIdUnpublishMutationVariables = {id: string}
+
+    /**
+ * @summary Take a published form off the air, keeping its version and responses
+ */
+export const usePostApiFormsByIdUnpublish = <TError = PostApiFormsByIdUnpublish404 | PostApiFormsByIdUnpublish409,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdUnpublish>>, TError,PostApiFormsByIdUnpublishMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFormsByIdUnpublish>>,
+        TError,
+        PostApiFormsByIdUnpublishMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFormsByIdUnpublishMutationOptions(options));
     }
     export type postApiFormsByIdPublishResponse200 = {
   data: PostApiFormsByIdPublish200
