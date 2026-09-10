@@ -84,6 +84,31 @@ const SNOOZE_DAYS = 14;
 
 type NudgeMemory = { kind: "dismissed" } | { kind: "snoozed"; until: number; partials: number };
 
+/**
+ * What we remember about this banner, with the clock already applied.
+ *
+ * `snoozeExpired` is resolved here rather than where the banner decides whether
+ * to render, and that placement is the whole point. Reading the clock during
+ * render is impure — the same component would answer differently on a re-render
+ * nobody asked for — and moving it into an effect instead would let the banner
+ * paint before the snooze that suppresses it had been evaluated, so an author
+ * who pressed "Not now" yesterday would see it flash back at them on every
+ * load. Read once, next to the value it is about.
+ */
+interface StoredNudge {
+  memory: NudgeMemory | null;
+  /** The fortnight is up. The count half of the rule depends on props, so it stays in render. */
+  snoozeExpired: boolean;
+}
+
+function readNudge(formId: string): StoredNudge {
+  const memory = readMemory(formId);
+  return {
+    memory,
+    snoozeExpired: memory?.kind === "snoozed" ? Date.now() >= memory.until : false,
+  };
+}
+
 function readMemory(formId: string): NudgeMemory | null {
   if (typeof window === "undefined") return null;
   try {
@@ -135,7 +160,7 @@ export function FollowUpNudge({
   const saveDoc = usePutApiFormsByIdDoc();
   const publish = usePostApiFormsByIdPublish();
 
-  const [memory, setMemory] = useState<NudgeMemory | null>(() => readMemory(formId));
+  const [{ memory, snoozeExpired }, setStored] = useState<StoredNudge>(() => readNudge(formId));
   const [busy, setBusy] = useState(false);
   const [askAddress, setAskAddress] = useState(false);
   const [justSavedAddress, setJustSavedAddress] = useState<string | null>(null);
@@ -161,7 +186,7 @@ export function FollowUpNudge({
    */
   const suppressed =
     memory?.kind === "dismissed" ||
-    (memory?.kind === "snoozed" && Date.now() < memory.until && partials < memory.partials * 2);
+    (memory?.kind === "snoozed" && !snoozeExpired && partials < memory.partials * 2);
 
   if (!doc || suppressed || on || !enough || !published || ent.isLoading) return null;
 
@@ -170,7 +195,8 @@ export function FollowUpNudge({
   const hasPostal = Boolean((justSavedAddress ?? storedAddress)?.trim());
 
   function remember(next: NudgeMemory) {
-    setMemory(next);
+    // A snooze the author has just set cannot already have run out.
+    setStored({ memory: next, snoozeExpired: false });
     try {
       localStorage.setItem(NUDGE_KEY(formId), JSON.stringify(next));
     } catch {

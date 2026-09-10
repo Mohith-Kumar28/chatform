@@ -92,7 +92,15 @@ export function ClosingNotice({
   );
 
   const desc = now === 0 ? null : describeClosing(closeAt, now, { started });
-  const spots = describeCapacity(capacity);
+  /**
+   * Places left stops being a fact the moment the deadline passes.
+   *
+   * Nobody can take them, so "you can still finish this response · 25 spots
+   * left" offers a thing that is no longer on offer — and it read as two
+   * contradictory sentences stapled together. The count survives only while it
+   * still describes something somebody could do.
+   */
+  const spots = desc?.tier === "passed" ? null : describeCapacity(capacity);
   if (!desc && !spots) return null;
 
   const timeUrgent = desc ? isUrgent(desc.tier) : false;
@@ -101,66 +109,79 @@ export function ClosingNotice({
       <div
         className={cn(
           /*
-            `rounded-2xl` rather than the scroll-to-bottom chip's `rounded-full`,
-            and wrapping allowed, because one of these strings is a sentence
-            rather than a clock — "you can still finish this response" is around
-            three hundred pixels and has to be able to take a second line on a
-            narrow phone. At one line the two shapes are barely distinguishable
-            at this height.
+            `items-start` with the icon outside the text, rather than everything
+            in one wrapping flex row.
+
+            All of this is usually a clock a few characters wide, but one string
+            is a whole sentence — "you can still finish this response" — and as
+            flex children the icon and each span were wrap candidates in their
+            own right. On a narrow phone that put the icon alone on the first
+            line with the sentence centred underneath, and left the separator
+            stranded before the count. The icon is a fixed column now and the
+            words are ordinary inline text inside it, so they wrap the way text
+            does and the icon stays beside the first line.
+
+            `rounded-2xl` rather than the scroll-to-bottom chip's `rounded-full`
+            for the same reason: at two lines a pill looks like a mistake, and
+            at one line the two shapes are barely distinguishable at this height.
           */
-          "flex max-w-full flex-wrap items-center justify-center gap-x-1.5 rounded-2xl border px-3 py-1.5 text-center text-xs",
+          "flex max-w-full items-start gap-1.5 rounded-2xl border px-3 py-1.5 text-xs",
           "bg-[var(--cf-chip-bg)]",
           timeUrgent || spots?.urgent
             ? "border-[var(--cf-warning)]/40"
             : "border-[var(--cf-chip-border)]",
         )}
       >
-        {/* The clock earns the icon slot; without a deadline the count takes it. */}
+        {/* The clock earns the icon slot; without a deadline the count takes it.
+            `mt-px` sits it on the text baseline rather than the box's top. */}
         {desc ? (
-          <Clock className="size-3.5 shrink-0" strokeWidth={2} />
+          <Clock className="mt-px size-3.5 shrink-0" strokeWidth={2} />
         ) : (
-          <Users className="size-3.5 shrink-0" strokeWidth={2} />
+          <Users className="mt-px size-3.5 shrink-0" strokeWidth={2} />
         )}
 
-        {desc && (
-          <>
-            {/*
-              `tabular-nums` because the digits change once a second and
-              proportional figures make the whole row twitch sideways as they do.
+        <span className="min-w-0 text-center">
+          {desc && (
+            <>
+              {/*
+                `tabular-nums` because the digits change once a second and
+                proportional figures make the whole row twitch sideways as they
+                do.
 
-              Hidden from assistive tech, with the absolute time announced in its
-              place — a live counter read out once a second is unusable, and the
-              date is the form somebody can act on anyway.
-            */}
-            <span
-              className={cn(
-                "tabular-nums",
-                timeUrgent ? "text-[var(--cf-warning)]" : "text-[var(--cf-muted)]",
-              )}
-              aria-hidden="true"
-            >
-              {desc.text}
+                Hidden from assistive tech, with the absolute time announced in
+                its place — a live counter read out once a second is unusable,
+                and the date is the form somebody can act on anyway.
+              */}
+              <span
+                className={cn(
+                  "tabular-nums",
+                  timeUrgent ? "text-[var(--cf-warning)]" : "text-[var(--cf-muted)]",
+                )}
+                aria-hidden="true"
+              >
+                {desc.text}
+              </span>
+              <span className="sr-only">{desc.srText}</span>
+            </>
+          )}
+
+          {/*
+            Coloured on its own account. Few places left is a reason to hurry
+            even when the deadline is a fortnight off, and a deadline in the last
+            hour says nothing about how full the form is — so one being urgent
+            must not drag the other into a colour its own numbers do not justify.
+          */}
+          {desc && spots && (
+            <span className="text-[var(--cf-muted)]" aria-hidden="true">
+              {" · "}
             </span>
-            <span className="sr-only">{desc.srText}</span>
-          </>
-        )}
-
-        {/*
-          Coloured on its own account. Few places left is a reason to hurry even
-          when the deadline is a fortnight off, and a deadline in the last hour
-          says nothing about how full the form is — so one being urgent must not
-          drag the other into a colour its own numbers do not justify.
-        */}
-        {desc && spots && (
-          <span className="text-[var(--cf-muted)]" aria-hidden="true">
-            ·
-          </span>
-        )}
-        {spots && (
-          <span className={spots.urgent ? "text-[var(--cf-warning)]" : "text-[var(--cf-muted)]"}>
-            {spots.text}
-          </span>
-        )}
+          )}
+          {spots && (
+            <span className={spots.urgent ? "text-[var(--cf-warning)]" : "text-[var(--cf-muted)]"}>
+              {spots.text}
+            </span>
+          )}
+        </span>
       </div>
     </div>
   );
