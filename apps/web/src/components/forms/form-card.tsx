@@ -604,15 +604,41 @@ export function FormCard({
           subtitle repeated what the picture said, in worse form and at two
           lines a card. A grid is for recognising, not reading.
         */}
-            <div className="flex flex-1 flex-col p-4">
-              <h3 className="font-display truncate font-semibold">
+            <div className="relative flex flex-1 flex-col p-4">
+              {/*
+                The other half of the seam blend: the form's own surface,
+                carried on below the thumbnail and fading out under the title.
+
+                This is what lets the fade above the seam start as low as it
+                does. Confined to the artwork it had to arrive at `--card` by
+                the bottom edge, so every pixel it started lower was a pixel
+                out of the ramp; spilling the rest of the ramp down here
+                decouples the two. The alpha it starts at is exactly what the
+                layer above ends at, read off the same curve, so the boundary
+                is continuous even though neither side has finished there.
+
+                Behind the text on `z-0`, and it is nearly gone by the time it
+                reaches the title — the strong end of it lives in the 16px of
+                padding above.
+              */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-0 z-0"
+                style={{
+                  ...thumbSurface(form.theme ?? null, "bleed"),
+                  height: SEAM_BELOW,
+                  maskImage: SEAM_BLEED_MASK,
+                  WebkitMaskImage: SEAM_BLEED_MASK,
+                }}
+              />
+              <h3 className="font-display relative z-10 truncate font-semibold">
                 {form.title}
               </h3>
               {/* `pe-8` when there is a tick box: it sits in this row's right-hand
               end, and a long relative time would otherwise run underneath it. */}
               <div
                 className={cn(
-                  "mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-3",
+                  "relative z-10 mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-3",
                   selectable && "pe-8",
                 )}
               >
@@ -835,10 +861,7 @@ function ChatThumb({
     return (
       <ThumbFrame
         pills={pills}
-        style={{
-          backgroundImage:
-            "linear-gradient(115deg, var(--brand-orange-band) 0%, var(--brand-violet-band) 100%)",
-        }}
+        style={thumbSurface(null, "thumb")}
       >
         <ThumbBubbles
           opener={opener}
@@ -866,7 +889,7 @@ function ChatThumb({
    * somebody picks a pale accent.
    */
   return (
-    <ThumbFrame pills={pills} style={{ backgroundColor: theme.background }}>
+    <ThumbFrame pills={pills} style={thumbSurface(theme, "thumb")}>
       <ThumbBubbles
         opener={opener}
         answer={answer}
@@ -922,41 +945,117 @@ function ChatThumb({
  * that would have overrun clips against the strip instead of through it.
  */
 /**
- * The thumbnail-to-card fade.
+ * The thumbnail-to-card blend, which straddles the seam rather than stopping
+ * at it.
  *
- * The first cut was five stops and read as four flat bands rather than one
- * fade: every stop is a change of slope, and the eye finds a change of slope
- * in a gradient far more readily than it finds the gradient itself. Mach bands
- * are a response to curvature, so the fix is not more opacity resolution — it
- * is a curve that never turns a corner.
+ * Every earlier cut of this lived entirely inside the thumbnail, and that is
+ * what made "start it lower" and "make it smoother" mutually exclusive. A fade
+ * confined above the seam has to arrive at `--card` exactly at the bottom
+ * edge, so its length is fixed by where it starts: drop the start 20px and you
+ * have taken 20px out of the ramp. Every attempt to satisfy one complaint
+ * produced the other.
  *
- * `smoothstep(t) = 3t² - 2t³` is flat at both ends, which is the property that
- * matters: zero slope at the top means the band eases out of the artwork with
- * no line where it begins, zero slope at the bottom means it eases into
- * `--card` with no line where it lands. A plain `transparent → var(--card)`
- * ramp is smooth in between but corners at both ends — the seam again, twice,
- * in softer form.
+ * The way out is that the fade does not have to finish at the seam. It can
+ * carry on into the card body and die out there. So the blend is one curve
+ * across {@link SEAM_TOTAL} pixels, drawn in two layers that meet at the
+ * boundary:
  *
- * 64px, which is the bottom ~40% of the 144px thumbnail, and the curve is left
- * symmetric rather than weighted late. Those two go together. An earlier cut
- * bought a lower onset by raising smoothstep to a power, which does move the
- * visible start down — but only by steepening everything under it, so the
- * artwork kept more of its colour and paid for it with a faster fade. Inside a
- * band already cut to the bottom 40% there is nothing left to buy: the plain
- * curve spends every one of those 64px easing, which is the gentlest ramp that
- * fits in the space. Onset lands around 55px up, so the top ~60% of the
- * thumbnail is the form's colour at full strength.
+ * - above it, `--card` painted over the artwork at rising alpha;
+ * - below it, the artwork painted over the card at the complement.
  *
- * Sampled at 17 points rather than left as two stops because the curve is
- * approximated by line segments either way, and at that spacing each segment's
- * slope step is under what the eye resolves as a band.
+ * They agree at the seam by construction — one is `S`, the other is `1 - S`,
+ * sampled from the same curve at the same point — so the boundary carries no
+ * step even though neither layer has reached its end there. That buys the
+ * start position and the ramp length separately: only {@link SEAM_ABOVE}
+ * pixels of it are on the artwork, which is the bottom fifth of the
+ * thumbnail, while the ramp itself is nearly twice that.
+ *
+ * `3t² - 2t³` — smoothstep — for the curve, because it is flat at both ends.
+ * Zero slope at the top means it eases out of the artwork with no line where
+ * it begins, zero slope at the bottom means it dies out under the title with
+ * no line where it ends. An earlier cut raised this to a power to push the
+ * onset down; that is no longer needed, and it cost smoothness — which is the
+ * whole point of moving the blend instead of reshaping it.
+ *
+ * Mach bands are a response to curvature, so both layers are sampled at 13
+ * points: the curve gets approximated by line segments either way, and at that
+ * spacing the slope step between neighbouring segments is under what the eye
+ * resolves as a band.
  */
-const SEAM_FADE = `linear-gradient(to bottom, ${Array.from({ length: 17 }, (_, i) => {
-  const t = i / 16;
-  const pct = (t * t * (3 - 2 * t) * 100).toFixed(2);
-  const at = (t * 100).toFixed(2);
-  return `color-mix(in oklab, var(--card) ${pct}%, transparent) ${at}%`;
-}).join(", ")})`;
+const SEAM_ABOVE = 28;
+const SEAM_BELOW = 28;
+const SEAM_TOTAL = SEAM_ABOVE + SEAM_BELOW;
+
+/** Where the artwork's own box ends. `h-36` on {@link ThumbFrame}. */
+const THUMB_H = 144;
+
+const smoothstep = (t: number) => t * t * (3 - 2 * t);
+
+/**
+ * One layer of the blend, as gradient stops.
+ *
+ * `from`/`to` are this layer's own edges measured down the *shared* ramp, so
+ * both layers read the same curve at the same place and agree where they meet.
+ */
+function seamStops(
+  from: number,
+  to: number,
+  paint: (alpha: number) => string,
+): string {
+  const steps = 12;
+  return Array.from({ length: steps + 1 }, (_, i) => {
+    const local = i / steps;
+    const alpha = smoothstep((from + local * (to - from)) / SEAM_TOTAL);
+    return `${paint(alpha)} ${(local * 100).toFixed(2)}%`;
+  }).join(", ");
+}
+
+/** Card colour over the artwork, for the part of the ramp above the seam. */
+const SEAM_FADE = `linear-gradient(to bottom, ${seamStops(
+  0,
+  SEAM_ABOVE,
+  (a) => `color-mix(in oklab, var(--card) ${(a * 100).toFixed(2)}%, transparent)`,
+)})`;
+
+/**
+ * The complement, as a mask.
+ *
+ * Below the seam the paint is the *form's* surface — a colour for a themed
+ * form, a two-stop sweep for an unthemed one — which no single `color-mix` can
+ * express. So the strip is painted with that surface at full strength and
+ * masked to `1 - S` instead, which works the same for either.
+ */
+const SEAM_BLEED_MASK = `linear-gradient(to bottom, ${seamStops(
+  SEAM_ABOVE,
+  SEAM_TOTAL,
+  (a) => `rgb(0 0 0 / ${(1 - a).toFixed(4)})`,
+)})`;
+
+const BRAND_BAND =
+  "linear-gradient(115deg, var(--brand-orange-band) 0%, var(--brand-violet-band) 100%)";
+
+/**
+ * The artwork's surface, painted so the strip below the seam continues it.
+ *
+ * A solid fill needs no help. The brand band does: a 115deg sweep resolves
+ * against the box it is painted in, so the same declaration in a 36px strip
+ * would restart the gradient rather than carry it on, and the seam would come
+ * back as a horizontal colour jump. Sizing both boxes to the *combined* height
+ * and offsetting the lower one by the thumbnail's own height makes the strip
+ * show the slice that comes next, which is what continuity means here.
+ */
+function thumbSurface(
+  theme: FormRow["theme"],
+  part: "thumb" | "bleed",
+): CSSProperties {
+  if (theme) return { backgroundColor: theme.background };
+  return {
+    backgroundImage: BRAND_BAND,
+    backgroundRepeat: "no-repeat",
+    backgroundSize: `100% ${THUMB_H + SEAM_BELOW}px`,
+    backgroundPosition: part === "thumb" ? "0 0" : `0 -${THUMB_H}px`,
+  };
+}
 
 function ThumbFrame({
   style,
@@ -992,8 +1091,8 @@ function ThumbFrame({
       */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-16"
-        style={{ backgroundImage: SEAM_FADE }}
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-0"
+        style={{ height: SEAM_ABOVE, backgroundImage: SEAM_FADE }}
       />
       <div className="relative z-10 min-h-0 flex-1 overflow-hidden">
         {children}
