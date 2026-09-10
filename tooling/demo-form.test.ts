@@ -196,7 +196,6 @@ describe("safe to leave open to the internet", () => {
     // response per identity means somebody who took it once can never open it
     // again — they come back to a dead end. Sign-in still gates it and
     // `maxSubmissions` still caps the spend.
-    expect(settings.requireAuth.onePerIdentity).toBe(false);
     expect(settings.allowResubmissions).toBe(true);
     // Not 0: a sign-in card at interaction zero is where a demo loses people.
     // Not late either — everything before it is ungated and costs real tokens.

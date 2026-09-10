@@ -147,10 +147,6 @@ export function stripForPublish(input: FormDoc, ent: Entitlements): StripResult 
       s.requireAuth.enabled = false;
       note(stripped, "settings.requireAuth.enabled", feature);
     }
-    if (s.requireAuth.onePerIdentity && !can(ent, "one_response_per_identity")) {
-      s.requireAuth.onePerIdentity = false;
-      note(stripped, "settings.requireAuth.onePerIdentity", "one_response_per_identity");
-    }
   }
   // Verified answers, question by question. Reported once however many questions ask for
   // it: a publish notice listing the same upsell six times is a worse notice.
@@ -250,7 +246,6 @@ export function clampForRuntime(input: FormDoc, ent: Entitlements): FormDoc {
   if (gate?.enabled) {
     const granted = gate.method === "phone" ? can(ent, "respondent_auth_phone") : can(ent, "respondent_auth_google");
     if (!granted) gate.enabled = false;
-    if (gate.onePerIdentity && !can(ent, "one_response_per_identity")) gate.onePerIdentity = false;
   }
   /*
    * Answer verification, re-derived per read for the same reason the gate is: a form

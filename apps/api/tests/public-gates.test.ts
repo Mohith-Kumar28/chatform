@@ -194,11 +194,11 @@ describe("branding", () => {
 });
 
 describe("duplicate responses", () => {
-  const withIp = (slug: string, ip: string) =>
+  const withIp = (slug: string, ip: string, deviceSignal?: string) =>
     fetchApi(`/p/forms/${slug}/sessions`, {
       method: "POST",
       headers: { "content-type": "application/json", "cf-connecting-ip": ip },
-      body: JSON.stringify({}),
+      body: JSON.stringify(deviceSignal ? { deviceSignal } : {}),
     });
 
   /** Mark every session opened from an address as finished, as completing the form would. */
@@ -207,13 +207,34 @@ describe("duplicate responses", () => {
       .bind(sha256Hex(ip))
       .run();
 
-  it("turns a finished respondent away on a repeat, and lets a different address through", async () => {
+  it("turns a finished respondent away on a repeat, and lets a different device through", async () => {
     const slug = await publish("dup", { allowResubmissions: false });
-    expect((await withIp(slug, "203.0.113.9")).status).toBe(200);
+    expect((await withIp(slug, "203.0.113.9", "devicealpha01")).status).toBe(200);
     await finishFrom("203.0.113.9");
-    expect((await withIp(slug, "203.0.113.9")).status).toBe(409);
-    // An IP identifies a network, not a person, so the block must be per-address.
-    expect((await withIp(slug, "203.0.113.10")).status).toBe(200);
+    expect((await withIp(slug, "203.0.113.9", "devicealpha01")).status).toBe(409);
+    // Same network, different machine: the key is the device, not the address.
+    expect((await withIp(slug, "203.0.113.9", "devicebeta002")).status).toBe(200);
+  });
+
+  /**
+   * The rule that used to close a form for a whole office.
+   *
+   * `respondentKey` falls back to the hashed IP when the browser sends no
+   * device signal, and the gate matched on `ip_hash` besides — so the first
+   * person behind a campus NAT to finish the form locked out everybody else
+   * on it, and the author's only clue was responses that never arrived.
+   *
+   * Refusing to enforce on an address is the deliberate trade. Letting a
+   * determined duplicate through is what sign-in is for, and the setting has
+   * never claimed to stop one; silently losing real respondents is the
+   * failure that cannot be noticed or undone.
+   */
+  it("does not enforce on an address, so a shared network is not one person", async () => {
+    const slug = await publish("dupnat", { allowResubmissions: false });
+    expect((await withIp(slug, "203.0.113.20")).status).toBe(200);
+    await finishFrom("203.0.113.20");
+    // A colleague on the same office wifi, with no device signal to tell them apart.
+    expect((await withIp(slug, "203.0.113.20")).status).toBe(200);
   });
 
   /**
@@ -226,15 +247,33 @@ describe("duplicate responses", () => {
    */
   it("does not count a session that was opened and abandoned", async () => {
     const slug = await publish("dupopen", { allowResubmissions: false });
-    expect((await withIp(slug, "203.0.113.12")).status).toBe(200);
-    expect((await withIp(slug, "203.0.113.12")).status).toBe(200);
+    expect((await withIp(slug, "203.0.113.12", "devicegamma01")).status).toBe(200);
+    expect((await withIp(slug, "203.0.113.12", "devicegamma01")).status).toBe(200);
+  });
+
+  /**
+   * Pro keeps the browser key even behind a sign-in gate.
+   *
+   * The device check stands down only when something stronger is going to
+   * run in its place, and on Pro nothing is: `one_response_per_identity` is
+   * a Business feature. Standing down here would turn the switch off in
+   * silence on exactly the forms most likely to have it on.
+   */
+  it("still uses the browser key on a gated form the plan cannot key by identity", async () => {
+    const slug = await publish("dupgated", {
+      allowResubmissions: false,
+      requireAuth: { enabled: true, method: "google" },
+    });
+    expect((await withIp(slug, "203.0.113.30", "deviceepsil01")).status).toBe(200);
+    await finishFrom("203.0.113.30");
+    expect((await withIp(slug, "203.0.113.30", "deviceepsil01")).status).toBe(409);
   });
 
   it("lets everyone through when resubmissions are allowed", async () => {
     const slug = await publish("nodup", { allowResubmissions: true });
-    expect((await withIp(slug, "203.0.113.11")).status).toBe(200);
+    expect((await withIp(slug, "203.0.113.11", "devicedelta01")).status).toBe(200);
     await finishFrom("203.0.113.11");
-    expect((await withIp(slug, "203.0.113.11")).status).toBe(200);
+    expect((await withIp(slug, "203.0.113.11", "devicedelta01")).status).toBe(200);
   });
 });
 

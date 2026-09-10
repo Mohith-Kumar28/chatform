@@ -2876,6 +2876,18 @@ export class SessionDO extends DurableObject<Bindings> {
      * `status`. Null while the conversation is still going.
      */
     ending: PublicEnding | null;
+    /**
+     * Whether this respondent may start another response.
+     *
+     * Answered here because the client cannot answer it. It was inferring it
+     * from `allowResubmissions` on the *published* config, which is a
+     * different document from the one this session is running — a form
+     * republished mid-conversation moves one and not the other — and which
+     * carries no idea of what the plan allows. The session knows both: it
+     * holds its own clamped document, and the clamp is where an unentitled
+     * setting has already been turned back off.
+     */
+    canRepeat: boolean;
     /** Null when the form is open to anyone. */
     auth: {
       method: RespondentAuthMethod;
@@ -2907,6 +2919,7 @@ export class SessionDO extends DurableObject<Bindings> {
           ? (this.meta.completedAt ?? null)
           : null,
       ending: this.finishedEnding(),
+      canRepeat: this.doc?.settings.allowResubmissions !== false,
       auth: this.doc?.settings.requireAuth.enabled
         ? {
             method: this.doc.settings.requireAuth.method,

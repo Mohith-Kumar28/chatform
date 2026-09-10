@@ -1346,8 +1346,17 @@ function EndingCard({
           a second device, another idea — had to reload and hope. Gated on the
           form's own resubmission setting, so a form that only wants one answer
           per person still does not invite a second one.
+
+          It used to be gated on there being no redirect as well, on the
+          reasoning that a page about to navigate away has no business offering
+          anything. That was the wrong call even then, and it is plainly wrong
+          now the redirect opens in a new tab and leaves this one standing: a
+          form with a completion redirect — which is most forms that have
+          somewhere to send people — silently lost the only control that lets a
+          respondent file a second response. One registration per person is a
+          setting, and it was being applied to forms that had not asked for it.
         */}
-        {allowRepeat && !ending.redirectUrl && (
+        {allowRepeat && (
           <button
             type="button"
             onClick={onRestart}

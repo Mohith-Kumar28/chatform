@@ -22,6 +22,7 @@ import {
   type FormDoc,
 } from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
+import { useEntitlements } from "@/hooks/use-entitlements";
 import { LinkSettings } from "./link-settings";
 import { FollowUpPanel } from "./followup-panel";
 import { ShortcutsList } from "@/components/ui/shortcuts-dialog";
@@ -68,6 +69,12 @@ export function SettingsPanel({
   slug,
 }: SettingsPanelProps) {
   const params = useParams<{ id: string; section?: string[] }>();
+  /*
+    Read rather than gated on: the switch itself is `duplicate_prevention`,
+    and this only decides which sentence sits under it. `LockedControl`
+    handles the padlock.
+  */
+  const canVerifiedIdentity = useEntitlements().can("one_response_per_identity");
 
   /**
    * The section is the URL, not component state.
@@ -162,24 +169,6 @@ export function SettingsPanel({
                 />
               </LockedControl>
               </SettingGroup>
-              <SettingGroup>
-              {/*
-                One switch, not a menu of mechanisms.
-
-                This was a three-way select — "allow repeats", "one per device
-                per day", "fingerprint by answer field" — which made the author
-                choose an implementation for a question they only had one
-                opinion about, and one of the three did nothing at all.
-              */}
-              <LockedControl feature="duplicate_prevention">
-                <SettingRow
-                  label="Allow resubmissions"
-                  description="Off means one response per person. Without sign-in we recognise the respondent's browser, which survives a cleared cache and a private window but not a different device — require sign-in for a per-person guarantee."
-                  checked={settings.allowResubmissions}
-                  onCheckedChange={(v) => patch({ allowResubmissions: v })}
-                />
-              </LockedControl>
-              </SettingGroup>
             </SettingSection>
             </>
           )}
@@ -269,14 +258,37 @@ export function SettingsPanel({
                       onChange={(e) => patch({ requireAuth: { ...settings.requireAuth, message: e.target.value } })}
                     />
                   </SettingRow>
-                  <SettingRow
-                    label="One response per person"
-                    description="A verified identity can only answer once."
-                    checked={settings.requireAuth.onePerIdentity}
-                    onCheckedChange={(v) => patch({ requireAuth: { ...settings.requireAuth, onePerIdentity: v } })}
-                  />
                 </>
               )}
+              {/*
+                One question, asked once.
+
+                This used to be two switches. "Allow resubmissions" sat in
+                General → Display, and "One response per person" sat here,
+                inside the sign-in block — opposite polarity, two sections
+                apart, and both answering "may one person answer twice?". All
+                that differed was which key they enforced on: the browser, or
+                the verified identity.
+
+                Which key to use is not a decision an author can make well,
+                because it is not a decision at all — it follows from whether
+                the form asks people to sign in. So the switch states the rule
+                and the description states the consequence, and the author is
+                never asked to pick a mechanism.
+
+                It lives here rather than under Display because it is a rule
+                about who may respond, alongside sign-in, the password, the
+                captcha and the closing date. Display is the progress bar and
+                the branding.
+              */}
+              <LockedControl feature="duplicate_prevention">
+                <SettingRow
+                  label="One response per person"
+                  description={onePerPersonBlurb(settings.requireAuth.enabled, canVerifiedIdentity)}
+                  checked={!settings.allowResubmissions}
+                  onCheckedChange={(v) => patch({ allowResubmissions: !v })}
+                />
+              </LockedControl>
               <SettingRow
                 label="Require password"
                 description="Only people with the password can respond."
@@ -558,6 +570,25 @@ function ConfirmationEmailSettings({
       )}
     </SettingGroup>
   );
+}
+
+/**
+ * What "one response per person" actually buys, given this form and this plan.
+ *
+ * The author picks the rule; the key is a consequence, and the consequence is
+ * worth stating because the three cases differ by a lot. Saying "one response
+ * per person" over a browser fingerprint without saying so is the kind of
+ * promise that gets discovered at the wrong moment — a duplicate in the
+ * results, or a respondent locked out of a form they never filled in.
+ */
+function onePerPersonBlurb(signInRequired: boolean, canVerifiedIdentity: boolean): string {
+  if (signInRequired && canVerifiedIdentity) {
+    return "Keyed to the identity they sign in with, so another browser or device does not get them a second response.";
+  }
+  if (signInRequired) {
+    return "We recognise the respondent's browser — it survives a cleared cache and a private window, but not a different device. Business keys this to the identity they sign in with instead.";
+  }
+  return "We recognise the respondent's browser. It survives a cleared cache and a private window, but not a different device — turn on Require sign-in for a per-person guarantee.";
 }
 
 function SettingSection({ title, children }: { title: string; children: React.ReactNode }) {

@@ -289,11 +289,47 @@ describe("signing in after Start over", () => {
    * page is a way around it.
    */
   it("still refuses somebody who has already finished", async () => {
-    await publish({ ...GATED, requireAuth: { ...GATED.requireAuth, onePerIdentity: true } });
+    await publish({ ...GATED, allowResubmissions: false });
     await seedTheirs("sbm_so_done", { status: "completed" });
     const { status, body } = await signIn({ fresh: true });
     expect(status).toBe(409);
     expect(body.error?.code).toBe("already_answered");
+    await publish(GATED);
+  });
+});
+
+/**
+ * Where the two keys hand over.
+ *
+ * On Business with a sign-in gate the verified identity is the key, and the
+ * device check in `openSession` must not also run. Running both is not
+ * belt-and-braces: the device check fires at the door, before anybody can
+ * prove who they are, so two people sharing a machine ends with the second
+ * refused for a response the first one left — by a rule the identity check
+ * would have let them past.
+ */
+describe("one response per person, on a form that knows who people are", () => {
+  const SIGNAL = "sharedlabpc1";
+
+  it("does not refuse a second person at the door on a shared machine", async () => {
+    await publish({ ...GATED, allowResubmissions: false });
+    const salt = await env.DB.prepare(`SELECT fingerprint_salt FROM forms WHERE id = ?`)
+      .bind(t.formId)
+      .first<{ fingerprint_salt: string }>();
+    const key = respondentKey({ signal: SIGNAL, ip: "", salt: salt!.fingerprint_salt });
+
+    // Somebody already finished on this machine.
+    await env.DB.prepare(
+      `INSERT INTO chat_sessions (id, form_id, form_version_id, organization_id, respondent_token_hash,
+                                  status, hidden_fields, ip_hash, fingerprint, source, is_test,
+                                  created_at, last_activity_at)
+       VALUES ('chs_so_shared', ?1, ?2, ?3, 'hash', 'completed', '{}', '', ?4, 'chat', 0, ?5, ?5)`,
+    )
+      .bind(t.formId, VERSION_ID, t.orgId, key.value, Date.now())
+      .run();
+
+    const res = await open({ deviceSignal: SIGNAL });
+    expect(res.status).toBe(200);
     await publish(GATED);
   });
 });
@@ -338,10 +374,12 @@ describe("the device match", () => {
  * anything had survived.
  */
 describe("returning after being screened out", () => {
-  const SCREEN_OUT = {
-    ...GATED,
-    requireAuth: { ...GATED.requireAuth, onePerIdentity: true },
-  };
+  /*
+   * One setting, not two. `allowResubmissions: false` is the whole of "one
+   * response per person"; the sign-in gate above it is what makes the
+   * verified identity the key rather than the browser.
+   */
+  const SCREEN_OUT = { ...GATED, allowResubmissions: false };
   const DOC_WITH_REFUSAL = {
     endings: [
       { id: "end_so000001", ref: "end_thanks", title: "Done", bodyMd: "Thanks." },

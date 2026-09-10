@@ -67,9 +67,9 @@ export const SettingsDoc = z.object({
        * could both be on. Nothing was gained by that: a respondent meeting a
        * card with two ways in has to choose one, and the two produce different
        * identities — a Google account and a phone number are not the same
-       * person to `onePerIdentity`, so the same human could answer twice by
-       * coming back through the other door. The author is choosing what an
-       * identity *is* on this form, and that is a single decision.
+       * person to the one-per-person rule, so the same human could answer
+       * twice by coming back through the other door. The author is choosing
+       * what an identity *is* on this form, and that is a single decision.
        */
       method: RespondentAuthMethod.default("google"),
       /** Said by the agent just above the sign-in card. */
@@ -77,12 +77,6 @@ export const SettingsDoc = z.object({
         .string()
         .max(300)
         .default("Before we start, could you verify who you are? It only takes a moment."),
-      /**
-       * Only one response per verified identity. Distinct from
-       * `allowResubmissions`, which keys on the respondent's device and can be
-       * sidestepped by using another one; a verified identity cannot.
-       */
-      onePerIdentity: z.boolean().default(false),
       /**
        * How many answers to take before asking who they are.
        *
@@ -142,9 +136,26 @@ export const SettingsDoc = z.object({
    * replaced did not need to, because it identified a network rather than a
    * person and handed a whole office one response between them. What it does
    * not survive is a different browser or device, and it is computed in the
-   * page, so somebody determined to answer twice still can. A form that needs a
-   * real per-person guarantee wants `requireAuth.onePerIdentity`, which keys on
-   * a verified identity.
+   * page, so somebody determined to answer twice still can.
+   *
+   * ── The only control, and what decides how strong it is ──
+   *
+   * There used to be a second one. `requireAuth.onePerIdentity` asked the same
+   * question — may one person answer twice? — in the opposite polarity, in a
+   * different settings section, and differed only in which key it enforced on.
+   * Which key to use is not a decision an author has any way to make well, and
+   * it is not a decision at all: it follows from whether the form asks people
+   * to sign in.
+   *
+   * So this field is the whole of the rule, and the key follows the form:
+   *
+   *   sign-in off  → the device key above, and only when it is a real device
+   *                  signal (see `lib/respondent-key.ts`)
+   *   sign-in on   → the verified identity, on a plan that has
+   *                  `one_response_per_identity`; the device key below that
+   *
+   * The identity is the only one of the two that actually holds. See
+   * `openSession` for the device half and `assessIdentity` for the other.
    */
   allowResubmissions: z.boolean().default(true),
 

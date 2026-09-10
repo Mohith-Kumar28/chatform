@@ -298,16 +298,22 @@ describe("the gates a resume may and may not walk through", () => {
   it("is not blocked by the resubmission rule it would otherwise trip", async () => {
     await publish({ ...DOC.settings, allowResubmissions: false });
     await seedAbandoned("sbm_resume09");
-    // A finished session from the same address is exactly what the rule refuses.
+    /*
+     * A finished session from the same *device* is exactly what the rule
+     * refuses. It has to be the device: the rule no longer enforces on an
+     * address, because an address is a network and the first person behind an
+     * office NAT would close the form for the rest of it.
+     */
     const IP = "203.0.113.7";
-    await open({}, IP);
+    const SIGNAL = "resumedevice1";
+    await open({ deviceSignal: SIGNAL }, IP);
     await env.DB.prepare(`UPDATE chat_sessions SET status = 'completed' WHERE ip_hash = ?1`)
       .bind(sha256Hex(IP))
       .run();
-    const blocked = await open({}, IP);
+    const blocked = await open({ deviceSignal: SIGNAL }, IP);
     expect(blocked.status).toBe(409);
 
-    const resumed = await open({ resumeToken: await token("sbm_resume09") }, IP);
+    const resumed = await open({ resumeToken: await token("sbm_resume09"), deviceSignal: SIGNAL }, IP);
     expect(resumed.status).toBe(200);
     await publish();
   });

@@ -82,7 +82,7 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
   brand_logo: { label: "Brand logo", blurb: "Put your logo and brand name on the form." },
   remove_branding: { label: "Remove chatform branding", blurb: "Drop the “Powered by chatform” footer." },
 
-  duplicate_prevention: { label: "One response per person", blurb: "Switch off resubmissions so nobody answers the same form twice." },
+  duplicate_prevention: { label: "One response per person", blurb: "Limit a form to one response each, recognised by the respondent's browser." },
   multi_language: { label: "Multiple languages", blurb: "Serve one form in several languages.", soon: true },
   respondent_auth_google: { label: "Google verification", blurb: "Ask respondents to verify who they are." },
   respondent_auth_phone: { label: "Phone verification", blurb: "Verify respondents by SMS code." },
@@ -90,7 +90,7 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
     label: "Verified answers",
     blurb: "Send a code to an email or phone answer, and only keep it once they type the code back.",
   },
-  one_response_per_identity: { label: "One response per identity", blurb: "Cap responses per verified person." },
+  one_response_per_identity: { label: "One response per verified person", blurb: "On a form with sign-in, key the limit to who they signed in as — another browser or device does not get a second response." },
   collect_payments: { label: "Collect payments", blurb: "Show your payment link or UPI QR mid-conversation." },
 
   partial_responses: {

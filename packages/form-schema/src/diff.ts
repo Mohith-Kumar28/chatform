@@ -139,7 +139,7 @@ const SETTING_LABELS: Record<string, string> = {
   "password.enabled": "Password protection",
   "password.value": "Form password",
   "captcha.enabled": "CAPTCHA",
-  allowResubmissions: "Resubmissions",
+  allowResubmissions: "One response per person",
   "onComplete.redirectUrl": "Completion redirect",
   "onComplete.delaySec": "Redirect delay",
   "onComplete.requireSubmit": "Explicit submit",

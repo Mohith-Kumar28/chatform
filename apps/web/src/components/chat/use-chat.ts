@@ -843,6 +843,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
             summary?: SubmittedState["answers"];
             completedAt?: number | null;
             ending?: EndingState | null;
+            canRepeat?: boolean;
           };
           if (state.status === "completed") {
             setSubmitted({
@@ -851,6 +852,13 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
               // The screen they finished on, so a return visit shows the
               // thank-you and its link rather than one line of grey text.
               ending: state.ending ?? null,
+              /*
+                From the session, not from the published config. This is the
+                document the response was actually written against, and it is
+                the one the clamp has already been applied to — the config the
+                page was rendered with knows neither.
+              */
+              canRepeat: state.canRepeat,
             });
             setStatus("ended");
             setResolving(false);

@@ -63,7 +63,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 12;
+export const DEMO_REVISION = 13;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.

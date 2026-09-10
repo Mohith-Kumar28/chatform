@@ -19,6 +19,7 @@ import { verifyGoogleIdToken, verifyFirebasePhoneToken } from "../lib/respondent
 import { findIdentityHistory } from "../lib/respondent-history.js";
 import { clampForRuntime } from "../lib/doc-entitlements.js";
 import { getEntitlements } from "../lib/entitlements.js";
+import { can } from "@repo/entitlements";
 
 /**
  * Respondent sign-in routes, mounted twice.
@@ -123,8 +124,9 @@ async function assessIdentity(
   if (!sess?.schema_json) return NOTHING;
 
   let doc: FormDoc;
+  let ent: Awaited<ReturnType<typeof getEntitlements>>;
   try {
-    const ent = await getEntitlements(env, sess.organization_id);
+    ent = await getEntitlements(env, sess.organization_id);
     doc = clampForRuntime(readFormDoc(JSON.parse(sess.schema_json)), ent);
   } catch (err) {
     // A document we cannot read must not become a lockout, and must not stop
@@ -138,13 +140,22 @@ async function assessIdentity(
 
   if (history.finished) {
     /*
-     * Two different settings can refuse a second response, and they mean
-     * different things: `onePerIdentity` is "one per person, and we checked",
-     * `allowResubmissions: false` is "one per respondent, however we can tell".
-     * Either being on is enough; neither being on means the author is happy to
-     * take another answer, and they get a fresh response rather than a lecture.
+     * One setting decides this, and the plan decides whether we are the ones
+     * who enforce it.
+     *
+     * `allowResubmissions: false` is the author saying "one response per
+     * person". It used to sit beside `requireAuth.onePerIdentity`, which asked
+     * the same question in the opposite polarity, and the two were OR'd — so
+     * the identity check, the half a customer buys the Business plan for, also
+     * ran for anybody on Pro who happened to switch resubmissions off.
+     *
+     * Now it is the one setting, and the key follows the plan: with
+     * `one_response_per_identity` the verified person is what we match on, and
+     * without it `openSession` keeps doing the device check it was already
+     * doing. Either way the author asked for one response per person and gets
+     * the strongest version of that we can honestly offer them.
      */
-    const oncePerPerson = settings.requireAuth.onePerIdentity || !settings.allowResubmissions;
+    const oncePerPerson = !settings.allowResubmissions && can(ent, "one_response_per_identity");
     if (!oncePerPerson) return NOTHING;
 
     const screenedOut = history.finished.status === "disqualified";

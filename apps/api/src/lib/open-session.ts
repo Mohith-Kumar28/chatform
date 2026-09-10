@@ -3,6 +3,7 @@ import type { Bindings } from "../env.js";
 import { getEntitlements, meter, checkQuota } from "./entitlements.js";
 import { clampForRuntime, brandingHiddenFor } from "./doc-entitlements.js";
 import { respondentKey, type RespondentKey } from "./respondent-key.js";
+import { can } from "@repo/entitlements";
 import { isHashedPassword, verifyPassword, timingSafeEqual } from "./crypto.js";
 import type { ResponseSource } from "./submissions.js";
 
@@ -295,7 +296,7 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
   });
 
   /**
-   * "One response per person."
+   * "One response per person", enforced on the device.
    *
    * This used to expire after 24 hours, on the reasoning that an IP identifies
    * a network rather than a person and a permanent block locks out everyone
@@ -304,10 +305,6 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
    * meant off, and a block that quietly lapses overnight is a setting that does
    * not do what it is called.
    *
-   * The shared-address cost is real and unchanged; it is now a reason to reach
-   * for `requireAuth.onePerIdentity`, which keys on a verified person, rather
-   * than a reason to weaken this.
-   *
    * What does count as a prior response also changed: a *finished* session,
    * not merely one that was opened. The window used to hide this — abandoning
    * the form locked you out for a day and then let you back in. With no window
@@ -315,23 +312,45 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
    * out forever without them answering a single question. `disqualified`
    * counts alongside `completed`, or screening out would be undone by
    * reloading and answering differently.
+   *
+   * ── Two reasons this half stands down ──
+   *
+   * A form with a sign-in gate, on a plan that can key on the identity, gets
+   * the stronger check at sign-in instead — and running both is not
+   * belt-and-braces, it is a bug. The device check fires at the door, before
+   * anybody can prove who they are, so two students sharing a lab PC ends with
+   * the second one refused for a response the first one left. The identity
+   * check would have waved them through. Where the identity is available it
+   * is the only key that should be consulted.
+   *
+   * And it never fires on the IP fallback. `respondentKey` falls back to the
+   * hashed IP when the browser sends no device signal, and an IP is a network:
+   * blocking on it means the first person behind a campus NAT closes the form
+   * for everybody else on it. `findDeviceResumable` already refuses to hand
+   * back answers on an IP match for exactly this reason, and refusing a
+   * response is the more damaging of the two. Over-blocking loses real
+   * registrations silently; letting a determined duplicate through is what
+   * sign-in is for, and the setting has never claimed to stop one.
+   *
+   * The same reasoning retires the old `ip_hash` clause that sat beside the
+   * fingerprint to recognise responses left before this key existed. It
+   * matched every row rather than only those legacy ones, so it was the NAT
+   * collision above wearing a different hat.
    */
-  if (!settings.allowResubmissions && device.value && !input.resumeSubmissionId) {
-    /*
-     * Matched on the device key, and on the old IP hash beside it.
-     *
-     * The second half is not belt-and-braces — it is the only thing that still
-     * recognises everybody who answered before this key existed. Their sessions
-     * carry an `ip_hash` and no `fingerprint`, and dropping the clause would
-     * quietly reopen the form to all of them at once.
-     */
+  const identityKeyed = settings.requireAuth.enabled && can(ent, "one_response_per_identity");
+  if (
+    !settings.allowResubmissions &&
+    !identityKeyed &&
+    device.source === "device" &&
+    !input.resumeSubmissionId
+  ) {
     const prior = await env.DB.prepare(
       `SELECT 1 FROM chat_sessions
         WHERE form_id = ?1 AND status IN ('completed', 'disqualified')
-          AND (fingerprint = ?2 OR (?3 != '' AND ip_hash = ?3))
+          AND fingerprint = ?2
         LIMIT 1`,
     )
-      .bind(form.id, device.value, ipHash)
+      .bind(form.id, device.value)
       .first();
     if (prior) {
       return {
