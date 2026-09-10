@@ -29,6 +29,7 @@ export const BLOCK_TYPES = [
   "scheduling",
   "contact_info",
   "address",
+  "field_group",
   "legal_consent",
 ] as const;
 
@@ -156,6 +157,54 @@ const VerifyAnswer = z.boolean().default(false);
 
 export const ContactField = z.enum(["first_name", "last_name", "email", "phone"]);
 export const AddressField = z.enum(["street", "city", "state", "postal", "country"]);
+
+/**
+ * What one field inside a `field_group` may collect.
+ *
+ * A subset of `BLOCK_TYPES` on purpose. Everything here validates from a single
+ * typed value and nothing here needs an out-of-band step, a code, a canvas or a
+ * checkout page — which is what keeps an entry a row you can fill in and keeps
+ * `groupFieldBlock` able to hand each one to the real validator. A group whose
+ * rows could contain a payment or a file upload would be a form inside a form,
+ * and neither the composer nor the session has anywhere to put that.
+ */
+export const GROUP_FIELD_KINDS = [
+  "short_text",
+  "long_text",
+  "email",
+  "phone",
+  "url",
+  "number",
+  "date",
+  "single_select",
+  "yes_no",
+] as const;
+export const GroupFieldKind = z.enum(GROUP_FIELD_KINDS);
+export type GroupFieldKind = (typeof GROUP_FIELD_KINDS)[number];
+
+/**
+ * One column of a repeating group.
+ *
+ * `key` is the identity, not `id`: the answer is an array of records keyed by
+ * it, so it is what a results column, an export header and an integration read.
+ * It is therefore treated like a `ref` — authored once, snake_case, and stable
+ * across edits — while `id` stays the throwaway React key.
+ */
+export const GroupField = z.object({
+  id: NanoId,
+  key: z.string().regex(/^[a-z][a-z0-9_]{0,30}$/, "key must be lowercase snake_case"),
+  label: z.string().min(1).max(200),
+  kind: GroupFieldKind,
+  /** Required *within an entry* — an entry that exists must fill it in. */
+  required: z.boolean().default(false),
+  placeholder: z.string().max(200).optional(),
+  /** `single_select` only; ignored by every other kind. */
+  options: z.array(Option).max(50).default([]),
+  /** `number` only. */
+  min: z.number().optional(),
+  max: z.number().optional(),
+});
+export type GroupField = z.output<typeof GroupField>;
 
 export const Block = z.discriminatedUnion("type", [
   z.object({ ...BlockBase, type: z.literal("welcome"), buttonLabel: z.string().max(60).default("Start") }),
@@ -345,6 +394,35 @@ export const Block = z.discriminatedUnion("type", [
     countryWhitelist: z.array(z.string().length(2)).optional(),
   }),
   /**
+   * A small form inside one question, repeated as many times as the answer needs.
+   *
+   * Everything else here collects one value per question, so "two to five team
+   * members, each with a name and an email" could only be built as ten separate
+   * questions — eight of which are wrong for a team of two, and none of which
+   * can be asked at all for a team of six. The same shape turns up constantly
+   * once you look for it: guests on a booking, children on a school form, line
+   * items on an order, authors on a paper, referees on an application.
+   *
+   * `fields` are the columns, `minEntries` rows are offered from the start, and
+   * the respondent adds up to `maxEntries` of them. Set both to 1 and it is
+   * simply a group of related fields asked together — a `contact_info` whose
+   * fields you chose yourself.
+   *
+   * The answer is an array of records keyed by each field's `key`, which is why
+   * `key` is stable and authored rather than derived: it is the column header in
+   * an export and the property name in a webhook payload.
+   */
+  z.object({
+    ...BlockBase,
+    type: z.literal("field_group"),
+    fields: z.array(GroupField).min(1).max(10),
+    /** What one entry is called, in the singular: "Team member", "Guest". */
+    itemLabel: z.string().min(1).max(60).default("Entry"),
+    /** How many rows are offered before they add any. Never fewer than one. */
+    minEntries: z.number().int().min(1).max(20).default(1),
+    maxEntries: z.number().int().min(1).max(20).default(5),
+  }),
+  /**
    * Terms, waivers, a code of conduct: wording shown verbatim, and a record of
    * who accepted which version of it.
    *
@@ -392,4 +470,42 @@ export const UNIQUE_CAPABLE_TYPES = new Set<BlockType>([
 /** True when this block refuses an answer another response already gave. */
 export function enforcesUnique(block: Block): boolean {
   return "unique" in block && block.unique === true;
+}
+
+/**
+ * One sub-field as a standalone block, so a group validates through the real
+ * validators rather than a second implementation of them.
+ *
+ * An email inside a group has to be lowercased, a phone canonicalised to E.164
+ * and a URL given its scheme in exactly the way the same question would be
+ * outside one — and the moment that logic is written twice, one copy is the
+ * one that rots. `validateAnswer` calls this and then calls itself.
+ */
+export function groupFieldBlock(field: GroupField): Block {
+  const base = {
+    id: field.id,
+    ref: `q_${field.key}`,
+    title: field.label,
+    required: field.required,
+  };
+  switch (field.kind) {
+    case "short_text":
+      return Block.parse({ ...base, type: "short_text", maxLength: 500 });
+    case "long_text":
+      return Block.parse({ ...base, type: "long_text", maxLength: 2000 });
+    case "email":
+      return Block.parse({ ...base, type: "email" });
+    case "phone":
+      return Block.parse({ ...base, type: "phone" });
+    case "url":
+      return Block.parse({ ...base, type: "url" });
+    case "number":
+      return Block.parse({ ...base, type: "number", min: field.min, max: field.max });
+    case "date":
+      return Block.parse({ ...base, type: "date" });
+    case "single_select":
+      return Block.parse({ ...base, type: "single_select", options: field.options });
+    case "yes_no":
+      return Block.parse({ ...base, type: "yes_no" });
+  }
 }

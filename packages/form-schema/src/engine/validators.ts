@@ -1,4 +1,4 @@
-import type { Block } from "../blocks";
+import { groupFieldBlock, type Block } from "../blocks";
 import type { AnswerValue } from "../answers";
 
 /**
@@ -392,6 +392,66 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
       return ok(out);
     }
 
+    /**
+     * A repeating group: an array of entries, each validated field by field
+     * through the very validators those fields would use on their own.
+     *
+     * Two things it refuses that are easy to miss. An entry that is not an
+     * object at all is a `type` failure rather than a silently dropped row —
+     * losing one team member out of five without saying so is the worst
+     * available outcome. And a key the block does not define is ignored rather
+     * than stored, so a client that invents a column cannot smuggle one into an
+     * export.
+     */
+    case "field_group": {
+      if (!Array.isArray(raw)) return fail("type", `Please fill in the ${block.itemLabel.toLowerCase()} details.`);
+      if (raw.length === 0) {
+        return block.required ? fail("required", "This question needs an answer.") : ok(undefined);
+      }
+      if (raw.length > block.maxEntries) {
+        return fail("too_many", `You can add up to ${block.maxEntries} ${plural(block.itemLabel, block.maxEntries)}.`);
+      }
+      if (raw.length < block.minEntries) {
+        return fail("too_few", `Please give at least ${block.minEntries} ${plural(block.itemLabel, block.minEntries)}.`);
+      }
+      // Built once for the whole answer rather than per entry: five fields
+      // across five entries is one parse each, not twenty-five.
+      const subs = block.fields.map((f) => [f, groupFieldBlock(f)] as const);
+      const entries: Record<string, string | number | boolean>[] = [];
+      for (const [i, entry] of raw.entries()) {
+        if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+          return fail("type", `Please fill in ${block.itemLabel.toLowerCase()} ${i + 1}.`);
+        }
+        const rec = entry as Record<string, unknown>;
+        const out: Record<string, string | number | boolean> = {};
+        for (const [field, sub] of subs) {
+          const result = validateAnswer(sub, rec[field.key]);
+          if (!result.ok) {
+            // Which row and which column, said before the reason. "Please
+            // enter a valid email address", arriving on a form with four
+            // entries and two email columns, names nothing the respondent can
+            // act on.
+            const where = `${block.itemLabel} ${i + 1} · ${field.label}`;
+            return {
+              ok: false,
+              code: result.code,
+              hint:
+                result.code === "required"
+                  ? `${where} is missing.`
+                  : `${where} — ${lowerFirst(result.hint ?? "that isn't valid.")}`,
+            };
+          }
+          const v = result.value;
+          if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") out[field.key] = v;
+        }
+        if (Object.keys(out).length === 0) {
+          return fail("incomplete", `${block.itemLabel} ${i + 1} is empty — fill it in or remove it.`);
+        }
+        entries.push(out);
+      }
+      return ok(entries);
+    }
+
     case "legal_consent": {
       const stamp = (accepted: boolean) => ({
         accepted,
@@ -426,6 +486,28 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
     default:
       return fail("unsupported", "Unsupported block type.");
   }
+}
+
+/**
+ * "Team member" → "team members", for a count that is not one.
+ *
+ * Deliberately naive: the author writes the singular and English's regular
+ * plural covers "guest", "member", "item", "child" is wrong and "person" is
+ * wrong, and both are wrong in a sentence nobody is grading. The alternative is
+ * asking an author for two spellings of the same word before they can add a
+ * field, which is a worse trade than an occasional "childs".
+ */
+function plural(label: string, count: number): string {
+  const one = label.toLowerCase();
+  if (count === 1) return one;
+  return /(s|x|z|ch|sh)$/.test(one) ? `${one}es` : `${one}s`;
+}
+
+/** Joins a sub-validator's sentence onto the row it belongs to. */
+function lowerFirst(text: string): string {
+  // Only when the second character is not itself a capital, so "URL" and
+  // "E.164" survive being placed mid-sentence.
+  return /^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text;
 }
 
 function countryDial(cc: string): string {

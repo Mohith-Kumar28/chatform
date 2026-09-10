@@ -125,6 +125,34 @@ export function extractionSchema(block: Block): z.ZodTypeAny | null {
       return envelope(z.object(shape));
     }
 
+    /**
+     * A roster dictated in one breath — "Alice, alice@x.com, and Bob at
+     * bob@y.com" — which is how anybody would answer this out loud and the only
+     * way to answer it without touching the widget.
+     *
+     * Every column is optional even when the block requires it: the extractor's
+     * job is to report what was said, and `validateAnswer` is what decides
+     * whether a half-given entry is acceptable. Constraining it here would make
+     * a partial dictation fail as a schema error, which is invisible, instead of
+     * failing as "team member 2 — please enter an email address", which is not.
+     */
+    case "field_group": {
+      const shape = Object.fromEntries(
+        block.fields.map((f) => [
+          f.key,
+          (f.kind === "number"
+            ? z.number()
+            : f.kind === "yes_no"
+              ? z.boolean()
+              : f.kind === "single_select" && f.options.length > 0
+                ? z.enum(f.options.map((o) => o.id) as [string, ...string[]])
+                : z.string().max(500)
+          ).optional(),
+        ]),
+      );
+      return envelope(z.array(z.object(shape)).max(block.maxEntries));
+    }
+
     default:
       return null;
   }
@@ -150,6 +178,21 @@ export function extractionGuidance(block: Block, todayIso: string): string {
     case "contact_info":
     case "address":
       return `Fill only the fields the respondent actually supplied. Leave the rest out rather than guessing.`;
+    case "field_group": {
+      const columns = block.fields
+        .map((f) => {
+          const opts =
+            f.kind === "single_select" && f.options.length > 0
+              ? ` (one of: ${f.options.map((o) => `${o.id} = ${o.label}`).join(", ")})`
+              : "";
+          return `${f.key} — ${f.label}${opts}`;
+        })
+        .join("; ");
+      return (
+        `Return one object per ${block.itemLabel.toLowerCase()}, in the order they were given, with these keys: ${columns}. ` +
+        `Leave a key out when it was not supplied rather than guessing it, and never invent an extra ${block.itemLabel.toLowerCase()} to reach a count.`
+      );
+    }
     case "email":
       return `Return the email address exactly as written, lowercased. If they described it ("name at company dot com"), reconstruct it and set confident=true only if unambiguous.`;
     case "phone":

@@ -50,6 +50,37 @@ export function displayAnswer(block: Block, value: unknown): string {
       return Object.values(value as Record<string, string>).filter(Boolean).join(", ");
     }
 
+    /**
+     * A repeating group, as one cell of a spreadsheet.
+     *
+     * Labelled rather than values-only, unlike `contact_info` above: a group's
+     * columns are whatever the author invented, so "Alice, 3, yes" read back a
+     * month later says nothing. Entries are numbered because the order is part
+     * of the answer — team member 1 is the one who registered.
+     */
+    case "field_group": {
+      if (!Array.isArray(value)) break;
+      return value
+        .map((entry, i) => {
+          const rec = (entry ?? {}) as Record<string, unknown>;
+          const parts = block.fields.flatMap((f) => {
+            const v = rec[f.key];
+            if (v === undefined || v === null || v === "") return [];
+            const text =
+              f.kind === "single_select"
+                ? labelIn(f.options, v)
+                : f.kind === "yes_no"
+                  ? v === true || v === "true"
+                    ? "Yes"
+                    : "No"
+                  : String(v);
+            return [`${f.label}: ${text}`];
+          });
+          return `${block.itemLabel} ${i + 1} — ${parts.length > 0 ? parts.join(", ") : "(empty)"}`;
+        })
+        .join(" · ");
+    }
+
     case "signature": {
       const sig = value as { signedName?: string };
       return sig.signedName ? `Signed — ${sig.signedName}` : "Signed";

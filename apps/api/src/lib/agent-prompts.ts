@@ -194,6 +194,24 @@ export function affordanceNote(block: Block): string | null {
     case "opinion_scale":
       return "Its scale is ALREADY on screen under your message, one button per number. Saying the range in a sentence is fine; listing the numbers is not.";
     /**
+     * A group asks for several things at once, several times over, and the
+     * rows are already drawn. Left to itself the model asks for them one
+     * column at a time — "and what's the first member's email?" — which is the
+     * conversation this block type exists to avoid, and which strands anyone
+     * who has already filled the boxes in.
+     */
+    case "field_group": {
+      const columns = block.fields.map((f) => f.label.toLowerCase()).join(", ");
+      const many = block.maxEntries > block.minEntries;
+      return (
+        `${block.minEntries} ${block.minEntries === 1 ? "row" : "rows"} for ${columns} ${block.minEntries === 1 ? "is" : "are"} ALREADY on screen under your message` +
+        `${many ? `, with a button to add more, up to ${block.maxEntries}` : ""}. ` +
+        `Ask for all of it in one sentence — name what you need per ${block.itemLabel.toLowerCase()}${many ? ` and how many are allowed` : ""} — and stop. ` +
+        `Do not walk them through it field by field, do not number the fields out, and do not ask for one ${block.itemLabel.toLowerCase()} at a time. ` +
+        `They may also just type the lot out, and it will be read for them.`
+      );
+    }
+    /**
      * A verified answer is not finished when it is given.
      *
      * The model is told to record an answer and go straight on to the next
@@ -428,6 +446,7 @@ ${sizing}
 - "type" MUST be one of exactly these, spelled exactly like this. Any other word — "text", "single_choice", "boolean" — is wrong; pick the closest from this list:
 ${renderBlockCatalog()}
 - Match the type to the answer, and reach past the text types. A price, a fee, a ticket or a UPI id means "payment". A time or a date means "date". A file means "file_upload". An address means "address". Asking for those as short_text is the single most common mistake here — a question titled "Payment Confirmation" that takes typed text collects nothing and takes no money.
+- The SAME details asked more than once over — every team member's name and email, every guest's name and meal, every line item — is ONE "field_group" question, never a numbered run of questions. "Member 1 name", "Member 1 email", "Member 2 name" is the mistake: it asks a solo entrant for four blanks they cannot fill and gives a team of six nowhere to put the last one. Say the columns and the bounds in config instead: fields=Full name:short_text*|Email:email*; item=Team member; min=2; max=5.
 - "config": the setup for types that need it, as "key=value; key=value" using exactly the keys listed above — e.g. "method=upi; upi=acme@okhdfcbank; amount=499; currency=INR". Put "" when the type needs none. Take the values from the request: if it names a price, an id or a link, they belong here rather than in the question's wording.
 - refs: lowercase snake_case, unique, prefixed by topic (e.g. q_email, q_role, q_rating)
 - "options": the choices as the respondent reads them — ["Android", "iPhone", "Chrome extension"]. Plain labels, no ids, no prefixes. Use [] for every type that is not a choice.
@@ -647,7 +666,7 @@ The manifest above marks a question "unique" when it already refuses answers ano
 If a new question is needed, "type" MUST be one of exactly these:
 ${renderBlockCatalog(ADDABLE_BLOCK_TYPES)}
 
-Pick the type that actually collects the thing. A price, a fee, a ticket or a UPI id is "payment", not a text question asking them to confirm they paid. A time or a date is "date". A booking link of the builder's own is "scheduling". Reaching for short_text because it is simpler produces a question that collects nothing.
+Pick the type that actually collects the thing. A price, a fee, a ticket or a UPI id is "payment", not a text question asking them to confirm they paid. A time or a date is "date". A booking link of the builder's own is "scheduling". The same set of details collected once per person or item is one "field_group", not a numbered run of questions. Reaching for short_text because it is simpler produces a question that collects nothing.
 
 "config" carries the setup for the types that need it, as "key=value; key=value" with exactly the keys listed above — "method=upi; upi=acme@okhdfcbank; amount=499; currency=INR" — and "" for the types that need none. If the request gives you an amount, an id or a URL, it goes in "config", not into the title. The same keys, and one more — "required=true" or "required=false" — are what "updateBlocks" writes about a question that already exists.
 

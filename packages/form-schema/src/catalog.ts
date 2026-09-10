@@ -113,6 +113,12 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
     summary: "A postal address.",
     config: "fields=<street|city|state|postal|country>",
   },
+  field_group: {
+    summary:
+      "A small form asked once per person or item, repeated as many times as needed — two to five team members each with a name and an email, guests on a booking, line items on an order. Use this whenever the request describes the SAME set of details collected several times over; never a numbered run of separate questions (\"Member 1 name\", \"Member 2 name\"), which cannot stretch to a team of six or shrink to a team of two.",
+    config:
+      "fields=<Label:kind|Label:kind> where kind is one of short_text, long_text, email, phone, url, number, date, single_select, yes_no — append * to make a field required, and list a select's choices in brackets (Role:single_select[Lead|Member]); item=<Team member> names one entry; min=<2>, max=<5> bound how many there may be",
+  },
   legal_consent: {
     summary:
       "Agreeing to terms, a waiver, a code of conduct. Put the wording in `description`. By default the only answer is yes; add decline=true when a refusal has to be a real answer you can route on — an eligibility gate, a policy someone may decline.",
@@ -188,6 +194,7 @@ export const BLOCK_PRESENTATION: Record<BlockType, BlockPresentation> = {
   url: { label: "Website", group: "Contact", tone: "contact" },
   contact_info: { label: "Contact info", group: "Contact", tone: "contact" },
   address: { label: "Address", group: "Contact", tone: "contact" },
+  field_group: { label: "Field group", group: "Advanced", tone: "advanced" },
 
   number: { label: "Number", group: "Numbers & dates", tone: "number" },
   date: { label: "Date", group: "Numbers & dates", tone: "number" },

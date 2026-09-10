@@ -28,6 +28,11 @@ export function opsFor(block: Block): { value: Op; label: string; needsValue: bo
     base.push({ value: "eq", label: "is", needsValue: true });
     base.push({ value: "gte", label: "is at least", needsValue: true });
     base.push({ value: "lte", label: "is at most", needsValue: true });
+  } else if (block.type === "field_group") {
+    // A roster has nothing to compare a typed value against — its answer is an
+    // array of records, and "contains" over that would match on whatever
+    // stringifying it happens to produce. Whether it was filled in is the one
+    // honest thing to ask, and the two rows below say it.
   } else {
     base.push({ value: "contains", label: "contains", needsValue: true });
     base.push({ value: "eq", label: "is exactly", needsValue: true });

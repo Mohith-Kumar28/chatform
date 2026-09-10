@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Plus, X } from "lucide-react";
 import {
   DndContext,
   KeyboardSensor,
@@ -19,9 +19,10 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import type { PublicBlock, PublicGroupField } from "@repo/form-schema";
 import { cn } from "@/lib/utils";
 import { KeyHint } from "./primitives";
-import { FIELD_SEMANTICS } from "./input-semantics";
+import { FIELD_SEMANTICS, inputSemanticsFor } from "./input-semantics";
 import { useChoiceKeys } from "./choice-keys";
 
 /**
@@ -30,6 +31,9 @@ import { useChoiceKeys } from "./choice-keys";
  * `contact_info`, `address`, `ranking` and `matrix` all previously fell through
  * to a single plain text input, which could not produce the record or array
  * shape `validateAnswer` requires — so they were unanswerable in practice.
+ *
+ * `field_group` is the same job one level up: an array of those records, added
+ * and removed by the respondent.
  */
 
 const CONTACT_LABELS: Record<string, string> = {
@@ -381,5 +385,286 @@ export function MatrixComposer({
         Continue
       </button>
     </div>
+  );
+}
+
+/**
+ * A repeating group: a small form, filled in once per person or item.
+ *
+ * The shape this exists for is "two to five team members, each with a name and
+ * an email" — which without it is either five pairs of questions that cannot
+ * shrink to a team of two, or one text box asking somebody to type a roster
+ * into prose. Both are worse for the respondent than the thing every other form
+ * product calls a repeater.
+ *
+ * What makes it readable at four entries rather than one: the entries share a
+ * single card and are separated by a rule rather than each being a box of its
+ * own, so the eye reads one list instead of four objects. The number is in the
+ * header, not repeated into every label, so "Full name" is the label whether it
+ * is the first team member's or the fourth. And `minEntries` rows are already
+ * on screen — an author who says "at least two" should not make the respondent
+ * discover the add button before they can comply.
+ */
+export function GroupComposer({
+  fields,
+  itemLabel,
+  minEntries,
+  maxEntries,
+  required,
+  onSubmit,
+}: {
+  fields: readonly PublicGroupField[];
+  itemLabel: string;
+  minEntries: number;
+  maxEntries: number;
+  required?: boolean;
+  onSubmit: (value: Record<string, string | number | boolean>[], display: string) => void;
+}) {
+  const floor = Math.min(Math.max(minEntries, 1), maxEntries);
+  const [entries, setEntries] = useState<Record<string, string>[]>(() =>
+    Array.from({ length: floor }, () => ({})),
+  );
+
+  const set = useCallback((index: number, key: string, value: string) => {
+    setEntries((rows) => rows.map((row, i) => (i === index ? { ...row, [key]: value } : row)));
+  }, []);
+
+  const filled = (row: Record<string, string>, f: PublicGroupField) => (row[f.key] ?? "").trim() !== "";
+  // An entry is "started" once anything is in it. A group that is not required
+  // may be left entirely blank, but a half-typed row is not a way to skip it.
+  const started = entries.filter((row) => fields.some((f) => filled(row, f)));
+  const complete = entries.every((row) => fields.every((f) => !f.required || filled(row, f)));
+  const canSubmit = complete && (required ? started.length >= floor : true);
+
+  return (
+    <div className="space-y-2">
+      <div className="divide-y divide-[var(--cf-chip-border)] overflow-hidden rounded-2xl border border-[var(--cf-chip-border)]">
+        {entries.map((row, i) => (
+          <div key={i} className="space-y-2 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium opacity-60">
+                {itemLabel} {i + 1}
+              </p>
+              {entries.length > floor && (
+                <button
+                  type="button"
+                  onClick={() => setEntries((rows) => rows.filter((_, j) => j !== i))}
+                  aria-label={`Remove ${itemLabel.toLowerCase()} ${i + 1}`}
+                  className="rounded-md p-1 opacity-45 transition-opacity hover:opacity-100"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {fields.map((f) => (
+                <GroupFieldInput
+                  key={f.key}
+                  field={f}
+                  index={i}
+                  value={row[f.key] ?? ""}
+                  onChange={(v) => set(i, f.key, v)}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2">
+        {entries.length < maxEntries && (
+          <button
+            type="button"
+            onClick={() => setEntries((rows) => [...rows, {}])}
+            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3.5 text-sm transition-colors hover:border-[var(--cf-accent)]"
+          >
+            <Plus className="size-3.5" />
+            Add {itemLabel.toLowerCase()}
+          </button>
+        )}
+        <p className="text-xs opacity-55">
+          {entries.length >= maxEntries
+            ? `That's the most you can add (${maxEntries}).`
+            : `${entries.length} of up to ${maxEntries}.`}
+        </p>
+      </div>
+
+      <button
+        type="button"
+        disabled={!canSubmit}
+        onClick={() => {
+          const value = entries
+            .filter((row) => fields.some((f) => filled(row, f)))
+            .map((row) => {
+              const entry: Record<string, string | number | boolean> = {};
+              for (const f of fields) {
+                const raw = (row[f.key] ?? "").trim();
+                if (raw === "") continue;
+                // Sent as the type the block documents rather than as text.
+                // `validateAnswer` would coerce either way, but what leaves
+                // here is what a webhook receives.
+                if (f.kind === "number") {
+                  const n = Number(raw);
+                  entry[f.key] = Number.isFinite(n) ? n : raw;
+                } else if (f.kind === "yes_no") {
+                  entry[f.key] = raw === "yes";
+                } else {
+                  entry[f.key] = raw;
+                }
+              }
+              return entry;
+            });
+          onSubmit(
+            value,
+            value
+              .map((entry, i) => {
+                const parts = fields.flatMap((f) => {
+                  const v = entry[f.key];
+                  if (v === undefined) return [];
+                  const text =
+                    f.kind === "single_select"
+                      ? (f.options?.find((o) => o.id === v)?.label ?? String(v))
+                      : f.kind === "yes_no"
+                        ? v === true
+                          ? "Yes"
+                          : "No"
+                        : String(v);
+                  return [`${f.label}: ${text}`];
+                });
+                return `${itemLabel} ${i + 1} — ${parts.join(", ")}`;
+              })
+              .join(" · "),
+          );
+        }}
+        className="h-11 w-full rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
+      >
+        Continue
+      </button>
+    </div>
+  );
+}
+
+/**
+ * One cell of a group entry.
+ *
+ * The keyboard and capitalisation come from `inputSemanticsFor`, the same
+ * function the message box uses, so an email column here behaves like an email
+ * question there — including the wording-based guesses it makes about a text
+ * column called "City".
+ *
+ * Autofill is the one thing deliberately turned off. A browser holding one
+ * saved person fills every matching field on the page at once, which on a
+ * roster means the same name in all four rows; the `name` attribute carries the
+ * row number for the same reason. A single-entry group loses a little
+ * convenience so a four-entry one does not become wrong.
+ */
+function GroupFieldInput({
+  field,
+  index,
+  value,
+  onChange,
+}: {
+  field: PublicGroupField;
+  index: number;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const semantics = inputSemanticsFor({
+    type: field.kind,
+    title: field.label,
+    ref: field.key,
+    id: field.key,
+    required: field.required,
+  } as PublicBlock);
+  const inputClass =
+    "h-11 w-full rounded-xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-3 text-[0.9375rem] outline-none focus:border-[var(--cf-accent)]";
+
+  const label = (
+    <span className="block text-xs opacity-60">
+      {field.label}
+      {field.required && <span className="ml-0.5 opacity-70">*</span>}
+    </span>
+  );
+
+  if (field.kind === "yes_no") {
+    return (
+      <div className="space-y-1">
+        {label}
+        <div className="flex h-11 items-center gap-1.5">
+          {(["yes", "no"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={value === v}
+              onClick={() => onChange(value === v ? "" : v)}
+              className={cn(
+                "h-9 flex-1 rounded-full border text-sm transition-colors",
+                value === v
+                  ? "border-transparent bg-[var(--cf-accent)] text-[var(--cf-accent-text)]"
+                  : "border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] hover:border-[var(--cf-accent)]",
+              )}
+            >
+              {v === "yes" ? "Yes" : "No"}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (field.kind === "single_select") {
+    return (
+      <label className="space-y-1">
+        {label}
+        <select
+          value={value}
+          name={`${field.key}_${index + 1}`}
+          onChange={(e) => onChange(e.target.value)}
+          className={cn(inputClass, value === "" && "opacity-55")}
+        >
+          <option value="">Choose…</option>
+          {(field.options ?? []).map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
+  if (field.kind === "long_text") {
+    return (
+      <label className="space-y-1 sm:col-span-2">
+        {label}
+        <textarea
+          value={value}
+          name={`${field.key}_${index + 1}`}
+          rows={2}
+          placeholder={field.placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          className={cn(inputClass, "h-auto resize-y py-2.5")}
+        />
+      </label>
+    );
+  }
+
+  return (
+    <label className="space-y-1">
+      {label}
+      <input
+        value={value}
+        name={`${field.key}_${index + 1}`}
+        type={field.kind === "date" ? "date" : semantics.type}
+        inputMode={field.kind === "date" ? undefined : semantics.inputMode}
+        placeholder={field.placeholder}
+        autoComplete="off"
+        autoCapitalize={semantics.autoCapitalize}
+        autoCorrect={semantics.autoCorrect}
+        spellCheck={semantics.spellCheck}
+        onChange={(e) => onChange(e.target.value)}
+        className={inputClass}
+      />
+    </label>
   );
 }

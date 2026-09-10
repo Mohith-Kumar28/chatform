@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { RespondentAuthMethod } from "./respondent";
 import { AnswerMap } from "./answers";
-import { Block, type BlockMedia } from "./blocks";
+import { Block, type BlockMedia, type GroupFieldKind } from "./blocks";
 import type { ConditionGroup } from "./conditions";
 import { identityFieldForBlock, type IdentityField } from "./identity-fields";
 import { Ending, HiddenField, LogicRule, Variable } from "./logic";
@@ -56,6 +56,19 @@ export interface PublicBlock {
   maxFiles?: number;
   maxSizeMB?: number;
   fields?: string[];
+  /**
+   * field_group: the columns of one entry, and how many entries are allowed.
+   *
+   * A key of its own rather than reusing `fields`, which is a list of names on
+   * `contact_info` and `address`. One key holding two unrelated shapes is the
+   * kind of thing every consumer gets right until the day it does not, and this
+   * one is read by the composer, the builder preview and any integrator
+   * rendering blocks themselves.
+   */
+  groupFields?: PublicGroupField[];
+  itemLabel?: string;
+  minEntries?: number;
+  maxEntries?: number;
   consentText?: string;
   /** legal_consent: whether an explicit refusal is offered, and the two labels. */
   allowDecline?: boolean;
@@ -114,6 +127,20 @@ export interface PublicBlock {
   identityField?: IdentityField;
   /** Image, video or downloadable file shown with the question. */
   media?: BlockMedia | null;
+}
+
+/** One column of a `field_group`, as the respondent's client receives it. */
+export interface PublicGroupField {
+  key: string;
+  label: string;
+  kind: GroupFieldKind;
+  required: boolean;
+  placeholder?: string;
+  /** `single_select` only. */
+  options?: { id: string; label: string }[];
+  /** `number` only. */
+  min?: number;
+  max?: number;
 }
 
 export function toPublicBlock(b: Block): PublicBlock {
@@ -208,6 +235,24 @@ export function toPublicBlock(b: Block): PublicBlock {
       break;
     case "address":
       pub.fields = b.fields;
+      break;
+    case "field_group":
+      pub.groupFields = b.fields.map((f) => ({
+        key: f.key,
+        label: f.label,
+        kind: f.kind,
+        required: f.required,
+        placeholder: f.placeholder,
+        // Only where it means something: a `number` column carrying an empty
+        // options array is noise in every payload that renders one.
+        ...(f.kind === "single_select"
+          ? { options: f.options.map((o) => ({ id: o.id, label: o.label })) }
+          : {}),
+        ...(f.kind === "number" ? { min: f.min, max: f.max } : {}),
+      }));
+      pub.itemLabel = b.itemLabel;
+      pub.minEntries = b.minEntries;
+      pub.maxEntries = b.maxEntries;
       break;
     case "legal_consent":
       pub.consentText = b.consentText;

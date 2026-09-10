@@ -476,6 +476,51 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
     ],
     codes: ["required", "type", "incomplete"],
   },
+  field_group: {
+    shape:
+      "One object per entry, keyed by each field's `key`. Every value is checked by the rules of that field's own kind, so a column can also fail with any code that kind emits — an `email` column with `invalid_email`, a bounded `number` column with `too_small`. The hint names the entry and the column.",
+    tsType: "Record<string, string | number | boolean>[]",
+    block: {
+      id: "blk_group001", ref: "q_team", type: "field_group", title: "Who is on your team?",
+      required: true, itemLabel: "Team member", minEntries: 2, maxEntries: 4,
+      fields: [
+        { id: "gf_name00001", key: "name", label: "Full name", kind: "short_text", required: true },
+        { id: "gf_email0001", key: "email", label: "Email", kind: "email", required: true },
+        { id: "gf_year00001", key: "year", label: "Year of study", kind: "number", required: false },
+      ],
+    },
+    examples: [
+      {
+        value: [
+          { name: "  Maya Iyer ", email: "Maya@Northwind.CO" },
+          { name: "Rahul Nair", email: "rahul@northwind.co", year: "3" },
+        ],
+        canonical: [
+          { name: "Maya Iyer", email: "maya@northwind.co" },
+          { name: "Rahul Nair", email: "rahul@northwind.co", year: 3 },
+        ],
+        note: "each field is canonicalized by the validator for its own kind — the same trimming, lowercasing and coercion it would get as a question of its own",
+      },
+    ],
+    counterExamples: [
+      { value: [{ name: "Maya Iyer", email: "maya@northwind.co" }], code: "too_few", note: "this block asks for at least two" },
+      {
+        value: [
+          { name: "A", email: "a@x.co" }, { name: "B", email: "b@x.co" },
+          { name: "C", email: "c@x.co" }, { name: "D", email: "d@x.co" },
+          { name: "E", email: "e@x.co" },
+        ],
+        code: "too_many",
+      },
+      { value: [{ name: "Maya Iyer" }, { name: "Rahul Nair", email: "rahul@northwind.co" }], code: "required", note: "a required field, missing in one entry — the hint names which" },
+      { value: [{ name: "Maya Iyer", email: "nope" }, { name: "Rahul Nair", email: "rahul@northwind.co" }], code: "invalid_email" },
+      { value: { name: "Maya Iyer" }, code: "type", note: "a single entry is still an array of one" },
+    ],
+    // The codes this block itself decides, plus the ones its own columns
+    // forward. Everything else a column type can emit is listed on that type's
+    // page rather than repeated here as a row with no example behind it.
+    codes: ["required", "type", "too_few", "too_many", "incomplete", "too_long", "invalid_email"],
+  },
   legal_consent: {
     shape:
       "`true`. The stored answer records what was agreed to, and when. A block with `allowDecline` also accepts `false` — a recorded refusal, which a branch can route on; without it `false` is rejected.",

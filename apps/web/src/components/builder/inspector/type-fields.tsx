@@ -2,6 +2,7 @@
 
 import { isValidUpiId, UPI_CURRENCY, type Block } from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
+import { GroupFieldsEditor } from "./group-fields";
 import {
   CheckboxGroup,
   ListEditor,
@@ -594,6 +595,60 @@ export function TypeFields({
             { value: "country", label: "Country" },
           ]}
         />
+      );
+
+    case "field_group":
+      return (
+        <>
+          <TextField
+            label="What one entry is called"
+            hint="Shown above each row — “Team member 1”, “Guest 2”."
+            value={block.itemLabel}
+            onChange={(v) => patch({ itemLabel: v || "Entry" } as Partial<Block>, key("itemLabel"))}
+            maxLength={60}
+          />
+          <div className="grid grid-cols-2 gap-3">
+            {/*
+              The floor is how many rows are already on screen, not just a
+              minimum the respondent discovers by trying to continue: an author
+              who says "at least two" wants two boxes waiting.
+            */}
+            <NumberField
+              label="Start with"
+              hint="Rows shown, and the fewest allowed"
+              value={block.minEntries}
+              min={1}
+              max={20}
+              onChange={(v) => {
+                const min = Math.min(20, Math.max(1, v ?? 1));
+                patch(
+                  {
+                    minEntries: min,
+                    ...(min > block.maxEntries ? { maxEntries: min } : {}),
+                  } as Partial<Block>,
+                  key("minEntries"),
+                );
+              }}
+            />
+            <NumberField
+              label="Allow up to"
+              value={block.maxEntries}
+              min={1}
+              max={20}
+              onChange={(v) => {
+                const max = Math.min(20, Math.max(1, v ?? 5));
+                patch(
+                  {
+                    maxEntries: max,
+                    ...(max < block.minEntries ? { minEntries: max } : {}),
+                  } as Partial<Block>,
+                  key("maxEntries"),
+                );
+              }}
+            />
+          </div>
+          <GroupFieldsEditor block={block} patch={patch} />
+        </>
       );
 
     case "legal_consent":

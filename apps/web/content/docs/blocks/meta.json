@@ -28,6 +28,7 @@
     "signature",
     "payment",
     "scheduling",
+    "field_group",
     "legal_consent"
   ]
 }

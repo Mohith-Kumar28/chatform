@@ -8,7 +8,7 @@ import { useChoiceKeys, type Choice } from "./composers/choice-keys";
 import { RatingComposer, ScaleComposer } from "./composers/rating";
 import { DateComposer } from "./composers/date";
 import { SignatureComposer } from "./composers/signature";
-import { FieldsComposer, MatrixComposer, RankingComposer } from "./composers/structured";
+import { FieldsComposer, GroupComposer, MatrixComposer, RankingComposer } from "./composers/structured";
 import { FileUploadControl } from "./file-upload";
 import { PaymentAffordance } from "./payment-affordance";
 import { assetUrl } from "@/lib/assets";
@@ -374,6 +374,18 @@ function AffordanceControls({
     case "contact_info":
     case "address":
       return <FieldsComposer fields={block.fields ?? []} required={block.required} onSubmit={onStructured} />;
+
+    case "field_group":
+      return (
+        <GroupComposer
+          fields={block.groupFields ?? []}
+          itemLabel={block.itemLabel ?? "Entry"}
+          minEntries={block.minEntries ?? 1}
+          maxEntries={block.maxEntries ?? 5}
+          required={block.required}
+          onSubmit={onStructured}
+        />
+      );
 
     case "legal_consent": {
       const agree = block.agreeLabel ?? "I agree";

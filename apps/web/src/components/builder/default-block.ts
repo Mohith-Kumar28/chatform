@@ -72,6 +72,20 @@ export function defaultBlock(type: Block["type"], existingRefs: Set<string>): Bl
       return BlockSchema.parse({ ...base, type, title: "Complete your payment", method: "link", amountMode: "fixed", amount: 0, currency: "USD" });
     case "scheduling":
       return BlockSchema.parse({ ...base, type, title: "Book a time", provider: "external", url: "https://cal.com/your-handle" });
+    /**
+     * Two rows of name and email, which is the request this type exists for
+     * almost word for word — and a starting point an author edits rather than
+     * an empty grid they have to design.
+     */
+    case "field_group":
+      return BlockSchema.parse({
+        ...base, type, title: "Who else is on your team?",
+        itemLabel: "Team member", minEntries: 2, maxEntries: 5,
+        fields: [
+          { id: uid("gf"), key: "name", label: "Full name", kind: "short_text", required: true },
+          { id: uid("gf"), key: "email", label: "Email", kind: "email", required: true },
+        ],
+      });
     case "legal_consent":
       return BlockSchema.parse({ ...base, type, title: "Do you accept the terms?", required: true, consentText: "I agree to the terms and privacy policy." });
     case "welcome":

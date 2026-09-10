@@ -90,6 +90,15 @@ export const UNREMEMBERED_BLOCK_TYPES: ReadonlySet<string> = new Set([
   "file_upload",
   "signature",
   "legal_consent",
+  /**
+   * A repeating group is a roster, not a detail about the person answering.
+   *
+   * Its answer is an array of records — four team-mates, six guests — and there
+   * is no single value in it that "the respondent's email" could mean. The
+   * profile stores one string per field, so this is the one type whose answer
+   * has no shape the vocabulary could hold even if a key existed for it.
+   */
+  "field_group",
 ]);
 
 /**

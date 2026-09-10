@@ -5,6 +5,7 @@ import {
   ContactField,
   Ending as EndingSchema,
   FormDoc,
+  GROUP_FIELD_KINDS,
   lintFormDoc,
   buildFlowRules,
   orderBlocksForBranches,
@@ -185,6 +186,103 @@ function labelled(raw: string | undefined): { id: string; label: string }[] {
     .filter((l) => l.length > 0)
     .slice(0, 20)
     .map((label) => ({ id: uid("mx"), label }));
+}
+
+/**
+ * `"Name:short_text*|Role:single_select[Lead|Member]"` → the columns of a group.
+ *
+ * Split on `|` outside brackets, because a select's own choices are separated
+ * by the same character and the only alternative is a second separator nobody
+ * would remember. `*` marks a column the entry must fill in.
+ *
+ * A label with no kind is text, which is the common case ("Name|Email" reads
+ * as two text columns) and the one a model writes when it is being terse.
+ */
+function groupFields(raw: string | undefined): Record<string, unknown>[] {
+  const specs: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of raw ?? "") {
+    if (ch === "[") depth++;
+    if (ch === "]") depth = Math.max(0, depth - 1);
+    if (ch === "|" && depth === 0) {
+      specs.push(current);
+      current = "";
+    } else current += ch;
+  }
+  specs.push(current);
+
+  const taken = new Set<string>();
+  const fields: Record<string, unknown>[] = [];
+  for (const spec of specs) {
+    const bracket = spec.indexOf("[");
+    const choices = bracket >= 0 ? spec.slice(bracket + 1).replace(/]\s*$/, "") : "";
+    const head = (bracket >= 0 ? spec.slice(0, bracket) : spec).trim();
+    if (!head) continue;
+    const colon = head.lastIndexOf(":");
+    const label = (colon > 0 ? head.slice(0, colon) : head).trim().replace(/\*$/, "").trim();
+    if (!label) continue;
+    const rawKind = (colon > 0 ? head.slice(colon + 1) : "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+    const required = /\*\s*$/.test(head) || rawKind.endsWith("*");
+    const kind = GROUP_KIND_ALIASES[rawKind.replace(/\*$/, "")] ?? "short_text";
+    const options = kind === "single_select"
+      ? choices.split("|").map((c) => c.trim()).filter(Boolean).slice(0, 50).map((l) => ({ id: uid("opt"), label: l }))
+      : [];
+    // A select with nothing to select from is a text column, not a broken one.
+    if (kind === "single_select" && options.length < 2) {
+      fields.push({ id: uid("gf"), key: groupFieldKey(label, taken), label: label.slice(0, 200), kind: "short_text", required });
+      continue;
+    }
+    fields.push({
+      id: uid("gf"),
+      key: groupFieldKey(label, taken),
+      label: label.slice(0, 200),
+      kind,
+      required,
+      ...(options.length > 0 ? { options } : {}),
+    });
+    if (fields.length >= 10) break;
+  }
+  return fields;
+}
+
+/** What a model may call each group-field kind, mapped onto what we call it. */
+const GROUP_KIND_ALIASES: Record<string, string> = {
+  ...Object.fromEntries(GROUP_FIELD_KINDS.map((k) => [k, k])),
+  text: "short_text",
+  string: "short_text",
+  name: "short_text",
+  paragraph: "long_text",
+  textarea: "long_text",
+  tel: "phone",
+  mobile: "phone",
+  link: "url",
+  website: "url",
+  int: "number",
+  integer: "number",
+  age: "number",
+  select: "single_select",
+  choice: "single_select",
+  dropdown: "single_select",
+  bool: "yes_no",
+  boolean: "yes_no",
+  yesno: "yes_no",
+  checkbox: "yes_no",
+};
+
+/** `"Full name"` → `full_name`, unique within the group. See `GroupField.key`. */
+function groupFieldKey(label: string, taken: Set<string>): string {
+  const base =
+    label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/(^[^a-z]+|_+$)/g, "")
+      .slice(0, 28) || "field";
+  let key = base;
+  let n = 2;
+  while (taken.has(key)) key = `${base}_${n++}`.slice(0, 31);
+  taken.add(key);
+  return key;
 }
 
 /** Members of a fixed set, as the model may have listed them. */
@@ -468,6 +566,29 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
         }
         return done(BlockSchema.parse({ ...base, type, items: options.slice(0, 12) }));
       }
+      /**
+       * A repeating group needs its columns; without them there is nothing to
+       * repeat. A model that named the type and forgot `fields=` has described
+       * a question, so it stays one rather than becoming an empty grid.
+       */
+      case "field_group": {
+        const fields = groupFields(config.get("fields") ?? config.get("columns"));
+        if (fields.length === 0) {
+          return done(BlockSchema.parse({ ...base, type: "short_text", minLength: 0, maxLength: 300 }));
+        }
+        const min = Math.min(Math.max(Math.round(num(config.get("min")) ?? 1), 1), 20);
+        const max = Math.min(Math.max(Math.round(num(config.get("max")) ?? Math.max(min, 5)), min), 20);
+        return done(
+          BlockSchema.parse({
+            ...base,
+            type,
+            fields,
+            itemLabel: (config.get("item") ?? config.get("itemlabel") ?? "Entry").slice(0, 60),
+            minEntries: min,
+            maxEntries: max,
+          }),
+        );
+      }
       case "matrix": {
         const rows = labelled(config.get("rows"));
         // A grid needs both axes; one of them alone is a plain choice question.
@@ -629,6 +750,39 @@ export function applyBlockConfig(block: Block, raw: string | undefined): Block |
     case "scheduling": {
       const url = config.get("url") ?? config.get("link");
       if (url !== undefined && /^https?:\/\//.test(url)) patch.url = url;
+      break;
+    }
+    case "field_group": {
+      const fields = groupFields(config.get("fields") ?? config.get("columns"));
+      if (fields.length > 0) patch.fields = fields;
+      if (config.has("item") || config.has("itemlabel")) {
+        patch.itemLabel = (config.get("item") ?? config.get("itemlabel"))?.slice(0, 60);
+      }
+      /**
+       * A bound the edit did not mention bends around one it did.
+       *
+       * "Allow up to one" on a group whose floor is two must end at one, not
+       * quietly stay at two — the written number is the request, and the other
+       * is what was already there. A floor above its own ceiling is a block the
+       * schema accepts and the composer cannot render, so one of them has to
+       * move, and it is never the one the author just typed.
+       */
+      const wroteMin = config.has("min");
+      const wroteMax = config.has("max");
+      if (wroteMin || wroteMax) {
+        const bound = (v: string | undefined, fallback: number) =>
+          Math.min(Math.max(Math.round(num(v) ?? fallback), 1), 20);
+        let min = wroteMin ? bound(config.get("min"), 1) : block.minEntries;
+        let max = wroteMax ? bound(config.get("max"), 5) : block.maxEntries;
+        // Both written and crossed reads as two numbers the wrong way round.
+        if (min > max) {
+          if (wroteMin && wroteMax) [min, max] = [max, min];
+          else if (wroteMax) min = max;
+          else max = min;
+        }
+        patch.minEntries = min;
+        patch.maxEntries = max;
+      }
       break;
     }
     case "contact_info":

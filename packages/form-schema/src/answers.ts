@@ -16,6 +16,14 @@ export const AnswerValue = z.union([
   z.array(z.string()),
   z.array(FileDescriptor),
   z.record(z.string(), z.union([z.string(), z.array(z.string())])),
+  /**
+   * `field_group`: one record per entry, keyed by each field's `key`.
+   *
+   * A union member one nesting level away from the two above it, and safe
+   * beside them because zod refuses an array for a record and refuses an object
+   * for `z.array(z.string())` — so a roster can only ever match this one.
+   */
+  z.array(z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]))),
   z.object({
     fileId: z.string(),
     r2Key: z.string(),

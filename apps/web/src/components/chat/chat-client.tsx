@@ -2080,6 +2080,10 @@ function placeholderFor(type: PublicBlock["type"]): string {
     case "file_upload":
     case "signature":
       return "Use the box above, or say something…";
+    case "contact_info":
+    case "address":
+    case "field_group":
+      return "Fill it in above, or type it out…";
     default:
       return "Type your answer…";
   }

@@ -302,6 +302,44 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
       );
 
     /**
+     * A repeating group, drawn at its opening size.
+     *
+     * `minEntries` rows and no more: the preview's job is the shape of the
+     * question, and an author who set a floor of two should see two.
+     */
+    case "field_group": {
+      const groupFields = block.groupFields ?? [];
+      const rows = Math.min(Math.max(block.minEntries ?? 1, 1), block.maxEntries ?? 5);
+      return (
+        <div className="space-y-2">
+          <div className="divide-y overflow-hidden rounded-2xl border" style={chipStyle}>
+            {Array.from({ length: rows }, (_, i) => (
+              <div key={i} className="space-y-2 p-3">
+                <p className="text-xs font-medium opacity-60">
+                  {block.itemLabel ?? "Entry"} {i + 1}
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {groupFields.map((f) => (
+                    <div key={f.key} className={cn("space-y-1", f.kind === "long_text" && "sm:col-span-2")}>
+                      <span className="block text-xs opacity-60">
+                        {f.label}
+                        {f.required && <span className="ml-0.5 opacity-70">*</span>}
+                      </span>
+                      <div className={cn(input, "h-10 rounded-xl")} style={chipStyle} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <span className={cn(chip, "inline-flex")} style={chipStyle}>
+            + Add {(block.itemLabel ?? "entry").toLowerCase()}
+          </span>
+        </div>
+      );
+    }
+
+    /**
      * The real calendar and the real payment control, not a drawing of them.
      *
      * These two were the only composers this file mocked rather than rendered,

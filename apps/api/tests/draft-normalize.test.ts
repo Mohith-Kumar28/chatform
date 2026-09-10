@@ -429,6 +429,66 @@ describe("block types that need setup", () => {
  * at, could only be answered by adding a second team-name question with the
  * flag on.
  */
+describe("a repeating group from a draft", () => {
+  const built = (config: string) => {
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome" }),
+          block({ ref: "q_team", type: "field_group", title: "Your team", config }),
+        ],
+      }),
+    );
+    return doc.blocks.find((b) => b.ref === "q_team");
+  };
+
+  it("reads columns, an entry name and the bounds out of one config string", () => {
+    const group = built("fields=Full name:short_text*|Email:email*|Year:number; item=Team member; min=2; max=5");
+    if (group?.type !== "field_group") throw new Error("not a field_group block");
+    expect(group.itemLabel).toBe("Team member");
+    expect(group.minEntries).toBe(2);
+    expect(group.maxEntries).toBe(5);
+    expect(group.fields.map((f) => [f.key, f.kind, f.required])).toEqual([
+      ["full_name", "short_text", true],
+      ["email", "email", true],
+      ["year", "number", false],
+    ]);
+  });
+
+  it("keeps a select's own choices, which are separated by the same character", () => {
+    // `|` divides the columns AND the choices inside one; only bracket depth
+    // tells them apart.
+    const group = built("fields=Name:short_text|Role:single_select[Lead|Member|Mentor]");
+    if (group?.type !== "field_group") throw new Error("not a field_group block");
+    expect(group.fields[1]?.kind).toBe("single_select");
+    expect(group.fields[1]?.options.map((o) => o.label)).toEqual(["Lead", "Member", "Mentor"]);
+  });
+
+  it("takes a bare label as a text column, and a near-miss kind as what it meant", () => {
+    const group = built("fields=Name|Mobile:tel|Portfolio:link|Attending:boolean");
+    if (group?.type !== "field_group") throw new Error("not a field_group block");
+    expect(group.fields.map((f) => f.kind)).toEqual(["short_text", "phone", "url", "yes_no"]);
+  });
+
+  it("demotes a choice column with nothing to choose from rather than dropping it", () => {
+    const group = built("fields=Name:short_text|Role:single_select");
+    if (group?.type !== "field_group") throw new Error("not a field_group block");
+    expect(group.fields[1]?.kind).toBe("short_text");
+    expect(group.fields[1]?.label).toBe("Role");
+  });
+
+  it("keeps the question as text when the model named the type and forgot the columns", () => {
+    // An empty grid is worse than the plain question it replaced.
+    expect(built("item=Team member; min=2")?.type).toBe("short_text");
+  });
+
+  it("gives duplicate labels distinct keys", () => {
+    const group = built("fields=Email:email|Email:email");
+    if (group?.type !== "field_group") throw new Error("not a field_group block");
+    expect(group.fields.map((f) => f.key)).toEqual(["email", "email_2"]);
+  });
+});
+
 describe("applyBlockConfig", () => {
   const short = Block.parse({
     id: "blk_apply001", ref: "q_team", type: "short_text", title: "Team name?",
@@ -493,6 +553,43 @@ describe("applyBlockConfig", () => {
     const capped = applyBlockConfig(number, "max=50");
     if (capped?.type !== "number") throw new Error("not a number block");
     expect(capped.max).toBe(50);
+  });
+});
+
+describe("editing a repeating group", () => {
+  const group = Block.parse({
+    id: "blk_group001", ref: "q_team", type: "field_group", title: "Your team",
+    itemLabel: "Team member", minEntries: 2, maxEntries: 4,
+    fields: [{ id: "gf_name0001", key: "name", label: "Full name", kind: "short_text", required: true }],
+  });
+
+  it("raises the ceiling without touching anything else", () => {
+    const next = applyBlockConfig(group, "max=6");
+    if (next?.type !== "field_group") throw new Error("not a field_group block");
+    expect(next.maxEntries).toBe(6);
+    expect(next.minEntries).toBe(2);
+    expect(next.fields).toHaveLength(1);
+  });
+
+  it("never leaves a floor above its own ceiling", () => {
+    // The schema would accept min 2 / max 1 and the composer cannot render it.
+    // The written number wins: "up to one" means one, not "still two".
+    const next = applyBlockConfig(group, "max=1");
+    if (next?.type !== "field_group") throw new Error("not a field_group block");
+    expect(next.minEntries).toBe(1);
+    expect(next.maxEntries).toBe(1);
+  });
+
+  it("reads two crossed bounds as two numbers the wrong way round", () => {
+    const next = applyBlockConfig(group, "min=6; max=3");
+    if (next?.type !== "field_group") throw new Error("not a field_group block");
+    expect([next.minEntries, next.maxEntries]).toEqual([3, 6]);
+  });
+
+  it("replaces the columns when the edit restates them", () => {
+    const next = applyBlockConfig(group, "fields=Name:short_text*|Email:email*");
+    if (next?.type !== "field_group") throw new Error("not a field_group block");
+    expect(next.fields.map((f) => f.key)).toEqual(["name", "email"]);
   });
 });
 
