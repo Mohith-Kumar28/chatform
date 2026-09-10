@@ -23,20 +23,19 @@
 /**
  * How long the respondent has to catch it.
  *
- * Seven seconds. Three is enough time to read "Cancel auto-submit" or to move
- * a thumb to it, but not both — and being carried past a submission you meant
- * to stop is the one failure this can cause that a plain button could not. The
- * form is also not always the only thing happening: somebody finishing this on
- * a phone is as likely to be half-reading their last answer as watching the
- * button, and the seconds that matter are the ones after they look back up.
+ * Five seconds. Three is enough time to read "Cancel auto-submit" or to move a
+ * thumb to it, but not both — and being carried past a submission you meant to
+ * stop is the one failure this can cause that a plain button could not. Five
+ * covers both with a second to spare, and stops the wait from reading as the
+ * form having hung on a card the respondent is already finished with.
  */
-export const AUTO_SUBMIT_MS = 7_000;
+export const AUTO_SUBMIT_MS = 5_000;
 
 /** How often the countdown re-reads the clock. Also the fill's step size. */
 export const AUTO_SUBMIT_TICK_MS = 100;
 
 export interface AutoSubmitTick {
-  /** The number on the button: 7, 6, 5 … 1 — never 0 while it is still counting. */
+  /** The number on the button: 5, 4, 3 … 1 — never 0 while it is still counting. */
   secondsLeft: number;
   /** How much of the button is filled, 0 → 1. */
   filled: number;
@@ -54,7 +53,7 @@ export interface AutoSubmitTick {
  * away. Reading the clock makes the sleep irrelevant: the first tick after
  * waking sees the deadline has passed and sends.
  *
- * `secondsLeft` is a ceiling, so the first frame says 7 rather than 6 and the
+ * `secondsLeft` is a ceiling, so the first frame says 5 rather than 4 and the
  * last whole second still says 1. It reaches 0 only together with `done`,
  * which means the button never shows a countdown that has nothing left to
  * count.
