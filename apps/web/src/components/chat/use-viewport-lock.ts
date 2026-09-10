@@ -66,10 +66,34 @@ export function useViewportLock(active: boolean, onViewportChange?: () => void) 
     apply();
     vv.addEventListener("resize", schedule);
     vv.addEventListener("scroll", schedule);
+    /*
+     * The same measurement, from the events that are hardest to miss.
+     *
+     * `--cf-vh` is a number written once and then trusted until something says
+     * otherwise, and the failure mode if that "otherwise" never arrives is not
+     * subtle: a value captured mid-rotation or mid-restore leaves a shell
+     * hundreds of pixels short of the screen, with the conversation stopping in
+     * a band and dead space under it, and nothing to correct it. A missed
+     * `visualViewport` event is silent, so it cannot be the only witness.
+     *
+     * `pageshow` is the one that matters most: coming back through the
+     * bfcache restores the DOM — this custom property included — from a
+     * snapshot taken on a screen that may have been a different size or
+     * orientation, and it fires no resize of any kind.
+     *
+     * All three are the same coalesced `apply`, so a browser firing every one
+     * of them costs a single frame.
+     */
+    window.addEventListener("resize", schedule);
+    window.addEventListener("orientationchange", schedule);
+    window.addEventListener("pageshow", schedule);
     return () => {
       if (frame) cancelAnimationFrame(frame);
       vv.removeEventListener("resize", schedule);
       vv.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("orientationchange", schedule);
+      window.removeEventListener("pageshow", schedule);
       root.classList.remove("cf-viewport-locked");
       root.style.removeProperty("--cf-vh");
       root.style.removeProperty("--cf-vv-top");
