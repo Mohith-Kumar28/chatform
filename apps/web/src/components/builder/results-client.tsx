@@ -85,16 +85,44 @@ export function ResultsClient({ formId }: ResultsClientProps) {
   const [tab, setTab] = useState<"submissions" | "summary" | "analytics">("submissions");
   const [statusFilter, setStatusFilter] = useState<"completed" | "abandoned">("completed");
 
-  const { data: rawAnalytics } = useGetApiFormsByIdAnalytics(formId as never);
-  const { data: rawSubs, isLoading } = useGetApiFormsByIdSubmissions(formId as never);
-  const { data: rawForm } = useGetApiFormsById(formId as never);
+  /**
+   * The one page that refetches when you come back to the window.
+   *
+   * `refetchOnWindowFocus` is off globally, which is right nearly everywhere:
+   * a form document, a plan, a template list do not change because you alt-
+   * tabbed. Results are the exception, because *waiting for responses to
+   * arrive* is the entire reason this page is open. Leaving it on the global
+   * default meant switching to your inbox to check whether anyone had replied
+   * and coming back to the counts from whenever you first opened the tab —
+   * the page most likely to be stale was the only one never asking.
+   *
+   * `staleTime` still applies, so a flurry of alt-tabs inside thirty seconds
+   * costs nothing, and the refetch is a background one: the numbers are on
+   * screen throughout, they just quietly become current.
+   */
+  const LIVE = { refetchOnWindowFocus: true } as const;
+
+  const { data: rawAnalytics } = useGetApiFormsByIdAnalytics(formId as never, {
+    query: { queryKey: getGetApiFormsByIdAnalyticsQueryKey(formId as never), ...LIVE },
+  });
+  const { data: rawSubs, isLoading } = useGetApiFormsByIdSubmissions(formId as never, undefined, {
+    query: { queryKey: getGetApiFormsByIdSubmissionsQueryKey(formId as never), ...LIVE },
+  });
+  const { data: rawForm } = useGetApiFormsById(formId as never, {
+    query: { queryKey: getGetApiFormsByIdQueryKey(formId as never), ...LIVE },
+  });
   /**
    * The recovery report rides alongside rather than inside `/analytics`: it is
    * gated on `followup_email` rather than `advanced_analytics`, so somebody
    * paying to send the reminders can read what they did without also paying for
    * the funnel. Returns zeros for a form that has never scheduled one.
    */
-  const { data: rawFollowUps } = useGetApiFormsByIdFollowupAnalytics(formId as never);
+  const { data: rawFollowUps } = useGetApiFormsByIdFollowupAnalytics(formId as never, {
+    query: {
+      queryKey: getGetApiFormsByIdFollowupAnalyticsQueryKey(formId as never),
+      ...LIVE,
+    },
+  });
 
   const analytics = rawAnalytics as Analytics | undefined;
   /**

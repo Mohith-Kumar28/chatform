@@ -3,6 +3,7 @@ import {
   getGetApiFormsQueryKey,
   getGetApiWorkspacesQueryKey,
 } from "@/lib/api/dashboard/dashboard";
+import { getGetApiBillingEntitlementsQueryKey } from "@/lib/api/billing/billing";
 
 /**
  * The forms list, invalidated from one place.
@@ -20,10 +21,22 @@ import {
  * the page behind it until a reload. Anything that creates, deletes or moves a
  * form changes those counts, so anything that invalidates the list invalidates
  * them too.
+ *
+ * Entitlements go with them for the same reason one step further out.
+ * `forms_count` and `workspaces_count` are `gauge` limits (see
+ * `packages/entitlements/src/limits.ts`), so they are part of the entitlements
+ * payload and they move every time a form is created or deleted. Without this
+ * line the usage meter kept showing "Forms 4 / 10" for up to its own 60s
+ * `staleTime` after the fifth one appeared in the grid behind it — the same
+ * class of disagreement the workspace counts above were added to fix. The
+ * server reads these gauges fresh on every request (they are deliberately not
+ * in the API's five-minute KV cache), so invalidating really does get the new
+ * number.
  */
 export function invalidateForms(client: QueryClient): Promise<void> {
   return Promise.all([
     client.invalidateQueries({ queryKey: getGetApiFormsQueryKey() }),
     client.invalidateQueries({ queryKey: getGetApiWorkspacesQueryKey() }),
+    client.invalidateQueries({ queryKey: getGetApiBillingEntitlementsQueryKey() }),
   ]).then(() => undefined);
 }

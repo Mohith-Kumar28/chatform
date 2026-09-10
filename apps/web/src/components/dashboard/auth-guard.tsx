@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/auth-client";
+import { purgePersistedCache } from "@/lib/api/persist";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -34,6 +36,33 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     const next = encodeURIComponent(pathname);
     router.replace(`/signin?next=${next}`);
   }, [isPending, session, transportFailure, router, pathname]);
+
+  /**
+   * The persisted query cache belongs to whoever was signed in when it was
+   * written, so it is dropped the moment that stops being true.
+   *
+   * Watching the identity rather than hooking sign-out, because sign-out is
+   * not one call site: the user menu, the Better Auth UI's own control and the
+   * re-authentication dialog each have their own, and an expiring session has
+   * none at all. Any of those leaving the previous account's forms list and
+   * plan on disk for the next person to sign in on this browser is the same
+   * bug; this catches all four, and the one added next.
+   *
+   * A transport failure is explicitly not a change of identity — the same
+   * distinction the redirect above makes. Purging on a dropped request would
+   * throw the cache away exactly when the network is too poor to refill it.
+   */
+  const lastUserId = useRef<string | null>(null);
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (isPending || transportFailure) return;
+    const userId = session?.user?.id ?? null;
+    if (lastUserId.current !== null && lastUserId.current !== userId) {
+      purgePersistedCache();
+      queryClient.clear();
+    }
+    lastUserId.current = userId;
+  }, [isPending, transportFailure, session, queryClient]);
 
   if (isPending) {
     return (
