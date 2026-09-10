@@ -31,6 +31,7 @@ import { QuestionAffordance } from "./question-affordance";
 import { QuestionMedia } from "./question-media";
 import { ChatBoot } from "./chat-boot";
 import { ClosingNotice } from "./closing-notice";
+import { autoSubmitTick, AUTO_SUBMIT_MS, AUTO_SUBMIT_TICK_MS } from "./auto-submit";
 import { useViewportLock } from "./use-viewport-lock";
 import { Confetti } from "./confetti";
 import { cn } from "@/lib/utils";
@@ -93,6 +94,15 @@ export function ChatClient({
     if (!googleGated) return;
     warmGoogleSignIn(googleHintEmail);
   }, [googleGated, googleHintEmail]);
+
+  /**
+   * Whether this respondent has told the review card to stop sending itself.
+   *
+   * Once, for the whole session. Somebody who cancels has said the form should
+   * wait for them, and re-arming the countdown every time the review comes
+   * back — after an edit, after a reconnect — would be arguing with them.
+   */
+  const [autoSubmitOff, setAutoSubmitOff] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -518,6 +528,15 @@ export function ChatClient({
               onEdit={(ref) => void chat.editAnswer(ref)}
               onSubmit={() => void chat.sendAction("submit")}
               busy={chat.thinking}
+              /*
+                Cancelling is remembered out here rather than in the card,
+                because the card does not survive the thing most likely to
+                follow a cancel: tapping an answer unmounts it, and coming back
+                from that edit would have mounted a fresh one and started the
+                countdown over on somebody who had just said no to it.
+              */
+              autoSubmitOff={autoSubmitOff}
+              onCancelAutoSubmit={() => setAutoSubmitOff(true)}
             />
           )}
 
@@ -1111,24 +1130,114 @@ function ReviewCard({
   onEdit,
   onSubmit,
   busy,
+  autoSubmitOff,
+  onCancelAutoSubmit,
 }: {
   review: NonNullable<ReturnType<typeof useChat>["review"]>;
   onEdit: (ref: string) => void;
   onSubmit: () => void;
   busy: boolean;
+  /** The respondent has already stopped the countdown once this session. */
+  autoSubmitOff: boolean;
+  onCancelAutoSubmit: () => void;
 }) {
+  const actionRef = useRef<HTMLDivElement>(null);
+  /** When the countdown started, or null while it has not been armed. */
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  /** The clock, re-read on every tick rather than counted down. */
+  const [now, setNow] = useState(0);
+  /** It has already fired. One submission per review, whatever the timers do. */
+  const [sent, setSent] = useState(false);
+
+  const counting = startedAt !== null && !sent && !busy && !autoSubmitOff;
+
+  /**
+   * Arm the countdown only once the button is actually on screen.
+   *
+   * The review arrives at the bottom of a thread the respondent may have
+   * scrolled away from — reading back over an earlier answer is exactly the
+   * kind of thing somebody does at the end of a form. Starting the clock on
+   * mount would send that person's response from a button they never saw, with
+   * the cancel they would have pressed sitting below the fold.
+   *
+   * What is watched is the button, not the card. A review of fifteen answers is
+   * taller than a phone, so a card that is fully in view is a card that
+   * respondent will never have — and a ratio test against it would leave the
+   * countdown armed but never started on precisely the long forms where
+   * forgetting to send is most likely.
+   *
+   * None of this delays the ordinary case: the thread is pinned to the bottom,
+   * so the button is on screen the moment it exists and the observer says so on
+   * its first callback.
+   */
+  useEffect(() => {
+    if (startedAt !== null || sent || busy || autoSubmitOff) return;
+    const el = actionRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setStartedAt(Date.now());
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.intersectionRatio >= 0.9)) return;
+        io.disconnect();
+        setStartedAt(Date.now());
+      },
+      { threshold: [0.9] },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [startedAt, sent, busy, autoSubmitOff]);
+
+  /** Tick the countdown, and send when it runs out. */
+  useEffect(() => {
+    if (startedAt === null || sent || busy || autoSubmitOff) return;
+    const tick = () => {
+      const t = Date.now();
+      setNow(t);
+      if (!autoSubmitTick(startedAt, t).done) return;
+      clearInterval(id);
+      setSent(true);
+      onSubmit();
+    };
+    const id = setInterval(tick, AUTO_SUBMIT_TICK_MS);
+    /*
+     * A tab that was backgrounded mid-countdown has its timers throttled to
+     * about once a second, so it comes back with a bar that has been standing
+     * still. The deadline is read from the clock rather than counted, so one
+     * tick on return puts the bar where it belongs — or sends, if the five
+     * seconds went by while the phone was locked.
+     */
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [startedAt, sent, busy, autoSubmitOff, onSubmit]);
+
   // ⌘↵ / Ctrl+↵ submits from anywhere on this screen, including from inside the
   // composer — which is where the caret still is when the review appears.
+  // Escape stops the countdown, for the same reason it closes everything else.
   useEffect(() => {
     if (busy) return;
     function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && counting) {
+        e.preventDefault();
+        onCancelAutoSubmit();
+        return;
+      }
       if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey)) return;
       e.preventDefault();
       onSubmit();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [busy, onSubmit]);
+  }, [busy, counting, onSubmit, onCancelAutoSubmit]);
+
+  const { secondsLeft, filled } = autoSubmitTick(startedAt ?? 0, startedAt === null ? 0 : now);
 
   return (
     <div className="animate-message-in space-y-3 rounded-2xl bg-[var(--cf-chip-bg)] p-4">
@@ -1141,7 +1250,9 @@ function ReviewCard({
         of this card a hurried respondent reads.
       */}
       <p className="text-sm font-medium">
-        That&apos;s everything — tap any answer to change it before you send.
+        {counting
+          ? "That’s everything — tap any answer to change it, or hold it with Cancel below."
+          : "That’s everything — tap any answer to change it before you send."}
       </p>
 
       <ul className="space-y-0.5">
@@ -1171,19 +1282,81 @@ function ReviewCard({
         ))}
       </ul>
 
-      <button
-        type="button"
-        disabled={busy}
-        onClick={onSubmit}
-        className="flex h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-60"
-        style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
-      >
-        {busy ? "Submitting…" : "Submit form"}
-        {/* Shown, not just bound. A shortcut nobody can see is a shortcut
-            nobody uses — and it is the one key press that ends the form, so it
-            is worth teaching at the moment it applies. */}
-        {!busy && <Kbd>{modKeyLabel()}↵</Kbd>}
-      </button>
+      {/*
+        While the countdown runs, the big button is the *cancel*, not the send.
+        Which way round this goes is the whole safety of the thing, because the
+        two ways to mistake it are not equally bad: someone who meant to send
+        and cancels by reflex loses one tap and gets the ordinary button back,
+        while someone who meant to stop and sends instead has ended the form on
+        answers they were still thinking about. So the thumb-sized target is the
+        reversible one, and sending now — which the countdown does by itself in
+        a moment anyway — is the small line under it, for the respondent who
+        does not want to sit out five seconds.
+      */}
+      <div ref={actionRef}>
+        {counting ? (
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={onCancelAutoSubmit}
+              className="relative flex h-11 w-full items-center justify-center overflow-hidden rounded-full border border-[var(--cf-chip-border)] text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
+            >
+              {/*
+                The bar is the countdown, not decoration: it says how much of
+                the five seconds is gone in a form that can be read without
+                counting. It steps with the tick and eases the gap between
+                steps, so a throttled tab catches up in one slide rather than a
+                jump.
+              */}
+              <span
+                aria-hidden
+                className="absolute inset-y-0 left-0 transition-[width] ease-linear"
+                style={{
+                  width: `${filled * 100}%`,
+                  background: "var(--cf-accent)",
+                  opacity: 0.22,
+                  transitionDuration: `${AUTO_SUBMIT_TICK_MS}ms`,
+                }}
+              />
+              <span className="relative flex items-center gap-1.5">
+                <X className="size-3.5" />
+                Cancel auto-submit · {secondsLeft}
+              </span>
+            </button>
+            {/*
+              Said once, not once a second. A live region tied to the digit
+              would read "four", "three", "two" over the top of whatever a
+              screen reader was in the middle of; this announces when the
+              countdown arms, and the button it names is the next thing in the
+              tab order.
+            */}
+            <p role="status" className="sr-only">
+              Sending automatically in {AUTO_SUBMIT_MS / 1000} seconds unless you cancel.
+            </p>
+            <button
+              type="button"
+              onClick={onSubmit}
+              className="block w-full py-1 text-center text-xs underline underline-offset-2 opacity-60"
+            >
+              Send it now
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onSubmit}
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-60"
+            style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+          >
+            {busy ? "Submitting…" : "Submit form"}
+            {/* Shown, not just bound. A shortcut nobody can see is a shortcut
+                nobody uses — and it is the one key press that ends the form, so
+                it is worth teaching at the moment it applies. */}
+            {!busy && <Kbd>{modKeyLabel()}↵</Kbd>}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
