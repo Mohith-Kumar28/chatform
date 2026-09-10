@@ -60,6 +60,8 @@ import {
   type ResponseOwner,
 } from "../lib/submissions.js";
 import { startEmailChallenge, verifyEmailChallenge } from "../lib/respondent-auth.js";
+import { findOpenResponseId } from "../lib/respondent-history.js";
+import type { RespondentKeySource } from "../lib/respondent-key.js";
 import type { RespondentIdentity, RespondentAuthMethod } from "@repo/form-schema";
 import { streamText, stepCountIs } from "ai";
 
@@ -84,6 +86,17 @@ interface DoSessionMeta {
   ipHash: string | null;
   /** Salted device key, from `lib/respondent-key.ts`. Null when nothing identified the device. */
   fingerprint?: string | null;
+  /**
+   * What that key was computed from.
+   *
+   * Carried because "device" and "ip" are not interchangeable and the value
+   * alone cannot tell them apart. A hashed IP is shared by everyone behind one
+   * router, so anything that treats the key as *this person* — reusing their
+   * open response, above all — must honour only a real device signal.
+   */
+  fingerprintSource?: RespondentKeySource | null;
+  /** They pressed "Start over": never reuse an earlier open response. */
+  startedOver?: boolean;
   country: string | null;
   userAgent: string | null;
   /** Set when the respondent submits, for the already-submitted screen. */
@@ -382,6 +395,14 @@ export class SessionDO extends DurableObject<Bindings> {
     hiddenFields: Record<string, string>;
     ipHash: string | null;
     fingerprint?: string | null;
+    fingerprintSource?: RespondentKeySource | null;
+    /**
+     * Opened by "Start over", which is a respondent saying they want nothing to
+     * do with what they had. It already declines the device match in
+     * `openSession`; it must decline the row-level reuse too, or the answers
+     * they asked to be rid of come back as the row this session writes into.
+     */
+    startedOver?: boolean;
     country: string | null;
     userAgent: string | null;
     /** Which surface opened this. Defaults to a conversation. */
@@ -423,6 +444,8 @@ export class SessionDO extends DurableObject<Bindings> {
       hiddenFields: params.hiddenFields,
       ipHash: params.ipHash,
       fingerprint: params.fingerprint ?? null,
+      fingerprintSource: params.fingerprintSource ?? null,
+      startedOver: params.startedOver === true,
       country: params.country,
       userAgent: params.userAgent,
       source: params.source ?? "chat",
@@ -3005,6 +3028,44 @@ export class SessionDO extends DurableObject<Bindings> {
     this.openingRow = (async () => {
       const existing = await this.ctx.storage.get<string>("submission_id");
       if (existing) return existing;
+
+      /**
+       * One response in progress per person per form.
+       *
+       * Finished responses may multiply — that is `allowResubmissions`, and it
+       * is the author's call. A *draft* cannot: being half-way through a form
+       * is a fact about the person, not about the tab they happen to have open,
+       * and a second open row is the same draft written down twice. It splits
+       * their answers, shows the author duplicates that stand for one attempt,
+       * and earns each copy its own reminder email.
+       *
+       * The session-level checks cannot carry this on their own, which is why
+       * it is here. Nothing is written to `submissions` until the first answer
+       * is projected — and for somebody who only signed in, not until the idle
+       * alarm fires half an hour later. A respondent who came back inside that
+       * window found no row to resume because none existed yet, so every visit
+       * opened another. This is the one place rows are created, so the rule
+       * holds no matter what any session managed to recognise.
+       *
+       * Adopting rather than merging: this session has no row, so it has
+       * projected no answers, and there is nothing here that could overwrite
+       * what the earlier one recorded. Answers from here land on that row
+       * exactly as they would have on a fresh one.
+       */
+      const reusable = this.meta!.startedOver
+        ? null
+        : await findOpenResponseId(this.env, this.meta!.formId, {
+            identity: this.meta!.identity ?? null,
+            fingerprint: this.meta!.fingerprint ?? null,
+            fingerprintSource: this.meta!.fingerprintSource ?? null,
+            isTest: this.meta!.isTest === true,
+            sessionId: this.meta!.sessionId,
+          });
+      if (reusable) {
+        await this.ctx.storage.put("submission_id", reusable);
+        return reusable;
+      }
+
       const id = await openResponse(this.owner(), {
         hiddenFields: this.meta!.hiddenFields,
         variables: this.state.variables,

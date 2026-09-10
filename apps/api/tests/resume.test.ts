@@ -401,3 +401,76 @@ describe("follow-up attribution on resume", () => {
     expect(other?.clicked_at).toBeNull();
   });
 });
+
+/**
+ * One draft per person, enforced where rows are created.
+ *
+ * The reported sequence: sign in, wander off, come back, wander off again, and
+ * end up with two half-finished responses in the results table standing for one
+ * person's single attempt. It happened because nothing is written to
+ * `submissions` until the first answer — so the second visit looked for a
+ * response to carry on with, found none, and opened its own.
+ */
+describe("one response in progress per person", () => {
+  const answer = (sessionId: string, respondentToken: string, ref: string, value: unknown) =>
+    fetchApi(`/p/sessions/${sessionId}/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-respondent-token": respondentToken },
+      body: JSON.stringify({ type: "structured", ref, value }),
+    });
+
+  const openWith = async (body: Record<string, unknown>) => {
+    const res = await open(body, "198.51.100.9");
+    expect(res.status).toBe(200);
+    return (await res.json()) as { sessionId: string; respondentToken: string };
+  };
+
+  const openRows = () =>
+    env.DB.prepare(
+      `SELECT id FROM submissions WHERE status IN ('in_progress','abandoned') ORDER BY started_at`,
+    ).all<{ id: string }>();
+
+  /*
+   * Pins the invariant, not the mechanism — and it is honest to say that this
+   * one already passed before `findOpenResponseId` existed, because
+   * `findDeviceResumable` catches it at session open when the earlier row is
+   * already written. It is here so that stays true.
+   *
+   * The case that needed the new check is the one this harness cannot reach: a
+   * respondent who signed in and answered nothing, whose row is not written
+   * until the idle alarm fires half an hour later and is therefore invisible to
+   * every check that runs at session open. The matching rules that case depends
+   * on are covered directly in `one-open-response.test.ts`.
+   */
+  it("continues the same draft when the same device comes back", async () => {
+    const SIGNAL = "onedraftdevice";
+    const first = await openWith({ deviceSignal: SIGNAL });
+    await answer(first.sessionId, first.respondentToken, "q_name", "Maya");
+
+    // A second visit from the same device — a new tab, a cleared session, an
+    // embed whose storage the browser partitioned away.
+    const second = await openWith({ deviceSignal: SIGNAL });
+    await answer(second.sessionId, second.respondentToken, "q_name", "Maya");
+
+    const rows = await openRows();
+    expect(rows.results).toHaveLength(1);
+  });
+
+  it("still gives Start over a clean sheet", async () => {
+    /*
+     * The one case where reusing the draft would be wrong. "Start over" is a
+     * respondent saying they want nothing to do with what they had, so writing
+     * this session's answers into that row would hand back the very thing the
+     * button exists to get rid of.
+     */
+    const SIGNAL = "startoverdevice";
+    const first = await openWith({ deviceSignal: SIGNAL });
+    await answer(first.sessionId, first.respondentToken, "q_name", "Maya");
+
+    const fresh = await openWith({ deviceSignal: SIGNAL, fresh: true });
+    await answer(fresh.sessionId, fresh.respondentToken, "q_name", "Someone else");
+
+    const rows = await openRows();
+    expect(rows.results).toHaveLength(2);
+  });
+});

@@ -379,6 +379,10 @@ sessionsRouter.post(
       hiddenFields: body.hiddenFields ?? {},
       ipHash: opened.ipHash,
       fingerprint: opened.device.value || null,
+      // The source travels with the value: a hashed IP is a whole office, and
+      // only a real device signal may stand in for a person.
+      fingerprintSource: opened.device.source,
+      startedOver: body.fresh === true,
       country: c.req.header("cf-ipcountry") ?? null,
       userAgent: c.req.header("user-agent") ?? null,
       source: body.embed?.origin ? "embed" : "chat",

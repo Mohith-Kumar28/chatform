@@ -217,3 +217,81 @@ async function loadAnswers(env: Bindings, submissionId: string): Promise<Resumab
   }
   return { submissionId, answers };
 }
+
+/**
+ * The open response this person already has on this form, if any.
+ *
+ * A person can hold many *finished* responses on a form that allows more than
+ * one — that is the author's setting and it is none of this function's
+ * business. What they cannot coherently have is two responses in progress at
+ * once. "Half-finished" is a state of the person's relationship with the form,
+ * not of a browser tab, and every extra open row is the same draft written down
+ * twice: it splits their answers across rows, shows the author duplicates that
+ * represent one person's single attempt, and makes each copy independently
+ * eligible for its own reminder email.
+ *
+ * They were being created routinely. A row is not written until the first
+ * answer is projected — or, for a session that only signed in, not until the
+ * idle alarm fires half an hour later — so a respondent who opened the form
+ * again inside that window found nothing to carry on with, because nothing had
+ * been written yet. Every visit therefore opened its own.
+ *
+ * This is the check at the one place rows are created, so the invariant holds
+ * regardless of what any session did or did not manage to recognise.
+ *
+ * Two ways to be the same person, and the weaker one is fenced exactly as it is
+ * in `findDeviceResumable`. A verified identity is definitive. A device key is a
+ * guess, so it is only honoured when it came from a real device signal — never
+ * the hashed-IP fallback, which a whole office shares and which would have
+ * colleagues writing into one another's drafts — and never against a row that
+ * carries an identity, which would be a way past the sign-in gate to a named
+ * person's answers.
+ *
+ * Never throws: failing to find a row to reuse must cost a duplicate, not the
+ * response itself.
+ */
+export async function findOpenResponseId(
+  env: Bindings,
+  formId: string,
+  who: {
+    identity?: RespondentIdentity | null;
+    fingerprint?: string | null;
+    /** Only `"device"` is trusted for this; see above. */
+    fingerprintSource?: RespondentKeySource | null;
+    isTest: boolean;
+    /** Excluded, so a session cannot match a row it opened itself. */
+    sessionId: string;
+  },
+): Promise<string | null> {
+  const open = `status IN ('in_progress', 'abandoned') AND is_test = ?2
+                AND (session_id IS NULL OR session_id != ?3)`;
+  try {
+    if (who.identity?.provider && who.identity.subject) {
+      const row = await env.DB.prepare(
+        `SELECT id FROM submissions
+          WHERE form_id = ?1 AND ${open}
+            AND respondent_provider = ?4 AND respondent_subject = ?5
+          ORDER BY updated_at DESC LIMIT 1`,
+      )
+        .bind(formId, who.isTest ? 1 : 0, who.sessionId, who.identity.provider, who.identity.subject)
+        .first<{ id: string }>();
+      if (row) return row.id;
+    }
+
+    if (who.fingerprintSource === "device" && who.fingerprint) {
+      const row = await env.DB.prepare(
+        `SELECT id FROM submissions
+          WHERE form_id = ?1 AND ${open}
+            AND fingerprint = ?4 AND respondent_subject IS NULL
+          ORDER BY updated_at DESC LIMIT 1`,
+      )
+        .bind(formId, who.isTest ? 1 : 0, who.sessionId, who.fingerprint)
+        .first<{ id: string }>();
+      if (row) return row.id;
+    }
+    return null;
+  } catch (err) {
+    console.error("open_response_lookup_failed", formId, err);
+    return null;
+  }
+}
