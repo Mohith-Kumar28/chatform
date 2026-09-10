@@ -574,32 +574,6 @@ export function FormCard({
           className={cn(
             "bg-card border-border group relative flex h-full flex-col overflow-hidden rounded-2xl border",
             "shadow-xs transition-[box-shadow,outline-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
-            /*
-              A live form's edge is tinted green.
-
-              The card already says Live twice — the pill on the artwork and
-              the word in the status strip — but both of those live inside the
-              thumbnail's top band, which is the busiest 128px on the card and
-              the part your eye skips once you know the form. The border is the
-              one property that traces the whole card, so it says which forms
-              are collecting *before* you read anything on them, which is the
-              question a grid of forms is usually being scanned for.
-
-              A mix rather than `--success` itself: this is a resting edge on
-              every published card at once, and a grid of saturated green
-              outlines reads as a row of alerts. Mixed most of the way back to
-              `--border` it is the same quiet line the draft cards have, in a
-              green you only name once you look at it — and because it is mixed
-              *toward the theme's own border colour*, it lands at the right
-              lightness in both themes without a `dark:` twin.
-
-              It is a border and not the outline because the outline is spoken
-              for: transparent at rest, `--border` on hover, `--primary` when
-              ticked. Those are the three things that happen *to* a card, and
-              they layer over this one, which is what the card *is*.
-            */
-            published &&
-              "border-[color-mix(in_oklab,var(--success)_38%,var(--border))]",
             // Always present, transparent until it has something to say, so the
             // only thing that ever animates is its colour. Inset, because an
             // outline outside a rounded border sits proud of the corner radius.
@@ -947,6 +921,43 @@ function ChatThumb({
  * row means the strip is never covered and never pushed out; a bubble stack
  * that would have overrun clips against the strip instead of through it.
  */
+/**
+ * The thumbnail-to-card fade.
+ *
+ * The first cut was five stops and read as four flat bands rather than one
+ * fade: every stop is a change of slope, and the eye finds a change of slope
+ * in a gradient far more readily than it finds the gradient itself. Mach bands
+ * are a response to curvature, so the fix is not more opacity resolution — it
+ * is a curve that never turns a corner.
+ *
+ * `smoothstep(t) = 3t² - 2t³` is flat at both ends, which is the property that
+ * matters: zero slope at the top means the band eases out of the artwork with
+ * no line where it begins, zero slope at the bottom means it eases into
+ * `--card` with no line where it lands. A plain `transparent → var(--card)`
+ * ramp is smooth in between but corners at both ends — the seam again, twice,
+ * in softer form.
+ *
+ * 64px, which is the bottom ~40% of the 144px thumbnail, and the curve is left
+ * symmetric rather than weighted late. Those two go together. An earlier cut
+ * bought a lower onset by raising smoothstep to a power, which does move the
+ * visible start down — but only by steepening everything under it, so the
+ * artwork kept more of its colour and paid for it with a faster fade. Inside a
+ * band already cut to the bottom 40% there is nothing left to buy: the plain
+ * curve spends every one of those 64px easing, which is the gentlest ramp that
+ * fits in the space. Onset lands around 55px up, so the top ~60% of the
+ * thumbnail is the form's colour at full strength.
+ *
+ * Sampled at 17 points rather than left as two stops because the curve is
+ * approximated by line segments either way, and at that spacing each segment's
+ * slope step is under what the eye resolves as a band.
+ */
+const SEAM_FADE = `linear-gradient(to bottom, ${Array.from({ length: 17 }, (_, i) => {
+  const t = i / 16;
+  const pct = (t * t * (3 - 2 * t) * 100).toFixed(2);
+  const at = (t * 100).toFixed(2);
+  return `color-mix(in oklab, var(--card) ${pct}%, transparent) ${at}%`;
+}).join(", ")})`;
+
 function ThumbFrame({
   style,
   pills,
@@ -961,10 +972,35 @@ function ThumbFrame({
       className="relative flex h-36 shrink-0 flex-col overflow-hidden p-3 pb-2"
       style={style}
     >
-      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+      {/*
+        The thumbnail's bottom edge dissolves into the card instead of ending.
+
+        Two flat colours meeting on a straight line is the one seam the eye
+        cannot help resolving, and this one ran the full width of every card in
+        the grid. Worse, the colour above the line is the *form's* — chosen by
+        whoever themed it, against a card colour they have never seen — so a
+        grid was some number of unplanned contrast edges. Ramping down to
+        `--card` means the two surfaces are already the same colour by the time
+        they touch, for any form colour, in either theme.
+
+        Behind the content, not over it — `z-0` here against `relative z-10` on
+        the two rows below. Over the top it would wash out the answer bubble on
+        every card, which is the one thing on the thumbnail worth reading. So
+        the bubbles stay at full strength and the fade passes *under* them and
+        under the pills, which is what puts the status strip half on the
+        artwork and half on the card rather than on one or the other.
+      */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-16"
+        style={{ backgroundImage: SEAM_FADE }}
+      />
+      <div className="relative z-10 min-h-0 flex-1 overflow-hidden">
+        {children}
+      </div>
       {/* `justify-between` with one child leaves it at the start, so a form
           with no question count keeps the status where it always was. */}
-      <div className="flex shrink-0 items-center justify-between gap-2 pt-1.5">
+      <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 pt-1.5">
         {pills}
       </div>
     </div>
