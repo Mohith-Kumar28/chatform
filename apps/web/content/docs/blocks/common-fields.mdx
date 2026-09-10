@@ -161,6 +161,52 @@ Every block carries these, so each type's own page documents only what is specif
     "prefillParam": {
       "type": "string",
       "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]{0,60}$"
+    },
+    "identityField": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "given-name",
+            "family-name",
+            "name",
+            "nickname",
+            "username",
+            "email",
+            "tel",
+            "organization",
+            "organization-title",
+            "department",
+            "street-address",
+            "address-line2",
+            "address-level2",
+            "address-level1",
+            "postal-code",
+            "country-name",
+            "url",
+            "linkedin",
+            "github",
+            "twitter",
+            "instagram",
+            "youtube",
+            "reddit",
+            "discord",
+            "school",
+            "degree",
+            "graduation-year",
+            "student-id",
+            "bday",
+            "sex",
+            "nationality",
+            "shirt-size",
+            "dietary"
+          ]
+        },
+        {
+          "type": "string",
+          "const": "never"
+        }
+      ]
     }
   }
 }

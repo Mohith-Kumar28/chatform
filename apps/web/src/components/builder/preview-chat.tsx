@@ -83,8 +83,12 @@ export function PreviewChat({
       brandingHidden: true,
     });
     if (!branded) {
-      c.theme.logoUrl = null;
-      c.theme.brandName = undefined;
+      // Copied rather than assigned into. `toPublicConfig` hands back the
+      // draft's own theme object, and the builder store is frozen in
+      // development — so mutating it threw `Cannot assign to read only
+      // property 'logoUrl'` and took the whole preview down for anyone
+      // without `brand_logo`.
+      c.theme = { ...c.theme, logoUrl: null, brandName: undefined };
     }
     return c;
   }, [doc, branded]);

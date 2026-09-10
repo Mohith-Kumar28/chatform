@@ -14,7 +14,7 @@ An email address, validated as one.
 
 ## Configuration
 
-Fields specific to `email`. The [fields every block has](/docs/blocks/common-fields) — `id`, `ref`, `title`, `required`, `visibility`, `media`, `agentHints`, `prefillParam` — are documented once.
+Fields specific to `email`. The [fields every block has](/docs/blocks/common-fields) — `id`, `ref`, `title`, `required`, `visibility`, `media`, `agentHints`, `prefillParam`, `identityField` — are documented once.
 
 ```json title="email configuration"
 {
@@ -213,6 +213,7 @@ In a generated draft these arrive as `config` pairs: `businessOnly=true to refus
   "required": true,
   "imageKey": null,
   "media": null,
+  "identityField": "email",
   "verify": false
 }
 ```

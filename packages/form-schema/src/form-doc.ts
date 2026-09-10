@@ -3,6 +3,7 @@ import type { RespondentAuthMethod } from "./respondent";
 import { AnswerMap } from "./answers";
 import { Block, type BlockMedia } from "./blocks";
 import type { ConditionGroup } from "./conditions";
+import { identityFieldForBlock, type IdentityField } from "./identity-fields";
 import { Ending, HiddenField, LogicRule, Variable } from "./logic";
 import { SettingsDoc, ThemeDoc } from "./settings";
 import { buildUpiUri } from "./payment-link";
@@ -102,6 +103,15 @@ export interface PublicBlock {
    * they have already committed to a number.
    */
   verify?: boolean;
+  /**
+   * Which reusable detail this question holds, already resolved.
+   *
+   * The author's mapping, the three self-describing block types and the refusals
+   * are all applied here rather than shipped as raw inputs for the client to
+   * re-derive. A question that must never be remembered simply arrives without
+   * this field, so there is no rule the browser could get wrong or skip.
+   */
+  identityField?: IdentityField;
   /** Image, video or downloadable file shown with the question. */
   media?: BlockMedia | null;
 }
@@ -117,6 +127,8 @@ export function toPublicBlock(b: Block): PublicBlock {
     imageKey: b.image_key,
     media: b.media,
   };
+  const identity = identityFieldForBlock(b);
+  if (identity) pub.identityField = identity;
   switch (b.type) {
     case "welcome":
     case "statement":

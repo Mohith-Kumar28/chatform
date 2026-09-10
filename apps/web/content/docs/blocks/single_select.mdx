@@ -16,7 +16,7 @@ Requires `options`.
 
 ## Configuration
 
-Fields specific to `single_select`. The [fields every block has](/docs/blocks/common-fields) — `id`, `ref`, `title`, `required`, `visibility`, `media`, `agentHints`, `prefillParam` — are documented once.
+Fields specific to `single_select`. The [fields every block has](/docs/blocks/common-fields) — `id`, `ref`, `title`, `required`, `visibility`, `media`, `agentHints`, `prefillParam`, `identityField` — are documented once.
 
 ```json title="single_select configuration"
 {
@@ -248,6 +248,7 @@ Fields specific to `single_select`. The [fields every block has](/docs/blocks/co
   "required": true,
   "imageKey": null,
   "media": null,
+  "identityField": "organization-title",
   "options": [
     {
       "id": "opt_founder1",

@@ -14,7 +14,7 @@ A web address.
 
 ## Configuration
 
-Fields specific to `url`. The [fields every block has](/docs/blocks/common-fields) — `id`, `ref`, `title`, `required`, `visibility`, `media`, `agentHints`, `prefillParam` — are documented once.
+Fields specific to `url`. The [fields every block has](/docs/blocks/common-fields) — `id`, `ref`, `title`, `required`, `visibility`, `media`, `agentHints`, `prefillParam`, `identityField` — are documented once.
 
 ```json title="url configuration"
 {
@@ -204,7 +204,8 @@ In a generated draft these arrive as `config` pairs: `unique=true to refuse a va
   "title": "Website?",
   "required": true,
   "imageKey": null,
-  "media": null
+  "media": null,
+  "identityField": "url"
 }
 ```
 

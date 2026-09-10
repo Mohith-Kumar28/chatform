@@ -14,7 +14,7 @@ A phone number, validated as one.
 
 ## Configuration
 
-Fields specific to `phone`. The [fields every block has](/docs/blocks/common-fields) — `id`, `ref`, `title`, `required`, `visibility`, `media`, `agentHints`, `prefillParam` — are documented once.
+Fields specific to `phone`. The [fields every block has](/docs/blocks/common-fields) — `id`, `ref`, `title`, `required`, `visibility`, `media`, `agentHints`, `prefillParam`, `identityField` — are documented once.
 
 ```json title="phone configuration"
 {
@@ -214,6 +214,7 @@ In a generated draft these arrive as `config` pairs: `country=<2-letter code> to
   "required": true,
   "imageKey": null,
   "media": null,
+  "identityField": "tel",
   "verify": false
 }
 ```

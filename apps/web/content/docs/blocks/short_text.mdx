@@ -14,7 +14,7 @@ One line of free text — a name, a job title, a company.
 
 ## Configuration
 
-Fields specific to `short_text`. The [fields every block has](/docs/blocks/common-fields) — `id`, `ref`, `title`, `required`, `visibility`, `media`, `agentHints`, `prefillParam` — are documented once.
+Fields specific to `short_text`. The [fields every block has](/docs/blocks/common-fields) — `id`, `ref`, `title`, `required`, `visibility`, `media`, `agentHints`, `prefillParam`, `identityField` — are documented once.
 
 ```json title="short_text configuration"
 {
@@ -225,6 +225,7 @@ In a generated draft these arrive as `config` pairs: `unique=true to refuse a va
   "required": true,
   "imageKey": null,
   "media": null,
+  "identityField": "organization",
   "maxLength": 40
 }
 ```

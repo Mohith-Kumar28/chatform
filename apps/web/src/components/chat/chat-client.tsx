@@ -25,8 +25,9 @@ import { asEmail } from "./respondent-hint";
 import { VerifyCard } from "./verify-card";
 import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
 import { useChat, type ChatMessage } from "./use-chat";
-import { KeyHint, SendRow, SkipButton, TextInput } from "./composers/primitives";
+import { KeyHint, SendRow, SkipButton, TextInput, keepFocus } from "./composers/primitives";
 import { inputSemanticsFor } from "./composers/input-semantics";
+import { forgetValue, rememberValue, suggestionsFor } from "./respondent-profile";
 import { QuestionAffordance } from "./question-affordance";
 import { QuestionMedia } from "./question-media";
 import { ChatBoot } from "./chat-boot";
@@ -1793,7 +1794,27 @@ const Composer = memo(function Composer({
   sendAction: (action: "skip" | "restart" | "stop" | "submit") => Promise<void>;
   config: PublicFormConfig;
 }) {
-  const [text, setText] = useState("");
+  /*
+    Opens on what they last used, from the first paint.
+
+    Reading storage in the initialiser rather than only in the question-change
+    branch below: on a fresh mount the block is usually already there, so that
+    branch never fires and the box sat empty next to a suggestion we already
+    had. Which is the one case the whole feature exists for — arriving at a
+    form that knows you.
+  */
+  const [text, setText] = useState(() => suggestionsFor(block?.identityField)[0] ?? "");
+
+  /**
+   * What this device has answered before for whatever the question is asking.
+   *
+   * Re-read from storage on each new question rather than memoised on the
+   * field, so a detail given earlier in *this* conversation is on offer by the
+   * time a later one asks for it — a form with "Email" and then "Confirm email"
+   * should not make somebody type it twice.
+   */
+  const identityField = block?.identityField;
+  const [suggestions, setSuggestions] = useState<string[]>(() => suggestionsFor(identityField));
 
   /**
    * The draft belongs to one question, so it is cleared when the question
@@ -1803,11 +1824,18 @@ const Composer = memo(function Composer({
    * old text against the new question for a frame, which is the blink this is
    * here to remove. A transient null question is ignored on purpose; that is
    * the round trip between two questions, not a new one.
+   *
+   * "Cleared" now means "opened on what they last used", where there is such a
+   * thing. The box still starts empty for the overwhelming majority of
+   * questions, which hold nothing reusable and so carry no `identityField`.
    */
   const [draftFor, setDraftFor] = useState(block?.ref);
   if (block?.ref && block.ref !== draftFor) {
     setDraftFor(block.ref);
-    if (text !== "") setText("");
+    const fresh = suggestionsFor(block.identityField);
+    setSuggestions(fresh);
+    const opening = fresh[0] ?? "";
+    if (text !== opening) setText(opening);
   }
 
   const canSkip = Boolean(block) && config.allowSkip && !block?.required;
@@ -1854,10 +1882,23 @@ const Composer = memo(function Composer({
 
   const disabled = status === "error";
 
+  /** Everything remembered for this question except whatever is already typed. */
+  const alternatives = suggestions.filter((s) => s !== text);
+
   function submit() {
     const value = text.trim();
     if (!value) return;
     setText("");
+    /*
+      Kept before it is sent, not after it is accepted.
+
+      The composer is the only place that holds the text — `answer_recorded`
+      carries the ref and deliberately not the value — so waiting for the
+      server would mean threading the answer back down to find it again.
+      `rememberValue` earns the trade by refusing anything the wrong shape, so
+      what a rejection would have caught is mostly caught here anyway.
+    */
+    rememberValue(identityField, value);
     void send(value);
   }
 
@@ -1880,6 +1921,64 @@ const Composer = memo(function Composer({
       )}
 
       {canSkip && <SkipButton onSkip={() => void sendAction("skip")} />}
+
+      {/*
+        Saved answers, in the shape a browser's own autofill uses.
+
+        Deliberately not `Chip`: those are the question's offered options and
+        carry the accent, a 44px target and a number key. These are neither an
+        option nor a recommendation — they are things this person typed, on this
+        device, and should read as quietly as the browser's own list does.
+        Hence the small type, the muted border and the dismiss on each row
+        rather than one link that erases the lot.
+
+        Whatever is in the box is not repeated here, so a question with a single
+        saved value shows no row at all — it is already filled in. Clearing the
+        box brings it back, which is how you retrieve something you typed over.
+      */}
+      {alternatives.length > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-1 px-1"
+          onMouseDown={keepFocus}
+          role="listbox"
+          aria-label="Saved answers"
+        >
+          {alternatives.map((s) => (
+            <span
+              key={s}
+              role="option"
+              aria-selected={false}
+              className="group inline-flex max-w-full items-center overflow-hidden rounded-lg border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] text-xs opacity-80 transition-opacity hover:opacity-100"
+            >
+              <button
+                type="button"
+                onClick={() => setText(s)}
+                disabled={disabled}
+                className="min-w-0 truncate py-1.5 pl-2.5 pr-1.5 disabled:pointer-events-none"
+              >
+                {s}
+              </button>
+              {/*
+                Removes this one entry, not the field. A control here that also
+                erased an address and a phone number would be doing more than it
+                says, and this row is the only place a respondent ever sees what
+                was kept.
+              */}
+              <button
+                type="button"
+                onClick={() => {
+                  forgetValue(identityField, s);
+                  setSuggestions((prev) => prev.filter((v) => v !== s));
+                }}
+                aria-label={`Forget ${s}`}
+                className="shrink-0 py-1.5 pl-1 pr-2 opacity-40 transition-opacity hover:opacity-90"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       <SendRow onSend={submit} disabled={disabled || !text.trim()}>
         <TextInput

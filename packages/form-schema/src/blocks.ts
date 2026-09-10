@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ConditionGroup } from "./conditions";
 import { NanoId, RefString, HiddenFieldName } from "./ids";
+import { IdentityFieldSetting } from "./identity-fields";
 
 export const BLOCK_TYPES = [
   "welcome",
@@ -89,6 +90,17 @@ const BlockBase = {
 
   /** Prefill this block's answer from a URL query parameter. */
   prefillParam: HiddenFieldName.optional(),
+
+  /**
+   * Override for which reusable detail this question holds.
+   *
+   * Left unset — which is how it will be left — the question is read from its
+   * own wording by `identityFieldForBlock`, so "What's your college?" is
+   * remembered as a school without anybody opening this panel. Set it to name
+   * the field when that guess is wrong, or to `never` to keep a question out
+   * of the profile however plainly it reads.
+   */
+  identityField: IdentityFieldSetting.optional(),
 
   /** Label on the advance control in non-conversational renderings and widgets. */
   buttonLabel: z.string().max(60).optional(),

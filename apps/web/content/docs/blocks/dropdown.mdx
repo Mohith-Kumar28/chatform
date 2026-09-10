@@ -16,7 +16,7 @@ Requires `options`.
 
 ## Configuration
 
-Fields specific to `dropdown`. The [fields every block has](/docs/blocks/common-fields) — `id`, `ref`, `title`, `required`, `visibility`, `media`, `agentHints`, `prefillParam` — are documented once.
+Fields specific to `dropdown`. The [fields every block has](/docs/blocks/common-fields) — `id`, `ref`, `title`, `required`, `visibility`, `media`, `agentHints`, `prefillParam`, `identityField` — are documented once.
 
 ```json title="dropdown configuration"
 {
@@ -244,6 +244,7 @@ Fields specific to `dropdown`. The [fields every block has](/docs/blocks/common-
   "required": true,
   "imageKey": null,
   "media": null,
+  "identityField": "country-name",
   "options": [
     {
       "id": "opt_in000001",

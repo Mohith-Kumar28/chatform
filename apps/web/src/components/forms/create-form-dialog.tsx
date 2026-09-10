@@ -75,9 +75,6 @@ export function CreateFormDialog({
   const [staged, setStaged] = useState<StagedItem[]>([]);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
 
-  const [blankOpen, setBlankOpen] = useState(false);
-  const [title, setTitle] = useState("");
-
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
@@ -110,8 +107,6 @@ export function CreateFormDialog({
       onSuccess: async (created) => {
         await invalidateForms(queryClient);
         onOpenChange(false);
-        setTitle("");
-        setBlankOpen(false);
         router.push(`/forms/${apiData<{ id: string }>(created).id}/build`);
       },
       onError: (e) =>
@@ -181,8 +176,6 @@ export function CreateFormDialog({
     if (!next) {
       generation.cancel();
       generation.reset();
-      setBlankOpen(false);
-      setTitle("");
       setSearch("");
       setCategory("all");
     }
@@ -232,20 +225,24 @@ export function CreateFormDialog({
               />
 
               {/* The alternative, kept close to the composer so it reads as
-                  part of the same decision rather than a separate offer. */}
+                  part of the same decision rather than a separate offer. One
+                  click, one form: naming it here asked for the one decision
+                  the builder is better at collecting, on the screen you are
+                  trying to leave. It lands as "Untitled form" and gets its
+                  real name in the builder's title field. */}
               <div className="mt-3">
-                <BlankRow
-                  open={blankOpen}
-                  setOpen={setBlankOpen}
-                  title={title}
-                  setTitle={setTitle}
-                  pending={createBlank.isPending}
-                  onCreate={() =>
-                    createBlank.mutate({
-                      data: { title: title.trim() || "Untitled form", workspaceId: ws },
-                    })
+                <Button
+                  variant="outline"
+                  size="sm"
+                  shape="pill"
+                  disabled={createBlank.isPending}
+                  onClick={() =>
+                    createBlank.mutate({ data: { title: "Untitled form", workspaceId: ws } })
                   }
-                />
+                >
+                  <Plus className="size-4" strokeWidth={1.75} />
+                  {createBlank.isPending ? "Creating…" : "Start blank"}
+                </Button>
               </div>
 
               {/* A rule and real air: the gallery is its own offer, not the
@@ -425,66 +422,5 @@ function AiPanel({
         </Button>
       </div>
     </section>
-  );
-}
-
-/**
- * The blank option: one quiet control under the composer, then a name field.
- *
- * It was a full-width card with a hover lift, which gave the fallback the
- * same weight as the thing above it and the cards below it. It is the
- * fallback, so it is sized like one.
- */
-function BlankRow({
-  open,
-  setOpen,
-  title,
-  setTitle,
-  pending,
-  onCreate,
-}: {
-  open: boolean;
-  setOpen: (v: boolean) => void;
-  title: string;
-  setTitle: (v: string) => void;
-  pending: boolean;
-  onCreate: () => void;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (open) ref.current?.focus();
-  }, [open]);
-
-  if (!open) {
-    return (
-      <Button variant="outline" size="sm" shape="pill" onClick={() => setOpen(true)}>
-        <Plus className="size-4" strokeWidth={1.75} />
-        Start blank
-      </Button>
-    );
-  }
-
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Input
-        ref={ref}
-        id="form-title"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        aria-label="Form name"
-        placeholder="Name your form"
-        className="h-9 min-w-0 flex-1 rounded-full px-4"
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !pending) onCreate();
-          if (e.key === "Escape") setOpen(false);
-        }}
-      />
-      <Button variant="outline" shape="pill" disabled={pending} onClick={onCreate}>
-        {pending ? "Creating…" : "Create"}
-      </Button>
-      <Button shape="pill" variant="ghost" onClick={() => setOpen(false)}>
-        Cancel
-      </Button>
-    </div>
   );
 }

@@ -239,7 +239,7 @@ ${catalog.summary}${catalog.needsOptions ? "\n\nRequires `options`." : ""}
 
 ## Configuration
 
-Fields specific to \`${type}\`. The [fields every block has](/docs/blocks/common-fields) — \`id\`, \`ref\`, \`title\`, \`required\`, \`visibility\`, \`media\`, \`agentHints\`, \`prefillParam\` — are documented once.
+Fields specific to \`${type}\`. The [fields every block has](/docs/blocks/common-fields) — \`id\`, \`ref\`, \`title\`, \`required\`, \`visibility\`, \`media\`, \`agentHints\`, \`prefillParam\`, \`identityField\` — are documented once.
 
 ${fence("json", JSON.stringify({ ...schema, properties: own }, null, 2), `${type} configuration`)}
 ${catalog.config ? `\nIn a generated draft these arrive as \`config\` pairs: \`${catalog.config}\`.\n` : ""}

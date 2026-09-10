@@ -1,5 +1,6 @@
 export * from "./ids";
 export * from "./conditions";
+export * from "./identity-fields";
 export * from "./blocks";
 export * from "./catalog";
 export * from "./logic";

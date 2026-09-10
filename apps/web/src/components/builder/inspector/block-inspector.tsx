@@ -4,7 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Bot, ChevronDown, GitBranch, Sparkles, Trash2 } from "lucide-react";
-import type { Block } from "@repo/form-schema";
+import {
+  IDENTITY_FIELDS,
+  IDENTITY_FIELD_LABELS,
+  canMapIdentityField,
+  identityFieldForBlock,
+  type Block,
+  type IdentityFieldSetting,
+} from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -21,10 +28,35 @@ import {
 import { useBuilderStore, useSelectedBlock } from "@/stores/builder-store";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_CLASSES } from "../block-library";
 import { defaultBlock } from "../default-block";
-import { Field, SwitchField, TextField } from "./fields";
+import { Field, SelectField, SwitchField, TextField } from "./fields";
 import { MediaField } from "./media-field";
 import { TypeFields } from "./type-fields";
 import { cn } from "@/lib/utils";
+
+/**
+ * Radix refuses an empty `SelectItem` value, and "unset" needs to be a real
+ * choice rather than a blank row, so the absence has a name of its own.
+ */
+const AUTO_IDENTITY = "auto";
+
+const IDENTITY_FIELD_OPTIONS = [
+  { value: AUTO_IDENTITY, label: "Automatic" },
+  { value: "never", label: "Never remember" },
+  ...IDENTITY_FIELDS.map((f) => ({ value: f, label: IDENTITY_FIELD_LABELS[f] })),
+] as const;
+
+/**
+ * Says what "Automatic" actually decided, rather than leaving the author to
+ * guess whether the wording was understood.
+ */
+function identityHint(block: Block): string {
+  if (block.identityField === "never") return "This answer is never kept";
+  if (block.identityField) return "Offered back on later forms, from this browser only";
+  const resolved = identityFieldForBlock(block);
+  return resolved
+    ? `Read as “${IDENTITY_FIELD_LABELS[resolved]}” from the question`
+    : "Nothing reusable in this question, so nothing is kept";
+}
 
 /**
  * The right-hand inspector.
@@ -195,6 +227,33 @@ export function BlockInspector() {
         </Section>
 
         <Section title="Advanced" icon={GitBranch}>
+          {/*
+            What this question collects, so a respondent is offered what they
+            typed last time instead of typing it again.
+
+            Off by default, and deliberately the author's call rather than
+            something read out of the wording: "What's your name?" and "What's
+            the name of your favourite film?" are the same question to a regex,
+            and only one of them holds anything worth keeping. Nothing is
+            remembered for a question left on "Don't remember".
+          */}
+          {canMapIdentityField(block.type) && (
+            <SelectField
+              label="Remember this answer as"
+              hint={identityHint(block)}
+              value={block.identityField ?? AUTO_IDENTITY}
+              onChange={(v) =>
+                patch(
+                  {
+                    identityField:
+                      v === AUTO_IDENTITY ? undefined : (v as IdentityFieldSetting),
+                  },
+                  key("identityField"),
+                )
+              }
+              options={IDENTITY_FIELD_OPTIONS}
+            />
+          )}
           <TextField
             label="Auto-fill from URL parameter"
             hint="?param=value on the form link"
