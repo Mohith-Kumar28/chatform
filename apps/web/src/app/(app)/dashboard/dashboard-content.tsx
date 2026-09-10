@@ -38,6 +38,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterChips } from "@/components/ui/filter-chips";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -109,7 +117,15 @@ export function DashboardContent() {
   const [status, setStatus] = useState<StatusFilter>("all");
   // ?new=1 lets the command palette open the create dialog.
   const [createOpen, setCreateOpen] = useState(searchParams.get("new") === "1");
+  /*
+    Both delete dialogs read this one piece of state, and which of the two
+    opens is decided by the form's own status rather than by a second flag: a
+    live form gets the warning, a draft gets the confirm. One state means the
+    menu item never has to know which it is about to open, and a form that goes
+    live in another tab cannot leave the wrong dialog on screen.
+  */
   const [pendingDelete, setPendingDelete] = useState<FormRow | null>(null);
+  const deleteBlocked = pendingDelete?.status === "published";
   /*
     Confirmed like a delete, and worded so the two cannot be confused. Taking a
     form offline is reversible and deleting it is not, but both stop the link
@@ -512,11 +528,55 @@ export function DashboardContent() {
         }}
       />
 
+      {/*
+        A live form cannot be deleted from here, and this dialog is the whole
+        of that answer — no "take it offline" button on it.
+
+        Deleting the form someone is half-way through answering is the one
+        mistake on this page that cannot be walked back, and an offline button
+        sitting next to a delete button turns two decisions into one click.
+        Taking it offline is its own choice, made from the card menu, and
+        coming back afterwards is the pause that makes the second one
+        deliberate.
+      */}
+      <Dialog
+        open={deleteBlocked}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              “{pendingDelete?.title}” is live
+            </DialogTitle>
+            <DialogDescription>
+              A published form can’t be deleted. Take it offline first — open
+              this form’s menu and choose <strong>Take offline</strong> — then
+              delete it.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setPendingDelete(null)}>Got it</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/*
+        Keyed by the form, so the typed-name box starts empty for each one
+        rather than carrying the last form’s half-typed name into the next.
+      */}
       <ConfirmDialog
-        open={pendingDelete !== null}
+        key={pendingDelete?.id}
+        open={pendingDelete !== null && !deleteBlocked}
         onOpenChange={(open) => !open && setPendingDelete(null)}
         title={`Delete “${pendingDelete?.title}”?`}
-        description="Responses already collected stay in your account, but the form stops accepting new ones and disappears from this list."
+        description={
+          <>
+            This can’t be undone. The form, its questions and its settings go
+            for good, and the link stops working for anyone who still has it.
+            Responses already collected stay in your account.
+          </>
+        }
+        confirmText={pendingDelete?.title}
         confirmLabel="Delete form"
         /*
           `mutate`, not `mutateAsync`. Both report through the same `onError`
