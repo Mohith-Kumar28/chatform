@@ -122,12 +122,11 @@ describe("shows the product off", () => {
     // that can be refused. The three choice blocks are deliberately absent —
     // see the note on `DEMO_FORM`.
     for (const wanted of [
-      "short_text",
-      "long_text",
       "matrix",
-      "ranking",
+      "nps",
       "rating",
       "file_upload",
+      "long_text",
       "legal_consent",
       "date",
     ]) {
@@ -146,15 +145,35 @@ describe("shows the product off", () => {
     expect(repeated, `repeated block types: ${repeated.join(", ")}`).toEqual([]);
   });
 
-  it("leaves the three interchangeable choice blocks out", () => {
-    // `single_select`, `multi_select` and `yes_no` are one idea in three sets
-    // of clothes, and a list of options is the part of a form a conversation
-    // is least interesting at. Every answer here is typed, dragged, rated,
-    // uploaded, consented to or picked off a calendar.
-    const types = new Set(doc.blocks.map((b) => b.type));
-    for (const dull of ["single_select", "multi_select", "yes_no"]) {
-      expect(types, `the demo is back to asking a ${dull}`).not.toContain(dull);
+  it("asks at most one question that is a list of options", () => {
+    // These six look different in a screenshot and are the same act to answer:
+    // read a list, pick from it. Four of them in a row is what made an earlier
+    // version of this form feel like one long question — and it is the reason
+    // a visitor could not tell it from a page of radio buttons.
+    const family = new Set(["single_select", "multi_select", "dropdown", "yes_no", "picture_choice", "ranking"]);
+    const lists = doc.blocks.filter((b) => family.has(b.type));
+    expect(lists.map((b) => `${b.ref}:${b.type}`)).toHaveLength(1);
+  });
+
+  it("keeps the typing late, and skippable", () => {
+    // A text box is the least interesting control here and the most expensive
+    // one to answer. Asked early and required, it is where a demo loses the
+    // people it was built to impress.
+    const asked = doc.blocks.filter((b) => b.type !== "welcome" && b.type !== "statement");
+    const typed = asked.filter((b) => b.type === "long_text" || b.type === "short_text");
+    for (const block of typed) {
+      expect(block.required, `${block.ref} makes a visitor type before they may go on`).toBe(false);
+      expect(asked.indexOf(block), `${block.ref} asks for prose too early`).toBeGreaterThanOrEqual(4);
     }
+  });
+
+  it("lets people past the questions that are only nice to have", () => {
+    // Three of eight are optional, and the runtime's skip control is only
+    // drawn for a block that is not required — so this is also what puts it on
+    // screen at all.
+    const optional = doc.blocks.filter((b) => b.type !== "welcome" && !b.required);
+    expect(optional.length).toBeGreaterThanOrEqual(3);
+    expect(doc.settings.navigation.allowSkip).toBe(true);
   });
 
   it("never leans on a block type that is only half-built", () => {

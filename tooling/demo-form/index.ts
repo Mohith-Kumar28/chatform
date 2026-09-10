@@ -22,19 +22,26 @@ export { DEMO_KNOWLEDGE } from "./knowledge.js";
  * It does two jobs at once, and both constrain the questions:
  *
  * The visitor's job is to experience the product. That rules out a
- * questionnaire: in eight questions they should meet a grid, a drag-to-order
- * ranking, stars, an upload, a consent they can actually refuse, a calendar,
- * branching that reads their answers, and an agent that answers questions back
- * — in about three minutes, because a demo nobody finishes demonstrates
- * nothing.
+ * questionnaire: in eight questions they should meet a grid, an NPS scale,
+ * stars, an upload, a consent they can actually refuse, a calendar, three
+ * questions they can skip, branching that reads their answers, and an agent
+ * that answers questions back — in about three minutes, because a demo nobody
+ * finishes demonstrates nothing.
  *
- * So the rule is one block type per question, and it is asserted in
- * `demo-form.test.ts`. Two questions of the same type is a wasted screen: the
- * second one shows the visitor nothing the first did not, on the one form whose
- * job is to show them everything. It also rules out the three choice blocks
- * between them — `single_select`, `multi_select`, `yes_no` are one idea with
- * three sets of clothes, and a list of options is the part of a form a chat is
- * least interesting at.
+ * Two rules, both asserted in `demo-form.test.ts`:
+ *
+ * 1. **One block type per question.** A repeated type is a wasted screen — the
+ *    second one shows the visitor nothing the first did not, on the one form
+ *    whose job is to show them everything.
+ * 2. **One question, at most, that is a list of options.** `single_select`,
+ *    `multi_select`, `dropdown`, `yes_no`, `picture_choice` and `ranking` look
+ *    different in a screenshot and are the same act to answer: read a list,
+ *    pick from it. Four of those in a row is what made the last version feel
+ *    like one long question, and it is the reason a visitor cannot tell a chat
+ *    form from a page of radio buttons.
+ *
+ * The typing is last and skippable for a related reason: a text box is the
+ * least interesting control we have and the most expensive one to answer.
  *
  * Our job is to learn something. So the questions are the ones we actually want
  * answered — what they do, where it gets in their way, how today is going and
@@ -56,7 +63,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 11;
+export const DEMO_REVISION = 12;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -85,50 +92,48 @@ export const DEMO_FORM = buildAuthoredDoc({
 
   greeting:
     "Hi — I'm the chatform agent, and this is a real chatform form, so you're seeing exactly what your own respondents would. " +
-    "I'd like to hear how forms are actually working out for you. Eight questions, under three minutes, " +
-    "every one of them a different kind of question — and you can ask me anything about chatform as we go.",
+    "I'd like to hear how forms are working out for you. Eight questions, under three minutes, " +
+    "a different kind of question every time — and you can ask me anything about chatform as we go.",
 
   questions: [
     {
       /*
-       * Typed, not tapped, and that is the rule for the whole form now.
+       * The one list of options in the whole form, and it is first because a
+       * question you answer with one tap is the cheapest possible start.
        *
-       * This used to be a list of six roles, which is the one thing a chat is
-       * worst at: a radio button wearing a speech bubble. Asked open, the agent
-       * gets "design lead at a two-person studio" — something to address them
-       * as for the next seven questions, and a far better answer than any list
-       * we could have guessed at.
+       * One is the budget. `single_select`, `multi_select`, `dropdown`,
+       * `yes_no`, `picture_choice` and `ranking` are all the same act — read a
+       * list, pick from it — and a demo that spends four of its eight
+       * questions on that has shown a visitor one control and charged them for
+       * four. `allowOther` keeps the typed answer available to anybody the six
+       * options do not fit.
        */
       ref: "role",
-      type: "short_text",
+      type: "single_select",
       title: "First — what do you do?",
-      description: "A few words is plenty.",
-      placeholder: "Founder, growth at a SaaS, ops for a clinic…",
       required: true,
-      maxLength: 120,
-    },
-    {
-      /** The one question whose answer we would keep if we could keep only one. */
-      ref: "pain",
-      type: "long_text",
-      title: "What's the most annoying thing about the way you collect answers today?",
-      description: "However it actually is. One line or five — I'll read it either way.",
-      required: true,
-      maxLength: 700,
+      allowOther: true,
+      options: [
+        { label: "Founder, or a team of one" },
+        { label: "Product or design" },
+        { label: "Marketing or growth" },
+        { label: "Engineering" },
+        { label: "Research or data" },
+        { label: "Operations, people or HR" },
+      ],
     },
     {
       /*
        * A grid, in a conversation, and the most surprising thing here.
        *
-       * Three readings in one question is why it is worth the screen: it
-       * replaces the "pick your biggest problem" list AND the three follow-ups
-       * that used to hang off it — eight questions' worth of flow in one — and
-       * what comes back is comparable across every respondent instead of being
-       * whichever arm they happened to land in.
+       * Three readings in one question is why it earns the screen: it replaced
+       * a "pick your biggest problem" list AND the three "say more" follow-ups
+       * that used to hang off it, and what comes back is comparable across
+       * every respondent instead of being whichever arm they landed in.
        */
       ref: "today",
       type: "matrix",
-      title: "And how are these going for you right now?",
+      title: "How are these going for you right now?",
       required: true,
       rows: [
         "People finishing what they start",
@@ -139,27 +144,21 @@ export const DEMO_FORM = buildAuthoredDoc({
     },
     {
       /*
-       * Ranks what would make them SWITCH, not what annoys them — the question
-       * above already has the annoyance, three ways.
-       *
-       * Four items rather than six: a ranking is one drag per item, and this is
-       * the most expensive question here by a wide margin.
+       * The question every research team already runs, asked about the tool
+       * they are on rather than about us — which is both more honest and more
+       * useful, since what we want to know is how much room there is.
        */
-      ref: "switch_rank",
-      type: "ranking",
-      title: "What would actually make you switch? Most important first.",
+      ref: "recommend",
+      type: "nps",
+      title: "How likely are you to recommend the form tool you use today?",
       required: true,
-      items: [
-        "More people finishing",
-        "Richer answers",
-        "Less time building it",
-        "A lower price",
-      ],
+      labelLow: "Wouldn't",
+      labelHigh: "Already do",
     },
     {
       ref: "feels",
       type: "rating",
-      title: "Level with me — how is answering this way compared with a normal form?",
+      title: "And how is answering this way compared with a normal form?",
       description: "One star if it's worse. Five if you'd rather answer this than a page of fields.",
       required: true,
       scale: 5,
@@ -167,10 +166,11 @@ export const DEMO_FORM = buildAuthoredDoc({
     },
     {
       /*
-       * Optional, and the one question here that is purely for fun. It shows an
-       * upload without asking anyone to produce one, and the answers are
-       * genuinely useful: a screenshot of a form that annoyed somebody is worth
-       * more than a paragraph about it.
+       * Optional, and the first of the three questions here that can be
+       * skipped — which is a feature this form should be seen to have, not
+       * just to own. It shows an upload without asking anyone to produce one,
+       * and a screenshot of a form that annoyed somebody is worth more than a
+       * paragraph about it.
        */
       ref: "specimen",
       type: "file_upload",
@@ -183,14 +183,30 @@ export const DEMO_FORM = buildAuthoredDoc({
     },
     {
       /*
+       * The only typing in the form, late and optional on purpose.
+       *
+       * It is the answer we would keep if we could keep only one — and it is
+       * also the one that costs a respondent the most, which is why it is no
+       * longer question two of eight. By here they have spent two minutes with
+       * the thing and have something to say; whoever does not can skip it in
+       * one tap, and we still have everything above.
+       */
+      ref: "pain",
+      type: "long_text",
+      title: "Last real question — what's the most annoying thing about the way you collect answers today?",
+      description: "However it actually is. One line or five. Or skip it — the rest is already useful.",
+      required: false,
+      maxLength: 700,
+    },
+    {
+      /*
        * The decision, and a consent block rather than a "would you like us to
-       * follow up?" list — because it is one. The wording is shown verbatim and
-       * what gets stored is which version of it they accepted.
+       * follow up?" list — because it is one. The wording is shown verbatim
+       * and what gets stored is which version of it they accepted.
        *
        * `allowDecline` is what makes it a question instead of a turnstile: "no
        * thanks" is a real answer here, and it is the answer the flow below
-       * routes on. Without it a visitor who does not want our email has nowhere
-       * to go but away, on the second-to-last question of a demo they finished.
+       * routes on.
        */
       ref: "updates",
       type: "legal_consent",
@@ -205,13 +221,13 @@ export const DEMO_FORM = buildAuthoredDoc({
     },
     {
       /*
-       * A calendar, inside the conversation, and the last thing anyone sees —
-       * asked only of the people who just said they want to hear from us.
+       * A calendar, inside the conversation, asked only of the people who just
+       * said they want to hear from us.
        *
-       * Optional on purpose, and the flow reads the difference: a slot picked
-       * goes to `end_booked`, a slot skipped to the ordinary thank-you. That is
-       * also the whole of our lead capture on this page, which is the argument
-       * for it being here rather than a "book a demo" link in the footer.
+       * Optional, and the flow reads the difference: a slot picked goes to
+       * `end_booked`, a slot skipped to the ordinary thank-you. That is also
+       * the whole of our lead capture on this page, which is the argument for
+       * it being here rather than a "book a demo" link in a footer.
        *
        * `date` with `includeTime`, not `scheduling`: the scheduling block is a
        * hand-off to somebody else's booking page, and a demo should not send a
@@ -219,8 +235,8 @@ export const DEMO_FORM = buildAuthoredDoc({
        */
       ref: "slot",
       type: "date",
-      title: "Last thing — want twenty minutes with us to see the builder side of this?",
-      description: "Pick a slot and it's yours. Or skip it: we've got your answers either way.",
+      title: "Want twenty minutes with us to see the builder side of this?",
+      description: "Pick a slot and it's yours. Or skip — we've got your answers either way.",
       required: false,
       disablePast: true,
       includeTime: true,
@@ -239,8 +255,8 @@ export const DEMO_FORM = buildAuthoredDoc({
    * three readings without a branch, so what is left to route on is what
    * somebody wants to happen next — which is the part a respondent can feel.
    *
-   * Consent is routable because `answerOperand` unwraps the audit record to its
-   * `accepted` boolean; `is_checked` then does what it says.
+   * Consent is routable because `answerOperand` unwraps the audit record to
+   * its `accepted` boolean; `is_checked` then does what it says.
    */
   branches: [
     { when: "updates", op: "is_checked", then: "slot" },

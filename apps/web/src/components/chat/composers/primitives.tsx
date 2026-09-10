@@ -22,8 +22,11 @@ export function KeyHint({
   className,
 }: {
   children: React.ReactNode;
-  /** `accent` for keys sitting on an accent-filled control. */
-  tone?: "default" | "accent" | "inverse";
+  /**
+   * `accent` for keys sitting on an accent-filled control, `inverse` for one
+   * drawn *on* the accent, `outline` for a key inside an accent-outlined pill.
+   */
+  tone?: "default" | "accent" | "inverse" | "outline";
   className?: string;
 }) {
   return (
@@ -34,7 +37,9 @@ export function KeyHint({
           ? "bg-[var(--cf-accent)] text-[var(--cf-accent-text)]"
           : tone === "inverse"
             ? "bg-[color-mix(in_oklch,var(--cf-accent-text)_25%,transparent)] text-[var(--cf-accent-text)]"
-            : "bg-[var(--cf-chip-border)]/40",
+            : tone === "outline"
+              ? "bg-[color-mix(in_oklch,var(--cf-accent)_18%,transparent)] text-[var(--cf-accent)]"
+              : "bg-[var(--cf-chip-border)]/40",
         className,
       )}
     >
@@ -104,20 +109,65 @@ export function ComposerShell({
   return <div className={cn("flex flex-wrap gap-2", className)}>{children}</div>;
 }
 
+/**
+ * Skip, sat next to Send, in the accent and at the same height.
+ *
+ * It was a 12px grey link at 50% opacity under the input, and the honest
+ * summary is that nobody saw it: three of this form's eight questions are
+ * optional and a respondent had no way of knowing, so an upload they did not
+ * want to make read as a wall. Optionality is a promise the form makes, and a
+ * promise whispered under the composer is not made.
+ *
+ * Outlined rather than filled, because Send is filled: the pair has to read as
+ * "the action, and the way past it", not as two equal buttons. Same 44px
+ * height as Send and the chips, so it is a real target on a phone.
+ *
+ * Only drawn when the current question can actually be skipped — `allowSkip`
+ * on the form and `required: false` on the block — which is what keeps it from
+ * becoming furniture people stop seeing.
+ */
+function SkipButton({ onSkip }: { onSkip: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onSkip}
+      className={cn(
+        "inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-4 text-sm font-medium",
+        "border-[var(--cf-accent)] bg-[color-mix(in_oklch,var(--cf-accent)_8%,transparent)] text-[var(--cf-accent)]",
+        "transition-[background-color,transform] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
+        "hover:bg-[color-mix(in_oklch,var(--cf-accent)_16%,transparent)]",
+        "active:scale-[0.97] motion-reduce:active:scale-100",
+      )}
+    >
+      Skip
+      {/* Esc, not a letter: the composer is focused on every question, so a
+          one-letter shortcut would eat the first character of an answer that
+          starts with it. `cf-key-hint` hides this where there is no keyboard. */}
+      <KeyHint tone="outline" className="w-auto min-w-4 px-1">
+        esc
+      </KeyHint>
+    </button>
+  );
+}
+
 export function SendRow({
   children,
   onSend,
+  onSkip,
   disabled,
   label = "Send",
 }: {
   children: React.ReactNode;
   onSend: () => void;
+  /** Given only when this question is optional; draws the Skip pill. */
+  onSkip?: () => void;
   disabled?: boolean;
   label?: string;
 }) {
   return (
     <div className="flex items-end gap-2">
       <div className="min-w-0 flex-1">{children}</div>
+      {onSkip && <SkipButton onSkip={onSkip} />}
       <button
         type="button"
         onClick={onSend}

@@ -9,7 +9,6 @@ import {
   Pencil,
   RotateCcw,
   ShieldAlert,
-  SkipForward,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -1259,6 +1258,31 @@ const Composer = memo(function Composer({
     if (text !== "") setText("");
   }
 
+  const canSkip = Boolean(block) && config.allowSkip && !block?.required;
+
+  /**
+   * Escape skips, wherever the focus happens to be.
+   *
+   * Above the early return because hooks cannot be conditional, and bound to
+   * the window rather than to the input because the affordance takes focus the
+   * moment somebody touches a chip or a calendar — a listener on the text box
+   * would stop working exactly when the question has something else to click.
+   *
+   * Escape and not a letter: the composer autofocuses on every question, so
+   * `s` would swallow the first character of "sometimes". Digits are already
+   * spoken for by `useChoiceKeys`.
+   */
+  useEffect(() => {
+    if (!canSkip) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape" || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      e.preventDefault();
+      void sendAction("skip");
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canSkip, sendAction]);
+
   /*
     Number keys used to be handled here, from a list built off `block.options`.
     That list did not match what the chips actually advertise — a `yes_no`
@@ -1277,7 +1301,6 @@ const Composer = memo(function Composer({
   }
 
   const disabled = status === "error";
-  const canSkip = config.allowSkip && !block.required;
 
   function submit() {
     const value = text.trim();
@@ -1304,7 +1327,11 @@ const Composer = memo(function Composer({
         </p>
       )}
 
-      <SendRow onSend={submit} disabled={disabled || !text.trim()}>
+      <SendRow
+        onSend={submit}
+        onSkip={canSkip ? () => void sendAction("skip") : undefined}
+        disabled={disabled || !text.trim()}
+      >
         <TextInput
           value={text}
           onChange={setText}
@@ -1327,16 +1354,6 @@ const Composer = memo(function Composer({
         />
       </SendRow>
 
-      {canSkip && (
-        <button
-          type="button"
-          onClick={() => void sendAction("skip")}
-          className="flex items-center gap-1 px-1 text-xs opacity-50 transition-opacity hover:opacity-100"
-        >
-          <SkipForward className="size-3" />
-          Skip this one
-        </button>
-      )}
     </div>
   );
 });
