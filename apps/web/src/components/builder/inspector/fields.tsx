@@ -29,17 +29,27 @@ import { useBufferedValue } from "@/hooks/use-buffered-value";
 export function Field({
   label,
   hint,
+  help,
   children,
   className,
 }: {
   label: string;
   hint?: string;
+  /**
+   * An explanation too long to print under every field — an `InfoHint`, folded
+   * away behind its icon beside the label. `hint` is for a line worth reading
+   * every time; this is for the one you go looking for once.
+   */
+  help?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <div className={cn("space-y-1.5", className)}>
-      <Label className="text-caption font-medium">{label}</Label>
+      <div className="flex items-center gap-0.5">
+        <Label className="text-caption font-medium">{label}</Label>
+        {help}
+      </div>
       {children}
       {hint && <p className="text-muted-foreground text-[0.6875rem] leading-snug">{hint}</p>}
     </div>
@@ -49,15 +59,19 @@ export function Field({
 export function TextField({
   label,
   hint,
+  help,
   value,
   onChange,
   placeholder,
   multiline,
   maxLength,
+  className,
   shortcutTarget,
 }: {
   label: string;
   hint?: string;
+  help?: React.ReactNode;
+  className?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
@@ -81,7 +95,7 @@ export function TextField({
   */
   const buffered = useBufferedValue(value, onChange);
   return (
-    <Field label={label} hint={hint}>
+    <Field label={label} hint={hint} help={help}>
       {multiline ? (
         <Textarea
           data-shortcut-target={shortcutTarget}
@@ -101,6 +115,7 @@ export function TextField({
           onBlur={buffered.onBlur}
           placeholder={placeholder}
           maxLength={maxLength}
+          className={className}
         />
       )}
     </Field>

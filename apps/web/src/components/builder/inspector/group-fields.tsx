@@ -9,6 +9,8 @@ import {
   type GroupFieldKind,
 } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
+import { InfoHint } from "@/components/ui/info-hint";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -16,11 +18,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { Field, ListEditor } from "./fields";
 import { BufferedInput } from "@/components/ui/buffered-input";
 
 const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
+
+/** The schema's own ceiling, so the button disappears exactly when it stops working. */
+const MAX_FIELDS = 10;
 
 /**
  * What each kind is called, borrowed from the block palette rather than
@@ -60,13 +66,57 @@ function keyFrom(label: string, taken: Set<string>, fallback: string): string {
   return key;
 }
 
+/** Whether a pattern is one the browser can actually compile. */
+export function patternIsValid(pattern: string): boolean {
+  try {
+    new RegExp(pattern);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * What a pattern is, for an author who has never written one.
+ *
+ * The box takes a regular expression and there is no way to guess that from an
+ * empty input labelled "Pattern" — so the explanation sits behind the icon next
+ * to it, with the two or three shapes anybody actually reaches for.
+ */
+export function PatternHelp() {
+  return (
+    <InfoHint label="What is a pattern?">
+      <p>
+        A rule the answer has to match, written as a regular expression. Leave it empty to
+        accept anything.
+      </p>
+      <ul className="mt-2 space-y-1">
+        <li>
+          <code className="text-foreground">^[0-9]&#123;10&#125;$</code> — exactly 10 digits
+        </li>
+        <li>
+          <code className="text-foreground">^1[A-Z]&#123;2&#125;[0-9]&#123;2&#125;.+$</code> — a USN
+          shape
+        </li>
+        <li>
+          <code className="text-foreground">^[A-Z]&#123;3&#125;-[0-9]+$</code> — ABC-1234
+        </li>
+      </ul>
+      <p className="mt-2">
+        Someone whose answer doesn&apos;t match is asked to fix it before moving on.
+      </p>
+    </InfoHint>
+  );
+}
+
 /**
  * The columns of a repeating group, and how many times it repeats.
  *
- * Laid out as one row per column — label, what it collects, whether it is
- * required — because that is the table the author is describing. A stack of
- * separate labelled controls per field would put four boxes on screen to say
- * what one row says.
+ * One card per column, two rows deep: the name on its own line, then what it
+ * collects and whether it is required. They were one line each, which in a
+ * 380px panel meant a name box roughly wide enough for one character — an
+ * author editing a group could not read the names of the columns they had
+ * already made, which is the one thing this list exists to show.
  */
 export function GroupFieldsEditor({
   block,
@@ -89,8 +139,14 @@ export function GroupFieldsEditor({
     >
       <div className="space-y-2">
         {block.fields.map((field, i) => (
-          <div key={field.id} className="border-border space-y-1.5 rounded-lg border p-2">
-            <div className="flex items-center gap-1.5">
+          <div
+            key={field.id}
+            className="border-border bg-muted/25 space-y-2 rounded-xl border p-2.5"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground w-3 shrink-0 text-center text-[0.6875rem] tabular-nums">
+                {i + 1}
+              </span>
               <BufferedInput
                 value={field.label}
                 placeholder="Field name"
@@ -115,20 +171,39 @@ export function GroupFieldsEditor({
                   const key = UNNAMED_KEY.test(field.key) ? keyFrom(label, taken, field.key) : field.key;
                   update(i, key === field.key ? { label } : { label, key }, `gflabel:${field.id}`);
                 }}
-                className="h-8 min-w-0 flex-1"
+                className="h-8 min-w-0 flex-1 font-medium"
               />
+              {/* A group needs one column to be a group at all, so at one field
+                  there is nothing to remove — and a permanently greyed button is
+                  a worse way to say that than no button. */}
+              {block.fields.length > 1 && (
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Remove ${field.label || "field"}`}
+                  onClick={() => setFields(block.fields.filter((_, j) => j !== i))}
+                  className="text-muted-foreground hover:text-destructive shrink-0"
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 pl-5">
               <Select
                 value={field.kind}
                 onValueChange={(v) =>
                   update(i, {
                     kind: v as GroupFieldKind,
-                    // A kind that cannot hold choices drops them rather than
-                    // carrying a hidden list back if it is switched again.
+                    // A kind that cannot hold choices — or a pattern — drops them
+                    // rather than carrying a hidden value back if it is switched
+                    // again.
                     ...(v === "single_select" ? {} : { options: [] }),
+                    ...(v === "short_text" ? {} : { pattern: undefined }),
                   })
                 }
               >
-                <SelectTrigger className="h-8 w-32 shrink-0 text-xs">
+                <SelectTrigger className="h-8 min-w-0 flex-1 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -139,82 +214,110 @@ export function GroupFieldsEditor({
                   ))}
                 </SelectContent>
               </Select>
-              <button
-                type="button"
-                role="checkbox"
-                aria-checked={field.required}
-                title="Every entry must fill this in"
-                onClick={() => update(i, { required: !field.required })}
-                className={cn(
-                  "shrink-0 rounded-md border px-2 py-1.5 text-[0.6875rem] transition-colors",
-                  "duration-[var(--duration-micro)] ease-[var(--ease-out)]",
-                  field.required
-                    ? "border-primary bg-primary-soft text-primary font-medium"
-                    : "border-border text-muted-foreground hover:border-muted-foreground/40",
-                )}
-              >
-                Required
-              </button>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={`Remove ${field.label || "field"}`}
-                disabled={block.fields.length <= 1}
-                onClick={() => setFields(block.fields.filter((_, j) => j !== i))}
-                className="text-muted-foreground hover:text-destructive shrink-0 disabled:opacity-30"
-              >
-                <Trash2 className="size-3" />
-              </Button>
+              {/*
+                A switch, not a pill that only says "Required".
+
+                The pill was on when it was tinted and off when it was not, which
+                is the same word in both states — you had to know the convention
+                to read it. A switch is the control this panel already uses for
+                every other yes/no, including the block's own Required toggle
+                four inches above it.
+              */}
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Label
+                  htmlFor={`req_${field.id}`}
+                  className={cn(
+                    "cursor-pointer text-[0.6875rem]",
+                    field.required ? "text-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  Required
+                </Label>
+                <Switch
+                  id={`req_${field.id}`}
+                  size="sm"
+                  checked={field.required}
+                  onCheckedChange={(v) => update(i, { required: v })}
+                  aria-label={`${field.label || "This field"} is required in every entry`}
+                />
+              </div>
             </div>
 
             {field.kind === "single_select" && (
-              <ListEditor
-                label="Choices"
-                items={field.options.map((o) => ({ id: o.id, label: o.label }))}
-                onChange={(items) =>
-                  update(i, {
-                    options: items.map((item) => {
-                      const existing = field.options.find((o) => o.id === item.id);
-                      return existing
-                        ? { ...existing, label: item.label }
-                        : { ...item, image_key: null };
-                    }),
-                  })
-                }
-                makeItem={() => ({ id: uid("opt"), label: "" })}
-                minItems={1}
-                addLabel="Add choice"
-              />
+              <div className="pl-5">
+                <ListEditor
+                  label="Choices"
+                  items={field.options.map((o) => ({ id: o.id, label: o.label }))}
+                  onChange={(items) =>
+                    update(i, {
+                      options: items.map((item) => {
+                        const existing = field.options.find((o) => o.id === item.id);
+                        return existing
+                          ? { ...existing, label: item.label }
+                          : { ...item, image_key: null };
+                      }),
+                    })
+                  }
+                  makeItem={() => ({ id: uid("opt"), label: "" })}
+                  minItems={1}
+                  addLabel="Add choice"
+                />
+              </div>
+            )}
+
+            {field.kind === "short_text" && (
+              <div className="space-y-1 pl-5">
+                <div className="flex items-center gap-0.5">
+                  <Label className="text-muted-foreground text-[0.6875rem] font-medium">
+                    Pattern
+                  </Label>
+                  <PatternHelp />
+                </div>
+                <BufferedInput
+                  value={field.pattern ?? ""}
+                  placeholder="^[0-9]{10}$"
+                  maxLength={500}
+                  onCommit={(v) => update(i, { pattern: v.trim() || undefined }, `gfpat:${field.id}`)}
+                  className="h-8 font-mono text-xs"
+                />
+                {field.pattern && !patternIsValid(field.pattern) && (
+                  <p className="text-destructive text-[0.6875rem] leading-snug">
+                    This isn&apos;t a valid pattern, so nothing is checked against it.
+                  </p>
+                )}
+              </div>
             )}
           </div>
         ))}
 
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={block.fields.length >= 10}
-          onClick={() =>
-            setFields([
-              ...block.fields,
-              {
-                id: uid("gf"),
-                key: `field_${block.fields.length + 1}`,
-                // A real word, not an empty box: a label is `min(1)` in the
-                // schema, so a field left unnamed is a draft that cannot be
-                // saved — and the failure would land on autosave, far from the
-                // click that caused it.
-                label: "New field",
-                kind: "short_text",
-                required: false,
-                options: [],
-              },
-            ])
-          }
-          className="text-muted-foreground w-full justify-start"
-        >
-          <Plus className="size-3.5" />
-          Add field
-        </Button>
+        {/* Ten is the schema's limit; past it the button could only fail. */}
+        {block.fields.length < MAX_FIELDS && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              setFields([
+                ...block.fields,
+                {
+                  id: uid("gf"),
+                  key: `field_${block.fields.length + 1}`,
+                  // A real word, not an empty box: a label is `min(1)` in the
+                  // schema, so a field left unnamed is a draft that cannot be
+                  // saved — and the failure would land on autosave, far from the
+                  // click that caused it.
+                  label: "New field",
+                  kind: "short_text",
+                  required: false,
+                  options: [],
+                },
+              ])
+            }
+            className="text-muted-foreground w-full justify-start"
+          >
+            <Plus className="size-3.5" />
+            Add field
+          </Button>
+        )}
       </div>
     </Field>
   );

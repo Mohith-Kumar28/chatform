@@ -222,10 +222,25 @@ export function ChatClient({
    * tab goes to the target itself. See the refusal branch below.
    */
   const [redirectBlocked, setRedirectBlocked] = useState(false);
+  /*
+   * Read off the ending as two primitives, because this effect is a five-second
+   * timeout and its dependencies decide whether that timeout ever finishes.
+   *
+   * It depended on `chat.ending` itself, which is a fresh object every time the
+   * stream hands one over — and the stream replays the `ending` event on every
+   * reconnect (see `use-chat`). Each replay was a new identity, so the effect
+   * tore down and re-armed: `clearTimeout` on a countdown four seconds in, then
+   * five fresh seconds. A form whose stream reconnected inside the window never
+   * redirected at all, and the only symptom was a screen that said it was about
+   * to and then sat there. A URL and a delay are values, so a replay of the same
+   * ending is now a no-op.
+   */
+  const redirectTarget = chat.ending?.redirectUrl;
+  const redirectDelaySec = chat.ending?.redirectDelaySec ?? 5;
   useEffect(() => {
-    const target = chat.ending?.redirectUrl;
+    const target = redirectTarget;
     if (!target || previewMode) return;
-    const delay = (chat.ending?.redirectDelaySec ?? 5) * 1000;
+    const delay = redirectDelaySec * 1000;
     const t = setTimeout(() => {
       /*
        * `noopener` goes on the handle, not in the feature string. Passing it
@@ -265,7 +280,7 @@ export function ChatClient({
       if (window.matchMedia?.("(pointer: coarse)").matches) window.location.assign(target);
     }, delay);
     return () => clearTimeout(t);
-  }, [chat.ending, previewMode]);
+  }, [redirectTarget, redirectDelaySec, previewMode]);
 
   const themeVars = useMemo(() => chatThemeVars(config.theme), [config.theme]);
 
@@ -1377,6 +1392,15 @@ function ReviewCard({
               <span className="relative flex items-center gap-1.5">
                 <X className="size-3.5" />
                 Cancel auto-submit · {secondsLeft}
+                {/*
+                  Escape has stopped this countdown since it was added, and
+                  nothing on screen said so — a shortcut nobody can see is one
+                  nobody reaches for, and this is the shortcut worth reaching
+                  for: a respondent who wants to stop is being timed. `kbd-hint`
+                  draws it only where there is a keyboard, so the thumb-sized
+                  target on a phone stays exactly as it was.
+                */}
+                <KeyHint className="w-auto min-w-4 px-1">esc</KeyHint>
               </span>
             </button>
             {/*
@@ -1714,11 +1738,30 @@ function EndingCard({
               Continue to the next step
               <ArrowUpRight className="size-4" strokeWidth={2} />
             </a>
-          ) : (
+          ) : counting ? (
             <p className="mt-4 text-xs tabular-nums opacity-50">
               {secondsToRedirect > 0
                 ? `Opening the next step in ${secondsToRedirect}s…`
                 : "Opening the next step…"}
+            </p>
+          ) : (
+            /*
+              A redirect on the ending, but nothing armed to fire it — which is
+              the builder preview, the one place with a URL and no session to
+              open it from.
+
+              It used to print the counting sentence here anyway, so the preview
+              said "Opening the next step in 5s…" and then held that digit for
+              ever: the count needs `counting` to tick, and the preview never
+              sets it. An author reading their own form saw the exact screen a
+              respondent would see, frozen, with nothing to distinguish "this is
+              not wired up in here" from "this is broken in production". So the
+              preview describes the behaviour instead of pretending to perform
+              it — no digit, because a number nobody is counting is the whole
+              bug.
+            */
+            <p className="mt-4 max-w-xs text-xs opacity-50">
+              Opens the next step automatically after {delaySec}s. Not in the preview.
             </p>
           ))}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { GripVertical, Plus, X } from "lucide-react";
 import {
   DndContext,
@@ -397,13 +397,20 @@ export function MatrixComposer({
  * into prose. Both are worse for the respondent than the thing every other form
  * product calls a repeater.
  *
- * What makes it readable at four entries rather than one: the entries share a
- * single card and are separated by a rule rather than each being a box of its
- * own, so the eye reads one list instead of four objects. The number is in the
- * header, not repeated into every label, so "Full name" is the label whether it
- * is the first team member's or the fourth. And `minEntries` rows are already
- * on screen — an author who says "at least two" should not make the respondent
- * discover the add button before they can comply.
+ * What makes it readable at four entries rather than one: each entry is its own
+ * softly filled card rather than a slice of one box cut by hairlines — the
+ * rules read as heavy black lines on a light theme, and four of them stacked
+ * looked like a table nobody had finished styling. The number is a badge in the
+ * entry's header, not repeated into every label, so "Full name" is the label
+ * whether it is the first team member's or the fourth. And `minEntries` rows
+ * are already on screen — an author who says "at least two" should not make the
+ * respondent discover the add button before they can comply.
+ *
+ * Add and Remove appear only where they do something. A group fixed at five —
+ * `minEntries` and `maxEntries` both 5 — is a form with five rows in it and no
+ * buttons at all; one that starts at four and allows five offers Add on the
+ * group and Remove on each row past the fourth, and each disappears the moment
+ * the bound it would cross is reached.
  */
 export function GroupComposer({
   fields,
@@ -429,30 +436,76 @@ export function GroupComposer({
     setEntries((rows) => rows.map((row, i) => (i === index ? { ...row, [key]: value } : row)));
   }, []);
 
+  /*
+    Compiled once for the question, not once per cell per keystroke.
+
+    An author can save a pattern that does not compile — the inspector says so
+    but does not refuse it — and `validateAnswer` skips those rather than
+    failing everything. A column whose rule is broken therefore accepts
+    anything here too, which is the same answer in both places.
+  */
+  const patterns = useMemo(() => {
+    const out = new Map<string, RegExp>();
+    for (const f of fields) {
+      if (!f.pattern) continue;
+      try {
+        out.set(f.key, new RegExp(f.pattern));
+      } catch {
+        // Not a rule anything can be checked against.
+      }
+    }
+    return out;
+  }, [fields]);
+
   const filled = (row: Record<string, string>, f: PublicGroupField) => (row[f.key] ?? "").trim() !== "";
+  /** Written in, but not in the shape the column asks for. */
+  const malformed = (row: Record<string, string>, f: PublicGroupField) => {
+    const re = patterns.get(f.key);
+    return Boolean(re && filled(row, f) && !re.test((row[f.key] ?? "").trim()));
+  };
   // An entry is "started" once anything is in it. A group that is not required
   // may be left entirely blank, but a half-typed row is not a way to skip it.
   const started = entries.filter((row) => fields.some((f) => filled(row, f)));
-  const complete = entries.every((row) => fields.every((f) => !f.required || filled(row, f)));
+  const complete = entries.every((row) =>
+    fields.every((f) => (!f.required || filled(row, f)) && !malformed(row, f)),
+  );
   const canSubmit = complete && (required ? started.length >= floor : true);
+
+  /*
+    The two bounds, read as what the respondent may do rather than as numbers.
+
+    A group whose floor and ceiling are the same — "exactly five members" — has
+    no add and no remove and no count to report: it is five rows, and every
+    control offered against that is one that cannot do anything when pressed.
+  */
+  const canAdd = entries.length < maxEntries;
+  const canRemove = entries.length > floor;
+  const fixed = floor === maxEntries;
 
   return (
     <div className="space-y-2">
-      <div className="divide-y divide-[var(--cf-chip-border)] overflow-hidden rounded-2xl border border-[var(--cf-chip-border)]">
+      <div className="space-y-2">
         {entries.map((row, i) => (
-          <div key={i} className="space-y-2 p-3">
+          <div
+            key={i}
+            className="space-y-2.5 rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-sunken)] p-3"
+          >
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-medium opacity-60">
-                {itemLabel} {i + 1}
+              <p className="flex min-w-0 items-center gap-2 text-xs font-medium">
+                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[var(--cf-accent)] text-[0.625rem] font-semibold text-[var(--cf-accent-text)]">
+                  {i + 1}
+                </span>
+                <span className="truncate opacity-70">{itemLabel}</span>
               </p>
-              {entries.length > floor && (
+              {canRemove && (
                 <button
                   type="button"
                   onClick={() => setEntries((rows) => rows.filter((_, j) => j !== i))}
                   aria-label={`Remove ${itemLabel.toLowerCase()} ${i + 1}`}
-                  className="rounded-md p-1 opacity-45 transition-opacity hover:opacity-100"
+                  className="-mr-1 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-xs opacity-50 transition-opacity hover:opacity-100"
                 >
-                  <X className="size-3.5" />
+                  <X className="size-3" />
+                  Remove
                 </button>
               )}
             </div>
@@ -463,6 +516,7 @@ export function GroupComposer({
                   field={f}
                   index={i}
                   value={row[f.key] ?? ""}
+                  malformed={malformed(row, f)}
                   onChange={(v) => set(i, f.key, v)}
                 />
               ))}
@@ -471,23 +525,25 @@ export function GroupComposer({
         ))}
       </div>
 
-      <div className="flex items-center gap-2">
-        {entries.length < maxEntries && (
-          <button
-            type="button"
-            onClick={() => setEntries((rows) => [...rows, {}])}
-            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3.5 text-sm transition-colors hover:border-[var(--cf-accent)]"
-          >
-            <Plus className="size-3.5" />
-            Add {itemLabel.toLowerCase()}
-          </button>
-        )}
-        <p className="text-xs opacity-55">
-          {entries.length >= maxEntries
-            ? `That's the most you can add (${maxEntries}).`
-            : `${entries.length} of up to ${maxEntries}.`}
-        </p>
-      </div>
+      {!fixed && (
+        <div className="flex items-center gap-2">
+          {canAdd && (
+            <button
+              type="button"
+              onClick={() => setEntries((rows) => [...rows, {}])}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3.5 text-sm transition-colors hover:border-[var(--cf-accent)]"
+            >
+              <Plus className="size-3.5" />
+              Add {itemLabel.toLowerCase()}
+            </button>
+          )}
+          <p className="text-xs opacity-55">
+            {canAdd
+              ? `${entries.length} of up to ${maxEntries}.`
+              : `That's the most you can add (${maxEntries}).`}
+          </p>
+        </div>
+      )}
 
       <button
         type="button"
@@ -562,13 +618,25 @@ function GroupFieldInput({
   field,
   index,
   value,
+  malformed,
   onChange,
 }: {
   field: PublicGroupField;
   index: number;
   value: string;
+  /** Written in, but not matching the column's `pattern`. */
+  malformed?: boolean;
   onChange: (v: string) => void;
 }) {
+  /*
+    Said on the way out of the box, not on the way through it.
+
+    A pattern is almost never satisfied by the first character typed, so
+    flagging as they type would paint the cell wrong for the whole time they
+    are getting it right. Blur is the first moment the value is a claim.
+  */
+  const [touched, setTouched] = useState(false);
+  const showError = Boolean(malformed && touched);
   const semantics = inputSemanticsFor({
     type: field.kind,
     title: field.label,
@@ -576,8 +644,12 @@ function GroupFieldInput({
     id: field.key,
     required: field.required,
   } as PublicBlock);
-  const inputClass =
-    "h-11 w-full rounded-xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-3 text-[0.9375rem] outline-none focus:border-[var(--cf-accent)]";
+  const inputClass = cn(
+    "h-11 w-full rounded-xl border bg-[var(--cf-composer-bg)] px-3 text-[0.9375rem] outline-none",
+    showError
+      ? "border-[var(--cf-warning)] focus:border-[var(--cf-warning)]"
+      : "border-[var(--cf-chip-border)] focus:border-[var(--cf-accent)]",
+  );
 
   const label = (
     <span className="block text-xs opacity-60">
@@ -662,9 +734,16 @@ function GroupFieldInput({
         autoCapitalize={semantics.autoCapitalize}
         autoCorrect={semantics.autoCorrect}
         spellCheck={semantics.spellCheck}
+        aria-invalid={showError || undefined}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={() => setTouched(true)}
         className={inputClass}
       />
+      {showError && (
+        <span className="block text-[0.6875rem] text-[var(--cf-warning)]">
+          That&apos;s not the format {field.label.toLowerCase()} expects.
+        </span>
+      )}
     </label>
   );
 }

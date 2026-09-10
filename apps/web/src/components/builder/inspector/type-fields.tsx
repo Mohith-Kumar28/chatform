@@ -2,7 +2,7 @@
 
 import { isValidUpiId, UPI_CURRENCY, type Block } from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
-import { GroupFieldsEditor } from "./group-fields";
+import { GroupFieldsEditor, PatternHelp, patternIsValid } from "./group-fields";
 import {
   CheckboxGroup,
   ListEditor,
@@ -76,6 +76,14 @@ export function TypeFields({
             <>
               <TextField
                 label="Pattern"
+                help={<PatternHelp />}
+                hint={
+                  block.pattern && !patternIsValid(block.pattern)
+                    ? "This isn't a valid pattern, so nothing is checked against it."
+                    : undefined
+                }
+                placeholder="^[0-9]{10}$"
+                className="font-mono text-xs"
                 value={block.pattern ?? ""}
                 onChange={(v) => patch({ pattern: v || undefined } as Partial<Block>, key("pattern"))}
               />

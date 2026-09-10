@@ -136,6 +136,11 @@ export interface PublicGroupField {
   kind: GroupFieldKind;
   required: boolean;
   placeholder?: string;
+  /**
+   * `short_text` only. Sent so the composer can catch a malformed cell where it
+   * is typed rather than after a round trip — the server validates it again.
+   */
+  pattern?: string;
   /** `single_select` only. */
   options?: { id: string; label: string }[];
   /** `number` only. */
@@ -249,6 +254,7 @@ export function toPublicBlock(b: Block): PublicBlock {
           ? { options: f.options.map((o) => ({ id: o.id, label: o.label })) }
           : {}),
         ...(f.kind === "number" ? { min: f.min, max: f.max } : {}),
+        ...(f.kind === "short_text" && f.pattern ? { pattern: f.pattern } : {}),
       }));
       pub.itemLabel = b.itemLabel;
       pub.minEntries = b.minEntries;

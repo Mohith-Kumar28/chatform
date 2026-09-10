@@ -118,6 +118,42 @@ describe("each column, by its own rules", () => {
     expect(result.value).toEqual([{ name: "Maya" }, { name: "Rahul" }]);
   });
 
+  it("holds a column to the pattern the author gave it", () => {
+    // A USN column exists to be a USN. The same regex a standalone short text
+    // block takes has to reach the cell, or the shape is only checked outside
+    // groups — see `groupFieldBlock`.
+    const usn = group({
+      minEntries: 1,
+      maxEntries: 4,
+      fields: [
+        {
+          id: uid("gf", 7),
+          key: "usn",
+          label: "USN",
+          kind: "short_text",
+          required: true,
+          pattern: "^1[A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{3}$",
+        },
+      ],
+    });
+    expect(validateAnswer(usn, [{ usn: "1MS22CS001" }]).ok).toBe(true);
+    const bad = validateAnswer(usn, [{ usn: "not-a-usn" }]);
+    expect(bad.code).toBe("pattern");
+    expect(bad.hint).toContain("USN");
+  });
+
+  it("ignores a pattern on a kind that has no use for one", () => {
+    // The inspector only offers it for short text and clears it on a switch,
+    // but a document written by hand or by the agent can still carry one.
+    const dated = group({
+      minEntries: 1,
+      fields: [
+        { id: uid("gf", 8), key: "joined", label: "Joined", kind: "date", pattern: "^nope$" },
+      ],
+    });
+    expect(validateAnswer(dated, [{ joined: "2026-03-01" }]).ok).toBe(true);
+  });
+
   it("refuses an entry that is not an object", () => {
     expect(validateAnswer(group(), ["Maya", "Rahul"]).code).toBe("type");
     expect(validateAnswer(group(), { name: "Maya" }).code).toBe("type");

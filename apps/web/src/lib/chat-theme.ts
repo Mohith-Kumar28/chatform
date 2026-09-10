@@ -132,6 +132,15 @@ export function chatThemeVars(theme: ThemeDoc): CSSProperties {
     "--cf-warning": darkSurface ? "oklch(0.84 0.14 80)" : "oklch(0.56 0.13 62)",
     "--cf-chip-bg": theme.surface,
     "--cf-chip-border": shift(theme.text, 0.82, darkSurface ? "dark" : "light"),
+    /*
+     * A fill for a panel that holds other controls — one entry of a repeating
+     * group, say. It cannot be the surface, because the inputs inside it are
+     * already the surface and a card the same colour as its contents is not a
+     * card. So it is the surface nudged a few percent the other way: enough to
+     * read as a container on both a white page and a near-black one, not enough
+     * to become a second background the author never chose.
+     */
+    "--cf-sunken": shift(theme.surface, 0.045, darkSurface ? "light" : "dark"),
     "--cf-radius": RADIUS_PX[theme.radius],
     fontFamily: `${theme.fontBody}, ui-sans-serif, system-ui, sans-serif`,
     "--cf-font-heading": `${theme.fontHeading}, ${theme.fontBody}, ui-sans-serif, sans-serif`,

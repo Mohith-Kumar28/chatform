@@ -198,6 +198,13 @@ export const GroupField = z.object({
   /** Required *within an entry* — an entry that exists must fill it in. */
   required: z.boolean().default(false),
   placeholder: z.string().max(200).optional(),
+  /**
+   * `short_text` only — the same regular expression a standalone short text
+   * block takes, applied per cell by `groupFieldBlock`. A column of USNs or
+   * order numbers has a shape, and stating it here is the difference between
+   * catching a typo in the box and catching it in the export.
+   */
+  pattern: z.string().max(500).optional(),
   /** `single_select` only; ignored by every other kind. */
   options: z.array(Option).max(50).default([]),
   /** `number` only. */
@@ -490,7 +497,14 @@ export function groupFieldBlock(field: GroupField): Block {
   };
   switch (field.kind) {
     case "short_text":
-      return Block.parse({ ...base, type: "short_text", maxLength: 500 });
+      // Spread rather than passed, so a column with no pattern parses to a
+      // block with no `pattern` key rather than one holding `undefined`.
+      return Block.parse({
+        ...base,
+        type: "short_text",
+        maxLength: 500,
+        ...(field.pattern ? { pattern: field.pattern } : {}),
+      });
     case "long_text":
       return Block.parse({ ...base, type: "long_text", maxLength: 2000 });
     case "email":

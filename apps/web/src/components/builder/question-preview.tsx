@@ -307,34 +307,58 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
      * `minEntries` rows and no more: the preview's job is the shape of the
      * question, and an author who set a floor of two should see two.
      */
+    /*
+      The same repeating group the composer draws, minus the typing.
+
+      Two things here used to disagree with what shipped. The entries were one
+      box sliced by `divide-y`, which takes no border colour from `chipStyle` —
+      the rules fell back to the current text colour and drew as hard black
+      lines across the card. And the add button was drawn unconditionally, so a
+      group fixed at five members advertised an Add that the composer would
+      never show. Each entry is now its own card on `--cf-sunken`, and Add
+      appears only where the respondent will really get one.
+    */
     case "field_group": {
       const groupFields = block.groupFields ?? [];
-      const rows = Math.min(Math.max(block.minEntries ?? 1, 1), block.maxEntries ?? 5);
+      const max = block.maxEntries ?? 5;
+      const rows = Math.min(Math.max(block.minEntries ?? 1, 1), max);
+      const itemLabel = block.itemLabel ?? "Entry";
       return (
         <div className="space-y-2">
-          <div className="divide-y overflow-hidden rounded-2xl border" style={chipStyle}>
-            {Array.from({ length: rows }, (_, i) => (
-              <div key={i} className="space-y-2 p-3">
-                <p className="text-xs font-medium opacity-60">
-                  {block.itemLabel ?? "Entry"} {i + 1}
-                </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {groupFields.map((f) => (
-                    <div key={f.key} className={cn("space-y-1", f.kind === "long_text" && "sm:col-span-2")}>
-                      <span className="block text-xs opacity-60">
-                        {f.label}
-                        {f.required && <span className="ml-0.5 opacity-70">*</span>}
-                      </span>
-                      <div className={cn(input, "h-10 rounded-xl")} style={chipStyle} />
-                    </div>
-                  ))}
-                </div>
+          {Array.from({ length: rows }, (_, i) => (
+            <div
+              key={i}
+              className="space-y-2.5 rounded-2xl border p-3"
+              style={{ borderColor: "var(--cf-chip-border)", background: "var(--cf-sunken)" }}
+            >
+              <p className="flex items-center gap-2 text-xs font-medium">
+                <span
+                  className="grid size-5 shrink-0 place-items-center rounded-full text-[0.625rem] font-semibold"
+                  style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+                >
+                  {i + 1}
+                </span>
+                <span className="truncate opacity-70">{itemLabel}</span>
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {groupFields.map((f) => (
+                  <div key={f.key} className={cn("space-y-1", f.kind === "long_text" && "sm:col-span-2")}>
+                    <span className="block text-xs opacity-60">
+                      {f.label}
+                      {f.required && <span className="ml-0.5 opacity-70">*</span>}
+                    </span>
+                    <div className={cn(input, "h-10 rounded-xl")} style={chipStyle} />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <span className={cn(chip, "inline-flex")} style={chipStyle}>
-            + Add {(block.itemLabel ?? "entry").toLowerCase()}
-          </span>
+            </div>
+          ))}
+          {/* Nothing to add when the first row count is already the last. */}
+          {rows < max && (
+            <span className={cn(chip, "inline-flex")} style={chipStyle}>
+              + Add {itemLabel.toLowerCase()}
+            </span>
+          )}
         </div>
       );
     }
