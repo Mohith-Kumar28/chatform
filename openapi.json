@@ -3814,6 +3814,12 @@
                           "type": "string"
                         }
                       },
+                      "partials": {
+                        "type": "number"
+                      },
+                      "hasUnpublishedChanges": {
+                        "type": "boolean"
+                      },
                       "theme": {
                         "anyOf": [
                           {
@@ -3869,6 +3875,8 @@
                       "updatedAt",
                       "questionCount",
                       "preview",
+                      "partials",
+                      "hasUnpublishedChanges",
                       "theme"
                     ]
                   }

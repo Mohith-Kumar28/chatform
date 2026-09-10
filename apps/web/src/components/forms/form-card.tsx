@@ -12,6 +12,7 @@ import {
   FolderInput,
   PowerOff,
   Trash2,
+  UploadCloud,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -25,9 +26,66 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { isDarkColor, readableInk } from "@/lib/chat-theme";
+
+/**
+ * The pieces of a menu, so one list of items can be rendered by two of them.
+ *
+ * Deliberately structural rather than a union of the two component sets: what
+ * the item list needs is "something with an `Item` that takes `asChild`,
+ * `onSelect` and a destructive variant", and both Radix menus are that. Typing
+ * it as the intersection of the concrete components instead would make every
+ * prop the two disagree about — `align` on the content, which only the
+ * dropdown has — a compile error at the call site rather than a thing neither
+ * menu is asked for.
+ */
+type MenuParts = {
+  Item: React.ComponentType<{
+    children?: React.ReactNode;
+    asChild?: boolean;
+    onSelect?: (event: Event) => void;
+    variant?: "default" | "destructive";
+    className?: string;
+  }>;
+  Separator: React.ComponentType<{ className?: string }>;
+  Sub: React.ComponentType<{ children?: React.ReactNode }>;
+  SubTrigger: React.ComponentType<{
+    children?: React.ReactNode;
+    className?: string;
+  }>;
+  SubContent: React.ComponentType<{
+    children?: React.ReactNode;
+    className?: string;
+  }>;
+};
+
+const DROPDOWN_PARTS: MenuParts = {
+  Item: DropdownMenuItem,
+  Separator: DropdownMenuSeparator,
+  Sub: DropdownMenuSub,
+  SubTrigger: DropdownMenuSubTrigger,
+  SubContent: DropdownMenuSubContent,
+};
+
+const CONTEXT_PARTS: MenuParts = {
+  Item: ContextMenuItem,
+  Separator: ContextMenuSeparator,
+  Sub: ContextMenuSub,
+  SubTrigger: ContextMenuSubTrigger,
+  SubContent: ContextMenuSubContent,
+};
 
 export interface FormRow {
   id: string;
@@ -35,7 +93,15 @@ export interface FormRow {
   slug: string;
   status: string;
   responses: number;
+  /**
+   * Responses somebody started and never finished. Absent on grids whose
+   * source does not count them, which is what keeps the card from claiming
+   * "+0 partial" about a number it was never told.
+   */
+  partials?: number;
   updatedAt: number;
+  /** True when the draft has moved on from what respondents are answering. */
+  hasUnpublishedChanges?: boolean;
   questionCount?: number;
   preview?: string[];
   /**
@@ -69,6 +135,7 @@ export function FormCard({
   form,
   onDelete,
   onUnpublish,
+  onPublish,
   workspaces = [],
   currentWorkspaceId,
   onMove,
@@ -83,6 +150,13 @@ export function FormCard({
    * what keeps the item out of the menu rather than showing one that fails.
    */
   onUnpublish?: () => void;
+  /**
+   * Pushes the draft live. Only ever offered on a form that has drifted — a
+   * card cannot show you what you would be publishing, so offering it on a
+   * form that is already up to date is an action whose only outcome is a
+   * version number.
+   */
+  onPublish?: () => void;
   /** Ticked. Only meaningful when `onSelectedChange` is supplied. */
   selected?: boolean;
   /**
@@ -130,14 +204,136 @@ export function FormCard({
    * that all looked alike. What is left is the pair that only matters once you
    * have already found the form: how much has come in, and when it last moved.
    */
+  /*
+   * Partials ride along with the completed count rather than getting a line.
+   *
+   * "1 response" was the whole footer on a form thirty-seven people had opened
+   * and left, which is not a small omission — it is the difference between a
+   * form nobody found and a form that is losing everybody at question four.
+   * Written as "+37 partial", joined to the number it qualifies, because it is
+   * a footnote on that number and not a second statistic: a card that reads
+   * "1 response · 37 partial" invites the two to be added up, and they are not
+   * the same kind of thing.
+   *
+   * Zero says nothing. A form with no partials has no drop-off to report, and
+   * a "+0" on every healthy card would spend the reader's attention on the
+   * cards that least need it.
+   */
+  const partials = form.partials ?? 0;
   const meta = (
     <>
       <span className="text-muted-foreground tabular text-xs">
         {form.responses} response{form.responses === 1 ? "" : "s"}
+        {partials > 0 && (
+          <span className="text-muted-foreground/70"> +{partials} partial</span>
+        )}
       </span>
       <span className="text-muted-foreground text-xs">
         {relativeTime(form.updatedAt)}
       </span>
+    </>
+  );
+
+  /*
+   * One menu, two triggers.
+   *
+   * The kebab and the right-click menu are the same menu — a card that offers
+   * Take offline on hover and not on right-click is a card whose menu you have
+   * to guess at, and two copies of this list is how that happens on the next
+   * item somebody adds. So the items are written once against whichever set of
+   * menu parts is rendering them: Radix's dropdown and context menus have the
+   * same item API, which is what makes the substitution safe rather than a
+   * lookalike.
+   */
+  const menuItems = (M: MenuParts) => (
+    <>
+      <M.Item asChild>
+        <Link href={`/forms/${form.id}/results`}>Results</Link>
+      </M.Item>
+      <M.Item asChild>
+        <Link href={`/forms/${form.id}/share`}>Share</Link>
+      </M.Item>
+      {/*
+        Publishing from the grid, when the grid is where you found out.
+
+        The card now says a form has edits nobody can see, and saying that
+        without offering the one action that fixes it sends somebody into the
+        builder to press a button they already decided to press. It sits above
+        the live-form actions because it is what you came here for.
+
+        Only on a form that has actually drifted: `onPublish` is offered by the
+        grid, `hasUnpublishedChanges` says whether there is anything to send.
+      */}
+      {published && onPublish && form.hasUnpublishedChanges && (
+        <M.Item onSelect={onPublish}>
+          <UploadCloud className="size-3.5" />
+          Publish changes
+        </M.Item>
+      )}
+      {published && (
+        <>
+          <M.Item onSelect={copyLink}>
+            <Copy className="size-3.5" />
+            Copy link
+          </M.Item>
+          <M.Item asChild>
+            <a href={`/f/${form.slug}`} target="_blank" rel="noreferrer">
+              <ExternalLink className="size-3.5" />
+              Open live form
+            </a>
+          </M.Item>
+          {/*
+            Stopping a form from the list, without opening it.
+
+            The builder has the same action, and this is not a duplicate of
+            it: a form that has to come down is usually one you are looking at
+            from the outside — a registration that filled up, a link that got
+            shared further than intended — and making somebody open the
+            builder to stop it adds a step to the one action nobody wants to
+            be slow.
+
+            Above the separator with the other live-form actions rather than
+            beside Delete: it is reversible and Delete is not, and putting
+            them together is how the wrong one gets clicked.
+          */}
+          {onUnpublish && (
+            <M.Item onSelect={onUnpublish}>
+              <PowerOff className="size-3.5" />
+              Take offline
+            </M.Item>
+          )}
+        </>
+      )}
+      {/* A form is created in whichever workspace you were looking at, so
+          this is how one ends up somewhere else. Without it a second
+          workspace is a place new forms can be made and nothing can be moved
+          into, which is a fork rather than a folder. */}
+      {onMove &&
+        workspaces.filter((w) => w.id !== currentWorkspaceId).length > 0 && (
+          <>
+            <M.Separator />
+            <M.Sub>
+              <M.SubTrigger>
+                <FolderInput className="size-3.5" />
+                Move to
+              </M.SubTrigger>
+              <M.SubContent>
+                {workspaces
+                  .filter((w) => w.id !== currentWorkspaceId)
+                  .map((w) => (
+                    <M.Item key={w.id} onSelect={() => onMove(w.id)}>
+                      <span className="min-w-0 truncate">{w.name}</span>
+                    </M.Item>
+                  ))}
+              </M.SubContent>
+            </M.Sub>
+          </>
+        )}
+      <M.Separator />
+      <M.Item variant="destructive" onSelect={onDelete}>
+        <Trash2 className="size-3.5" />
+        Delete
+      </M.Item>
     </>
   );
 
@@ -154,79 +350,7 @@ export function FormCard({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem asChild>
-          <Link href={`/forms/${form.id}/results`}>Results</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href={`/forms/${form.id}/share`}>Share</Link>
-        </DropdownMenuItem>
-        {published && (
-          <>
-            <DropdownMenuItem onSelect={copyLink}>
-              <Copy className="size-3.5" />
-              Copy link
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <a href={`/f/${form.slug}`} target="_blank" rel="noreferrer">
-                <ExternalLink className="size-3.5" />
-                Open live form
-              </a>
-            </DropdownMenuItem>
-            {/*
-              Stopping a form from the list, without opening it.
-
-              The builder has the same action, and this is not a duplicate of
-              it: a form that has to come down is usually one you are looking at
-              from the outside — a registration that filled up, a link that got
-              shared further than intended — and making somebody open the
-              builder to stop it adds a step to the one action nobody wants to
-              be slow.
-
-              Above the separator with the other live-form actions rather than
-              beside Delete: it is reversible and Delete is not, and putting
-              them together is how the wrong one gets clicked.
-            */}
-            {onUnpublish && (
-              <DropdownMenuItem onSelect={onUnpublish}>
-                <PowerOff className="size-3.5" />
-                Take offline
-              </DropdownMenuItem>
-            )}
-          </>
-        )}
-        {/* A form is created in whichever workspace you were looking at, so
-            this is how one ends up somewhere else. Without it a second
-            workspace is a place new forms can be made and nothing can be moved
-            into, which is a fork rather than a folder. */}
-        {onMove &&
-          workspaces.filter((w) => w.id !== currentWorkspaceId).length > 0 && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <FolderInput className="size-3.5" />
-                  Move to
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  {workspaces
-                    .filter((w) => w.id !== currentWorkspaceId)
-                    .map((w) => (
-                      <DropdownMenuItem
-                        key={w.id}
-                        onSelect={() => onMove(w.id)}
-                      >
-                        <span className="min-w-0 truncate">{w.name}</span>
-                      </DropdownMenuItem>
-                    ))}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-            </>
-          )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-          <Trash2 className="size-3.5" />
-          Delete
-        </DropdownMenuItem>
+        {menuItems(DROPDOWN_PARTS)}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -259,6 +383,23 @@ export function FormCard({
    * foreground/background pair *is* the opposition, and it stays theme-aware
    * without a `dark:` twin for every value.
    */
+  /*
+   * `--thumb-live` and `--thumb-drift` are on the plate, not the app.
+   *
+   * The live dot used to be `--success` straight from the theme, and it worked
+   * because a 6px dot only has to be *seen*. Saying "Live" in green is a
+   * different job: the word has to be read off a plate whose lightness the app
+   * theme did not choose — a light form in a dark app gets a dark plate — so
+   * one green cannot serve both. `--success` in dark mode is L 0.7, which is
+   * legible on the dark plate and mud on the light one.
+   *
+   * So each plate names its own pair, chosen against that plate rather than
+   * against the page. The band case is the one that cannot hardcode them: its
+   * plate follows `--foreground`, so the colour has to flip with the app. It
+   * mixes toward `--background` — which is what that plate's *ink* already is,
+   * so the mix always runs away from the plate and toward the readable end,
+   * in either theme, with no `dark:` twin.
+   */
   const thumbIsDark = form.theme ? isDarkColor(form.theme.background) : null;
   const thumbPlate: Record<string, string> =
     thumbIsDark === null
@@ -268,17 +409,25 @@ export function FormCard({
           "--thumb-plate-ink": "var(--background)",
           "--thumb-plate-wash":
             "color-mix(in oklab, var(--background) 20%, transparent)",
+          "--thumb-live":
+            "color-mix(in oklab, oklch(0.72 0.17 152) 72%, var(--background))",
+          "--thumb-drift":
+            "color-mix(in oklab, oklch(0.75 0.16 75) 72%, var(--background))",
         }
       : thumbIsDark
         ? {
             "--thumb-plate": "rgb(255 255 255 / 0.92)",
             "--thumb-plate-ink": "oklch(0.216 0.006 56.043)",
             "--thumb-plate-wash": "rgb(0 0 0 / 0.10)",
+            "--thumb-live": "oklch(0.5 0.14 152)",
+            "--thumb-drift": "oklch(0.52 0.13 62)",
           }
         : {
             "--thumb-plate": "oklch(0.216 0.006 56.043 / 0.85)",
             "--thumb-plate-ink": "oklch(0.985 0.001 106.423)",
             "--thumb-plate-wash": "rgb(255 255 255 / 0.20)",
+            "--thumb-live": "oklch(0.82 0.17 152)",
+            "--thumb-drift": "oklch(0.84 0.14 82)",
           };
   const onThumb = "bg-[var(--thumb-plate)] text-[var(--thumb-plate-ink)]";
 
@@ -300,28 +449,80 @@ export function FormCard({
    * where the dot gives it a shape you can scan without reading, and the size
    * on the right, so a column of cards lines its counts up.
    */
+  /*
+   * Bigger, because 10px was a label you had to lean in for.
+   *
+   * These were `text-[0.625rem]` with a 6px dot — sized to be unobtrusive on
+   * the artwork, which got the priority backwards. Whether a form is live is
+   * the single most consequential fact on the card: it is the difference
+   * between a link that is collecting answers and one that 404s, and it was
+   * set two steps below the response count underneath it. At 12px with a 8px
+   * dot the strip reads at a glance, which is the only size worth having for
+   * something you scan a grid for.
+   *
+   * And Live is now green *as a word*, not just as a dot beside one. A colour
+   * you have to already know the code for is not a signal; a green "Live" is
+   * legible before you have read it, which is what "clear at a glance" means.
+   * Draft stays in the plate's own ink — it is the quiet half of the pair, and
+   * two coloured states is two states competing for the same attention.
+   */
   const thumbPill = cn(
-    "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5",
-    "text-[0.625rem] leading-none font-medium backdrop-blur-sm",
+    "inline-flex items-center gap-1.5 rounded-full px-2 py-1",
+    "text-xs leading-none font-semibold backdrop-blur-sm",
     onThumb,
   );
   const thumbPills = (
     <>
-      <span className={thumbPill}>
+      <span className="flex min-w-0 items-center gap-1.5">
         <span
-          aria-hidden
           className={cn(
-            "size-1.5 rounded-full",
-            // Live is the one state worth a colour. Draft borrows the pill's
-            // own ink at low opacity, so it stays legible on both fills
-            // without a second token that only works on one of them.
-            published ? "bg-[var(--success)]" : "bg-current opacity-40",
+            thumbPill,
+            // The one pill on this strip that never gives up width. If
+            // something has to truncate it is "Unpublished", which has a
+            // tooltip and a menu item behind it; "Live" has neither and is
+            // the more consequential of the two.
+            "shrink-0",
+            published && "text-[var(--thumb-live)]",
           )}
-        />
-        {published ? "Live" : "Draft"}
+        >
+          <span
+            aria-hidden
+            className={cn(
+              "size-2 shrink-0 rounded-full",
+              // Draft borrows the pill's own ink at low opacity, so it stays
+              // legible on both fills without a second token that only works
+              // on one of them.
+              published ? "bg-[var(--thumb-live)]" : "bg-current opacity-40",
+            )}
+          />
+          {published ? "Live" : "Draft"}
+        </span>
+        {/*
+          The draft has moved on and the live form has not.
+
+          Beside Live rather than replacing it, because both are true and the
+          card would be lying if it picked one: the form *is* live, and what is
+          live is not what you last edited. Amber for the same reason the
+          builder header uses it — a state to resolve, not a fault.
+
+          The word alone at these sizes; "Unpublished changes" is what the menu
+          item says, and the strip has a question count to fit beside this.
+        */}
+        {published && form.hasUnpublishedChanges && (
+          <span
+            className={cn(thumbPill, "min-w-0 text-[var(--thumb-drift)]")}
+            title="This form has edits that are not live yet"
+          >
+            <span
+              aria-hidden
+              className="size-2 shrink-0 rounded-full bg-[var(--thumb-drift)]"
+            />
+            <span className="truncate">Unpublished</span>
+          </span>
+        )}
       </span>
       {form.questionCount !== undefined && (
-        <span className={cn(thumbPill, "tabular")}>
+        <span className={cn(thumbPill, "tabular shrink-0")}>
           {form.questionCount} question{form.questionCount === 1 ? "" : "s"}
         </span>
       )}
@@ -349,150 +550,174 @@ export function FormCard({
    * only to hold still while something inside it moved.
    */
   return (
-    <div
-      style={{ ...thumbPlate }}
-      className={cn(
-        "bg-card border-border group relative flex h-full flex-col overflow-hidden rounded-2xl border",
-        "shadow-xs transition-[box-shadow,outline-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
-        // Always present, transparent until it has something to say, so the
-        // only thing that ever animates is its colour. Inset, because an
-        // outline outside a rounded border sits proud of the corner radius.
-        "outline-2 -outline-offset-2 outline-transparent",
-        "hover:shadow-md hover:outline-border",
-        // Scoped to the link rather than `focus-within`, which the checkbox
-        // satisfies too — ticking a box lit the whole card up as if focused.
-        "has-[a:focus-visible]:outline-ring/60",
-        selected && "outline-primary hover:outline-primary shadow-md",
-      )}
-    >
-      {/*
-        The tick box.
+    /*
+      Right-click is the same menu as the kebab.
 
-        Top-left, opposite the quick actions, and outside the `<Link>` so
-        choosing a form is never one mis-aimed pixel from opening it. It fades
-        in on hover like the actions do — but the moment anything in the grid is
-        ticked, every box is visible, because a selection you extend by
-        remembering where invisible targets are is not a selection you can use.
+      The kebab was the only way to reach Move to, Take offline and Delete, and
+      it is three hover-revealed pixels in a corner. Everywhere else that shows
+      a grid of things — a file manager, a photo library — answers a right-click
+      on the thing itself, and a card that does not is a card people right-click
+      once and then stop trying.
 
-        The padding here is the touch target and nothing else. It used to carry
-        a `bg-card/80` blur tile to lift the box off the thumbnail, which in
-        dark mode read as a grey blob stuck to the corner. The box carries its
-        own surface instead, so what you see is a checkbox rather than a
-        checkbox inside a container.
-      */}
-      {selectable && (
+      `asChild` puts the trigger on the card element rather than wrapping it in
+      a div, so the grid item stays one box and `h-full` still stretches it.
+    */
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
         <div
+          style={{ ...thumbPlate }}
           className={cn(
-            "absolute top-2 left-2 z-10 p-1.5",
-            "transition-opacity duration-[var(--duration-micro)]",
-            selected || anySelected
-              ? "opacity-100"
-              : "opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100",
+            "bg-card border-border group relative flex h-full flex-col overflow-hidden rounded-2xl border",
+            "shadow-xs transition-[box-shadow,outline-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
+            // Always present, transparent until it has something to say, so the
+            // only thing that ever animates is its colour. Inset, because an
+            // outline outside a rounded border sits proud of the corner radius.
+            "outline-2 -outline-offset-2 outline-transparent",
+            "hover:shadow-md hover:outline-border",
+            // Scoped to the link rather than `focus-within`, which the checkbox
+            // satisfies too — ticking a box lit the whole card up as if focused.
+            "has-[a:focus-visible]:outline-ring/60",
+            selected && "outline-primary hover:outline-primary shadow-md",
           )}
         >
-          <Checkbox
-            checked={selected}
-            onCheckedChange={(next) => onSelectedChange?.(next === true)}
-            aria-label={`Select ${form.title}`}
-            className={cn(
-              /*
-               * Bigger, outlined in the accent, and filled *against* the
-               * artwork rather than with it.
-               *
-               * At 18px with a hairline border it disappeared into whatever was
-               * behind it. Going up to 22px with an accent edge helped, but the
-               * fill was still white — and a form's own background is pale on
-               * most themes, so a white box on a near-white thumbnail was a
-               * bright shape on a bright ground with only the border doing any
-               * work.
-               *
-               * The fill now opposes the thumbnail: dark on light artwork,
-               * light on dark. That is the one rule that cannot fail, because
-               * it is derived from the surface rather than guessed. Checked, it
-               * becomes the accent with `--primary-foreground` ink, which is
-               * dark and clears AA on the orange — so the tick reads on the one
-               * fill this does not choose.
-               *
-               * The `dark:` halves are not redundant: `Checkbox` ships
-               * `dark:bg-input/30`, and a dark variant beats a plain utility of
-               * the same specificity on source order, so a fill set here comes
-               * out as that instead the moment the app is in dark mode.
-               */
-              "size-[22px] border-2 shadow-md",
-              "border-primary data-[state=checked]:border-primary",
-              thumbIsDark === null
-                ? // The brand band follows `--background`, so oppose the app.
-                  "bg-stone-800 dark:bg-stone-100"
-                : thumbIsDark
-                  ? "bg-stone-100 dark:bg-stone-100"
-                  : "bg-stone-800 dark:bg-stone-800",
-            )}
-          />
-        </div>
-      )}
+          <Link
+            href={`/forms/${form.id}/build`}
+            className="flex min-w-0 flex-1 flex-col"
+          >
+            <ChatThumb
+              opener={opener}
+              answer={asks[0]}
+              theme={form.theme}
+              logoAlt={form.title}
+              pills={thumbPills}
+            />
 
-      <Link
-        href={`/forms/${form.id}/build`}
-        className="flex min-w-0 flex-1 flex-col"
-      >
-        <ChatThumb
-          opener={opener}
-          answer={asks[0]}
-          theme={form.theme}
-          logoAlt={form.title}
-          pills={thumbPills}
-        />
-
-        {/*
+            {/*
           Title and status, and nothing else.
           The questions used to run underneath as a dot-joined subtitle — but
           the thumbnail above is already the form's own opening line, so the
           subtitle repeated what the picture said, in worse form and at two
           lines a card. A grid is for recognising, not reading.
         */}
-        <div className="flex flex-1 flex-col p-4">
-          <h3 className="font-display truncate font-semibold">{form.title}</h3>
-          <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-3">
-            {meta}
-          </div>
-        </div>
-      </Link>
-
-      {/* Quick actions sit above the card link. Revealed on hover, but always
-          present for keyboard focus and on touch, where there is no hover. */}
-      <div
-        className={cn(
-          "absolute top-2 right-2 flex items-center gap-0.5 rounded-full",
-          "p-0.5 backdrop-blur-sm",
-          onThumb,
-          // `ghost` resting has no colour of its own, so the icons inherit the
-          // plate's ink — but its hover *does*, and `--accent-foreground` on a
-          // plate the app theme did not choose is how an icon disappears at the
-          // moment you reach for it. Both halves come from the plate instead.
-          "[&_[data-slot=button]]:hover:bg-[var(--thumb-plate-wash)]",
-          "[&_[data-slot=button]]:hover:text-[var(--thumb-plate-ink)]",
-          "opacity-0 transition-opacity duration-[var(--duration-micro)]",
-          "group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100",
-        )}
-      >
-        {published && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Copy public link"
-            onClick={copyLink}
-          >
-            <Link2 className="size-3.5" />
-          </Button>
-        )}
-        <Button variant="ghost" size="icon-sm" aria-label="Results" asChild>
-          <Link href={`/forms/${form.id}/results`}>
-            <BarChart3 className="size-3.5" />
+            <div className="flex flex-1 flex-col p-4">
+              <h3 className="font-display truncate font-semibold">
+                {form.title}
+              </h3>
+              {/* `pe-8` when there is a tick box: it sits in this row's right-hand
+              end, and a long relative time would otherwise run underneath it. */}
+              <div
+                className={cn(
+                  "mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-3",
+                  selectable && "pe-8",
+                )}
+              >
+                {meta}
+              </div>
+            </div>
           </Link>
-        </Button>
-        {actions}
-      </div>
-    </div>
+
+          {/* Quick actions sit above the card link. Revealed on hover, but always
+          present for keyboard focus and on touch, where there is no hover. */}
+          <div
+            className={cn(
+              "absolute top-2 right-2 flex items-center gap-0.5 rounded-full",
+              "p-0.5 backdrop-blur-sm",
+              onThumb,
+              // `ghost` resting has no colour of its own, so the icons inherit the
+              // plate's ink — but its hover *does*, and `--accent-foreground` on a
+              // plate the app theme did not choose is how an icon disappears at the
+              // moment you reach for it. Both halves come from the plate instead.
+              "[&_[data-slot=button]]:hover:bg-[var(--thumb-plate-wash)]",
+              "[&_[data-slot=button]]:hover:text-[var(--thumb-plate-ink)]",
+              "opacity-0 transition-opacity duration-[var(--duration-micro)]",
+              "group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100",
+            )}
+          >
+            {published && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Copy public link"
+                onClick={copyLink}
+              >
+                <Link2 className="size-3.5" />
+              </Button>
+            )}
+            <Button variant="ghost" size="icon-sm" aria-label="Results" asChild>
+              <Link href={`/forms/${form.id}/results`}>
+                <BarChart3 className="size-3.5" />
+              </Link>
+            </Button>
+            {actions}
+          </div>
+
+          {/*
+        The tick box, bottom-right, on the card rather than on the artwork.
+
+        It was top-left over the thumbnail, which put it on the one part of the
+        card that is a picture — three controls (tick box, quick actions,
+        status strip) competing with the form's own opening line for a 128px
+        band, and the box had to invent a fill that opposed whatever colour the
+        form happened to be just to stay visible. Down here it sits on
+        `bg-card`, which is one known surface in each theme, so the default
+        checkbox styling is simply correct.
+
+        It is also where the eye ends up: the footer is the last thing read on
+        a card, the right end of it is empty, and a column of cards lines its
+        boxes up on the same edge — which is what makes a run of them
+        tickable without aiming.
+
+        Still outside the `<Link>`, so choosing a form is never one mis-aimed
+        pixel from opening it, and still hover-revealed until something in the
+        grid is ticked — after which every box shows, because a selection you
+        extend by remembering where invisible targets are is not a selection
+        you can use.
+      */}
+          {selectable && (
+            <div
+              className={cn(
+                // `2.5` plus the 6px touch padding inside puts the box's own
+                // edge exactly on the footer's 16px inset, so it lines up with
+                // the text beside it rather than sitting proud of it.
+                "absolute right-2.5 bottom-2.5 z-10 p-1.5",
+                "transition-opacity duration-[var(--duration-micro)]",
+                selected || anySelected
+                  ? "opacity-100"
+                  : "opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100",
+              )}
+            >
+              <Checkbox
+                checked={selected}
+                onCheckedChange={(next) => onSelectedChange?.(next === true)}
+                aria-label={`Select ${form.title}`}
+                className={cn(
+                  /*
+                   * On `bg-card` this needs no fill of its own.
+                   *
+                   * Over the thumbnail it did: a form's background is whatever its
+                   * author chose, so the box had to be painted against it — dark
+                   * on light artwork, light on dark — and every one of those fills
+                   * was wrong on some card. The card surface is one colour per
+                   * theme, which is exactly what `Checkbox`'s own resting style is
+                   * drawn for.
+                   *
+                   * Kept from that version: 22px with a 2px accent edge, so it is
+                   * a real target and reads as ticked at a glance, and the accent
+                   * fill when checked — `--primary-foreground` ink clears AA on
+                   * the orange.
+                   */
+                  "size-[22px] border-2",
+                  "border-primary data-[state=checked]:border-primary",
+                )}
+              />
+            </div>
+          )}
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-52">
+        {menuItems(CONTEXT_PARTS)}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -624,11 +849,14 @@ function ChatThumb({
 /**
  * The thumbnail: bubbles above, a strip of pills along the bottom edge.
  *
- * A column rather than an overlay, and the four extra pixels of height (h-28 →
- * h-32) are what pays for the strip. Absolutely positioning the pills would
- * have put them under a two-line opener plus an answer bubble on exactly the
- * cards that have the most to say — the bubbles fill this box top-down and a
- * fixed height has no give. Giving the bubbles `flex-1` and the strip its own
+ * A column rather than an overlay, and the extra height (h-28 → h-32 → h-36)
+ * is what pays for the strip — the second bump when the pills went up to 12px,
+ * because taking those six pixels out of the bubbles instead would have
+ * clipped the answer bubble on any form whose opening line runs to two lines.
+ *
+ * Absolutely positioning the pills would have put them under a two-line opener
+ * plus an answer bubble on exactly the cards that have the most to say — the
+ * bubbles fill this box top-down and a fixed height has no give. Giving the bubbles `flex-1` and the strip its own
  * row means the strip is never covered and never pushed out; a bubble stack
  * that would have overrun clips against the strip instead of through it.
  */
@@ -643,7 +871,7 @@ function ThumbFrame({
 }) {
   return (
     <div
-      className="relative flex h-32 shrink-0 flex-col overflow-hidden p-3 pb-2"
+      className="relative flex h-36 shrink-0 flex-col overflow-hidden p-3 pb-2"
       style={style}
     >
       <div className="min-h-0 flex-1 overflow-hidden">{children}</div>

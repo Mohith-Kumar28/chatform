@@ -101,6 +101,24 @@ const FormListItem = FormSummary.extend({
   questionCount: z.number(),
   preview: z.array(z.string()),
   /**
+   * Responses that started and never finished.
+   *
+   * `responses` counts only `completed`, which is the number worth leading
+   * with — but on a form that is losing people it is also the smaller half of
+   * the story, and the card was showing "1 response" for a form thirty-seven
+   * people had opened. Same union the results filter calls "partial", so the
+   * count on the card and the count behind the filter cannot disagree.
+   */
+  partials: z.number(),
+  /**
+   * True when the draft has moved on from what respondents are answering.
+   *
+   * The builder has always known this; the grid did not, so the one place you
+   * look to see the state of everything could not tell you that half of it was
+   * live at a version you edited yesterday.
+   */
+  hasUnpublishedChanges: z.boolean(),
+  /**
    * Null when nobody has designed this form.
    *
    * Not "null when `theme_json` is absent": the builder writes a full theme the
@@ -260,12 +278,25 @@ formsRouter.get(
     // thousands, and the alternative is a denormalised summary column that
     // can disagree with the document it summarises.
     const rows = await c.env.DB.prepare(
-      `SELECT f.id, f.title, f.slug, f.status, f.updated_at, f.working_schema,
-              (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id AND s.status = 'completed') AS responses
-       FROM forms f WHERE f.workspace_id = ? AND f.deleted_at IS NULL ORDER BY f.updated_at DESC`,
+      `SELECT f.id, f.title, f.slug, f.status, f.updated_at, f.working_schema, fv.checksum AS active_checksum,
+              (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id AND s.status = 'completed') AS responses,
+              (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id AND s.status IN ('abandoned','in_progress','disqualified')) AS partials
+       FROM forms f LEFT JOIN form_versions fv ON fv.id = f.active_version_id
+       WHERE f.workspace_id = ? AND f.deleted_at IS NULL ORDER BY f.updated_at DESC`,
     )
       .bind(ws.wsId)
-      .all<{ id: string; title: string; slug: string; status: string; updated_at: number; responses: number; working_schema: string | null }>();
+      .all<{ id: string; title: string; slug: string; status: string; updated_at: number; responses: number; partials: number; working_schema: string | null; active_checksum: string | null }>();
+    /*
+      One entitlements lookup for the whole list, not one per card.
+
+      `hasUnpublishedChanges` needs the plan, because `stripForPublish` removes
+      gated settings and the same draft published on two plans is two different
+      live forms. Every row here belongs to one workspace and therefore one
+      organization, so the plan is a property of the request rather than of the
+      form — resolving it inside the map would ask the same question thirty
+      times for thirty identical answers.
+    */
+    const { planId } = await entitlementsFor(c);
     return c.json(
       (rows.results ?? []).map((r) => ({
         id: r.id,
@@ -273,7 +304,14 @@ formsRouter.get(
         slug: r.slug,
         status: r.status,
         responses: r.responses,
+        partials: r.partials,
         updatedAt: r.updated_at,
+        // A form with no document cannot have drifted from anything, and the
+        // fingerprint needs one — so absent working schema is "up to date"
+        // rather than a hash of the empty string.
+        hasUnpublishedChanges: r.working_schema
+          ? hasUnpublishedChanges({ workingSchema: r.working_schema, planId, activeChecksum: r.active_checksum })
+          : false,
         ...summariseDoc(r.working_schema),
       })),
     );

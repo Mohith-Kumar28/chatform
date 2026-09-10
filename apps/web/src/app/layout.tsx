@@ -98,6 +98,28 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       suppressHydrationWarning
       className={`${inter.variable} ${bricolage.variable} ${caveat.variable} ${jetbrains.variable}`}
     >
+      <head>
+        {/*
+          A shim for a name the bundler leaves behind in somebody else's script.
+          
+          `next-themes` builds its blocking theme script by serialising one of
+          its own functions, and the Cloudflare build runs that function through
+          esbuild with `keepNames`, which instruments it with `__name(fn, "fn")`
+          calls. The instrumentation travels into the serialised string, so the
+          browser gets a script that calls a helper only the server bundle has.
+          It threw `__name is not defined` on the first line of every
+          dynamically rendered page — the respondent form page most of all —
+          and everything after it, which is the part that actually applies the
+          theme, never ran. Statically prerendered pages were fine, because
+          their script was serialised at build time by plain Node.
+          
+          Defined here rather than fixed at the bundler: it is three tokens, it
+          runs before any script `next-themes` injects into the body, and it
+          neutralises the whole class rather than the one instance. `||=` so a
+          real `__name` is never overwritten.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: "window.__name||=function(f){return f}" }} />
+      </head>
       <body className="min-h-svh font-sans">
         {/*
           Who this is, once, for the whole site.

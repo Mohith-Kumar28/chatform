@@ -290,7 +290,7 @@ function SignInForm() {
           </p>
           <p className="mt-4 text-center">
             <Link href="/" className="text-muted-foreground text-xs hover:underline">
-              ← back to chatform.com
+              ← back to chatform.in
             </Link>
           </p>
         </CardContent>

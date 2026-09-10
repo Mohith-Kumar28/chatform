@@ -17,6 +17,7 @@ import {
   getGetApiFormsQueryKey,
   useDeleteApiFormsById,
   usePostApiFormsByIdUnpublish,
+  usePostApiFormsByIdPublish,
   useGetApiForms,
   useGetApiWorkspaces,
   usePatchApiFormsByIdWorkspace,
@@ -262,6 +263,35 @@ export function DashboardContent() {
     },
   });
 
+  /*
+   * Publishing from the grid, for the one case the grid can be sure about.
+   *
+   * The card only offers this on a form that is already live and has drifted,
+   * which is what makes it safe to do without opening the builder: the
+   * document has been published before, so it linted then, and what is being
+   * sent is edits to a form whose shape somebody already approved.
+   *
+   * The refusals are still real, though, and both are worth their own message
+   * rather than "Couldn't publish". A 422 is a lint error — something in the
+   * draft is broken and only the builder can show you where. A 402 is a plan
+   * limit. Either way the answer is "open it", so the toast says so instead of
+   * leaving somebody pressing a menu item that keeps failing.
+   */
+  const publish = usePostApiFormsByIdPublish<Error>({
+    mutation: {
+      onSuccess: () => {
+        void invalidateForms(queryClient);
+        toast.success("Changes published", {
+          description: "Respondents now see the version you last edited.",
+        });
+      },
+      onError: (e) =>
+        toast.error("Couldn't publish", {
+          description: `${e.message} — open the form to fix it.`,
+        }),
+    },
+  });
+
   const unpublish = usePostApiFormsByIdUnpublish<Error>({
     mutation: {
       onSuccess: () => {
@@ -493,6 +523,7 @@ export function DashboardContent() {
                   onUnpublish={
                     form.status === "published" ? () => setPendingOffline(form) : undefined
                   }
+                  onPublish={() => publish.mutate({ id: form.id })}
                   workspaces={workspaces}
                   currentWorkspaceId={currentWorkspaceId}
                   onMove={(workspaceId) => {

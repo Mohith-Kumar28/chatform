@@ -947,6 +947,8 @@ export type GetApiForms200Item = {
   updatedAt: number;
   questionCount: number;
   preview: string[];
+  partials: number;
+  hasUnpublishedChanges: boolean;
   theme: GetApiForms200ItemTheme;
 };
 
