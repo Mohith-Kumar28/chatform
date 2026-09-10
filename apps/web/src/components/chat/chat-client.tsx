@@ -25,7 +25,7 @@ import { asEmail } from "./respondent-hint";
 import { VerifyCard } from "./verify-card";
 import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
 import { useChat, type ChatMessage } from "./use-chat";
-import { KeyHint, SendRow, SkipButton, TextInput, keepFocus } from "./composers/primitives";
+import { KeyHint, SendRow, TextInput, keepFocus } from "./composers/primitives";
 import { inputSemanticsFor } from "./composers/input-semantics";
 import { forgetValue, rememberValue, suggestionsFor } from "./respondent-profile";
 import { QuestionAffordance } from "./question-affordance";
@@ -1920,8 +1920,6 @@ const Composer = memo(function Composer({
         </p>
       )}
 
-      {canSkip && <SkipButton onSkip={() => void sendAction("skip")} />}
-
       {/*
         Saved answers, in the shape a browser's own autofill uses.
 
@@ -1980,7 +1978,12 @@ const Composer = memo(function Composer({
         </div>
       )}
 
-      <SendRow onSend={submit} disabled={disabled || !text.trim()}>
+      <SendRow
+        onSend={submit}
+        disabled={disabled || !text.trim()}
+        canSkip={canSkip}
+        onSkip={() => void sendAction("skip")}
+      >
         <TextInput
           value={text}
           onChange={setText}
