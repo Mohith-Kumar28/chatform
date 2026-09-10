@@ -105,6 +105,8 @@ import type {
   PostApiWorkspaces200,
   PostApiWorkspacesBody,
   PutApiFormsByIdDoc200,
+  PutApiFormsByIdDoc409,
+  PutApiFormsByIdDoc429,
   PutApiFormsByIdDocBody
 } from '../generated.schemas';
 
@@ -865,12 +867,24 @@ export const usePatchApiFormsByIdWorkspace = <TError = PatchApiFormsByIdWorkspac
   status: 200
 }
 
+export type putApiFormsByIdDocResponse409 = {
+  data: PutApiFormsByIdDoc409
+  status: 409
+}
+
+export type putApiFormsByIdDocResponse429 = {
+  data: PutApiFormsByIdDoc429
+  status: 429
+}
+
 export type putApiFormsByIdDocResponseSuccess = (putApiFormsByIdDocResponse200) & {
   headers: Headers;
 };
-;
+export type putApiFormsByIdDocResponseError = (putApiFormsByIdDocResponse409 | putApiFormsByIdDocResponse429) & {
+  headers: Headers;
+};
 
-export type putApiFormsByIdDocResponse = (putApiFormsByIdDocResponseSuccess)
+export type putApiFormsByIdDocResponse = (putApiFormsByIdDocResponseSuccess | putApiFormsByIdDocResponseError)
 
 export const getPutApiFormsByIdDocUrl = (id: string,) => {
 
@@ -905,7 +919,7 @@ return customFetch<putApiFormsByIdDocResponse>(getPutApiFormsByIdDocUrl(id),
 
 
 
-export const getPutApiFormsByIdDocMutationOptions = <TError = unknown,
+export const getPutApiFormsByIdDocMutationOptions = <TError = PutApiFormsByIdDoc409 | PutApiFormsByIdDoc429,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdDoc>>, TError,PutApiFormsByIdDocMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdDoc>>, TError,PutApiFormsByIdDocMutationVariables, TContext> => {
 
@@ -934,13 +948,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PutApiFormsByIdDocMutationResult = NonNullable<Awaited<ReturnType<typeof putApiFormsByIdDoc>>>
     export type PutApiFormsByIdDocMutationBody = PutApiFormsByIdDocBody
-    export type PutApiFormsByIdDocMutationError = unknown
+    export type PutApiFormsByIdDocMutationError = PutApiFormsByIdDoc409 | PutApiFormsByIdDoc429
     export type PutApiFormsByIdDocMutationVariables = {id: string;data: PutApiFormsByIdDocBody}
 
     /**
  * @summary Update the working document (autosave target)
  */
-export const usePutApiFormsByIdDoc = <TError = unknown,
+export const usePutApiFormsByIdDoc = <TError = PutApiFormsByIdDoc409 | PutApiFormsByIdDoc429,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdDoc>>, TError,PutApiFormsByIdDocMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof putApiFormsByIdDoc>>,

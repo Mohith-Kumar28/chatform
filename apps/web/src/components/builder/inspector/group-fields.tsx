@@ -8,7 +8,6 @@ import {
   type GroupField,
   type GroupFieldKind,
 } from "@repo/form-schema";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -19,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Field, ListEditor } from "./fields";
+import { BufferedInput } from "@/components/ui/buffered-input";
 
 const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
 
@@ -91,7 +91,7 @@ export function GroupFieldsEditor({
         {block.fields.map((field, i) => (
           <div key={field.id} className="border-border space-y-1.5 rounded-lg border p-2">
             <div className="flex items-center gap-1.5">
-              <Input
+              <BufferedInput
                 value={field.label}
                 placeholder="Field name"
                 onFocus={(e) => {
@@ -100,12 +100,20 @@ export function GroupFieldsEditor({
                   if (field.label === "New field") e.target.select();
                 }}
                 maxLength={200}
-                onChange={(e) => update(i, { label: e.target.value }, `gflabel:${field.id}`)}
-                onBlur={(e) => {
-                  if (!UNNAMED_KEY.test(field.key)) return;
+                onCommit={(label) => {
+                  /*
+                    The label and the key it implies move together now.
+
+                    Deriving the key was a separate `onBlur` write, so naming a
+                    column produced two edits and two undo steps for one action —
+                    and the key was read off the DOM rather than from the value
+                    that was actually committed. `GroupField.key` is a regex the
+                    schema enforces, so the intermediate states of a name being
+                    typed were never valid to send anyway.
+                  */
                   const taken = new Set(block.fields.filter((_, j) => j !== i).map((f) => f.key));
-                  const key = keyFrom(e.target.value, taken, field.key);
-                  if (key !== field.key) update(i, { key });
+                  const key = UNNAMED_KEY.test(field.key) ? keyFrom(label, taken, field.key) : field.key;
+                  update(i, key === field.key ? { label } : { label, key }, `gflabel:${field.id}`);
                 }}
                 className="h-8 min-w-0 flex-1"
               />

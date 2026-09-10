@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import { Bot, BookOpen, Shield, Target, Coins } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingGroup, SettingRow } from "@/components/ui/setting-row";
 import {  NumberField, SwitchField } from "../inspector/fields";
 import { useBuilderStore } from "@/stores/builder-store";
 import { KnowledgePanel } from "@/components/knowledge/knowledge-panel";
+import { BufferedInput, BufferedTextarea } from "@/components/ui/buffered-input";
 
 const SECTIONS = [
   { value: "persona", label: "Persona", icon: Bot },
@@ -83,10 +82,10 @@ export function AgentTab() {
             </p>
 
             <SettingRow label="Name" description="Shown in the chat header." stacked>
-              <Input
+              <BufferedInput
                 value={agent.displayName ?? ""}
                 placeholder={doc.title}
-                onChange={(e) => patch({ displayName: e.target.value || undefined }, "agentName")}
+                onCommit={(v) => patch({ displayName: v || undefined }, "agentName")}
               />
             </SettingRow>
 
@@ -120,12 +119,12 @@ export function AgentTab() {
               description="Who is this, and how do they talk?"
               stacked
             >
-              <Textarea
+              <BufferedTextarea
                 rows={4}
                 maxLength={2000}
                 value={agent.personaPrompt ?? ""}
                 placeholder="You're Sam from the founding team. Warm, direct, allergic to corporate speak. You've talked to hundreds of customers."
-                onChange={(e) => patch({ personaPrompt: e.target.value || undefined }, "persona")}
+                onCommit={(v) => patch({ personaPrompt: v || undefined }, "persona")}
               />
             </SettingRow>
           </SettingGroup>
@@ -134,12 +133,12 @@ export function AgentTab() {
         {section === "goal" && (
           <SettingGroup>
             <SettingRow label="Goal" stacked>
-              <Textarea
+              <BufferedTextarea
                 rows={3}
                 maxLength={1000}
                 value={agent.goal ?? ""}
                 placeholder="Qualify the lead and, if they're a fit, get them to book a demo."
-                onChange={(e) => patch({ goal: e.target.value || undefined }, "goal")}
+                onCommit={(v) => patch({ goal: v || undefined }, "goal")}
               />
             </SettingRow>
             <SettingRow
@@ -147,12 +146,12 @@ export function AgentTab() {
               description="When to dig deeper, when to move on."
               stacked
             >
-              <Textarea
+              <BufferedTextarea
                 rows={3}
                 maxLength={1000}
                 value={agent.successCriteria ?? ""}
                 placeholder="We know their team size, budget range and timeline — and they left feeling heard, not processed."
-                onChange={(e) => patch({ successCriteria: e.target.value || undefined }, "success")}
+                onCommit={(v) => patch({ successCriteria: v || undefined }, "success")}
               />
             </SettingRow>
           </SettingGroup>
@@ -183,20 +182,20 @@ export function AgentTab() {
               }
             />
             <SettingRow label="If it must decline" stacked>
-              <Input
+              <BufferedInput
                 value={agent.guardrails.refusalMessage}
                 maxLength={500}
-                onChange={(e) => patchGuards({ refusalMessage: e.target.value })}
+                onCommit={(v) => patchGuards({ refusalMessage: v })}
               />
             </SettingRow>
             <SettingRow label="Never discuss" description="One topic per line." stacked>
-              <Textarea
+              <BufferedTextarea
                 rows={3}
                 value={agent.guardrails.forbiddenTopics.join("\n")}
                 placeholder={"competitor pricing\nlegal advice"}
-                onChange={(e) =>
+                onCommit={(v) =>
                   patchGuards({
-                    forbiddenTopics: e.target.value
+                    forbiddenTopics: v
                       .split("\n")
                       .map((t) => t.trim())
                       .filter(Boolean)

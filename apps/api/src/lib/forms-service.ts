@@ -2,6 +2,7 @@ import { FormDoc, lintFormDoc, hasErrors, migrateFormDoc, type FormDoc as FormDo
 import type { Bindings } from "../env.js";
 import { stripForPublish, checkDocLimits } from "./doc-entitlements.js";
 import { limitReached, type Entitlements } from "@repo/entitlements";
+import { describeSchemaError, type ApiIssue } from "./api-error.js";
 import {
   parseStoredDoc,
   recordDocChange,
@@ -30,18 +31,16 @@ export interface DocIssue {
 
 export type UpdateDocResult =
   | { ok: true; issues: DocIssue[]; doc: FormDocT }
-  | { ok: false; status: 422; code: "invalid_doc"; message: string };
+  | { ok: false; status: 422; code: "invalid_doc"; message: string; issues: ApiIssue[] };
 
 /** Validate and migrate an incoming document. Never store one that has not been through this. */
 export function parseDoc(raw: unknown): UpdateDocResult {
   const parsed = FormDoc.safeParse(migrateFormDoc(raw));
   if (!parsed.success) {
-    return {
-      ok: false,
-      status: 422,
-      code: "invalid_doc",
-      message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
-    };
+    // The sentence and the per-field detail are separate audiences; see
+    // `describeSchemaError`. `message` no longer carries a dotted path.
+    const { message, issues } = describeSchemaError(parsed.error);
+    return { ok: false, status: 422, code: "invalid_doc", message, issues };
   }
   return { ok: true, issues: lintFormDoc(parsed.data) as DocIssue[], doc: parsed.data };
 }

@@ -168,10 +168,24 @@ export function BuildToolbar() {
 function SaveStatusCloud() {
   const saveState = useBuilderStore((s) => s.saveState);
   const saveError = useBuilderStore((s) => s.saveError);
+  const docIssues = useBuilderStore((s) => s.docIssues);
   const lastSavedAt = useBuilderStore((s) => s.lastSavedAt);
 
   const { icon, className, label } = (() => {
     switch (saveState) {
+      /*
+        Held back rather than failed. Nothing is in flight and nothing is being
+        retried — the document has a value in it that cannot be stored, and it
+        will keep having one until the field is edited. The tooltip says which.
+      */
+      case "invalid":
+        return {
+          icon: <CloudAlert className="size-4" />,
+          className: "text-[var(--warning)]",
+          label: docIssues.length
+            ? `Not saved — ${docIssues.map((i) => i.message).join("; ")}`
+            : "Not saved — one field needs fixing",
+        };
       case "saving":
         return {
           icon: <Loader2 className="size-4 animate-spin" />,

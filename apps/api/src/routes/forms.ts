@@ -11,6 +11,8 @@ import { stripForPublish, checkDocLimits } from "../lib/doc-entitlements.js";
 import { publishFingerprint, hasUnpublishedChanges } from "../lib/publish-state.js";
 import { afterResponse, parseStoredDoc, recordDocChange, recordFormEvent, stampVersionStatement } from "../lib/form-activity.js";
 import { audit } from "../lib/gate-log.js";
+import { apiError, describeSchemaError } from "../lib/api-error.js";
+import { saveLimit } from "../lib/ratelimit.js";
 import { limitReached } from "@repo/entitlements";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
 
@@ -18,6 +20,16 @@ export const formsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<Aut
 
 // ─── middleware: session, then organization, then per-form ownership ───
 formsRouter.use("*", requireSession);
+/*
+  Ahead of `requireOrg`, and only on the autosave.
+
+  It needs the session to know whose bucket to count against, and it wants to sit
+  in front of everything after that: the org lookup, the form lookup and the role
+  read are three indexed D1 point reads that a client stuck in a render loop
+  should not be able to spend on our behalf. Every other route here is driven by
+  a person clicking something, and is limited by how fast a person can click.
+*/
+formsRouter.use("/forms/:id/doc", saveLimit);
 formsRouter.use("*", requireOrg);
 // Every `/forms/:id...` route is org-scoped: a form id belonging to another
 // tenant 404s here and never reaches a handler.
@@ -50,6 +62,8 @@ const FormSummary = z.object({
 const FormFull = FormSummary.extend({
   workingSchema: z.unknown(),
   activeVersion: z.number().nullable(),
+  /** The draft revision this document is at. Stated back on save to detect a clash. */
+  workingRevision: z.number(),
   /** When the live version went live. Null until the form is published once. */
   publishedAt: z.number().nullable(),
   /** True when the draft differs from what respondents are currently answering. */
@@ -185,6 +199,15 @@ const CreateFormBody = z.object({
 
 const UpdateDocBody = z.object({
   doc: z.unknown(),
+  /**
+   * The revision this edit was made against, for optimistic concurrency.
+   *
+   * Optional, and deliberately so: a builder that loaded before this shipped
+   * sends nothing, and a save with no stated revision is applied unconditionally
+   * rather than refused. That is the old behaviour, kept for exactly as long as
+   * a stale tab can live, instead of a deploy that 409s everyone at once.
+   */
+  baseRevision: z.number().int().nonnegative().optional(),
   theme: z.unknown().optional(),
   settings: z.unknown().optional(),
 });
@@ -274,7 +297,8 @@ formsRouter.post(
     if (body.doc !== undefined) {
       const parsed = FormDoc.safeParse(body.doc);
       if (!parsed.success) {
-        return c.json({ error: { code: "invalid_doc", message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") } }, 422);
+        const described = describeSchemaError(parsed.error);
+        return apiError(c, 422, "invalid_doc", described.message, { issues: described.issues });
       }
       workingSchema = JSON.stringify(parsed.data);
     } else {
@@ -298,7 +322,7 @@ formsRouter.post(
         actor: { type: "user", id: userId },
         source: body.doc !== undefined ? "template" : "builder",
       }).catch((err) => console.error("form_activity_failed", err)),);
-    return c.json({ id, title: body.title, slug, status: "draft", responses: 0, updatedAt: Date.now(), workingSchema: JSON.parse(workingSchema), activeVersion: null, publishedAt: null, hasUnpublishedChanges: false });
+    return c.json({ id, title: body.title, slug, status: "draft", responses: 0, updatedAt: Date.now(), workingSchema: JSON.parse(workingSchema), activeVersion: null, workingRevision: 0, publishedAt: null, hasUnpublishedChanges: false });
   },
 );
 
@@ -354,7 +378,7 @@ formsRouter.get(
   async (c) => {
     const id = c.get("form")!.id;
     const row = await c.env.DB.prepare(
-      `SELECT f.id, f.title, f.slug, f.status, f.working_schema, f.updated_at,
+      `SELECT f.id, f.title, f.slug, f.status, f.working_schema, f.updated_at, f.working_revision,
               fv.version, fv.published_at, fv.checksum
        FROM forms f LEFT JOIN form_versions fv ON fv.id = f.active_version_id
        WHERE f.id = ? AND f.deleted_at IS NULL`,
@@ -367,6 +391,7 @@ formsRouter.get(
         status: string;
         working_schema: string;
         updated_at: number;
+        working_revision: number;
         version: number | null;
         published_at: number | null;
         checksum: string | null;
@@ -387,6 +412,14 @@ formsRouter.get(
       workingSchema: normalized.success ? normalized.data : rawDoc,
       activeVersion: row.version,
       /*
+        The draft's own counter, which the editor states back on every save.
+
+        Not `activeVersion`: that names the published version and does not move
+        when a draft is saved, so an editor holding it could never have noticed
+        another tab. The builder store's `baseVersion` was being fed from it.
+      */
+      workingRevision: row.working_revision,
+      /*
         The publish clock, which is not the save clock. Autosave answers "is my work
         safe"; these answer "is my work live", and the builder header needs both because
         on a published form they are routinely different.
@@ -404,13 +437,21 @@ formsRouter.get(
 formsRouter.put(
   "/forms/:id/doc",
   validator("json", UpdateDocBody),
-  describeRoute({ tags: ["dashboard"], summary: "Update the working document (autosave target)", responses: { 200: { description: "Saved", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean(), issues: z.array(z.any()) })) } } } } }),
+  describeRoute({ tags: ["dashboard"], summary: "Update the working document (autosave target)", responses: { 200: { description: "Saved", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean(), issues: z.array(z.any()), revision: z.number() })) } } }, 409: { description: "Edited elsewhere since `baseRevision`", content: { "application/json": { schema: resolver(ErrorEnvelope) } } }, 429: { description: "Too many saves", content: { "application/json": { schema: resolver(ErrorEnvelope) } } } } }),
   async (c) => {
     const id = c.get("form")!.id;
     const body = c.req.valid("json");
     const parsed = FormDoc.safeParse(migrateFormDoc(body.doc));
     if (!parsed.success) {
-      return c.json({ error: { code: "invalid_doc", message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") } }, 422);
+      /*
+        The path stays in `issues[]`, where the builder can use it to put the
+        message under the control that owns it; the sentence in `message` never
+        contains one. The two used to be the same string, and the string was the
+        path — so someone typing in a box labelled "Notification emails" was
+        shown `settings.onComplete.notificationEmails.0: Invalid email address`.
+      */
+      const { message, issues } = describeSchemaError(parsed.error);
+      return apiError(c, 422, "invalid_doc", message, { issues });
     }
     const doc = await withHashedPassword(parsed.data);
     const issues = lintFormDoc(doc);
@@ -424,10 +465,11 @@ formsRouter.put(
       per save and diffing later — would store a hundred near-identical copies of a form
       to answer a question a sentence answers.
     */
-    const previous = parseStoredDoc(
-      (await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`).bind(id).first<{ working_schema: string }>())
-        ?.working_schema,
-    );
+    const stored = await c.env.DB.prepare(`SELECT working_schema, working_revision FROM forms WHERE id = ?`)
+      .bind(id)
+      .first<{ working_schema: string; working_revision: number }>();
+    const previous = parseStoredDoc(stored?.working_schema);
+    const currentRevision = stored?.working_revision ?? 0;
 
     /*
       The name travels with the document.
@@ -442,9 +484,39 @@ formsRouter.put(
       The slug is deliberately left alone: it is the public address, and a
       rename must not break a link that is already out there.
     */
-    await c.env.DB.prepare(`UPDATE forms SET working_schema = ?, title = ?, updated_at = ? WHERE id = ?`)
-      .bind(JSON.stringify(doc), doc.title, Date.now(), id)
-      .run();
+    /*
+      Conditional on the revision the editor was looking at, so the second of two
+      tabs is told rather than obeyed.
+
+      The write used to be unconditional, which made the save a race with no
+      loser's consolation: whoever called last won, and the other author's work
+      left no trace but a diff in the activity timeline. The counter is bumped in
+      the same statement that does the write, so there is no window between
+      checking and claiming.
+
+      A caller that states no revision is applied unconditionally, which is what
+      keeps a tab opened before this deployed — and the `/v1` API, which has no
+      editor to hold one — working exactly as before.
+    */
+    const expected = body.baseRevision;
+    const sql =
+      `UPDATE forms SET working_schema = ?, title = ?, updated_at = ?, working_revision = working_revision + 1` +
+      ` WHERE id = ?${expected === undefined ? "" : " AND working_revision = ?"}`;
+    const bindings: (string | number)[] = [JSON.stringify(doc), doc.title, Date.now(), id];
+    if (expected !== undefined) bindings.push(expected);
+    const written = await c.env.DB.prepare(sql).bind(...bindings).run();
+
+    if (expected !== undefined && written.meta.changes === 0) {
+      /*
+        The document itself is not in this body. It is up to ~80KB on a large
+        form, and an error envelope is the wrong place to put one — the builder
+        already holds a query for it and refetches on the way into the dialog,
+        which costs one request on a path that should be rare.
+      */
+      return apiError(c, 409, "revision_conflict", "Someone else has edited this form since you opened it", {
+        revision: currentRevision,
+      });
+    }
 
     /*
       Recorded after the response is on its way. Autosave latency is felt as the editor
@@ -460,7 +532,9 @@ formsRouter.put(
         source: "builder",
       }).catch((err) => console.error("form_activity_failed", err)),);
 
-    return c.json({ ok: true, issues });
+    // The revision this save produced. The editor holds it and states it on the
+    // next one, which is what makes the next conflict detectable.
+    return c.json({ ok: true, issues, revision: currentRevision + 1 });
   },
 );
 

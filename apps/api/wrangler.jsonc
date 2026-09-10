@@ -195,6 +195,18 @@
         "limit": 12,
         "period": 60
       }
+    },
+    {
+      "name": "RATE_LIMIT_SAVE",
+      "namespace_id": "1006",
+      // The builder's autosave, keyed by author. The editor checkpoints at most
+      // every ten seconds per tab, so someone with five forms open still sits at
+      // a quarter of this — it bounds a client stuck in a loop, not a person
+      // working. `period` may only be 10 or 60; a minute is the useful one here.
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
     }
   ],
   "triggers": {

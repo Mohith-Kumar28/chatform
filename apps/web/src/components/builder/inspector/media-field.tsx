@@ -5,9 +5,9 @@ import { FileText, Film, ImageIcon, Loader2, Paperclip, Trash2 } from "lucide-re
 import { toast } from "sonner";
 import type { Block, BlockMedia } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { API_ORIGIN } from "@/lib/api/mutator";
+import { BufferedInput } from "@/components/ui/buffered-input";
 
 
 /**
@@ -109,10 +109,10 @@ export function MediaField({
       </div>
 
       {media.kind === "image" && (
-        <Input
+        <BufferedInput
           value={media.alt ?? ""}
           placeholder="Describe the image"
-          onChange={(e) => onChange({ ...media, alt: e.target.value || undefined })}
+          onCommit={(v) => onChange({ ...media, alt: v || undefined })}
           className={cn("h-8", !media.alt && "border-[var(--warning)]/50")}
         />
       )}

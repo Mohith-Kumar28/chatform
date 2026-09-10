@@ -15,6 +15,7 @@ import { useEntitlements } from "@/hooks/use-entitlements";
 import { useUpgrade } from "@/components/billing/gate";
 import { useActiveOrg } from "@/hooks/use-active-org";
 import { FollowUpAddressDialog } from "./followup-address-dialog";
+import { useBuilderStore } from "@/stores/builder-store";
 
 /**
  * The moment to mention follow-ups, and the only honest one.
@@ -301,7 +302,23 @@ export function FollowUpNudge({
         },
       };
 
-      await saveDoc.mutateAsync({ id: formId as never, data: { doc: next } as never });
+      /*
+        The second writer to `PUT /forms/:id/doc`, and the only one that does not
+        go through the builder store.
+
+        It has to state a revision like every other save, or it silently
+        overwrites whatever the builder has open — and, having written, it has to
+        put the new revision and document back into the store, or the *next* edit
+        made in the builder conflicts with this one and the author is asked to
+        resolve a clash with themselves.
+      */
+      const store = useBuilderStore.getState();
+      const mine = store.formId === formId ? store.revision : null;
+      const result = (await saveDoc.mutateAsync({
+        id: formId as never,
+        data: { doc: next, ...(mine === null ? {} : { baseRevision: mine }) } as never,
+      })) as { revision?: number } | undefined;
+      if (store.formId === formId) store.hydrate(formId, next, result?.revision ?? null, true);
       saved = true;
       if (shipNow) await publish.mutateAsync({ id: formId as never });
 

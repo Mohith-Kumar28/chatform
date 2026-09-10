@@ -30,7 +30,7 @@ async function bucketFor(presented: string): Promise<string> {
 
 function tooMany(
   c: Parameters<MiddlewareHandler>[0],
-  { seconds, scope, policy }: { seconds: number; scope: "burst" | "ip"; policy?: string },
+  { seconds, scope, policy }: { seconds: number; scope: "burst" | "ip" | "user"; policy?: string },
 ) {
   c.header("retry-after", String(seconds));
   // Only when there is one to state. This used to be set unconditionally, with
@@ -137,6 +137,37 @@ export const respondentAuthLimit: MiddlewareHandler<{ Bindings: Bindings }> = as
   const ip = c.req.header("cf-connecting-ip");
   if (await limited(c, c.env.RATE_LIMIT_P_AUTH, [`pa:${ip}`])) {
     return tooMany(c, { seconds: 60, scope: "ip", policy: "12;w=60" });
+  }
+  await next();
+};
+
+/**
+ * The builder's autosave, keyed by the author rather than by address.
+ *
+ * Per user because that is the unit that misbehaves: an office behind one
+ * address is many authors who must not exhaust each other, and a runaway tab is
+ * one author who should not be able to. Mounted ahead of `requireOrg` so a
+ * refusal costs nothing — the three guard reads that follow are the expense this
+ * limit exists to avoid paying for a client stuck in a loop.
+ *
+ * 120 a minute is deliberately far above the ceiling the editor itself imposes:
+ * autosave checkpoints at most every ten seconds per tab, so a person with five
+ * forms open still sits at a quarter of this. It is a bound on a bug, not a
+ * budget for a user, and — like every binding here — it is per-colo and
+ * eventually consistent, so it is not a number to state as a promise.
+ *
+ * Keyed through `limited`, which is what keeps it inert off the Cloudflare edge:
+ * `vitest.config.ts` points Miniflare at this same `wrangler.jsonc`, so a
+ * limiter that counted without a `cf-connecting-ip` would start failing the test
+ * suite on its own fixtures.
+ */
+export const saveLimit: MiddlewareHandler<{
+  Bindings: Bindings;
+  Variables: Partial<GuardVars>;
+}> = async (c, next) => {
+  const userId = c.get("userId");
+  if (userId && (await limited(c, c.env.RATE_LIMIT_SAVE, [`save:${userId}`]))) {
+    return tooMany(c, { seconds: 60, scope: "user", policy: "120;w=60" });
   }
   await next();
 };

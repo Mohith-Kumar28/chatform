@@ -53,7 +53,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { BufferedInput, BufferedTextarea } from "@/components/ui/buffered-input";
 import {
   AlertTriangle,
   LayoutGrid,
@@ -1750,11 +1750,11 @@ function EndingInspector({
 
       <div className="space-y-1.5">
         <Label>Title</Label>
-        <Input value={ending.title} onChange={(e) => patch({ title: e.target.value })} />
+        <BufferedInput value={ending.title} onCommit={(v) => patch({ title: v })} />
       </div>
       <div className="space-y-1.5">
         <Label>{screenOut ? "What they can do about it" : "Message"}</Label>
-        <Textarea rows={3} value={ending.bodyMd} onChange={(e) => patch({ bodyMd: e.target.value })} />
+        <BufferedTextarea rows={3} value={ending.bodyMd} onCommit={(v) => patch({ bodyMd: v })} />
       </div>
 
       {screenOut && (
@@ -1921,20 +1921,20 @@ function ConditionValueInput({
   }
   if (["rating", "nps", "opinion_scale", "number"].includes(block.type)) {
     return (
-      <Input
+      <BufferedInput
         type="number"
         className={inputClass}
         value={String(value ?? "")}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onCommit={(v) => onChange(Number(v))}
         placeholder="number"
       />
     );
   }
   return (
-    <Input
+    <BufferedInput
       className={inputClass}
       value={String(value ?? "")}
-      onChange={(e) => onChange(e.target.value)}
+      onCommit={(v) => onChange(v)}
       placeholder="value"
     />
   );

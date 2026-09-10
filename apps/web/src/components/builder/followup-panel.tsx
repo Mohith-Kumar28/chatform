@@ -3,9 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, MessageCircle, X } from "lucide-react";
 import type { FormDoc } from "@repo/form-schema";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -17,6 +15,7 @@ import { useActiveOrg } from "@/hooks/use-active-org";
 import { cn } from "@/lib/utils";
 import { FollowUpAddressDialog } from "./followup-address-dialog";
 import { FollowUpEmailPreview } from "./followup-email-preview";
+import { BufferedInput, BufferedTextarea } from "@/components/ui/buffered-input";
 
 type FollowUp = FormDoc["settings"]["followUp"];
 type Step = FollowUp["steps"][number];
@@ -168,11 +167,11 @@ export function FollowUpPanel({
         {followUp.enabled && hasAddress && (
           <div className="flex items-center justify-between gap-4 border-t px-4 py-3">
             <p className="text-sm">Send replies to</p>
-            <Input
+            <BufferedInput
               className="h-8 max-w-56"
               value={followUp.replyTo ?? ""}
               placeholder="you@company.com"
-              onChange={(e) => patch({ replyTo: e.target.value || undefined })}
+              onCommit={(v) => patch({ replyTo: v || undefined })}
             />
           </div>
         )}
@@ -199,11 +198,11 @@ export function FollowUpPanel({
                       ))}
                     </SelectContent>
                   </Select>
-                  <Input
+                  <BufferedInput
                     className="h-8 flex-1 border-0 bg-transparent px-2 text-sm shadow-none"
                     value={step.subject}
                     placeholder="Subject"
-                    onChange={(e) => setStep(i, { subject: e.target.value })}
+                    onCommit={(v) => setStep(i, { subject: v })}
                   />
                   <button
                     type="button"
@@ -231,11 +230,11 @@ export function FollowUpPanel({
                 </div>
                 {expanded === i && (
                   <div className="space-y-2 px-3 pb-3 sm:pl-[10.25rem]">
-                    <Textarea
+                    <BufferedTextarea
                       className="min-h-16 text-sm"
                       value={step.bodyMd}
                       placeholder="Message"
-                      onChange={(e) => setStep(i, { bodyMd: e.target.value })}
+                      onCommit={(v) => setStep(i, { bodyMd: v })}
                     />
                     <FollowUpEmailPreview
                       subject={step.subject}

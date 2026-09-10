@@ -1,0 +1,15 @@
+-- A revision counter for the working document, so two editors stop overwriting each other.
+--
+-- The autosave wrote `UPDATE forms SET working_schema = ?` with no guard at all: whoever
+-- saved last won, and the other tab's work was gone with no error anywhere. `active_version_id`
+-- could not stand in for this — it names the published version and does not move when a draft
+-- is saved — so there was nothing on the row to compare against.
+--
+-- Hand-written, as 0021 and 0022 were before it: `drizzle-kit generate` diffs against its own
+-- meta snapshot, which does not know about the hand-added tables, so it re-emits them as
+-- CREATEs and the first `table already exists` fails the run. Only the new column belongs here.
+--
+-- Defaulting to 0 is what makes this safe to apply under live traffic: every existing row
+-- starts at 0, and a builder that hydrated before the deploy sends no revision at all, which
+-- the handler reads as "unconditional" rather than as a conflict.
+ALTER TABLE `forms` ADD `working_revision` integer DEFAULT 0 NOT NULL;

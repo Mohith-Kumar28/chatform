@@ -214,6 +214,16 @@ export const forms = sqliteTable(
     status: text("status").notNull().default("draft"),
     activeVersionId: text("active_version_id"),
     workingSchema: text("working_schema").notNull(),
+    /**
+     * Bumped on every accepted save, and compared before each one.
+     *
+     * Distinct from `activeVersionId`, which names the published version and
+     * does not move when a draft is saved — so it could never have served as a
+     * concurrency token, though the builder store's `baseVersion` was being fed
+     * from it. This is the draft's own counter, and the only thing standing
+     * between two open tabs and one of them silently losing its work.
+     */
+    workingRevision: integer("working_revision").notNull().default(0),
     themeJson: text("theme_json"),
     settingsJson: text("settings_json"),
     ogImageR2Key: text("og_image_r2_key"),

@@ -20,6 +20,8 @@ import { invalidateForms } from "@/lib/query-keys";
 import { useBuilderStore } from "@/stores/builder-store";
 import { useAutosave } from "@/hooks/use-autosave";
 import { BuilderHeader } from "./builder-header";
+import { ConflictDialog } from "./conflict-dialog";
+import { clearLocalDraft, readLocalDraft } from "@/lib/local-draft";
 import { PreviewDialog } from "./preview-dialog";
 import { PublishStrippedDialog, type StrippedSetting } from "./publish-stripped-dialog";
 import { UnpublishedChangesDialog } from "./unpublished-changes-dialog";
@@ -47,10 +49,11 @@ export function BuilderShell({
   const doc = useBuilderStore((s) => s.doc);
   const edit = useBuilderStore((s) => s.edit);
   const hydrate = useBuilderStore((s) => s.hydrate);
+  const restoreDraft = useBuilderStore((s) => s.restoreDraft);
   const markPublished = useBuilderStore((s) => s.markPublished);
   const loadedId = useBuilderStore((s) => s.formId);
 
-  const { flush } = useAutosave(formId);
+  const { flush, retry } = useAutosave(formId);
   const [publishing, setPublishing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   /**
@@ -70,6 +73,8 @@ export function BuilderShell({
         status: string;
         workingSchema: unknown;
         activeVersion: number | null;
+        /** The draft's own counter, stated back on every save to detect a clash. */
+        workingRevision: number;
         publishedAt: number | null;
         hasUnpublishedChanges: boolean;
       }
@@ -125,8 +130,36 @@ export function BuilderShell({
       was published from, including the plan it was published on. That is the only place
       the answer can be exact, so it seeds the store rather than being recomputed here.
     */
-    hydrate(row.id, parsed.data, row.activeVersion, row.hasUnpublishedChanges);
-  }, [row, loadedId, hydrate]);
+    hydrate(row.id, parsed.data, row.workingRevision, row.hasUnpublishedChanges);
+
+    /*
+      Work that never reached the server, from a tab that closed before it could.
+
+      Restored rather than offered, because it is the author's own unsaved work
+      and discarding it by default is the one outcome nobody wants. Only when the
+      draft was based on the revision the server is still at: an older one means
+      somebody has saved since, and replaying stale edits over that would be
+      guessing at a merge.
+    */
+    void readLocalDraft(row.id).then((draft) => {
+      if (!draft || draft.revision !== row.workingRevision) return;
+      if (useBuilderStore.getState().formId !== row.id) return;
+      if (JSON.stringify(draft.doc) === JSON.stringify(parsed.data)) return;
+      const recovered = FormDoc.safeParse(migrateFormDoc(draft.doc));
+      if (!recovered.success) return;
+      restoreDraft(recovered.data);
+      toast("Unsaved changes restored", {
+        description: "This tab closed before your last few edits were saved.",
+        action: {
+          label: "Discard",
+          onClick: () => {
+            clearLocalDraft(row.id);
+            hydrate(row.id, parsed.data, row.workingRevision, row.hasUnpublishedChanges);
+          },
+        },
+      });
+    });
+  }, [row, loadedId, hydrate, restoreDraft]);
 
   /**
    * Copying the live link, shared by the header button and ⇧⌘C.
@@ -268,6 +301,7 @@ export function BuilderShell({
             onPreview={() => setPreviewOpen(true)}
             onCopyLink={copyLink}
             onRename={doc ? (title) => edit((d) => { d.title = title; }, "doc:title") : undefined}
+            onRetrySave={retry}
           />
         )}
 
@@ -307,6 +341,8 @@ export function BuilderShell({
         )}
 
         <PublishStrippedDialog stripped={stripped} onClose={() => setStripped([])} />
+
+        <ConflictDialog />
 
         <UnpublishedChangesDialog
           open={guard.pending !== null}

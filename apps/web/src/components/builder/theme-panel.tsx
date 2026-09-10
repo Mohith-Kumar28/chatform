@@ -1,12 +1,12 @@
 "use client";
 
 import { FormDoc, ThemeDoc } from "@repo/form-schema";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { BrandField } from "./brand-field";
 import { LockedControl } from "@/components/billing/gate";
+import { BufferedInput } from "@/components/ui/buffered-input";
 
 type Theme = FormDoc["theme"];
 
@@ -84,9 +84,10 @@ export function ThemePanel({
   onChange,
 }: {
   theme: Theme;
-  onChange: (next: Theme) => void;
+  /** `coalesceKey` merges a burst of changes to one control into a single undo step. */
+  onChange: (next: Theme, coalesceKey?: string) => void;
 }) {
-  const patch = (p: Partial<Theme>) => onChange({ ...theme, ...p });
+  const patch = (p: Partial<Theme>, coalesceKey?: string) => onChange({ ...theme, ...p }, coalesceKey);
 
   return (
     <div className="w-full space-y-6">
@@ -128,13 +129,27 @@ export function ThemePanel({
                     id={`theme-${key}`}
                     type="color"
                     value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#ffffff"}
-                    onChange={(e) => patch({ [key]: e.target.value } as Partial<Theme>)}
+                    /*
+                      The one genuinely continuous control in the builder: the
+                      native picker fires this repeatedly as the swatch is
+                      dragged. Left uncoalesced, one drag across the spectrum
+                      filled the undo ring with dozens of near-identical steps,
+                      so ⌘Z afterwards walked back through the gradient one shade
+                      at a time instead of undoing "changed the colour".
+
+                      The document still updates on every move, deliberately —
+                      that is what makes the preview follow your thumb — and it
+                      no longer costs anything on the wire, because autosave now
+                      fires once the drag has been over for three seconds rather
+                      than at every pause within it.
+                    */
+                    onChange={(e) => patch({ [key]: e.target.value } as Partial<Theme>, `theme:${key}`)}
                     className="size-8 shrink-0 cursor-pointer rounded-md border"
                     aria-label={label}
                   />
-                  <Input
+                  <BufferedInput
                     value={value}
-                    onChange={(e) => patch({ [key]: e.target.value } as Partial<Theme>)}
+                    onCommit={(v) => patch({ [key]: v } as Partial<Theme>, `theme:${key}`)}
                     placeholder="#FD6F29"
                     className="font-mono text-xs"
                   />
@@ -168,19 +183,19 @@ export function ThemePanel({
         <LockedControl feature="custom_fonts" className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="font-heading">Heading</Label>
-            <Input
+            <BufferedInput
               id="font-heading"
               value={theme.fontHeading}
-              onChange={(e) => patch({ fontHeading: e.target.value })}
+              onCommit={(v) => patch({ fontHeading: v }, "theme:fontHeading")}
               placeholder="Bricolage Grotesque"
             />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="font-body">Body</Label>
-            <Input
+            <BufferedInput
               id="font-body"
               value={theme.fontBody}
-              onChange={(e) => patch({ fontBody: e.target.value })}
+              onCommit={(v) => patch({ fontBody: v }, "theme:fontBody")}
               placeholder="Inter"
             />
           </div>

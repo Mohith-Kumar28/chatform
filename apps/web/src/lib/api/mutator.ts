@@ -61,9 +61,26 @@ export async function throwApiError(res: Response, url: string): Promise<never> 
     const raw = await res.text();
     let message = `Request failed: ${res.status}`;
     let gate: GateError | null = null;
+    /*
+      Per-field detail, kept apart from the sentence.
+
+      The builder needs the path to put a schema complaint under the control that
+      owns it; collapsing them into `message` — which is what the doc routes used
+      to send — leaves the caller with a string and nowhere to put it.
+    */
+    let issues: ApiIssue[] = [];
     try {
-      const parsed = JSON.parse(raw) as { error?: { message?: string; issues?: { message: string }[] } };
+      const parsed = JSON.parse(raw) as {
+        error?: { message?: string; issues?: { message: string; path?: string; code?: string }[] };
+      };
       const err = parsed.error;
+      if (err && Array.isArray(err.issues)) {
+        issues = err.issues.map((i) => ({
+          path: i.path ?? "",
+          code: i.code ?? "invalid",
+          message: i.message,
+        }));
+      }
       if (typeof err === "string") message = err;
       else if (err && "message" in err && err.message) message = err.message;
       else if (err && "issues" in err && Array.isArray(err.issues)) message = err.issues.map((i) => i.message).join("; ");
@@ -87,8 +104,17 @@ export async function throwApiError(res: Response, url: string): Promise<never> 
     }
     // A gate denial is expected product behaviour, not a fault worth a console error.
     if (!gate) console.error(`[api] ${res.status} ${url}`, message);
-    throw new ApiError(message, res.status, gate);
+    const retryAfter = Number(res.headers.get("retry-after"));
+    throw new ApiError(message, res.status, gate, issues, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null);
   }
+}
+
+/** One field-level complaint from the API's error envelope. */
+export interface ApiIssue {
+  /** Dotted path into the submitted document, when the failure was a schema one. */
+  path: string;
+  code: string;
+  message: string;
 }
 
 export class ApiError extends Error {
@@ -97,6 +123,10 @@ export class ApiError extends Error {
     public readonly status: number,
     /** The parsed gate envelope when this was a plan or role denial. */
     public readonly gate: GateError | null = null,
+    /** Per-field detail, for a caller that can render it in place. */
+    public readonly issues: ApiIssue[] = [],
+    /** Seconds the server asked us to wait, from `retry-after`. */
+    public readonly retryAfterSeconds: number | null = null,
   ) {
     super(message);
     this.name = "ApiError";

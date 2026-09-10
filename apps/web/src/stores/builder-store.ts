@@ -23,13 +23,43 @@ const HISTORY_LIMIT = 100;
 /** Rapid edits to the same target collapse into one undo step. */
 const COALESCE_MS = 600;
 
-export type SaveState = "saved" | "dirty" | "saving" | "error" | "offline";
+export type SaveState = "saved" | "dirty" | "saving" | "error" | "offline" | "invalid";
+
+/** One schema complaint, addressed to the control that owns it. */
+export interface DocIssue {
+  /** Dotted path into the document, e.g. `settings.onComplete.notificationEmails.0`. */
+  path: string;
+  code: string;
+  message: string;
+}
 
 export interface BuilderState {
   formId: string;
   doc: FormDoc | null;
-  /** Server doc version this edit is based on, for 409 conflict detection. */
-  baseVersion: number | null;
+  /**
+   * The draft revision this edit is based on, for 409 conflict detection.
+   *
+   * Was fed from `activeVersion` — the *published* version number, which does
+   * not move when a draft is saved — so the conflict machinery below it could
+   * never have fired. It now carries `workingRevision`, which the server bumps
+   * on every accepted save and compares before each one.
+   */
+  revision: number | null;
+  /**
+   * The last document the server accepted, for skipping saves that change nothing.
+   *
+   * Typing a character and deleting it leaves a document identical to the stored
+   * one, and uploading sixteen kilobytes to say so is a request nobody needed.
+   */
+  lastSavedDoc: FormDoc | null;
+  /**
+   * Why the document cannot be saved, when `saveState` is `invalid`.
+   *
+   * Held here rather than in the panel that renders it because the document is
+   * validated as a whole: a bad value in Settings is discovered while the author
+   * is in Build, and the field that owns it may not be mounted.
+   */
+  docIssues: DocIssue[];
 
   selectedRef: string | null;
   selectedEndingRef: string | null;
@@ -74,7 +104,7 @@ export interface BuilderState {
    * direction to err in is the one that hides an unpublished change.
    */
   editedSincePublish: boolean;
-  conflict: { theirs: FormDoc } | null;
+  conflict: { theirs: FormDoc; revision: number | null } | null;
 
   past: FormDoc[];
   future: FormDoc[];
@@ -83,18 +113,25 @@ export interface BuilderState {
   lastEditAt: number;
 
   // ── lifecycle ──
-  hydrate: (formId: string, doc: FormDoc, baseVersion: number | null, editedSincePublish?: boolean) => void;
+  hydrate: (formId: string, doc: FormDoc, revision: number | null, editedSincePublish?: boolean) => void;
   /** Apply a mutation. `coalesceKey` merges rapid edits to one field. */
   edit: (recipe: (draft: FormDoc) => void, coalesceKey?: string) => void;
   markSaving: () => void;
-  markSaved: (at: number) => void;
+  markSaved: (at: number, revision: number | null, savedDoc: FormDoc) => void;
   markError: (message: string) => void;
+  /** The document failed validation here, so it was never sent. */
+  markInvalid: (issues: DocIssue[]) => void;
+  setOffline: (offline: boolean) => void;
   /** The draft is now what is live. Called on a successful publish. */
   markPublished: () => void;
-  setConflict: (theirs: FormDoc | null) => void;
+  setConflict: (theirs: FormDoc | null, revision?: number | null) => void;
   setShortcuts: (shortcuts: Shortcut[]) => void;
   /** Discard local edits and adopt the server's document. */
   acceptTheirs: () => void;
+  /** Keep the local document and overwrite theirs, deliberately. */
+  keepMine: () => void;
+  /** Adopt work recovered from local storage, and mark it as needing a save. */
+  restoreDraft: (doc: FormDoc) => void;
 
   undo: () => void;
   redo: () => void;
@@ -154,7 +191,9 @@ function repairLogic(draft: { blocks: unknown; endings: unknown; logic: unknown 
 export const useBuilderStore = create<BuilderState>((set, get) => ({
   formId: "",
   doc: null,
-  baseVersion: null,
+  revision: null,
+  lastSavedDoc: null,
+  docIssues: [],
   selectedRef: null,
   selectedEndingRef: null,
   pickerIndex: null,
@@ -170,11 +209,13 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   lastEditKey: null,
   lastEditAt: 0,
 
-  hydrate: (formId, doc, baseVersion, editedSincePublish = false) =>
+  hydrate: (formId, doc, revision, editedSincePublish = false) =>
     set({
       formId,
       doc,
-      baseVersion,
+      revision,
+      lastSavedDoc: doc,
+      docIssues: [],
       editedSincePublish,
       past: [],
       future: [],
@@ -212,20 +253,44 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         saveState: "dirty",
         editedSincePublish: true,
         saveError: null,
+        // Any edit may be the one that fixes the field that was refused, and a
+        // stale complaint under a corrected value is worse than none.
+        docIssues: [],
       };
     }),
 
   markSaving: () => set({ saveState: "saving" }),
-  markSaved: (at) =>
+  markSaved: (at, revision, savedDoc) =>
     set((s) => ({
       // A save that lands after further edits must not claim to be clean.
       saveState: s.saveState === "saving" ? "saved" : s.saveState,
       lastSavedAt: at,
       saveError: null,
+      docIssues: [],
+      revision,
+      // What the server now holds — the baseline the next save is compared
+      // against, and not necessarily what is on screen by the time this lands.
+      lastSavedDoc: savedDoc,
     })),
   markError: (message) => set({ saveState: "error", saveError: message }),
+  /*
+    Refused here, so nothing was sent.
+
+    Distinct from `error` because the two ask for different things: an error is
+    the network's problem and will be retried, this one is a value in the
+    document and will not resolve until somebody changes it. Conflating them is
+    what made a half-typed email address look like an outage.
+  */
+  markInvalid: (issues) => set({ saveState: "invalid", saveError: null, docIssues: issues }),
+  setOffline: (offline) =>
+    set((s) => {
+      if (offline) return s.saveState === "offline" ? s : { saveState: "offline" };
+      // Coming back does not mean saved — it means there is something to try
+      // again with, if anything was outstanding.
+      return s.saveState === "offline" ? { saveState: s.doc === s.lastSavedDoc ? "saved" : "dirty" } : s;
+    }),
   markPublished: () => set({ editedSincePublish: false }),
-  setConflict: (theirs) => set({ conflict: theirs ? { theirs } : null }),
+  setConflict: (theirs, revision = null) => set({ conflict: theirs ? { theirs, revision } : null }),
   acceptTheirs: () =>
     set((s) =>
       s.conflict
@@ -236,7 +301,38 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
             future: [],
             saveState: "saved",
             saveError: null,
+            docIssues: [],
+            // Adopting their document means adopting the revision it is at, or
+            // the next save conflicts again on the version we just discarded.
+            revision: s.conflict.revision,
+            lastSavedDoc: s.conflict.theirs,
           }
+        : s,
+    ),
+
+  /*
+    Work that never reached the server, put back.
+
+    Unlike `hydrate` this leaves the editor dirty on purpose: the whole reason
+    this document is in local storage is that the network had not been told about
+    it, so arriving in a state that claims to be saved would be a lie that gets
+    overwritten by the next edit.
+  */
+  restoreDraft: (doc) =>
+    set({ doc, saveState: "dirty", saveError: null, docIssues: [], past: [], future: [] }),
+
+  /*
+    The other side of a clash: their revision, our document.
+
+    Adopting the revision is what makes the next save land — it is the number the
+    server will compare, and holding the stale one would simply produce the same
+    409 again. Overwriting someone's work is a decision, so it is only ever taken
+    by somebody clicking this, never by the editor on its own.
+  */
+  keepMine: () =>
+    set((s) =>
+      s.conflict
+        ? { conflict: null, revision: s.conflict.revision, saveState: "dirty" as const, saveError: null }
         : s,
     ),
 

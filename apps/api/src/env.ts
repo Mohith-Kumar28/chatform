@@ -39,6 +39,16 @@ export interface Bindings {
   RATE_LIMIT_P?: RateLimit;
   RATE_LIMIT_P_START?: RateLimit;
   RATE_LIMIT_P_AUTH?: RateLimit;
+  /**
+   * The builder's autosave, keyed by the author.
+   *
+   * The dashboard save path is the one write in the product that a client is
+   * expected to call unprompted and repeatedly, and it was the only one with no
+   * ceiling at all — `/v1`'s twin of it is burst-limited and metered, so the
+   * cheaper path to the same row was the unmetered one. This bounds a runaway
+   * client rather than a person: nobody editing a form reaches it.
+   */
+  RATE_LIMIT_SAVE?: RateLimit;
   WORKERS_AI?: Ai;
   /**
    * The knowledge base's vector index, one namespace per form.

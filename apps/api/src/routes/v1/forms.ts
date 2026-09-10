@@ -172,7 +172,7 @@ formsV1Router.post(
     let doc;
     if (body.doc !== undefined) {
       const parsed = parseDoc(body.doc);
-      if (!parsed.ok) return c.json({ error: { code: parsed.code, message: parsed.message } }, parsed.status);
+      if (!parsed.ok) return c.json({ error: { code: parsed.code, message: parsed.message, issues: parsed.issues } }, parsed.status);
       doc = parsed.doc;
     } else {
       const { FormDoc } = await import("@repo/form-schema");
@@ -236,7 +236,7 @@ formsV1Router.put(
     if (!exists) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
 
     const parsed = parseDoc(c.req.valid("json").doc);
-    if (!parsed.ok) return c.json({ error: { code: parsed.code, message: parsed.message } }, parsed.status);
+    if (!parsed.ok) return c.json({ error: { code: parsed.code, message: parsed.message, issues: parsed.issues } }, parsed.status);
     await saveWorkingDoc(c.env, id, parsed.doc, {
       orgId,
       actor: { type: "api_key", id: c.get("userId") ?? null, label: "API" },

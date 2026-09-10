@@ -5,9 +5,9 @@ import { ImagePlus, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { ThemeDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { API_ORIGIN } from "@/lib/api/mutator";
+import { BufferedInput } from "@/components/ui/buffered-input";
 
 
 /**
@@ -76,12 +76,12 @@ export function BrandField({
 
         <div className="min-w-0 flex-1 space-y-1.5">
           <Label htmlFor="brand-name">Name</Label>
-          <Input
+          <BufferedInput
             id="brand-name"
             value={theme.brandName ?? ""}
             maxLength={60}
             placeholder="Optional"
-            onChange={(e) => onChange({ brandName: e.target.value || undefined })}
+            onCommit={(v) => onChange({ brandName: v || undefined })}
           />
         </div>
 

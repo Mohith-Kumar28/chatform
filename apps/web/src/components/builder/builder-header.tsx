@@ -68,6 +68,7 @@ export function BuilderHeader({
   onPreview,
   onCopyLink,
   onRename,
+  onRetrySave,
 }: {
   formId: string;
   title: string;
@@ -100,6 +101,8 @@ export function BuilderHeader({
    * the document, so there is nothing to write into before then.
    */
   onRename?: (title: string) => void;
+  /** Try a failed save again now. Shown beside the failure state. */
+  onRetrySave?: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -153,7 +156,7 @@ export function BuilderHeader({
                   {published ? `Live · v${activeVersion ?? 1}` : "Draft"}
                 </span>
                 <span aria-hidden>·</span>
-                {settled ? <PublishIndicator stale={stale} published={published} publishedAt={publishedAt} /> : <SaveIndicator />}
+                {settled ? <PublishIndicator stale={stale} published={published} publishedAt={publishedAt} /> : <SaveIndicator onRetry={onRetrySave} />}
               </p>
             </div>
           </div>
@@ -608,17 +611,49 @@ function formatWhen(at: number): string {
  * Save status. Every state is nameable — the old header showed three bare
  * strings ("saving…", "unsaved", "saved") and nothing at all when a save failed.
  */
-function SaveIndicator() {
+function SaveIndicator({ onRetry }: { onRetry?: () => void }) {
   const saveState = useBuilderStore((s) => s.saveState);
   const saveError = useBuilderStore((s) => s.saveError);
+  const docIssues = useBuilderStore((s) => s.docIssues);
   const lastSavedAt = useBuilderStore((s) => s.lastSavedAt);
   const [, force] = useState(0);
 
+  /*
+    A field the document cannot hold, which is not the same thing as a failure.
+
+    It used to be one: a half-typed email address produced a red toast reading
+    `settings.onComplete.notificationEmails.0: Invalid email address`, which said
+    the save had gone wrong when what had actually happened was that a value was
+    not finished. Nothing is retried here, because nothing will change until
+    somebody edits the field — so this says which one.
+  */
+  if (saveState === "invalid") {
+    const first = docIssues[0];
+    return (
+      <span
+        className="flex shrink-0 items-center gap-1 text-[var(--warning)]"
+        title={docIssues.map((i) => i.message).join("\n")}
+      >
+        <CircleAlert className="size-3" />
+        {first ? first.message : "One field needs fixing"}
+      </span>
+    );
+  }
   if (saveState === "error") {
+    /*
+      Kept in place until it is no longer true, rather than shown as a toast that
+      leaves while the condition remains. A retry is already scheduled with a
+      widening gap; this is for the author who would rather not wait for it.
+    */
     return (
       <span className="text-destructive flex shrink-0 items-center gap-1" title={saveError ?? undefined}>
         <CircleAlert className="size-3" />
         Not saved
+        {onRetry && (
+          <button type="button" onClick={onRetry} className="underline underline-offset-2 hover:no-underline">
+            Retry
+          </button>
+        )}
       </span>
     );
   }
@@ -634,7 +669,7 @@ function SaveIndicator() {
     return (
       <span className="flex shrink-0 items-center gap-1">
         <Loader2 className="size-3 animate-spin" />
-        Saving
+        Saving…
       </span>
     );
   }

@@ -33,10 +33,10 @@ export function DesignSheet({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
           <ThemePanel
             theme={doc.theme}
-            onChange={(theme) =>
+            onChange={(theme, coalesceKey) =>
               edit((d) => {
                 d.theme = theme;
-              })
+              }, coalesceKey)
             }
           />
         </div>

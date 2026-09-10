@@ -14,6 +14,7 @@ import { useClientValue } from "@/hooks/use-client-value";
 import { assetUrl } from "@/lib/assets";
 import { API_ORIGIN } from "@/lib/api/mutator";
 import { cn } from "@/lib/utils";
+import { useBufferedValue } from "@/hooks/use-buffered-value";
 
 /**
  * Link settings: how this form looks everywhere it isn't.
@@ -52,12 +53,17 @@ export function LinkSettings({
   const patchMeta = (p: Partial<FormDoc["settings"]["meta"]>) =>
     onChange({ ...settings, meta: { ...meta, ...p } });
 
+  const titleField = useBufferedValue(meta.ogTitle ?? "", (v) => patchMeta({ ogTitle: v || undefined }));
+  const descriptionField = useBufferedValue(meta.ogDescription ?? "", (v) =>
+    patchMeta({ ogDescription: v || undefined }),
+  );
+
   // The domain the card will show. Rendered blank on the server rather than
   // guessed, since a custom domain makes any hardcoded answer wrong.
   const host = useClientValue(() => window.location.host, "");
 
-  const title = meta.ogTitle?.trim() || formTitle || "Untitled form";
-  const description = meta.ogDescription?.trim() || FALLBACK_DESCRIPTION;
+  const title = titleField.value.trim() || formTitle || "Untitled form";
+  const description = descriptionField.value.trim() || FALLBACK_DESCRIPTION;
 
   /**
    * The card the crawler will actually fetch, drawn from the fields as they are
@@ -69,7 +75,7 @@ export function LinkSettings({
    * in its place. Same parameters `/f/[slug]` builds, so this is the card.
    */
   const cardParams = new URLSearchParams({ title });
-  if (meta.ogDescription?.trim()) cardParams.set("description", meta.ogDescription.trim());
+  if (descriptionField.value.trim()) cardParams.set("description", descriptionField.value.trim());
   if (settings.closeRules.closeAt) cardParams.set("closeAt", settings.closeRules.closeAt);
   const defaultImageUrl = useDebounced(`/og/form?${cardParams}`, 400);
 
@@ -77,22 +83,31 @@ export function LinkSettings({
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <LockedControl feature="form_metadata">
         <div className="space-y-7">
-          <Field label="Title" count={meta.ogTitle?.length ?? 0} max={TITLE_MAX}>
+          {/*
+            The hook rather than the wrapper, because these two fields also draw
+            a character count. A count that only moved when the field committed
+            would sit still while you typed towards the limit it exists to warn
+            you about — so the live value is needed here, and only the write to
+            the document is deferred.
+          */}
+          <Field label="Title" count={titleField.value.length} max={TITLE_MAX}>
             <Input
               maxLength={TITLE_MAX}
               placeholder={formTitle}
-              value={meta.ogTitle ?? ""}
-              onChange={(e) => patchMeta({ ogTitle: e.target.value || undefined })}
+              value={titleField.value}
+              onChange={(e) => titleField.onChange(e.target.value)}
+              onBlur={titleField.onBlur}
             />
           </Field>
 
-          <Field label="Description" count={meta.ogDescription?.length ?? 0} max={DESCRIPTION_MAX}>
+          <Field label="Description" count={descriptionField.value.length} max={DESCRIPTION_MAX}>
             <Textarea
               rows={3}
               maxLength={DESCRIPTION_MAX}
               placeholder={FALLBACK_DESCRIPTION}
-              value={meta.ogDescription ?? ""}
-              onChange={(e) => patchMeta({ ogDescription: e.target.value || undefined })}
+              value={descriptionField.value}
+              onChange={(e) => descriptionField.onChange(e.target.value)}
+              onBlur={descriptionField.onBlur}
             />
           </Field>
 

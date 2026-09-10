@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { BufferedInput, BufferedTextarea } from "@/components/ui/buffered-input";
+import { useBufferedValue } from "@/hooks/use-buffered-value";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -15,7 +17,6 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import {
   DEFAULT_CONFIRMATION_BODY,
   DEFAULT_CONFIRMATION_SUBJECT,
@@ -231,17 +232,17 @@ export function SettingsPanel({
                     label="Ask after"
                     description="Questions to answer before signing in. 0 asks before the first one."
                   >
-                    <Input
+                    <BufferedInput
                       type="number"
                       min={0}
                       max={20}
                       className="w-32"
-                      value={settings.requireAuth.afterBlocks}
-                      onChange={(e) =>
+                      value={String(settings.requireAuth.afterBlocks)}
+                      onCommit={(v) =>
                         patch({
                           requireAuth: {
                             ...settings.requireAuth,
-                            afterBlocks: Math.max(0, Math.min(20, Number(e.target.value) || 0)),
+                            afterBlocks: Math.max(0, Math.min(20, Number(v) || 0)),
                           },
                         })
                       }
@@ -252,10 +253,10 @@ export function SettingsPanel({
                     description="The sentence shown above the sign-in buttons."
                     stacked
                   >
-                    <Textarea
+                    <BufferedTextarea
                       rows={2}
                       value={settings.requireAuth.message}
-                      onChange={(e) => patch({ requireAuth: { ...settings.requireAuth, message: e.target.value } })}
+                      onCommit={(v) => patch({ requireAuth: { ...settings.requireAuth, message: v } })}
                     />
                   </SettingRow>
                 </>
@@ -297,10 +298,10 @@ export function SettingsPanel({
               />
               {settings.password.enabled && (
                 <SettingRow label="Password">
-                  <Input
+                  <BufferedInput
                     className="max-w-xs"
                     value={settings.password.value}
-                    onChange={(e) => patch({ password: { ...settings.password, value: e.target.value } })}
+                    onCommit={(v) => patch({ password: { ...settings.password, value: v } })}
                   />
                 </SettingRow>
               )}
@@ -342,17 +343,17 @@ export function SettingsPanel({
                 />
               )}
               <SettingRow label="Close after N submissions" description="Cap the total number of responses.">
-                <Input
+                <BufferedInput
                   type="number"
                   min={1}
                   className="w-32"
                   placeholder="No limit"
-                  value={settings.closeRules.maxSubmissions ?? ""}
-                  onChange={(e) =>
+                  value={settings.closeRules.maxSubmissions === undefined ? "" : String(settings.closeRules.maxSubmissions)}
+                  onCommit={(v) =>
                     patch({
                       closeRules: {
                         ...settings.closeRules,
-                        maxSubmissions: e.target.value ? Number(e.target.value) : undefined,
+                        maxSubmissions: v ? Number(v) : undefined,
                       },
                     })
                   }
@@ -374,10 +375,10 @@ export function SettingsPanel({
                 />
               )}
               <SettingRow label="Closed message" description="Shown when the form is closed." stacked>
-                <Textarea
+                <BufferedTextarea
                   rows={2}
                   value={settings.closeRules.closedMessageMd}
-                  onChange={(e) => patch({ closeRules: { ...settings.closeRules, closedMessageMd: e.target.value } })}
+                  onCommit={(v) => patch({ closeRules: { ...settings.closeRules, closedMessageMd: v } })}
                 />
               </SettingRow>
               </SettingGroup>
@@ -411,16 +412,20 @@ export function SettingsPanel({
           {section === "completion" && (
             <SettingSection title="On completion">
               <SettingGroup>
-              <SettingRow label="Notification emails" description="Get an email for every completed response.">
-                <Input
+              <SettingRow
+                label="Notification emails"
+                description="Get an email for every completed response."
+                issuePath="settings.onComplete.notificationEmails"
+              >
+                <BufferedInput
                   className="max-w-md"
                   value={settings.onComplete.notificationEmails.join(", ")}
                   placeholder="you@company.com"
-                  onChange={(e) =>
+                  onCommit={(v) =>
                     patch({
                       onComplete: {
                         ...settings.onComplete,
-                        notificationEmails: e.target.value
+                        notificationEmails: v
                           .split(",")
                           .map((x) => x.trim())
                           .filter(Boolean),
@@ -433,16 +438,17 @@ export function SettingsPanel({
               <SettingRow
                 label="Redirect after completion"
                 description="Opens your own page in a new tab when they finish. The confirmation stays open behind it."
+                issuePath="settings.onComplete.redirectUrl"
               >
-                <Input
+                <BufferedInput
                   className="max-w-md"
                   value={settings.onComplete.redirectUrl ?? ""}
                   placeholder="https://yoursite.com/thanks"
-                  onChange={(e) =>
+                  onCommit={(v) =>
                     patch({
                       onComplete: {
                         ...settings.onComplete,
-                        redirectUrl: e.target.value || undefined,
+                        redirectUrl: v || undefined,
                       },
                     })
                   }
@@ -500,29 +506,37 @@ export function SettingsPanel({
  * from a broken form.
  */
 function FormNameField({ title, onChange }: { title: string; onChange: (title: string) => void }) {
-  const [draft, setDraft] = useState(title);
-  const [focused, setFocused] = useState(false);
+  /*
+    Buffered, and it still refuses to commit an empty name.
 
-  // Undo, the header field and the AI all write the same string; adopt theirs
-  // whenever this input is not the one doing the writing.
-  if (!focused && draft !== title) setDraft(title);
+    Two guards, because they answer different halves of the same problem.
+    `FormDoc.title` is `z.string().min(1)`, so selecting the whole name in order
+    to retype it passes through a state the document cannot hold: the buffer
+    keeps the letters in between off the wire, and the emptiness check covers the
+    one intermediate state that is still invalid after it has settled.
+
+    Adopting an upstream change while this box is not the one writing — undo, the
+    header's own name field, an AI edit — is handled by the hook rather than by a
+    `focused` flag and a write during render.
+  */
+  const buffered = useBufferedValue(title, (next) => {
+    const trimmed = next.trim();
+    if (trimmed) onChange(trimmed);
+  });
 
   return (
     <Input
-      value={draft}
+      value={buffered.value}
       maxLength={200}
       aria-label="Form name"
       placeholder="Untitled form"
       className="w-72"
-      onFocus={() => setFocused(true)}
-      onChange={(e) => {
-        setDraft(e.target.value);
-        const next = e.target.value.trim();
-        if (next) onChange(next);
-      }}
+      onChange={(e) => buffered.onChange(e.target.value)}
       onBlur={(e) => {
-        setFocused(false);
-        if (!e.target.value.trim()) setDraft(title);
+        // Put the old name back rather than leaving an empty box, which reads as
+        // a form that has been successfully renamed to nothing.
+        if (!e.target.value.trim()) buffered.onChange(title);
+        buffered.onBlur();
       }}
     />
   );
@@ -578,11 +592,11 @@ function ConfirmationEmailSettings({
           />
           <LockedControl feature="auto_reply_email">
             <SettingRow label="Subject" description="Leave it as it is, or write your own.">
-              <Input
+              <BufferedInput
                 className="max-w-md"
                 value={confirmation.subject}
                 placeholder={DEFAULT_CONFIRMATION_SUBJECT}
-                onChange={(e) => patch({ subject: e.target.value })}
+                onCommit={(v) => patch({ subject: v })}
               />
             </SettingRow>
             <SettingRow
@@ -590,11 +604,11 @@ function ConfirmationEmailSettings({
               description="Use {{form.title}} or any question's ref to write their own answers back to them."
               stacked
             >
-              <Textarea
+              <BufferedTextarea
                 rows={3}
                 value={confirmation.bodyMd}
                 placeholder={DEFAULT_CONFIRMATION_BODY}
-                onChange={(e) => patch({ bodyMd: e.target.value })}
+                onCommit={(v) => patch({ bodyMd: v })}
               />
             </SettingRow>
           </LockedControl>
@@ -667,6 +681,7 @@ function SettingRow({
    * against the right edge of the row, showing about four words of it.
    */
   stacked = false,
+  issuePath,
 }: {
   label: string;
   description?: string;
@@ -674,13 +689,41 @@ function SettingRow({
   checked?: boolean;
   onCheckedChange?: (v: boolean) => void;
   stacked?: boolean;
+  /**
+   * The document path this row edits, so a schema refusal lands under it.
+   *
+   * Matched as a prefix: `settings.onComplete.notificationEmails` catches the
+   * `…​.0` the server actually complains about, which is an index into a list
+   * this row edits as one comma-separated string.
+   */
+  issuePath?: string;
 }) {
+  const issue = useBuilderStore((s) =>
+    issuePath ? (s.docIssues.find((i) => i.path === issuePath || i.path.startsWith(`${issuePath}.`)) ?? null) : null,
+  );
+
   const control =
     checked !== undefined && onCheckedChange ? (
       <Switch checked={checked} onCheckedChange={onCheckedChange} />
     ) : (
       children
     );
+
+  /*
+    Under the control, not in a toast in the corner.
+
+    The message used to arrive as `settings.onComplete.notificationEmails.0:
+    Invalid email address` in a notification two feet from the box it was about,
+    and vanish a few seconds later while the problem stayed.
+  */
+  const withIssue = issue ? (
+    <div className="space-y-1">
+      {control}
+      <p className="text-destructive text-xs">{issue.message.replace(/^[^:]*: /, "")}</p>
+    </div>
+  ) : (
+    control
+  );
 
   if (stacked) {
     return (
@@ -689,7 +732,7 @@ function SettingRow({
           <p className="text-sm font-medium">{label}</p>
           {description && <p className="text-muted-foreground mt-0.5 text-xs">{description}</p>}
         </div>
-        {control}
+        {withIssue}
       </div>
     );
   }
@@ -700,7 +743,7 @@ function SettingRow({
         <p className="text-sm font-medium">{label}</p>
         {description && <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">{description}</p>}
       </div>
-      <div className="shrink-0">{control}</div>
+      <div className="shrink-0">{withIssue}</div>
     </div>
   );
 }

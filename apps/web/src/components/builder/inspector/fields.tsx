@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useBufferedValue } from "@/hooks/use-buffered-value";
 
 /**
  * Inspector field primitives.
@@ -68,13 +69,25 @@ export function TextField({
    */
   shortcutTarget?: string;
 }) {
+  /*
+    Buffered, because a keystroke is not an edit.
+
+    Roughly forty of the builder's typed fields render through this component,
+    and every one of them used to write a whole new document per character —
+    which marked the form dirty, restarted the save timer, and submitted whatever
+    half-finished value was in the box for validation. Committing on blur or
+    after a pause makes the document change once per thing the author actually
+    changed. See `useBufferedValue`.
+  */
+  const buffered = useBufferedValue(value, onChange);
   return (
     <Field label={label} hint={hint}>
       {multiline ? (
         <Textarea
           data-shortcut-target={shortcutTarget}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          value={buffered.value}
+          onChange={(e) => buffered.onChange(e.target.value)}
+          onBlur={buffered.onBlur}
           placeholder={placeholder}
           maxLength={maxLength}
           rows={3}
@@ -83,8 +96,9 @@ export function TextField({
       ) : (
         <Input
           data-shortcut-target={shortcutTarget}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          value={buffered.value}
+          onChange={(e) => buffered.onChange(e.target.value)}
+          onBlur={buffered.onBlur}
           placeholder={placeholder}
           maxLength={maxLength}
         />
@@ -110,16 +124,28 @@ export function NumberField({
   max?: number;
   placeholder?: string;
 }) {
+  /*
+    Numbers need this more than text does, not less.
+
+    Several numeric fields have a floor well above their first digit —
+    `sessionTokenBudget` starts at 1000, `maxTurns` at 5 — so every prefix of a
+    legitimate answer is a value the schema refuses. Typing `12000` used to send
+    `1`, `12` and `120` for validation before it sent anything acceptable.
+  */
+  const buffered = useBufferedValue(value === undefined ? "" : String(value), (raw) =>
+    // An empty box means "no constraint", which is different from 0.
+    onChange(raw === "" ? undefined : Number(raw)),
+  );
   return (
     <Field label={label} hint={hint}>
       <Input
         type="number"
-        value={value ?? ""}
+        value={buffered.value}
         min={min}
         max={max}
         placeholder={placeholder}
-        // An empty box means "no constraint", which is different from 0.
-        onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+        onChange={(e) => buffered.onChange(e.target.value)}
+        onBlur={buffered.onBlur}
       />
     </Field>
   );
@@ -182,6 +208,35 @@ export function SelectField<T extends string>({
 }
 
 /** Editable list of `{id,label}` records — options, ranking items, matrix rows. */
+/**
+ * One row of a `ListEditor`, buffered.
+ *
+ * A component of its own only because the rows are produced in a loop and a hook
+ * cannot be. Worth the indirection: an option's label is `z.string().min(1)`, so
+ * clearing one in order to retype it produced a document the server refused —
+ * and refused the rest of the form along with it.
+ */
+function ListItemInput({
+  value,
+  onCommit,
+  ariaLabel,
+}: {
+  value: string;
+  onCommit: (next: string) => void;
+  ariaLabel: string;
+}) {
+  const buffered = useBufferedValue(value, onCommit);
+  return (
+    <Input
+      aria-label={ariaLabel}
+      value={buffered.value}
+      onChange={(e) => buffered.onChange(e.target.value)}
+      onBlur={buffered.onBlur}
+      className="h-8"
+    />
+  );
+}
+
 export function ListEditor({
   label,
   hint,
@@ -205,14 +260,14 @@ export function ListEditor({
         {items.map((item, i) => (
           <div key={item.id} className="group flex items-center gap-1.5">
             <GripVertical className="text-muted-foreground/40 size-3.5 shrink-0" />
-            <Input
+            <ListItemInput
               value={item.label}
-              onChange={(e) => {
+              onCommit={(label) => {
                 const next = [...items];
-                next[i] = { ...item, label: e.target.value };
+                next[i] = { ...item, label };
                 onChange(next);
               }}
-              className="h-8"
+              ariaLabel={`${label} ${i + 1}`}
             />
             <Button
               variant="ghost"

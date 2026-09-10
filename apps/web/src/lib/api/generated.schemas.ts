@@ -955,6 +955,7 @@ export type PostApiForms200 = {
   updatedAt: number;
   workingSchema: unknown;
   activeVersion: number | null;
+  workingRevision: number;
   publishedAt: number | null;
   hasUnpublishedChanges: boolean;
 };
@@ -992,6 +993,7 @@ export type GetApiFormsById200 = {
   updatedAt: number;
   workingSchema: unknown;
   activeVersion: number | null;
+  workingRevision: number;
   publishedAt: number | null;
   hasUnpublishedChanges: boolean;
 };
@@ -1046,6 +1048,11 @@ export type PatchApiFormsByIdWorkspace404 = {
 
 export type PutApiFormsByIdDocBody = {
   doc: unknown;
+  /**
+     * @minimum 0
+     * @maximum 9007199254740991
+     */
+  baseRevision?: number;
   theme?: unknown;
   settings?: unknown;
 };
@@ -1053,6 +1060,47 @@ export type PutApiFormsByIdDocBody = {
 export type PutApiFormsByIdDoc200 = {
   ok: boolean;
   issues: unknown[];
+  revision: number;
+};
+
+export type PutApiFormsByIdDoc409ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PutApiFormsByIdDoc409Error = {
+  code: string;
+  message: string;
+  issues?: PutApiFormsByIdDoc409ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PutApiFormsByIdDoc409 = {
+  error: PutApiFormsByIdDoc409Error;
+};
+
+export type PutApiFormsByIdDoc429ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PutApiFormsByIdDoc429Error = {
+  code: string;
+  message: string;
+  issues?: PutApiFormsByIdDoc429ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PutApiFormsByIdDoc429 = {
+  error: PutApiFormsByIdDoc429Error;
 };
 
 export type PostApiFormsByIdUnpublish200 = {

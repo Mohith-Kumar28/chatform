@@ -3884,6 +3884,9 @@
                         }
                       ]
                     },
+                    "workingRevision": {
+                      "type": "number"
+                    },
                     "publishedAt": {
                       "anyOf": [
                         {
@@ -3907,6 +3910,7 @@
                     "updatedAt",
                     "workingSchema",
                     "activeVersion",
+                    "workingRevision",
                     "publishedAt",
                     "hasUnpublishedChanges"
                   ]
@@ -4071,6 +4075,9 @@
                         }
                       ]
                     },
+                    "workingRevision": {
+                      "type": "number"
+                    },
                     "publishedAt": {
                       "anyOf": [
                         {
@@ -4094,6 +4101,7 @@
                     "updatedAt",
                     "workingSchema",
                     "activeVersion",
+                    "workingRevision",
                     "publishedAt",
                     "hasUnpublishedChanges"
                   ]
@@ -4316,6 +4324,11 @@
                 "type": "object",
                 "properties": {
                   "doc": {},
+                  "baseRevision": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
                   "theme": {},
                   "settings": {}
                 },
@@ -4344,11 +4357,137 @@
                     "issues": {
                       "type": "array",
                       "items": {}
+                    },
+                    "revision": {
+                      "type": "number"
                     }
                   },
                   "required": [
                     "ok",
-                    "issues"
+                    "issues",
+                    "revision"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Edited elsewhere since `baseRevision`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many saves",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
                   ]
                 }
               }

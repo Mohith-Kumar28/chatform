@@ -1,6 +1,7 @@
 "use client";
 
 import type { Block, LogicRuleInput } from "@repo/form-schema";
+import { useBufferedValue } from "@/hooks/use-buffered-value";
 
 /**
  * "Only ask this if …" — one condition, chosen in one row.
@@ -165,6 +166,14 @@ export function ConditionRow({
   const ops = opsFor(decider);
   const choices = choicesFor(decider);
   const needsValue = ops.find((o) => o.value === condition.op)?.needsValue ?? true;
+  /*
+    A rule's operand, buffered like every other typed field.
+
+    Typing a comparison value rewrote `doc.logic` per character, and the workflow
+    canvas replaces the whole document on each change, so this was among the most
+    expensive boxes in the builder to type into.
+  */
+  const valueBuffer = useBufferedValue(condition.value, (value) => onChange({ ...condition, value }));
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-sm">
@@ -203,8 +212,9 @@ export function ConditionRow({
         ) : (
           <input
             aria-label="Value"
-            value={condition.value}
-            onChange={(e) => onChange({ ...condition, value: e.target.value })}
+            value={valueBuffer.value}
+            onChange={(e) => valueBuffer.onChange(e.target.value)}
+            onBlur={valueBuffer.onBlur}
             placeholder="value"
             className="border-input bg-background h-7 w-24 rounded-md border px-1.5 text-xs"
           />
