@@ -1838,6 +1838,60 @@ const Composer = memo(function Composer({
     if (text !== opening) setText(opening);
   }
 
+  /** Everything remembered for this question except whatever is already typed. */
+  const alternatives = suggestions.filter((s) => s !== text);
+
+  /**
+   * Whether a digit may pick a saved answer instead of being typed.
+   *
+   * The rule `useChoiceKeys` already uses is "safe while the box is empty",
+   * because somebody writing "1 or 2 a week" keeps their digits. That is very
+   * nearly right here and would almost never fire: the box arrives *pre-filled*
+   * with the most recent saved answer, so it is empty only after someone clears
+   * it — which is the one moment they most want a different one.
+   *
+   * So the rule widens by exactly one case: the box holding a value they did not
+   * type. Pre-filled and untouched is the same thing as empty as far as
+   * hijacking a keystroke goes, and it covers the case this exists for — arrive,
+   * see the wrong address in the box, press 2.
+   *
+   * The moment they type a character of their own the numbers stop working and
+   * the badges disappear with them, which is the honest way round: a key hint
+   * that is drawn is a key hint that works.
+   */
+  const digitsPickSuggestions = text === "" || suggestions.includes(text);
+
+  useEffect(() => {
+    if (!digitsPickSuggestions || alternatives.length === 0) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      /*
+        The affordance owns digits whenever it is offering numbered choices.
+
+        A dropdown with saved answers would otherwise bind "2" twice — once to
+        its second option, once to a second saved value — and the respondent
+        would get whichever listener happened to run first.
+
+        Testing for `[data-affordance]` alone is not that test: the wrapper is
+        rendered for every question and is simply empty for a text one, so this
+        guard swallowed every digit and the shortcut never fired once. What
+        distinguishes the two is the key badges themselves — `useChoiceKeys`
+        binds a digit exactly when the affordance has drawn one — and matching
+        the element rather than its visibility is deliberate, since `kbd-hint`
+        hides those on touch while the binding stays live.
+      */
+      if (document.querySelector("[data-affordance] kbd")) return;
+      const n = Number(e.key);
+      if (!Number.isInteger(n) || n < 1 || n > alternatives.length) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.isContentEditable) return;
+      e.preventDefault();
+      setText(alternatives[n - 1]!);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [digitsPickSuggestions, alternatives]);
+
   const canSkip = Boolean(block) && config.allowSkip && !block?.required;
 
   /**
@@ -1882,8 +1936,6 @@ const Composer = memo(function Composer({
 
   const disabled = status === "error";
 
-  /** Everything remembered for this question except whatever is already typed. */
-  const alternatives = suggestions.filter((s) => s !== text);
 
   function submit() {
     const value = text.trim();
@@ -1941,7 +1993,7 @@ const Composer = memo(function Composer({
           role="listbox"
           aria-label="Saved answers"
         >
-          {alternatives.map((s) => (
+          {alternatives.map((s, i) => (
             <span
               key={s}
               role="option"
@@ -1952,9 +2004,13 @@ const Composer = memo(function Composer({
                 type="button"
                 onClick={() => setText(s)}
                 disabled={disabled}
-                className="min-w-0 truncate py-1.5 pl-2.5 pr-1.5 disabled:pointer-events-none"
+                className="inline-flex min-w-0 items-center gap-1.5 py-1.5 pl-2 pr-1.5 disabled:pointer-events-none"
               >
-                {s}
+                {/* Drawn only while the key it names actually picks something —
+                    see `digitsPickSuggestions`. `kbd-hint` takes care of the
+                    devices with no keyboard to press it on. */}
+                {digitsPickSuggestions && i < 9 && <KeyHint>{i + 1}</KeyHint>}
+                <span className="min-w-0 truncate">{s}</span>
               </button>
               {/*
                 Removes this one entry, not the field. A control here that also
