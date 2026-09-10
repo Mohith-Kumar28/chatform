@@ -116,7 +116,7 @@ const signIn = (sid: string) =>
 beforeAll(async () => {
   await applySchema();
   t = await seedTenant("defergate");
-  // Business: `requireAuth` is plan-gated, and a gate `clampForRuntime` had
+  // A paid plan: `requireAuth` is plan-gated, and a gate `clampForRuntime` had
   // switched off would make every one of these pass for no reason.
   await env.DB.prepare(
     `INSERT INTO plans (id, slug, name, price_monthly_cents, price_yearly_cents, currency, features_json, limits_json, is_active, sort_order)

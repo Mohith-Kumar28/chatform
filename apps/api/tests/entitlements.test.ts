@@ -145,7 +145,7 @@ describe("resolving entitlements from the database", () => {
     const ent = await getEntitlements(DB(), org.orgId);
     expect(ent.planId).toBe("pro");
     expect(ent.features.partial_responses).toBe(true);
-    expect(ent.features.respondent_auth_phone).toBe(false);
+    expect(ent.features.activity_log).toBe(false);
     expect(ent.limits.ai_conversations_per_month).toBe(2_000);
   });
 

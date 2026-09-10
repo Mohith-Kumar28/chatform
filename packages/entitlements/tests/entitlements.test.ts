@@ -111,7 +111,7 @@ describe("resolve", () => {
     expect(ent.planId).toBe("pro");
     expect(ent.source).toBe("subscription");
     expect(can(ent, "partial_responses")).toBe(true);
-    expect(can(ent, "respondent_auth_phone")).toBe(false); // Business only
+    expect(can(ent, "activity_log")).toBe(false); // Business only
     expect(limitOf(ent, "ai_conversations_per_month")).toBe(2_000);
   });
 
@@ -229,7 +229,7 @@ describe("the gate envelope", () => {
   });
 
   it("points a Business-only feature at Business", () => {
-    expect(featureLocked("respondent_auth_phone", "pro").error.requiredPlan).toBe("business");
+    expect(featureLocked("activity_log", "pro").error.requiredPlan).toBe("business");
   });
 
   it("distinguishes a plan allowance from the absolute ceiling", () => {

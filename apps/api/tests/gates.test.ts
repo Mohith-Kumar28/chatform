@@ -578,10 +578,10 @@ describe("stripForPublish", () => {
   it("turns a verification gate off rather than leaving it unusable", () => {
     // A respondent must never meet a sign-in step the plan cannot complete.
     const doc = docWith({ settings: { requireAuth: { enabled: true, methods: ["phone"] } } });
-    const { doc: pro } = stripForPublish(doc, entFor("pro"));
-    expect(pro.settings.requireAuth.enabled).toBe(false);
-    const { doc: biz, stripped } = stripForPublish(doc, entFor("business"));
-    expect(biz.settings.requireAuth.enabled).toBe(true);
+    const { doc: free } = stripForPublish(doc, entFor("free"));
+    expect(free.settings.requireAuth.enabled).toBe(false);
+    const { doc: pro, stripped } = stripForPublish(doc, entFor("pro"));
+    expect(pro.settings.requireAuth.enabled).toBe(true);
     expect(stripped).toEqual([]);
   });
 
@@ -686,7 +686,7 @@ describe("clampForRuntime", () => {
       ...minimalDoc("clamp3"),
       settings: { requireAuth: { enabled: true, methods: ["google"] } },
     });
-    expect(clampForRuntime(doc, entFor("business")).settings.requireAuth.enabled).toBe(true);
+    expect(clampForRuntime(doc, entFor("pro")).settings.requireAuth.enabled).toBe(true);
     expect(clampForRuntime(doc, entFor("free")).settings.requireAuth.enabled).toBe(false);
   });
 });

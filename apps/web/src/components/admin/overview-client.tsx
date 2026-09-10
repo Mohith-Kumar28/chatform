@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useGetApiAdminOverview } from "@/lib/api/admin/admin";
 import { ChartCard, Legend, SERIES } from "@/components/charts/chart-kit";
-import { PieChart } from "@/components/charts/pie-chart";
 import { TrendChart } from "@/components/charts/trend-chart";
 import { FunnelShape, type FunnelStep } from "@/components/charts/funnel-shape";
 import { CohortGrid, NOISE_FLOOR, type Cohort } from "@/components/charts/cohort-grid";
@@ -21,7 +20,6 @@ interface Overview {
   kpis: Record<string, { value: number; previous: number }>;
   series: Record<string, number[]>;
   funnel: FunnelStep[];
-  planMix: { plan: string; orgs: number }[];
   mrrSeries: number[];
   cohorts: Cohort[];
   formStatsAsOf: number | null;
@@ -88,7 +86,6 @@ const GROWTH_VIEWS = {
 
 type GrowthView = keyof typeof GROWTH_VIEWS;
 
-const PLAN_LABEL: Record<string, string> = { free: "Free", pro: "Pro", business: "Business" };
 
 export function OverviewClient() {
   const range = useRange();
@@ -107,7 +104,6 @@ export function OverviewClient() {
   const o = apiData<Overview>(data) ?? ({} as Overview);
   const days = o.days ?? [];
   const kpi = (key: string) => o.kpis?.[key] ?? { value: 0, previous: 0 };
-  const planTotal = (o.planMix ?? []).reduce((n, p) => n + p.orgs, 0);
   // Started in this window and still unfinished when their day ended — the same
   // union the results table calls partial, counted in the rollup.
   const partials = kpi("responses_partial").value;
@@ -220,53 +216,31 @@ export function OverviewClient() {
       {/*
         Then why: where the arrivals go, and what they are worth.
 
-        Two rows of two, rather than one tall card beside a stack of short ones.
-        The funnel takes the wider column in both because it is the chart that
-        produces work — everything else describes, this one accuses. The cards
-        beside it are not pinned to the top: `ChartCard` fills its grid cell, so
-        a row bottoms out on one line instead of three.
+        The funnel gets a row to itself. It shared one with a pie of the plan
+        split, and the pairing cost it twice: half the width for a chart whose
+        every row is a horizontal measurement, and — because that width put a
+        thousand pixels between a step's name and its count — a reader who could
+        not tell which number belonged to which row. The plan split was the
+        weaker of the two anyway; it named three plans and a total, which the
+        accounts table already lists and the revenue card already prices.
       */}
-      <div className="grid gap-3 lg:grid-cols-5">
-        <ChartCard
-          className="lg:col-span-3"
-          title="From signup to paying"
-          subtitle="Accounts that signed up in this period, and how far each one got."
-        >
-          <FunnelShape
-            steps={o.funnel ?? []}
-            timeToValueMs={o.timeToValueMs ?? null}
-            hrefFor={(step) => {
-              // Carry the period too, so the list is cohorted on the same window
-              // the funnel counted — otherwise a 30-day bar links into an
-              // all-time list and the two numbers differ for no visible reason.
-              const days = RANGE_DAYS[range];
-              const cohort = FUNNEL_COHORT[step.key];
-              return cohort
-                ? `/admin/accounts?cohort=${cohort}&since=${days}`
-                : `/admin/accounts?since=${days}`;
-            }}
-          />
-        </ChartCard>
-
-        {/*
-          A pie rather than the donut it was: the split *is* the question here,
-          and the total it used to hold in its middle is a smaller fact that now
-          rides in the corner. Naming each wedge on itself also retired the
-          "N paying accounts, M trialing" line that used to sit underneath.
-        */}
-        <ChartCard
-          className="lg:col-span-2"
-          title="Who is on what"
-          aside={`${planTotal.toLocaleString()} accounts`}
-        >
-          <PieChart
-            items={(o.planMix ?? []).map((p) => ({ label: PLAN_LABEL[p.plan] ?? p.plan, value: p.orgs }))}
-            total={planTotal}
-            height={240}
-            emptyLabel="No accounts yet."
-          />
-        </ChartCard>
-      </div>
+      <ChartCard
+        title="From signup to paying"
+        subtitle="Accounts that signed up in this period, and how far each one got."
+      >
+        <FunnelShape
+          steps={o.funnel ?? []}
+          timeToValueMs={o.timeToValueMs ?? null}
+          hrefFor={(step) => {
+            // Carry the period too, so the list is cohorted on the same window
+            // the funnel counted — otherwise a 30-day bar links into an
+            // all-time list and the two numbers differ for no visible reason.
+            const days = RANGE_DAYS[range];
+            const cohort = FUNNEL_COHORT[step.key];
+            return cohort ? `/admin/accounts?cohort=${cohort}&since=${days}` : `/admin/accounts?since=${days}`;
+          }}
+        />
+      </ChartCard>
 
       <div className="grid gap-3 lg:grid-cols-5">
         {/* The triangle grows a column per week, so it takes the wider half. */}

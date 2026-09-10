@@ -46,8 +46,8 @@ const DOC = {
 /**
  * A sign-in gate is the whole point of these tests: it is what leaves the
  * conversation waiting, so identity — not the device — is what recognises a
- * returning respondent. `requireAuth` is a business-plan feature and
- * `clampForRuntime` would switch it back off on anything less.
+ * returning respondent. `requireAuth` is a paid feature and
+ * `clampForRuntime` would switch it back off on Free.
  */
 const GATED = { agent: { mode: "template" }, requireAuth: { enabled: true, method: "google" } };
 

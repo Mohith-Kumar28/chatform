@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { MailPlus, X } from "lucide-react";
 import { followUpReadiness, type FormDoc } from "@repo/form-schema";
+import { PLANS, minPlanFor } from "@repo/entitlements";
 import {
   getGetApiFormsByIdQueryKey,
   usePostApiFormsByIdPublish,
@@ -429,7 +430,8 @@ export function FollowUpNudge({
           */}
           {entitled && needsSetup && !canGoogleAuth && (
             <p className="text-muted-foreground/80 text-xs">
-              Verified sign-in is a Business feature. An email question on the form works too.
+              Verified sign-in is a {PLANS[minPlanFor("respondent_auth_google")].name} feature. An
+              email question on the form works too.
             </p>
           )}
         </div>

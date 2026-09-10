@@ -93,6 +93,8 @@ const PRO: Plan = {
     "remove_branding",
     "duplicate_prevention",
     "multi_language",
+    "respondent_auth_google",
+    "respondent_auth_phone",
     "collect_payments",
     "partial_responses",
     "advanced_analytics",
@@ -148,8 +150,6 @@ const BUSINESS: Plan = {
   currency: "USD",
   features: [
     ...PRO.features,
-    "respondent_auth_google",
-    "respondent_auth_phone",
     "verified_answers",
     "one_response_per_identity",
     "ai_insights",

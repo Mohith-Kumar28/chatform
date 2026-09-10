@@ -62,20 +62,20 @@ export const PLAN_HIGHLIGHTS: Record<string, readonly string[]> = {
   ],
   // agent_persona · agent_knowledge · agent_guardrails · followup_email ·
   // partial_responses + advanced_analytics + conversation_analytics ·
-  // brand_logo + custom_fonts + remove_branding
+  // brand_logo + custom_fonts + remove_branding ·
+  // respondent_auth_google + respondent_auth_phone
   pro: [
     "2,000 AI conversations a month",
     "Persona, goal and a knowledge base",
-    "Follow-up emails to the people who left",
-    "Partial responses and drop-off analytics",
+    "Verified respondents — Google or SMS",
+    "Partial responses, analytics and follow-up emails",
     "Your logo and fonts, no chatform badge",
   ],
-  // respondent_auth_google + respondent_auth_phone · verified_answers ·
-  // agent_model_picker · activity_log
+  // verified_answers · one_response_per_identity · agent_model_picker · activity_log
   business: [
     "10,000 AI conversations a month",
-    "Verified respondents — Google or SMS",
     "Verified answers, by emailed or texted code",
+    "One response per verified person",
     "Pick the model that runs the interview",
     "An activity log of every change",
   ],

@@ -86,8 +86,8 @@ export interface FunnelStep {
  * is one pixel vertically and the shape lines up with the rows beside it
  * without measuring anything at runtime.
  */
-const SLAB = 42;
-const NECK = 26;
+const SLAB = 48;
+const NECK = 30;
 
 /**
  * The narrowest the shape is ever drawn, as a half-width in viewBox units —
@@ -197,11 +197,9 @@ export function FunnelShape({
       The lane geometry lives here as variables and nowhere else, because the
       rows read them as grid columns and the shape reads them as an inset — and
       the moment those two disagree the drawing stops lining up with the names
-      beside it. On a phone the gutters give up what they can spare and the
-      labels keep their words; a truncated "Someone o…" beside a curve is worse
-      than a narrower curve.
+      beside it.
     */
-    <div className="[--fx-gap:0.5rem] [--fx-l:9rem] [--fx-r:4.5rem] sm:[--fx-gap:0.75rem] sm:[--fx-l:9.25rem] sm:[--fx-r:6.25rem]">
+    <div className="[--fx-gap:0.75rem] [--fx-l:13.5rem] sm:[--fx-l:16rem]">
       <div className="relative">
         {/*
           The shape, floated over the lane between the gutters. `pointer-events-none`
@@ -211,7 +209,7 @@ export function FunnelShape({
         */}
         <div
           className="bg-muted/70 pointer-events-none absolute top-0 z-10 overflow-hidden rounded-xl"
-          style={{ height: totalH, left: "calc(var(--fx-l) + var(--fx-gap))", right: "calc(var(--fx-r) + var(--fx-gap))" }}
+          style={{ height: totalH, left: "calc(var(--fx-l) + var(--fx-gap))", right: 0 }}
           aria-hidden
         >
           <svg
@@ -255,7 +253,6 @@ export function FunnelShape({
             </defs>
 
             {d && <path d={d} fill={`url(#${gradientId})`} />}
-
             {ghostFrom !== null && (
               <>
                 {/* Faint body, so the empty steps are a continuation of the shape
@@ -287,34 +284,62 @@ export function FunnelShape({
           </svg>
         </div>
 
+        {/*
+          The stage boundaries, carried across the drawing.
+
+          Without them the shape is one continuous ribbon and the rows beside it
+          are seven separate things, so reading "this width is that name" means
+          running a finger across an unmarked field. Above the shape rather than
+          under it (`z-20` against the shape's `z-10`) and in the same ink as the
+          rules in the label column, so a boundary is one line across the whole
+          card instead of two that happen to meet.
+        */}
+        {steps.slice(0, -1).map((step, i) => (
+          <div
+            key={step.key}
+            className="bg-border/70 pointer-events-none absolute right-0 z-20 h-px"
+            style={{ top: tops[i]! + SLAB + NECK / 2, left: "var(--fx-l)" }}
+            aria-hidden
+          />
+        ))}
+
         <ol>
           {steps.map((step, i) => {
             const next = steps[i + 1];
             // The fall *out of* this step, because the caption sits under it.
-            // Undefined when nothing entered the step: no share of nobody.
+            // Null when nothing entered the step: no share of nobody.
             const kept = next && step.count > 0 ? Math.round((next.count / step.count) * 1000) / 10 : null;
             const lost = next ? step.count - next.count : 0;
             const href = hrefFor?.(step) ?? null;
+            const leaks = hasWorst && worst === i + 1;
 
+            /*
+              Name, count and share, in that order and touching.
+
+              They used to sit at opposite ends of the card with the drawing
+              between them, which worked at half width and failed completely at
+              full width: a thousand pixels of funnel between "Published it" and
+              the 5 that belongs to it, with six other numbers stacked in the
+              same column. The dotted leader is the old table-of-contents trick
+              and it is here for the old reason — the eye needs something to ride
+              along, and the alternative is counting rows.
+            */
             const row = (
-              <>
-                <span className="col-start-1 flex min-w-0 items-center gap-1.5">
-                  <span className="truncate text-sm font-medium" title={step.label}>
-                    {step.label}
-                  </span>
-                  {href && (
-                    <ArrowRight
-                      className="text-muted-foreground size-3.5 shrink-0 opacity-0 transition-opacity duration-[var(--duration-micro)] group-hover:opacity-100"
-                      strokeWidth={2}
-                      aria-hidden
-                    />
-                  )}
+              <span className="col-start-1 flex min-w-0 items-baseline gap-2">
+                <span className="truncate text-sm font-medium" title={step.label}>
+                  {step.label}
                 </span>
-                <span className="col-start-3 flex items-baseline justify-end gap-1.5 text-right">
-                  <span className="tabular text-sm font-medium">{step.count.toLocaleString()}</span>
-                  <span className="text-muted-foreground tabular text-micro w-9 shrink-0 text-right">{step.rate}%</span>
-                </span>
-              </>
+                {href && (
+                  <ArrowRight
+                    className="text-muted-foreground size-3.5 shrink-0 self-center opacity-0 transition-opacity duration-[var(--duration-micro)] group-hover:opacity-100"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                )}
+                <span className="border-border/70 min-w-2 flex-1 translate-y-[-0.28rem] border-b border-dotted" aria-hidden />
+                <span className="tabular shrink-0 text-sm font-semibold">{step.count.toLocaleString()}</span>
+                <span className="text-muted-foreground tabular text-micro w-10 shrink-0 text-right">{step.rate}%</span>
+              </span>
             );
 
             return (
@@ -325,14 +350,14 @@ export function FunnelShape({
                     // Sits *under* the shape (which is z-10), so the hover wash
                     // reads as the row lighting up behind the funnel rather than
                     // as a panel dropped on top of it.
-                    className="hover:bg-muted/50 group relative grid grid-cols-[var(--fx-l)_1fr_var(--fx-r)] items-center gap-[var(--fx-gap)] rounded-lg transition-colors duration-[var(--duration-micro)]"
+                    className="hover:bg-muted/50 group relative grid grid-cols-[var(--fx-l)_1fr] items-center gap-[var(--fx-gap)] rounded-lg transition-colors duration-[var(--duration-micro)]"
                     style={{ height: SLAB }}
                   >
                     {row}
                   </Link>
                 ) : (
                   <div
-                    className="relative grid grid-cols-[var(--fx-l)_1fr_var(--fx-r)] items-center gap-[var(--fx-gap)]"
+                    className="relative grid grid-cols-[var(--fx-l)_1fr] items-center gap-[var(--fx-gap)]"
                     style={{ height: SLAB }}
                   >
                     {row}
@@ -340,51 +365,49 @@ export function FunnelShape({
                 )}
 
                 {/*
-                  The step-over-step numbers, in the gutters the shape leaves
-                  free. Kept on the left, lost on the right — the same sides the
-                  names and the counts are already on, so neither ever has to be
-                  read across the drawing.
+                  The step-over-step numbers, riding the boundary rule rather
+                  than floating between two rows.
+
+                  One sentence in one place, where it used to be split across
+                  both gutters — "83.3% continued" on the left and "−1 −16.7%"
+                  a card's width away on the right, which looked exactly like a
+                  step's own count and share and was read as one. Kept and lost
+                  are the same fact twice, and a fact said twice belongs on one
+                  line or it becomes two facts.
                 */}
                 {i < n - 1 && (
                   <div
-                    className="relative grid grid-cols-[var(--fx-l)_1fr_var(--fx-r)] items-center gap-[var(--fx-gap)]"
+                    className="relative grid grid-cols-[var(--fx-l)_1fr] items-center gap-[var(--fx-gap)]"
                     style={{ height: NECK }}
                   >
-                    {kept !== null ? (
-                      <>
-                        <span
-                          className={cn(
-                            "text-micro col-start-1 flex items-center gap-1",
-                            hasWorst && worst === i + 1 ? "text-[var(--warning)]" : "text-muted-foreground",
-                          )}
-                        >
+                    <span
+                      className={cn(
+                        "text-micro col-start-1 flex min-w-0 items-center gap-1.5 whitespace-nowrap",
+                        leaks ? "text-[var(--warning)]" : "text-muted-foreground",
+                      )}
+                    >
+                      {kept !== null ? (
+                        <>
                           <TrendingDown className="size-3 shrink-0" strokeWidth={2} aria-hidden />
-                          <span className="tabular">{kept}%</span>
-                          {/* The arrow already says which way this goes, so on a
-                              phone the word is the part that gives way. */}
-                          <span className="hidden truncate sm:inline">continued</span>
-                        </span>
-                        {/* Nothing lost is not a loss worth printing: "−0 −0%"
-                            reads as a broken number rather than as a clean step. */}
-                        {lost > 0 && (
-                          <span
-                            className={cn(
-                              "text-micro tabular col-start-3 text-right",
-                              hasWorst && worst === i + 1 ? "text-[var(--warning)]" : "text-muted-foreground/70",
-                            )}
-                          >
-                            −{lost.toLocaleString()}
-                            <span className="ml-1 opacity-70">−{Math.round((100 - kept) * 10) / 10}%</span>
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      /* A step nobody reached has no share to report, but the
-                         band is still there — the shape is drawn against it. A
-                         rule rather than a sentence: it holds the rhythm without
-                         printing a percentage of nothing. */
-                      <span className="bg-border/60 col-start-1 h-px w-4 self-center" aria-hidden />
-                    )}
+                          <span className="tabular">{kept}% continued</span>
+                          {lost > 0 && (
+                            <span className={cn("tabular", leaks ? "opacity-90" : "opacity-75")}>
+                              · −{lost.toLocaleString()}
+                              {/* The same drop as a share, which is the form the
+                                  number is compared in. First to go when the
+                                  column is a phone's width. */}
+                              <span className="hidden sm:inline"> (−{Math.round((100 - kept) * 10) / 10}%)</span>
+                            </span>
+                          )}
+                        </>
+                      ) : null}
+                      {/* Meets the line drawn across the shape, so the boundary
+                          is one rule across the whole card and not two. */}
+                      <span
+                        className={cn("min-w-2 flex-1 border-b", leaks ? "border-[var(--warning)]/40" : "border-border/70")}
+                        aria-hidden
+                      />
+                    </span>
                   </div>
                 )}
               </li>

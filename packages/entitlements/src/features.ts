@@ -22,8 +22,8 @@ export const FEATURE_MIN_PLAN = {
   // ── collect ─────────────────────────────────────────────────────────────
   duplicate_prevention: "pro",
   multi_language: "pro",
-  respondent_auth_google: "business",
-  respondent_auth_phone: "business",
+  respondent_auth_google: "pro",
+  respondent_auth_phone: "pro",
   verified_answers: "business",
   one_response_per_identity: "business",
   collect_payments: "pro",
