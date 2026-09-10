@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { env } from "cloudflare:test";
-import { applySchema, seedTenant, fetchApi, type Tenant } from "./helpers.js";
+import { applySchema, seedTenant, seedKey, fetchApi, type Tenant } from "./helpers.js";
 import { invalidateEntitlements } from "../src/lib/entitlements.js";
 import { respondentKey } from "../src/lib/respondent-key.js";
 import { PLANS } from "@repo/entitlements";
@@ -162,6 +162,7 @@ async function signIn(body: Record<string, unknown> = {}): Promise<{
       outcome?: string;
       ending?: { ref: string; kind: string; title: string; requirements: string[] } | null;
       answers?: { ref: string; title: string; display: string }[];
+      canRepeat?: boolean;
     };
   };
 }> {
@@ -373,6 +374,114 @@ describe("the device match", () => {
  * registration was told they had submitted it and shown nothing to prove
  * anything had survived.
  */
+/**
+ * Coming back to a form that takes more than one answer.
+ *
+ * The author has said a person may respond twice, so nothing here refuses
+ * them — but signing in and landing on question one of a blank conversation
+ * is not "yes, go ahead", it is indistinguishable from the first response
+ * having been lost. The respondent's rational move at that point is to type
+ * the whole thing again, and the form collects a duplicate nobody wanted.
+ *
+ * So the conversation is held until they say what they want.
+ */
+describe("returning to a form that allows a second response", () => {
+  const OPEN = { ...GATED, allowResubmissions: true };
+
+  beforeEach(() => publish(OPEN));
+  afterAll(() => publish(GATED));
+
+  it("holds, rather than silently starting a second response", async () => {
+    await seedTheirs("sbm_so_again1", { status: "completed" });
+    const { status, body } = await signIn();
+    expect(status).toBe(409);
+    expect(body.error?.code).toBe("already_answered");
+  });
+
+  it("offers another one, because the author allows it", async () => {
+    await seedTheirs("sbm_so_again2", { status: "completed" });
+    const { body } = await signIn();
+    // The whole point of holding: a button that answers the question. Refusing
+    // and offering are the same 409, and this is what tells them apart.
+    expect(body.error?.canRepeat).toBe(true);
+    expect(body.error?.message).not.toMatch(/one response per person/i);
+  });
+
+  it("shows them what they already sent", async () => {
+    await seedTheirs("sbm_so_again3", { status: "completed" });
+    const { body } = await signIn();
+    expect(body.error?.answers).toEqual([{ ref: "q_name", title: "Your name?", display: "Maya" }]);
+  });
+
+  it("lets them straight through once they have asked for another", async () => {
+    await seedTheirs("sbm_so_again4", { status: "completed" });
+    expect((await signIn()).status).toBe(409);
+
+    /*
+     * "Submit another response" opens a fresh session flagged `started_over`,
+     * which is how this sign-in knows the offer has already been made and
+     * accepted. Without it the hold would repeat forever and the button would
+     * lead back to the screen it was on.
+     */
+    const { status, body } = await signIn({ fresh: true });
+    expect(status).toBe(200);
+    expect(body.resumed).toBe(false);
+  });
+
+  it("still refuses when the author only wants one", async () => {
+    await publish({ ...GATED, allowResubmissions: false });
+    await seedTheirs("sbm_so_again5", { status: "completed" });
+    const { status, body } = await signIn();
+    expect(status).toBe(409);
+    // No button: the next sign-in would turn it down, and offering anyway is
+    // worse than not offering.
+    expect(body.error?.canRepeat).toBe(false);
+    expect(body.error?.message).toMatch(/one response per person/i);
+  });
+});
+
+/**
+ * And the same respondent over the headless API, where nothing changed.
+ *
+ * The hold is a hosted-chat decision: it exists because our own page is the
+ * respondent's only view of what they already sent. A customer driving the
+ * conversation from their own server has their own interface and their own
+ * record of who has answered, and turning their 200 into a 409 would break
+ * every one of those integrations to solve a problem they do not have.
+ */
+describe("the headless API is not held", () => {
+  let key: string;
+
+  beforeAll(async () => {
+    key = (
+      await seedKey(t, "startoverv1", {
+        scopes: { form: ["read"], session: ["create", "write", "read"] },
+      })
+    ).raw;
+  });
+
+  it("signs a returning respondent in and starts their second response", async () => {
+    await publish({ ...GATED, allowResubmissions: true });
+    await seedTheirs("sbm_so_v1", { status: "completed" });
+
+    const opened = await fetchApi(`/v1/forms/${t.formId}/sessions`, {
+      method: "POST",
+      headers: { "x-api-key": key, "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(opened.status).toBe(200);
+    const { sessionId } = (await opened.json()) as { sessionId: string };
+
+    const res = await fetchApi(`/v1/chat/sessions/${sessionId}/auth/google`, {
+      method: "POST",
+      headers: { "x-api-key": key, "content-type": "application/json" },
+      body: JSON.stringify({ idToken: await googleToken() }),
+    });
+    expect(res.status).toBe(200);
+    await publish(GATED);
+  });
+});
+
 describe("returning after being screened out", () => {
   /*
    * One setting, not two. `allowResubmissions: false` is the whole of "one

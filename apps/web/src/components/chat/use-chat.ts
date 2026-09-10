@@ -1394,6 +1394,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
           outcome?: "completed" | "screened_out";
           ending?: EndingState | null;
           answers?: SubmittedState["answers"];
+          canRepeat?: boolean;
         }
       | undefined;
     if (err?.code !== "already_answered") return false;
@@ -1416,7 +1417,17 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
       answers: err.answers ?? [],
       outcome: err.outcome ?? "completed",
       ending: err.ending ?? null,
-      canRepeat: false,
+      /*
+       * The server decides, and it now says yes as often as no.
+       *
+       * This was hardcoded false on the reasoning that a 409 is always a
+       * refusal. It is not any more: on a form that accepts more than one
+       * response the same 409 is a *hold* — here is what you sent, would you
+       * like to send another — and hardcoding false hid the only button that
+       * answers the question. Defaulting to false keeps a server that says
+       * nothing on the old, safe behaviour.
+       */
+      canRepeat: err.canRepeat === true,
     });
     setStatus("ended");
     setResolving(false);

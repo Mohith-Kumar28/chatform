@@ -640,6 +640,10 @@ mountRespondentAuth(sessionsRouter, {
   base: "/sessions/:id",
   stub,
   resolve: (c) => requireRespondent(c),
+  // Hosted chat: a returning respondent is shown what they already sent and
+  // asked whether they want another, rather than being dropped into a blank
+  // conversation. See `acknowledgePriorResponse`.
+  acknowledgePriorResponse: true,
 });
 
 export default sessionsRouter;

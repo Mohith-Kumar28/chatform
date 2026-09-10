@@ -49,6 +49,22 @@ interface Options {
   stub: (env: Bindings, sessionId: string) => DurableObjectStub<SessionDO>;
   /** Route prefix, e.g. "/sessions/:id" or "/chat/sessions/:sid". */
   base: string;
+  /**
+   * Stop and say "you have answered this before" rather than opening a second
+   * response the moment we recognise somebody.
+   *
+   * Hosted chat only. A respondent who comes back to a form that accepts more
+   * than one answer used to sign in and land on question one of a blank
+   * conversation, which reads as their first response having been lost — so
+   * the honest ones retype the whole thing and the form collects a duplicate
+   * neither party wanted. Showing what they already sent, and letting them ask
+   * for another, is the same outcome with the decision in their hands.
+   *
+   * Off for `/v1`, deliberately. A headless caller has its own interface and
+   * its own record of who has answered; turning a 200 into a 409 there would
+   * break every integration to solve a problem those callers do not have.
+   */
+  acknowledgePriorResponse?: boolean;
 }
 
 /**
@@ -96,6 +112,15 @@ interface SignInVerdict {
     ending: PublicEnding | null;
     /** What they told the form, so the page has a transcript to show. */
     answers: { ref: string; title: string; display: string }[];
+    /**
+     * Whether "Submit another response" is a real offer.
+     *
+     * False when the author's rule refuses a second one, and the card must not
+     * dangle a button the next sign-in would turn down. True when this is the
+     * acknowledgement above — the conversation is being held, not refused, and
+     * pressing the button is how it proceeds.
+     */
+    canRepeat: boolean;
   } | null;
   resume: { submissionId: string; answers: Record<string, unknown> } | null;
 }
@@ -106,6 +131,7 @@ async function assessIdentity(
   env: Bindings,
   sessionId: string,
   identity: RespondentIdentity,
+  acknowledgePriorResponse: boolean,
 ): Promise<SignInVerdict> {
   const sess = await env.DB.prepare(
     `SELECT s.form_id AS form_id, s.organization_id AS organization_id, s.started_over AS started_over,
@@ -156,7 +182,27 @@ async function assessIdentity(
      * the strongest version of that we can honestly offer them.
      */
     const oncePerPerson = !settings.allowResubmissions && can(ent, "one_response_per_identity");
-    if (!oncePerPerson) return NOTHING;
+
+    /*
+     * Not refused, but not waved through either.
+     *
+     * A form that takes more than one response per person still owes a
+     * returning respondent the fact that their last one arrived. Dropping
+     * them onto question one of an empty conversation is the single most
+     * alarming thing this screen can do: the only evidence they have that the
+     * form ever worked is the conversation they can no longer see, so the
+     * reasonable reading is that it was lost, and the reasonable response is
+     * to fill the whole thing in again. The duplicate that produces is not a
+     * second opinion, it is the same one typed twice.
+     *
+     * So the conversation is held here rather than started. The client shows
+     * what they sent and offers "Submit another response", and pressing it
+     * opens a fresh session flagged `started_over` — which is how the sign-in
+     * below this knows the offer has already been made and accepted, and lets
+     * them straight through the second time.
+     */
+    if (!oncePerPerson && !acknowledgePriorResponse) return NOTHING;
+    if (!oncePerPerson && sess.started_over) return NOTHING;
 
     const screenedOut = history.finished.status === "disqualified";
     /*
@@ -183,9 +229,13 @@ async function assessIdentity(
     return {
       blocked: {
         code: "already_answered",
-        message: screenedOut
-          ? "This form takes one response per person, and yours was not accepted."
-          : "This form takes one response per person, and you have already answered it.",
+        message: oncePerPerson
+          ? screenedOut
+            ? "This form takes one response per person, and yours was not accepted."
+            : "This form takes one response per person, and you have already answered it."
+          : screenedOut
+            ? "Your last response was not accepted. You can send another."
+            : "You have already answered this form. You can send another response if you need to.",
         completedAt: history.finished.completedAt,
         outcome: screenedOut ? "screened_out" : "completed",
         ending: ending
@@ -197,6 +247,7 @@ async function assessIdentity(
           .filter((b) => !["welcome", "statement"].includes(b.type))
           .filter((b) => answers[b.ref] !== undefined)
           .map((b) => ({ ref: b.ref, title: b.title, display: displayAnswer(b, answers[b.ref]) })),
+        canRepeat: !oncePerPerson,
       },
       resume: null,
     };
@@ -223,7 +274,12 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
   const { resolve, stub, base } = opts;
 
   const attach = async (c: Ctx, identity: RespondentIdentity, sessionId: string) => {
-    const verdict = await assessIdentity(c.env, sessionId, identity);
+    const verdict = await assessIdentity(
+      c.env,
+      sessionId,
+      identity,
+      opts.acknowledgePriorResponse === true,
+    );
     if (verdict.blocked) {
       /*
        * `completedAt` rides along so the page can say *when* they answered
@@ -239,6 +295,7 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
             outcome: verdict.blocked.outcome,
             ending: verdict.blocked.ending,
             answers: verdict.blocked.answers,
+            canRepeat: verdict.blocked.canRepeat,
           },
         },
         409,
