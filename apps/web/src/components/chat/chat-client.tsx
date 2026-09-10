@@ -30,6 +30,7 @@ import { inputSemanticsFor } from "./composers/input-semantics";
 import { QuestionAffordance } from "./question-affordance";
 import { QuestionMedia } from "./question-media";
 import { ChatBoot } from "./chat-boot";
+import { ClosingNotice } from "./closing-notice";
 import { useViewportLock } from "./use-viewport-lock";
 import { Confetti } from "./confetti";
 import { cn } from "@/lib/utils";
@@ -386,6 +387,24 @@ export function ChatClient({
         className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
       >
         <div ref={contentRef} className="mx-auto w-full max-w-2xl space-y-3 px-4 pt-6 pb-10">
+          {/*
+            The closing time, before the first question rather than after the
+            last one.
+
+            Withdrawn once the conversation has an ending: a countdown over a
+            finished response is counting down to nothing that concerns the
+            person reading it.
+
+            `started` is read from the thread having anything in it, because a
+            greeting means the server accepted a session — and a session that
+            opened before the deadline can still be finished after it, which is
+            the difference between "you have closed" and "you can still submit
+            this". Nothing else here distinguishes those two.
+          */}
+          {!chat.ending && !chat.submitted && (
+            <ClosingNotice closeAt={config.closeAt} started={chat.messages.length > 0} />
+          )}
+
           {/* Screen readers announce new agent messages without stealing focus.
               Memoised: this walked the whole thread on every render, and a
               render happens on every streamed token. */}

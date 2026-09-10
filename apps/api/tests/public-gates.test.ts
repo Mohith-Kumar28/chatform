@@ -146,6 +146,54 @@ describe("close rules", () => {
     expect(config.closed).toBeFalsy();
   });
 
+  /**
+   * The respondent-facing countdown says two different things at zero — "this
+   * form has closed" to somebody who has not started, and "you can still
+   * finish this response" to somebody mid-conversation — and the second is a
+   * promise this test is the only thing holding up.
+   *
+   * It is true because the close date is checked when a session is created and
+   * nowhere else: `SessionDO` gates turns on the session's own status and
+   * never reads `closeRules`. That is easy to change by accident. If this test
+   * ever fails, the copy in `closing-time.ts` is lying to somebody about
+   * whether their answers are going anywhere, and it — not this test — is what
+   * needs fixing.
+   */
+  it("lets a conversation that was already open finish after the deadline", async () => {
+    const slug = await publish("late", {
+      closeRules: { closeAt: new Date(Date.now() + 3_600_000).toISOString() },
+    });
+    const opened = await createSession(slug);
+    expect(opened.status).toBe(200);
+    const s = (await opened.json()) as { sessionId: string; respondentToken: string };
+
+    // The deadline passes underneath them. `forms.close_at` is the
+    // denormalised copy, which `isClosed` honours when the doc has nothing
+    // earlier to say — the cheapest way to move time in a test.
+    await env.DB.prepare(`UPDATE forms SET close_at = ?1 WHERE id = 'frm_gate_late'`)
+      .bind(Date.now() - 1_000)
+      .run();
+
+    // Nobody new gets in…
+    expect((await createSession(slug)).status).toBe(403);
+
+    // …and the person already answering is not thrown out mid-sentence.
+    const headers = { "content-type": "application/json", "x-respondent-token": s.respondentToken };
+    const turn = await fetchApi(`/p/sessions/${s.sessionId}/messages`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ type: "structured", ref: "q_email", value: "late@example.com" }),
+    });
+    expect(turn.status).toBe(202);
+
+    const submit = await fetchApi(`/p/sessions/${s.sessionId}/actions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ action: "submit" }),
+    });
+    expect(submit.status).toBe(202);
+  });
+
   it("closes once the response cap is reached, counting only completed responses", async () => {
     const slug = await publish("cap", { closeRules: { maxSubmissions: 2 } });
     const formId = "frm_gate_cap";

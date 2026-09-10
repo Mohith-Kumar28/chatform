@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useRef, useSyncExternalStore } from "react";
 import { Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { describeClosing, isUrgent } from "./closing-notice";
+import { describeClosing, isUrgent } from "./closing-time";
 
 /**
  * When this form stops accepting responses, said before anybody starts.
@@ -27,34 +27,68 @@ export function ClosingNotice({
   started: boolean;
 }) {
   /**
-   * Null until mounted, which is deliberate rather than lazy: every string
-   * below is formatted in the respondent's own timezone, so rendering it on
-   * the server would produce a different one and hydration would tear.
+   * The clock as an external store rather than state on a timer.
+   *
+   * Three things fall out of it that the obvious `useState` + `useEffect`
+   * version had to fight for. Nothing calls `Date.now()` during render, which
+   * is a purity rule and not a style preference — a component that reads the
+   * clock while rendering produces a different answer every time React happens
+   * to re-render it. Nothing calls `setState` inside an effect body, so there
+   * is no cascading render on mount. And the server snapshot is `0`, so the
+   * first paint is empty on both sides and the locale-formatted time — which
+   * is formatted in the *respondent's* zone and would never match the
+   * server's — cannot tear during hydration.
    */
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => setNow(Date.now()), []);
+  const nowRef = useRef(0);
 
-  const desc = now === null ? null : describeClosing(closeAt, now, { started });
-  const tickMs = desc?.tickMs ?? null;
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
 
-  useEffect(() => {
-    if (tickMs === null) return;
-    const id = setInterval(() => setNow(Date.now()), tickMs);
-    /*
-     * A backgrounded tab has its timers throttled to about once a minute, so a
-     * second-by-second countdown comes back visibly stale. The clock is read
-     * rather than counted, so one read on return is the whole repair.
-     */
-    const onVisible = () => {
-      if (document.visibilityState === "visible") setNow(Date.now());
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [tickMs]);
+      const read = () => {
+        nowRef.current = Date.now();
+        onStoreChange();
+        /*
+         * The next wake-up is decided by the line we just wrote, not by a
+         * fixed interval: seconds inside the last day, minutes above it, and
+         * nothing at all once the deadline has passed. So the countdown speeds
+         * up as it crosses each tier without anyone having to notice, and a
+         * deadline three weeks out costs one wake-up a minute rather than
+         * sixty.
+         */
+        const next = describeClosing(closeAt, nowRef.current, { started })?.tickMs;
+        if (next != null) timer = setTimeout(read, next);
+      };
 
+      /*
+       * A backgrounded tab has its timers throttled to about once a minute, so
+       * a second-by-second countdown comes back visibly stale. The clock is
+       * read rather than counted, so one read on return is the whole repair.
+       */
+      const onVisible = () => {
+        if (document.visibilityState === "visible") {
+          clearTimeout(timer);
+          read();
+        }
+      };
+
+      read();
+      document.addEventListener("visibilitychange", onVisible);
+      return () => {
+        clearTimeout(timer);
+        document.removeEventListener("visibilitychange", onVisible);
+      };
+    },
+    [closeAt, started],
+  );
+
+  const now = useSyncExternalStore(
+    subscribe,
+    () => nowRef.current,
+    () => 0,
+  );
+
+  const desc = now === 0 ? null : describeClosing(closeAt, now, { started });
   if (!desc) return null;
 
   const urgent = isUrgent(desc.tier);
