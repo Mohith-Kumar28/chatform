@@ -1,5 +1,6 @@
 "use client";
 
+import { SkipForward } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -118,7 +119,13 @@ export function ComposerShell({
  * want to make read as a wall. Optionality is a promise the form makes, and a
  * promise whispered under the composer is not made.
  *
- * Outlined rather than filled, because Send is filled: the pair has to read as
+ * Sat on its own line directly above the input rather than beside Send, for
+ * one reason: at 400px an input sharing a row with two pills is a 200px input,
+ * and this row already has to hold a whole sentence. Above it, the pill is the
+ * last thing between the question and the answer, which is exactly where a
+ * respondent deciding whether to bother is looking.
+ *
+ * Outlined rather than filled, because Send is filled: the two have to read as
  * "the action, and the way past it", not as two equal buttons. Same 44px
  * height as Send and the chips, so it is a real target on a phone.
  *
@@ -126,20 +133,21 @@ export function ComposerShell({
  * on the form and `required: false` on the block — which is what keeps it from
  * becoming furniture people stop seeing.
  */
-function SkipButton({ onSkip }: { onSkip: () => void }) {
+export function SkipButton({ onSkip }: { onSkip: () => void }) {
   return (
     <button
       type="button"
       onClick={onSkip}
       className={cn(
-        "inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-4 text-sm font-medium",
+        "inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-medium",
         "border-[var(--cf-accent)] bg-[color-mix(in_oklch,var(--cf-accent)_8%,transparent)] text-[var(--cf-accent)]",
         "transition-[background-color,transform] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
         "hover:bg-[color-mix(in_oklch,var(--cf-accent)_16%,transparent)]",
         "active:scale-[0.97] motion-reduce:active:scale-100",
       )}
     >
-      Skip
+      <SkipForward className="size-4" strokeWidth={2} />
+      Skip this question
       {/* Esc, not a letter: the composer is focused on every question, so a
           one-letter shortcut would eat the first character of an answer that
           starts with it. `cf-key-hint` hides this where there is no keyboard. */}
@@ -153,21 +161,17 @@ function SkipButton({ onSkip }: { onSkip: () => void }) {
 export function SendRow({
   children,
   onSend,
-  onSkip,
   disabled,
   label = "Send",
 }: {
   children: React.ReactNode;
   onSend: () => void;
-  /** Given only when this question is optional; draws the Skip pill. */
-  onSkip?: () => void;
   disabled?: boolean;
   label?: string;
 }) {
   return (
     <div className="flex items-end gap-2">
       <div className="min-w-0 flex-1">{children}</div>
-      {onSkip && <SkipButton onSkip={onSkip} />}
       <button
         type="button"
         onClick={onSend}

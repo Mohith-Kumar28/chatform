@@ -440,7 +440,7 @@ export class SessionDO extends DurableObject<Bindings> {
     if (params.resume) {
       await this.ctx.storage.put("submission_id", params.resume.submissionId);
       this.state.answers = { ...(params.resume.answers as EvalState["answers"]) };
-      this.collectedCount = Object.keys(params.resume.answers).length;
+      this.collectedCount = this.liveAnswerCount(params.resume.answers);
       if (params.resume.identity) this.meta.identity = params.resume.identity;
       this.resumed = true;
     }
@@ -448,7 +448,13 @@ export class SessionDO extends DurableObject<Bindings> {
     await this.persistMeta();
     await this.appendMessage(
       "assistant",
-      params.resume ? resumeGreeting(this.doc, this.collectedCount) : greeting(this.doc),
+      /*
+       * A resume that carried nothing over is a fresh start, and is greeted as
+       * one. "Let's pick up where you left off" in front of question one, with
+       * the progress bar reading 0%, describes a conversation that did not
+       * happen — see `liveAnswerCount`.
+       */
+      params.resume && this.collectedCount > 0 ? resumeGreeting(this.doc, this.collectedCount) : greeting(this.doc),
     );
     await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
 
@@ -502,6 +508,31 @@ export class SessionDO extends DurableObject<Bindings> {
    * form gates before the first question exactly as before; above 0 the gate
    * stays open until that many answers are in.
    */
+  /**
+   * How many of a resumed response's answers this document still has a question
+   * for.
+   *
+   * A response outlives the version it was given to. Republish the form with
+   * different refs — a rewrite, a rebuilt demo, a question renamed — and the
+   * answers come back keyed to blocks that no longer exist: `resolveNext` puts
+   * the respondent on question one, the progress bar reads 0%, and every one of
+   * those orphans was still counted.
+   *
+   * Which is how a public demo greeted returning visitors with a sign-in card
+   * before its first question. `afterBlocks: 3` versus a raw count of four
+   * answers from a version that had been replaced: the gate closed on somebody
+   * who had, as far as this document is concerned, answered nothing.
+   *
+   * Counting only what the document can still show is the same rule
+   * `collectedCount` follows everywhere else — it is the number of questions
+   * this respondent has actually got through.
+   */
+  private liveAnswerCount(answers: Record<string, unknown>): number {
+    if (!this.doc) return 0;
+    const refs = new Set(this.doc.blocks.map((b) => b.ref));
+    return Object.keys(answers).filter((ref) => refs.has(ref)).length;
+  }
+
   private authGateBlocks(): boolean {
     if (!this.doc || !this.meta) return false;
     const gate = this.doc.settings.requireAuth;
@@ -597,7 +628,7 @@ export class SessionDO extends DurableObject<Bindings> {
     if (resume && this.collectedCount === 0 && !this.meta.currentRef) {
       await this.ctx.storage.put("submission_id", resume.submissionId);
       this.state.answers = { ...(resume.answers as EvalState["answers"]) };
-      this.collectedCount = Object.keys(resume.answers).length;
+      this.collectedCount = this.liveAnswerCount(resume.answers);
       this.resumed = true;
       await this.persistMeta();
       if (this.collectedCount > 0) {

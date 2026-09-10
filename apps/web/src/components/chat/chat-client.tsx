@@ -23,7 +23,7 @@ import { asEmail } from "./respondent-hint";
 import { VerifyCard } from "./verify-card";
 import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
 import { useChat, type ChatMessage } from "./use-chat";
-import { SendRow, TextInput } from "./composers/primitives";
+import { SendRow, SkipButton, TextInput } from "./composers/primitives";
 import { QuestionAffordance } from "./question-affordance";
 import { QuestionMedia } from "./question-media";
 import { ChatBoot } from "./chat-boot";
@@ -1327,11 +1327,9 @@ const Composer = memo(function Composer({
         </p>
       )}
 
-      <SendRow
-        onSend={submit}
-        onSkip={canSkip ? () => void sendAction("skip") : undefined}
-        disabled={disabled || !text.trim()}
-      >
+      {canSkip && <SkipButton onSkip={() => void sendAction("skip")} />}
+
+      <SendRow onSend={submit} disabled={disabled || !text.trim()}>
         <TextInput
           value={text}
           onChange={setText}

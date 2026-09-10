@@ -5,6 +5,7 @@ import { mintEmailToken } from "../src/lib/signed-url.js";
 import { RESUME_TTL_DAYS } from "../src/lib/followups.js";
 import { sha256Hex } from "@repo/form-schema";
 import type { Bindings } from "../src/env.js";
+import type { SessionDO } from "../src/do/session-do.js";
 
 /**
  * Coming back to a response you abandoned.
@@ -166,6 +167,70 @@ describe("resuming with a valid token", () => {
     expect(second.status).toBe(200);
     const subs = await env.DB.prepare(`SELECT COUNT(*) AS n FROM submissions`).first<{ n: number }>();
     expect(subs?.n).toBe(1);
+  });
+});
+
+describe("resuming a response the form has since outgrown", () => {
+  /**
+   * The answers were given to a version whose questions no longer exist.
+   *
+   * `resolveNext` already does the right thing with them — nothing routes to a
+   * ref the document does not have, so the respondent lands on question one —
+   * but they were still being *counted*, and the count is what a deferred
+   * sign-in gate reads. A public demo republished with a new set of questions
+   * met every returning visitor with the sign-in card in front of question one,
+   * progress bar reading 0%.
+   */
+  async function seedStale(id: string): Promise<void> {
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT INTO submissions (id, form_id, form_version_id, organization_id, status, source, is_test, started_at, updated_at, active_ms)
+       VALUES (?, ?, ?, ?, 'abandoned', 'chat', 0, ?, ?, 60000)`,
+    )
+      .bind(id, t.formId, VERSION_ID, t.orgId, now - 3_600_000, now - 3_600_000)
+      .run();
+    for (const ref of ["q_gone_one", "q_gone_two", "q_gone_three"]) {
+      await env.DB.prepare(
+        `INSERT INTO submission_answers (id, submission_id, form_id, block_ref, block_type, value_json, updated_at)
+         VALUES (?, ?, ?, ?, 'short_text', ?, ?)`,
+      )
+        .bind(`ans_${id}_${ref}`, id, t.formId, ref, JSON.stringify("from an older version"), now)
+        .run();
+    }
+  }
+
+  it("does not count answers to questions this version no longer asks", async () => {
+    await publish({ ...DOC.settings, requireAuth: { enabled: true, method: "google", afterBlocks: 3 } });
+    await seedStale("sbm_resume20");
+    const res = await open({ resumeToken: await token("sbm_resume20") });
+    expect(res.status).toBe(200);
+    const { sessionId } = (await res.json()) as { sessionId: string };
+
+    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+    const status = await stub.getStatus();
+    // Three orphaned answers, a gate set to close after three: counted raw,
+    // this is a sign-in card in front of question one.
+    expect(status?.collected).toBe(0);
+    expect(status?.currentRef).toBe("q_name");
+
+    const { events } = await stub.eventsSince(0);
+    expect(events.map((e) => e.type)).not.toContain("auth_required");
+    await publish();
+  });
+
+  it("greets them as a new arrival rather than welcoming them back", async () => {
+    // Republished without the gate, so what is under test is the greeting and
+    // not whatever the previous test left in `settings`.
+    await publish();
+    await seedStale("sbm_resume21");
+    const res = await open({ resumeToken: await token("sbm_resume21") });
+    const { sessionId } = (await res.json()) as { sessionId: string };
+    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+    // The opening line lives in the transcript, not in the event stream: it is
+    // written by `appendMessage` before the first question is put.
+    const said = (await stub.getTranscript()).map((m) => m.content).join("\n");
+    expect(said).not.toContain("Welcome back");
+    expect(said).not.toContain("pick up");
   });
 });
 
