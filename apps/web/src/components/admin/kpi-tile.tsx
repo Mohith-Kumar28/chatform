@@ -40,7 +40,7 @@ export function KpiTile({
   series,
   lowerIsBetter = false,
   hint,
-  caption,
+  about,
   sub,
 }: {
   label: string;
@@ -67,17 +67,21 @@ export function KpiTile({
   lowerIsBetter?: boolean;
   hint?: string;
   /**
-   * The short form of `hint`, for the line that is actually printed.
+   * An explanation that is never printed, only hovered.
    *
    * `hint` does two jobs — the caption beside the movement, and the tooltip
-   * behind it — and they want different lengths. A sentence that explains a
-   * definition properly is a hundred characters; the line it has to fit on is
-   * about a hundred and forty pixels once the percentage has taken its share.
-   * So the tile printed "Accounts tha…", which is the half that says nothing.
-   * Give a caption of three or four words and the full sentence still arrives
-   * on hover.
+   * behind it — and for four or five words that is exactly right: "live, not
+   * deleted", "MRR × 12", "3+ fails in a row". It stops being right at sentence
+   * length, where the line has about a hundred and forty pixels once the
+   * movement has taken its share and the tile prints "Accounts tha…", which is
+   * the half that says nothing.
+   *
+   * Abbreviating the sentence into the slot does not fix that. "Collected or
+   * edited" fitted and meant nothing: two transitive verbs with their objects
+   * cut off. A definition that needs a sentence needs a sentence, so it goes
+   * here and the printed line stays empty.
    */
-  caption?: string;
+  about?: string;
   /**
    * A second figure that qualifies the first, beside it — "+8 partial".
    *
@@ -107,7 +111,9 @@ export function KpiTile({
      * needs to out-weigh its own label, which 1.75rem does, and the row now fits
      * on one line at desktop width and costs roughly a third of what it did.
      */
-    <div className="bg-card shadow-xs rounded-xl px-3.5 py-3">
+    // The whole tile is the hover target for `about`, rather than a few words of
+    // caption the reader would have to find first.
+    <div className="bg-card shadow-xs rounded-xl px-3.5 py-3" title={about}>
       <p className="text-muted-foreground text-caption truncate" title={label}>
         {label}
       </p>
@@ -146,8 +152,8 @@ export function KpiTile({
         )}
       >
         {moved === null ? (
-          <span className="truncate" title={hint}>
-            {caption ?? hint ?? (previous !== undefined ? "no change" : "")}
+          <span className="truncate" title={about ?? hint}>
+            {hint ?? (previous !== undefined ? "no change" : "")}
           </span>
         ) : (
           <>
@@ -165,9 +171,9 @@ export function KpiTile({
               on the figure — but the line itself is now the movement and, where
               a tile has one, the caption that says what it counts.
             */}
-            {(caption ?? hint) && (
-              <span className="text-muted-foreground truncate" title={hint}>
-                {caption ?? hint}
+            {hint && (
+              <span className="text-muted-foreground truncate" title={about ?? hint}>
+                {hint}
               </span>
             )}
           </>

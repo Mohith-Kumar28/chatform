@@ -574,6 +574,32 @@ export function FormCard({
           className={cn(
             "bg-card border-border group relative flex h-full flex-col overflow-hidden rounded-2xl border",
             "shadow-xs transition-[box-shadow,outline-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
+            /*
+              A live form's edge is tinted green.
+
+              The card already says Live twice — the pill on the artwork and
+              the word in the status strip — but both of those live inside the
+              thumbnail's top band, which is the busiest 128px on the card and
+              the part your eye skips once you know the form. The border is the
+              one property that traces the whole card, so it says which forms
+              are collecting *before* you read anything on them, which is the
+              question a grid of forms is usually being scanned for.
+
+              A mix rather than `--success` itself: this is a resting edge on
+              every published card at once, and a grid of saturated green
+              outlines reads as a row of alerts. Mixed most of the way back to
+              `--border` it is the same quiet line the draft cards have, in a
+              green you only name once you look at it — and because it is mixed
+              *toward the theme's own border colour*, it lands at the right
+              lightness in both themes without a `dark:` twin.
+
+              It is a border and not the outline because the outline is spoken
+              for: transparent at rest, `--border` on hover, `--primary` when
+              ticked. Those are the three things that happen *to* a card, and
+              they layer over this one, which is what the card *is*.
+            */
+            published &&
+              "border-[color-mix(in_oklab,var(--success)_38%,var(--border))]",
             // Always present, transparent until it has something to say, so the
             // only thing that ever animates is its colour. Inset, because an
             // outline outside a rounded border sits proud of the corner radius.
@@ -681,17 +707,37 @@ export function FormCard({
           {selectable && (
             <div
               className={cn(
-                // `2.5` plus the 6px touch padding inside puts the box's own
-                // edge exactly on the footer's 16px inset, so it lines up with
-                // the text beside it rather than sitting proud of it.
-                "absolute right-2.5 bottom-2.5 z-10 p-1.5",
+                // Tucked into the corner: `0.5` plus the 6px touch padding
+                // inside puts the box's own edge 8px off each edge — half the
+                // footer's 16px text column, so it reads as a control sitting
+                // on the card rather than as another item in the meta row it
+                // shares a line with. The padding is the part that stays: it
+                // is what keeps the tap target over 32px without growing the
+                // box, and it is why the box can sit this close to the corner
+                // without the pointer having to find 22 exact pixels.
+                "absolute right-0.5 bottom-0.5 z-10 p-1.5",
                 "transition-opacity duration-[var(--duration-micro)]",
                 selected || anySelected
                   ? "opacity-100"
                   : "opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100",
               )}
             >
-              <div className="relative">
+              {/*
+                `flex`, not the default block, and it fixes two things at once.
+
+                The box is an inline-block button, so in a block parent it sits
+                on a baseline with descender space under it: the ghost tick
+                below centres itself against that taller box and lands low in
+                the square rather than in it.
+
+                Worse, Radix only mounts the indicator once the box is checked
+                — so ticking it takes the button from empty to having in-flow
+                content, which moves its baseline from its bottom edge up to
+                the glyph's, and the whole box jumps at the moment you click
+                it. As a flex item it is block-level and aligned to neither, so
+                there is no baseline left to change.
+              */}
+              <div className="relative flex">
                 <Checkbox
                   checked={selected}
                   onCheckedChange={(next) => onSelectedChange?.(next === true)}
@@ -716,6 +762,15 @@ export function FormCard({
                      * is the state change you see from across the grid.
                      */
                     "size-[22px] border-2 shadow-sm",
+                    // The base component's tick is sized for a 16px box: at
+                    // 22px the same 14px glyph at stroke-2 is a thin scratch
+                    // in the middle of a large square. Scaled to 16px at
+                    // stroke-3 it is a tick at this size. `inline-flex`
+                    // centres it against the border box, since the stock
+                    // indicator only lands centred when the glyph happens to
+                    // fill the content box exactly.
+                    "inline-flex items-center justify-center",
+                    "[&_svg]:size-4 [&_svg]:stroke-[3]",
                     "border-foreground bg-foreground text-background dark:bg-foreground",
                     "data-[state=checked]:border-primary data-[state=checked]:bg-primary",
                   )}
@@ -737,7 +792,8 @@ export function FormCard({
                 {!selected && (
                   <CheckIcon
                     aria-hidden
-                    className="text-background pointer-events-none absolute inset-0 m-auto size-3.5 opacity-30"
+                    strokeWidth={3}
+                    className="text-background pointer-events-none absolute inset-0 m-auto size-4 opacity-35"
                   />
                 )}
               </div>

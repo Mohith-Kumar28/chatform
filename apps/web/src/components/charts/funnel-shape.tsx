@@ -171,8 +171,22 @@ function Movement({
   lowerIsBetter?: boolean;
   title?: string;
 }) {
+  /*
+    Nothing to say, so it says nothing — but it still takes the line.
+
+    A dash here was one mark per figure meaning "no comparison", and on a young
+    product with no prior period that is *every* figure: twenty-one dashes, none
+    of them information, drawn at the same weight as the movements they were
+    standing in for. Blank is the honest rendering of an absent comparison.
+
+    It cannot simply be omitted, though. The figure above it is centred in a
+    fixed-height row, so a cell that drops to one line lifts its number out of
+    alignment with the two-line cells beside it, and a table whose numbers sit at
+    two heights across one row is harder to read across than one with dashes in
+    it. So the line is reserved and left empty.
+  */
   if (change === null) {
-    return <span className="text-muted-foreground/40 text-[0.6875rem] leading-[1.35]">—</span>;
+    return <span aria-hidden className="text-[0.6875rem] leading-[1.35]">&nbsp;</span>;
   }
 
   const good = lowerIsBetter ? change < 0 : change > 0;
@@ -532,7 +546,19 @@ export function FunnelShape({
                     />
                   )}
                 </span>
-                <span className="tabular text-right text-sm font-semibold">{step.count.toLocaleString()}</span>
+                {/*
+                  The count carries no movement of its own — a cohort that grew
+                  says something about the Signups tile, not about this stage —
+                  but it reserves the line anyway. Every other figure in the row
+                  sits on the upper of two lines, and a number that centres
+                  itself instead lands thirteen pixels lower than the four beside
+                  it, which is exactly the kind of misalignment that makes a
+                  table hard to read across.
+                */}
+                <span className="flex flex-col items-end">
+                  <span className="tabular text-sm font-semibold">{step.count.toLocaleString()}</span>
+                  <Movement change={null} render={() => ""} />
+                </span>
                 {/*
                   The top row is 100% by definition, so it takes no colour: a
                   cell that is green whatever happens is a cell that has stopped
@@ -543,9 +569,8 @@ export function FunnelShape({
                   <span className={cn("tabular text-sm", i === 0 ? "text-muted-foreground" : TONE[verdict(step.rate) ?? "good"])}>
                     {step.rate}%
                   </span>
-                  {i > 0 && (
-                    <Movement
-                      change={reachedShift}
+                  <Movement
+                      change={i === 0 ? null : reachedShift}
                       render={(n) => `${n}pp`}
                       title={
                         reachedShift === null
@@ -553,7 +578,6 @@ export function FunnelShape({
                           : `${step.rate}% of signups reached this stage, against ${prevRate}% in ${comparedTo}.`
                       }
                     />
-                  )}
                 </span>
 
                 {/*
@@ -574,9 +598,8 @@ export function FunnelShape({
                   <span className={cn("tabular text-sm", tone ? TONE[tone] : "text-muted-foreground", leaks && "font-semibold")}>
                     {kept === null ? <span className="text-muted-foreground opacity-40">—</span> : `${kept}%`}
                   </span>
-                  {kept !== null && (
-                    <Movement
-                      change={keptShift}
+                  <Movement
+                      change={kept === null ? null : keptShift}
                       render={(n) => `${n}pp`}
                       title={
                         keptShift === null
@@ -584,7 +607,6 @@ export function FunnelShape({
                           : `${kept}% continued this period, against ${prevKept}% in ${comparedTo}.`
                       }
                     />
-                  )}
                 </span>
 
                 {/*
@@ -612,18 +634,16 @@ export function FunnelShape({
                   >
                     {step.medianMs == null ? <span className="opacity-40">—</span> : duration(step.medianMs)}
                   </span>
-                  {step.medianMs != null && (
-                    <Movement
-                      change={timeShift}
+                  <Movement
+                      change={step.medianMs == null ? null : timeShift}
                       render={(n) => `${n}%`}
                       lowerIsBetter
                       title={
                         timeShift === null
                           ? `No account reached this stage in ${comparedTo}, so there is nothing to compare against.`
-                          : `${duration(step.medianMs)} this period, against ${duration(step.previousMedianMs!)} in ${comparedTo}.`
+                          : `${duration(step.medianMs!)} this period, against ${duration(step.previousMedianMs!)} in ${comparedTo}.`
                       }
                     />
-                  )}
                 </span>
               </>
             );

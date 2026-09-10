@@ -134,8 +134,9 @@ export function OverviewClient() {
           {...kpi("active_orgs")}
           series={o.series?.active_orgs}
           comparedTo={comparedTo}
-          caption="collected or edited"
-          hint="Accounts that collected a response or edited a form in this period, counted once each. The sparkline is the daily count."
+          // A definition, not a caption: nothing is printed under the figure and
+          // the whole tile carries the sentence on hover.
+          about="Accounts that collected a response or edited a form in this period, counted once each. The sparkline is the daily count."
         />
         <KpiTile
           label="Forms created"
