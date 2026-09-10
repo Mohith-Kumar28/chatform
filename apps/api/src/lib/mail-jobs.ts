@@ -253,6 +253,13 @@ async function runFollowUpJob(
     resumeUrl: `${origin}/f/${encodeURIComponent(await slugOf(env, row.form_id))}?resume=${resumeToken}&fu=${row.id}`,
     unsubscribeUrl: `${origin}/p/unsubscribe/${unsubToken}`,
     ...(progress ? { progress: { answered: progress.answered, total: progress.totalEstimate } } : {}),
+    /*
+      Passed whether or not the author shows a progress line, because what the
+      message may truthfully claim cannot depend on a display setting — with
+      `showProgress` off and nothing answered, the copy used to promise them
+      answers that were waiting.
+    */
+    answered: byRef.size,
     ...(resolved?.firstName ? { firstName: resolved.firstName } : {}),
     ...(org?.postal_address ? { postalAddress: org.postal_address } : {}),
     showPoweredBy: !doc.settings.branding?.hidePoweredBy,

@@ -240,6 +240,50 @@ describe("scheduleFollowUps", () => {
   });
 
   /**
+   * Signing in and stopping is the abandonment worth chasing.
+   *
+   * They got through the gate — which is the step people drop at — and then
+   * answered nothing. The sign-in handed us a verified address, so this is the
+   * one zero-answer response we can actually reach, and it used to be skipped
+   * as `no_answers` alongside the anonymous ones we cannot.
+   */
+  it("still nudges a verified respondent who answered nothing", async () => {
+    await seedAbandoned("sbm_verified_zero", {});
+    await env.DB.prepare(
+      `UPDATE submissions SET respondent_provider = 'google', respondent_subject = 'sub_zero',
+              respondent_email = 'signed.in@northwind.example' WHERE id = ?`,
+    )
+      .bind("sbm_verified_zero")
+      .run();
+
+    const n = await scheduleFollowUps({
+      env: env as unknown as Bindings,
+      submissionId: "sbm_verified_zero",
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt: Date.now(),
+    });
+    expect(n).toBe(2);
+    expect((await rowsFor("sbm_verified_zero")).results?.[0]!.address).toBe(
+      "signed.in@northwind.example",
+    );
+  });
+
+  it("stays quiet when nothing was answered and nobody signed in", async () => {
+    // The address would have to come from an answer, and there are none. This
+    // is the case the old rule was actually written for.
+    await seedAbandoned("sbm_anon_zero", {});
+    const n = await scheduleFollowUps({
+      env: env as unknown as Bindings,
+      submissionId: "sbm_anon_zero",
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt: Date.now(),
+    });
+    expect(n).toBe(0);
+  });
+
+  /**
    * The silent branches, made legible.
    *
    * Each of these used to return zero and write nothing anywhere, so an author

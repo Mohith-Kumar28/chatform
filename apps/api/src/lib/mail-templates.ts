@@ -510,6 +510,16 @@ export function followUpEmail(a: {
   unsubscribeUrl: string;
   /** Omitted when the author turned the progress line off, or nothing is known. */
   progress?: { answered: number; total: number };
+  /**
+   * How many questions they actually answered, known whether or not the author
+   * shows a progress line.
+   *
+   * Separate from `progress` because "did they answer anything at all" decides
+   * what this email may truthfully claim, and that must not depend on a display
+   * setting: with `showProgress` off and no answers, the old copy still told
+   * them their answers were waiting.
+   */
+  answered: number;
   /** From a contact block, when the form collected one. */
   firstName?: string;
   /** The sender's physical address. Required by CAN-SPAM; see above. */
@@ -520,24 +530,43 @@ export function followUpEmail(a: {
   const greeting = a.firstName ? `${escapeHtml(a.firstName)}, y` : "Y";
   const remaining = a.progress ? Math.max(a.progress.total - a.progress.answered, 0) : 0;
 
-  const progressLine = a.progress
+  /**
+   * Three cases, because two of them used to share a sentence that was false
+   * in one of them.
+   *
+   * "Your answers are still there" is the right thing to say to somebody who
+   * left half a form behind, and a plain untruth to somebody who signed in and
+   * stopped before the first question — who now gets a nudge at all, since the
+   * sign-in told us where to send it. Telling that person their answers are
+   * safe invites them back to look for work they never did, and "pick up where
+   * you left off" points at a conversation with nothing in it.
+   */
+  const startedNothing = a.progress ? a.progress.answered === 0 : a.answered === 0;
+
+  const progressLine = startedNothing
     ? p(
-        `${greeting}ou answered <strong>${a.progress.answered} of ${a.progress.total}</strong> questions in ` +
-          `<strong>${escapeHtml(a.formTitle)}</strong>` +
-          (remaining > 0
-            ? `, ${remaining} to go, about ${estimateMinutes(remaining)}.`
-            : ` and were nearly done.`),
+        `${greeting}ou opened <strong>${escapeHtml(a.formTitle)}</strong> but did not get to any ` +
+          `of the questions` +
+          (a.progress ? `, and there ${a.progress.total === 1 ? "is" : "are"} ${a.progress.total}.` : `.`),
       )
-    : p(
-        `${greeting}ou started <strong>${escapeHtml(a.formTitle)}</strong> and did not finish. ` +
-          `Your answers are still there.`,
-      );
+    : a.progress
+      ? p(
+          `${greeting}ou answered <strong>${a.progress.answered} of ${a.progress.total}</strong> questions in ` +
+            `<strong>${escapeHtml(a.formTitle)}</strong>` +
+            (remaining > 0
+              ? `, ${remaining} to go, about ${estimateMinutes(remaining)}.`
+              : ` and were nearly done.`),
+        )
+      : p(
+          `${greeting}ou started <strong>${escapeHtml(a.formTitle)}</strong> and did not finish. ` +
+            `Your answers are still there.`,
+        );
 
   const body = [
     h1(a.subject),
     progressLine,
     a.bodyHtml,
-    button(a.resumeUrl, "Pick up where you left off"),
+    button(a.resumeUrl, startedNothing ? "Start the form" : "Pick up where you left off"),
     fallbackLink(a.resumeUrl),
   ]
     .filter(Boolean)
@@ -549,21 +578,30 @@ export function followUpEmail(a: {
    * an unsubscribe somebody cannot find is the same as one that does not exist,
    * and it is the cheapest possible alternative to a spam complaint.
    */
+  const why = startedNothing
+    ? `You are receiving this because you opened ${escapeHtml(a.formTitle)}.`
+    : `You are receiving this because you started filling in ${escapeHtml(a.formTitle)}.`;
   const footerParts = [
-    `You are receiving this because you started filling in ${escapeHtml(a.formTitle)}.`,
+    why,
     `<a href="${escapeHtml(a.unsubscribeUrl)}" style="color:${MUTED};text-decoration:underline;">Unsubscribe</a>`,
   ];
   if (a.postalAddress) footerParts.push(escapeHtml(a.postalAddress));
   if (a.showPoweredBy) footerParts.push("Powered by chatform.");
 
   const textParts = [
-    a.progress
-      ? `You answered ${a.progress.answered} of ${a.progress.total} questions in ${a.formTitle}.`
-      : `You started ${a.formTitle} and did not finish. Your answers are still there.`,
+    startedNothing
+      ? `You opened ${a.formTitle} but did not get to any of the questions.`
+      : a.progress
+        ? `You answered ${a.progress.answered} of ${a.progress.total} questions in ${a.formTitle}.`
+        : `You started ${a.formTitle} and did not finish. Your answers are still there.`,
     a.bodyText,
-    `Pick up where you left off: ${a.resumeUrl}`,
+    startedNothing
+      ? `Start the form: ${a.resumeUrl}`
+      : `Pick up where you left off: ${a.resumeUrl}`,
     "—",
-    `You are receiving this because you started filling in ${a.formTitle}.`,
+    startedNothing
+      ? `You are receiving this because you opened ${a.formTitle}.`
+      : `You are receiving this because you started filling in ${a.formTitle}.`,
     `Unsubscribe: ${a.unsubscribeUrl}`,
     a.postalAddress ?? "",
   ].filter(Boolean);
@@ -571,9 +609,11 @@ export function followUpEmail(a: {
   return {
     subject: a.subject,
     html: layout({
-      preheader: a.progress
-        ? `${a.progress.answered} of ${a.progress.total} answered — ${remaining} to go.`
-        : `Your answers to ${a.formTitle} are still saved.`,
+      preheader: startedNothing
+        ? `You have not started ${a.formTitle} yet.`
+        : a.progress
+          ? `${a.progress.answered} of ${a.progress.total} answered — ${remaining} to go.`
+          : `Your answers to ${a.formTitle} are still saved.`,
       body,
       brand: a.showPoweredBy,
       footer: footerParts.join("<br>"),

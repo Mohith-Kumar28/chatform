@@ -252,12 +252,6 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
       // One unparseable answer must not stop the rest from being read.
     }
   }
-  // Nothing answered means nothing to come back to, and no basis for saying
-  // negotiations took place. `finalizeResponse` already declines to write a row
-  // at all in that case, but an API response can reach here with an identity
-  // and no answers.
-  if (byRef.size === 0) return noteSkip(env, submissionId, "no_answers");
-
   const hidden = parseHidden(sub.hidden_fields);
   const resolved = resolveRespondentAddress(doc, {
     respondentEmail: sub.respondent_email,
@@ -266,6 +260,27 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
     ...(cfg.addressField ? { addressField: cfg.addressField } : {}),
   });
   if (!resolved) return noteSkip(env, submissionId, "no_address");
+
+  /**
+   * Nothing answered — which is only a reason to stay quiet if we do not know
+   * who they are.
+   *
+   * This used to run before the address was resolved, so a respondent who
+   * signed in with Google and then left without answering a question was
+   * skipped as `no_answers`, even though the sign-in had just handed us a
+   * verified address. That is the one abandonment we are best placed to
+   * recover: they got through the gate, which is the step people drop at, and
+   * then stopped at question one. On a live form it accounted for seven of the
+   * twenty responses that never got a reminder.
+   *
+   * A verified identity only. An address from an answer cannot be here — there
+   * are no answers — and one from a hidden field is a parameter on a URL
+   * somebody clicked, which is not a person telling us their address. Mailing
+   * that on the strength of an opened link is how a nudge becomes spam.
+   */
+  if (byRef.size === 0 && resolved.source !== "identity") {
+    return noteSkip(env, submissionId, "no_answers");
+  }
 
   if (await isSuppressed(env, organizationId, resolved.address)) {
     return noteSkip(env, submissionId, "suppressed");
