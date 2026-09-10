@@ -73,7 +73,78 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
     return outcome.message;
   };
 
+  /**
+   * Offered only when there is something to look up.
+   *
+   * It used to be registered unconditionally, and its description tells the
+   * model to call it "before answering any question about pricing, policy, the
+   * product, or the form itself". On a form with no knowledge base that
+   * instruction can only ever be answered with "no knowledge base is
+   * configured" — so an off-topic question spent a whole extra model round
+   * trip, at the full prompt, to learn nothing. It also put ~100 tokens of
+   * schema in front of every turn of every form, most of which have no
+   * knowledge base at all.
+   */
+  const knowledgeTools: ToolSet = ctx.hasKnowledge
+    ? {
+        answer_from_knowledge: tool({
+          description:
+            "Look up something the respondent asked about, from the form's knowledge base. Use this before answering any question about pricing, policy, the product, or the form itself.",
+          inputSchema: z.object({ query: z.string().describe("What they want to know.") }),
+          execute: async ({ query }) => {
+            const guards = ctx.doc.settings.agent.guardrails;
+            const nothingFound = () =>
+              record({
+                name: "answer_from_knowledge",
+                ok: true,
+                message: guards.answerOffTopic
+                  ? "Nothing in the knowledge base covers that. Answer briefly from general knowledge and say you are not certain."
+                  : `Nothing in the knowledge base covers that. Say: "${guards.refusalMessage}"`,
+              });
+
+            /*
+             * `hasKnowledge` was true when the toolset was built, but the
+             * searcher can still be missing — Miniflare implements neither
+             * Vectorize nor Workers AI, so this is the shape of every local dev
+             * run. Saying "nothing covers that" would be a lie about the
+             * material; saying retrieval is unavailable is the truth, and it is
+             * what stops the model inventing an answer it thinks it looked up.
+             */
+            if (!ctx.searchKnowledge) {
+              return record({
+                name: "answer_from_knowledge",
+                ok: true,
+                message:
+                  "No knowledge base is configured for this form. Answer from the form's title and description only, and say if you are unsure.",
+              });
+            }
+
+            let hits: KnowledgeHit[];
+            try {
+              hits = await ctx.searchKnowledge(query);
+            } catch (err) {
+              // A retrieval failure is not a reason to end the respondent's turn.
+              // Treating it as a miss lets the guardrail decide what to say, which
+              // is the same thing that happens when the answer genuinely is not
+              // there.
+              console.error("knowledge_search_failed", err);
+              return nothingFound();
+            }
+
+            if (hits.length === 0) return nothingFound();
+
+            return record({
+              name: "answer_from_knowledge",
+              ok: true,
+              message: hits.map((hit) => `### ${hit.title}\n${hit.text}`).join("\n\n"),
+            });
+          },
+        }),
+      }
+    : {};
+
   return {
+    ...knowledgeTools,
     record_answer: tool({
       description:
         "Record the respondent's answer to the question you are currently asking. Only call this when they have actually answered it.",
@@ -96,70 +167,6 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
           ok: true,
           effect: { kind: "record", ref, value },
           message: "Answer accepted. Move on to the next question.",
-        });
-      },
-    }),
-
-    /**
-     * The retrieval verb.
-     *
-     * This is the only way the knowledge base reaches the model, and that is
-     * deliberate. The material used to be pasted whole into the system prompt
-     * *and* re-scored here, which put a ceiling on it of whatever fits in a
-     * prompt — about twenty thousand characters. Now the prompt says only that
-     * a knowledge base exists, and the passages arrive as this tool's result,
-     * on the turns where a respondent actually asked something.
-     *
-     * Two consequences worth keeping in mind when editing:
-     *
-     * - The stable prefix stays byte-identical across a session, so the
-     *   provider's prompt cache keeps serving it. Splicing retrieved text back
-     *   into the system prompt would lose that on every turn.
-     * - The size of a form's knowledge no longer costs anything per turn. A
-     *   500-page manual and a one-line FAQ are the same prompt.
-     */
-    answer_from_knowledge: tool({
-      description:
-        "Look up something the respondent asked about, from the form's knowledge base. Use this before answering any question about pricing, policy, the product, or the form itself.",
-      inputSchema: z.object({ query: z.string().describe("What they want to know.") }),
-      execute: async ({ query }) => {
-        const guards = ctx.doc.settings.agent.guardrails;
-        const nothingFound = () =>
-          record({
-            name: "answer_from_knowledge",
-            ok: true,
-            message: guards.answerOffTopic
-              ? "Nothing in the knowledge base covers that. Answer briefly from general knowledge and say you are not certain."
-              : `Nothing in the knowledge base covers that. Say: "${guards.refusalMessage}"`,
-          });
-
-        if (!ctx.searchKnowledge || ctx.hasKnowledge === false) {
-          return record({
-            name: "answer_from_knowledge",
-            ok: true,
-            message:
-              "No knowledge base is configured for this form. Answer from the form's title and description only, and say if you are unsure.",
-          });
-        }
-
-        let hits: KnowledgeHit[];
-        try {
-          hits = await ctx.searchKnowledge(query);
-        } catch (err) {
-          // A retrieval failure is not a reason to end the respondent's turn.
-          // Treating it as a miss lets the guardrail decide what to say, which
-          // is the same thing that happens when the answer genuinely is not
-          // there.
-          console.error("knowledge_search_failed", err);
-          return nothingFound();
-        }
-
-        if (hits.length === 0) return nothingFound();
-
-        return record({
-          name: "answer_from_knowledge",
-          ok: true,
-          message: hits.map((hit) => `### ${hit.title}\n${hit.text}`).join("\n\n"),
         });
       },
     }),

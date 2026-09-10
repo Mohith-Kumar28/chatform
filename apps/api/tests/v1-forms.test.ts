@@ -136,7 +136,10 @@ describe("publish", () => {
     expect(config.status).toBe(200);
     const session = await api(`/v1/forms/${created.id}/sessions`, { method: "POST", body: "{}" });
     expect(session.status).toBe(200);
-  });
+  // Six sequential round trips through publish/unpublish/session-create. It
+  // lands around 4.6s against vitest's 5s default, so it failed roughly one run
+  // in three purely on load — noise that reads as a real regression.
+  }, 20_000);
 });
 
 /**
@@ -177,7 +180,10 @@ describe("unpublish", () => {
     const again = await api(`/v1/forms/${id}/publish`, { method: "POST" });
     expect(again.status).toBe(200);
     expect((await api(`/v1/forms/${id}/sessions`, { method: "POST", body: "{}" })).status).toBe(200);
-  });
+  // Six sequential round trips through publish/unpublish/session-create. It
+  // lands around 4.6s against vitest's 5s default, so it failed roughly one run
+  // in three purely on load — noise that reads as a real regression.
+  }, 20_000);
 
   it("says so rather than succeeding on a form that is not live", async () => {
     const created = (await (

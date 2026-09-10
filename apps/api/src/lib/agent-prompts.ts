@@ -251,9 +251,11 @@ export function buildTurnSuffix(
   if (context?.transcript) parts.push(`CONVERSATION SO FAR\n${context.transcript}`);
   if (context?.answers) parts.push(`ANSWERS COLLECTED\n${context.answers}`);
 
+  // Absent on a document that has not been through `clampForRuntime`; there is
+  // then no limit to pace against, so the line is simply not said.
   const maxTurns = doc.settings.agent.guardrails.maxTurns;
   const turns = context?.turnCount ?? 0;
-  if (turns > maxTurns * 0.75) {
+  if (maxTurns !== undefined && turns > maxTurns * 0.75) {
     parts.push(
       `PACING: this conversation is running long (${turns} of ~${maxTurns} turns). Be more direct and stop making small talk.`,
     );

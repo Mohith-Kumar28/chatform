@@ -318,7 +318,7 @@ resultsRouter.get(
       followup_skip: string | null;
     };
     type AnswerRow = { submission_id: string; block_ref: string; block_type: string; value_json: string };
-    type MessageRow = { session_id: string; role: string; content: string; created_at: number };
+    type MessageRow = { submission_id: string; role: string; content: string; created_at: number };
     type FollowUpRow = {
       submission_id: string;
       sent: number;
@@ -379,12 +379,36 @@ resultsRouter.get(
            FROM submission_answers a
            JOIN (${WINDOW}) w ON w.id = a.submission_id`,
       ).bind(id, effectiveStatus, limit, offset),
-      // A NULL `session_id` — a response that never had a chat — joins to nothing,
-      // which is exactly the empty transcript the old per-row branch produced.
+      /**
+       * Gathered by response, not by `submissions.session_id`.
+       *
+       * That column is stamped once, by whichever session created the row, and
+       * never re-pointed — but a response outlives its session. Someone who
+       * reloads, or comes back later, opens a *new* session which adopts the
+       * open row (`ensureSubmissionRow`), and the conversation continues there.
+       * Joining on the stale pointer then read the wrong session: the completed
+       * response on a live registration form showed "No conversation was
+       * recorded" while its seventeen messages sat under the session that
+       * actually held them, and split conversations showed only their first half.
+       *
+       * `chat_sessions.submission_id` is the reverse pointer, written per
+       * session as each one finalises, so every session that contributed is
+       * found. The `w.session_id` arm keeps the original pointer working for a
+       * session that has not finalised yet. A response that never had a chat
+       * joins to nothing, which is still the empty transcript it should be.
+       *
+       * `chat_sessions` is joined LEFT, and the second arm matches on the
+       * message's own `session_id` rather than on `cs.id`, because messages
+       * outlive their session row: the expiry sweep clears old sessions and
+       * leaves the transcript behind, so a form in production already has rows
+       * whose session is gone. An inner join dropped exactly those — swapping
+       * one silently-missing transcript for another.
+       */
       c.env.DB.prepare(
-        `SELECT m.session_id, m.role, m.content, m.created_at
+        `SELECT w.id AS submission_id, m.role, m.content, m.created_at
            FROM chat_messages m
-           JOIN (${WINDOW}) w ON w.session_id = m.session_id
+           LEFT JOIN chat_sessions cs ON cs.id = m.session_id
+           JOIN (${WINDOW}) w ON cs.submission_id = w.id OR m.session_id = w.session_id
           ORDER BY m.created_at`,
       ).bind(id, effectiveStatus, limit, offset),
       /**
@@ -476,11 +500,11 @@ resultsRouter.get(
       if (list) list.push(a);
       else answersBySub.set(a.submission_id, [a]);
     }
-    const transcriptBySession = new Map<string, MessageRow[]>();
+    const transcriptBySub = new Map<string, MessageRow[]>();
     for (const m of transcriptRows.results ?? []) {
-      const list = transcriptBySession.get(m.session_id);
+      const list = transcriptBySub.get(m.submission_id);
       if (list) list.push(m);
-      else transcriptBySession.set(m.session_id, [m]);
+      else transcriptBySub.set(m.submission_id, [m]);
     }
     const byId = new Map((followUps.results ?? []).map((r) => [r.submission_id, r]));
 
@@ -489,7 +513,7 @@ resultsRouter.get(
     const seen = new Map<string, string>();
     for (const s of subs.results ?? []) {
       const answers = answersBySub.get(s.id) ?? [];
-      const transcript = s.session_id ? transcriptBySession.get(s.session_id) ?? [] : [];
+      const transcript = transcriptBySub.get(s.id) ?? [];
       out.push({
         id: s.id,
         status: s.status,
@@ -649,7 +673,31 @@ resultsRouter.delete(
     const rows = ownedPages.flatMap((p) => p.results ?? []);
     if (rows.length === 0) return c.json({ deleted: 0 });
 
-    const sessionIds = rows.map((r) => r.session_id).filter((s): s is string => s !== null);
+    /**
+     * Every session that held part of this conversation, not just the one the
+     * response row points at.
+     *
+     * `submissions.session_id` names whichever session *created* the row; a
+     * respondent who reloads continues in a new session that adopts it, and
+     * that is where the messages end up. Deleting only the named session left
+     * the transcript behind — the exact thing the note above says must go with
+     * the answers. `chat_sessions.submission_id` is the reverse pointer and
+     * catches the rest; the two are unioned because neither is complete alone.
+     */
+    const claimPages = (await c.env.DB.batch(
+      bindChunks(rows.map((r) => r.id)).map((chunk) =>
+        c.env.DB
+          .prepare(`SELECT id FROM chat_sessions WHERE submission_id IN (${holesFor(chunk)})`)
+          .bind(...chunk),
+      ),
+    )) as D1Result<{ id: string }>[];
+
+    const sessionIds = [
+      ...new Set([
+        ...rows.map((r) => r.session_id).filter((s): s is string => s !== null),
+        ...claimPages.flatMap((p) => (p.results ?? []).map((r) => r.id)),
+      ]),
+    ];
     const stmts = [
       ...bindChunks(rows.map((r) => r.id)).map((chunk) =>
         c.env.DB

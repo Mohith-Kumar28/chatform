@@ -607,26 +607,76 @@ describe("stripForPublish", () => {
     expect(stripForPublish(doc, entFor("pro")).doc.settings.agent.model).toBeUndefined();
     expect(stripForPublish(doc, entFor("business")).doc.settings.agent.model).toBe("anthropic/claude-opus-4");
   });
+
+  /**
+   * The two agent ceilings cannot be set by anyone outside this codebase.
+   *
+   * The builder no longer offers them, but the public API takes a whole
+   * document — so the boundary that matters is this one. Dropped rather than
+   * clamped and reported: the author did not choose them and has lost nothing
+   * they would recognise.
+   */
+  it("drops the agent ceilings a client tried to set, on every plan", () => {
+    const doc = FormDoc.parse({
+      ...minimalDoc("ceilings"),
+      settings: { agent: { guardrails: { maxTurns: 200 }, sessionTokenBudget: 900_000 } },
+    });
+    for (const plan of ["free", "pro", "business"] as const) {
+      const { doc: out, stripped } = stripForPublish(doc, entFor(plan));
+      expect(out.settings.agent.sessionTokenBudget).toBeUndefined();
+      expect(out.settings.agent.guardrails.maxTurns).toBeUndefined();
+      // Silently: there is no upsell here and nothing for a notice to say.
+      expect(stripped.map((x) => x.path)).not.toContain("settings.agent.sessionTokenBudget");
+    }
+  });
 });
 
 describe("clampForRuntime", () => {
   const entFor = (planId: PlanId) => resolve({ planId, status: planId === "free" ? "none" : "active", now: Date.now() });
 
-  it("caps turns and tokens instead of refusing to load", () => {
+  /**
+   * Both agent ceilings come from the plan, whatever the document says.
+   *
+   * They used to be `min(authored, plan)`. That made two numbers nobody can
+   * reason about into cliffs: a live registration form carried an authored
+   * 12,000-token budget from the day it was made and the interviewer went
+   * quiet on the fifth answer. They are not authorable at all now — the
+   * builder does not offer them, `stripForPublish` drops anything a client
+   * sends, and this is what puts the real numbers back.
+   */
+  it("takes both agent ceilings from the plan, not the document", () => {
     const doc = FormDoc.parse({
       ...minimalDoc("clamp"),
       settings: { agent: { guardrails: { maxTurns: 200 }, sessionTokenBudget: 100_000 } },
     });
-    const free = clampForRuntime(doc, entFor("free"));
-    expect(free.settings.agent.guardrails.maxTurns).toBe(PLANS.free.limits.agent_max_turns);
-    expect(free.settings.agent.sessionTokenBudget).toBe(PLANS.free.limits.agent_token_budget);
-    // A form authored on Business keeps its authored values there.
-    expect(clampForRuntime(doc, entFor("business")).settings.agent.guardrails.maxTurns).toBe(200);
+    for (const plan of ["free", "pro", "business"] as const) {
+      const out = clampForRuntime(doc, entFor(plan));
+      expect(out.settings.agent.guardrails.maxTurns).toBe(PLANS[plan].limits.agent_max_turns);
+      expect(out.settings.agent.sessionTokenBudget).toBe(PLANS[plan].limits.agent_token_budget);
+    }
   });
 
-  it("never raises an authored value", () => {
-    const doc = FormDoc.parse({ ...minimalDoc("clamp2"), settings: { agent: { guardrails: { maxTurns: 10 } } } });
-    expect(clampForRuntime(doc, entFor("business")).settings.agent.guardrails.maxTurns).toBe(10);
+  it("raises them as readily as it lowers them", () => {
+    // The old clamp could only ever lower, which is why a form authored under a
+    // low default stayed broken after an upgrade.
+    const stingy = FormDoc.parse({
+      ...minimalDoc("clamp2"),
+      settings: { agent: { guardrails: { maxTurns: 10 }, sessionTokenBudget: 1_000 } },
+    });
+    const out = clampForRuntime(stingy, entFor("business"));
+    expect(out.settings.agent.guardrails.maxTurns).toBe(PLANS.business.limits.agent_max_turns);
+    expect(out.settings.agent.sessionTokenBudget).toBe(PLANS.business.limits.agent_token_budget);
+  });
+
+  it("fills them in on a document that carries neither", () => {
+    // The shape every published version has now: `stripForPublish` removed them.
+    const bare = FormDoc.parse(minimalDoc("clamp3"));
+    expect(bare.settings.agent.sessionTokenBudget).toBeUndefined();
+    expect(bare.settings.agent.guardrails.maxTurns).toBeUndefined();
+
+    const out = clampForRuntime(bare, entFor("pro"));
+    expect(out.settings.agent.sessionTokenBudget).toBe(PLANS.pro.limits.agent_token_budget);
+    expect(out.settings.agent.guardrails.maxTurns).toBe(PLANS.pro.limits.agent_max_turns);
   });
 
   it("drops a verification step a lapsed plan can no longer complete", () => {

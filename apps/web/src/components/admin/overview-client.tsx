@@ -148,12 +148,55 @@ export function OverviewClient() {
       </div>
 
       {/*
-        Two rows of two, rather than one tall card beside a stack of short ones.
+        What is happening, before why it is happening.
 
+        This row used to sit third, under the funnel. But the tiles above it
+        answer "how much" and the two charts here answer "when" — the same
+        question at two speeds, a 30-day trend beside the last half hour — so
+        they belong in the same glance as the numbers they explain. The funnel
+        and the plan split are the follow-up question, and follow-ups can wait
+        one scroll.
+
+        Growth gives up two columns to the live tile: a trend is a chart you
+        study, a pulse is a chart you glance at, and both are wanted at the same
+        moment — after a launch or a deploy.
+      */}
+      <div className="grid gap-3 lg:grid-cols-5">
+        <ChartCard
+          className="lg:col-span-3"
+          title="Growth"
+          aside={
+            <div className="flex items-center gap-3">
+              <Legend items={growth.series.map((s, i) => ({ label: s.label, color: SERIES[i]! }))} />
+              <SegmentedControl
+                size="sm"
+                value={view}
+                onChange={setView}
+                options={Object.entries(GROWTH_VIEWS).map(([value, v]) => ({ value: value as GrowthView, label: v.label }))}
+                ariaLabel="What to plot"
+              />
+            </div>
+          }
+        >
+          <TrendChart
+            days={days}
+            series={growth.series.map((s) => ({ ...s }))}
+            data={o.series ?? {}}
+            averageOf={growth.averageOf}
+          />
+        </ChartCard>
+
+        <LiveActivity className="lg:col-span-2" />
+      </div>
+
+      {/*
+        Then why: where the arrivals go, and what they are worth.
+
+        Two rows of two, rather than one tall card beside a stack of short ones.
         The funnel takes the wider column in both because it is the chart that
         produces work — everything else describes, this one accuses. The cards
-        beside it are no longer pinned to the top: `ChartCard` fills its grid
-        cell now, so a row bottoms out on one line instead of three.
+        beside it are not pinned to the top: `ChartCard` fills its grid cell, so
+        a row bottoms out on one line instead of three.
       */}
       <div className="grid gap-3 lg:grid-cols-5">
         <ChartCard
@@ -194,42 +237,6 @@ export function OverviewClient() {
             emptyLabel="No accounts yet."
           />
         </ChartCard>
-      </div>
-
-      {/*
-        Growth gives up two columns to the live tile.
-
-        A 30-day trend is a chart you study; "is anything happening right now"
-        is a chart you glance at, and they are wanted at the same moment — after
-        a launch or a deploy. Side by side, the slow picture keeps the width it
-        needs to be read and the fast one stops being a page of its own.
-      */}
-      <div className="grid gap-3 lg:grid-cols-5">
-        <ChartCard
-          className="lg:col-span-3"
-          title="Growth"
-          aside={
-            <div className="flex items-center gap-3">
-              <Legend items={growth.series.map((s, i) => ({ label: s.label, color: SERIES[i]! }))} />
-              <SegmentedControl
-                size="sm"
-                value={view}
-                onChange={setView}
-                options={Object.entries(GROWTH_VIEWS).map(([value, v]) => ({ value: value as GrowthView, label: v.label }))}
-                ariaLabel="What to plot"
-              />
-            </div>
-          }
-        >
-          <TrendChart
-            days={days}
-            series={growth.series.map((s) => ({ ...s }))}
-            data={o.series ?? {}}
-            averageOf={growth.averageOf}
-          />
-        </ChartCard>
-
-        <LiveActivity className="lg:col-span-2" />
       </div>
 
       <div className="grid gap-3 lg:grid-cols-5">

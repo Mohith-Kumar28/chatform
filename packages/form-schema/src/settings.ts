@@ -403,7 +403,14 @@ export const SettingsDoc = z.object({
         .object({
           /** May it answer questions retrieval from the knowledge base does not cover? */
           answerOffTopic: z.boolean().default(true),
-          maxTurns: z.number().int().min(5).max(200).default(60),
+          /**
+           * Runtime-injected, never authored. See `sessionTokenBudget`.
+           *
+           * Optional with no default so a document does not carry a number
+           * that means nothing: `clampForRuntime` writes the plan's value on
+           * every read, and `stripForPublish` removes whatever a client sent.
+           */
+          maxTurns: z.number().int().min(5).max(1000).optional(),
           refusalMessage: z
             .string()
             .max(500)
@@ -415,19 +422,25 @@ export const SettingsDoc = z.object({
       maxClarificationsPerBlock: z.number().int().min(0).max(5).default(2),
       escalateAfterInvalid: z.number().int().min(1).max(10).default(3),
       /**
-       * How much of a conversation the agent gets to phrase before the
-       * templates take over.
+       * Both agent ceilings are ours, not the author's, and are not stored.
        *
-       * 12,000 was the default, and it bought about five turns. Nearly all of
-       * it went on input: the stable prefix — persona, goal, question manifest,
-       * transcript so far — is ~3,000 tokens and is re-sent every turn, against
-       * a few dozen tokens of reply. So a twelve-question form spent its whole
-       * allowance somewhere around question five and conducted the rest of the
-       * interview as a plain form, which is not a downgrade an author asked for
-       * or could see coming. 60,000 carries an ordinary interview to the end;
-       * the ceiling and the author's control over it are unchanged.
+       * They were authorable, with defaults, and both were traps. "Token
+       * budget: 12000" is not a question anyone building a form can answer —
+       * it reads as a preference and behaves as a cliff, because spending it
+       * turns the interviewer into a plain form mid-conversation. A live
+       * registration form carried an authored 12,000 from the day it was made
+       * and went quiet on the fifth answer; nobody could have known that was
+       * the number that mattered. `maxTurns` is the same trap one step later.
+       *
+       * The honest value depends on the plan, not on the form, so it lives in
+       * one place — `PLANS[...].limits` — and `clampForRuntime` writes it onto
+       * the document on every read. They stay declared here because the
+       * runtime reads them off the doc, but they are optional with no default:
+       * a document that has been through `stripForPublish` carries neither, so
+       * there is no stale copy to drift from the plan, and no way for a client
+       * or the public API to set one.
        */
-      sessionTokenBudget: z.number().int().min(1000).max(200000).default(60000),
+      sessionTokenBudget: z.number().int().min(1000).max(5_000_000).optional(),
       responseMaxTokens: z.number().int().min(50).max(2000).default(400),
     })
     .prefault({}),

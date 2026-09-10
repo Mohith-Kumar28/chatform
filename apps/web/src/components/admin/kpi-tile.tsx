@@ -18,11 +18,14 @@ import { cn } from "@/lib/utils";
  * shows AI cost next to signups, and a cost tile that turns green as it climbs
  * is worse than no colour at all.
  *
+ * **The movement is a percentage; the window is a tooltip.** "+13 vs prev 30
+ * days" spent most of the line restating the range picker sitting above it, so
+ * the line now carries the figure alone and the comparison is named on hover.
+ *
  * **A move from a zero baseline is not a percentage.** "+∞%" and "+100%" are
- * both nonsense when last period was zero, so the tile prints the move itself —
- * "+12" — against the same named window every other tile compares to. The
- * trailing half stays the same sentence whatever the baseline was; only the
- * figure changes. See `deltaLabel`.
+ * both nonsense when last period was zero, so those tiles — and on a young
+ * product that is most of them — print the move itself, "+12". A percentage
+ * appears the moment there is a previous period to divide by. See `deltaLabel`.
  */
 export function KpiTile({
   label,
@@ -130,10 +133,24 @@ export function KpiTile({
         ) : (
           <>
             <Icon className="size-3 shrink-0" strokeWidth={2.25} aria-hidden />
-            <span className="tabular shrink-0">{moved.change}</span>
-            <span className="text-muted-foreground truncate" title={hint ?? moved.against}>
-              {hint ?? moved.against}
+            <span className="tabular shrink-0" title={moved.against}>
+              {moved.change}
             </span>
+            {/*
+              The window is not printed, only hovered.
+
+              "+13 vs prev 30 days" spends most of a 200px line restating the
+              range picker that is on screen, three inches above, set by the
+              reader a moment ago. Six tiles printed it six times and each one
+              truncated. The comparison is still named — it rides in the title
+              on the figure — but the line itself is now the movement and, where
+              a tile has one, the caption that says what it counts.
+            */}
+            {hint && (
+              <span className="text-muted-foreground truncate" title={hint}>
+                {hint}
+              </span>
+            )}
           </>
         )}
       </p>

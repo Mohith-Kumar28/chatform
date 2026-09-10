@@ -187,3 +187,92 @@ describe("submissions list", () => {
     expect(csv).toContain("grace@hopper.dev");
   });
 });
+
+/**
+ * The transcript belongs to the response, not to the session that opened it.
+ *
+ * `submissions.session_id` names whichever session created the row and is never
+ * re-pointed. A respondent who reloads continues in a *new* session, which
+ * adopts the open row — so the conversation ends up under a session id the
+ * response has never heard of. Joining on the stale pointer showed "No
+ * conversation was recorded" on a completed registration whose seventeen
+ * messages were sitting in the table the whole time, and showed only the first
+ * half of a conversation that spanned two sittings.
+ */
+describe("transcripts follow the response, not the pointer", () => {
+  const now = Date.now();
+
+  beforeAll(async () => {
+    await subscribePro(t.orgId);
+    await env.DB.batch([
+      // The row was opened by `chs_opener`, which then went quiet with nothing said.
+      env.DB.prepare(
+        `INSERT INTO submissions (id, form_id, form_version_id, organization_id, session_id, status, started_at, completed_at)
+         VALUES ('sbm_adopted', ?, 'ver_x', ?, 'chs_opener', 'completed', ?, ?)`,
+      ).bind(t.formId, t.orgId, now - 9000, now),
+      env.DB.prepare(
+        `INSERT INTO chat_sessions (id, form_id, organization_id, respondent_token_hash, status, created_at, last_activity_at)
+         VALUES ('chs_opener', ?, ?, 'h_opener', 'abandoned', ?, ?)`,
+      ).bind(t.formId, t.orgId, now - 9000, now - 9000),
+      // The respondent reloaded; this session adopted the row and holds the talking.
+      env.DB.prepare(
+        `INSERT INTO chat_sessions (id, form_id, organization_id, respondent_token_hash, status, submission_id, created_at, last_activity_at)
+         VALUES ('chs_adopter', ?, ?, 'h_adopter', 'completed', 'sbm_adopted', ?, ?)`,
+      ).bind(t.formId, t.orgId, now - 8000, now),
+      env.DB.prepare(
+        `INSERT INTO chat_messages (id, session_id, role, content, created_at)
+         VALUES ('cm_a1', 'chs_adopter', 'assistant', 'What is your Team Name?', ?)`,
+      ).bind(now - 7000),
+      env.DB.prepare(
+        `INSERT INTO chat_messages (id, session_id, role, content, created_at)
+         VALUES ('cm_a2', 'chs_adopter', 'user', 'Tech Divas', ?)`,
+      ).bind(now - 6000),
+    ]);
+  });
+
+  it("reads the adopting session's messages, not the empty opener's", async () => {
+    const res = await fetchApi(`/api/forms/${t.formId}/submissions?status=all`, { headers: auth() });
+    expect(res.status).toBe(200);
+    const { submissions: rows } = await res.json<ListBody>();
+    const adopted = rows.find((r) => r.id === "sbm_adopted");
+    expect(adopted?.transcript).toHaveLength(2);
+    expect(adopted?.transcript).toMatchObject([
+      { role: "assistant", content: "What is your Team Name?" },
+      { role: "user", content: "Tech Divas" },
+    ]);
+  });
+
+  it("keeps a conversation that spanned two sittings whole", async () => {
+    // The opener did say something after all — both halves must come back, in order.
+    await env.DB.prepare(
+      `INSERT INTO chat_messages (id, session_id, role, content, created_at)
+       VALUES ('cm_o1', 'chs_opener', 'assistant', 'Welcome back.', ?)`,
+    )
+      .bind(now - 8500)
+      .run();
+    await env.DB.prepare(`UPDATE chat_sessions SET submission_id = 'sbm_adopted' WHERE id = 'chs_opener'`).run();
+
+    const res = await fetchApi(`/api/forms/${t.formId}/submissions?status=all`, { headers: auth() });
+    const { submissions: rows } = await res.json<ListBody>();
+    const adopted = rows.find((r) => r.id === "sbm_adopted");
+    expect(adopted?.transcript.map((m) => (m as { content: string }).content)).toEqual([
+      "Welcome back.",
+      "What is your Team Name?",
+      "Tech Divas",
+    ]);
+  });
+
+  /*
+   * Not covered here: a message whose session row has been swept away. The
+   * production database has them — the response this suite was written for
+   * pointed at a session id `chat_sessions` no longer holds — but the FK is
+   * enforced in the test binding, so the state cannot be built. It is why the
+   * session join in the query is LEFT and why the second arm matches on
+   * `m.session_id` rather than `cs.id`; an inner join drops those rows.
+   */
+  it("a response that never had a chat still reads as empty", async () => {
+    const res = await fetchApi(`/api/forms/${t.formId}/submissions?status=all`, { headers: auth() });
+    const { submissions: rows } = await res.json<ListBody>();
+    expect(rows.find((r) => r.id === "sbm_partial")?.transcript).toEqual([]);
+  });
+});

@@ -73,8 +73,8 @@ const FREE: Plan = {
     knowledge_sources_count: 0,
     knowledge_bytes: 0,
 
-    agent_max_turns: 30,
-    agent_token_budget: 6_000,
+    agent_max_turns: 50,
+    agent_token_budget: 60_000,
   },
   sortOrder: 0,
 };
@@ -132,8 +132,8 @@ const PRO: Plan = {
     knowledge_sources_count: 50,
     knowledge_bytes: 25 * 1024 * 1024,
 
-    agent_max_turns: 60,
-    agent_token_budget: 12_000,
+    agent_max_turns: 100,
+    agent_token_budget: 500_000,
   },
   sortOrder: 1,
 };
@@ -178,7 +178,7 @@ const BUSINESS: Plan = {
     knowledge_bytes: 250 * 1024 * 1024,
 
     agent_max_turns: 200,
-    agent_token_budget: 30_000,
+    agent_token_budget: 1_000_000,
   },
   sortOrder: 2,
 };

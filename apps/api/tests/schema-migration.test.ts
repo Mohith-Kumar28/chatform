@@ -18,7 +18,11 @@ describe("docs are migrated on read", () => {
     const res = await fetchApi(`/api/forms/${t.formId}`, { headers: auth() });
     const body = await res.json<{ workingSchema: Record<string, any> }>();
     expect(body.workingSchema.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(body.workingSchema.settings.agent.guardrails.maxTurns).toBe(60);
+    // The two agent ceilings are not document values any more — the runtime
+    // takes both from the plan — so a migrated read carries neither.
+    expect(body.workingSchema.settings.agent.guardrails.maxTurns).toBeUndefined();
+    expect(body.workingSchema.settings.agent.sessionTokenBudget).toBeUndefined();
+    expect(body.workingSchema.settings.agent.guardrails.answerOffTopic).toBe(true);
     // Knowledge left the document at v7; a migrated read must not carry it.
     expect(body.workingSchema.settings.agent.knowledge).toBeUndefined();
     expect(body.workingSchema.blocks[0].agentHints).toBeNull();

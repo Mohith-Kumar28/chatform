@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, BookOpen, Shield, Target, Coins } from "lucide-react";
+import { Bot, BookOpen, Shield, Target } from "lucide-react";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingGroup, SettingRow } from "@/components/ui/setting-row";
 import {  NumberField, SwitchField } from "../inspector/fields";
@@ -14,7 +14,6 @@ const SECTIONS = [
   { value: "goal", label: "Goal", icon: Target },
   { value: "knowledge", label: "Knowledge", icon: BookOpen },
   { value: "guardrails", label: "Guardrails", icon: Shield },
-  { value: "budget", label: "Budget", icon: Coins },
 ] as const;
 
 type Section = (typeof SECTIONS)[number]["value"];
@@ -204,24 +203,28 @@ export function AgentTab() {
                 }
               />
             </SettingRow>
-            <div className="grid grid-cols-2 gap-3">
-              <NumberField
-                label="Max turns"
-                hint="Hard stop."
-                value={agent.guardrails.maxTurns}
-                min={5}
-                max={200}
-                onChange={(v) => patchGuards({ maxTurns: v ?? 60 })}
-              />
-              <NumberField
-                label="Give up after"
-                hint="Bad answers before it shows a widget."
-                value={agent.escalateAfterInvalid}
-                min={1}
-                max={10}
-                onChange={(v) => patch({ escalateAfterInvalid: v ?? 3 })}
-              />
-            </div>
+            {/*
+              "Max turns" used to sit beside this. It went the same way as the
+              token budget, and for the same reason: it is a ceiling on cost
+              wearing the clothes of a preference. Nobody authoring a form knows
+              what number is safe, the honest answer depends on the plan rather
+              than on the form, and getting it wrong is invisible until a
+              respondent is mid-conversation. The runtime reads it from the plan
+              now (`clampForRuntime`), so leaving the control here would have
+              been a field that quietly did nothing.
+
+              "Give up after" stays, because it is a real authoring decision:
+              how patient the interviewer should be before it stops asking in
+              prose and puts the plain widget on screen.
+            */}
+            <NumberField
+              label="Give up after"
+              hint="Bad answers before it shows a widget."
+              value={agent.escalateAfterInvalid}
+              min={1}
+              max={10}
+              onChange={(v) => patch({ escalateAfterInvalid: v ?? 3 })}
+            />
           </SettingGroup>
         )}
 
@@ -230,30 +233,16 @@ export function AgentTab() {
           times the cost of the tier below it — which made the per-conversation
           cost of the platform a choice for whoever opened a dropdown, on a
           screen that gave them no way to judge it. The model is now ours to
-          pick; what is left are the two limits an author has a real stake in.
+          pick, and so are the two token limits that sat beside it.
+
+          They were removed for the same reason: "Token budget: 12000" is not a
+          question an author can answer. It reads as a preference and behaves as
+          a cliff — spend it and the interviewer quietly becomes a plain form
+          mid-conversation, which is exactly what happened to a live
+          registration form carrying the old 12,000 default. The runtime now
+          derives the budget from the plan on every read (`clampForRuntime`), so
+          it is right for every existing form without anyone republishing.
         */}
-        {section === "budget" && (
-          <SettingGroup>
-            <div className="grid grid-cols-2 gap-3">
-              <NumberField
-                label="Token budget"
-                hint="Per conversation."
-                value={agent.sessionTokenBudget}
-                min={1000}
-                max={200000}
-                onChange={(v) => patch({ sessionTokenBudget: v ?? 60000 })}
-              />
-              <NumberField
-                label="Reply length"
-                hint="Tokens per turn."
-                value={agent.responseMaxTokens}
-                min={50}
-                max={2000}
-                onChange={(v) => patch({ responseMaxTokens: v ?? 400 })}
-              />
-            </div>
-          </SettingGroup>
-        )}
       </div>
 
     </div>

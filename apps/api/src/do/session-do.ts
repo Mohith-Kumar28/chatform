@@ -36,6 +36,7 @@ import {
   extractAnswer,
   MODELS,
   INTERVIEW_PROVIDER_OPTIONS,
+  callTag,
   REASONING_HEADROOM_TOKENS,
 } from "../lib/ai.js";
 import {
@@ -201,6 +202,7 @@ interface StoredSession {
   collectedCount: number;
   invalidCounts?: Record<string, number>;
   sessionTokensUsed?: number;
+  /** Retired: merged into `sessionTokensUsed`. Still read when resuming an old session. */
   phrasingTokensUsed?: number;
   extractionCalls?: number;
   editingRef?: string | null;
@@ -268,6 +270,15 @@ const WRITE_STALL_MS = 5000;
 const AI_TURN_TIMEOUT_MS = 45000;
 
 /**
+ * Used only if a document reaches the runtime without `clampForRuntime` having
+ * written the plan's number onto it — which should not happen, and did once.
+ * Generous on purpose: the failure mode of guessing low is a form that stops
+ * talking mid-conversation, and the failure mode of guessing high is a slightly
+ * larger bill on a path that is already a bug.
+ */
+const FALLBACK_TOKEN_BUDGET = 1_000_000;
+
+/**
  * How many times one session may fall back to the extraction model.
  *
  * A ceiling, not a budget: extraction runs only after every deterministic
@@ -320,6 +331,22 @@ export class SessionDO extends DurableObject<Bindings> {
   private seenTurnIds: string[] = [];
   /** Non-null while a synchronous turn is collecting the events it produces. */
   private turnJournal: SSEEnvelope[] | null = null;
+  /**
+   * Did this turn hand control back to the respondent?
+   *
+   * A turn is only finished when something on screen is waiting for them: a
+   * question, an ending, a sign-in card, a verification code, the review step.
+   * Every path through the FSM is supposed to end in one of those, and one of
+   * them did not — a respondent on the live SIH form answered, and the form
+   * said nothing back, twice, on two different sessions. Reloading the page
+   * fixed it, because `resync` re-states the step; nobody should have to
+   * discover that.
+   *
+   * Rather than find and patch the one path that forgot, the guarantee is made
+   * unconditional: `handleUserTurn` checks this flag and resyncs when it is
+   * still false. Any future path that forgets is covered by the same net.
+   */
+  private turnHandedBack = false;
   private seq = 0;
   private turnCount = 0;
   private collectedCount = 0;
@@ -327,20 +354,18 @@ export class SessionDO extends DurableObject<Bindings> {
   /** This conversation continues a response somebody abandoned. */
   private resumed = false;
   private encoder = new TextEncoder();
-  /** Every token this session has spent, for the org meter. */
-  private sessionTokensUsed = 0;
   /**
-   * The subset of that spent on the interviewer's own words.
+   * Every token this session has spent: the org meter, and the backstop.
    *
-   * `sessionTokenBudget` is an allowance for phrasing, and it is what decides
-   * when the agent stops rewording questions and the deterministic templates
-   * take over. Comprehension used to draw on the same pot, so the moment the
-   * allowance ran out the form also lost the ability to *read* a reply: a
-   * plain "yeah, use the same address" stopped resolving and came back as
-   * "That doesn't look like a valid email address", twice, and then a dead
-   * end. Two different things, two different counters.
+   * There were two counters here. The second, `phrasingTokensUsed`, held the
+   * subset spent on the interviewer's own words, so that running out of
+   * phrasing budget could not also cost the form its ability to *read* a
+   * reply. That split is no longer carrying anything: comprehension is gated
+   * by `MAX_EXTRACTION_CALLS`, not by tokens, so it was already independent —
+   * and the budget is now the plan's, far past where any interview reaches.
+   * One number, counted raw.
    */
-  private phrasingTokensUsed = 0;
+  private sessionTokensUsed = 0;
   /** Extraction calls made, against MAX_EXTRACTION_CALLS. */
   private extractionCalls = 0;
   /** Consecutive guard rejections; 3 drops the session to template mode. */
@@ -1042,10 +1067,10 @@ export class SessionDO extends DurableObject<Bindings> {
     // and reset the token budget to zero (so `sessionTokenBudget` was not
     // actually a cap). They are part of session state and must survive.
     this.invalidCounts = new Map(Object.entries(stored.invalidCounts ?? {}));
-    this.sessionTokensUsed = stored.sessionTokensUsed ?? 0;
-    // Sessions written before the split carried one number; the phrasing
-    // budget inherits it so an upgrade cannot hand anyone a fresh allowance.
-    this.phrasingTokensUsed = stored.phrasingTokensUsed ?? stored.sessionTokensUsed ?? 0;
+    // `phrasingTokensUsed` was the larger of the two while both existed, so a
+    // session written before they merged carries its spend across rather than
+    // being handed a fresh allowance mid-conversation.
+    this.sessionTokensUsed = Math.max(stored.sessionTokensUsed ?? 0, stored.phrasingTokensUsed ?? 0);
     this.extractionCalls = stored.extractionCalls ?? 0;
     this.editingRef = stored.editingRef ?? null;
     this.degraded = stored.degraded ?? false;
@@ -1068,7 +1093,6 @@ export class SessionDO extends DurableObject<Bindings> {
       collectedCount: this.collectedCount,
       invalidCounts: Object.fromEntries(this.invalidCounts),
       sessionTokensUsed: this.sessionTokensUsed,
-      phrasingTokensUsed: this.phrasingTokensUsed,
       extractionCalls: this.extractionCalls,
       editingRef: this.editingRef,
       degraded: this.degraded,
@@ -1202,6 +1226,16 @@ export class SessionDO extends DurableObject<Bindings> {
       if (run) data = { ...(data as object), text: run.text };
     }
     const evt: SSEEnvelope = { v: 1, seq: ++this.seq, ts: Date.now(), type, data };
+    // The five events that put the respondent back in control. See `turnHandedBack`.
+    if (
+      type === "question" ||
+      type === "ending" ||
+      type === "auth_required" ||
+      type === "verify_required" ||
+      type === "review"
+    ) {
+      this.turnHandedBack = true;
+    }
     // The one line that makes a turn returnable over HTTP as well as streamable:
     // when a *Sync RPC is collecting, every event it would have streamed is also
     // handed back to the caller. One event contract, two transports.
@@ -1301,7 +1335,7 @@ export class SessionDO extends DurableObject<Bindings> {
     return (
       this.env.OPENROUTER_API_KEY !== undefined &&
       mode !== "template" &&
-      this.phrasingTokensUsed < (this.doc?.settings.agent.sessionTokenBudget ?? 12000)
+      this.sessionTokensUsed < (this.doc?.settings.agent.sessionTokenBudget ?? FALLBACK_TOKEN_BUDGET)
     );
   }
 
@@ -1385,10 +1419,27 @@ export class SessionDO extends DurableObject<Bindings> {
 
       const result = streamText({
         model,
-        // Stable prefix first so the provider's prompt cache can serve the
-        // persona, goal, knowledge base and question manifest across turns.
-        system: `${buildStablePrefix(this.doc, { hasKnowledge })}\n\n${buildTurnSuffix(this.doc, block, answered, { ...context, turnCount: this.turnCount })}`,
-        prompt: objective,
+        /**
+         * `system` is the stable prefix and nothing else. The turn's own
+         * context goes in the user message, below.
+         *
+         * This used to be `prefix + "\n\n" + suffix`, with a comment saying the
+         * prefix came first so the provider's cache could serve it. The intent
+         * was right and the arrangement defeated it: the suffix carries the
+         * running transcript, so the system message changed on every turn and
+         * the identical leading run was only the prefix itself — about 750
+         * tokens, under Gemini's 1,024-token minimum for implicit caching. So
+         * nothing was ever cached. `cacheReadTokens` came back 0 on every one
+         * of the 5,700 turns this form has taken, which is why a 12,000-token
+         * budget bought five answers.
+         *
+         * Split this way the system message is byte-identical for a whole
+         * session, and together with the tool declarations the stable head
+         * clears the threshold. `buildStablePrefix` must stay a pure function
+         * of the document for this to hold — see its own note.
+         */
+        system: buildStablePrefix(this.doc, { hasKnowledge }),
+        prompt: `${buildTurnSuffix(this.doc, block, answered, { ...context, turnCount: this.turnCount })}\n\n${objective}`,
         tools,
         // A tool call ends a step. Without this the model looks something up
         // (or records an answer) and the turn ends having said nothing, so the
@@ -1403,7 +1454,13 @@ export class SessionDO extends DurableObject<Bindings> {
         // The author's setting governs the visible reply; reasoning gets its
         // own headroom on top so it can never starve the answer.
         maxOutputTokens: this.doc.settings.agent.responseMaxTokens + REASONING_HEADROOM_TOKENS,
-        providerOptions: INTERVIEW_PROVIDER_OPTIONS,
+        providerOptions: {
+          openrouter: {
+            ...INTERVIEW_PROVIDER_OPTIONS.openrouter,
+            // Which feature, whose org, which conversation — see `callTag`.
+            user: callTag("interview_turn", this.meta.organizationId, this.meta.sessionId),
+          },
+        },
         // A turn that never returns is worse than a turn phrased by template.
         // See AI_TURN_TIMEOUT_MS.
         abortSignal: AbortSignal.timeout(AI_TURN_TIMEOUT_MS),
@@ -1428,49 +1485,32 @@ export class SessionDO extends DurableObject<Bindings> {
       const inTok = usage?.inputTokens ?? 0;
       const outTok = usage?.outputTokens ?? 0;
       /**
-       * Reasoning tokens are billed to the org but not to the conversation.
+       * Raw tokens, counted once, against a ceiling nobody reaches.
        *
-       * `sessionTokenBudget` decides when the agent stops phrasing and the
-       * scripted fallback takes over, so what it counts decides how long a
-       * respondent gets a real interviewer. Charging it for thinking nobody
-       * reads spends that allowance three times faster than the words do —
-       * measured, ~590 input plus up to 1,600 output per turn against a free
-       * plan clamped to 6,000, which is how a conversation reached its seventh
-       * exchange and answered "why do you want my phone number?" with a canned
-       * "Please enter a valid phone number with country code."
+       * This used to subtract cached input and reasoning output, so that a
+       * budget "expressed in what the respondent sees" was not spent on what
+       * they don't. The arithmetic was right and the whole idea was wrong: it
+       * only matters within sight of the limit, and the limit is now the
+       * plan's — a million on Business, against roughly forty thousand for a
+       * full thirteen-question interview.
        *
-       * The same reasoning as `REASONING_HEADROOM_TOKENS`: a budget expressed
-       * in what the respondent sees should not be consumed by what they don't.
-       * `logAiUsage` and the org-level meter still receive the true totals.
+       * So this is a backstop, not an allowance: one comparison, no accounting.
+       * It is the only ceiling expressed in money — `agent_max_turns` is a
+       * pacing hint to the model and stops nothing, and the hard `turnCount`
+       * cap below is deliberately far out — so it stays, but it should never
+       * be the thing a real conversation meets. The cost of caching lands where
+       * it belongs, on the OpenRouter bill, without us modelling it.
        */
-      const reasoningTok = usage?.outputTokenDetails?.reasoningTokens ?? 0;
-      /**
-       * Cached input is not charged to the conversation either, for the same
-       * reason reasoning is not.
-       *
-       * The stable prefix exists so the provider can serve it from its cache
-       * across a whole session — that is why `buildStablePrefix` is kept
-       * byte-identical. Counting those tokens again on every turn made the
-       * budget a count of how many times we re-sent something nobody paid full
-       * price for: ~3,000 a turn on a prompt whose cached portion costs a
-       * tenth of that, which is how a 12,000 allowance ran out in five
-       * exchanges. `logAiUsage` and the org meter still take the true totals.
-       */
-      const cachedTok = usage?.inputTokenDetails?.cacheReadTokens ?? 0;
-      const budget = this.doc.settings.agent.sessionTokenBudget;
-      const wasWithinBudget = this.phrasingTokensUsed < budget;
-      this.phrasingTokensUsed += Math.max(0, inTok - cachedTok) + Math.max(0, outTok - reasoningTok);
-      // The org meter is a bill, not an allowance: it keeps counting the
-      // uncached-input-plus-visible-output figure it always counted, so this
-      // change moves where the interviewer stops phrasing and nothing else.
-      this.sessionTokensUsed += inTok + Math.max(0, outTok - reasoningTok);
-      // Running out is not an error, but it changes the product mid-conversation
-      // — the interviewer becomes a form — so it should not be invisible.
-      if (wasWithinBudget && this.phrasingTokensUsed >= budget) {
+      const budget = this.doc.settings.agent.sessionTokenBudget ?? FALLBACK_TOKEN_BUDGET;
+      const wasWithinBudget = this.sessionTokensUsed < budget;
+      this.sessionTokensUsed += inTok + outTok;
+      // Reaching it changes the product mid-conversation — the interviewer
+      // becomes a form — so it must not be invisible.
+      if (wasWithinBudget && this.sessionTokensUsed >= budget) {
         console.warn("agent_budget_spent", {
           sessionId: this.meta.sessionId,
           budget,
-          used: this.phrasingTokensUsed,
+          used: this.sessionTokensUsed,
           turns: this.turnCount,
         });
       }
@@ -1772,6 +1812,7 @@ export class SessionDO extends DurableObject<Bindings> {
       if (!(await this.ensureLoaded())) return { accepted: false, error: "session_not_found" };
       if (this.seenTurnIds.includes(input.turnId)) return { accepted: true };
     }
+    this.turnHandedBack = false;
     try {
       const result = await this.runUserTurn(input);
       // Recorded only on acceptance: a refused turn (a failed validation, a
@@ -1780,6 +1821,25 @@ export class SessionDO extends DurableObject<Bindings> {
         this.seenTurnIds.push(input.turnId);
         if (this.seenTurnIds.length > 20) this.seenTurnIds.splice(0, this.seenTurnIds.length - 20);
         await this.persistMeta();
+      }
+      /**
+       * The turn returned without putting anything on screen. Say the step
+       * again rather than leave them staring at a form that stopped talking.
+       *
+       * Only reachable when the FSM took a path that forgot to close the turn —
+       * so it is logged at error level, loudly enough to find the path, and
+       * recovered silently, because the respondent should never be the one who
+       * has to notice. `resync` reads state and emits; it never advances.
+       */
+      if (result.accepted && !this.turnHandedBack) {
+        console.error("turn_ended_without_handback", {
+          sessionId: this.meta?.sessionId,
+          formId: this.meta?.formId,
+          blockRef: this.meta?.currentRef,
+          turnCount: this.turnCount,
+          inputType: input.type,
+        });
+        await this.resync();
       }
       return result;
     } catch (err) {
@@ -2686,8 +2746,21 @@ export class SessionDO extends DurableObject<Bindings> {
   }): Promise<{ accepted: boolean; error?: string }> {
     // Same reasoning as `handleUserTurn`: skipping and submitting advance the
     // flow, so they can leave the client waiting on an event too.
+    this.turnHandedBack = false;
     try {
-      return await this.runAction(input);
+      const result = await this.runAction(input);
+      // The same net as `handleUserTurn` — see `turnHandedBack`. `stop` is the
+      // one action that legitimately ends without a next step of its own.
+      if (result.accepted && !this.turnHandedBack && input.action !== "stop") {
+        console.error("action_ended_without_handback", {
+          sessionId: this.meta?.sessionId,
+          formId: this.meta?.formId,
+          blockRef: this.meta?.currentRef,
+          action: input.action,
+        });
+        await this.resync();
+      }
+      return result;
     } catch (err) {
       console.error("action_failed", {
         sessionId: this.meta?.sessionId,

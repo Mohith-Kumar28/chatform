@@ -74,9 +74,22 @@ describe("answer_from_knowledge", () => {
     expect(out.indexOf("first")).toBeLessThan(out.indexOf("second"));
   });
 
-  it("says the form has no knowledge base when it has none", async () => {
+  /**
+   * A form with no knowledge base is not offered the tool at all.
+   *
+   * It used to be registered unconditionally and answer "no knowledge base is
+   * configured" — but its own description tells the model to call it before
+   * answering anything about the product, policy or the form itself. So on the
+   * forms that have no knowledge (most of them) an off-topic question spent a
+   * whole extra model round trip, at the full prompt, to be told nothing was
+   * there, and every turn carried its schema for no reason.
+   */
+  it("is not offered at all when the form has no knowledge base", () => {
     const { tools } = toolsFor({ hasKnowledge: false });
-    expect(await run(tools, "pricing?")).toContain("No knowledge base is configured");
+    expect(tools.answer_from_knowledge).toBeUndefined();
+    // The verbs that do not depend on a knowledge base are still there.
+    expect(tools.record_answer).toBeDefined();
+    expect(tools.clarify).toBeDefined();
   });
 
   it("degrades to no-knowledge when retrieval is not wired at all", async () => {

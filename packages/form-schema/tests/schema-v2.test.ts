@@ -48,7 +48,10 @@ describe("migration chain", () => {
   it("a migrated v1 doc parses and materializes every new default", () => {
     const doc = FormDoc.parse(migrateFormDoc(v1Doc));
     expect(doc.settings.agent.guardrails.answerOffTopic).toBe(true);
-    expect(doc.settings.agent.guardrails.maxTurns).toBe(60);
+    // `maxTurns` deliberately has no default: it is one of the two agent
+    // ceilings the runtime writes from the plan, not something a document
+    // carries. See `settings.ts`.
+    expect(doc.settings.agent.guardrails.maxTurns).toBeUndefined();
     expect(doc.settings.agent.model).toBeUndefined();
     // per-block additions
     expect(doc.blocks[0]!.agentHints).toBeNull();
@@ -93,7 +96,6 @@ describe("readFormDoc", () => {
     const doc = readFormDoc(v1Doc);
     expect(doc.settings.onComplete.requireSubmit).toBe(true);
     expect(doc.settings.agent.rephraseQuestions).toBe(true);
-    expect(doc.settings.agent.guardrails.maxTurns).toBe(60);
     expect(doc.schemaVersion).toBe(SCHEMA_VERSION);
   });
 
@@ -165,7 +167,7 @@ describe("agent layer", () => {
     expect(doc.settings.agent.goal).toBe("Qualify the lead and book a demo");
     expect(doc.settings.agent.guardrails.answerOffTopic).toBe(false);
     // unspecified guardrails still default
-    expect(doc.settings.agent.guardrails.maxTurns).toBe(60);
+    expect(doc.settings.agent.guardrails.refusalMessage).toContain("not sure about that one");
   });
 
   /**

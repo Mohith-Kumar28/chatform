@@ -1158,7 +1158,18 @@ function SubmissionDialog({
           />
         </div>
 
-        <DialogBody className="space-y-6 px-5 py-4">
+        {/*
+          A floor under the body, so the two views are two readings of one
+          panel rather than two differently-sized dialogs.
+
+          Answers is a list of eleven rows; Chat can be a single line saying
+          there is no conversation. Switching between them resized the dialog
+          under the cursor and moved the control that had just been clicked,
+          which reads as the panel flinching. The floor is set just under the
+          height a typical answer list settles at, so the common case never
+          grows into it and the sparse case stops collapsing.
+        */}
+        <DialogBody className="min-h-[26rem] space-y-6 px-5 py-4">
           <div className="text-caption flex flex-wrap items-center gap-2">
             {/*
               Three states, not two.
@@ -1286,9 +1297,14 @@ function SubmissionDialog({
                 the point they were streamed, it was a common one. Saying so is
                 what stops an author concluding the answers are untrustworthy.
               */
-              <p className="text-muted-foreground text-sm">
-                No conversation was recorded for this response.
-              </p>
+              <div className="text-muted-foreground flex min-h-[18rem] flex-col items-center justify-center gap-2 text-center">
+                <MessageSquare className="size-5 opacity-40" strokeWidth={1.5} />
+                <p className="text-sm">No conversation was recorded for this response.</p>
+                <p className="text-caption max-w-[22rem] text-balance opacity-70">
+                  Responses sent through the API, or imported rather than chatted, arrive
+                  without a transcript.
+                </p>
+              </div>
             ))}
         </DialogBody>
       </DialogContent>

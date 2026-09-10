@@ -208,11 +208,14 @@ describe("safe to leave open to the internet", () => {
     // against the same monthly bucket as their real forms.
     expect(settings.closeRules.maxSubmissions).toBeGreaterThan(0);
     expect(settings.closeRules.maxSubmissions).toBeLessThanOrEqual(5000);
-    expect(settings.agent.guardrails.maxTurns).toBeLessThanOrEqual(40);
-    expect(settings.agent.sessionTokenBudget).toBeLessThanOrEqual(14000);
+    // Neither ceiling is authored any more — the runtime takes both from the
+    // plan. Authoring one here is what would put this form back in the state
+    // where it quietly stopped demonstrating the agent halfway through.
+    expect(settings.agent.guardrails.maxTurns).toBeUndefined();
+    expect(settings.agent.sessionTokenBudget).toBeUndefined();
     // Room for a real answer when someone asks for one. It is still a
-    // ceiling — the cost guard is `maxTurns` and the submission cap, not a
-    // gag on the one form meant to show the agent answering well.
+    // ceiling — the cost guard is the submission cap, not a gag on the one
+    // form meant to show the agent answering well.
     expect(settings.agent.responseMaxTokens).toBeLessThanOrEqual(800);
   });
 

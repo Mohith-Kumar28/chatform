@@ -63,7 +63,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 14;
+export const DEMO_REVISION = 15;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -451,13 +451,6 @@ export const DEMO_FORM = buildAuthoredDoc({
       guardrails: {
         /** Answering questions about chatform *is* the feature being demonstrated. */
         answerOffTopic: true,
-        /**
-         * The real cap. Business would allow 200; eight questions plus a
-         * clarification each plus a handful of questions back is about twenty
-         * five, so this is generous to a respondent and stops a griefer at
-         * roughly twice a genuine run.
-         */
-        maxTurns: 40,
         refusalMessage: "That one's outside what I'm here for — I'm a form, not a chatbot. Back to it:",
         /** Against the obvious abuse: free general-purpose AI on a marketing page. */
         forbiddenTopics: [
@@ -472,15 +465,15 @@ export const DEMO_FORM = buildAuthoredDoc({
       /** Once. Twice is nagging, and doubles the turns on the long-text questions. */
       maxClarificationsPerBlock: 1,
       escalateAfterInvalid: 2,
-      /**
-       * Above the 12000 default and below the 30000 Business permits.
-       *
-       * Crossing the budget silently degrades the agent to deterministic
-       * template phrasing, which on this form means the demo stops
-       * demonstrating the product halfway through. A genuine run must never
-       * reach it; a pathological one still has a ceiling.
+      /*
+       * `maxTurns` and `sessionTokenBudget` used to be set here, at 40 and
+       * 14,000. Both are gone: they are not authorable any more, and this form
+       * is the clearest argument for why. 14,000 was chosen as "generous" and
+       * would have run out around the fifth answer — silently degrading the one
+       * form whose entire job is to demonstrate the agent. The runtime takes
+       * both from the plan now. What actually bounds this form's cost is
+       * `closeRules.maxSubmissions` and the forbidden-topics list below.
        */
-      sessionTokenBudget: 14000,
       /*
        * Raised from 320. That was set to trim output cost per turn, and it was
        * doing more than that: 320 tokens is a hard ceiling of roughly 240

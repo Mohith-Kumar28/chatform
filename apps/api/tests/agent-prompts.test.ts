@@ -142,6 +142,39 @@ describe("knowledge base and guardrails reach the prompt", () => {
     expect(buildStablePrefix(doc, { hasKnowledge: true })).toBe(buildStablePrefix(doc, { hasKnowledge: true }));
   });
 
+  /**
+   * The prefix must not move as the conversation grows, because that is the
+   * whole basis of the prompt cache.
+   *
+   * It never did — but it was concatenated with the turn suffix into one
+   * `system` string, and the suffix carries the running transcript. The
+   * identical leading run was therefore only the prefix itself, about 750
+   * tokens, under Gemini's 1,024-token minimum for implicit caching, so
+   * nothing was ever cached and every turn was billed in full. The two are
+   * separate messages now. This asserts the property that makes that safe:
+   * the prefix is a function of the document and nothing else.
+   */
+  it("does not change as answers accumulate — it never sees the conversation", () => {
+    const doc = docWith({});
+    const early = buildTurnSuffix(doc, doc.blocks[1]!, 0, {
+      transcript: "You: first question\nRespondent: first answer",
+      answers: "Q1: first answer",
+      turnCount: 1,
+    });
+    const late = buildTurnSuffix(doc, doc.blocks[1]!, 6, {
+      transcript: Array.from({ length: 40 }, (_, i) => `Respondent: message ${i}`).join("\n"),
+      answers: Array.from({ length: 6 }, (_, i) => `Q${i}: answer ${i}`).join("\n"),
+      turnCount: 12,
+    });
+
+    // The volatile half really is volatile...
+    expect(early).not.toBe(late);
+    // ...and none of it leaks into the half the cache depends on.
+    expect(buildStablePrefix(doc)).toBe(buildStablePrefix(doc));
+    expect(buildStablePrefix(doc)).not.toContain("Respondent: message 0");
+    expect(buildStablePrefix(doc)).not.toContain("first answer");
+  });
+
   it("uses the refusal line when off-topic answering is disabled", () => {
     const doc = docWith({
       guardrails: { answerOffTopic: false, refusalMessage: "I can't help with that." },

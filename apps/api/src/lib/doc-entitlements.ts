@@ -6,9 +6,10 @@
  *   `stripForPublish` — runs at publish. Gated settings are removed from the version
  *                       being published, and every removal is reported by path so the
  *                       builder can say exactly what was dropped and what it costs.
- *   `clampForRuntime` — runs when a published doc is read. Plan-capped values replace
- *                       larger authored ones, so a form built on Pro keeps working after
- *                       a downgrade instead of refusing to load.
+ *   `clampForRuntime` — runs when a published doc is read. Plan-derived values replace
+ *                       the authored ones, so a form built on Pro keeps working after a
+ *                       downgrade instead of refusing to load — and a form built under an
+ *                       old default is repaired without anyone republishing it.
  *
  * Authoring is never gated. `PUT /forms/:id/doc` accepts anything valid, so a free user
  * uploads their logo, picks their font, and sees their form wearing both in the builder
@@ -25,7 +26,6 @@ import {
 import {
   can,
   limitOf,
-  clampToLimit,
   FEATURES,
   minPlanFor,
   type Entitlements,
@@ -172,6 +172,17 @@ export function stripForPublish(input: FormDoc, ent: Entitlements): StripResult 
   // ── the agent ───────────────────────────────────────────────────────────────
   const agent = s.agent;
   if (agent) {
+    /*
+     * The two ceilings are ours, so a published version stores neither.
+     *
+     * Dropped rather than clamped, and silently rather than reported: an author
+     * did not choose these and there is nothing to tell them they have lost.
+     * `clampForRuntime` puts the plan's numbers back on the way out, which is
+     * what makes every already-published form pick up a new limit without being
+     * republished. Anything a client or the public API sent ends here.
+     */
+    agent.sessionTokenBudget = undefined;
+    if (agent.guardrails) agent.guardrails.maxTurns = undefined;
     if (!can(ent, "agent_persona")) {
       if (agent.personaPrompt || agent.goal || agent.successCriteria) {
         agent.personaPrompt = undefined;
@@ -260,10 +271,32 @@ export function clampForRuntime(input: FormDoc, ent: Entitlements): FormDoc {
 
   const agent = doc.settings.agent;
   if (!agent) return doc;
-  if (agent.guardrails) {
-    agent.guardrails.maxTurns = clampToLimit(agent.guardrails.maxTurns, limitOf(ent, "agent_max_turns"));
-  }
-  agent.sessionTokenBudget = clampToLimit(agent.sessionTokenBudget, limitOf(ent, "agent_token_budget"));
+  /**
+   * Both agent ceilings are the plan's numbers, not the author's.
+   *
+   * They used to be `min(authored, plan)`, which turned two numbers nobody
+   * understands into cliffs a respondent walks off. A live registration form
+   * carried an authored budget of 12,000 from the day it was made; the
+   * interviewer spends ~2,600 a turn, so on the fifth answer `aiEnabled` went
+   * quiet mid-conversation and the form stopped talking back. The author had
+   * no way to know that was the number that mattered, and no reason to care.
+   * `maxTurns` is the same trap in a quieter form: it stops nothing on its own
+   * — the hard cap is a fixed `turnCount` guard in the session object — but it
+   * is what tells the interviewer a conversation is running long, so a stale 60
+   * had it hurrying respondents who had barely started.
+   *
+   * So the runtime decides both, from the plan, on read. That is also what
+   * repairs every form already published under an old low default, without
+   * anyone republishing: `clampForRuntime` runs on the way out, not at publish.
+   *
+   * Neither is offered in the builder any more, so the stored values are
+   * whatever a form happened to be created with — history, not intent. Reading
+   * the plan instead is the only way they mean the same thing on every form.
+   */
+  const turns = limitOf(ent, "agent_max_turns");
+  if (agent.guardrails && turns != null) agent.guardrails.maxTurns = turns;
+  const budget = limitOf(ent, "agent_token_budget");
+  if (budget != null) agent.sessionTokenBudget = budget;
   if (agent.model && !can(ent, "agent_model_picker")) agent.model = undefined;
   return doc;
 }

@@ -61,8 +61,39 @@ export const MODELS = {
 
 export const DEFAULT_MODEL = MODELS.interview;
 
+/**
+ * App attribution, sent on every call.
+ *
+ * OpenRouter reads these two headers to label the traffic in its own dashboard
+ * (and on its public app rankings). Without them every request in the activity
+ * feed is anonymous, which is exactly the view you do not want when you are
+ * trying to work out which feature spent the money. Set once here rather than
+ * at each call site so no caller can forget.
+ */
+const APP_HEADERS = {
+  "HTTP-Referer": "https://chatform.in",
+  "X-Title": "Chatform",
+} as const;
+
 export function openrouter(env: Bindings) {
-  return createOpenRouter({ apiKey: env.OPENROUTER_API_KEY });
+  return createOpenRouter({ apiKey: env.OPENROUTER_API_KEY, headers: { ...APP_HEADERS } });
+}
+
+/**
+ * The label a single call carries into OpenRouter's activity feed.
+ *
+ * OpenRouter has no general-purpose metadata field; `user` is the one string
+ * that travels with a request and comes back on the row. So it is packed:
+ * feature first, then the org paying for it, then the conversation it belongs
+ * to. `interview_turn/org_d40ea4bb/chs_f4ce7182aa89` reconciles a line on the
+ * bill against a session in `chat_sessions` without opening a support ticket.
+ *
+ * Ids only, and never a respondent's. The field is echoed back on OpenRouter's
+ * side, so an email or a phone number here would be handing a third party the
+ * very thing the form was collecting.
+ */
+export function callTag(kind: string, organizationId: string, sessionId?: string | null): string {
+  return [kind, organizationId, sessionId].filter(Boolean).join("/");
 }
 
 export function chatModel(env: Bindings, model: string = DEFAULT_MODEL): LanguageModel {

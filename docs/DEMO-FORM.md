@@ -37,8 +37,8 @@ The guards, in the order they bite:
 | Guard | Value | Where |
 | --- | --- | --- |
 | `closeRules.maxSubmissions` | 2000 | the hard ceiling — turn this down first |
-| `agent.guardrails.maxTurns` | 40 | per conversation |
-| `agent.sessionTokenBudget` | 14000 | per conversation, then it degrades silently |
+| `agent.guardrails.maxTurns` | — | not authored; taken from the plan at runtime |
+| `agent.sessionTokenBudget` | — | not authored; taken from the plan at runtime |
 | `agent.responseMaxTokens` | 320 | per turn |
 | session opens | 8/min per IP | `RATE_LIMIT_P_START` |
 
