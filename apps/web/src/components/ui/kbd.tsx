@@ -8,20 +8,34 @@ import { cn } from "@/lib/utils";
  * in tooltips far more often than in the shortcut sheet — hence `tone`, because
  * tooltips are drawn on the foreground colour and a muted chip disappears into
  * them.
+ *
+ * On a device with no keyboard it draws nothing. `kbd-hint` is the single rule
+ * in `globals.css` that decides that, shared with the runtime's `KeyHint`, so
+ * no caller has to remember a `sm:` gate or a `hidden md:inline-grid` of its
+ * own — which is how `⌘K` came to be advertised on phones in the first place.
  */
 export function Kbd({
   children,
   tone = "default",
+  always = false,
   className,
 }: {
   children: React.ReactNode;
   tone?: "default" | "inverse";
+  /**
+   * Draw it even without a keyboard — for the places where a key is the
+   * *subject* rather than an affordance. The shortcut sheet is the only one:
+   * it is reachable by tapping a row in the command palette, and a list of
+   * shortcuts with the keys taken out of it is a list of nothing.
+   */
+  always?: boolean;
   className?: string;
 }) {
   return (
     <kbd
       className={cn(
-        "inline-grid min-w-[1.25rem] shrink-0 place-items-center rounded px-1 py-0.5",
+        always ? "inline-grid" : "kbd-hint",
+        "min-w-[1.25rem] shrink-0 place-items-center rounded px-1 py-0.5",
         "font-sans text-[0.6875rem] leading-none font-medium tabular-nums",
         tone === "inverse"
           ? "bg-background/20 text-background"

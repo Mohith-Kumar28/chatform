@@ -246,7 +246,11 @@ export function AiBar() {
               it read as something you press to send. Hidden once the bar is open
               or has text, when it is only noise. */}
           {!open && !prompt && (
-            <Kbd className="mb-2 hidden shrink-0 sm:inline-grid">{KEY.askAi}</Kbd>
+            /* No `sm:` gate of its own any more: `Kbd` is drawn where there
+               is a keyboard to press, which is the question this was asking
+               badly — a 640px viewport with a trackpad had the key and was not
+               told, and a wide tablet without one was. */
+            <Kbd className="mb-2 shrink-0">{KEY.askAi}</Kbd>
           )}
           <textarea
             ref={inputRef}

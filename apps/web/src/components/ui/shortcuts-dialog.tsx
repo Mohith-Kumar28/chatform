@@ -36,7 +36,10 @@ export function ShortcutsList({ shortcuts }: { shortcuts: Shortcut[] }) {
               {items.map((s) => (
                 <li key={s.keys + s.label} className="flex items-center justify-between gap-4 py-1">
                   <span className="text-sm">{s.label}</span>
-                  <Kbd>{s.keys}</Kbd>
+                  {/* `always`: this sheet is reachable by tapping a row in the
+                      command palette, and a list of shortcuts with the keys
+                      taken out of it is a list of nothing. */}
+                  <Kbd always>{s.keys}</Kbd>
                 </li>
               ))}
             </ul>

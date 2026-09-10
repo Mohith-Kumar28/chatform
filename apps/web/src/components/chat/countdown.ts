@@ -1,6 +1,9 @@
 /**
- * The last button on a chat form, and the reason a finished response can still
- * end up unfinished.
+ * The two places the form counts down before doing something on a respondent's
+ * behalf: sending the response, and moving them on to whatever comes after it.
+ *
+ * The first of them, and the reason a finished response can still end up
+ * unfinished.
  *
  * A respondent who has answered every question is done in every sense that
  * matters to them — the conversation said so, the review card lists what they
@@ -20,21 +23,20 @@
 /**
  * How long the respondent has to catch it.
  *
- * Five seconds, and the number was chosen against two different people. Three
- * is enough time to read "Cancel auto-submit" or to move a thumb to it, but
- * not both, and being carried past a submission you meant to stop is the one
- * failure this feature can cause that the old button could not. Ten is long
- * enough that the person who *is* watching starts to wonder whether something
- * has hung, which trades the forgetful respondent's problem for everybody
- * else's. Five reads, moves and fires before it feels like waiting.
+ * Seven seconds. Three is enough time to read "Cancel auto-submit" or to move
+ * a thumb to it, but not both — and being carried past a submission you meant
+ * to stop is the one failure this can cause that a plain button could not. The
+ * form is also not always the only thing happening: somebody finishing this on
+ * a phone is as likely to be half-reading their last answer as watching the
+ * button, and the seconds that matter are the ones after they look back up.
  */
-export const AUTO_SUBMIT_MS = 5_000;
+export const AUTO_SUBMIT_MS = 7_000;
 
 /** How often the countdown re-reads the clock. Also the fill's step size. */
 export const AUTO_SUBMIT_TICK_MS = 100;
 
 export interface AutoSubmitTick {
-  /** The number on the button: 5, 4, 3, 2, 1 — never 0 while it is still counting. */
+  /** The number on the button: 7, 6, 5 … 1 — never 0 while it is still counting. */
   secondsLeft: number;
   /** How much of the button is filled, 0 → 1. */
   filled: number;
@@ -52,7 +54,7 @@ export interface AutoSubmitTick {
  * away. Reading the clock makes the sleep irrelevant: the first tick after
  * waking sees the deadline has passed and sends.
  *
- * `secondsLeft` is a ceiling, so the first frame says 5 rather than 4 and the
+ * `secondsLeft` is a ceiling, so the first frame says 7 rather than 6 and the
  * last whole second still says 1. It reaches 0 only together with `done`,
  * which means the button never shows a countdown that has nothing left to
  * count.
@@ -65,4 +67,21 @@ export function autoSubmitTick(startedAt: number, now: number): AutoSubmitTick {
     filled: Math.min(1, elapsed / AUTO_SUBMIT_MS),
     done: remaining === 0,
   };
+}
+
+/**
+ * The digit for a plain countdown: how many whole seconds are left to run.
+ *
+ * The ending's redirect had one of these written into the copy as a constant —
+ * "opening the next step in 5s…", printed once and never touched again, while
+ * the timeout it was describing ran down behind it. Anybody who read it after
+ * the first second was reading a number that was no longer true, and on a
+ * screen where the very next thing that happens is the page moving, that is the
+ * one number worth getting right.
+ *
+ * A ceiling, and floored at zero, for the same reasons as `autoSubmitTick`: it
+ * opens on the full count and never shows a bare 0 with time still to go.
+ */
+export function secondsUntil(deadline: number, now: number): number {
+  return Math.max(0, Math.ceil((deadline - now) / 1000));
 }

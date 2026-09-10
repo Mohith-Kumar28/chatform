@@ -25,13 +25,18 @@ import { asEmail } from "./respondent-hint";
 import { VerifyCard } from "./verify-card";
 import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
 import { useChat, type ChatMessage } from "./use-chat";
-import { SendRow, SkipButton, TextInput } from "./composers/primitives";
+import { KeyHint, SendRow, SkipButton, TextInput } from "./composers/primitives";
 import { inputSemanticsFor } from "./composers/input-semantics";
 import { QuestionAffordance } from "./question-affordance";
 import { QuestionMedia } from "./question-media";
 import { ChatBoot } from "./chat-boot";
 import { ClosingNotice } from "./closing-notice";
-import { autoSubmitTick, AUTO_SUBMIT_MS, AUTO_SUBMIT_TICK_MS } from "./auto-submit";
+import {
+  autoSubmitTick,
+  secondsUntil,
+  AUTO_SUBMIT_MS,
+  AUTO_SUBMIT_TICK_MS,
+} from "./countdown";
 import { useViewportLock } from "./use-viewport-lock";
 import { Confetti } from "./confetti";
 import { cn } from "@/lib/utils";
@@ -200,7 +205,7 @@ export function ChatClient({
   useViewportLock(!previewMode, onViewportChange);
 
   /**
-   * Honour the ending's redirect — in a new tab, leaving this one where it is.
+   * Honour the ending's redirect — in a new tab where there is one to open.
    *
    * It used to be `location.assign`, which threw the finished form away. What
    * a redirect points at is almost always somewhere to go *next* (a WhatsApp
@@ -208,10 +213,12 @@ export function ChatClient({
    * on this screen when they come back from it: the confirmation, the link
    * spelled out in the body, the "you already answered this" record.
    *
-   * A pop-up opened five seconds after the last tap has no user gesture behind
-   * it, and Safari in particular will refuse it. That is not a failure worth
-   * hiding — `blocked` puts a real button on the ending, and a tap on that is a
-   * gesture no browser argues with.
+   * A pop-up opened seconds after the last tap has no user gesture behind it,
+   * and Safari in particular will refuse it — as will every in-app browser,
+   * which is where a link shared in a chat group is opened. That is not a
+   * failure worth hiding: `blocked` puts a real button on the ending, and on a
+   * touch device, where a background tab is not a place anybody can see, this
+   * tab goes to the target itself. See the refusal branch below.
    */
   const [redirectBlocked, setRedirectBlocked] = useState(false);
   useEffect(() => {
@@ -226,8 +233,35 @@ export function ChatClient({
        * blocked, and would show the fallback button every single time.
        */
       const opened = window.open(target, "_blank");
-      if (opened) opened.opener = null;
-      else setRedirectBlocked(true);
+      if (opened) {
+        opened.opener = null;
+        return;
+      }
+
+      /*
+       * Refused. The button goes up either way — if what follows does not
+       * happen, something has to be on screen that still gets them there.
+       */
+      setRedirectBlocked(true);
+
+      /*
+       * And on a phone, go anyway.
+       *
+       * Keeping this tab standing is worth something on a desktop: the
+       * confirmation, the link spelled out in the body and the redirect target
+       * can all be on screen at once, so a refused pop-up leaves a real choice
+       * and a button to make it with. In an in-app browser — the WhatsApp
+       * webview most of these links are opened from, where pop-ups are refused
+       * as a matter of policy rather than as a judgement about this page —
+       * there is no second tab to leave anything standing in. What actually
+       * happened there was that the form said "opening the next step" and then
+       * did nothing at all, and the respondent was left holding a button they
+       * had been told they would not need.
+       *
+       * `(pointer: coarse)` is asking whether a new tab is a place this person
+       * can see, which is the thing that differs — not the screen's width.
+       */
+      if (window.matchMedia?.("(pointer: coarse)").matches) window.location.assign(target);
     }, delay);
     return () => clearTimeout(t);
   }, [chat.ending, previewMode]);
@@ -552,6 +586,13 @@ export function ChatClient({
               */
               onUndoScreenOut={previewMode ? undefined : () => void chat.undoScreenOut()}
               redirectBlocked={redirectBlocked}
+              /*
+                Whether a redirect is really coming, which is not the same
+                question as whether the ending has a URL on it: a preview has
+                one and fires nothing. The card counts down only when something
+                is going to happen at the end of the count.
+              */
+              redirectArmed={Boolean(chat.ending.redirectUrl) && !previewMode}
             />
           )}
 
@@ -1092,12 +1133,26 @@ function AlreadySubmittedCard({
           </div>
         </div>
 
+        {/*
+          A quiet link, not a filled button — the same one the ending card uses,
+          and for the same reason.
+
+          It was drawn in the accent as the only control on the screen, which is
+          how it ended up being the loudest thing on a screen whose message is
+          "you have already done this". Filling it in the brand colour makes
+          answering twice look like the next step of the form: somebody coming
+          back to check their registration met a big purple button under a green
+          receipt, and a second response is the one outcome nobody on this
+          screen wants. Everything of consequence here — the confirmation, the
+          group link in the body, the receipt — is something to read. This is an
+          escape hatch for the few who want it, and it should be exactly as loud
+          as one.
+        */}
         {allowRepeat && (
           <button
             type="button"
             onClick={onResubmit}
-            className="h-11 rounded-full px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
-            style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+            className="text-sm underline opacity-55 transition-opacity hover:opacity-100"
           >
             Submit another response
           </button>
@@ -1291,7 +1346,7 @@ function ReviewCard({
         answers they were still thinking about. So the thumb-sized target is the
         reversible one, and sending now — which the countdown does by itself in
         a moment anyway — is the small line under it, for the respondent who
-        does not want to sit out five seconds.
+        does not want to sit out the count.
       */}
       <div ref={actionRef}>
         {counting ? (
@@ -1303,7 +1358,7 @@ function ReviewCard({
             >
               {/*
                 The bar is the countdown, not decoration: it says how much of
-                the five seconds is gone in a form that can be read without
+                the countdown is gone in a form that can be read without
                 counting. It steps with the tick and eases the gap between
                 steps, so a throttled tab catches up in one slide rather than a
                 jump.
@@ -1352,8 +1407,15 @@ function ReviewCard({
             {busy ? "Submitting…" : "Submit form"}
             {/* Shown, not just bound. A shortcut nobody can see is a shortcut
                 nobody uses — and it is the one key press that ends the form, so
-                it is worth teaching at the moment it applies. */}
-            {!busy && <Kbd>{modKeyLabel()}↵</Kbd>}
+                it is worth teaching at the moment it applies.
+
+                `KeyHint` rather than a chip of this card's own: it is the same
+                key chip the composers draw, and it inherits the one rule that
+                keeps every key in the app off the screens that have no
+                keyboard. This used to be a local copy, which is why a phone was
+                being taught ⌘↵. `w-auto` because two glyphs do not fit the
+                square a single one gets. */}
+            {!busy && <KeyHint tone="inverse" className="w-auto px-1.5">{`${modKeyLabel()}↵`}</KeyHint>}
           </button>
         )}
       </div>
@@ -1365,17 +1427,6 @@ function ReviewCard({
 function modKeyLabel(): string {
   if (typeof navigator === "undefined") return "⌘";
   return /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl+";
-}
-
-function Kbd({ children }: { children: React.ReactNode }) {
-  return (
-    <kbd
-      className="rounded px-1.5 py-0.5 font-sans text-[0.6875rem] leading-none opacity-70"
-      style={{ background: "color-mix(in oklch, var(--cf-accent-text) 22%, transparent)" }}
-    >
-      {children}
-    </kbd>
-  );
 }
 
 /**
@@ -1458,6 +1509,7 @@ function EndingCard({
   onUndoScreenOut,
   replay,
   redirectBlocked = false,
+  redirectArmed = false,
 }: {
   ending: NonNullable<ReturnType<typeof useChat>["ending"]>;
   theme: PublicFormConfig["theme"];
@@ -1484,9 +1536,50 @@ function EndingCard({
   replay?: boolean;
   /** The new tab was refused, so the respondent has to open it themselves. */
   redirectBlocked?: boolean;
+  /** A redirect really is scheduled — a preview has a URL and fires nothing. */
+  redirectArmed?: boolean;
 }) {
   const screenedOut = ending.kind === "screen_out";
   const requirements = ending.requirements ?? [];
+
+  /**
+   * The redirect countdown, actually counting.
+   *
+   * It said "in 5s…" and meant it once — a constant printed into the copy while
+   * the timeout it was describing ran down behind it, so anybody who read the
+   * line after the first second was reading a number that had stopped being
+   * true. On the one screen whose next event is the page moving, that is the
+   * number worth getting right.
+   *
+   * The deadline is this card's own, set when the countdown starts rather than
+   * handed down from the effect that schedules the redirect. Those are two
+   * clocks for one event, which is worth being uneasy about — but they are
+   * started by the same commit, the gap between them is the length of an effect
+   * queue, and the alternative is either reading the clock during render or
+   * writing state from inside an effect. What has to be exact is the *firing*,
+   * and that is the timeout's; what this owns is a digit somebody reads.
+   *
+   * `secondsLeft` is null until the first tick, so nothing reads a clock while
+   * rendering: the first paint shows the delay the author configured, which is
+   * what the countdown says at that instant anyway.
+   */
+  const delaySec = ending.redirectDelaySec ?? 5;
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const counting = redirectArmed && !replay && !redirectBlocked;
+  useEffect(() => {
+    if (!counting) return;
+    const deadline = Date.now() + delaySec * 1000;
+    /*
+     * Four reads a second, not one. A second boundary crossed just after a tick
+     * leaves the old digit up for the rest of that tick, which is the stutter
+     * that makes a countdown look stuck — and a tab that was backgrounded comes
+     * back to the right number rather than to wherever a counter got to.
+     */
+    const id = setInterval(() => setSecondsLeft(secondsUntil(deadline, Date.now())), 250);
+    return () => clearInterval(id);
+  }, [counting, delaySec]);
+  const secondsToRedirect = secondsLeft ?? delaySec;
+
   return (
     <>
       {!screenedOut && !replay && <Confetti colors={[theme.accent, theme.userBubble, "#ffffff", theme.text]} />}
@@ -1621,8 +1714,10 @@ function EndingCard({
               <ArrowUpRight className="size-4" strokeWidth={2} />
             </a>
           ) : (
-            <p className="mt-4 text-xs opacity-50">
-              Opening the next step in a new tab in {ending.redirectDelaySec ?? 5}s…
+            <p className="mt-4 text-xs tabular-nums opacity-50">
+              {secondsToRedirect > 0
+                ? `Opening the next step in ${secondsToRedirect}s…`
+                : "Opening the next step…"}
             </p>
           ))}
 

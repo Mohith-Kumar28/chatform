@@ -14,9 +14,10 @@ import type { InputSemantics } from "./input-semantics";
  * `ui/kbd`, which is painted in dashboard tokens a form's palette never
  * reaches.
  *
- * `cf-key-hint` is what decides whether it is drawn at all: hints only make
- * sense where there is a keyboard, and that is a `(hover: hover) and (pointer:
- * fine)` question, not a width one.
+ * `kbd-hint` is what decides whether it is drawn at all — the one rule in
+ * `globals.css` that every key in the app is gated on, dashboard chips
+ * included: hints only make sense where there is a keyboard, and that is a
+ * `(hover: hover) and (pointer: fine)` question, not a width one.
  */
 export function KeyHint({
   children,
@@ -34,7 +35,7 @@ export function KeyHint({
   return (
     <kbd
       className={cn(
-        "cf-key-hint size-4 shrink-0 place-items-center rounded font-sans text-[0.625rem] leading-none font-medium tabular-nums",
+        "kbd-hint size-4 shrink-0 place-items-center rounded font-sans text-[0.625rem] leading-none font-medium tabular-nums",
         tone === "accent"
           ? "bg-[var(--cf-accent)] text-[var(--cf-accent-text)]"
           : tone === "inverse"
@@ -164,7 +165,7 @@ export function SkipButton({ onSkip }: { onSkip: () => void }) {
       Skip this question
       {/* Esc, not a letter: the composer is focused on every question, so a
           one-letter shortcut would eat the first character of an answer that
-          starts with it. `cf-key-hint` hides this where there is no keyboard. */}
+          starts with it. `kbd-hint` hides this where there is no keyboard. */}
       <KeyHint tone="outline" className="w-auto min-w-4 px-1">
         esc
       </KeyHint>
@@ -201,7 +202,7 @@ export function SendRow({
         {label}
         {/* Says Enter sends, in the same key chip the choice chips use. The
             icon this replaces was hidden below `sm`, which is the width proxy
-            `cf-key-hint` exists to avoid: an embedded form in a 400px frame on
+            `kbd-hint` exists to avoid: an embedded form in a 400px frame on
             a desktop has a keyboard and was told nothing. */}
         <KeyHint tone="inverse">↵</KeyHint>
       </button>

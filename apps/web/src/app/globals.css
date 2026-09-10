@@ -1374,25 +1374,39 @@ html.cf-viewport-locked body {
 /* ═══════════════════════════════════════════════════════════════════════════
    Keyboard hints
 
-   The `1` `2` `3` badges on choice chips were gated on `sm:` — a 640px minimum
-   viewport width — which is the wrong question asked of the wrong thing. Inside
-   an embedded form the media query measures the *iframe*, and the default popup
-   panel is 400px wide, so every hint vanished on desktop the moment the form
-   was embedded. The shortcuts themselves kept working: `useChoiceKeys` binds to
-   the frame's own window, so `1` picked the first option while nothing on
-   screen said so.
+   One rule, for every key drawn anywhere in the app: a `⌘K` chip in the
+   dashboard, the `1` `2` `3` badges on choice chips, the `↵` on a send button,
+   the `⌘↵` on the review card. A phone has none of those keys, and a hint about
+   a key you cannot press is furniture at best — on a 400px screen it is
+   furniture in the way.
 
-   Width was only ever a proxy for "has a keyboard". Ask that instead. A phone
-   is coarse-pointered and hoverless at any width; a 400px frame on a desktop is
-   neither, and gets its hints back.
+   Ask about the pointer, not the width. The badges were once gated on `sm:`,
+   which is the wrong question asked of the wrong thing: inside an embedded form
+   the media query measures the *iframe*, and the default popup panel is 400px
+   wide, so every hint vanished on desktop the moment the form was embedded —
+   while `useChoiceKeys`, bound to the frame's own window, went on answering the
+   `1` key that nothing on screen mentioned. A phone is coarse-pointered and
+   hoverless at any width; a 400px frame on a desktop is neither, and keeps its
+   hints.
+
+   There are two key chips and there have to be: `ui/kbd`'s is painted in
+   dashboard tokens, and the runtime's `KeyHint` in whatever `--cf-*` palette
+   the form's author chose, which no shared component can serve. Whether either
+   is *drawn* is not a palette question, so both wear this class and it is
+   answered here — once — rather than in each of them, and again in the next one
+   somebody writes. A hint that decides for itself when to appear is exactly how
+   the `sm:` gate got in.
+
+   `inline-grid`, because that is what centres a single glyph in a square chip;
+   inside the flex rows these sit in it blockifies to `grid` anyway.
    ═════════════════════════════════════════════════════════════════════════ */
-.cf-key-hint {
+.kbd-hint {
   display: none;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .cf-key-hint {
-    display: grid;
+  .kbd-hint {
+    display: inline-grid;
   }
 }
 
