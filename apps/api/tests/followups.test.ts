@@ -1005,6 +1005,57 @@ describe("backfillFollowUps", () => {
     }
   });
 
+  it("schedules a page that spans several chunks, and stops at the cap", async () => {
+    /*
+      Above `CATCHUP_CHUNK` and above `CATCHUP_LIMIT`, because both boundaries
+      are invisible from a single-response test: the chunk loop reads, decides
+      and writes a slice at a time, and the reads bind one parameter per id —
+      a page read in one `IN (...)` would sit exactly on D1's hundred-parameter
+      limit, which the local D1 does not enforce and production does.
+    */
+    const abandonedAt = Date.now() - DAY;
+    const seeded = Array.from({ length: 110 }, (_, i) => `sbm_catchup_bulk_${String(i).padStart(3, "0")}`);
+    // Seeded in one batch rather than through `seedAbandoned`: a hundred and ten
+    // responses at three sequential statements each is slow enough to be a
+    // timeout rather than a test.
+    await env.DB.batch(
+      seeded.flatMap((id, i) => [
+        env.DB
+          .prepare(
+            `INSERT INTO submissions (id, form_id, form_version_id, organization_id, status, source, is_test, started_at, updated_at)
+             VALUES (?, ?, ?, ?, 'abandoned', 'chat', 0, ?, ?)`,
+          )
+          .bind(id, t.formId, VERSION_ID, t.orgId, abandonedAt - HOUR, abandonedAt),
+        env.DB
+          .prepare(
+            `INSERT INTO submission_answers (id, submission_id, form_id, block_ref, block_type, value_json, updated_at)
+             VALUES (?, ?, ?, 'q_email', 'short_text', ?, ?)`,
+          )
+          .bind(`ans_${id}`, id, t.formId, JSON.stringify(`person${i}@northwind.example`), abandonedAt),
+      ]),
+    );
+
+    // Two steps each, capped at a hundred responses.
+    expect(await backfillFollowUps(env as never, t.formId, t.orgId)).toBe(200);
+
+    const counted = await env.DB.prepare(
+      `SELECT COUNT(DISTINCT submission_id) AS people, COUNT(*) AS rows FROM followups WHERE form_id = ?`,
+    )
+      .bind(t.formId)
+      .first<{ people: number; rows: number }>();
+    expect(counted).toEqual({ people: 100, rows: 200 });
+
+    // The ten the cap left behind are picked up by the next publish.
+    expect(await backfillFollowUps(env as never, t.formId, t.orgId)).toBe(20);
+    const after = await env.DB.prepare(
+      `SELECT COUNT(DISTINCT submission_id) AS people FROM followups WHERE form_id = ?`,
+    )
+      .bind(t.formId)
+      .first<{ people: number }>();
+    expect(after?.people).toBe(110);
+    expect(seeded).toHaveLength(110);
+  });
+
   it("still refuses everyone the per-response gates refuse", async () => {
     await seedAbandonedAt("sbm_catchup_suppressed", DAY);
     await suppress(env as never, t.orgId, "maya@northwind.example", "unsubscribe");

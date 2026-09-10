@@ -3,6 +3,7 @@ import { can } from "@repo/entitlements";
 import type { Bindings } from "../env.js";
 import { getEntitlements } from "./entitlements.js";
 import { resolveRespondentAddress, type AddressSource } from "./respondent-address.js";
+import { bindChunks, holesFor } from "./d1-bindings.js";
 
 /**
  * Scheduling and cancelling the nudges sent to someone who walked away.
@@ -52,6 +53,19 @@ interface FormRow {
   close_at: number | null;
 }
 
+/** Answer rows to `ref -> value`, shared by the one-response and batch paths. */
+function readAnswers(rows: { block_ref: string; value_json: string }[]): Map<string, unknown> {
+  const byRef = new Map<string, unknown>();
+  for (const a of rows) {
+    try {
+      byRef.set(a.block_ref, JSON.parse(a.value_json));
+    } catch {
+      // One unparseable answer must not stop the rest from being read.
+    }
+  }
+  return byRef;
+}
+
 interface SubRow {
   respondent_email: string | null;
   hidden_fields: string | null;
@@ -91,17 +105,29 @@ export async function isSuppressedIn(
   const hits = new Set<string>();
   if (pairs.length === 0) return hits;
   const addresses = [...new Set(pairs.map((p) => p.address.toLowerCase()))];
-  const orgIds = [...new Set(pairs.map((p) => p.orgId))];
-  const rows = await env.DB.prepare(
-    `SELECT address, organization_id FROM email_suppressions
-      WHERE address IN (${addresses.map(() => "?").join(",")})
-        AND (organization_id IS NULL OR organization_id IN (${orgIds.map(() => "?").join(",")}))`,
-  )
-    .bind(...addresses, ...orgIds)
-    .all<{ address: string; organization_id: string | null }>();
+  /**
+   * Addresses only, chunked, and the organization matched below rather than in
+   * SQL.
+   *
+   * Two variable-length `IN (…)` lists in one statement cannot both be bounded
+   * against D1's hundred-parameter ceiling — a sweep of a hundred follow-ups
+   * spanning a hundred organizations would have bound two hundred. Filtering
+   * the organization in memory costs at most a few extra rows for an address
+   * some other tenant also suppressed, and the pair matching below is what
+   * decides the answer either way.
+   */
+  const pages = (await env.DB.batch(
+    bindChunks(addresses).map((chunk) =>
+      env.DB
+        .prepare(
+          `SELECT address, organization_id FROM email_suppressions WHERE address IN (${holesFor(chunk)})`,
+        )
+        .bind(...chunk),
+    ),
+  )) as D1Result<{ address: string; organization_id: string | null }>[];
   const global = new Set<string>();
   const scoped = new Set<string>();
-  for (const r of rows.results ?? []) {
+  for (const r of pages.flatMap((p) => p.results ?? [])) {
     if (r.organization_id === null) global.add(r.address.toLowerCase());
     else scoped.add(`${r.organization_id}|${r.address.toLowerCase()}`);
   }
@@ -191,17 +217,19 @@ type SkipReason =
   | "suppressed"
   | "closed";
 
+function skipStatement(env: Bindings, submissionId: string, reason: SkipReason | null) {
+  return env.DB
+    .prepare(`UPDATE submissions SET meta = json_set(coalesce(meta,'{}'), '$.followUpSkip', ?2) WHERE id = ?1`)
+    .bind(submissionId, reason);
+}
+
 async function noteSkip(
   env: Bindings,
   submissionId: string,
   reason: SkipReason | null,
 ): Promise<number> {
   try {
-    await env.DB.prepare(
-      `UPDATE submissions SET meta = json_set(coalesce(meta,'{}'), '$.followUpSkip', ?2) WHERE id = ?1`,
-    )
-      .bind(submissionId, reason)
-      .run();
+    await skipStatement(env, submissionId, reason).run();
   } catch (err) {
     console.error("followup_skip_note_failed", submissionId, err);
   }
@@ -291,10 +319,35 @@ async function scheduleInner(input: ScheduleInput): Promise<number> {
 }
 
 /**
+ * What `scheduleOne` reads for itself when it is deciding one response alone,
+ * and what a batch reads once for all of them.
+ *
+ * `suppressed` is a resolved answer rather than an address list because the
+ * address is not known until the document has been read against the response —
+ * which the caller does in a pass of its own, with no queries in it.
+ */
+interface Prefetched {
+  sub: SubRow;
+  byRef: Map<string, unknown>;
+  suppressed: boolean;
+}
+
+/**
  * The half of the decision that is about one response, given a form whose gates
  * have already been opened.
+ *
+ * `pre` and `collect` are what let a backfill of a hundred responses cost a
+ * handful of round trips instead of five hundred: with `pre` it asks nothing,
+ * and with `collect` it writes nothing — it hands its statements back for the
+ * caller to send in one batch. Called without either, it reads and writes for
+ * itself exactly as it did when one abandoned response was the only caller.
  */
-async function scheduleOne(gate: FormGate, input: ScheduleInput): Promise<number> {
+async function scheduleOne(
+  gate: FormGate,
+  input: ScheduleInput,
+  pre?: Prefetched,
+  collect?: D1PreparedStatement[],
+): Promise<number> {
   const { env, submissionId, formId, organizationId, abandonedAt } = input;
   const { doc, cfg, closeAt } = gate;
 
@@ -305,31 +358,36 @@ async function scheduleOne(gate: FormGate, input: ScheduleInput): Promise<number
    * where it is recorded — the offer is made while the question is on screen,
    * which can be before the response row exists.
    */
-  const sub = await env.DB.prepare(
-    `SELECT s.respondent_email, s.hidden_fields,
-            COALESCE(cs.followup_opt_out, 0) AS opted_out
-       FROM submissions s
-       LEFT JOIN chat_sessions cs ON cs.id = s.session_id
-      WHERE s.id = ?`,
-  )
-    .bind(submissionId)
-    .first<SubRow>();
+  /** Every early return goes through here, so `collect` is honoured on all of them. */
+  const note = async (reason: SkipReason | null): Promise<number> => {
+    if (!collect) return noteSkip(env, submissionId, reason);
+    collect.push(skipStatement(env, submissionId, reason));
+    return 0;
+  };
+
+  const sub =
+    pre?.sub ??
+    (await env.DB.prepare(
+      `SELECT s.respondent_email, s.hidden_fields,
+              COALESCE(cs.followup_opt_out, 0) AS opted_out
+         FROM submissions s
+         LEFT JOIN chat_sessions cs ON cs.id = s.session_id
+        WHERE s.id = ?`,
+    )
+      .bind(submissionId)
+      .first<SubRow>());
   // Nothing to annotate if the row itself has gone.
   if (!sub) return 0;
-  if (sub.opted_out) return noteSkip(env, submissionId, "opted_out");
+  if (sub.opted_out) return note("opted_out");
 
-  const answers = await env.DB.prepare(
-    `SELECT block_ref, value_json FROM submission_answers WHERE submission_id = ?`,
-  )
-    .bind(submissionId)
-    .all<{ block_ref: string; value_json: string }>();
-  const byRef = new Map<string, unknown>();
-  for (const a of answers.results ?? []) {
-    try {
-      byRef.set(a.block_ref, JSON.parse(a.value_json));
-    } catch {
-      // One unparseable answer must not stop the rest from being read.
-    }
+  let byRef = pre?.byRef;
+  if (!byRef) {
+    const answers = await env.DB.prepare(
+      `SELECT block_ref, value_json FROM submission_answers WHERE submission_id = ?`,
+    )
+      .bind(submissionId)
+      .all<{ block_ref: string; value_json: string }>();
+    byRef = readAnswers(answers.results ?? []);
   }
   const hidden = parseHidden(sub.hidden_fields);
   const resolved = resolveRespondentAddress(doc, {
@@ -338,7 +396,7 @@ async function scheduleOne(gate: FormGate, input: ScheduleInput): Promise<number
     hiddenFields: hidden,
     ...(cfg.addressField ? { addressField: cfg.addressField } : {}),
   });
-  if (!resolved) return noteSkip(env, submissionId, "no_address");
+  if (!resolved) return note("no_address");
 
   /**
    * Nothing answered — which is only a reason to stay quiet if we do not know
@@ -358,12 +416,11 @@ async function scheduleOne(gate: FormGate, input: ScheduleInput): Promise<number
    * that on the strength of an opened link is how a nudge becomes spam.
    */
   if (byRef.size === 0 && resolved.source !== "identity") {
-    return noteSkip(env, submissionId, "no_answers");
+    return note("no_answers");
   }
 
-  if (await isSuppressed(env, organizationId, resolved.address)) {
-    return noteSkip(env, submissionId, "suppressed");
-  }
+  const suppressed = pre ? pre.suppressed : await isSuppressed(env, organizationId, resolved.address);
+  if (suppressed) return note("suppressed");
 
   /**
    * The holdout.
@@ -416,7 +473,7 @@ async function scheduleOne(gate: FormGate, input: ScheduleInput): Promise<number
     rows.push({ step: i + 1, at });
   });
   // Every step would land after the form stops accepting answers.
-  if (rows.length === 0) return noteSkip(env, submissionId, "closed");
+  if (rows.length === 0) return note("closed");
 
   const stmts = rows.map((r) =>
     env.DB.prepare(
@@ -439,10 +496,13 @@ async function scheduleOne(gate: FormGate, input: ScheduleInput): Promise<number
       now,
     ),
   );
-  await env.DB.batch(stmts);
   // Something was written, so whatever excuse this response was carrying from
   // an earlier attempt no longer applies.
-  await noteSkip(env, submissionId, null);
+  if (collect) collect.push(...stmts, skipStatement(env, submissionId, null));
+  else {
+    await env.DB.batch(stmts);
+    await noteSkip(env, submissionId, null);
+  }
   return held ? 0 : rows.length;
 }
 
@@ -470,6 +530,23 @@ export const CATCHUP_LOOKBACK_DAYS = 7;
  * activity writes sharing the same request.
  */
 const CATCHUP_LIMIT = 100;
+
+/**
+ * How many of them are read, decided and written at a time.
+ *
+ * D1 allows a hundred bound parameters per query, and the prefetch below binds
+ * one per response — so a page read in a single `IN (...)` would sit exactly on
+ * that limit, and raising `CATCHUP_LIMIT` by one would break it at runtime with
+ * no local test able to notice, because the local D1 does not enforce the cap
+ * the HTTP API does.
+ *
+ * It also bounds what one failed write costs. A batch is all-or-nothing, so a
+ * chunk that fails schedules nobody in that chunk — twenty-five people rather
+ * than a hundred, with the rest of the page unaffected. Four batches of reads
+ * and four of writes for a full page is still two orders of magnitude fewer
+ * round trips than asking per response.
+ */
+const CATCHUP_CHUNK = 25;
 
 /**
  * Schedule the reminders for people who walked away *before* the sequence
@@ -525,16 +602,25 @@ export async function backfillFollowUps(
       .bind(formId, since, CATCHUP_LIMIT)
       .all<{ id: string; updated_at: number }>();
 
+    const rows = candidates.results ?? [];
+    if (rows.length === 0) return 0;
+
+    /**
+     * A chunk that fails does not take the rest of the page with it.
+     *
+     * The point of chunking is that one bad batch costs twenty-five people
+     * rather than a hundred, and letting the throw escape to the outer catch
+     * would have given that back: the chunks after it would never run, and the
+     * ones already written would still be reported as nothing scheduled.
+     */
     let scheduled = 0;
-    for (const row of candidates.results ?? []) {
-      scheduled += await scheduleOne(gate, {
-        env,
-        submissionId: row.id,
-        formId,
-        organizationId,
-        abandonedAt: row.updated_at,
-        catchUp: true,
-      });
+    for (let i = 0; i < rows.length; i += CATCHUP_CHUNK) {
+      const chunk = rows.slice(i, i + CATCHUP_CHUNK);
+      try {
+        scheduled += await scheduleChunk(env, gate, formId, organizationId, chunk);
+      } catch (err) {
+        console.error("followup_backfill_chunk_failed", formId, chunk.length, err);
+      }
     }
     if (scheduled > 0) console.log("followup_backfill_scheduled", formId, scheduled);
     return scheduled;
@@ -542,6 +628,117 @@ export async function backfillFollowUps(
     console.error("followup_backfill_failed", formId, err);
     return 0;
   }
+}
+
+/**
+ * One chunk of a catch-up: read together, decided in memory, written together.
+ *
+ * `scheduleOne` reads a response and its answers for itself when it is deciding
+ * one abandonment as it happens. That is the right shape for one response and
+ * the wrong shape for twenty-five — at five round trips apiece it was a
+ * subrequest budget rather than a query plan, inside a publish. So the reads
+ * happen once for the chunk and are handed down, and the writes come back up to
+ * be sent in one batch.
+ */
+async function scheduleChunk(
+  env: Bindings,
+  gate: FormGate,
+  formId: string,
+  organizationId: string,
+  rows: { id: string; updated_at: number }[],
+): Promise<number> {
+  const ids = rows.map((r) => r.id);
+  const holes = ids.map(() => "?").join(",");
+
+  const [subsRes, answersRes] = (await env.DB.batch([
+    env.DB.prepare(
+      `SELECT s.id, s.respondent_email, s.hidden_fields,
+              COALESCE(cs.followup_opt_out, 0) AS opted_out
+         FROM submissions s
+         LEFT JOIN chat_sessions cs ON cs.id = s.session_id
+        WHERE s.id IN (${holes})`,
+    ).bind(...ids),
+    env.DB.prepare(
+      `SELECT submission_id, block_ref, value_json FROM submission_answers
+        WHERE submission_id IN (${holes})`,
+    ).bind(...ids),
+  ])) as [
+    D1Result<SubRow & { id: string }>,
+    D1Result<{ submission_id: string; block_ref: string; value_json: string }>,
+  ];
+  const subById = new Map((subsRes.results ?? []).map((r) => [r.id, r]));
+  const answerRows = new Map<string, { block_ref: string; value_json: string }[]>();
+  for (const a of answersRes.results ?? []) {
+    const list = answerRows.get(a.submission_id);
+    if (list) list.push(a);
+    else answerRows.set(a.submission_id, [a]);
+  }
+
+  /**
+   * Who these responses belong to, worked out before anything is asked of the
+   * database again.
+   *
+   * Resolving an address is pure — the document, the response's own columns and
+   * its answers — so every address in the chunk can be known without a query,
+   * which is what makes one bulk suppression lookup possible where
+   * `scheduleOne` on its own has to ask per response. Kept rather than
+   * recomputed: `scheduleOne` resolves it again for the row it writes, and
+   * doing it a third time here to build the lookup key would be three passes
+   * over the same document for one answer.
+   */
+  const decided = new Map<string, { byRef: Map<string, unknown>; address: string | null }>();
+  const addresses: { orgId: string; address: string }[] = [];
+  for (const row of rows) {
+    const sub = subById.get(row.id);
+    if (!sub) continue;
+    const byRef = readAnswers(answerRows.get(row.id) ?? []);
+    const resolved = resolveRespondentAddress(gate.doc, {
+      respondentEmail: sub.respondent_email,
+      byRef,
+      hiddenFields: parseHidden(sub.hidden_fields),
+      ...(gate.cfg.addressField ? { addressField: gate.cfg.addressField } : {}),
+    });
+    decided.set(row.id, { byRef, address: resolved?.address ?? null });
+    if (resolved) addresses.push({ orgId: organizationId, address: resolved.address });
+  }
+  const suppressed = await isSuppressedIn(env, addresses);
+
+  /**
+   * Every write the chunk produces, in one batch.
+   *
+   * All-or-nothing rather than per response, which is a change of failure shape
+   * worth stating: a batch that fails schedules nobody in this chunk, where a
+   * per-response loop would have left the ones it had already reached
+   * scheduled. Safe because the insert is `ON CONFLICT DO NOTHING` and the
+   * whole thing runs again on the next publish, and bounded because a chunk is
+   * twenty-five responses rather than the entire page.
+   */
+  const writes: D1PreparedStatement[] = [];
+  let scheduled = 0;
+  for (const row of rows) {
+    const sub = subById.get(row.id);
+    const d = decided.get(row.id);
+    if (!sub || !d) continue;
+    scheduled += await scheduleOne(
+      gate,
+      {
+        env,
+        submissionId: row.id,
+        formId,
+        organizationId,
+        abandonedAt: row.updated_at,
+        catchUp: true,
+      },
+      {
+        sub,
+        byRef: d.byRef,
+        suppressed: d.address ? suppressed.has(`${organizationId}|${d.address.toLowerCase()}`) : false,
+      },
+      writes,
+    );
+  }
+  if (writes.length > 0) await env.DB.batch(writes);
+  return scheduled;
 }
 
 /**
