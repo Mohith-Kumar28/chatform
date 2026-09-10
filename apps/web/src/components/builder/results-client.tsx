@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Download,
@@ -10,12 +10,18 @@ import {
   Inbox,
   Lock,
   MessageSquare,
+  RefreshCw,
   Sheet,
   TrendingDown,
   Users,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { type Block, type FormDoc } from "@repo/form-schema";
 import {
+  getGetApiFormsByIdAnalyticsQueryKey,
+  getGetApiFormsByIdFollowupAnalyticsQueryKey,
+  getGetApiFormsByIdQueryKey,
+  getGetApiFormsByIdSubmissionsQueryKey,
   useGetApiFormsById,
   useGetApiFormsByIdAnalytics,
   useGetApiFormsByIdFollowupAnalytics,
@@ -42,6 +48,7 @@ import { FirstPartialToast } from "@/components/billing/first-partial-toast";
 import { FollowUpNudge } from "./followup-nudge";
 import { FollowUpAnalytics, type FollowUpPayload } from "./followup-analytics";
 import { API_ORIGIN } from "@/lib/api/mutator";
+import { cn } from "@/lib/utils";
 
 
 interface ResultsClientProps {
@@ -70,6 +77,9 @@ interface Analytics extends AnalyticsPayload {
     worstBlockIndex: number | null;
   } | null;
 }
+
+/** One turn of the refresh icon. The floor on how long a refresh looks busy. */
+const SPIN_MS = 600;
 
 export function ResultsClient({ formId }: ResultsClientProps) {
   const [tab, setTab] = useState<"submissions" | "summary" | "analytics">("submissions");
@@ -117,21 +127,96 @@ export function ResultsClient({ formId }: ResultsClientProps) {
   );
 
   /**
+   * Fetching this page again, because responses arrive while you are reading it.
+   *
+   * The list is a snapshot: React Query holds it until something invalidates
+   * the key, and nothing on this screen does — a form that is live collects
+   * answers whether or not the tab showing them is open, and a partial changes
+   * state on its own half an hour after the respondent walks away (see the
+   * follow-up column). Reloading the browser worked and cost the whole page.
+   *
+   * All four keys, not just the submissions one: the status chips count from
+   * analytics, the nudge banner reads the form, and the recovery figures come
+   * from their own endpoint. Refreshing the table alone would leave the numbers
+   * beside it describing a moment that has passed.
+   */
+  const queryClient = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    const started = Date.now();
+    try {
+      await Promise.all(
+        [
+          getGetApiFormsByIdSubmissionsQueryKey(formId as never),
+          getGetApiFormsByIdAnalyticsQueryKey(formId as never),
+          getGetApiFormsByIdFollowupAnalyticsQueryKey(formId as never),
+          getGetApiFormsByIdQueryKey(formId as never),
+        ].map((queryKey) => queryClient.refetchQueries({ queryKey })),
+      );
+    } finally {
+      /*
+       * One whole revolution, minimum.
+       *
+       * A cached round trip comes back in 80ms, and a spinner that stops before
+       * it has been all the way round reads as a click that did nothing — worse
+       * than no feedback, because the eye registers the flicker and not the
+       * cause. `SPIN_MS` is one turn of the icon, so the animation always ends
+       * where it started.
+       */
+      const spent = Date.now() - started;
+      if (spent < SPIN_MS) await new Promise((r) => setTimeout(r, SPIN_MS - spent));
+      setRefreshing(false);
+    }
+  }, [formId, queryClient, refreshing]);
+
+  /**
    * Hoisted, because it belongs to the table rather than to the page: on the
    * table it sits in the same row as full screen and the selection actions, and
    * every other branch below still needs it above whatever it renders instead.
+   *
+   * Refresh travels with it for the same reason, and one better: the branch
+   * where you most want to fetch again is the empty one, which renders no
+   * table and therefore none of the table's own toolbar.
    */
   const statusSwitcher = (
-    <SegmentedControl
-      size="sm"
-      options={[
-        { value: "completed", label: "Completed", badge: completedCount },
-        { value: "abandoned", label: "Partial", badge: partialCount },
-      ]}
-      value={statusFilter}
-      onChange={setStatusFilter}
-      ariaLabel="Submission status"
-    />
+    <div className="flex items-center gap-2">
+      <SegmentedControl
+        size="sm"
+        options={[
+          { value: "completed", label: "Completed", badge: completedCount },
+          { value: "abandoned", label: "Partial", badge: partialCount },
+        ]}
+        value={statusFilter}
+        onChange={setStatusFilter}
+        ariaLabel="Submission status"
+      />
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        shape="pill"
+        className="group text-muted-foreground hover:text-foreground"
+        aria-label="Refresh responses"
+        title="Refresh responses"
+        onClick={refresh}
+        disabled={refreshing}
+      >
+        <RefreshCw
+          className={cn(
+            "size-3.5",
+            refreshing
+              ? // Faster than Tailwind's `animate-spin`, which is a full second
+                // per turn and reads as loading-forever rather than as work.
+                "[animation:spin_var(--spin-ms)_linear_infinite]"
+              : // Idle, the icon leans into the cursor. It is the whole of the
+                // affordance: an arrow that already moves says it will move.
+                "transition-transform duration-300 ease-out group-hover:rotate-90",
+          )}
+          style={{ "--spin-ms": `${SPIN_MS}ms` } as React.CSSProperties}
+        />
+      </Button>
+    </div>
   );
 
   return (
@@ -228,9 +313,21 @@ export function ResultsClient({ formId }: ResultsClientProps) {
               rows={rows}
               columns={columns}
               filters={statusSwitcher}
-              // Partial only: on a finished response the follow-up story is
-              // always "they finished", which the status pill already says.
-              showFollowUp={statusFilter === "abandoned"}
+              /*
+                Partial only: on a finished response the follow-up story is
+                always "they finished", which the status pill already says.
+
+                And only when there is a story. With reminders switched off,
+                every cell in the column reads "not sent" — a whole column,
+                pinned next to the timestamp where the width is most expensive,
+                to report that a feature the author never enabled did nothing.
+                A sequence still in flight from before it was switched off does
+                count, because that one is a thing the product is about to do.
+              */
+              showFollowUp={
+                statusFilter === "abandoned" &&
+                (Boolean(doc?.settings.followUp?.enabled) || rows.some((r) => r.followUp))
+              }
             />
           )}
         </div>

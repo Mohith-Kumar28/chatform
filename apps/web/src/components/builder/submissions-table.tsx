@@ -115,43 +115,103 @@ function skipCopy(reason: string): string {
 }
 
 /**
- * What happened after they left, in two or three words.
+ * "in 3h", not "in 3 hours".
  *
- * This began as a badge in the detail dialog only, on the grounds that it
- * applies to a minority of responses. It earns a column in the Partial view
- * because that is the view where it applies to *most* of them, and because the
- * question it answers there — "why has nobody been nudged yet" — was previously
- * unanswerable from the product at all.
+ * `formatRelative` writes prose, and the follow-up column is not prose: it is a
+ * strip a few characters wide between the answers and the timestamp. The unit
+ * is a single letter here; the sentence version is on the `title` and, spelled
+ * out with an absolute clock, in the dialog.
  */
-function followUpLabel(row: SubmissionRecord): { text: string; tone: "good" | "muted" | "warn" } | null {
+function shortIn(at: number): string {
+  const diff = Math.max(0, at - Date.now());
+  if (diff >= 86_400_000) return `in ${Math.round(diff / 86_400_000)}d`;
+  if (diff >= 3_600_000) return `in ${Math.round(diff / 3_600_000)}h`;
+  return `in ${Math.max(1, Math.round(diff / 60_000))}m`;
+}
+
+/**
+ * What happened after they left, in a word.
+ *
+ * This used to spell the reason out in the cell — "Not sent — nothing answered
+ * yet", "Not sent — reminders off when they left" — and no width could hold it:
+ * every cell ended in an ellipsis, and the half that got cut was the half that
+ * carried the meaning. A column that has to truncate to fit is a column saying
+ * the wrong thing. So the cell now says only *which* of the five things
+ * happened, in one word; the reason rides on the `title`, and the dialog below
+ * still gives it in full with real times on it.
+ */
+function followUpLabel(
+  row: SubmissionRecord,
+): { text: string; detail: string; tone: "good" | "muted" | "warn" } | null {
   const f = row.followUp;
   if (!f) {
-    return row.followUpSkip
-      ? { text: `Not sent — ${skipCopy(row.followUpSkip)}`, tone: "warn" }
+    if (row.followUpSkip) {
+      return { text: "Not sent", detail: `Not sent — ${skipCopy(row.followUpSkip)}`, tone: "warn" };
+    }
+    /*
+     * The decision has not been made yet, which is not the same as "nothing
+     * will happen" — and an em-dash said the second. A conversation stays
+     * `in_progress` for half an hour after its last message (`IDLE_ALARM_MS`
+     * in the session object); only when that alarm fires is the response
+     * finalised as abandoned, and only then does `scheduleFollowUps` run. So
+     * the newest rows in the Partial list — the ones an author is most likely
+     * to be staring at — correctly have no sequence and no skip reason, and the
+     * honest label is that the clock is still running.
+     */
+    return row.status === "in_progress"
+      ? {
+          text: "Still open",
+          detail:
+            "No reminder decided yet — they may still be answering. Reminders are arranged 30 minutes after their last message.",
+          tone: "muted",
+        }
       : null;
   }
-  if (f.recovered) return { text: "Recovered", tone: "good" };
-  if (f.holdout) return { text: "Held back", tone: "muted" };
+  if (f.recovered) {
+    return { text: "Recovered", detail: "They came back and finished after a reminder", tone: "good" };
+  }
+  if (f.holdout) {
+    return {
+      text: "Held back",
+      detail: "Held back from the reminder sequence, to keep the recovery figure honest",
+      tone: "muted",
+    };
+  }
   // In flight beats the count: "sending" is the more useful thing to know while
   // it is true, and it is true for seconds.
-  if (f.queued > 0) return { text: "Sending…", tone: "muted" };
+  if (f.queued > 0) return { text: "Sending", detail: "A reminder is with the mail queue now", tone: "muted" };
   if (f.scheduled > 0 && f.nextScheduledAt) {
     /*
      * A due time in the past is normal, not late: the sweep runs every five
      * minutes, and a step configured for less than the idle window is overdue
-     * the moment it is written. "Reminder 3 minutes ago" would read as a
-     * message that has already gone, which is the opposite of what it means.
+     * the moment it is written. Saying "3 minutes ago" would read as a message
+     * that has already gone, which is the opposite of what it means.
      */
     return isPast(f.nextScheduledAt)
-      ? { text: "Reminder due", tone: "muted" }
-      : { text: `Reminder ${formatRelative(f.nextScheduledAt)}`, tone: "muted" };
+      ? {
+          text: "Due",
+          detail: `Reminder was due ${formatDateTime(f.nextScheduledAt)} and goes out on the next sweep`,
+          tone: "muted",
+        }
+      : {
+          text: shortIn(f.nextScheduledAt),
+          detail: `Reminder sends ${formatDateTime(f.nextScheduledAt)}`,
+          tone: "muted",
+        };
   }
-  if (f.scheduled > 0) return { text: "Reminder queued", tone: "muted" };
+  if (f.scheduled > 0) return { text: "Queued", detail: "A reminder is scheduled", tone: "muted" };
   if (f.sent > 0) {
-    const n = f.sent === 1 ? "Nudged" : `Nudged ×${f.sent}`;
-    return { text: f.lastSentAt ? `${n} · ${formatRelative(f.lastSentAt)}` : n, tone: "muted" };
+    return {
+      text: f.sent === 1 ? "Sent" : `Sent ×${f.sent}`,
+      detail: f.lastSentAt
+        ? `${f.sent === 1 ? "Reminder sent" : `Last of ${f.sent} reminders sent`} ${formatRelative(f.lastSentAt)}`
+        : "Reminder sent",
+      tone: "muted",
+    };
   }
-  if (f.stoppedReason) return { text: `Not sent — ${skipCopy(f.stoppedReason)}`, tone: "warn" };
+  if (f.stoppedReason) {
+    return { text: "Not sent", detail: `Not sent — ${skipCopy(f.stoppedReason)}`, tone: "warn" };
+  }
   return null;
 }
 
@@ -192,6 +252,7 @@ function FollowUpCell({ row, empty = "dash" }: { row: SubmissionRecord; empty?: 
   }
   return (
     <span
+      title={label.detail}
       className={cn(
         "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
         // `--warning-soft` pairs with `--warning-soft-foreground`, never with
@@ -204,7 +265,7 @@ function FollowUpCell({ row, empty = "dash" }: { row: SubmissionRecord; empty?: 
       )}
     >
       <MailCheck className="size-3 shrink-0" />
-      <span className="block max-w-[11rem] truncate">{label.text}</span>
+      <span className="whitespace-nowrap">{label.text}</span>
     </span>
   );
 }
@@ -212,9 +273,8 @@ function FollowUpCell({ row, empty = "dash" }: { row: SubmissionRecord; empty?: 
 /**
  * The reminder sequence for one response, with real times on it.
  *
- * The badge says "Reminder in 1h", which is the right density for a table and
- * the wrong one for somebody who has opened a response to work out what the
- * product did. Here the times are absolute — a relative time is unfalsifiable,
+ * The badge says "in 1h", which is the right density for a table and the wrong
+ * one for somebody who has opened a response to work out what the product did. Here the times are absolute — a relative time is unfalsifiable,
  * and "why has this not gone" is exactly the question you cannot answer without
  * a clock you can compare against your own.
  *
@@ -225,12 +285,23 @@ function FollowUpCell({ row, empty = "dash" }: { row: SubmissionRecord; empty?: 
 function FollowUpDetail({ row }: { row: SubmissionRecord }) {
   const f = row.followUp;
   if (!f) {
-    if (!row.followUpSkip) return null;
-    return (
-      <p className="text-muted-foreground text-xs">
-        No reminder scheduled — {skipCopy(row.followUpSkip)}.
-      </p>
-    );
+    if (row.followUpSkip) {
+      return (
+        <p className="text-muted-foreground text-xs">
+          No reminder scheduled — {skipCopy(row.followUpSkip)}.
+        </p>
+      );
+    }
+    // See `followUpLabel`: nothing is decided until the conversation goes idle.
+    if (row.status === "in_progress") {
+      return (
+        <p className="text-muted-foreground text-xs">
+          No reminder decided yet — this conversation is still open. Whether one is sent is worked
+          out 30 minutes after their last message.
+        </p>
+      );
+    }
+    return null;
   }
 
   const total = f.sent + f.queued + f.scheduled;
@@ -281,9 +352,11 @@ export function SubmissionsTable({
   /** The status switcher, rendered on the left of the table's own toolbar. */
   filters,
   /**
-   * Which chip is active. The follow-up column is Partial-only: on a completed
-   * response the answer is always "they finished", which is what the row
-   * already says.
+   * Whether there is a follow-up story to tell at all — see the caller. The
+   * column is Partial-only (on a completed response the answer is always "they
+   * finished", which the row already says) and it is also off whenever nobody
+   * has turned reminders on, because a column of "not sent" is a column's worth
+   * of width spent saying that a feature is switched off.
    */
   showFollowUp = false,
 }: {
