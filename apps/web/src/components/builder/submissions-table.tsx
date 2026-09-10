@@ -8,7 +8,9 @@ import {
   Clock,
   Download,
   Link2,
+  ListChecks,
   Maximize2,
+  MessageSquare,
   Minimize2,
   MailCheck,
   ShieldAlert,
@@ -27,6 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogBody, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDateTime, formatDuration, formatRelative, formatShortDateTime, isPast } from "@/lib/format";
 import { useClientValue } from "@/hooks/use-client-value";
@@ -769,13 +772,24 @@ function HeadCell({ icon: Icon, children }: { icon: React.ComponentType<{ classN
 }
 
 /**
- * One whole response, with the conversation that produced it.
+ * One whole response — as answers, or as the conversation that produced them.
  *
  * DESIGN.md north star #3 — "every response is stored and displayed as a
- * transcript first, fields second" — is why the transcript is here at full
- * width rather than in a column beside the answers. The answers come first
- * because that is what someone opening a response is checking; the conversation
- * is underneath, in full, because it is the thing a form platform cannot show.
+ * transcript first, fields second" — is why the conversation is here at full
+ * width and not squeezed into a column beside the answers.
+ *
+ * It used to be *below* them, and that was the wrong shape for both. Stacking
+ * a twelve-row answer list on top of a forty-message thread makes one long
+ * scroll in which neither is findable: you arrive on the answers, and the
+ * conversation — the thing a form platform cannot show, the reason this view
+ * exists — is somewhere past the fold with no sign that it is there. Two
+ * views, one pill switch, and the whole of whichever you picked. The pill also
+ * gives the transcript somewhere to say when there is none, which a section
+ * that renders nothing when empty could never do.
+ *
+ * The choice sticks while you step through responses with ↑/↓: someone
+ * comparing how five people answered question three does not want to re-pick
+ * the lens five times.
  */
 function SubmissionDialog({
   row,
@@ -802,6 +816,7 @@ function SubmissionDialog({
     () => new Map((row?.answers ?? []).map((a) => [a.blockRef, a.value])),
     [row],
   );
+  const [view, setView] = useState<"answers" | "chat">("answers");
   if (!row) return null;
 
   const answered = columns.filter((b) => displayCell(b, byRef.get(b.ref)) !== "").length;
@@ -874,6 +889,30 @@ function SubmissionDialog({
           </div>
         </div>
 
+        {/*
+          Its own row, not squeezed in beside the header icons.
+          Those are seven small targets already, and a switch that changes what
+          the whole panel shows is not a peer of "copy link" — it reads as the
+          heading of what is underneath it, so it sits there.
+        */}
+        <div className="flex items-center gap-2 border-b px-5 py-2.5">
+          <SegmentedControl
+            size="sm"
+            ariaLabel="How to read this response"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "answers", label: "Answers", icon: ListChecks, badge: `${answered}/${columns.length}` },
+              {
+                value: "chat",
+                label: "Chat",
+                icon: MessageSquare,
+                ...(row.transcript.length > 0 ? { badge: row.transcript.length } : {}),
+              },
+            ]}
+          />
+        </div>
+
         <DialogBody className="space-y-6 px-5 py-4">
           <div className="text-caption flex flex-wrap items-center gap-2">
             {/*
@@ -932,6 +971,7 @@ function SubmissionDialog({
             has to its value everywhere else in the product — and a hairline
             between rows says where one answer stops.
           */}
+          {view === "answers" && (
           <dl className="divide-border/60 divide-y">
             {columns.map((b) => {
               const meta = blockMeta(b.type);
@@ -958,28 +998,50 @@ function SubmissionDialog({
               );
             })}
           </dl>
+          )}
 
-          {row.transcript.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-muted-foreground text-micro font-medium tracking-wide uppercase">
-                The conversation
-              </p>
-              <div className="bg-muted/30 space-y-2 rounded-xl p-3">
-                {row.transcript.map((m, i) => (
-                  <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
-                    <p
-                      className={cn(
-                        "max-w-[85%] rounded-2xl px-3 py-1.5 text-sm break-words whitespace-pre-wrap",
-                        m.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border",
-                      )}
-                    >
+          {view === "chat" &&
+            (row.transcript.length > 0 ? (
+              /*
+                Read as a conversation, which means it gets the room one needs:
+                no inset panel, no 85% cap inside an already narrow box, and the
+                same left/right, us/them arrangement the respondent saw. A
+                `system` message — "verified via google" — is neither side, and
+                is set as the quiet note it was in the chat.
+              */
+              <div className="space-y-2.5">
+                {row.transcript.map((m, i) =>
+                  m.role === "system_event" ? (
+                    <p key={i} className="text-muted-foreground/70 text-caption px-1 text-center">
                       {m.content}
                     </p>
-                  </div>
-                ))}
+                  ) : (
+                    <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
+                      <p
+                        className={cn(
+                          "max-w-[80%] rounded-2xl px-3.5 py-2 text-[0.9375rem] leading-relaxed break-words whitespace-pre-wrap",
+                          m.role === "user"
+                            ? "bg-primary text-primary-foreground rounded-br-md"
+                            : "bg-muted rounded-bl-md",
+                        )}
+                      >
+                        {m.content}
+                      </p>
+                    </div>
+                  ),
+                )}
               </div>
-            </div>
-          )}
+            ) : (
+              /*
+                An empty transcript is a fact about this response, not an
+                absence to hide — and until the questions were written down at
+                the point they were streamed, it was a common one. Saying so is
+                what stops an author concluding the answers are untrustworthy.
+              */
+              <p className="text-muted-foreground text-sm">
+                No conversation was recorded for this response.
+              </p>
+            ))}
         </DialogBody>
       </DialogContent>
     </Dialog>

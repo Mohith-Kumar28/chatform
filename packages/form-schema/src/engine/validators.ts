@@ -119,7 +119,18 @@ function isFileDescriptorArray(v: unknown): v is { fileId: string; filename: str
  * LLM-extracted values for free text. Returns canonical value on success.
  */
 export function validateAnswer(block: Block, raw: unknown): ValidationResult {
-  if (raw === undefined || raw === null || raw === "") {
+  /*
+   * Whitespace is not an answer.
+   *
+   * The emptiness gate tested `raw === ""` and the per-type branches trimmed
+   * afterwards, so a required short_text handed a single space passed the gate,
+   * came back `ok("")`, and was recorded — an answered question holding nothing,
+   * which the results table then renders as "Not answered". Trimming first
+   * makes the two agree: what counts as empty here is what the stored value
+   * would have been.
+   */
+  const given = typeof raw === "string" ? raw.trim() : raw;
+  if (given === undefined || given === null || given === "") {
     return block.required ? fail("required", "This question needs an answer.") : ok(undefined);
   }
 

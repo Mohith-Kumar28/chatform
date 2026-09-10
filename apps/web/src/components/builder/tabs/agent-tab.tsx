@@ -241,7 +241,7 @@ export function AgentTab() {
                 value={agent.sessionTokenBudget}
                 min={1000}
                 max={200000}
-                onChange={(v) => patch({ sessionTokenBudget: v ?? 12000 })}
+                onChange={(v) => patch({ sessionTokenBudget: v ?? 60000 })}
               />
               <NumberField
                 label="Reply length"

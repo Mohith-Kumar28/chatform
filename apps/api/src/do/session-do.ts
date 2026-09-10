@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import {
   FormDoc,
   resolveNext,
+  isBlockVisible,
   validateAnswer,
   enforcesUnique,
   DUPLICATE_HINT,
@@ -581,7 +582,6 @@ export class SessionDO extends DurableObject<Bindings> {
     // The prompt is a real assistant message so it lands in the transcript and
     // survives replay; the card below it is the event.
     await this.emitMessage(gate.message);
-    await this.appendMessage("assistant", gate.message);
     await this.emit("auth_required", { method: gate.method, message: gate.message });
   }
 
@@ -668,7 +668,6 @@ export class SessionDO extends DurableObject<Bindings> {
       await this.persistMeta();
       if (this.collectedCount > 0) {
         await this.emitMessage(resumeGreeting(this.doc, this.collectedCount));
-        await this.appendMessage("assistant", resumeGreeting(this.doc, this.collectedCount));
       }
     }
 
@@ -800,7 +799,6 @@ export class SessionDO extends DurableObject<Bindings> {
          */
         await this.emit("validation_error", { ref: block.ref, code: "invalid_code", message: started.message });
         await this.emitMessage(started.message);
-        await this.appendMessage("assistant", started.message);
         await this.emitQuestion();
         return { accepted: true };
       }
@@ -829,7 +827,6 @@ export class SessionDO extends DurableObject<Bindings> {
     if (announce) {
       const said = codeSentText(pending.channel, pending.sentTo);
       await this.emitMessage(said);
-      await this.appendMessage("assistant", said);
     }
     await this.emit("verify_required", {
       ref: pending.ref,
@@ -873,7 +870,6 @@ export class SessionDO extends DurableObject<Bindings> {
     if (pending.channel === "sms") {
       const nudge = codeExpectedText(pending.channel);
       await this.emitMessage(nudge);
-      await this.appendMessage("assistant", nudge);
       await this.emitVerifyRequired(false);
       return { accepted: true };
     }
@@ -883,7 +879,6 @@ export class SessionDO extends DurableObject<Bindings> {
     if (code.length < 4) {
       const nudge = codeExpectedText(pending.channel);
       await this.emitMessage(nudge);
-      await this.appendMessage("assistant", nudge);
       await this.emitVerifyRequired(false);
       return { accepted: true };
     }
@@ -959,7 +954,6 @@ export class SessionDO extends DurableObject<Bindings> {
     await this.appendMessage("system_event", `Verified ${pending.sentTo} by ${pending.channel === "sms" ? "SMS" : "email"}`);
     const done = codeVerifiedText(pending.channel);
     await this.emitMessage(done);
-    await this.appendMessage("assistant", done);
 
     /*
      * Now record it for real. The answer was echoed when they first gave it, so
@@ -1365,6 +1359,7 @@ export class SessionDO extends DurableObject<Bindings> {
           currentBlock: block,
           allowedNext: allowedNextRefs(this.doc, block.ref, this.state),
           clarifications: this.invalidCounts.get(block.ref) ?? 0,
+          unansweredRequired: this.unansweredRequired().map((b) => ({ ref: b.ref, title: b.title })),
           hasKnowledge,
           searchKnowledge: hasKnowledge
             ? (query: string) => knowledgeStore(this.env).search(formId, query)
@@ -1434,11 +1429,26 @@ export class SessionDO extends DurableObject<Bindings> {
        * `logAiUsage` and the org-level meter still receive the true totals.
        */
       const reasoningTok = usage?.outputTokenDetails?.reasoningTokens ?? 0;
+      /**
+       * Cached input is not charged to the conversation either, for the same
+       * reason reasoning is not.
+       *
+       * The stable prefix exists so the provider can serve it from its cache
+       * across a whole session — that is why `buildStablePrefix` is kept
+       * byte-identical. Counting those tokens again on every turn made the
+       * budget a count of how many times we re-sent something nobody paid full
+       * price for: ~3,000 a turn on a prompt whose cached portion costs a
+       * tenth of that, which is how a 12,000 allowance ran out in five
+       * exchanges. `logAiUsage` and the org meter still take the true totals.
+       */
+      const cachedTok = usage?.inputTokenDetails?.cacheReadTokens ?? 0;
       const budget = this.doc.settings.agent.sessionTokenBudget;
       const wasWithinBudget = this.phrasingTokensUsed < budget;
-      const spent = inTok + Math.max(0, outTok - reasoningTok);
-      this.phrasingTokensUsed += spent;
-      this.sessionTokensUsed += spent;
+      this.phrasingTokensUsed += Math.max(0, inTok - cachedTok) + Math.max(0, outTok - reasoningTok);
+      // The org meter is a bill, not an allowance: it keeps counting the
+      // uncached-input-plus-visible-output figure it always counted, so this
+      // change moves where the interviewer stops phrasing and nothing else.
+      this.sessionTokensUsed += inTok + Math.max(0, outTok - reasoningTok);
       // Running out is not an error, but it changes the product mid-conversation
       // — the interviewer becomes a form — so it should not be invisible.
       if (wasWithinBudget && this.phrasingTokensUsed >= budget) {
@@ -1575,18 +1585,6 @@ export class SessionDO extends DurableObject<Bindings> {
     }
   }
 
-  /** Remove a retracted answer from the D1 projection. */
-  private async unprojectAnswer(ref: string): Promise<void> {
-    if (!this.meta || this.meta.formVersionId === "preview") return;
-    const submissionId = await this.ctx.storage.get<string>("submission_id");
-    if (!submissionId) return;
-    try {
-      await deleteAnswerRow(this.owner(), submissionId, ref);
-    } catch (err) {
-      console.error("unproject_failed", err);
-    }
-  }
-
   /** Recent conversation + collected answers, for the agent's system prompt. */
   /**
    * Does this form have anything indexed to retrieve?
@@ -1695,9 +1693,26 @@ export class SessionDO extends DurableObject<Bindings> {
     }
   }
 
-  /** Stream text as token events (template mode: chunked; AI mode: real tokens). */
+  /**
+   * Stream text as token events (template mode: chunked; AI mode: real tokens),
+   * and write it down.
+   *
+   * The transcript append lives here rather than at the call sites, and that is
+   * the whole point. It used to be a second line every caller had to remember —
+   * `emitMessage(x)` then `appendMessage("assistant", x)` — and seven of the
+   * fourteen callers did not, every one of them on the deterministic path. So a
+   * conversation that spent its phrasing budget mid-way (see `aiEnabled`) went
+   * on asking questions the respondent could read and the transcript never
+   * recorded: the results dashboard showed a wall of answers with no questions
+   * above them, and an author reading it back could not tell what had been
+   * asked. Streaming a sentence to a respondent and storing it are the same
+   * act, so they are one call.
+   */
   private async emitMessage(text: string): Promise<string> {
     const messageId = crypto.randomUUID();
+    // Ahead of the stream so the storage key, which is derived from `seq`,
+    // sorts with the `message_start` this text belongs to.
+    await this.appendMessage("assistant", text);
     await this.emit("message_start", { messageId, role: "assistant" });
     // chunk into word-ish tokens for streaming feel
     const chunks = text.match(/\S+\s*/g) ?? [text];
@@ -2033,8 +2048,12 @@ export class SessionDO extends DurableObject<Bindings> {
     }
 
     if (result.value !== undefined) {
+      // Counted once per question, not once per answer. Re-answering after an
+      // edit used to add a second tally for the same ref, which put the
+      // progress bar past 100% and told `finalize` that more questions were
+      // answered than the form has.
+      if (this.state.answers[block.ref] === undefined) this.collectedCount += 1;
       this.state.answers[block.ref] = result.value;
-      this.collectedCount += 1;
     }
     this.invalidCounts.delete(block.ref);
     const echo = summarizeAnswer(block, result.value);
@@ -2060,6 +2079,32 @@ export class SessionDO extends DurableObject<Bindings> {
 
     await this.advanceTo(next, block.ref);
     return { accepted: true };
+  }
+
+  /**
+   * Required, reachable questions this response still has no answer for.
+   *
+   * The floor under every way of finishing. The agent's tools already refuse to
+   * skip a required question, and the flow only reaches an ending by walking
+   * past every question on the path — so on paper this is always empty, and on
+   * paper is where it stayed: `runAction("submit")` completed unconditionally,
+   * and `end_interview` went as far as computing the list before throwing it
+   * away. Anything that puts the cursor somewhere other than where the walk
+   * left it — an edit, a recovered turn — could therefore finish a response
+   * with a required answer missing, and nothing anywhere would object.
+   *
+   * Visibility is checked because a hidden question is not one they declined to
+   * answer; it is one the form decided not to ask.
+   */
+  private unansweredRequired(): Block[] {
+    if (!this.doc) return [];
+    return this.doc.blocks.filter(
+      (b) =>
+        b.required &&
+        !["welcome", "statement"].includes(b.type) &&
+        this.state.answers[b.ref] === undefined &&
+        isBlockVisible(b, this.state),
+    );
   }
 
   private progressPct(): number {
@@ -2699,6 +2744,31 @@ export class SessionDO extends DurableObject<Bindings> {
     }
     /** The explicit finish, once every question is answered. */
     if (input.action === "submit") {
+      /*
+       * Not while something required is still blank.
+       *
+       * The review card is built from the answers that exist, so a question
+       * with none of its own simply is not on it — which makes "send" look like
+       * the end of a finished form to the one respondent for whom it is not.
+       * Sending them to the question instead is the only reading of the button
+       * that does not quietly file an incomplete response.
+       */
+      const missing = this.unansweredRequired();
+      if (missing.length > 0) {
+        const target = missing[0]!;
+        this.pendingEndingRef = null;
+        this.meta.currentRef = target.ref;
+        this.editingRef = null;
+        await this.persistMeta();
+        await this.emitMessage(
+          missing.length === 1
+            ? `Almost — I still need one answer before I can send this.`
+            : `Almost — there are ${missing.length} answers still missing before I can send this.`,
+        );
+        await this.emitMessage(questionText(target));
+        await this.emitQuestion();
+        return { accepted: true };
+      }
       const ending =
         (this.pendingEndingRef && this.doc.endings.find((e) => e.ref === this.pendingEndingRef)) ||
         resolveEnding(this.doc, this.state) ||
@@ -2715,10 +2785,22 @@ export class SessionDO extends DurableObject<Bindings> {
     /**
      * Go back and change an answer.
      *
-     * Discards the stored answer, returns the cursor to that block, and asks
-     * again. Later answers are kept: re-answering "how many people" should not
-     * wipe an email given three questions ago. If the change reroutes the flow,
-     * `resolveNext` handles that on the way forward as it always does.
+     * Returns the cursor to that block and asks again. Later answers are kept:
+     * re-answering "how many people" should not wipe an email given three
+     * questions ago. If the change reroutes the flow, `resolveNext` handles
+     * that on the way forward as it always does.
+     *
+     * The answer being changed is kept too, until a new one replaces it.
+     *
+     * It used to be deleted the instant the pencil was tapped — from the state,
+     * from `collectedCount`, and from the projected row — on the reasoning that
+     * a respondent had retracted it. They had not: "change this answer" is an
+     * intent to replace, and the replacement may never arrive. Somebody who
+     * tapped it on the review card and then put their phone down left a
+     * required question permanently blank, the review card gone, and no trace
+     * of any of it in the transcript. Holding the old value costs nothing —
+     * `record` overwrites it, and `recordAnswerRow` upserts — and it means the
+     * worst an abandoned edit can do is leave the answer they already gave.
      */
     if (input.action === "edit") {
       const target = this.doc.blocks.find((b) => b.ref === input.ref);
@@ -2727,13 +2809,6 @@ export class SessionDO extends DurableObject<Bindings> {
         return { accepted: false, error: "not_answerable" };
       }
 
-      if (this.state.answers[target.ref] !== undefined) {
-        delete this.state.answers[target.ref];
-        this.collectedCount = Math.max(0, this.collectedCount - 1);
-        // Drop the projected row too, or the submission keeps a value the
-        // respondent has explicitly retracted.
-        this.ctx.waitUntil(this.unprojectAnswer(target.ref));
-      }
       this.invalidCounts.delete(target.ref);
       this.meta.currentRef = target.ref;
       this.meta.status = "active";
@@ -2842,10 +2917,25 @@ export class SessionDO extends DurableObject<Bindings> {
     }
 
     /*
-     * And then it is an ordinary edit. Everything that makes the pencil work —
-     * discarding the answer, unprojecting its row, `resumeAfterEdit` walking
-     * the flow forward without re-asking the tail — is the behaviour wanted
-     * here too, so this does not reimplement any of it.
+     * The answer that refused them is genuinely retracted, and this is the only
+     * place that word applies.
+     *
+     * "Undo" says the tap should never have counted, so the value goes — from
+     * the state, the tally and the projected row — and a form owner reading the
+     * response must not find the "no" that the respondent has just taken back
+     * sitting in their results. The pencil means the opposite (replace this
+     * when I tell you what with) and keeps the old value until it is told; see
+     * the `edit` action.
+     */
+    if (this.state.answers[target.ref] !== undefined) {
+      delete this.state.answers[target.ref];
+      this.collectedCount = Math.max(0, this.collectedCount - 1);
+      this.ctx.waitUntil(this.unprojectAnswer(target.ref));
+    }
+
+    /*
+     * The rest is an ordinary edit: putting the cursor back, re-asking, and
+     * `resumeAfterEdit` walking the flow forward without re-asking the tail.
      */
     return this.runAction({ action: "edit", ref: target.ref });
   }
@@ -3163,6 +3253,25 @@ export class SessionDO extends DurableObject<Bindings> {
       }
     } catch (err) {
       console.error("reconcile_answers_failed", { sessionId: this.meta.sessionId, submissionId, ...errorInfo(err) });
+    }
+  }
+
+  /**
+   * Remove a retracted answer from the D1 projection.
+   *
+   * Retraction, not replacement — the caller is `undoScreenOut` and nothing
+   * else. The pencil deliberately does not come through here: see the note on
+   * the `edit` action for why an answer being changed is kept until the change
+   * arrives.
+   */
+  private async unprojectAnswer(ref: string): Promise<void> {
+    if (!this.meta || this.meta.formVersionId === "preview") return;
+    const submissionId = await this.ctx.storage.get<string>("submission_id");
+    if (!submissionId) return;
+    try {
+      await deleteAnswerRow(this.owner(), submissionId, ref);
+    } catch (err) {
+      console.error("unproject_failed", err);
     }
   }
 

@@ -414,7 +414,20 @@ export const SettingsDoc = z.object({
 
       maxClarificationsPerBlock: z.number().int().min(0).max(5).default(2),
       escalateAfterInvalid: z.number().int().min(1).max(10).default(3),
-      sessionTokenBudget: z.number().int().min(1000).max(200000).default(12000),
+      /**
+       * How much of a conversation the agent gets to phrase before the
+       * templates take over.
+       *
+       * 12,000 was the default, and it bought about five turns. Nearly all of
+       * it went on input: the stable prefix — persona, goal, question manifest,
+       * transcript so far — is ~3,000 tokens and is re-sent every turn, against
+       * a few dozen tokens of reply. So a twelve-question form spent its whole
+       * allowance somewhere around question five and conducted the rest of the
+       * interview as a plain form, which is not a downgrade an author asked for
+       * or could see coming. 60,000 carries an ordinary interview to the end;
+       * the ceiling and the author's control over it are unchanged.
+       */
+      sessionTokenBudget: z.number().int().min(1000).max(200000).default(60000),
       responseMaxTokens: z.number().int().min(50).max(2000).default(400),
     })
     .prefault({}),

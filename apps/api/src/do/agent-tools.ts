@@ -38,6 +38,14 @@ export interface ToolContext {
   searchKnowledge?: (query: string) => Promise<KnowledgeHit[]>;
   /** Whether the form has any indexed knowledge at all. */
   hasKnowledge?: boolean;
+  /**
+   * Required questions that still have no answer, in the order they are asked.
+   *
+   * Passed in rather than derived from `doc` here: whether a question is
+   * reachable depends on the answers already given, and the FSM is the only
+   * thing that holds them.
+   */
+  unansweredRequired?: { ref: string; title: string }[];
 }
 
 export interface ToolOutcome {
@@ -225,25 +233,50 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
       },
     }),
 
+    /**
+     * The verb that ends the conversation, and the one guard on it that was
+     * written but never used.
+     *
+     * `unanswered` was computed from `doc.blocks` alone — every required
+     * question, whether or not it had been answered — so the list was never
+     * empty, the tool always reported "wrapping up early", and it accepted the
+     * call either way. A model that decided it had heard enough could close a
+     * form with required questions still blank, and the only trace was an
+     * adverb in a message nobody reads.
+     */
     end_interview: tool({
       description: "Finish the conversation. Only when every required question is answered, or they ask to stop.",
       inputSchema: z.object({ endingRef: z.string().optional() }),
       execute: async ({ endingRef }) => {
-        const unanswered = ctx.doc.blocks.filter(
-          (b) => b.required && !["welcome", "statement"].includes(b.type),
-        );
-        if (endingRef && !ctx.doc.endings.some((e) => e.ref === endingRef)) {
+        const ending = endingRef ? ctx.doc.endings.find((e) => e.ref === endingRef) : undefined;
+        if (endingRef && !ending) {
           return record({
             name: "end_interview",
             ok: false,
             message: `Rejected: there is no ending with ref=${endingRef}.`,
           });
         }
+        const unanswered = ctx.unansweredRequired ?? [];
+        /*
+         * A screen-out is exempt. Turning somebody away is a decision about the
+         * answers already given, and holding it back until they have filled in
+         * the rest of a form that has just refused them is the wrong way round.
+         */
+        if (unanswered.length > 0 && ending?.kind !== "screen_out") {
+          const next = unanswered[0]!;
+          return record({
+            name: "end_interview",
+            ok: false,
+            message:
+              `Rejected: ${unanswered.length} required question${unanswered.length === 1 ? "" : "s"} still ` +
+              `unanswered, starting with "${next.title}" (ref=${next.ref}). Ask that one instead.`,
+          });
+        }
         return record({
           name: "end_interview",
           ok: true,
           effect: { kind: "end", endingRef },
-          message: `Wrapping up${unanswered.length ? " early" : ""}. Thank them warmly.`,
+          message: "Wrapping up. Thank them warmly.",
         });
       },
     }),
