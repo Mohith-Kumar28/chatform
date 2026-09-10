@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { Scalar } from "@scalar/hono-api-reference";
 import type { Bindings } from "./env.js";
+import { webOrigins } from "./lib/origins.js";
 import { healthRouter } from "./routes/health.js";
 import publicRouter from "./routes/public.js";
 import uploadsRouter, { filesAdminRouter, assetsRouter } from "./routes/uploads.js";
@@ -64,10 +65,33 @@ export function createApp() {
    */
   app.use("/p/*", publicIpLimit);
 
+  /**
+   * The dashboard surface, and the only one that carries the session cookie.
+   *
+   * The origin is checked against `WEB_ORIGINS`, not reflected. Reflecting it
+   * here was a hole rather than a convenience: in production the API is on
+   * `api.chatform.in` and the app on `chatform.in`, which are different hosts,
+   * so `needsCrossSiteCookies` is true and the session cookie is issued
+   * `SameSite=None`. A browser therefore sends it on requests from *any* site
+   * — and with the origin reflected beside `credentials: true`, any page a
+   * signed-in customer happened to visit could read the response. Every
+   * cookie-authenticated route is behind that: their forms, every respondent's
+   * answers and transcripts, deletes, publishes, API keys, billing. Nothing
+   * else stood in the way, because `requireSession` reads the cookie and asks
+   * nothing about where the request came from, and Better Auth's
+   * `trustedOrigins` only covers `/api/auth/*`.
+   *
+   * `null` rather than a throw for an origin that is not allowed: the header is
+   * simply absent, the browser refuses the read, and a request with no `Origin`
+   * at all — curl, a server, our own worker — is unaffected.
+   */
   app.use(
     "/api/*",
     cors({
-      origin: (origin) => origin ?? "*",
+      origin: (origin, c) => {
+        if (!origin) return null;
+        return webOrigins(c.env as Bindings).includes(origin.replace(/\/$/, "")) ? origin : null;
+      },
       /**
        * `x-chatform-impersonate` is here because a browser will not send a
        * custom header the preflight did not allow — and it fails *silently*:
