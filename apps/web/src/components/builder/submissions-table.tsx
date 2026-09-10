@@ -58,6 +58,23 @@ import { cn } from "@/lib/utils";
  * screen exists because a nine-question form does not fit in a builder pane.
  */
 
+/**
+ * The submissions payload with some rows taken out, for the optimistic delete
+ * in `runDelete`.
+ *
+ * Pure and exported so the shape assumption is pinned by a test rather than by
+ * this file continuing to be right. Two things it must not do: drop
+ * `retiredColumns`, which travels in the same envelope and is what lets a
+ * deleted question's answers still render, and rewrite an envelope it does not
+ * recognise — an unexpected shape is returned untouched, so the worst case is
+ * the old behaviour of waiting for the refetch rather than a blank table.
+ */
+export function withoutSubmissions(payload: unknown, ids: ReadonlySet<string>): unknown {
+  const list = payload as { submissions?: SubmissionRecord[] } | undefined;
+  if (!list?.submissions) return payload;
+  return { ...list, submissions: list.submissions.filter((s) => !ids.has(s.id)) };
+}
+
 export interface SubmissionRecord {
   id: string;
   status: string;
@@ -525,18 +542,62 @@ export function SubmissionsTable({
 
   const allSelected = rows.length > 0 && selected.size === rows.length;
 
+  /**
+   * Delete, applied to the table before the server has agreed.
+   *
+   * The dialog used to close on click and then everything else waited: the
+   * mutation, and then two invalidations, which are refetches. For the whole of
+   * that round trip the rows were still on screen and the "3 selected" toolbar
+   * was still offering to delete them again — the confirmation had visibly
+   * happened and nothing had visibly changed, which reads as a click that
+   * failed. Long enough on a slow connection to press Delete twice.
+   *
+   * So the rows come out of the cache immediately and the server is told
+   * afterwards. The two are reconciled either way: `onSettled` refetches the
+   * truth, and a failure puts the snapshot back before it does.
+   */
   async function runDelete(ids: string[]) {
+    const submissionsKey = getGetApiFormsByIdSubmissionsQueryKey(formId as never);
+    const analyticsKey = getGetApiFormsByIdAnalyticsQueryKey(formId as never);
+    const doomed = new Set(ids);
+
+    /*
+      Before the snapshot, not after: an in-flight refetch that resolves later
+      carries the pre-delete list and would put every row back, seconds after
+      it vanished. Resolves immediately when nothing is in flight, which is the
+      usual case — this is not what makes the click feel slow.
+    */
+    await queryClient.cancelQueries({ queryKey: submissionsKey });
+    const snapshot = queryClient.getQueryData(submissionsKey);
+    const previouslyPicked = picked;
+
+    queryClient.setQueryData(submissionsKey, (old: unknown) => withoutSubmissions(old, doomed));
+    setPicked(new Set());
+    // The drawer cannot stay open over a row that is no longer there.
+    if (openId && doomed.has(openId)) setOpenId(null);
+
     try {
       await del.mutateAsync({ id: formId as never, data: { ids } });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: getGetApiFormsByIdSubmissionsQueryKey(formId as never) }),
-        queryClient.invalidateQueries({ queryKey: getGetApiFormsByIdAnalyticsQueryKey(formId as never) }),
-      ]);
-      setPicked(new Set());
-      if (openId && ids.includes(openId)) setOpenId(null);
       toast.success(ids.length === 1 ? "Response deleted" : `${ids.length} responses deleted`);
     } catch {
+      /*
+        Put back both halves. The rows alone would leave someone looking at
+        the responses they just tried to delete with no selection left to
+        retry from, having to pick all three again to find out whether the
+        second attempt works.
+      */
+      queryClient.setQueryData(submissionsKey, snapshot);
+      setPicked(previouslyPicked);
       toast.error("Could not delete", { description: "Nothing was removed — try again." });
+    } finally {
+      /*
+        Analytics as well as the list: the status chips above the table count
+        from it, so a delete that is not reflected there leaves "12 completed"
+        over eleven rows. Not awaited — the table is already correct, and this
+        only confirms it.
+      */
+      void queryClient.invalidateQueries({ queryKey: submissionsKey });
+      void queryClient.invalidateQueries({ queryKey: analyticsKey });
     }
   }
 
@@ -777,10 +838,21 @@ export function SubmissionsTable({
         }
         description="The answers and the conversation go with it. This cannot be undone — download them first if you might want them."
         confirmLabel="Delete"
-        onConfirm={async () => {
+        /*
+          Closed here rather than left to `ConfirmDialog`'s own busy state.
+
+          The dialog will happily stay open with a spinner until `onConfirm`
+          resolves — that is the other correct answer to this, and the right
+          one when the screen behind cannot be updated until the server
+          replies. Here it can: `runDelete` takes the rows out of the cache
+          first, so by the time this dialog would have finished spinning the
+          table underneath has already lost them. Holding it open would be
+          showing a spinner over work that is visibly done.
+        */
+        onConfirm={() => {
           const ids = confirming ?? [];
           setConfirming(null);
-          await runDelete(ids);
+          void runDelete(ids);
         }}
       />
     </>
