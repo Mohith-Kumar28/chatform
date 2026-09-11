@@ -1,6 +1,7 @@
 import { conditionIsAlwaysFalse, conditionIsAlwaysTrue } from "../conditions";
 import type { Block } from "../blocks";
 import type { LogicRuleInput } from "../logic";
+import { rulesAreExhaustive } from "./lint";
 
 /**
  * Turning a branch list into a flow that actually works.
@@ -121,6 +122,32 @@ export function buildFlowRules(
     }
   }
 
+  /**
+   * (3) A condition and its exact opposite, both sent to the same place.
+   *
+   * "Not empty → screen-out" beside "empty → screen-out" is how a model says
+   * "and then the form ends". Stored as written it routes correctly, but the
+   * canvas draws a decision with two arms over a choice nobody makes. Kept as
+   * one unconditional jump instead; `collapsedAt` records which pairs have
+   * already been written so the second half of each adds nothing.
+   */
+  const exhaustive = new Set<DraftBranch>();
+  for (const a of branches) {
+    for (const b of branches) {
+      if (
+        a !== b &&
+        a.when.ref === b.when.ref &&
+        a.then === b.then &&
+        NEGATE[a.when.op] === b.when.op &&
+        a.when.value === b.when.value
+      ) {
+        exhaustive.add(a);
+        exhaustive.add(b);
+      }
+    }
+  }
+  const collapsedAt = new Set<string>();
+
   for (const br of branches) {
     if (!index.has(br.when.ref)) continue;
     if (br.when.ref === br.then) continue;
@@ -129,6 +156,16 @@ export function buildFlowRules(
     // A backwards jump is how a form loops forever; the FSM would allow it and
     // the respondent would never escape.
     if (!isEnding && index.get(br.then)! <= index.get(br.when.ref)!) continue;
+
+    if (exhaustive.has(br)) {
+      const key = `${br.when.ref}\u0000${br.then}`;
+      if (!collapsedAt.has(key)) {
+        collapsedAt.add(key);
+        rules.push(alwaysRule(br.when.ref, br.then, isEnding ? "ending" : "block"));
+        routed.add(br.when.ref);
+      }
+      continue;
+    }
 
     // `is_not_empty` on a required question is how the model spells "and
     // then": it can never be false, so keeping it as a condition would draw a
@@ -171,15 +208,31 @@ export function buildFlowRules(
       .sort((a, b) => index.get(a.then)! - index.get(b.then)!);
     if (arms.length === 0) continue;
 
-    // Only one branch in total leaves this question — including any that end
-    // the form. When the model has already routed the other answers somewhere,
-    // adding a complement here would compete with its rule instead of
-    // completing it.
-    if (arms.length === 1 && group.length === 1) {
+    // Only one branch leaves this question for another QUESTION. Branches that
+    // end the form do not count against it: they sit above the complement in
+    // the rule list, and the first matching goto wins, so they keep their
+    // answers either way.
+    //
+    // This used to require exactly one branch in total, on the reasoning that
+    // any other branch meant the model had already routed the remaining
+    // answers. Sometimes it has — "yes → phone, no → end" leaves nobody over —
+    // and then a complement is a wire nobody travels. But an ending branch
+    // routes its own answers, not necessarily the rest: an age question that
+    // screened out the over-25s was given "under 6 → a referral question"
+    // directly below it, the complement was withheld because of the
+    // screen-out, and every 6-to-25-year-old fell into the referral question
+    // and was screened out behind it. So the question is whether the branches
+    // — these and any already on the form — leave an answer unrouted.
+    if (arms.length === 1) {
       const target = index.get(arms[0]!.then)!;
+      const siblings = [
+        ...group.map((b) => gotoRule(source, b.when, b.then, "block")),
+        ...existing.filter((r) => r.from === source),
+      ] as Parameters<typeof rulesAreExhaustive>[1];
+      const sourceBlock = blocks[sourceIndex];
       // (2) The branch targets the block that comes next anyway, so it changes
       // nothing. What the flow meant is "skip this when the condition fails".
-      if (target === sourceIndex + 1) {
+      if (target === sourceIndex + 1 && sourceBlock && !rulesAreExhaustive(sourceBlock, siblings)) {
         // Skip the whole arm, not just its first question — see `armExtent`.
         const dest = destinationAfter(armExtent(target, branches, blocks), blocks, endingRefs);
         if (dest) {

@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, Check, GitBranch, Loader2, Mic, Minus, Shuffle, SlidersHorizontal, Sparkles, Square } from "lucide-react";
+import { ArrowUp, Check, GitBranch, Loader2, Mic, Minus, Shuffle, SlidersHorizontal, Sparkles, Square, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
-import { FormDoc as FormDocSchema } from "@repo/form-schema";
+import { FormDoc as FormDocSchema, lintFormDoc, type FormDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { useBuilderStore } from "@/stores/builder-store";
@@ -14,6 +14,11 @@ import { loadHistory, saveHistory, type Turn } from "./ai-bar-thread";
 import { KEY } from "./use-builder-shortcuts";
 import { useDictation } from "@/hooks/use-dictation";
 import { cn } from "@/lib/utils";
+
+/** Refs of questions no path through the form reaches. */
+function unreachableRefs(doc: FormDoc): string[] {
+  return lintFormDoc(doc).find((i) => i.code === "unreachable_blocks")?.refs ?? [];
+}
 
 /** Plain words for an edit whose summary came back empty. */
 function describeEdit(added: number, updated: number, removed: number, rules: number): string {
@@ -155,6 +160,13 @@ export function AiBar() {
       const proposed = FormDocSchema.safeParse(res.doc);
       if (!proposed.success) throw new Error("The proposal came back in a shape I couldn't read.");
 
+      // Questions this proposal cuts off. Compared against the form as it is,
+      // so a question that was already unreachable is not blamed on the edit.
+      const reachableNow = new Set(unreachableRefs(doc));
+      const orphaned = unreachableRefs(proposed.data)
+        .filter((ref) => !reachableNow.has(ref))
+        .map((ref) => proposed.data.blocks.find((b) => b.ref === ref)?.title || ref);
+
       const existing = new Set(doc.blocks.map((b) => b.ref));
       const added = proposed.data.blocks.filter((b) => !existing.has(b.ref));
       const removed = res.removedRefs ?? [];
@@ -181,6 +193,7 @@ export function AiBar() {
           updated,
           rules,
           rewired: res.rewired ?? 0,
+          orphaned,
           doc: proposed.data,
         },
       ]);
@@ -385,6 +398,7 @@ function Message({
   const updated = turn.updated ?? [];
   const rules = turn.rules ?? 0;
   const rewired = turn.rewired ?? 0;
+  const orphaned = turn.orphaned ?? [];
   // An assistant turn is a proposal when it carries one, in any of its forms —
   // questions, removals, changed settings, or nothing but new wiring.
   const isProposal =
@@ -444,6 +458,16 @@ function Message({
               {rules} branching rule{rules > 1 ? "s" : ""}, so each answer only sees what applies to it
             </p>
           )}
+          {orphaned.length > 0 && !turn.applied && (
+            <p className="flex items-start gap-1 px-1 text-xs text-amber-600 dark:text-amber-400">
+              <TriangleAlert className="mt-0.5 size-3 shrink-0" />
+              <span>
+                Leaves {orphaned.length === 1 ? "1 question" : `${orphaned.length} questions`} nobody can reach:{" "}
+                {orphaned.slice(0, 3).join(", ")}
+                {orphaned.length > 3 ? `, and ${orphaned.length - 3} more` : ""}
+              </span>
+            </p>
+          )}
           {turn.applied ? (
             <p className="text-muted-foreground flex items-center gap-1 px-1 text-xs">
               <Check className="size-3" />
@@ -453,9 +477,11 @@ function Message({
             <Button size="sm" shape="pill" onClick={() => onApply(turn)}>
               {/* Named for what the edit does. It said "Add them" regardless,
                   which was wrong for the many edits that add nothing. */}
-              {added.length > 0 && removed.length === 0
-                ? `Add ${added.length === 1 ? "it" : "them"}`
-                : "Apply"}
+              {orphaned.length > 0
+                ? "Apply anyway"
+                : added.length > 0 && removed.length === 0
+                  ? `Add ${added.length === 1 ? "it" : "them"}`
+                  : "Apply"}
             </Button>
           ) : (
             // The proposal is not kept in storage, so a thread restored from a

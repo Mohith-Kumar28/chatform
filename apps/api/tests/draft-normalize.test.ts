@@ -187,6 +187,21 @@ describe("resolveBranches", () => {
     expect(resolved.map((r) => r.when.op)).toEqual(["contains"]);
   });
 
+  // Except when the pair IS the route: a referral question offered only to
+  // those too young to enrol, sending every answer to the screen-out. Dropping
+  // both let them fall through into the rest of the form.
+  it("keeps an empty / not-empty pair that sends everyone to an ending", () => {
+    const resolved = resolveBranches(
+      [
+        { whenRef: "q_text", op: "is_not_empty", value: "", then: "end_ineligible" },
+        { whenRef: "q_text", op: "is_empty", value: "", then: "end_ineligible" },
+      ],
+      blocks,
+      new Map(),
+    );
+    expect(resolved.map((r) => r.when.op)).toEqual(["is_not_empty", "is_empty"]);
+  });
+
   it("drops a branch hanging off a question that does not exist", () => {
     const resolved = resolveBranches([{ whenRef: "q_ghost", op: "eq", value: "x", then: "q_text" }], blocks, new Map());
     expect(resolved).toHaveLength(0);

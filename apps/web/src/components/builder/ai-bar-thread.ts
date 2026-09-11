@@ -22,6 +22,13 @@ export interface Turn {
    * wrote — the two things that make a conditional question work.
    */
   doc?: FormDoc;
+  /**
+   * Titles of questions this proposal leaves with no route to them, that had
+   * one before it. The server lints every proposal and nothing read the
+   * answer: an edit that cut seven questions off the flow was offered with a
+   * plain "Apply", and applied.
+   */
+  orphaned?: string[];
   applied?: boolean;
 }
 

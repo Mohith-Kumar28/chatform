@@ -966,7 +966,24 @@ export function resolveBranches(
     // covers the optional case, where they are merely meaningless — and the
     // cost of being wrong is a branch the author adds back by hand in ten
     // seconds, against a nonsense node they cannot explain.
-    if (br.op === "is_empty" || br.op === "is_not_empty") continue;
+    //
+    // Except as a pair that goes somewhere falling through would not. "Empty →
+    // screen-out" beside "not empty → screen-out" is the same "and then" — but
+    // on a question that is itself a detour, the "then" is the route: drop both
+    // and a respondent sent here only to be turned away falls through into the
+    // rest of the form instead. `buildFlowRules` stores the pair as one
+    // unconditional jump. A pair aimed at the very next question is still
+    // dropped, since that is where everyone goes anyway.
+    if (br.op === "is_empty" || br.op === "is_not_empty") {
+      const opposite = br.op === "is_empty" ? "is_not_empty" : "is_empty";
+      const paired = branches.some((o) => o.whenRef === br.whenRef && o.then === br.then && o.op === opposite);
+      const from = blocks.findIndex((b) => b.ref === br.whenRef);
+      const to = blocks.findIndex((b) => b.ref === br.then);
+      const goesPastFallThrough = to < 0 || to > from + 1;
+      if (!paired || !goesPastFallThrough) continue;
+      out.push({ when: { ref: br.whenRef, op: br.op, value: null }, then: br.then });
+      continue;
+    }
 
     const raw = String(br.value ?? "").trim();
     const optionIds = optionIdsByRef.get(br.whenRef);
