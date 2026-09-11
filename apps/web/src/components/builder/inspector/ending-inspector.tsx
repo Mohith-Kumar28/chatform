@@ -3,6 +3,7 @@
 import { Flag, Plus, ShieldAlert, X } from "lucide-react";
 import type { FormDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
+import { InfoHint } from "@/components/ui/info-hint";
 import { Input } from "@/components/ui/input";
 import { BufferedInput } from "@/components/ui/buffered-input";
 import {
@@ -165,13 +166,19 @@ export function EndingInspector({
       */}
       <LockedControl feature="completion_redirect">
         <Field
-          label="Redirect when they reach this ending"
+          label="Redirect to"
           help={
-            ending.redirectUrl
-              ? `They land on this page after ${ending.redirectDelaySec} second${ending.redirectDelaySec === 1 ? "" : "s"}.`
-              : screenOut
-                ? "Leave empty to show this screen and stay put."
-                : "Leave empty to use the form's completion redirect, if it has one."
+            <InfoHint label="About this redirect">
+              <p>
+                Where someone goes once they reach this ending, so different
+                outcomes can send people to different places.
+              </p>
+              <p className="mt-2">
+                {screenOut
+                  ? "Leave it empty to show this screen and stay put — a screen-out never inherits the form's completion redirect."
+                  : "Leave it empty to fall back to the form's completion redirect in Settings, if it has one."}
+              </p>
+            </InfoHint>
           }
         >
           <BufferedInput
@@ -184,7 +191,7 @@ export function EndingInspector({
       </LockedControl>
 
       {ending.redirectUrl && (
-        <Field label="Wait before redirecting" help="Seconds the message stays on screen first.">
+        <Field label="Wait before redirecting (seconds)">
           <BufferedInput
             value={String(ending.redirectDelaySec)}
             inputMode="numeric"

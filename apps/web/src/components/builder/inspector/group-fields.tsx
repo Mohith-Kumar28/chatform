@@ -87,6 +87,27 @@ export function patternIsValid(pattern: string): boolean {
  * empty input labelled "Pattern" — so the explanation sits behind the icon next
  * to it, with the two or three shapes anybody actually reaches for.
  */
+/**
+ * The same explanation the standalone email block shows, for a column.
+ *
+ * Exported because `type-fields.tsx` shows it too — one wording for one idea,
+ * and behind an icon because `Field` puts `help` beside the label rather than
+ * under the input.
+ */
+export function DomainsHelp() {
+  return (
+    <InfoHint label="About accepted domains">
+      <p>
+        Accepts an address only when it ends in one of these. Leave it empty to
+        accept any domain.
+      </p>
+      <p className="mt-2">
+        Separate several with commas — <code className="text-foreground">acme.com, acme.edu</code>.
+      </p>
+    </InfoHint>
+  );
+}
+
 export function PatternHelp() {
   return (
     <InfoHint label="What is a pattern?">
@@ -353,11 +374,7 @@ export function GroupFieldsEditor({
                     placeholder="acme.com, acme.edu"
                     value={field.allowedDomains.join(", ")}
                     onChange={(v) => update(i, { allowedDomains: parseEmailDomains(v) })}
-                    help={
-                      field.allowedDomains.length > 0
-                        ? `Only ${field.allowedDomains.map((d) => `@${d}`).join(", ")} accepted in this column.`
-                        : "Leave empty to accept any domain."
-                    }
+                    help={<DomainsHelp />}
                   />
                 </div>
               )}

@@ -2,7 +2,8 @@
 
 import { isValidUpiId, parseEmailDomains, UPI_CURRENCY, type Block } from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
-import { GroupFieldsEditor, PatternHelp, patternIsValid } from "./group-fields";
+import { InfoHint } from "@/components/ui/info-hint";
+import { DomainsHelp, GroupFieldsEditor, PatternHelp, patternIsValid } from "./group-fields";
 import {
   CheckboxGroup,
   ListEditor,
@@ -616,7 +617,7 @@ export function TypeFields({
                 )
               }
               maxLength={2}
-              help="Lets someone type a national number without the dialling code."
+              help={<CountryCodeHelp />}
             />
           )}
         </>
@@ -747,6 +748,17 @@ export function TypeFields({
  * author who knows the domain reaches for the box, and one who only knows "not
  * gmail" reaches for the switch above it.
  */
+function CountryCodeHelp() {
+  return (
+    <InfoHint label="About the country code">
+      <p>
+        Lets someone type a national number — <code className="text-foreground">9876543210</code> —
+        without the dialling code, and stores it in full.
+      </p>
+    </InfoHint>
+  );
+}
+
 function EmailRuleFields({
   businessOnly,
   allowedDomains,
@@ -768,11 +780,7 @@ function EmailRuleFields({
         placeholder="acme.com, acme.edu"
         value={allowedDomains.join(", ")}
         onChange={(v) => onChange({ allowedDomains: parseEmailDomains(v) })}
-        help={
-          allowedDomains.length > 0
-            ? `Only addresses ending in ${allowedDomains.map((d) => `@${d}`).join(", ")} are accepted.`
-            : "Leave empty to accept any domain. Separate several with commas."
-        }
+        help={<DomainsHelp />}
       />
     </>
   );
