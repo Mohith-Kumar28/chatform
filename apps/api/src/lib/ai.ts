@@ -1,5 +1,5 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { streamText, streamObject, generateText, generateObject, tool, type ToolSet, type LanguageModel } from "ai";
+import { streamText, streamObject, generateText, generateObject, tool, APICallError, type ToolSet, type LanguageModel } from "ai";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
 
@@ -57,6 +57,28 @@ export const MODELS = {
    * respondent's turn), so its latency is nobody's typing indicator.
    */
   ocr: "google/gemini-3.7-flash",
+  /**
+   * The model that drafts when the primary REFUSES THE SCHEMA.
+   *
+   * Not a quality tier and not a preference — a different vendor, which is the
+   * whole point. The generation tier is rejected or accepted by Google's
+   * structured-output budget, and that budget is Google's to change: it was
+   * tightened under a schema that had been measured against it, and every
+   * generation started failing with no deploy on our side (see
+   * `GenerationDraft`). Measured the same afternoon, the exact schema Google
+   * refused was accepted by OpenAI, Anthropic, Mistral and DeepSeek — the
+   * limit is one vendor's, so the insurance has to be another vendor's.
+   *
+   * Haiku on the numbers, not on brand: against the same real prompt it drafted
+   * 11 blocks in 8.7s with no lint errors, where `gpt-5-mini` took 67.7s for 6
+   * blocks and `mistral-medium-3.1` gave 5. It is the only non-Google model
+   * measured that still sizes a form the way `FORM_DESIGNER_SYSTEM` asks.
+   *
+   * This path is cold by construction — it runs only when the primary has
+   * refused the request itself — so its job is to be correct, not cheap. It
+   * happens to be both.
+   */
+  generationFallback: "anthropic/claude-haiku-4.5",
 } as const;
 
 export const DEFAULT_MODEL = MODELS.interview;
@@ -182,24 +204,87 @@ export async function runAgentTurn(opts: {
 }
 
 /**
+ * How long a draft is allowed to be.
+ *
+ * These are enforced on the draft that comes BACK, by `clampDraft`, and never
+ * sent to the provider as `maxItems` — see the note on `GenerationDraft`.
+ * `blocks` is 20 because a form longer than that is a form nobody finishes;
+ * `branches` is 12 because the flow stops being readable past it.
+ */
+export const DRAFT_LIMITS = {
+  blocks: 20,
+  endings: 5,
+  branches: 12,
+  /** Edit-only lists. */
+  addBlocks: 12,
+  updateBlocks: 12,
+  removeRefs: 12,
+  rewireRefs: 12,
+} as const;
+
+/**
+ * Truncate every list in a draft to its limit, in place of the `.max()` the
+ * schema cannot carry. Unknown keys are left alone.
+ */
+function clampDraft<T extends Record<string, unknown>>(draft: T): T {
+  for (const [key, limit] of Object.entries(DRAFT_LIMITS)) {
+    const list = draft[key as keyof T];
+    if (Array.isArray(list) && list.length > limit) {
+      (draft as Record<string, unknown>)[key] = list.slice(0, limit);
+    }
+  }
+  return draft;
+}
+
+/**
  * Loose generation schema — deliberately NOT the full FormDoc (recursive
  * condition groups are rejected by provider structured-output APIs).
  * The route normalizes this draft into a strict FormDoc afterwards.
  *
- * FLATNESS IS A HARD REQUIREMENT, not a style choice.
+ * FLATNESS IS A HARD REQUIREMENT, and `maxItems` IS NOT ALLOWED HERE.
  *
  * Google's structured-output validator enforces a budget over the whole
- * schema, and `maxItems` multiplies into it: a draft with `blocks` capped at
- * 30 × 7 properties alongside `branches` capped at 12 × 4 is rejected outright
- * with "Request contains an invalid argument", before the model is even
- * reached. Measured on `google/gemini-3.7-flash`: blocks(30) + endings(5) is
- * accepted, blocks(30) + branches(12) is not, and blocks(20) + branches(12)
- * is. Nesting counts double — options as `{id, label}` objects inside blocks
- * blew the same budget on its own.
+ * schema, and `maxItems` multiplies into it: a list capped at 20 with 8
+ * properties spends on the order of 160 of the budget, not 8. Exceed it and
+ * every request is rejected with "Request contains an invalid argument" before
+ * the model is reached — the whole feature, not one prompt.
  *
- * Hence: 20 blocks, options as plain labels, and conditions flattened to four
- * scalar fields. Anthropic accepted the old nested shape, which is exactly why
- * this went unnoticed until the model changed.
+ * `maxItems` is the ONLY keyword that does this, which was established by
+ * elimination rather than by reading: stripping `$schema`, `additionalProperties`,
+ * `minLength`, `minimum`/`maximum` or `minItems` from the refused schema changed
+ * nothing, and stripping `maxItems` alone made it pass. Everything we send is on
+ * Google's supported list; the problem is a supported keyword at a scale their
+ * docs describe only as "very large or deeply nested schemas may be rejected".
+ *
+ * The ceiling is real, unpublished, and close to `maxItems × properties-per-item`.
+ * Binary-searched on `google/gemini-3.7-flash`: an array of 2-property objects
+ * is accepted up to `maxItems` 132, of 4-property objects up to 69, and of
+ * 8-property objects up to 35 — a product of 264, 276 and 280. Enums and nested
+ * arrays evidently cost more than one each, since our own schema was refused
+ * below that product; the exact accounting is not documented and not worth
+ * reverse-engineering, because it is a number Google can change.
+ *
+ * The caps used to be tuned to fit that budget, and that is the part which did
+ * not hold — not because the budget moved, but because the schema grew into it.
+ * `EditDraft` is the proof and it is worth stating exactly: adding ONE property
+ * (`description` on `updateBlocks`, in "feat: add rich text question
+ * descriptions") spent 12 more of the budget — 1 property × `maxItems` 12 — and
+ * took the schema from accepted 3/3 to refused 3/3. A rich-text feature, with
+ * nothing to do with generation, silently broke the builder's AI edit bar.
+ *
+ * That is the real hazard, and it is worse than a provider changing its mind:
+ * the cost of a field is invisible at the point you add it, the failure is
+ * total rather than partial, and nothing in review or CI says a word. So the
+ * caps left the schema entirely and moved to `clampDraft`, which runs on the
+ * draft that comes back. Nothing is lost — the limits are still enforced, and
+ * the prompt still states them — and adding a field is a normal thing to do
+ * again, because there is no longer a budget for it to spend.
+ *
+ * `minItems` stays: small, and it is what stops a one-question "form".
+ *
+ * The rest of the flatness still matters for the same budget. Options are
+ * plain labels, and conditions are four scalar fields; options as `{id, label}`
+ * objects inside blocks blew the budget on their own.
  */
 export const GenerationDraft = z.object({
   title: z.string().min(1),
@@ -245,8 +330,7 @@ export const GenerationDraft = z.object({
         config: z.string(),
       }),
     )
-    .min(2)
-    .max(20),
+    .min(2),
   /**
    * One entry per distinct outcome.
    *
@@ -284,8 +368,7 @@ export const GenerationDraft = z.object({
         requirements: z.string(),
       }),
     )
-    .min(1)
-    .max(5),
+    .min(1),
   /** Conditional flow: when <condition on question ref> → jump to <target ref | ending ref>. */
   branches: z
     .array(
@@ -305,8 +388,7 @@ export const GenerationDraft = z.object({
         /** Target question ref or ending ref. */
         then: z.string(),
       }),
-    )
-    .max(12),
+    ),
 });
 export type GenerationDraft = z.output<typeof GenerationDraft>;
 
@@ -352,8 +434,7 @@ export const EditDraft = z.object({
          */
         insertAfter: z.string(),
       }),
-    )
-    .max(12),
+    ),
   /**
    * Settings changed on questions that are already in the form.
    *
@@ -382,8 +463,7 @@ export const EditDraft = z.object({
          */
         description: z.string(),
       }),
-    )
-    .max(12),
+    ),
   /**
    * Endings this edit adds or changes.
    *
@@ -408,10 +488,9 @@ export const EditDraft = z.object({
         /** `screen_out` only: what they did not meet, as "a | b | c". */
         requirements: z.string(),
       }),
-    )
-    .max(5),
+    ),
   /** Refs of questions the request asks to be taken out. Usually empty. */
-  removeRefs: z.array(z.string()).max(12),
+  removeRefs: z.array(z.string()),
   /**
    * Questions whose routing this edit is changing.
    *
@@ -430,7 +509,7 @@ export const EditDraft = z.object({
    * the model think about which routes it is changing — but a route the edit
    * does not mention is never removed on the strength of it.
    */
-  rewireRefs: z.array(z.string()).max(12),
+  rewireRefs: z.array(z.string()),
   /**
    * Every branch this edit asserts: the ones it is changing, restated in full,
    * plus any new ones. Each replaces the existing rule for that same question
@@ -446,8 +525,7 @@ export const EditDraft = z.object({
         value: z.string(),
         then: z.string(),
       }),
-    )
-    .max(12),
+    ),
   /** One sentence on what changed, shown to the builder. */
   summary: z.string(),
 });
@@ -490,6 +568,64 @@ export function splitUsage(usage: { inputTokens?: number; outputTokens?: number 
 }
 
 /**
+ * Did the provider refuse the REQUEST, or fail to answer it?
+ *
+ * The difference is the whole reason this exists. A 429, a 502, a timeout — the
+ * provider is having a bad minute and the same request will work shortly, so a
+ * retry is the right move. A 400 is the opposite: the provider read the request
+ * and rejected its shape. Retrying a 400 is a guaranteed second failure, and
+ * that is precisely what shipped — every generation burned two upstream calls
+ * and ~7s before telling the author "the AI provider failed to respond", a
+ * sentence that describes a flaky provider and sent the diagnosis in the wrong
+ * direction for as long as it stood.
+ *
+ * 422 is included because providers disagree about which of the two a schema
+ * they dislike deserves. Rate limits are excluded explicitly: some gateways
+ * report them as 400, and a rate limit is the retryable kind.
+ */
+export function isSchemaRejection(err: unknown): boolean {
+  if (!APICallError.isInstance(err)) return false;
+  if (err.statusCode !== 400 && err.statusCode !== 422) return false;
+  const text = `${err.message} ${err.responseBody ?? ""}`.toLowerCase();
+  if (text.includes("rate limit") || text.includes("quota") || text.includes("overloaded")) return false;
+  return true;
+}
+
+/**
+ * Run a model call, and run it again on another vendor if the first refuses the
+ * schema.
+ *
+ * This is the part that makes a repeat of the outage a slow day rather than a
+ * dead feature. `clampDraft` and the `maxItems` ban fix the schema we know
+ * about; they cannot fix the next limit Google decides to tighten, and nothing
+ * on our side can. What we CAN decide is that one vendor's opinion of our
+ * schema stops being a single point of failure — so a refusal falls through to
+ * `MODELS.generationFallback` and the author still gets their form.
+ *
+ * Deliberately narrow. It catches ONLY `isSchemaRejection`, so a rate limit or
+ * an outage still surfaces as itself rather than quietly doubling our spend on
+ * a second vendor. And it is loud: a fallback that fires silently is a bug that
+ * bills you monthly and is discovered by accident.
+ */
+async function withSchemaFallback<T>(label: string, run: (model: string) => Promise<T>): Promise<T> {
+  try {
+    return await run(MODELS.generation);
+  } catch (err) {
+    if (!isSchemaRejection(err)) throw err;
+    // Flattened, because Workers Logs serialise an Error object to `{}`.
+    console.error("schema_rejected_falling_back", {
+      label,
+      primary: MODELS.generation,
+      fallback: MODELS.generationFallback,
+      status: APICallError.isInstance(err) ? err.statusCode : undefined,
+      message: err instanceof Error ? err.message : String(err),
+      body: APICallError.isInstance(err) ? String(err.responseBody ?? "").slice(0, 800) : undefined,
+    });
+    return await run(MODELS.generationFallback);
+  }
+}
+
+/**
  * Edit an existing form: questions added or removed, and how the flow rewires.
  *
  * `system` carries the same design doctrine the generator gets. An edit is
@@ -499,15 +635,17 @@ export function splitUsage(usage: { inputTokens?: number; outputTokens?: number 
  * less. It used to see none of them.
  */
 export async function generateEdit(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: EditDraft; tokens: number; usage: TokenUsage }> {
-  const result = await generateObject({
-    model: chatModel(opts.env, MODELS.generation),
-    schema: EditDraft,
-    system: opts.system,
-    prompt: opts.prompt,
-    providerOptions: GENERATION_PROVIDER_OPTIONS,
-  });
+  const result = await withSchemaFallback("edit", (model) =>
+    generateObject({
+      model: chatModel(opts.env, model),
+      schema: EditDraft,
+      system: opts.system,
+      prompt: opts.prompt,
+      providerOptions: GENERATION_PROVIDER_OPTIONS,
+    }),
+  );
   const usage = splitUsage(result.usage);
-  return { draft: result.object as EditDraft, tokens: usage.input + usage.output, usage };
+  return { draft: clampDraft(result.object as EditDraft), tokens: usage.input + usage.output, usage };
 }
 
 /**
@@ -518,15 +656,17 @@ export async function generateEdit(opts: { env: Bindings; prompt: string; system
  * provider's prompt cache instead of being billed as fresh input each time.
  */
 export async function generateFormDraft(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage }> {
-  const result = await generateObject({
-    model: chatModel(opts.env, MODELS.generation),
-    schema: GenerationDraft,
-    system: opts.system,
-    prompt: opts.prompt,
-    providerOptions: GENERATION_PROVIDER_OPTIONS,
-  });
+  const result = await withSchemaFallback("generate", (model) =>
+    generateObject({
+      model: chatModel(opts.env, model),
+      schema: GenerationDraft,
+      system: opts.system,
+      prompt: opts.prompt,
+      providerOptions: GENERATION_PROVIDER_OPTIONS,
+    }),
+  );
   const usage = splitUsage(result.usage);
-  return { draft: result.object as GenerationDraft, tokens: usage.input + usage.output, usage };
+  return { draft: clampDraft(result.object as GenerationDraft), tokens: usage.input + usage.output, usage };
 }
 
 /** A question as it appears mid-stream, before the draft is complete. */
@@ -558,46 +698,64 @@ export async function streamFormDraft(opts: {
   onBlock?: (block: DraftBlockPreview) => void;
   abortSignal?: AbortSignal;
 }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage }> {
-  const result = streamObject({
-    model: chatModel(opts.env, MODELS.generation),
-    schema: GenerationDraft,
-    system: opts.system,
-    prompt: opts.prompt,
-    providerOptions: GENERATION_PROVIDER_OPTIONS,
-    abortSignal: opts.abortSignal,
-  });
+  // Whether this attempt has already put a question on the author's screen.
+  // A schema refusal lands before the first token, so the fallback normally
+  // starts from a blank spinner — but if anything HAS been announced, falling
+  // back would replay the list from index 0 and show every question twice. In
+  // that case the error is honest and the fallback is not taken.
+  let streamed = false;
 
-  const announced = new Set<number>();
-  for await (const partial of result.partialObjectStream) {
-    if (!opts.onBlock) continue;
-    const blocks = partial.blocks ?? [];
-    for (const [i, b] of blocks.entries()) {
-      // The last element of a partial array is the one still being written, so
-      // a block is only announced once its title has stopped growing — i.e.
-      // once a later block has appeared, or the stream has ended.
-      const settled = i < blocks.length - 1;
-      if (!settled || announced.has(i) || !b?.title) continue;
-      announced.add(i);
-      opts.onBlock({
-        index: i,
-        ref: b.ref ?? "",
-        type: b.type ?? "",
-        title: b.title,
-        optionCount: b.options?.filter(Boolean).length ?? 0,
-      });
+  const draw = async (model: string) => {
+    const result = streamObject({
+      model: chatModel(opts.env, model),
+      schema: GenerationDraft,
+      system: opts.system,
+      prompt: opts.prompt,
+      providerOptions: GENERATION_PROVIDER_OPTIONS,
+      abortSignal: opts.abortSignal,
+    });
+
+    const announced = new Set<number>();
+    for await (const partial of result.partialObjectStream) {
+      if (!opts.onBlock) continue;
+      const blocks = partial.blocks ?? [];
+      for (const [i, b] of blocks.entries()) {
+        // The last element of a partial array is the one still being written, so
+        // a block is only announced once its title has stopped growing — i.e.
+        // once a later block has appeared, or the stream has ended.
+        const settled = i < blocks.length - 1;
+        if (!settled || announced.has(i) || !b?.title || i >= DRAFT_LIMITS.blocks) continue;
+        announced.add(i);
+        streamed = true;
+        opts.onBlock({
+          index: i,
+          ref: b.ref ?? "",
+          type: b.type ?? "",
+          title: b.title,
+          optionCount: b.options?.filter(Boolean).length ?? 0,
+        });
+      }
     }
-  }
 
-  const draft = (await result.object) as GenerationDraft;
-  // The final block never gets a successor to settle it against, so it is
-  // announced from the finished document instead.
-  const last = draft.blocks.length - 1;
-  if (opts.onBlock && last >= 0 && !announced.has(last)) {
-    const b = draft.blocks[last]!;
-    opts.onBlock({ index: last, ref: b.ref, type: b.type, title: b.title, optionCount: b.options.length });
-  }
-  const split = splitUsage(await result.usage);
-  return { draft, tokens: split.input + split.output, usage: split };
+    const draft = clampDraft((await result.object) as GenerationDraft);
+    // The final block never gets a successor to settle it against, so it is
+    // announced from the finished document instead.
+    const last = draft.blocks.length - 1;
+    if (opts.onBlock && last >= 0 && !announced.has(last)) {
+      const b = draft.blocks[last]!;
+      streamed = true;
+      opts.onBlock({ index: last, ref: b.ref, type: b.type, title: b.title, optionCount: b.options.length });
+    }
+    const split = splitUsage(await result.usage);
+    return { draft, tokens: split.input + split.output, usage: split };
+  };
+
+  return withSchemaFallback("generate_stream", (model) => {
+    if (model !== MODELS.generation && streamed) {
+      throw new Error("Schema refused after the draft had started streaming; not restarting it.");
+    }
+    return draw(model);
+  });
 }
 
 /**

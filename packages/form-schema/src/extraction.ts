@@ -150,7 +150,24 @@ export function extractionSchema(block: Block): z.ZodTypeAny | null {
           ).optional(),
         ]),
       );
-      return envelope(z.array(z.object(shape)).max(block.maxEntries));
+      /**
+       * No `.max(block.maxEntries)`, for the same reason the columns are
+       * optional: a cap here fails as a schema error, which is invisible, and
+       * `validateAnswer` already fails it as "You can add up to 4 team
+       * members", which is not (see `validators.ts`).
+       *
+       * It also costs what we cannot afford to spend. Google budgets `maxItems`
+       * against the whole schema by MULTIPLYING it out — 10 fields × 20 entries
+       * is 200, not 10 — and exceeding that budget rejects the request outright,
+       * before the model. That is not hypothetical: the same defect took form
+       * generation down in production when Google tightened the budget under a
+       * schema that had been measured against it. This is the respondent's own
+       * path, so the failure would have been an author's live form quietly
+       * refusing to understand answers, and only for the forms configured near
+       * the ceiling. The cap the author set is enforced either way; it just
+       * isn't spent here.
+       */
+      return envelope(z.array(z.object(shape)));
     }
 
     default:

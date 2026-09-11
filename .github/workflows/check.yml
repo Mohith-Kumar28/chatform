@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  # For the `schemas` job below: the limit it checks is the provider's to move,
+  # so it has to be re-asked on a timer rather than on a commit.
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
 
 concurrency:
   group: check-${{ github.ref }}
@@ -33,3 +38,31 @@ jobs:
       # Kept out of `check` because it boots a worker, which a contributor
       # without wrangler set up cannot do.
       - run: pnpm openapi:verify
+
+  # Asks the provider whether it still accepts the schemas we send it.
+  #
+  # Separate from `check` and on a schedule, because the thing it guards against
+  # is not a commit. Google budgets structured-output schemas and tightened that
+  # budget under schemas that had been measured against it: form generation broke
+  # in production with no deploy, no failing test, and no change on our side. Only
+  # the provider knows the current limit, so the only way to find out before a
+  # customer does is to ask it on a timer.
+  #
+  # Needs OPENROUTER_API_KEY. Costs a handful of cheap calls per run. `continue-
+  # on-error` is deliberately NOT set — a refusal here means the feature is
+  # broken or one schema change away from it.
+  schemas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @repo/api check:schemas
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

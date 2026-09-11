@@ -11,6 +11,7 @@ import {
   generateEdit,
   streamFormDraft,
   researchBrief,
+  isSchemaRejection,
   MODELS,
   type GenerationDraft,
   type TokenUsage,
@@ -65,8 +66,8 @@ aiRouter.post("/ai/generate-form/stream", requireGauge("forms_count", "forms.cre
  *
  * Absent, the model sizes the form against the request (see
  * `FORM_DESIGNER_SYSTEM`). Present, it is a number the author typed and is
- * obeyed exactly. The ceiling is 19 because `GenerationDraft` caps blocks at 20
- * and the welcome block is one of them.
+ * obeyed exactly. The ceiling is 19 because `DRAFT_LIMITS.blocks` is 20 and the
+ * welcome block is one of them.
  */
 export const GenerateBody = z.object({
   prompt: z.string().min(5).max(2000),
@@ -128,11 +129,21 @@ async function generateWithRetry(opts: {
       usage.input += result.usage.input;
       usage.output += result.usage.output;
     } catch (err) {
-      // An upstream failure — OpenRouter 5xx, a provider timeout, a schema the
-      // provider rejected. Worth one retry; the second is the author's problem
-      // to hear about rather than wait through.
+      // An upstream failure — OpenRouter 5xx, a provider timeout, a rate limit.
+      // Worth one retry; the second is the author's problem to hear about
+      // rather than wait through.
       lastError = err instanceof Error ? err.message : String(err);
-      console.error("generation_call_failed", lastError);
+      // Flattened: Workers Logs serialise an Error object to `{}`.
+      console.error("generation_call_failed", {
+        attempt,
+        schemaRejected: isSchemaRejection(err),
+        message: lastError,
+      });
+      // A schema refusal is not a bad minute, it is a bad request: both
+      // vendors have already refused it inside `withSchemaFallback`, and a
+      // third identical attempt would fail identically. Retrying it bought
+      // nothing but ~7s of spinner in front of a wrong error message.
+      if (isSchemaRejection(err)) throw new Error(upstreamMessage(lastError));
       if (attempt === 1) throw new Error(upstreamMessage(lastError));
       opts.onRetry?.("The model didn't respond — trying once more");
       continue;
@@ -168,9 +179,20 @@ async function generateWithRetry(opts: {
   throw new Error("The AI couldn't produce a usable form. Try rephrasing the request.");
 }
 
-/** Upstream error text is for logs; this is what the author is told. */
+/**
+ * Upstream error text is for logs; this is what the author is told.
+ *
+ * "The AI provider failed to respond" was shown for a 400 the provider had
+ * answered instantly and deliberately — our own schema, refused — and it cost
+ * real diagnosis time, because it describes a flaky provider and the provider
+ * was fine. A message that points at the wrong party is worse than a vague one,
+ * so a refusal now says so and says trying again will not help.
+ */
 function upstreamMessage(raw: string): string {
   const lower = raw.toLowerCase();
+  if (lower.includes("invalid argument") || lower.includes("invalid_argument") || lower.includes("invalid schema")) {
+    return "Form generation is misconfigured on our side, not yours — we've been alerted. Please try again later.";
+  }
   if (lower.includes("abort") || lower.includes("timeout") || lower.includes("504")) {
     return "The AI provider timed out. Please try again.";
   }
