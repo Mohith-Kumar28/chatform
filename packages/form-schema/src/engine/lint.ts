@@ -266,6 +266,48 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
     });
   }
 
+  /**
+   * A route below a route that already catches everything it does.
+   *
+   * `applyLogicRules` returns the FIRST matching goto, so the routes on a
+   * question are read top to bottom and the rest are never consulted. That is
+   * invisible in an editor that draws them as a list of peers, and it cost a
+   * real form: an intake for 6-to-25-year-olds routed "≥ 6 → carry on", then
+   * "< 6 → referral", then "> 25 → referral". A 40-year-old matched the first
+   * rule and was taken through as eligible; the arm written for them sat two
+   * rows below and could never fire. Nothing said so — the flow was drawn
+   * exactly as the author had built it, and it was wrong.
+   *
+   * A warning rather than an error: the form works, it just does less than it
+   * says, and what to do about it is the author's call — widen the first route
+   * into a range, or move this one above it.
+   *
+   * Only what can be decided from the numbers is reported. A route is read as
+   * an interval when every one of its conditions is a comparison on the
+   * branch's own question joined by "and"; anything else — a text match, a
+   * mixture of questions, an "any of" — is left alone, which errs towards
+   * saying nothing rather than towards a warning nobody can act on.
+   */
+  for (const [from, rules] of gotoFrom) {
+    const spans = rules.map((r) => numericSpan(r, from));
+    for (let later = 1; later < rules.length; later++) {
+      const mine = spans[later];
+      if (!mine) continue;
+      const shadow = spans.findIndex((s, earlier) => earlier < later && s !== null && covers(s, mine));
+      if (shadow === -1) continue;
+      const block = doc.blocks.find((b) => b.ref === from);
+      issues.push({
+        level: "warning",
+        code: "unreachable_route",
+        message:
+          `On "${block?.title || from}", route ${later + 1} can never run: route ${shadow + 1} above it already ` +
+          `matches every answer it does. Give route ${shadow + 1} an upper and a lower bound, or move route ` +
+          `${later + 1} above it.`,
+        refs: [from],
+      });
+    }
+  }
+
   // Required blocks must not be permanently hidden (always-false visibility is hard to detect;
   // flag empty OR groups which evaluate true, and empty AND groups which also evaluate true — fine).
   // Payment blocks: warn if form has no notification email configured.
@@ -390,4 +432,66 @@ export function rulesAreExhaustive(block: Block, rules: GotoRule[]): boolean {
     if (lowestCoveredAbove <= highestCoveredBelow + 1) return true;
   }
   return false;
+}
+
+/** One end of a comparison: the number, and whether the number itself counts. */
+interface Bound {
+  value: number;
+  inclusive: boolean;
+}
+
+/** The stretch of the number line a route matches, when it is expressible as one. */
+interface Span {
+  low: Bound | null;
+  high: Bound | null;
+}
+
+/**
+ * A route as a stretch of the number line, or null when it is not one.
+ *
+ * Null for everything this is not willing to reason about: a text or option
+ * test, a condition on some other question, an "any of" group, a route with no
+ * conditions at all (which is the "otherwise" rule and catches the leftovers by
+ * design).
+ */
+function numericSpan(rule: GotoRule, from: string): Span | null {
+  const when = rule.when;
+  if (!when || when.op !== "and" || when.groups.length > 0 || when.conditions.length === 0) return null;
+  const span: Span = { low: null, high: null };
+  for (const c of when.conditions) {
+    if (c.left.kind !== "ref" || c.left.ref !== from) return null;
+    if (typeof c.value !== "number") return null;
+    const at = { value: c.value, inclusive: c.op === "gte" || c.op === "lte" || c.op === "eq" };
+    if (c.op === "gt" || c.op === "gte") span.low = widest(span.low, at, "low");
+    else if (c.op === "lt" || c.op === "lte") span.high = widest(span.high, at, "high");
+    else if (c.op === "eq") {
+      span.low = widest(span.low, at, "low");
+      span.high = widest(span.high, at, "high");
+    } else return null;
+  }
+  return span.low || span.high ? span : null;
+}
+
+/** Two bounds of the same end, ANDed: the tighter one wins. */
+function widest(current: Bound | null, next: Bound, end: "low" | "high"): Bound {
+  if (!current) return next;
+  const tighter = end === "low" ? next.value > current.value : next.value < current.value;
+  if (tighter) return next;
+  if (next.value !== current.value) return current;
+  return { value: current.value, inclusive: current.inclusive && next.inclusive };
+}
+
+/** Does `outer` match every number `inner` matches? */
+function covers(outer: Span, inner: Span): boolean {
+  const lowOk =
+    !outer.low ||
+    (inner.low !== null &&
+      (outer.low.value < inner.low.value ||
+        (outer.low.value === inner.low.value && (outer.low.inclusive || !inner.low.inclusive))));
+  const highOk =
+    !outer.high ||
+    (inner.high !== null &&
+      (outer.high.value > inner.high.value ||
+        (outer.high.value === inner.high.value && (outer.high.inclusive || !inner.high.inclusive))));
+  return lowOk && highOk;
 }

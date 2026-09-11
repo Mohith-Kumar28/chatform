@@ -29,7 +29,9 @@ import { EndingInspector } from "./inspector/ending-inspector";
 import { blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
 import { NodeCatalog } from "./node-catalog";
 import { layoutGraph } from "./flow-layout";
-import { OPS, opInverse, opsValueNeeded, type Op } from "./branch-layout";
+import { opInverse, opsValueNeeded, type Op } from "./branch-layout";
+import { ConditionsEditor, type WhenGroup } from "./condition-editor";
+import { FlowTargetCombobox } from "./flow-target-combobox";
 import {
   condOf,
   deriveGraph,
@@ -44,17 +46,7 @@ import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
 import { Block as BlockSchema, bridgeDeletedBlocks, lintFormDoc, rulesAreExhaustive } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { BufferedInput } from "@/components/ui/buffered-input";
 import {
   AlertTriangle,
   LayoutGrid,
@@ -187,7 +179,15 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
     const out = new Map<string, { level: "error" | "warning"; messages: string[] }>();
     for (const issue of lintFormDoc(doc)) {
       if (!issue.refs?.length) continue;
-      if (issue.code !== "unreachable_blocks" && issue.code !== "no_route_to_ending" && issue.code !== "dangling_target") {
+      if (
+        issue.code !== "unreachable_blocks" &&
+        issue.code !== "no_route_to_ending" &&
+        issue.code !== "dangling_target" &&
+        // A route that can never run is a problem about this question's own
+        // list of routes, so it belongs on this question's node and nowhere
+        // else — it is the one warning the canvas can point at precisely.
+        issue.code !== "unreachable_route"
+      ) {
         continue;
       }
       for (const ref of issue.refs) {
@@ -702,10 +702,29 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
       const op = (patch.op ?? cond?.op ?? "is_not_empty") as Op;
       const from = patch.from ?? rule.from ?? "";
       const left = { kind: "ref" as const, ref: from };
-      const value = patch.value !== undefined ? patch.value : (cond?.value ?? "");
-      const nextWhen =
-        patch.makeConditional || cond
-          ? ({ op: "and" as const, conditions: [{ left, op, ...(opsValueNeeded(op) ? { value } : {}) }], groups: [] } as GotoRule["when"])
+      // `null` is how a control says "no value", and a condition either carries
+      // one or omits the field; it is never stored as null.
+      const value = patch.value !== undefined ? (patch.value ?? "") : (cond?.value ?? "");
+
+      /**
+       * A whole test, or one comparison of it.
+       *
+       * `when` comes from the conditions editor, which owns the list and hands
+       * back the group entire — the only way a route can hold a range. The
+       * `op`/`value` form stays for the controls that speak about one
+       * comparison and nothing else (the Yes/No pair, "add a condition"), and
+       * writing one of those replaces the list, which is correct: they are
+       * shown only where the list has at most one entry.
+       *
+       * Every condition reads the question the rule hangs off, so a change of
+       * `from` re-points all of them. A test still pointing at the question it
+       * used to hang off would evaluate against an answer this branch has
+       * nothing to do with.
+       */
+      const nextWhen: GotoRule["when"] = patch.when
+        ? { op: patch.when.op, conditions: patch.when.conditions.map((c) => ({ ...c, left })), groups: [] }
+        : patch.makeConditional || cond
+          ? { op: "and", conditions: [{ left, op, ...(opsValueNeeded(op) ? { value } : {}) }], groups: [] }
           : null;
 
       logic = logic.map((r) => {
@@ -713,12 +732,30 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
         return { ...r, from, ...(patch.target ? { target: patch.target, targetKind: patch.targetKind ?? r.targetKind } : {}), when: nextWhen } as LogicRule;
       });
 
-      // keep the else sibling's condition inverted
-      if (rule.pair) {
-        const inv = opInverse(op);
+      /*
+        Keep a paired "else" the mirror of its rule — while there is still one
+        comparison to mirror.
+
+        A compound test has no single opposite: the negation of "at least 6 and
+        at most 25" is a disjunction, and writing one inverted operator there
+        would produce a sibling that claims to catch the leftovers and does
+        not. So the pair is left exactly as the author last set it, and the
+        "otherwise" row below says where unmatched answers actually go.
+      */
+      const single = nextWhen?.conditions.length === 1 ? nextWhen.conditions[0]! : null;
+      if (rule.pair && single) {
+        const inv = opInverse(single.op);
         logic = logic.map((r) =>
           isGoto(r) && r.id === rule.pair && inv
-            ? ({ ...r, from, when: { op: "and" as const, conditions: [{ left, op: inv, ...(opsValueNeeded(inv) ? { value } : {}) }], groups: [] } } as LogicRule)
+            ? ({
+                ...r,
+                from,
+                when: {
+                  op: "and" as const,
+                  conditions: [{ left, op: inv, ...(opsValueNeeded(inv) ? { value: single.value } : {}) }],
+                  groups: [],
+                },
+              } as LogicRule)
             : r,
         );
       }
@@ -1009,8 +1046,10 @@ function QuestionNode({ id, data, selected }: NodeProps) {
           "w-56 rounded-xl bg-[var(--card)] px-3 py-2.5 transition-shadow",
           selected ? "shadow-md" : "shadow-xs",
           // A broken node is outlined, not tinted: the fill is the block's family
-          // colour and carries meaning of its own.
-          problem && "ring-2 ring-[var(--destructive)]",
+          // colour and carries meaning of its own. Red stops a publish; amber
+          // is the flow doing less than the author thinks, which is worth
+          // seeing and is not worth a colour that means "broken".
+          problem && (problem.level === "error" ? "ring-2 ring-[var(--destructive)]" : "ring-2 ring-amber-500/70"),
         )}
         style={{ boxShadow: selected ? `inset 3px 0 0 0 ${accent}, var(--shadow-md)` : undefined }}
       >
@@ -1045,7 +1084,10 @@ function QuestionNode({ id, data, selected }: NodeProps) {
 function ProblemNote({ problem }: { problem: NodeProblem }) {
   return (
     <p
-      className="text-destructive mt-1 flex items-start gap-1 text-[10px] leading-tight"
+      className={cn(
+        "mt-1 flex items-start gap-1 text-[10px] leading-tight",
+        problem.level === "error" ? "text-destructive" : "text-amber-600 dark:text-amber-500",
+      )}
       title={problem.messages.join("\n\n")}
     >
       <AlertTriangle className="mt-px size-3 shrink-0" strokeWidth={2.5} />
@@ -1060,6 +1102,7 @@ function ProblemNote({ problem }: { problem: NodeProblem }) {
 function shortProblem(message: string): string {
   if (message.startsWith("No path reaches")) return "Nothing reaches this";
   if (message.startsWith("From these questions")) return "No way to finish from here";
+  if (message.includes("can never run")) return "A route never runs";
   return "Broken connection";
 }
 
@@ -1326,12 +1369,13 @@ function BranchInspector({
       </p>
 
       <div className="space-y-3">
-        {rules.map((rule) => (
+        {rules.map((rule, at) => (
           <BranchCaseRow
             key={rule.id}
             rule={rule}
             sourceBlock={sourceBlock}
             doc={doc}
+            index={at + 1}
             onPatch={onPatch}
             onDelete={() => onDeleteCase(rule.id)}
           />
@@ -1376,10 +1420,11 @@ function BranchInspector({
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">Go to</span>
-            <TargetSelect
+            <FlowTargetCombobox
               doc={doc}
               value={explicitElse.target}
               onChange={(ref, kind) => onPatch(explicitElse.id, { target: ref, targetKind: kind })}
+              className="min-w-0 flex-1"
             />
           </div>
         </div>
@@ -1409,27 +1454,53 @@ function BranchInspector({
   );
 }
 
-/** One case: a test on the branch's question, and where a match goes. */
+/**
+ * One route out of a branch: what it tests, and where a match goes.
+ *
+ * The test is a list now — see `ConditionsEditor` — so the row reads "if ALL
+ * of: at least 6, at most 25 → Q7" rather than being able to say only the
+ * first half of that and routing the rest of the form wrongly.
+ */
 function BranchCaseRow({
   rule,
   sourceBlock,
   doc,
+  index,
   onPatch,
   onDelete,
 }: {
   rule: GotoRule;
   sourceBlock: Block | null;
   doc: FormDoc;
+  /** 1-based position among this branch's routes: routes are matched in order. */
+  index: number;
   onPatch: (ruleId: string, patch: RulePatch) => void;
   onDelete: () => void;
 }) {
-  const cond = condOf(rule);
-  const op = (cond?.op ?? "is_not_empty") as Op;
+  const when: WhenGroup = {
+    op: rule.when?.op ?? "and",
+    conditions: rule.when?.conditions ?? [],
+    groups: [],
+  };
 
   return (
     <div className="bg-muted/40 space-y-2 rounded-xl p-2.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">If</span>
+        <span className="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium tracking-wide uppercase">
+          {/*
+            The order is the rule, so the row wears its number.
+
+            The first matching route wins and the rest are never consulted —
+            which is how an age branch sent every 40-year-old down the arm
+            written for 6-to-25-year-olds, with the arm meant for them sitting
+            right below, unreachable. Numbering the routes is the smallest
+            honest way to say that this list is read top to bottom.
+          */}
+          <span className="bg-background text-muted-foreground tabular flex size-4 items-center justify-center rounded text-[9px] font-semibold">
+            {index}
+          </span>
+          If
+        </span>
         <button
           type="button"
           onClick={onDelete}
@@ -1440,68 +1511,21 @@ function BranchCaseRow({
         </button>
       </div>
 
-      <div className="flex gap-1.5">
-        <Picker
-          value={op}
-          onValueChange={(v) => onPatch(rule.id, { op: v as Op, makeConditional: true })}
-          className="min-w-0 flex-1"
-        >
-          {OPS.map((o) => (
-            <SelectItem key={o.value} value={o.value}>
-              {o.label}
-            </SelectItem>
-          ))}
-        </Picker>
-        {/*
-          The shared value editor, rather than the options-or-free-text pair
-          this row used to carry.
-          Its fallback was a bare text box for every type without `options`, so
-          routing a yes/no meant knowing to type the literal word "true" — and
-          a consent, whose answer is not a scalar at all, was unroutable by any
-          text a person would think to type. Both are pickers here, and every
-          other type keeps the number or text input it had.
-        */}
-        {opsValueNeeded(op) && (
-          <div className="min-w-0 flex-1">
-            <ConditionValueInput
-              compact
-              block={sourceBlock}
-              value={cond?.value}
-              onChange={(v) => onPatch(rule.id, { value: v, makeConditional: true })}
-            />
-          </div>
-        )}
-      </div>
+      <ConditionsEditor
+        compact
+        sourceBlock={sourceBlock}
+        when={when}
+        onChange={(next) => onPatch(rule.id, { when: next })}
+      />
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 pt-0.5">
         <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">Go to</span>
-        <Picker
+        <FlowTargetCombobox
+          doc={doc}
           value={rule.target}
-          onValueChange={(v) =>
-            onPatch(rule.id, {
-              target: v,
-              targetKind: doc.endings.some((x) => x.ref === v) ? "ending" : "block",
-            })
-          }
+          onChange={(ref, kind) => onPatch(rule.id, { target: ref, targetKind: kind })}
           className="min-w-0 flex-1"
-        >
-          <SelectGroup>
-            <SelectLabel>Questions</SelectLabel>
-            {doc.blocks.map((b) => (
-              <SelectItem key={b.ref} value={b.ref}>
-                {b.title.slice(0, 40)}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-          <SelectGroup>
-            <SelectLabel>Endings</SelectLabel>
-            {doc.endings.map((e) => (
-              <SelectItem key={e.ref} value={e.ref}>
-                {e.title.slice(0, 40)}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </Picker>
+        />
       </div>
     </div>
   );
@@ -1537,15 +1561,17 @@ function EdgeRuleEditor({
 
       <div className="space-y-1.5">
         <Label>From</Label>
-        <Picker value={rule.from ?? ""} onValueChange={(v) => onPatch(rule.id, { from: v })}>
-          {doc.blocks
-            .filter((b) => b.type !== "welcome")
-            .map((b) => (
-              <SelectItem key={b.ref} value={b.ref}>
-                {b.title.slice(0, 40)}
-              </SelectItem>
-            ))}
-        </Picker>
+        {/* Questions only: a wire cannot start at an ending, because nothing
+            comes after one. */}
+        <FlowTargetCombobox
+          doc={doc}
+          include="blocks"
+          value={rule.from ?? ""}
+          onChange={(ref) => onPatch(rule.id, { from: ref })}
+          size="default"
+          ariaLabel="From"
+          placeholder="Pick a question…"
+        />
       </div>
 
       {isYesNo ? (
@@ -1573,22 +1599,24 @@ function EdgeRuleEditor({
       ) : (
         <div className="space-y-1.5">
           <Label>Condition</Label>
-          <Picker value={cond?.op ?? "is_not_empty"} onValueChange={(v) => onPatch(rule.id, { op: v as Op })}>
-            {OPS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </Picker>
-          {opsValueNeeded(cond?.op ?? "is_not_empty") && (
-            <ConditionValueInput block={sourceBlock} value={cond?.value} onChange={(v) => onPatch(rule.id, { value: v })} />
-          )}
+          {/* The same editor the branch panel uses, so a wire and a branch row
+              can say exactly the same things about the same rule. */}
+          <ConditionsEditor
+            sourceBlock={sourceBlock}
+            when={{ op: rule.when?.op ?? "and", conditions: rule.when?.conditions ?? [], groups: [] }}
+            onChange={(next) => onPatch(rule.id, { when: next })}
+          />
         </div>
       )}
 
       <div className="space-y-1.5">
         <Label>Go to</Label>
-        <TargetSelect doc={doc} value={rule.target} onChange={(t, kind) => onPatch(rule.id, { target: t, targetKind: kind })} />
+        <FlowTargetCombobox
+          doc={doc}
+          value={rule.target}
+          onChange={(t, kind) => onPatch(rule.id, { target: t, targetKind: kind })}
+          size="default"
+        />
       </div>
 
       {!cond && (
@@ -1634,142 +1662,6 @@ function EdgeInfo({ edgeId, doc, onDelete }: { edgeId: string; doc: FormDoc; onD
 }
 
 // ────────────────────────── shared bits ──────────────────────────
-
-/**
- * The styled select, in the shape this file keeps needing.
- *
- * Native `<select>` elements were scattered through the flow inspectors while
- * the shadcn Select sat unused — so the panel rendered the operating system's
- * dropdown next to the app's own controls, in a different font at a different
- * height with a different focus ring.
- */
-function Picker({
-  value,
-  onValueChange,
-  placeholder,
-  className,
-  size = "sm",
-  children,
-}: {
-  value: string;
-  onValueChange: (v: string) => void;
-  placeholder?: string;
-  className?: string;
-  size?: "sm" | "default";
-  children: React.ReactNode;
-}) {
-  return (
-    <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger size={size} className={cn("w-full", className)}>
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>{children}</SelectContent>
-    </Select>
-  );
-}
-
-function TargetSelect({
-  doc,
-  value,
-  onChange,
-}: {
-  doc: FormDoc;
-  value: string;
-  onChange: (ref: string, kind: "block" | "ending") => void;
-}) {
-  return (
-    <Picker
-      value={value}
-      onValueChange={(t) => onChange(t, doc.endings.some((x) => x.ref === t) ? "ending" : "block")}
-    >
-      <SelectGroup>
-        <SelectLabel>Questions</SelectLabel>
-        {doc.blocks.map((b) => (
-          <SelectItem key={b.ref} value={b.ref}>
-            {b.title.slice(0, 36)}
-          </SelectItem>
-        ))}
-      </SelectGroup>
-      <SelectGroup>
-        <SelectLabel>Endings</SelectLabel>
-        {doc.endings.map((e) => (
-          <SelectItem key={e.ref} value={e.ref}>
-            {e.title.slice(0, 30)}
-          </SelectItem>
-        ))}
-      </SelectGroup>
-    </Picker>
-  );
-}
-
-function ConditionValueInput({
-  block,
-  value,
-  onChange,
-  /** The branch row is denser than the panel below it; its inputs match its pickers. */
-  compact = false,
-}: {
-  block: Block | null;
-  value: unknown;
-  onChange: (v: string | number | boolean) => void;
-  compact?: boolean;
-}) {
-  const inputClass = compact ? "h-7 text-xs" : undefined;
-  if (!block) return null;
-  if (block.type === "yes_no") {
-    return (
-      <Picker value={String(value ?? "")} onValueChange={(v) => onChange(v === "true")} placeholder="Pick…">
-        <SelectItem value="true">{block.yesLabel ?? "Yes"}</SelectItem>
-        <SelectItem value="false">{block.noLabel ?? "No"}</SelectItem>
-      </Picker>
-    );
-  }
-  /*
-   * A consent routes on its two buttons, like a yes/no.
-   *
-   * The stored answer is an object — the wording's hash and a timestamp make it
-   * an audit record — and the engine compares it on its `accepted` flag, so a
-   * boolean here is exactly what the rule needs.
-   */
-  if (block.type === "legal_consent") {
-    return (
-      <Picker value={String(value ?? "")} onValueChange={(v) => onChange(v === "true")} placeholder="Pick…">
-        <SelectItem value="true">{block.agreeLabel || "I agree"}</SelectItem>
-        <SelectItem value="false">{block.declineLabel || "I do not agree"}</SelectItem>
-      </Picker>
-    );
-  }
-  if ("options" in block && block.options) {
-    return (
-      <Picker value={String(value ?? "")} onValueChange={onChange} placeholder="Pick an option…">
-        {block.options.map((o) => (
-          <SelectItem key={o.id} value={o.id}>
-            {o.label}
-          </SelectItem>
-        ))}
-      </Picker>
-    );
-  }
-  if (["rating", "nps", "opinion_scale", "number"].includes(block.type)) {
-    return (
-      <BufferedInput
-        type="number"
-        className={inputClass}
-        value={String(value ?? "")}
-        onCommit={(v) => onChange(Number(v))}
-        placeholder="number"
-      />
-    );
-  }
-  return (
-    <BufferedInput
-      className={inputClass}
-      value={String(value ?? "")}
-      onCommit={(v) => onChange(v)}
-      placeholder="value"
-    />
-  );
-}
 
 // ────────────────────────── helpers ──────────────────────────
 
@@ -1866,6 +1758,8 @@ interface RulePatch {
   from?: string;
   target?: string;
   targetKind?: "block" | "ending";
+  /** The whole test, from the conditions editor. */
+  when?: WhenGroup;
   op?: Op;
   value?: string | number | boolean | null;
   makeConditional?: boolean;

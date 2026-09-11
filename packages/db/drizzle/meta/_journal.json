@@ -190,6 +190,13 @@
       "when": 1790006400000,
       "tag": "0026_respondents",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1789700000000,
+      "tag": "0027_one_open_response_per_respondent",
+      "breakpoints": true
     }
   ]
 }

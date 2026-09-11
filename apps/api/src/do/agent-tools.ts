@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { tool, type ToolSet } from "ai";
-import type { Block, FormDoc } from "@repo/form-schema";
+import { resolveNext, validateAnswer, type Block, type EvalState, type FormDoc } from "@repo/form-schema";
 import type { KnowledgeHit } from "../lib/knowledge/index.js";
 
 /**
@@ -17,11 +17,74 @@ import type { KnowledgeHit } from "../lib/knowledge/index.js";
  * imported them — the "agent" was a phrasing layer over a fixed script.
  */
 
+/** Where the flow goes after the current question is settled. */
+export type NextStep = { kind: "block"; ref: string; title: string } | { kind: "ending" };
+
+/**
+ * Where the flow will go if `value` is recorded for `block` — resolved mid-turn,
+ * before the agent writes the message that asks the next question.
+ *
+ * The agent is told to record an answer and go straight on in the same message,
+ * and the only list of questions it has is in document order, with nothing in it
+ * about branching — because a branch cannot be described until the answer it
+ * reads has been given. So on a branching form it asked whatever came next in
+ * the list while the FSM routed somewhere else, and `suppressNextAsk` — which
+ * exists precisely because the agent has already asked — then silenced the
+ * question the flow had actually chosen. The respondent read one question with
+ * another one's answer controls underneath, and what they typed was recorded
+ * against a question they never saw. An age branch that sends 6-25 onwards and
+ * everyone else to a referral question did exactly that to a 23-year-old.
+ *
+ * Answered on a copy of the state, never the session's own: the model may call
+ * this twice, or never record the answer at all, so nothing here may leave a
+ * trace. `applyLogicRules` writes variables as it goes, hence cloning those too.
+ *
+ * Called with no value for a skip. A value the FSM would refuse resolves to
+ * null: the turn ends in a retry on this same question, and there is no next
+ * one to promise.
+ */
+export function nextStepAfter(
+  doc: FormDoc,
+  block: Block,
+  state: EvalState,
+  value?: unknown,
+): NextStep | null {
+  const probe: EvalState = {
+    answers: { ...state.answers },
+    variables: { ...state.variables },
+    hidden: state.hidden,
+  };
+  if (value !== undefined) {
+    const validated = validateAnswer(block, value);
+    if (!validated.ok) return null;
+    // An optional question answered with nothing is the same state as a skip:
+    // the branch reads no answer, because there is none.
+    if (validated.value !== undefined) probe.answers[block.ref] = validated.value;
+  }
+  const next = resolveNext(doc, block.ref, probe);
+  return next.kind === "block" ? { kind: "block", ref: next.block.ref, title: next.block.title } : { kind: "ending" };
+}
+
 export interface ToolContext {
   doc: FormDoc;
   currentBlock: Block;
-  /** Refs the FSM would accept as the next question right now. */
-  allowedNext: string[];
+  /**
+   * Where the flow will go once `value` is recorded for the current question —
+   * or once it is skipped, when called with no value. See `nextStepAfter`.
+   *
+   * A callback into the FSM rather than a list computed when the turn started,
+   * because the branch reads the answer, and when the turn started that answer
+   * had not been given.
+   */
+  nextAfter: (value?: unknown) => NextStep | null;
+  /**
+   * True when the form asks its questions word for word.
+   *
+   * The agent then never asks anything itself — the FSM emits the question
+   * verbatim right after its turn — so naming the routed question would put it
+   * on screen twice, in two different sets of words.
+   */
+  verbatimQuestions?: boolean;
   /** Clarifications already spent on the current block. */
   clarifications: number;
   /**
@@ -71,6 +134,27 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
   const record = (outcome: ToolOutcome) => {
     collect(outcome);
     return outcome.message;
+  };
+
+  /**
+   * Name the question the flow actually goes to, in the tool result.
+   *
+   * Said here rather than in the system prompt because it is the one thing
+   * about this form that is not knowable until the answer is: the branch reads
+   * the value that was just given. The model is mid-turn when it reads this,
+   * with the message still to write, so this is also the last moment at which
+   * telling it changes what the respondent sees.
+   */
+  const route = (settled: string, next: NextStep | null): string => {
+    if (ctx.verbatimQuestions) return `${settled} Do NOT ask the next question — it follows immediately, word for word.`;
+    if (!next) return `${settled} Move on to the next question.`;
+    if (next.kind === "ending") {
+      return `${settled} That was the last question for them — do NOT ask another. Close in one short line; the form takes it from here.`;
+    }
+    return (
+      `${settled} The flow goes to ref=${next.ref} — "${next.title}". Ask THAT question next, in this same ` +
+      `message, and no other. It is not always the one that follows in the list: this form branches on the answers.`
+    );
   };
 
   /**
@@ -166,7 +250,7 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
           name: "record_answer",
           ok: true,
           effect: { kind: "record", ref, value },
-          message: "Answer accepted. Move on to the next question.",
+          message: route("Answer accepted.", ctx.nextAfter(value)),
         });
       },
     }),
@@ -215,7 +299,7 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
           name: "skip_current",
           ok: true,
           effect: { kind: "skip" },
-          message: "Skipped. Acknowledge it warmly and move on.",
+          message: route("Skipped. Acknowledge it warmly.", ctx.nextAfter()),
         });
       },
     }),

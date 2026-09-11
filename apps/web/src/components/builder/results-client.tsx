@@ -83,6 +83,12 @@ const SPIN_MS = 600;
 
 export function ResultsClient({ formId }: ResultsClientProps) {
   const [tab, setTab] = useState<"submissions" | "summary" | "analytics">("submissions");
+  /*
+    What the table below has ticked, held here because the Download button is
+    up here. `setSelection` goes down as-is — a `useState` setter is stable,
+    which is what keeps the table's reporting effect from firing every render.
+  */
+  const [selection, setSelection] = useState<{ count: number; download: () => void } | null>(null);
   const [statusFilter, setStatusFilter] = useState<"completed" | "abandoned">("completed");
   /**
    * The page, and how big it is.
@@ -357,6 +363,7 @@ export function ResultsClient({ formId }: ResultsClientProps) {
           completed={completedCount}
           partials={partialCount}
           canPartials={canPartials}
+          selection={selection}
         />
       </div>
 
@@ -438,6 +445,7 @@ export function ResultsClient({ formId }: ResultsClientProps) {
               rows={rows}
               columns={columns}
               filters={statusSwitcher}
+              onSelection={setSelection}
               /*
                 Partial only: on a finished response the follow-up story is
                 always "they finished", which the status pill already says.
@@ -499,11 +507,14 @@ function DownloadMenu({
   completed,
   partials,
   canPartials,
+  selection,
 }: {
   formId: string;
   completed: number;
   partials: number;
   canPartials: boolean;
+  /** Set while rows are ticked in the table below — see `SubmissionsTable`. */
+  selection?: { count: number; download: () => void } | null;
 }) {
   const upgrade = useUpgrade();
   // Straight browser navigation, so the session cookie rides along.
@@ -513,6 +524,24 @@ function DownloadMenu({
     }`;
 
   const total = completed + partials;
+
+  /*
+    Ticked rows retarget this button rather than growing a second one.
+
+    There is no menu in this state, because there is no choice left to make:
+    the rows are already on screen and already fetched, so the scope is settled
+    and the format is the one the browser can write from here — CSV. Untick
+    everything and the button goes back to being the whole form's download,
+    every page of it, in either format.
+  */
+  if (selection) {
+    return (
+      <Button variant="outline" size="sm" shape="pill" onClick={selection.download}>
+        <Download className="size-3.5" />
+        Download {selection.count === 1 ? "1 response" : `${selection.count} responses`}
+      </Button>
+    );
+  }
 
   return (
     <DropdownMenu>

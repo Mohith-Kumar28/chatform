@@ -281,13 +281,23 @@ function collectAnswers(rows: { block_ref: string | null; value_json: string | n
  * This is the check at the one place rows are created, so the invariant holds
  * regardless of what any session did or did not manage to recognise.
  *
- * Two ways to be the same person, and the weaker one is fenced exactly as it is
- * in `findDeviceResumable`. A verified identity is definitive. A device key is a
- * guess, so it is only honoured when it came from a real device signal — never
- * the hashed-IP fallback, which a whole office shares and which would have
- * colleagues writing into one another's drafts — and never against a row that
- * carries an identity, which would be a way past the sign-in gate to a named
- * person's answers.
+ * Three ways to be the same person, strongest first, and the weakest is fenced
+ * exactly as it is in `findDeviceResumable`.
+ *
+ * `respondentId` leads, because it is the one that is already set when the row
+ * is created. It is the platform-wide person from `lib/respondents.ts`, resolved
+ * at session creation out of whatever the visit offered and merged across every
+ * identifier that turns out to name the same human, so it recognises a
+ * respondent before they sign in — which is when the duplicates were being made
+ * — and it is what `uq_submissions_one_open_per_respondent` is declared on. The
+ * other two remain because the id can be null: a visit that offered nothing to
+ * resolve one from, or a row written before `0026` existed.
+ *
+ * A verified identity is definitive. A device key is a guess, so it is only
+ * honoured when it came from a real device signal — never the hashed-IP
+ * fallback, which a whole office shares and which would have colleagues writing
+ * into one another's drafts — and never against a row that carries an identity,
+ * which would be a way past the sign-in gate to a named person's answers.
  *
  * Never throws: failing to find a row to reuse must cost a duplicate, not the
  * response itself.
@@ -296,23 +306,32 @@ export async function findOpenResponseId(
   env: Bindings,
   formId: string,
   who: {
+    /** The platform-wide person, from `lib/respondents.ts`. Strongest key here. */
+    respondentId?: string | null;
     identity?: RespondentIdentity | null;
     fingerprint?: string | null;
     /** Only `"device"` is trusted for this; see above. */
     fingerprintSource?: RespondentKeySource | null;
     isTest: boolean;
-    /** Excluded, so a session cannot match a row it opened itself. */
-    sessionId: string;
+    /**
+     * Excluded, so a session cannot match a row it opened itself.
+     *
+     * Pass `null` to match every row, which is what the collision path in
+     * `openResponse` wants: by then the question is not "is there somebody
+     * else's row" but "which row is the one the constraint kept".
+     */
+    sessionId: string | null;
   },
 ): Promise<string | null> {
   const open = `status IN ('in_progress', 'abandoned') AND is_test = ?2
-                AND (session_id IS NULL OR session_id != ?3)`;
+                AND (?3 IS NULL OR session_id IS NULL OR session_id != ?3)`;
+  const byRespondent = Boolean(who.respondentId);
   const byIdentity = Boolean(who.identity?.provider && who.identity.subject);
   const byDevice = who.fingerprintSource === "device" && Boolean(who.fingerprint);
-  if (!byIdentity && !byDevice) return null;
+  if (!byRespondent && !byIdentity && !byDevice) return null;
   try {
     /**
-     * Both ways of being the same person, in one round trip — but not in one
+     * Every way of being the same person, in one round trip — but not in one
      * query.
      *
      * They were two lookups awaited in turn, and a respondent with no prior
@@ -323,10 +342,22 @@ export async function findOpenResponseId(
      * `idx_submissions_form_fp`) and a disjunction across both leaves SQLite
      * scanning the form's responses and sorting them.
      *
-     * The identity answer is still authoritative: it is read first, exactly as
-     * the sequential version returned it first.
+     * Order is authority: the results are read back in the order they were
+     * queued, so the respondent id answers before the identity and the identity
+     * before the device guess.
      */
     const statements = [];
+    if (byRespondent) {
+      statements.push(
+        env.DB
+          .prepare(
+            `SELECT id FROM submissions
+              WHERE form_id = ?1 AND ${open} AND respondent_id = ?4
+              ORDER BY updated_at DESC LIMIT 1`,
+          )
+          .bind(formId, who.isTest ? 1 : 0, who.sessionId, who.respondentId),
+      );
+    }
     if (byIdentity) {
       statements.push(
         env.DB

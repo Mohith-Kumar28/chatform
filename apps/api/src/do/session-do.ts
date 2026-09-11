@@ -13,8 +13,8 @@ import {
   type Ending,
   type EvalState,
   migrateFormDoc,
+  readFormDoc,
   replayState,
-  allowedNextRefs,
   needsExtraction,
   extractionSchema,
   extractionGuidance,
@@ -46,19 +46,22 @@ import {
   buildTurnSuffix,
   buildRetryObjective,
 } from "../lib/agent-prompts.js";
-import { buildAgentTools, type ToolOutcome } from "./agent-tools.js";
+import { buildAgentTools, nextStepAfter, type ToolOutcome } from "./agent-tools.js";
 import { knowledgeStore, knowledgeAvailable } from "../lib/knowledge/index.js";
 import { getEntitlements } from "../lib/entitlements.js";
+import { clampForRuntime } from "../lib/doc-entitlements.js";
 import { can } from "@repo/entitlements";
 import { meter } from "../lib/entitlements.js";
 import { costUsdMicro } from "../lib/ai-pricing.js";
 import {
+  newResponseId,
   openResponse,
   attachRespondent,
   recordAnswerRow,
   deleteAnswerRow,
   finalizeResponse,
   reopenResponse,
+  restartResponse,
   reopenAbandonedResponse,
   findDuplicateAnswer,
   type ResponseOwner,
@@ -641,6 +644,116 @@ export class SessionDO extends DurableObject<Bindings> {
     return this.collectedCount >= gate.afterBlocks;
   }
 
+  /**
+   * Re-read the sign-in gate from the version the form publishes *now*.
+   *
+   * `this.doc` is a snapshot taken at `init` and stored with the session, so a
+   * conversation already in progress never learns that anything changed. For
+   * the questions that is the point — nobody should have the form rewritten
+   * under them mid-answer — but the sign-in gate is not a question. It is the
+   * author's rule about who may answer at all, and a rule that applies only to
+   * people who had not already started is not the rule they switched on.
+   *
+   * That is the bug this exists for. A respondent who left a form half-finished
+   * while it was open to anyone came back after sign-in was turned on, the
+   * browser reconnected to the session it had saved rather than opening a new
+   * one, and the only gate that session could see was the one that existed the
+   * day it opened. They carried on answering, ungated, forever.
+   *
+   * So the gate alone is re-derived — in the same spirit as `clampForRuntime`,
+   * which already re-reads the *plan* on every read so a downgrade takes effect
+   * without anyone republishing. Everything else stays snapshotted.
+   *
+   * One small indexed read on the paths that decide the gate, and no cache in
+   * front of it. A rate limit was the obvious thing to add and the wrong one:
+   * anything that holds the previous answer for a few seconds is a window in
+   * which the rule the author just switched on does not apply, which is the bug
+   * this exists to close wearing a shorter hat. A turn that often makes a model
+   * call can afford a `SELECT`.
+   *
+   * A failure leaves the snapshot alone: a form whose settings we cannot read
+   * must not start refusing the person in front of it.
+   */
+  private async refreshAuthGate(): Promise<void> {
+    if (!this.doc || !this.meta) return;
+    // Somebody already verified has cleared whatever the gate now says, and a
+    // finished conversation has nothing left to gate.
+    if (this.meta.identity || this.meta.status !== "active") return;
+
+    try {
+      const row = await this.env.DB.prepare(
+        `SELECT fv.schema_json AS schema_json
+           FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
+          WHERE f.id = ?1 AND f.deleted_at IS NULL LIMIT 1`,
+      )
+        .bind(this.meta.formId)
+        .first<{ schema_json: string }>();
+      if (!row?.schema_json) return;
+
+      /*
+       * Through the plan, exactly as this session's own document went. A gate
+       * the subscription cannot complete has to stay off here too, or a lapsed
+       * plan would put up a card with no door behind it.
+       */
+      const ent = await getEntitlements(this.env, this.meta.organizationId);
+      const live = clampForRuntime(readFormDoc(JSON.parse(row.schema_json)), ent).settings.requireAuth;
+      const held = this.doc.settings.requireAuth;
+      if (
+        live.enabled === held.enabled &&
+        live.method === held.method &&
+        live.afterBlocks === held.afterBlocks &&
+        live.message === held.message
+      ) {
+        return;
+      }
+      this.doc.settings.requireAuth = live;
+      await this.persistMeta();
+    } catch (err) {
+      console.error("auth_gate_refresh_failed", { sessionId: this.meta.sessionId, ...errorInfo(err) });
+    }
+  }
+
+  /**
+   * Remember the question a gate closed in front of, when nothing else has.
+   *
+   * `advanceTo` sets `gatedAtRef` on its way *to* a block, which is how signing
+   * in knows where to carry on. A gate that closes because the author switched
+   * it on has no such moment: the respondent is already sitting on a question
+   * asked before the rule existed. Without the cursor written down here,
+   * `attachIdentity` would find no bookmark and no reason to start the flow,
+   * and would leave them verified in front of nothing.
+   */
+  private async rememberGatedCursor(): Promise<void> {
+    if (!this.meta || this.gatedAtRef || !this.meta.currentRef) return;
+    this.gatedAtRef = this.meta.currentRef;
+    await this.persistMeta();
+  }
+
+  /**
+   * Begin an interview that a gate never let start.
+   *
+   * The mirror of the case above, and just as real: `init` closes the gate
+   * *before* `beginInterview`, so a session gated from the outset has no cursor
+   * and has been asked nothing at all. If the author then switches sign-in back
+   * off, clearing the gate is not enough on its own — the respondent reconnects
+   * to a conversation that is no longer blocked and still has no question in
+   * it, and the next thing they send is an answer to a question nobody asked.
+   *
+   * Deliberately narrow: only the exact state `init` leaves behind, and only
+   * once the gate genuinely no longer blocks.
+   */
+  private async startIfGateCleared(): Promise<void> {
+    if (!this.meta || this.meta.status !== "active") return;
+    if (this.meta.currentRef || this.pendingEndingRef !== null) return;
+    if (this.collectedCount > 0 && !this.resumed) return;
+    if (this.authGateBlocks()) return;
+    try {
+      await this.beginInterview();
+    } catch (err) {
+      console.error("gate_cleared_start_failed", { sessionId: this.meta.sessionId, ...errorInfo(err) });
+    }
+  }
+
   private async emitAuthRequired(): Promise<void> {
     if (!this.doc || !this.meta) return;
     const gate = this.doc.settings.requireAuth;
@@ -692,10 +805,29 @@ export class SessionDO extends DurableObject<Bindings> {
      * not land is a stale results table, not a failed sign-in.
      */
     const openRow = await this.ctx.storage.get<string>("submission_id").catch(() => null);
-    // The device key travels with the identity, because signing in is the
-    // moment the graph learns that this browser and this person are one.
-    if (openRow) {
-      await attachRespondent(this.env, openRow, identity, this.meta?.respondentDeviceKey ?? null);
+    /*
+      The device key travels with the identity, because signing in is the moment
+      the graph learns that this browser and this person are one.
+
+      Called with or without a row. Without one is the *common* order on a gated
+      form — the gate refuses every turn until somebody signs in, so the row is
+      opened by the answer after this — and it used to mean the session carried
+      whatever `respondentId` it had resolved from a browser fingerprint alone,
+      or none at all. That id is what `ensureSubmissionRow` looks their existing
+      draft up by and what the one-draft constraint is keyed on, so a stale one
+      is how the same person came back as a second partial response. Taking the
+      answer here keeps the session's idea of who it is talking to current from
+      the moment they say so.
+    */
+    const resolved = await attachRespondent(
+      this.env,
+      openRow ?? null,
+      identity,
+      this.meta?.respondentDeviceKey ?? null,
+    );
+    if (resolved && this.meta && this.meta.respondentId !== resolved) {
+      this.meta.respondentId = resolved;
+      await this.persistMeta();
     }
     try {
       await this.env.DB.prepare(`UPDATE chat_sessions SET respondent_identity = ? WHERE id = ?`)
@@ -1170,6 +1302,11 @@ export class SessionDO extends DurableObject<Bindings> {
 
   async stream(): Promise<Response> {
     await this.ensureLoaded();
+    // Reopening the form is the moment a respondent is most likely to meet a
+    // rule that changed while they were away — the saved session reconnects
+    // here rather than opening a new one, so this is the only place that can
+    // notice.
+    await this.refreshAuthGate();
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
     const writer = writable.getWriter();
     this.writers.add(writer);
@@ -1234,6 +1371,41 @@ export class SessionDO extends DurableObject<Bindings> {
       };
       void writer.write(this.encoder.encode(this.serialize(ready)));
     }
+
+    /**
+     * A gate that closed while they were away, stated on the way back in.
+     *
+     * The replay above is the transcript as it stood, and a gate switched on
+     * after the last turn is by definition not in it. Guarded on the tail so a
+     * reconnect to a conversation already sitting at the card does not stack a
+     * second one: the respondent reloading twice should see one card, not two.
+     */
+    /*
+     * Raised once this method has handed the response back, never inside it.
+     *
+     * `emit` awaits a write to every attached writer, and this connection's
+     * writer was added at the top — but its reader is the response that has not
+     * been returned yet. Awaiting a write here is therefore waiting on a stream
+     * nobody can drain until we stop waiting, which stalls the whole connect
+     * path rather than the one frame it was trying to send.
+     *
+     * Queued instead: the reader attaches, and the card — or the first question
+     * of an interview the gate never let start — arrives just behind the replay.
+     */
+    const onConnected = async (): Promise<void> => {
+      if (this.authGateBlocks()) {
+        if (replay.at(-1)?.type !== "auth_required") {
+          await this.rememberGatedCursor();
+          await this.emitAuthRequired();
+        }
+        return;
+      }
+      await this.startIfGateCleared();
+    };
+    void onConnected().catch((err: unknown) =>
+      console.error("stream_gate_sync_failed", { sessionId: this.meta?.sessionId, ...errorInfo(err) }),
+    );
+
     // periodic ping to keep connection alive
     const ping = setInterval(() => {
       void writer.write(this.encoder.encode(this.serialize({ v: 1, seq: 0, ts: Date.now(), type: "ping", data: {} })));
@@ -1462,7 +1634,8 @@ export class SessionDO extends DurableObject<Bindings> {
         {
           doc: this.doc,
           currentBlock: block,
-          allowedNext: allowedNextRefs(this.doc, block.ref, this.state),
+          nextAfter: (value?: unknown) => nextStepAfter(this.doc!, block, this.state, value),
+          verbatimQuestions: this.doc.settings.agent.rephraseQuestions === false,
           clarifications: this.invalidCounts.get(block.ref) ?? 0,
           unansweredRequired: this.unansweredRequired().map((b) => ({ ref: b.ref, title: b.title })),
           hasKnowledge,
@@ -2003,9 +2176,14 @@ export class SessionDO extends DurableObject<Bindings> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta || !this.doc) return { accepted: false, error: "session_not_found" };
     if (this.meta.status !== "active") return { accepted: false, error: "session_closed" };
+    // The tab that never reloaded: a gate switched on while this conversation
+    // sat open takes effect on the next thing they send, not whenever the
+    // isolate happens to be recycled.
+    await this.refreshAuthGate();
     // Re-emit rather than silently dropping: a client that lost the card (a
     // reload, a stale tab) needs it back, not a dead input box.
     if (this.authGateBlocks()) {
+      await this.rememberGatedCursor();
       await this.emitAuthRequired();
       return { accepted: false, error: "auth_required" };
     }
@@ -2092,7 +2270,9 @@ export class SessionDO extends DurableObject<Bindings> {
           `Their message may contain an answer, a question of their own, or both — handle everything in it.\n` +
           `1. If any part of it answers "${block.title}", call record_answer with ref=${block.ref}.${shape}${options}\n` +
           `2. If they also asked something, answer that too, in one or two sentences.\n` +
-          `3. Then, if you recorded an answer, go straight on to the next question in the same message. ` +
+          `3. Then, if you recorded an answer, go straight on in the same message to the question ` +
+          `record_answer names in its result — not the one that follows in the list, which on a branching ` +
+          `form is a different question. ` +
           `If you did not, ask "${block.title}" again.\n` +
           `Never ignore a question they asked, even when they also answered.`,
       );
@@ -2836,6 +3016,7 @@ export class SessionDO extends DurableObject<Bindings> {
   async resync(): Promise<{ ok: boolean }> {
     const loaded = await this.ensureLoaded();
     if (!loaded || !this.meta || !this.doc) return { ok: false };
+    await this.refreshAuthGate();
 
     // A screen-out is just as finished as a completion, and a reload has to
     // land back on the screen that explains it — not on the question the
@@ -2855,6 +3036,7 @@ export class SessionDO extends DurableObject<Bindings> {
     // outranks the questions, and the review step outranks the current block.
     if (this.authGateBlocks()) {
       const gate = this.doc.settings.requireAuth;
+      await this.rememberGatedCursor();
       await this.emit("auth_required", { method: gate.method, message: gate.message });
       return { ok: true };
     }
@@ -2928,9 +3110,11 @@ export class SessionDO extends DurableObject<Bindings> {
      */
     if (input.action === "undo_screen_out") return this.undoScreenOut();
     if (this.meta.status !== "active") return { accepted: false, error: "session_closed" };
+    await this.refreshAuthGate();
     // `stop` and `restart` stay open while gated — someone who cannot sign in
     // must still be able to walk away or start over.
     if (this.authGateBlocks() && input.action !== "stop" && input.action !== "restart") {
+      await this.rememberGatedCursor();
       await this.emitAuthRequired();
       return { accepted: false, error: "auth_required" };
     }
@@ -3436,27 +3620,49 @@ export class SessionDO extends DurableObject<Bindings> {
        * projected no answers, and there is nothing here that could overwrite
        * what the earlier one recorded. Answers from here land on that row
        * exactly as they would have on a fresh one.
+       *
+       * Started over is the exception that used to be a hole. It skipped this
+       * lookup and inserted, which is how one person who asked to begin again
+       * became two partial responses — and, since `0027`, is an insert the
+       * database refuses. They are reusing their own draft either way; what
+       * "start over" buys them is that it is empty when they get there.
        */
-      const reusable = this.meta!.startedOver
-        ? null
-        : await findOpenResponseId(this.env, this.meta!.formId, {
-            identity: this.meta!.identity ?? null,
-            fingerprint: this.meta!.fingerprint ?? null,
-            fingerprintSource: this.meta!.fingerprintSource ?? null,
-            isTest: this.meta!.isTest === true,
-            sessionId: this.meta!.sessionId,
-          });
+      const reusable = await findOpenResponseId(this.env, this.meta!.formId, {
+        respondentId: this.meta!.respondentId ?? null,
+        identity: this.meta!.identity ?? null,
+        fingerprint: this.meta!.fingerprint ?? null,
+        fingerprintSource: this.meta!.fingerprintSource ?? null,
+        isTest: this.meta!.isTest === true,
+        sessionId: this.meta!.sessionId,
+      });
       if (reusable) {
         await this.ctx.storage.put("submission_id", reusable);
-        // `findOpenResponseId` matches `abandoned` rows as well, so adoption
-        // here has the same obligation the sign-in and resume-link paths have:
-        // a row somebody is answering into is in progress, whatever it was
-        // when they walked away from it. See `reopenAdopted`.
-        await this.reopenAdopted(reusable);
+        if (this.meta!.startedOver) {
+          await restartResponse(this.env, reusable, {
+            sessionId: this.meta!.sessionId,
+            startedAt: this.meta!.startedAt,
+          });
+        } else {
+          // `findOpenResponseId` matches `abandoned` rows as well, so adoption
+          // here has the same obligation the sign-in and resume-link paths have:
+          // a row somebody is answering into is in progress, whatever it was
+          // when they walked away from it. See `reopenAdopted`.
+          await this.reopenAdopted(reusable);
+        }
         return reusable;
       }
 
+      /*
+        The id is minted here rather than inside `openResponse` so that this can
+        tell the two outcomes apart. Getting a different one back means the
+        insert lost to `uq_submissions_one_open_per_respondent` and adopted the
+        draft that was already there — the same race the lookup above exists to
+        avoid, arriving in the gap between that read and this write — and an
+        adopted row carries the obligation every other adoption path has.
+      */
+      const wanted = newResponseId();
       const id = await openResponse(this.owner(), {
+        responseId: wanted,
         hiddenFields: this.meta!.hiddenFields,
         variables: this.state.variables,
         userAgent: this.meta!.userAgent,
@@ -3469,6 +3675,7 @@ export class SessionDO extends DurableObject<Bindings> {
         identity: this.meta!.identity ?? null,
       });
       await this.ctx.storage.put("submission_id", id);
+      if (id !== wanted) await this.reopenAdopted(id);
       return id;
     })();
     /*

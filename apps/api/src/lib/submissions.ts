@@ -1,5 +1,6 @@
 import type { Bindings } from "../env.js";
 import { resolveRespondent } from "./respondents.js";
+import { findOpenResponseId } from "./respondent-history.js";
 import type { AnswerMap, RespondentIdentity } from "@repo/form-schema";
 import { enqueueMail } from "./mail.js";
 import { cancelFollowUps, creditFollowUpRecovery, scheduleFollowUps } from "./followups.js";
@@ -90,18 +91,28 @@ export interface OpenResponseArgs {
  *
  * `ON CONFLICT DO NOTHING` rather than a read-then-insert: two answers arriving
  * at once on the API path would otherwise race to create two rows for one id.
+ *
+ * Untargeted, because there are now two ways to lose that race and the caller
+ * wants the same thing from both. The id conflict is the old one. The other is
+ * `uq_submissions_one_open_per_respondent` — one unfinished response per person
+ * per form, see `0027` — which fires when this respondent's draft already
+ * exists under a different id, whether it was written a moment ago by their
+ * other tab or half an hour ago by a session that has since gone quiet.
+ *
+ * Either way the response that is already there is the response, and this
+ * returns it. A caller only ever asked for somewhere to put the answer.
  */
 export async function openResponse(o: ResponseOwner, a: OpenResponseArgs): Promise<string> {
   const id = a.responseId ?? newResponseId();
   if (isPreview(o)) return id;
-  await o.env.DB.prepare(
+  const res = await o.env.DB.prepare(
     `INSERT INTO submissions
        (id, form_id, form_version_id, organization_id, session_id, source, is_test, status,
         hidden_fields, meta, started_at, updated_at, expires_at, api_key_id, fingerprint,
         respondent_id, respondent_provider, respondent_subject, respondent_email, respondent_phone,
         respondent_name)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (id) DO NOTHING`,
+     ON CONFLICT DO NOTHING`,
   )
     .bind(
       id,
@@ -128,7 +139,50 @@ export async function openResponse(o: ResponseOwner, a: OpenResponseArgs): Promi
       a.identity?.name ?? null,
     )
     .run();
+
+  /*
+    Nothing inserted. Which of the two conflicts it was decides where the
+    response actually is, and the id settles it in one read: present means the
+    caller's own id was already there — a retry, or the second of two answers
+    arriving together — and this is that row. Absent means the respondent's
+    draft is under an id we have not seen, and `findOpenResponseId` is the
+    lookup the constraint was declared to be served by.
+
+    `sessionId: null` on that lookup, deliberately: every other caller is asking
+    "does somebody else already have one", and this one already knows the answer
+    is yes. Its own session is a legitimate owner of the row that won.
+  */
+  if (res.meta.changes === 0) return (await adoptExisting(o, id, a)) ?? id;
   return id;
+}
+
+/**
+ * The row that won, after an insert conflicted.
+ *
+ * Never throws, and a null answer is survivable: the caller falls back to the
+ * id it asked for, and the worst case is the one answer that provoked this
+ * failing to land — which is what would have happened anyway.
+ */
+async function adoptExisting(o: ResponseOwner, id: string, a: OpenResponseArgs): Promise<string | null> {
+  try {
+    const mine = await o.env.DB.prepare(`SELECT id FROM submissions WHERE id = ?1`)
+      .bind(id)
+      .first<{ id: string }>();
+    if (mine) return id;
+    const theirs = await findOpenResponseId(o.env, o.formId, {
+      respondentId: a.respondentId ?? null,
+      identity: a.identity ?? null,
+      isTest: o.isTest === true,
+      sessionId: null,
+    });
+    if (theirs) {
+      console.warn("open_response_collision", { formId: o.formId, wanted: id, adopted: theirs });
+    }
+    return theirs;
+  } catch (err) {
+    console.error("open_response_adopt_failed", o.formId, id, err);
+    return null;
+  }
 }
 
 /**
@@ -137,6 +191,14 @@ export async function openResponse(o: ResponseOwner, a: OpenResponseArgs): Promi
  * For the case `openResponse` cannot cover: somebody who signs in *after* the
  * row was opened, because the form did not require it and they volunteered, or
  * because `requireAuth` was switched on mid-conversation.
+ *
+ * Also called with no row at all, which is the ordinary order on a gated form:
+ * the gate refuses every turn until somebody signs in, so the sign-in comes
+ * first and the row is opened by the answer after it. There is still a person
+ * to resolve, and the id it returns is what that insert will key its one-draft
+ * constraint on — see `0027`. Signing in is precisely when a browser we had
+ * only seen anonymously turns out to be somebody we already know, so resolving
+ * it here rather than at the insert is also what finds their existing draft.
  *
  * Until this existed, `finalizeResponse` was the only writer of these columns,
  * which coupled "who answered" to "they stopped answering": every `in_progress`
@@ -156,27 +218,30 @@ export async function openResponse(o: ResponseOwner, a: OpenResponseArgs): Promi
  */
 export async function attachRespondent(
   env: Bindings,
-  responseId: string,
+  /** Null before the first answer: sign-in can come first, and the person still resolves. */
+  responseId: string | null,
   identity: RespondentIdentity,
   /** The platform-wide device key, so signing in links this browser to the person. */
   deviceKey?: string | null,
-): Promise<void> {
+): Promise<string | null> {
   try {
-    await env.DB.prepare(
-      `UPDATE submissions
-          SET respondent_provider = ?2, respondent_subject = ?3,
-              respondent_email = ?4, respondent_phone = ?5, respondent_name = ?6
-        WHERE id = ?1 AND status = 'in_progress' AND respondent_subject IS NULL`,
-    )
-      .bind(
-        responseId,
-        identity.provider,
-        identity.subject,
-        identity.email ?? null,
-        identity.phone ?? null,
-        identity.name ?? null,
+    if (responseId) {
+      await env.DB.prepare(
+        `UPDATE submissions
+            SET respondent_provider = ?2, respondent_subject = ?3,
+                respondent_email = ?4, respondent_phone = ?5, respondent_name = ?6
+          WHERE id = ?1 AND status = 'in_progress' AND respondent_subject IS NULL`,
       )
-      .run();
+        .bind(
+          responseId,
+          identity.provider,
+          identity.subject,
+          identity.email ?? null,
+          identity.phone ?? null,
+          identity.name ?? null,
+        )
+        .run();
+    }
 
     /*
       Signing in is where the identity graph usually learns something.
@@ -197,13 +262,15 @@ export async function attachRespondent(
       phone: identity.phone,
       deviceKey: deviceKey ?? null,
     });
-    if (respondentId) {
+    if (respondentId && responseId) {
       await env.DB.prepare(`UPDATE submissions SET respondent_id = ?2 WHERE id = ?1`)
         .bind(responseId, respondentId)
         .run();
     }
+    return respondentId;
   } catch (err) {
     console.error("respondent_attach_failed", responseId, err);
+    return null;
   }
 }
 
@@ -355,15 +422,31 @@ export async function reopenResponse(
   responseId: string,
 ): Promise<{ changed: boolean }> {
   if (isPreview(o)) return { changed: false };
-  const res = await o.env.DB.prepare(
-    `UPDATE submissions
-        SET status = 'in_progress', completed_at = NULL, updated_at = ?1,
-            meta = json_set(coalesce(meta,'{}'), '$.endingRef', NULL, '$.abandonReason', NULL)
-      WHERE id = ?2 AND status = 'disqualified'`,
-  )
-    .bind(Date.now(), responseId)
-    .run();
-  return { changed: (res.meta?.changes ?? 0) > 0 };
+  try {
+    const res = await o.env.DB.prepare(
+      `UPDATE submissions
+          SET status = 'in_progress', completed_at = NULL, updated_at = ?1,
+              meta = json_set(coalesce(meta,'{}'), '$.endingRef', NULL, '$.abandonReason', NULL)
+        WHERE id = ?2 AND status = 'disqualified'`,
+    )
+      .bind(Date.now(), responseId)
+      .run();
+    return { changed: (res.meta?.changes ?? 0) > 0 };
+  } catch (err) {
+    /*
+      The one write in this module that can move a row *into* the set
+      `uq_submissions_one_open_per_respondent` covers — `disqualified` is
+      outside it, `in_progress` is inside — so it is the one that can be refused
+      by somebody's other open draft. Screened out in one tab, started again in
+      another, then undone in the first.
+
+      Reported as "nothing reopened" rather than thrown: the caller's next step
+      is to read the row and decide, which is a better answer to this than an
+      error surfacing to a respondent as a conversation that has expired.
+    */
+    console.warn("reopen_response_refused", { responseId, ...errorInfo(err) });
+    return { changed: false };
+  }
 }
 
 /**
@@ -403,6 +486,59 @@ export async function reopenAbandonedResponse(
     .bind(Date.now(), responseId)
     .run();
   return { changed: (res.meta?.changes ?? 0) > 0 };
+}
+
+/**
+ * Empty this person's draft and hand it back, because they asked to start over.
+ *
+ * "Start over" used to mean a new row. `fresh` on the create-session call
+ * declined the device match so the screen came up empty, and `started_over` on
+ * the session made the sign-in gate decline the identity match a few turns
+ * later — but nothing declined the *insert*, so the abandoned draft stayed
+ * behind and the author saw two partial responses for one person who had asked,
+ * once, to begin again. That is the pair `0027` found in production.
+ *
+ * What they asked for is that their answers stop counting, not that a second
+ * copy of them appear in somebody's results table. So the row is reused and
+ * emptied: same id, no answers, back to `in_progress`, timings restarted, and
+ * the reminder sequence that was scheduled against the old attempt cancelled —
+ * it was scheduled for a conversation that no longer exists.
+ *
+ * The id is deliberately kept. It is already in the DO's storage, on the chat
+ * session, possibly in a resume link somebody was sent, and a response that
+ * changed id every time somebody restarted would break all three to make the
+ * results table no cleaner.
+ *
+ * Never throws. A failure here leaves them writing into a draft that still
+ * holds their old answers, which is the wrong answer to a small question and
+ * not a reason to refuse them a form.
+ */
+export async function restartResponse(
+  env: Bindings,
+  responseId: string,
+  at: { sessionId: string; startedAt: number },
+): Promise<void> {
+  try {
+    await env.DB.batch([
+      env.DB.prepare(`DELETE FROM submission_answers WHERE submission_id = ?1`).bind(responseId),
+      env.DB.prepare(
+        `UPDATE submissions
+            SET status = 'in_progress', session_id = ?2, started_at = ?3, updated_at = ?3,
+                completed_at = NULL, duration_ms = NULL, active_ms = 0, partial_notified_at = NULL,
+                meta = json_set(coalesce(meta,'{}'), '$.endingRef', NULL, '$.abandonReason', NULL,
+                                '$.restartedAt', ?3)
+          WHERE id = ?1`,
+      ).bind(responseId, at.sessionId, at.startedAt),
+    ]);
+    /*
+      Outside the batch because it is somebody else's table and its own module's
+      business. Cancelling a sequence for a draft that is being answered right
+      now is the same call the first answer would make anyway.
+    */
+    await cancelFollowUps(env, responseId, "restarted");
+  } catch (err) {
+    console.error("response_restart_failed", responseId, err);
+  }
 }
 
 /** Every answer flattened into one lowercase haystack for the dashboard's search box. */

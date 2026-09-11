@@ -345,13 +345,3 @@ export function resolveNext(
   if (first) return { kind: "block", block: first };
   return { kind: "ending", ending: resolveEnding(doc, state) };
 }
-
-/** Blocks the agent is allowed to ask next (for guard allowlists): just the resolved one. */
-export function allowedNextRefs(
-  doc: FormDoc,
-  answeredRef: string | null,
-  state: EvalState,
-): string[] {
-  const next = resolveNext(doc, answeredRef, state);
-  return next.kind === "block" ? [next.block.ref] : [];
-}

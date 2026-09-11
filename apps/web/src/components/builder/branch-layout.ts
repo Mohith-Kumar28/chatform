@@ -331,3 +331,40 @@ export function edgeLabel(block: Block | null, cond: { op: string; value?: unkno
 export function conditionText(cond: { op: string; value?: unknown }): string {
   return `${opLabel(cond.op)}${cond.value !== undefined && cond.value !== null ? ` ${String(cond.value).slice(0, 14)}` : ""}`;
 }
+
+/**
+ * What a whole route says on its row of the branch node.
+ *
+ * A route holds a list of conditions now, not one — a range needs two — so the
+ * label has to speak for all of them. Three registers, narrowest first:
+ *
+ *   - One condition reads exactly as it always did.
+ *   - Two inclusive bounds on the same question collapse to `6–25`, because
+ *     that is how a person says it and because "greater or equal 6 and less or
+ *     equal 25" does not fit on a node 224 pixels wide. Only the inclusive
+ *     pair collapses: rendering `> 6 and < 25` as a range would mean doing
+ *     arithmetic on the author's numbers and showing them back a different
+ *     pair than the ones they typed.
+ *   - Anything else joins its parts with the group's own word, and is cut to
+ *     length. A label too long to read is still worth more than a label that
+ *     silently describes only the first of three tests.
+ */
+export function caseLabel(
+  block: Block | null,
+  when: { op: "and" | "or"; conditions: { op: string; value?: unknown }[] } | null | undefined,
+): string {
+  const conditions = when?.conditions ?? [];
+  if (conditions.length === 0) return "always";
+  if (conditions.length === 1) return edgeLabel(block, conditions[0]!);
+
+  if (when!.op === "and" && conditions.length === 2) {
+    const low = conditions.find((c) => c.op === "gte");
+    const high = conditions.find((c) => c.op === "lte");
+    if (low && high && typeof low.value === "number" && typeof high.value === "number") {
+      return `${low.value}–${high.value}`;
+    }
+  }
+
+  const joined = conditions.map((c) => edgeLabel(block, c)).join(when!.op === "and" ? " and " : " or ");
+  return joined.length > 34 ? `${joined.slice(0, 33)}…` : joined;
+}

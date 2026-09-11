@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Block } from "@repo/form-schema";
-import { edgeLabel } from "@/components/builder/branch-layout";
+import { caseLabel, edgeLabel } from "@/components/builder/branch-layout";
 
 /**
  * What a route's wire says on the canvas.
@@ -108,5 +108,66 @@ describe("labels with no block to consult", () => {
   it("states the operator and the value", () => {
     expect(edgeLabel(null, { op: "gte", value: 5 })).toBe("greater or equal 5");
     expect(edgeLabel(null, { op: "is_not_empty" })).toBe("is not empty");
+  });
+});
+
+/**
+ * A route holds a list of conditions now, because a range needs two of them.
+ * The node row has to speak for all of them: a label that reads only the first
+ * describes a form that routes differently from the one it is drawn on.
+ */
+describe("labels for a route with more than one condition", () => {
+  const age = Block.parse({
+    id: "blk_ag000001",
+    ref: "q_age",
+    type: "number",
+    title: "Participant's age?",
+  });
+  const group = (conditions: { op: string; value?: unknown }[], op: "and" | "or" = "and") => ({
+    op,
+    conditions,
+  });
+
+  it("reads a pair of inclusive bounds as the range a person would say", () => {
+    expect(
+      caseLabel(age, group([{ op: "gte", value: 6 }, { op: "lte", value: 25 }])),
+    ).toBe("6–25");
+  });
+
+  it("keeps the range the right way round however it was typed", () => {
+    expect(
+      caseLabel(age, group([{ op: "lte", value: 25 }, { op: "gte", value: 6 }])),
+    ).toBe("6–25");
+  });
+
+  it("will not turn exclusive bounds into a range it would have to do arithmetic for", () => {
+    expect(caseLabel(age, group([{ op: "gt", value: 6 }, { op: "lt", value: 25 }]))).toBe(
+      "greater than 6 and less than 25",
+    );
+  });
+
+  it("joins an 'any of' route with its own word", () => {
+    expect(caseLabel(age, group([{ op: "eq", value: 1 }, { op: "eq", value: 2 }], "or"))).toBe(
+      "equals 1 or equals 2",
+    );
+  });
+
+  it("leaves a single condition exactly as it read before", () => {
+    expect(caseLabel(age, group([{ op: "gte", value: 6 }]))).toBe("greater or equal 6");
+  });
+
+  it("calls a route with no conditions what it is", () => {
+    expect(caseLabel(age, group([]))).toBe("always");
+    expect(caseLabel(age, null)).toBe("always");
+  });
+
+  it("cuts a label too long for the node rather than overflowing it", () => {
+    const long = caseLabel(age, group([
+      { op: "gte", value: 100000 },
+      { op: "lte", value: 200000 },
+      { op: "neq", value: 150000 },
+    ]));
+    expect(long.length).toBeLessThanOrEqual(34);
+    expect(long.endsWith("…")).toBe(true);
   });
 });

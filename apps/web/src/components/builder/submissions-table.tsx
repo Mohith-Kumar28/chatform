@@ -735,12 +735,24 @@ export function SubmissionsTable({
    * just the scroll hint, which is what every other caller wants.
    */
   page,
+  /**
+   * Tells the caller what is ticked, and how to download exactly that.
+   *
+   * The table used to grow its own "Download 2 responses" button the moment a
+   * checkbox was ticked, directly under the Download the page already had —
+   * two buttons with the same name and the same icon, one of which had just
+   * appeared. There is one download control; ticking rows only changes what it
+   * takes. The scope stays owned here (only this component knows which rows
+   * are ticked, and how to write them out), and the caller is handed the verb.
+   */
+  onSelection,
 }: {
   formId: string;
   rows: SubmissionRecord[];
   columns: ResultColumn[];
   filters?: React.ReactNode;
   showFollowUp?: boolean;
+  onSelection?: (selection: { count: number; download: () => void } | null) => void;
   page?: {
     offset: number;
     limit: number;
@@ -899,6 +911,29 @@ export function SubmissionsTable({
   const allSelected = rows.length > 0 && selected.size === rows.length;
 
   /**
+   * The selection, published to whoever draws the download button.
+   *
+   * Through a ref, so the effect can depend on the *count* alone. `rows` and
+   * `columns` are fresh arrays on every render of the caller, and an effect
+   * that depended on them would report upward on each one — into the caller's
+   * state, which renders it again.
+   */
+  const downloadRef = useRef<() => void>(() => {});
+  // Deliberately un-deped: whatever the last render saw is what the button
+  // downloads, and a ref cannot be written during one.
+  useEffect(() => {
+    downloadRef.current = () =>
+      downloadCsv(rows.filter((r) => selected.has(r.id)), columns, hasRespondents);
+  });
+
+  const selectedCount = selected.size;
+  useEffect(() => {
+    onSelection?.(selectedCount > 0 ? { count: selectedCount, download: () => downloadRef.current() } : null);
+  }, [selectedCount, onSelection]);
+  // Leaving the tab, or the table, leaves nothing ticked behind it.
+  useEffect(() => () => onSelection?.(null), [onSelection]);
+
+  /**
    * Delete, applied to the table before the server has agreed.
    *
    * The dialog used to close on click and then everything else waited: the
@@ -974,28 +1009,24 @@ export function SubmissionsTable({
           {selected.size > 0 && (
             <>
               {/*
-                The count is on the buttons, not beside them.
+                The count is on the button, not beside it.
 
-                It used to be a "3 selected" label next to a bare "Download" and
-                a bare "Delete", which puts the number one control away from the
-                thing it qualifies — and leaves the destructive button as the
-                only one on screen that does not say what it is about to touch.
-                Naming the scope twice is cheap; a Delete that reads as though it
-                might mean everything is not.
+                It used to be a "3 selected" label next to a bare "Delete",
+                which puts the number one control away from the thing it
+                qualifies — and leaves the destructive button as the only one on
+                screen that does not say what it is about to touch.
 
-                It is also the answer to the other question this toolbar raises:
-                the Download above the table takes every response, and this one
-                takes exactly the rows that are ticked.
+                Download is missing here on purpose: the page's own Download
+                button retargets itself at the ticked rows, so a second one
+                would be the same verb twice. Full screen covers that button
+                over, which is the one case this toolbar has to carry it.
               */}
-              <Button
-                variant="outline"
-                size="sm"
-                shape="pill"
-                onClick={() => downloadCsv(rows.filter((r) => selected.has(r.id)), columns, hasRespondents)}
-              >
-                <Download className="size-3.5" />
-                Download {selected.size === 1 ? "1 response" : `${selected.size} responses`}
-              </Button>
+              {full && (
+                <Button variant="outline" size="sm" shape="pill" onClick={() => downloadRef.current()}>
+                  <Download className="size-3.5" />
+                  Download {selected.size === 1 ? "1 response" : `${selected.size} responses`}
+                </Button>
+              )}
               {canDelete && (
                 <Button
                   variant="ghost"

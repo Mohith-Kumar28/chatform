@@ -34,7 +34,7 @@ function toolsFor(opts: {
     {
       doc: parsed,
       currentBlock: parsed.blocks[1]!,
-      allowedNext: [],
+      nextAfter: () => null,
       clarifications: 0,
       hasKnowledge: opts.hasKnowledge,
       searchKnowledge: opts.search,

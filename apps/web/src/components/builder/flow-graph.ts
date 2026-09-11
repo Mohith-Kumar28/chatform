@@ -2,7 +2,7 @@ import type { Edge, MarkerType, Node } from "@xyflow/react";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
 import { conditionIsAlwaysTrue, rulesAreExhaustive } from "@repo/form-schema";
 import { placeNodes, type Rankdir } from "./flow-layout";
-import { edgeLabel } from "./branch-layout";
+import { caseLabel } from "./branch-layout";
 
 /**
  * The graph a form's flow makes, derived once and drawn twice.
@@ -145,7 +145,9 @@ export function deriveGraph(
     // A test that cannot fail is a jump, however it was written down. Drawing
     // it as a decision put a branch node on the canvas with one live arm and
     // one dead one, over a question the form never actually chooses about.
-    if (!cond || conditionIsAlwaysTrue(cond, fromBlock)) {
+    // Only a lone condition can be read this way: one arm of a compound test
+    // says nothing about whether the whole test can fail.
+    if (!cond || (rule.when!.conditions.length === 1 && conditionIsAlwaysTrue(cond, fromBlock))) {
       alwaysBySource.set(from, rule);
       continue;
     }
@@ -153,7 +155,7 @@ export function deriveGraph(
     const exists = endingRefs.has(rule.target) || doc.blocks.some((b) => b.ref === rule.target);
     list.push({
       ruleId: rule.id,
-      label: edgeLabel(fromBlock, cond),
+      label: caseLabel(fromBlock, rule.when),
       target: rule.target,
       targetKind: endingRefs.has(rule.target) ? "ending" : "block",
       missing: !exists,

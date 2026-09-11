@@ -524,14 +524,35 @@ export function ChatClient({
           {/* The current question's controls live here, under the agent's
               message — not in place of the composer. */}
           {/*
-              Disabled while an answer is in flight, not unmounted.
-              A respondent who tapped "iOS (iPhone)" must not be able to tap
-              again — the second tap was read as a correction, "Sure, let's redo
-              that one" — but taking the chips out of the tree to achieve that
-              made them flash: `thinking` flips on every send and on every
-              branch jump, so the row vanished and then faded back in through
-              `animate-message-in` each time. Disabling stops the second tap
-              and keeps the row still.
+              One rule decides whether this row is on screen: could tapping it
+              do anything? If not, it is not rendered — a greyed-out control is
+              still furniture the eye has to read and dismiss, and the answer is
+              already in the thread above as a bubble.
+
+              So the row goes while an answer is in flight, rather than sitting
+              there dimmed. That also settles the double-tap this used to guard
+              against by disabling: a respondent who tapped "iOS (iPhone)" could
+              tap again, and the second tap was read as a correction — "Sure,
+              let's redo that one". Nothing to tap, nothing to correct, and the
+              number-key shortcuts go quiet with it.
+
+              `answering` is the flag, and the distinction from `thinking` is
+              the whole reason this is safe. `thinking` flips on every send AND
+              on every branch jump, so unmounting on it made the row vanish and
+              fade back through `animate-message-in` mid-question — and a
+              `thinking` that got stuck took the chips away for good, leaving a
+              respondent staring at a question whose three options had been
+              delivered, were on the page a reload away, and could not be seen
+              or tapped. `answering` covers only the window between sending an
+              answer and the server resolving it: every path that raises it
+              raises `thinking` too, which arms the watchdog in `use-chat`, and
+              that ladder always terminates — `giveUp` settles the turn. It
+              cannot stick.
+
+              The one visible cost: an answer the server REJECTS brings the same
+              question back, so the row leaves and returns. That is honest — the
+              question really is being asked again — and it arrives with the
+              validation hint that explains why.
           */}
           {/* Not while a sign-in gate is up: the server refuses every turn until
               it is cleared, so chips there are a control that cannot work — and
@@ -539,19 +560,16 @@ export function ChatClient({
           {/* Not while a code is outstanding either: the question has been
               answered, and answering it again is what "Use a different number"
               is for. */}
-          {!chat.ending && !chat.auth && !chat.verify && chat.question && (
+          {!chat.ending && !chat.auth && !chat.verify && !chat.answering && chat.question && (
             <div key={chat.question.block.ref} className="animate-message-in pt-0.5 pl-1">
               <QuestionAffordance
                 block={chat.question.block}
-                // `answering`, not `thinking`. The comment above says these are
-                // disabled rather than unmounted, and `!chat.thinking` in the
-                // condition quietly made that untrue: any flag that raised the
-                // typing dots — a branch jump, a sign-in round trip — took the
-                // chips off the screen with it, and a flag that got stuck took
-                // them away for good. That is how a respondent ended up staring
-                // at a question whose three options had been delivered, were on
-                // the page a reload away, and could not be seen or tapped.
-                disabled={chat.status === "error" || chat.answering}
+                // Only the error state disables now; the in-flight case is
+                // handled by not rendering at all. Kept rather than folded into
+                // the condition above, because a dropped stream is a state the
+                // respondent can still see their options in — they just cannot
+                // act on them until it reconnects.
+                disabled={chat.status === "error"}
                 uploadBase={uploadBase}
                 respondentToken={respondentToken}
                 onStructured={onStructured}
