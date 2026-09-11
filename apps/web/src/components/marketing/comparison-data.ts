@@ -155,6 +155,6 @@ export const FOOTNOTES: readonly string[] = [
   "Typeform's conversational AI product is Formless, sold separately from typeform.com plans and starting at $59/mo for 250 AI conversations. typeform.com itself offers AI follow-ups on an open-text answer, not a conversational interview.",
   "Jotform's AI Agents are a genuine conversational form-filler with a trainable knowledge base, available from its free tier. It is the closest thing to this product on the list.",
   "“Not documented” means we could not find the capability on the vendor's public pages — not that it is confirmed absent.",
-  "* Unlimited means no per-plan quota, subject to a fair-use ceiling of 5,000 responses a month on Free.",
+  "* Unlimited means no per-plan quota, subject to a fair-use ceiling of 10,000 responses a month on Free.",
   "The abandonment follow-up row was checked separately in September 2026, against Typeform's partial-response and automation help pages, Tally's partial-submissions page (which states that partial submissions do not trigger email notifications), Jotform's incomplete-submission answers, and Fillout's form-abandonment help page. Fillout is the only competitor on this list with native timed recovery; their own guidance is to send it once. chatform sends at most three, and every one is re-checked at the moment it is due — dropped if the person finished, the form closed, or the address opted out in the meantime.",
 ];

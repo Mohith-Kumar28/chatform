@@ -698,7 +698,7 @@ describe("billing routes", () => {
     const body = await res.json<{ plan: string; planId: string; limits: Record<string, number | null> }>();
     expect(body.plan).toBe("Free"); // a string, which is what the UI already reads
     expect(body.planId).toBe("free");
-    expect(body.limits.responses_ceiling_per_month).toBe(5000);
+    expect(body.limits.responses_ceiling_per_month).toBe(10000);
   });
 
   it("refuses checkout when the plan has no Dodo product", async () => {

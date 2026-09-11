@@ -12,6 +12,7 @@
     "cf:build": "opennextjs-cloudflare build",
     "cf:preview": "opennextjs-cloudflare preview",
     "cf:deploy": "opennextjs-cloudflare deploy",
+    "og:image": "tsx scripts/og-image.mts",
     "postinstall": "fumadocs-mdx"
   },
   "dependencies": {

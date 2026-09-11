@@ -169,10 +169,10 @@ export function meterTone(row: MeterRowData): "quiet" | "neutral" | "warning" | 
  * The fair-use ceiling only becomes a bar once it is nearly true.
  *
  * `responses_per_month` is `meter` — genuinely unlimited — while
- * `responses_ceiling_per_month` is a `hard` 5,000 on the same metric. Both are true, and
- * which one to show is a question of when. Drawing a bar against 5,000 from the first
+ * `responses_ceiling_per_month` is a `hard` 10,000 on the same metric. Both are true, and
+ * which one to show is a question of when. Drawing a bar against 10,000 from the first
  * response turns "unlimited responses", the plan's headline promise, into "you have
- * 5,000". So below half the ceiling this reads as a plain count, and above it the
+ * 10,000". So below half the ceiling this reads as a plain count, and above it the
  * denominator and the bar appear and it behaves like any other hard monthly limit.
  */
 const LATENT_BELOW = 0.5;

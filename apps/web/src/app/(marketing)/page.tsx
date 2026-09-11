@@ -40,7 +40,7 @@ export const metadata: Metadata = {
    */
   title: { absolute: "chatform — AI forms that get 2.3× more submissions" },
   description:
-    "chatform turns your boring form into a conversation: it reads what people write, asks again when an answer is too thin to use, and follows up with the ones who leave. More of the people who start finish.",
+    "Free AI forms with unlimited submissions. chatform turns your form into a conversation that reads what people write, asks again when an answer is thin, and follows up with the ones who leave.",
   ...canonical("/"),
   openGraph: {
     ...openGraphBase("/"),
@@ -50,9 +50,21 @@ export const metadata: Metadata = {
     // which is the phrase people search with.
     title: "chatform — AI forms that get 2.3× more submissions",
     description:
-      "It reads what people write, asks again when an answer is thin, and follows up with the ones who leave.",
+      "It reads what people write, asks again when an answer is thin, and follows up with the ones who leave. Free, with unlimited submissions.",
+    // A baked file, not an `opengraph-image.tsx`: nothing on this card changes,
+    // and a route is served through the worker at ~2s where `public/` is
+    // ~0.3s. Regenerate with `pnpm --filter @repo/web og:image`.
+    images: [
+      {
+        url: "/og.jpg",
+        width: 1200,
+        height: 630,
+        type: "image/jpeg",
+        alt: "chatform — AI forms that get 2.3× more submissions",
+      },
+    ],
   },
-  twitter: { card: "summary_large_image" },
+  twitter: { card: "summary_large_image", images: ["/og.jpg"] },
 };
 
 /**

@@ -137,7 +137,7 @@ describe("resolving entitlements from the database", () => {
     expect(ent.planId).toBe("free");
     expect(ent.features.partial_responses).toBe(false);
     expect(ent.limits.responses_per_month).toBeNull();
-    expect(ent.limits.responses_ceiling_per_month).toBe(5_000);
+    expect(ent.limits.responses_ceiling_per_month).toBe(10_000);
   });
 
   it("gives a Pro subscriber Pro", async () => {

@@ -54,7 +54,7 @@ const FREE: Plan = {
   features: [],
   limits: {
     responses_per_month: null,
-    responses_ceiling_per_month: 5_000,
+    responses_ceiling_per_month: 10_000,
     ai_conversations_per_month: 200,
     ai_tokens_per_month: 500_000,
     ai_generations_per_month: 10,

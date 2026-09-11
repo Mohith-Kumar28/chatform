@@ -25,7 +25,7 @@ export default defineComparison({
     {
       title: "No response cliff on the free plan",
       body:
-        "Jotform's free Starter plan allows 5 active forms and 100 submissions a month. chatform's free plan has no per-plan response quota and no form cap worth hitting — 100 forms, and a fair-use ceiling of 5,000 responses a month.",
+        "Jotform's free Starter plan allows 5 active forms and 100 submissions a month. chatform's free plan has no per-plan response quota and no form cap worth hitting — 100 forms, and a fair-use ceiling of 10,000 responses a month.",
     },
     {
       title: "A documented headless conversation API",

@@ -307,7 +307,7 @@ Past the AI cap:
 
 Two ceilings back it up: `ai_tokens_per_month` (a token-level circuit breaker independent
 of conversation count, so one pathological form cannot burn the budget) and
-`responses_hard_ceiling_per_month` (5,000 free / 50,000 paid — Typeform's cap structure).
+`responses_hard_ceiling_per_month` (10,000 free / 50,000 paid — Typeform's cap structure).
 
 ### 2.3 Limits, as data
 
@@ -957,7 +957,7 @@ with an ugly paywall, while the reverse is a paywall a `curl` walks through.
   is defensible on the *pricing page* only if the page marks them "coming soon" rather than
   implying they ship today. Flagging explicitly: **listing an unbuilt feature as included
   in a plan someone pays for is a misrepresentation, and the pricing page must label them.**
-- **The 5,000 free ceiling is a guess.** It should be re-derived from real AI cost per
+- **The 10,000 free ceiling is a guess.** It should be re-derived from real AI cost per
   conversation once there is traffic. The number lives in one place, so changing it is a
   one-line edit plus a re-seed.
 - **Seat add-on billing** ($10/mo above 5 on Business) needs Dodo add-ons or a quantity-based

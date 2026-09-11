@@ -73,7 +73,7 @@ export default defineComparison({
     {
       question: "Is there a free Google Forms alternative?",
       answer:
-        "chatform's free plan gives you unlimited forms and unlimited responses, subject to a fair-use ceiling of 5,000 responses a month, plus 200 AI-run conversations a month. No card and no trial clock. It is not free in the same absolute way Google Forms is — running an interview costs money — but collecting answers is.",
+        "chatform's free plan gives you unlimited forms and unlimited responses, subject to a fair-use ceiling of 10,000 responses a month, plus 200 AI-run conversations a month. No card and no trial clock. It is not free in the same absolute way Google Forms is — running an interview costs money — but collecting answers is.",
     },
     {
       question: "Can I send Google Forms responses to a spreadsheet from chatform?",

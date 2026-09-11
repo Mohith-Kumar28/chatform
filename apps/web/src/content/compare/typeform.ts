@@ -35,7 +35,7 @@ export default defineComparison({
     {
       title: "Unlimited responses on the free plan",
       body:
-        "Typeform's free tier stops at 10 responses a month. chatform's free plan has no per-plan response quota at all, subject to a fair-use ceiling of 5,000 a month — and unlimited forms alongside it.",
+        "Typeform's free tier stops at 10 responses a month. chatform's free plan has no per-plan response quota at all, subject to a fair-use ceiling of 10,000 a month — and unlimited forms alongside it.",
     },
     {
       title: "A documented headless API",
@@ -79,7 +79,7 @@ export default defineComparison({
     {
       question: "Is chatform really free?",
       answer:
-        "Yes. Unlimited forms and unlimited responses on the free plan, subject to a fair-use ceiling of 5,000 responses a month, plus 200 AI-run conversations a month. No card, no trial clock. Paid plans start at $16 a month billed yearly, and they buy brand control, partial-response export, the API and a bigger AI allowance — not the right to collect answers.",
+        "Yes. Unlimited forms and unlimited responses on the free plan, subject to a fair-use ceiling of 10,000 responses a month, plus 200 AI-run conversations a month. No card, no trial clock. Paid plans start at $16 a month billed yearly, and they buy brand control, partial-response export, the API and a bigger AI allowance — not the right to collect answers.",
     },
     {
       question: "How does chatform compare to Typeform on pricing?",
