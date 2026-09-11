@@ -499,3 +499,98 @@ export function repairFlow<T extends { blocks: Block[]; endings: { ref: string }
   const derived = buildFlowRules(branches, doc.blocks, endingRefs, complex);
   return { ...doc, logic: [...untouched, ...complex, ...derived] };
 }
+
+/**
+ * Take questions out of the flow without cutting the chain they sat in.
+ *
+ * Deleting a question used to delete every route pointing at it, so an answer
+ * that led there simply fell through to whichever block happened to sit next
+ * in the list. With the first question of an arm gone, that next block was
+ * often another arm's question: delete "Play Store email?" and every iOS user
+ * was asked which Android device they own.
+ *
+ * A route into a deleted question is a route into whatever that question led
+ * to, so that is where it goes now — the question's own unconditional jump if
+ * it had one, else the block below it, else the first ending — following on
+ * past anything else deleted in the same edit. Routes out of a deleted
+ * question go with it.
+ *
+ * `rederived` is for a caller about to run `repairFlow`, which reads every
+ * branch target as the start of that answer's arm. When the deleted questions
+ * were the whole arm, the destination is where the arms rejoin, and a branch
+ * aimed there would be read as a new arm that the other arms then skip past.
+ * So an emptied arm's route is dropped instead, and `repairFlow` sends that
+ * answer to the rejoin itself — the one case where dropping was always right.
+ */
+export function bridgeDeletedBlocks<T extends { blocks: Block[]; endings: { ref: string }[]; logic: LogicRuleInput[] }>(
+  doc: T,
+  deleted: Iterable<string>,
+  { rederived = false }: { rederived?: boolean } = {},
+): T {
+  const gone = new Set(deleted);
+  const endingRefs = new Set(doc.endings.map((e) => e.ref));
+  const isJump = (r: LogicRuleInput, from: string): r is Extract<LogicRuleInput, { action_kind: "goto" }> => {
+    if (r.action_kind !== "goto" || r.from !== from) return false;
+    const when = r.when as { conditions?: unknown[]; groups?: unknown[] } | null | undefined;
+    return (when?.conditions?.length ?? 0) === 0 && (when?.groups?.length ?? 0) === 0;
+  };
+
+  /**
+   * Where the flow went after `ref`, walking past everything being deleted.
+   * `jumped` says an arm-closing jump was crossed on the way.
+   */
+  const onward = (ref: string): { ref: string; kind: "block" | "ending"; jumped: boolean } | null => {
+    const visited = new Set<string>();
+    let at = ref;
+    let jumped = false;
+    while (gone.has(at)) {
+      if (visited.has(at)) return null; // deleted questions jumping in a circle
+      visited.add(at);
+      const jump = doc.logic.find((r) => isJump(r, at));
+      if (jump && jump.action_kind === "goto") {
+        at = jump.target;
+        jumped = true;
+        continue;
+      }
+      const i = doc.blocks.findIndex((b) => b.ref === at);
+      const next = doc.blocks[i + 1]?.ref ?? doc.endings[0]?.ref;
+      if (!next) return null;
+      at = next;
+    }
+    return { ref: at, kind: endingRefs.has(at) ? "ending" : "block", jumped };
+  };
+
+  /**
+   * The destination is where arms meet, not the rest of this one: a sibling
+   * answer already goes there, or a surviving arm's closing jump lands there.
+   */
+  const isRejoin = (target: string, rule: LogicRuleInput & { action_kind: "goto" }) =>
+    doc.logic.some(
+      (o) =>
+        o !== rule &&
+        o.action_kind === "goto" &&
+        o.target === target &&
+        !gone.has(o.from ?? "") &&
+        (o.from === rule.from || (o.from !== undefined && isJump(o, o.from))),
+    );
+
+  const logic: LogicRuleInput[] = [];
+  for (const rule of doc.logic) {
+    if (rule.action_kind !== "goto") {
+      logic.push(rule);
+      continue;
+    }
+    if (rule.from && gone.has(rule.from)) continue;
+    if (!gone.has(rule.target)) {
+      logic.push(rule);
+      continue;
+    }
+    const to = onward(rule.target);
+    // Nowhere to rejoin, or rejoining would send the question back to itself.
+    if (!to || to.ref === rule.from) continue;
+    if (rederived && (to.jumped || isRejoin(to.ref, rule))) continue;
+    logic.push({ ...rule, target: to.ref, targetKind: to.kind });
+  }
+
+  return { ...doc, blocks: doc.blocks.filter((b) => !gone.has(b.ref)), logic };
+}

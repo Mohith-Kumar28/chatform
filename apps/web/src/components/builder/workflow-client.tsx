@@ -42,7 +42,7 @@ import { CanvasMenuProvider, NodeMenu, PaneMenu, type CanvasMenuActions } from "
 import { toast } from "sonner";
 import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
-import { Block as BlockSchema, lintFormDoc, rulesAreExhaustive } from "@repo/form-schema";
+import { Block as BlockSchema, bridgeDeletedBlocks, lintFormDoc, rulesAreExhaustive } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -531,9 +531,9 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
   const onNodesDelete = useCallback(
     (deleted: Node[]) => {
       let logic = [...doc.logic];
-      let blocks = [...doc.blocks];
       let endings = [...doc.endings];
       const layout = { ...doc.layout };
+      const questionRefs: string[] = [];
 
       for (const n of deleted) {
         if (n.id.startsWith("branch_")) {
@@ -549,13 +549,13 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
           delete layout[n.id];
           continue;
         }
-        blocks = blocks.filter((b) => b.ref !== n.id);
-        const removed = logic.filter((r) => isGoto(r) && (r.from === n.id || r.target === n.id));
-        const removedIds = new Set(removed.flatMap((r) => [r.id, isGoto(r) ? (r.pair ?? "") : ""]).filter(Boolean));
-        logic = logic.filter((r) => !removedIds.has(r.id));
+        questionRefs.push(n.id);
         delete layout[n.id];
       }
-      onChange({ ...doc, blocks, endings, logic, layout });
+      // Wires into a deleted question are carried on to wherever it led, so the
+      // chain closes up instead of falling through to the next block in order.
+      const bridged = bridgeDeletedBlocks({ blocks: doc.blocks, endings, logic }, questionRefs);
+      onChange({ ...doc, blocks: bridged.blocks, endings, logic: bridged.logic as LogicRule[], layout });
       setSelectedNodeId(null);
 
       // Deleting a question takes its wording, its options, and every rule

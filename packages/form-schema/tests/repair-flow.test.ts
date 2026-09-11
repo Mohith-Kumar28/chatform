@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FormDoc, repairFlow, resolveNext, type EvalState } from "../src";
+import { bridgeDeletedBlocks, FormDoc, repairFlow, resolveNext, type EvalState } from "../src";
 
 /**
  * Dragging a question must not change who gets asked what.
@@ -217,6 +217,67 @@ describe("repairFlow", () => {
     const twice = repairFlow(once);
     expect(walk(twice, ANDROID)).toEqual(walk(once, ANDROID));
     expect(walk(twice, IOS)).toEqual(walk(once, IOS));
+  });
+});
+
+/**
+ * Deleting a question closes the gap it leaves.
+ *
+ * The route into a deleted question used to be dropped, so its answer fell
+ * through to the next block in the list — which for the first question of an
+ * arm is the rest of that arm, asked of people the arm was never meant for.
+ */
+describe("bridgeDeletedBlocks", () => {
+  type Doc = ReturnType<typeof FormDoc.parse>;
+  // The Questions list re-derives the rest of the flow afterwards; the canvas
+  // does not. Both must route correctly.
+  const viaList = (doc: Doc, refs: string[]) => repairFlow(bridgeDeletedBlocks(doc, refs, { rederived: true }));
+  const viaCanvas = (doc: Doc, refs: string[]) => bridgeDeletedBlocks(doc, refs);
+
+  for (const [name, remove] of [["the question list", viaList], ["the canvas", viaCanvas]] as const) {
+    describe(`from ${name}`, () => {
+      it("sends a branch into a deleted question on to where that question led", () => {
+        const after = remove(baseDoc(), ["q_play_email"]);
+        expect(walk(after, ANDROID)).toEqual(["welcome", "q_name", "q_platform", "q_device", "q_phone"]);
+        // Previously: iOS lost nothing, but Android's route was dropped and
+        // with no branch left, everyone fell into the Android device question.
+        expect(walk(after, IOS)).toEqual(["welcome", "q_name", "q_platform", "q_any_email", "q_phone"]);
+      });
+
+      it("follows a run of deleted questions to the first one that is left", () => {
+        const after = remove(baseDoc(), ["q_play_email", "q_device"]);
+        expect(walk(after, ANDROID)).toEqual(["welcome", "q_name", "q_platform", "q_phone"]);
+        expect(walk(after, IOS)).toEqual(["welcome", "q_name", "q_platform", "q_any_email", "q_phone"]);
+      });
+
+      it("carries a jump into the last question on to the ending", () => {
+        const after = remove(baseDoc(), ["q_phone"]);
+        expect(walk(after, ANDROID)).toEqual(["welcome", "q_name", "q_platform", "q_play_email", "q_device"]);
+        expect(walk(after, IOS)).toEqual(["welcome", "q_name", "q_platform", "q_any_email"]);
+      });
+    });
+  }
+
+  it("sends an emptied arm's answer to where the arms rejoin", () => {
+    // Canvas only. From the question list this still sends iOS into the
+    // Android device question — as it did before bridging existed — because
+    // with one branch left `repairFlow` reads Android's arm as one question
+    // long. That is `armExtent`'s limit, not the bridge's.
+    const after = viaCanvas(baseDoc(), ["q_any_email"]);
+    expect(walk(after, IOS)).toEqual(["welcome", "q_name", "q_platform", "q_phone"]);
+    expect(walk(after, ANDROID)).toEqual(["welcome", "q_name", "q_platform", "q_play_email", "q_device", "q_phone"]);
+  });
+
+  it("keeps the rest of the rule — only the destination changes", () => {
+    const after = bridgeDeletedBlocks(baseDoc(), ["q_play_email"]);
+    const android = after.logic.find((r) => r.id === uid("rl", 1));
+    expect(android).toMatchObject({ from: "q_platform", target: "q_device", targetKind: "block" });
+  });
+
+  it("drops the deleted question's own routes", () => {
+    const after = bridgeDeletedBlocks(baseDoc(), ["q_device"]);
+    expect(after.logic.some((r) => r.action_kind === "goto" && r.from === "q_device")).toBe(false);
+    expect(after.blocks.some((b) => b.ref === "q_device")).toBe(false);
   });
 });
 

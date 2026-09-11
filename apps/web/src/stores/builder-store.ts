@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { Shortcut } from "@/lib/shortcuts";
 import { produce } from "immer";
-import { repairFlow, type Block, type FormDoc, type Ending, type LogicRuleInput } from "@repo/form-schema";
+import { bridgeDeletedBlocks, repairFlow, type Block, type FormDoc, type Ending, type LogicRuleInput } from "@repo/form-schema";
 
 /**
  * Builder state.
@@ -404,13 +404,16 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     if (!doc) return;
     const index = doc.blocks.findIndex((b) => b.ref === ref);
     get().edit((d) => {
-      d.blocks = d.blocks.filter((b) => b.ref !== ref);
-      // Logic pointing at a deleted block would fail lint on publish; drop it
-      // here so the builder never holds a doc it cannot publish.
-      d.logic = d.logic.filter((r) => {
-        if (r.action_kind !== "goto") return true;
-        return r.target !== ref && r.from !== ref;
-      });
+      // Routes into the deleted block are re-aimed at wherever it led, rather
+      // than dropped — a dropped route falls through to whatever sits below,
+      // which is often another arm's question.
+      const bridged = bridgeDeletedBlocks(
+        { blocks: d.blocks as Block[], endings: d.endings as { ref: string }[], logic: d.logic as LogicRuleInput[] },
+        [ref],
+        { rederived: true },
+      );
+      d.blocks = bridged.blocks as never;
+      d.logic = bridged.logic as never;
       repairLogic(d);
     });
     // Keep something selected: prefer the block that took its place.
