@@ -684,21 +684,29 @@ function YoutubePanel({ editor, onDone }: { editor: Editor; onDone: () => void }
 }
 
 /**
- * YouTube's own mark, in its own red.
+ * YouTube's mark, drawn as line work in the toolbar's own colour.
  *
- * Lucide dropped its brand icons in v1, and the nearest thing left — a play
- * triangle in a rounded square — sat next to the image button reading as "some
- * other kind of media" rather than as YouTube. The rest of this toolbar is
- * monochrome line work on purpose; this one is a logo, and a logo drawn in the
- * toolbar's grey is a logo nobody recognises.
- *
- * One path with `evenodd`, so the triangle is a hole rather than a second fill:
- * the button's own background shows through it, in either theme.
+ * Lucide dropped its brand icons in v1, so this is the outline it used to ship
+ * — YouTube's bowed screen and play triangle, not a generic rounded square,
+ * which read as "some other kind of media" beside the image button. It was the
+ * logo in YouTube red for a while; one coloured icon in a monochrome toolbar
+ * shouted over every other button in it. Same 2px stroke and `currentColor` as
+ * the Lucide icons around it, so it greys, hovers and activates with them.
  */
 function YoutubeMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="#FF0000" fillRule="evenodd" clipRule="evenodd">
-      <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.5 15.6V8.4l6.3 3.6-6.3 3.6z" />
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17" />
+      <path d="m10 15 5-3-5-3z" />
     </svg>
   );
 }

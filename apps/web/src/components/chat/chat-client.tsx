@@ -25,7 +25,8 @@ import { asEmail } from "./respondent-hint";
 import { VerifyCard } from "./verify-card";
 import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
 import { useChat, type ChatMessage } from "./use-chat";
-import { KeyHint, SendRow, TextInput, keepFocus } from "./composers/primitives";
+import { DictateButton, KeyHint, SendRow, TextInput, keepFocus } from "./composers/primitives";
+import { useDictation } from "@/hooks/use-dictation";
 import { inputSemanticsFor } from "./composers/input-semantics";
 import { PhoneInput } from "./composers/phone";
 import { isSendablePhone } from "./composers/phone-value";
@@ -1909,6 +1910,30 @@ const Composer = memo(function Composer({
    */
   const isPhone = block?.type === "phone";
 
+  /*
+   * Saying the answer instead of typing it — the same browser recogniser the
+   * builder's AI bar uses. Words land in the box to be read back, not sent, so
+   * a misheard word costs a tap to fix rather than a wrong answer on record.
+   *
+   * The failure is said in the thread's own voice, above the box: a public form
+   * has no toaster, and a respondent who pressed the mic needs to hear why
+   * nothing is happening where they are already looking.
+   */
+  // Kept with the question it happened on, so moving on retires it without an
+  // effect having to clear it.
+  const [micError, setMicError] = useState<{ ref: string | undefined; message: string } | null>(null);
+  const dictation = useDictation({
+    text,
+    onChange: setText,
+    onError: (message) => setMicError({ ref: block?.ref, message }),
+  });
+  const stopDictation = dictation.stop;
+
+  // A recogniser still writing would put the end of one answer into the next.
+  useEffect(() => {
+    stopDictation();
+  }, [block?.ref, stopDictation]);
+
   /** Everything remembered for this question except whatever is already typed. */
   const alternatives = suggestions.filter((s) => s !== text);
 
@@ -2026,6 +2051,7 @@ const Composer = memo(function Composer({
       plan is what decides — before it is sent, not after it comes back.
     */
     if (isPhone && !isSendablePhone(value)) return;
+    dictation.stop();
     setText("");
     /*
       Kept before it is sent, not after it is accepted.
@@ -2043,6 +2069,7 @@ const Composer = memo(function Composer({
   return (
     <div className="space-y-2">
       {validationHint && <p className="px-1 text-sm opacity-70">{validationHint}</p>}
+      {micError?.ref === block.ref && <p className="px-1 text-sm opacity-70">{micError.message}</p>}
 
       {/*
         Said before they type, not after. A question that is going to send a
@@ -2151,6 +2178,20 @@ const Composer = memo(function Composer({
               chat form asks for most was the one thing nothing could fill in.
             */
             semantics={inputSemanticsFor(block)}
+            /* Nothing where the browser has no recogniser — a mic that cannot
+               listen is worse than no mic. Not on the phone field, which
+               takes digits a recogniser would spell out as words. */
+            trailing={
+              dictation.supported && !disabled ? (
+                <DictateButton
+                  listening={dictation.listening}
+                  onToggle={() => {
+                    setMicError(null);
+                    dictation.toggle();
+                  }}
+                />
+              ) : undefined
+            }
           />
         )}
       </SendRow>

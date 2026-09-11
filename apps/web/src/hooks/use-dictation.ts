@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 /**
  * Dictation, using the speech recogniser the browser already ships.
@@ -68,6 +68,12 @@ function recogniser(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+// Whether the browser has a recogniser never changes, so there is nothing to
+// subscribe to — the store exists only for its separate server snapshot.
+const noSubscribe = () => () => {};
+const hasRecogniser = () => recogniser() !== null;
+const noRecogniser = () => false;
+
 /** What went wrong, in words a person can act on. */
 const MESSAGES: Record<string, string> = {
   "not-allowed": "Microphone access is blocked. Allow it for this site and try again.",
@@ -94,7 +100,16 @@ export function useDictation({
   onChange: (next: string) => void;
   onError?: (message: string) => void;
 }): Dictation {
-  const [supported] = useState(() => recogniser() !== null);
+  /*
+   * False on the server and through hydration, the real answer after.
+   *
+   * A `useState` initialiser answered it on both sides: the server has no
+   * `window` and drew no mic, the browser has a recogniser and drew one, and
+   * any composer rendered on the first paint failed hydration over it. The
+   * server snapshot is what hydration compares against; React switches to the
+   * client one straight after.
+   */
+  const supported = useSyncExternalStore(noSubscribe, hasRecogniser, noRecogniser);
   const [listening, setListening] = useState(false);
 
   const recRef = useRef<SpeechRecognitionLike | null>(null);

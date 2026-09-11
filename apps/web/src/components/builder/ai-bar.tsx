@@ -102,6 +102,17 @@ export function AiBar() {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" });
   }, [turns, busy]);
 
+  // Grow to fit, between a floor and a ceiling. Collapsed, the floor is one
+  // line so the bar stays slim; open, it is two, so the field reads as a place
+  // to write. The ceiling keeps a pasted page from swallowing the canvas —
+  // past it the field scrolls.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, open ? 56 : 32), 240)}px`;
+  }, [prompt, open]);
+
   async function run() {
     const text = prompt.trim();
     if (!text || !doc || busy) return;
@@ -235,7 +246,7 @@ export function AiBar() {
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
             >
-              <div ref={threadRef} className="max-h-72 space-y-2.5 overflow-y-auto p-3">
+              <div ref={threadRef} className="max-h-[min(28rem,55vh)] space-y-2.5 overflow-y-auto p-3">
                 {turns.map((turn) => (
                   <Message key={turn.id} turn={turn} onApply={apply} />
                 ))}
@@ -255,13 +266,24 @@ export function AiBar() {
             e.preventDefault();
             void run();
           }}
-          className="flex items-start gap-2 px-3 py-2"
+          className={cn(
+            "flex items-end gap-2 px-3 py-2",
+            // A hairline between what was said and what you are writing, only
+            // once there is a thread above to separate it from.
+            open && turns.length > 0 && "border-border/60 border-t",
+          )}
         >
-          {/* Aligned to the first line rather than to the bottom of the box:
-              the field is a compose area now, so its text starts at the top and
-              everything that labels it has to start there too. The buttons are
-              the exception — they `self-end`, where a thumb expects them. */}
-          <Sparkles className="text-primary mt-2.5 size-4 shrink-0" />
+          {/* Every item in this row is one 32px line tall — the spark, the key,
+              a single line of text and the buttons — so on one line they all
+              share a centre, and the controls stay on the last line as the text
+              grows, where a thumb expects them. The spark labels an empty field;
+              once there is text it has nothing left to say and gives the words
+              its width. */}
+          {!prompt && (
+            <span className="flex h-8 shrink-0 items-center self-start">
+              <Sparkles className="text-primary size-4" />
+            </span>
+          )}
           {/* The key that gets you here, at the head of the line beside the
               spark rather than trailing after the placeholder — it belongs with
               the label for the input, not with the send button, and on the right
@@ -272,7 +294,9 @@ export function AiBar() {
                is a keyboard to press, which is the question this was asking
                badly — a 640px viewport with a trackpad had the key and was not
                told, and a wide tablet without one was. */
-            <Kbd className="mt-[0.4375rem] h-6 min-w-6 rounded-md px-1.5 text-xs">{KEY.askAi}</Kbd>
+            <span className="flex h-8 shrink-0 items-center self-start">
+              <Kbd className="h-6 min-w-6 rounded-md px-1.5 text-xs">{KEY.askAi}</Kbd>
+            </span>
           )}
           <textarea
             ref={inputRef}
@@ -289,7 +313,7 @@ export function AiBar() {
               }
             }}
             placeholder="Ask AI to make changes…"
-            className="max-h-40 min-h-12 flex-1 resize-none bg-transparent py-2 text-sm outline-none placeholder:text-[color-mix(in_oklch,currentColor_45%,transparent)]"
+            className="min-h-8 flex-1 resize-none overflow-y-auto bg-transparent py-1.5 text-sm leading-5 outline-none placeholder:text-[color-mix(in_oklch,currentColor_45%,transparent)]"
           />
           {/* Nothing at all where the browser has no recogniser — a mic that
               cannot listen is worse than no mic. */}
@@ -306,7 +330,7 @@ export function AiBar() {
               aria-pressed={dictation.listening}
               aria-label={dictation.listening ? "Stop dictating" : "Dictate"}
               className={cn(
-                "shrink-0 self-end",
+                "shrink-0",
                 dictation.listening && "text-destructive hover:text-destructive",
               )}
             >
@@ -319,7 +343,7 @@ export function AiBar() {
                   <Square className="size-2.5 fill-current" />
                 </span>
               ) : (
-                <Mic className="size-3.5" />
+                <Mic className="size-[1.125rem]" />
               )}
             </Button>
           )}
@@ -329,7 +353,7 @@ export function AiBar() {
             shape="pill"
             disabled={busy || !prompt.trim()}
             aria-label="Ask"
-            className="shrink-0 self-end"
+            className="shrink-0"
           >
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowUp className="size-3.5" />}
           </Button>

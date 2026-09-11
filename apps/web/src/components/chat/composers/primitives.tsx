@@ -1,6 +1,6 @@
 "use client";
 
-import { SkipForward } from "lucide-react";
+import { Mic, SkipForward, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InputSemantics } from "./input-semantics";
 
@@ -233,6 +233,53 @@ export function SendRow({
   );
 }
 
+/**
+ * Speak the answer instead of typing it.
+ *
+ * Sits inside the message box rather than beside Send: it is a way of filling
+ * the box, not a way of finishing the question, and a third pill in the send
+ * row would compete with the one control that does. The words land in the box
+ * to be read back before they go — see `useDictation`.
+ */
+export function DictateButton({
+  listening,
+  onToggle,
+  className,
+}: {
+  listening: boolean;
+  onToggle: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      onMouseDown={keepFocus}
+      aria-pressed={listening}
+      aria-label={listening ? "Stop dictating" : "Dictate your answer"}
+      className={cn(
+        "inline-flex size-9 items-center justify-center rounded-full",
+        "transition-[background-color,opacity] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
+        listening
+          ? "bg-[color-mix(in_oklch,var(--cf-accent)_14%,transparent)] text-[var(--cf-accent)]"
+          : "opacity-55 hover:bg-[var(--cf-chip-bg)] hover:opacity-100",
+        className,
+      )}
+    >
+      {listening ? (
+        <span className="relative flex size-4 items-center justify-center">
+          {/* The one thing in the composer that moves on its own: an open
+              microphone has to be visible from the corner of the eye. */}
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-[color-mix(in_oklch,var(--cf-accent)_30%,transparent)] motion-reduce:animate-none" />
+          <Square className="size-3 fill-current" />
+        </span>
+      ) : (
+        <Mic className="size-[1.125rem]" />
+      )}
+    </button>
+  );
+}
+
 export function TextInput({
   value,
   onChange,
@@ -241,6 +288,7 @@ export function TextInput({
   semantics,
   autoFocus,
   multiline,
+  trailing,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -254,9 +302,14 @@ export function TextInput({
   semantics: InputSemantics;
   autoFocus?: boolean;
   multiline?: boolean;
+  /** A control drawn inside the box at its trailing edge — the mic. */
+  trailing?: React.ReactNode;
 }) {
-  const shared =
-    "w-full rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 py-3 text-[0.9375rem] outline-none transition-colors placeholder:opacity-50 focus:border-[var(--cf-accent)]";
+  const shared = cn(
+    "w-full rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 py-3 text-[0.9375rem] outline-none transition-colors placeholder:opacity-50 focus:border-[var(--cf-accent)]",
+    // Room for the trailing control, so text never runs underneath it.
+    trailing && "pr-12",
+  );
 
   /* Enter sends here, so the phone's return key should say so rather than
      drawing a newline it will not insert. */
@@ -272,7 +325,7 @@ export function TextInput({
   };
 
   if (multiline) {
-    return (
+    const box = (
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -290,9 +343,17 @@ export function TextInput({
         className={cn(shared, "resize-none")}
       />
     );
+    if (!trailing) return box;
+    // Pinned to the last line, beside where the words are landing.
+    return (
+      <div className="relative">
+        {box}
+        <div className="absolute right-1.5 bottom-1.5">{trailing}</div>
+      </div>
+    );
   }
 
-  return (
+  const box = (
     <input
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -307,5 +368,12 @@ export function TextInput({
       {...shell}
       className={cn(shared, "h-11 py-0")}
     />
+  );
+  if (!trailing) return box;
+  return (
+    <div className="relative">
+      {box}
+      <div className="absolute inset-y-0 right-1 flex items-center">{trailing}</div>
+    </div>
   );
 }
