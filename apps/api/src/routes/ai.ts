@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { APICallError } from "ai";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import { FormDoc, buildFlowRules, lintFormDoc, hasErrors, migrateFormDoc, type Block } from "@repo/form-schema";
@@ -612,8 +613,21 @@ export const editFormHandler = async (c: AiCtx) => {
       tokens = result.tokens;
       usage = result.usage;
     } catch (err) {
-      console.error("edit_form_failed", err);
+      // Flattened, and not `err` on its own: Workers Logs serialise an Error
+      // object to `{}`, so the one record of why an edit died was the empty
+      // string. That is not a theoretical loss — an edit failed in production
+      // and this line is the reason the cause could not be recovered
+      // afterwards. Status and `schemaRejected` are the two facts that
+      // separate "the provider had a bad minute" from "we sent something it
+      // refuses", which is the fork every diagnosis here starts from.
       const message = err instanceof Error ? err.message : String(err);
+      console.error("edit_form_failed", {
+        formId,
+        schemaRejected: isSchemaRejection(err),
+        status: APICallError.isInstance(err) ? err.statusCode : undefined,
+        message,
+        body: APICallError.isInstance(err) ? String(err.responseBody ?? "").slice(0, 800) : undefined,
+      });
       return c.json({ error: { code: "generation_failed", message: upstreamMessage(message) } }, 502);
     }
 
