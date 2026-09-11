@@ -6,7 +6,7 @@
 -- creating the products, and check with GET /api/billing/config-check.
 
 INSERT INTO plans (id, slug, name, price_monthly_cents, price_yearly_cents, seat_price_cents, currency, features_json, limits_json, is_active, sort_order)
-VALUES ('free', 'free', 'Free', 0, 0, 0, 'USD', '[]', '{"responses_per_month":null,"responses_ceiling_per_month":5000,"ai_conversations_per_month":200,"ai_tokens_per_month":500000,"ai_generations_per_month":10,"api_requests_per_month":0,"emails_per_month":500,"followups_shared_domain_per_month":0,"forms_count":100,"workspaces_count":1,"seats":1,"file_storage_mb":10,"max_upload_mb_per_file":5,"blocks_per_form":100,"webhooks_per_form":2,"knowledge_sources_count":0,"knowledge_bytes":0,"agent_max_turns":50,"agent_token_budget":60000}', 1, 0)
+VALUES ('free', 'free', 'Free', 0, 0, 0, 'USD', '[]', '{"responses_per_month":null,"responses_ceiling_per_month":10000,"ai_conversations_per_month":200,"ai_tokens_per_month":500000,"ai_generations_per_month":10,"api_requests_per_month":0,"emails_per_month":500,"followups_shared_domain_per_month":0,"forms_count":100,"workspaces_count":1,"seats":1,"file_storage_mb":10,"max_upload_mb_per_file":5,"blocks_per_form":100,"webhooks_per_form":2,"knowledge_sources_count":0,"knowledge_bytes":0,"agent_max_turns":50,"agent_token_budget":60000}', 1, 0)
 ON CONFLICT (id) DO UPDATE SET
   slug = excluded.slug,
   name = excluded.name,
