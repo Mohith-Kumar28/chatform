@@ -3594,7 +3594,7 @@
                   "size": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 26214400
+                    "maximum": 104857600
                   }
                 },
                 "required": [
