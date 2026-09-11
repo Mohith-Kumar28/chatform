@@ -546,6 +546,8 @@ export const EditFormBody = z.object({
  * additions, in that order and for reasons written inline. Duplicating it for a
  * second surface would have been the worst option available.
  */
+type EditDraftOut = Awaited<ReturnType<typeof generateEdit>>["draft"];
+
 export const editFormHandler = async (c: AiCtx) => {
     if (!c.env.OPENROUTER_API_KEY) {
       return c.json({ error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } }, 503);
@@ -568,8 +570,6 @@ export const editFormHandler = async (c: AiCtx) => {
       .bind(formId)
       .first<{ working_schema: string }>();
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
-type EditDraftOut = Awaited<ReturnType<typeof generateEdit>>["draft"];
-
     const base = FormDoc.parse(migrateFormDoc(JSON.parse(row.working_schema)));
 
     // The model call is a network call to a third party, and it fails: two 504s
@@ -595,6 +595,16 @@ type EditDraftOut = Awaited<ReturnType<typeof generateEdit>>["draft"];
       return c.json({ error: { code: "generation_failed", message: upstreamMessage(message) } }, 502);
     }
 
+    /**
+     * One draft applied to a fresh copy of the form.
+     *
+     * A function rather than straight-line code so the same surgery can run a
+     * second time on a corrected draft — see the retry below — without the
+     * first attempt's changes already in the document.
+     */
+    const applyDraft = (draft: EditDraftOut) => {
+    const doc = structuredClone(base);
+
     // ─── removals first, so a ref freed here can be reused below ───
     const removable = new Set(
       doc.blocks
@@ -617,16 +627,6 @@ type EditDraftOut = Awaited<ReturnType<typeof generateEdit>>["draft"];
      *
      * Before removals would be wrong (a question on its way out has no
      * settings worth changing) and after additions would be ambiguous, since
-    /**
-     * One draft applied to a fresh copy of the form.
-     *
-     * A function rather than straight-line code so the same surgery can run a
-     * second time on a corrected draft — see the retry below — without the
-     * first attempt's changes already in the document.
-     */
-    const applyDraft = (draft: EditDraftOut) => {
-    const doc = structuredClone(base);
-
      * a new block's ref may collide with one of these. Between the two, every
      * ref in `updateBlocks` names a question that was in the form when the
      * model read it, which is the only thing it can honestly be talking about.
@@ -748,28 +748,6 @@ type EditDraftOut = Awaited<ReturnType<typeof generateEdit>>["draft"];
       doc.logic = FormDoc.parse({ ...doc, logic: [...kept, ...newRules] }).logic;
     }
     const rewired = supersededCount;
-
-    // An edit has to change something. This replaces the old "no new blocks"
-    // rejection, which is what forced the model to invent one: a routing-only
-    // edit is now a complete answer, and only an edit that touches nothing at
-    // all is worth telling the builder about.
-    if (
-      added.length === 0 &&
-      removed.length === 0 &&
-      updated.length === 0 &&
-      newRules.length === 0 &&
-      endingChanges.length === 0
-    ) {
-      return c.json(
-        {
-          error: {
-            code: "no_change",
-            message: draft.summary?.trim()
-              ? `Nothing to change — ${draft.summary.trim()}`
-              : "That already looks the way you described. Try describing the change differently.",
-          },
-        },
-        422,
     return { doc, added, removed, updated, newRules, rewired, endingChanges };
     };
 
@@ -829,6 +807,28 @@ type EditDraftOut = Awaited<ReturnType<typeof generateEdit>>["draft"];
       }
     }
     const { doc, added, removed, updated, newRules, rewired, endingChanges } = attempt;
+
+    // An edit has to change something. This replaces the old "no new blocks"
+    // rejection, which is what forced the model to invent one: a routing-only
+    // edit is now a complete answer, and only an edit that touches nothing at
+    // all is worth telling the builder about.
+    if (
+      added.length === 0 &&
+      removed.length === 0 &&
+      updated.length === 0 &&
+      newRules.length === 0 &&
+      endingChanges.length === 0
+    ) {
+      return c.json(
+        {
+          error: {
+            code: "no_change",
+            message: draft.summary?.trim()
+              ? `Nothing to change — ${draft.summary.trim()}`
+              : "That already looks the way you described. Try describing the change differently.",
+          },
+        },
+        422,
       );
     }
 
