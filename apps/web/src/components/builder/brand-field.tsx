@@ -6,8 +6,8 @@ import { toast } from "sonner";
 import type { ThemeDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { API_ORIGIN } from "@/lib/api/mutator";
 import { BufferedInput } from "@/components/ui/buffered-input";
+import { uploadAsset } from "@/lib/assets";
 
 
 /**
@@ -34,19 +34,8 @@ export function BrandField({
     }
     setBusy(true);
     try {
-      const body = new FormData();
-      body.append("file", file);
-      const res = await fetch(`${API_ORIGIN}/api/assets`, {
-        method: "POST",
-        credentials: "include",
-        body,
-      });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-        throw new Error(err?.error?.message ?? "Upload failed");
-      }
-      const asset = (await res.json()) as { fileId: string; key: string };
-      onChange({ logoUrl: `${API_ORIGIN}/p/assets/${asset.fileId}`, logoKey: asset.key });
+      const asset = await uploadAsset(file);
+      onChange({ logoUrl: asset.url, logoKey: asset.key });
     } catch (err) {
       toast.error("Couldn't upload", { description: err instanceof Error ? err.message : undefined });
     } finally {

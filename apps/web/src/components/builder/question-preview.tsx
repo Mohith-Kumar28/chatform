@@ -2,13 +2,14 @@
 
 import { QuestionDescription } from "@/components/chat/rich-text";
 import { useMemo } from "react";
-import { CornerDownLeft, Download, FileText, FileUp, PenLine } from "lucide-react";
-import { schedulingLabel, toPublicBlock, type Block, type FormDoc } from "@repo/form-schema";
-import { DateComposer } from "@/components/chat/composers/date";
+import { FileUp } from "lucide-react";
+import { fileDownloadUrl, toPublicBlock, type Block, type FormDoc } from "@repo/form-schema";
+import { FileCard } from "@/components/chat/file-card";
 import { PhoneInput } from "@/components/chat/composers/phone";
-import { PaymentAffordance } from "@/components/chat/payment-affordance";
+import { QuestionAffordance } from "@/components/chat/question-affordance";
+import { SendRow, TextInput } from "@/components/chat/composers/primitives";
+import { inputSemanticsFor } from "@/components/chat/composers/input-semantics";
 import { chatThemeVars } from "@/lib/chat-theme";
-import { cn } from "@/lib/utils";
 import { API_ORIGIN } from "@/lib/api/mutator";
 import { LogoMark } from "@/components/brand/logo";
 import { useEntitlements } from "@/hooks/use-entitlements";
@@ -174,21 +175,9 @@ function MediaBlock({ block }: { block: Block }) {
     );
   }
 
-  return (
-    <a
-      href={src}
-      download={media.filename}
-      className="flex items-center gap-2.5 border px-3 py-2.5 text-sm transition-opacity hover:opacity-80"
-      style={{ borderColor: "var(--cf-chip-border)", borderRadius: "var(--cf-radius)" }}
-    >
-      <FileText className="size-4 shrink-0 opacity-60" />
-      <span className="min-w-0 flex-1 truncate">{media.filename ?? "Attachment"}</span>
-      {media.sizeBytes !== undefined && (
-        <span className="shrink-0 text-xs opacity-50">{Math.round(media.sizeBytes / 1024)} KB</span>
-      )}
-      <Download className="size-3.5 shrink-0 opacity-60" />
-    </a>
-  );
+  // The chat's own card, so the preview cannot draw a file differently.
+  const name = media.filename ?? "Attachment";
+  return <FileCard filename={name} sizeBytes={media.sizeBytes} downloadHref={fileDownloadUrl(src, name)} />;
 }
 
 /**
@@ -206,378 +195,145 @@ function Inert({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
 /**
- * A non-interactive rendering of the control this block shows. Deliberately
- * inert — this is a preview of shape, not a place to answer.
+ * The control this block shows, drawn by the runtime's own component.
+ *
+ * This file used to carry a hand-written imitation of every composer — chips
+ * for the choices, stars for a rating, a grid of grey boxes for a date. It
+ * drifted, exactly as a second implementation of anything does: the chips had
+ * no `1` `2` `3` key hints, a picture choice showed its labels and not its
+ * pictures, and a ranking list looked like a row of plain chips. An author
+ * checking their question in the preview was reading a drawing of the product
+ * rather than the product.
+ *
+ * So the affordance is now `QuestionAffordance`, the same component the hosted
+ * runtime renders, in `preview` mode: full strength, sealed with `inert`, and
+ * deaf to the keyboard. Two things it cannot do are still drawn here —
+ *
+ *   - the message box and Send, which in the runtime belong to the chat
+ *     composer rather than to the question, and
+ *   - the upload dropzone, which the runtime only draws once a session exists
+ *     to upload into, and would otherwise render nothing at all.
  */
 function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) {
-  const chip = "rounded-full border px-3.5 py-2 text-sm";
-  const chipStyle = {
-    borderColor: "var(--cf-chip-border)",
-    background: "var(--cf-chip-bg)",
-  };
-  const input =
-    "flex h-11 items-center rounded-2xl border px-4 text-[0.9375rem] opacity-50";
+  // `inspector-reveal` targets, kept at the granularity the panel has fields
+  // for. A click anywhere else in here falls through to the `answer` marker
+  // this whole composer sits inside.
+  const inspect =
+    block.type === "welcome" || block.type === "statement"
+      ? "button"
+      : CHOICE_BLOCKS.has(block.type)
+        ? "options"
+        : undefined;
 
-  switch (block.type) {
-    case "welcome":
-    case "statement":
-      return (
-        <div
-          data-inspect="button"
-          className="grid h-11 place-items-center rounded-full text-sm font-medium"
-          style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
-        >
-          {block.buttonLabel || "Continue"}
-        </div>
-      );
+  if (block.type === "file_upload") return <UploadDropzone />;
 
-    case "yes_no":
-      return (
-        <div className="flex flex-wrap gap-2">
-          <span className={chip} style={chipStyle}>{block.yesLabel ?? "Yes"}</span>
-          <span className={chip} style={chipStyle}>{block.noLabel ?? "No"}</span>
-        </div>
-      );
+  return (
+    <div className="space-y-2" data-inspect={inspect}>
+      <QuestionAffordance
+        preview
+        block={block}
+        uploadBase={null}
+        respondentToken={null}
+        onStructured={noop}
+        onSkip={noop}
+      />
+      {TYPED_BLOCKS.has(block.type) && <TypedComposer block={block} />}
+    </div>
+  );
+}
 
-    case "single_select":
-    case "multi_select":
-    case "dropdown":
-    case "picture_choice":
-      return (
-        <div data-inspect="options" className="flex flex-wrap gap-2">
-          {(block.options ?? []).slice(0, 8).map((o) => (
-            <span key={o.id} className={chip} style={chipStyle}>
-              {o.label || "Option"}
-            </span>
-          ))}
-          {(block.options ?? []).length === 0 && (
-            <span className="text-sm opacity-40">No options yet</span>
-          )}
-        </div>
-      );
+const noop = () => {};
 
-    case "rating":
-      return (
-        <div className="flex gap-1 text-2xl" style={{ color: "var(--cf-accent)" }}>
-          {Array.from({ length: block.scale ?? 5 }, (_, i) => (
-            <span key={i} className="opacity-30">
-              {block.shape === "heart" ? "♥" : block.shape === "number" ? i + 1 : "★"}
-            </span>
-          ))}
-        </div>
-      );
+/** The blocks whose answer is typed into the message box. */
+const TYPED_BLOCKS = new Set(["short_text", "long_text", "email", "phone", "url", "number"]);
 
-    case "nps":
-    case "opinion_scale": {
-      const start = block.type === "nps" ? 0 : (block.startAt ?? 1);
-      const count = block.type === "nps" ? 11 : (block.steps ?? 5);
-      return (
-        <div className="space-y-1.5">
-          <div className="flex flex-wrap gap-1.5">
-            {Array.from({ length: count }, (_, i) => (
-              <span
-                key={i}
-                className="min-w-9 rounded-xl border px-2.5 py-2 text-center text-sm"
-                style={chipStyle}
-              >
-                {start + i}
-              </span>
-            ))}
-          </div>
-          {(block.labels?.low || block.labels?.high) && (
-            <div className="flex justify-between text-xs opacity-50">
-              <span>{block.labels?.low}</span>
-              <span>{block.labels?.high}</span>
-            </div>
-          )}
-        </div>
-      );
-    }
+/** The blocks whose affordance is the option list the inspector edits. */
+const CHOICE_BLOCKS = new Set([
+  "single_select",
+  "multi_select",
+  "dropdown",
+  "picture_choice",
+  "ranking",
+]);
 
-    case "ranking":
-      return (
-        <div className="flex flex-wrap gap-1.5">
-          {(block.items ?? []).map((i) => (
-            <span key={i.id} className={chip} style={chipStyle}>
-              {i.label}
-            </span>
-          ))}
-        </div>
-      );
-
-    case "matrix":
-      return (
-        <div className="space-y-2">
-          {(block.rows ?? []).slice(0, 3).map((r) => (
-            <div key={r.id} className="space-y-1">
-              <p className="text-xs opacity-60">{r.label}</p>
-              <div className="flex flex-wrap gap-1.5">
-                {(block.columns ?? []).map((col) => (
-                  <span key={col.id} className="rounded-full border px-2.5 py-1 text-xs" style={chipStyle}>
-                    {col.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      );
-
-    case "contact_info":
-    case "address":
-      return (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {(block.fields ?? []).map((f) => (
-            <div key={f} className="space-y-1">
-              <span className="block text-xs opacity-60">{f.replaceAll("_", " ")}</span>
-              <div className={cn(input, "h-10 rounded-xl")} style={chipStyle} />
-            </div>
-          ))}
-        </div>
-      );
-
-    /**
-     * A repeating group, drawn at its opening size.
-     *
-     * `minEntries` rows and no more: the preview's job is the shape of the
-     * question, and an author who set a floor of two should see two.
-     */
-    /*
-      The same repeating group the composer draws, minus the typing.
-
-      Two things here used to disagree with what shipped. The entries were one
-      box sliced by `divide-y`, which takes no border colour from `chipStyle` —
-      the rules fell back to the current text colour and drew as hard black
-      lines across the card. And the add button was drawn unconditionally, so a
-      group fixed at five members advertised an Add that the composer would
-      never show. Each entry is now its own card on `--cf-sunken`, and Add
-      appears only where the respondent will really get one.
-    */
-    case "field_group": {
-      const groupFields = block.groupFields ?? [];
-      const max = block.maxEntries ?? 5;
-      const rows = Math.min(Math.max(block.minEntries ?? 1, 1), max);
-      const itemLabel = block.itemLabel ?? "Entry";
-      return (
-        <div className="space-y-2">
-          {Array.from({ length: rows }, (_, i) => (
-            <div
-              key={i}
-              className="space-y-2.5 rounded-2xl border p-3"
-              style={{ borderColor: "var(--cf-chip-border)", background: "var(--cf-sunken)" }}
-            >
-              <p className="flex items-center gap-2 text-xs font-medium">
-                <span
-                  className="grid size-5 shrink-0 place-items-center rounded-full text-[0.625rem] font-semibold"
-                  style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
-                >
-                  {i + 1}
-                </span>
-                <span className="truncate opacity-70">{itemLabel}</span>
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {groupFields.map((f) => (
-                  <div key={f.key} className={cn("space-y-1", f.kind === "long_text" && "sm:col-span-2")}>
-                    <span className="block text-xs opacity-60">
-                      {f.label}
-                      {f.required && <span className="ml-0.5 opacity-70">*</span>}
-                    </span>
-                    <div className={cn(input, "h-10 rounded-xl")} style={chipStyle} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          {/* Nothing to add when the first row count is already the last. */}
-          {rows < max && (
-            <span className={cn(chip, "inline-flex")} style={chipStyle}>
-              + Add {itemLabel.toLowerCase()}
-            </span>
-          )}
-        </div>
-      );
-    }
-
-    /**
-     * The real calendar and the real payment control, not a drawing of them.
-     *
-     * These two were the only composers this file mocked rather than rendered,
-     * and both mocks were wrong in a way that mattered: `date` was a grid of
-     * grey rectangles that reads as a loading skeleton, and `payment` had no
-     * case at all, so a UPI block with an amount and a payee fell through to
-     * "Type your answer…" — the preview said the question collected typed text
-     * when it actually shows a QR code. The file promises "what shows here is
-     * what ships"; for these two it did not.
-     *
-     * Both components are pure and prop-driven, so they render here as-is
-     * inside `Inert`, which is what keeps this a preview of shape.
-     */
-    case "date":
-      return (
+/**
+ * The message box and Send, as the runtime draws them.
+ *
+ * `SendRow` and `TextInput` rather than a copy of their markup, so the Send
+ * button's ⏎ hint, the box's radius and the skip affordance cannot drift from
+ * the thing a respondent uses. Empty and inert: this is where an answer would
+ * be typed, not a place to type one.
+ */
+function TypedComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) {
+  return (
+    <div className="space-y-1.5">
+      {/* A question that will send a code is a two-step question, and the
+          author deciding whether to ask for it should see that here. */}
+      {(block.type === "email" || block.type === "phone") && block.verify && (
+        <p className="text-[0.6875rem] opacity-55">
+          {block.type === "email"
+            ? "We’ll email a 6-digit code to confirm this address."
+            : "We’ll text a 6-digit code to confirm this number."}
+        </p>
+      )}
+      {/* The marker goes outside `Inert`: an inert subtree is never a click
+          target, so a marker inside one is never found by `closest`. */}
+      <div data-inspect="placeholder">
         <Inert>
-          <DateComposer
-            min={block.minDate}
-            max={block.maxDate}
-            disablePast={block.disablePast}
-            onPick={() => {}}
-          />
-        </Inert>
-      );
-
-    case "payment":
-      return (
-        <Inert>
-          <PaymentAffordance block={block} disabled onStructured={() => {}} onSkip={() => {}} />
-        </Inert>
-      );
-
-    // Booking sends them out to the builder's own link, so there is nothing to
-    // draw but the button that goes there — worth showing, because its wording
-    // changes with the link (a bare Meet room has no slot to pick).
-    case "scheduling":
-      return (
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className="flex h-10 items-center rounded-full px-5 text-sm font-medium"
-            style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
-          >
-            {schedulingLabel(block.url ?? "", block.buttonLabel)}
-          </span>
-          <span className={chip} style={chipStyle}>
-            {block.url ? "I've booked" : "Add a booking link in the panel"}
-          </span>
-        </div>
-      );
-
-    case "file_upload":
-    case "signature": {
-      // Mirrors the runtime dropzone in `chat/file-upload` — the accent-tinted
-      // dash and disc, not the grey box the preview used to draw.
-      const Glyph = block.type === "signature" ? PenLine : FileUp;
-      return (
-        <div
-          className="grid h-24 place-items-center gap-2 rounded-2xl border border-dashed"
-          style={{
-            borderColor: "color-mix(in oklch, var(--cf-accent) 38%, var(--cf-chip-border))",
-            background: "color-mix(in oklch, var(--cf-accent) 4%, transparent)",
-          }}
-        >
-          <span
-            className="grid size-10 place-items-center justify-self-center rounded-full"
-            style={{
-              background: "color-mix(in oklch, var(--cf-accent) 14%, transparent)",
-              color: "var(--cf-accent)",
-            }}
-          >
-            <Glyph className="size-5" strokeWidth={1.75} />
-          </span>
-          <span className="text-sm font-medium opacity-70">
-            {block.type === "signature" ? "Sign here" : "Drop a file or tap to choose"}
-          </span>
-        </div>
-      );
-    }
-
-    case "legal_consent":
-      return (
-        <div className="space-y-2">
-          <p className="rounded-xl border px-3 py-2.5 text-sm opacity-70" style={chipStyle}>
-            {block.consentText || "Your consent text"}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <span className={chip} style={chipStyle}>{block.agreeLabel || "I agree"}</span>
-            {block.allowDecline && (
-              <span className={chip} style={chipStyle}>{block.declineLabel || "I do not agree"}</span>
+          <SendRow onSend={noop}>
+            {block.type === "phone" ? (
+              <PhoneInput
+                value=""
+                onChange={noop}
+                onSubmit={noop}
+                countryHint={block.countryHint}
+                placeholder={block.placeholder || "Your number"}
+              />
+            ) : (
+              <TextInput
+                value=""
+                onChange={noop}
+                onSubmit={noop}
+                placeholder={block.placeholder || "Type your answer…"}
+                semantics={inputSemanticsFor(block)}
+                multiline={block.type === "long_text"}
+              />
             )}
-          </div>
-        </div>
-      );
+          </SendRow>
+        </Inert>
+      </div>
+    </div>
+  );
+}
 
-    // A question that will send a code is a two-step question, and an author
-    // deciding whether to ask for it should see that here rather than only in
-    // the live preview.
-    case "email":
-      return (
-        <div className="space-y-1.5">
-          {block.verify && (
-            <p className="text-[0.6875rem] opacity-55">
-              We’ll email a 6-digit code to confirm this address.
-            </p>
-          )}
-          <div className="flex items-end gap-2">
-            <div className={cn(input, "flex-1")} style={chipStyle}>
-              you@example.com
-            </div>
-            <div
-              data-inspect="button"
-              className="flex h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium"
-              style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
-            >
-              Send
-              <CornerDownLeft className="hidden size-3.5 opacity-60 sm:block" aria-hidden />
-            </div>
-          </div>
-        </div>
-      );
-
-    /*
-      The runtime's own field, not a drawing of it.
-
-      A phone question is the one text question whose box is not a text box —
-      a country picker and a national number — and the author choosing a
-      country code needs to see where the picker opens. Rendered as-is inside
-      `Inert` for the same reason `DateComposer` is: it is prop-driven, so a
-      mock of it is just a second thing to keep in step.
-    */
-    case "phone":
-      return (
-        <div className="space-y-1.5">
-          {block.verify && (
-            <p className="text-[0.6875rem] opacity-55">
-              We’ll text a 6-digit code to confirm this number.
-            </p>
-          )}
-          <div className="flex items-end gap-2">
-            <div className="min-w-0 flex-1">
-              <Inert>
-                <PhoneInput
-                  value=""
-                  onChange={() => {}}
-                  onSubmit={() => {}}
-                  countryHint={block.countryHint}
-                  placeholder="Your number"
-                />
-              </Inert>
-            </div>
-            <div
-              data-inspect="button"
-              className="flex h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium"
-              style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
-            >
-              Send
-              <CornerDownLeft className="hidden size-3.5 opacity-60 sm:block" aria-hidden />
-            </div>
-          </div>
-        </div>
-      );
-
-    default:
-      return (
-        <div className="flex items-end gap-2">
-          <div data-inspect="placeholder" className={cn(input, "flex-1")} style={chipStyle}>
-            {block.placeholder || "Type your answer…"}
-          </div>
-          <div
-            data-inspect="button"
-            className="flex h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium"
-            style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
-          >
-            Send
-            <CornerDownLeft className="hidden size-3.5 opacity-60 sm:block" aria-hidden />
-          </div>
-        </div>
-      );
-  }
+/**
+ * The dropzone, which is the one control the runtime will not render here.
+ *
+ * `FileUploadControl` needs a session to upload into and returns nothing
+ * without one, so a preview of a file question would be an empty space. This
+ * mirrors its resting state — the accent-tinted dash and disc — and nothing
+ * else about it.
+ */
+function UploadDropzone() {
+  return (
+    <div
+      className="grid h-24 place-items-center gap-2 rounded-2xl border border-dashed"
+      style={{
+        borderColor: "color-mix(in oklch, var(--cf-accent) 38%, var(--cf-chip-border))",
+        background: "color-mix(in oklch, var(--cf-accent) 4%, transparent)",
+      }}
+    >
+      <span
+        className="grid size-10 place-items-center justify-self-center rounded-full"
+        style={{
+          background: "color-mix(in oklch, var(--cf-accent) 14%, transparent)",
+          color: "var(--cf-accent)",
+        }}
+      >
+        <FileUp className="size-5" strokeWidth={1.75} />
+      </span>
+      <span className="text-sm font-medium opacity-70">Drop a file or tap to choose</span>
+    </div>
+  );
 }

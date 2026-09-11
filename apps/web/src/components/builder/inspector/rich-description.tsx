@@ -1,18 +1,28 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { EditorContent, useEditor, type Editor } from "@tiptap/react";
+import {
+  EditorContent,
+  Node,
+  NodeViewWrapper,
+  ReactNodeViewRenderer,
+  useEditor,
+  type Editor,
+  type ReactNodeViewProps,
+} from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Youtube from "@tiptap/extension-youtube";
 import Mention from "@tiptap/extension-mention";
 import { Markdown } from "@tiptap/markdown";
-import { AtSign, Bold, Check, ImageIcon, Italic, Link2, List, Loader2, Paperclip, SquarePlay, Unlink, Upload, X } from "lucide-react";
+import { AtSign, Bold, Check, ImageIcon, Italic, Link2, List, Loader2, Paperclip, Unlink, Upload, X } from "lucide-react";
 import { toast } from "sonner";
-import { youtubeId } from "@repo/form-schema";
+import { fileDownloadUrl, fileFromUrl, fileLink, youtubeId } from "@repo/form-schema";
+import { FileCard } from "@/components/chat/file-card";
 import { Input } from "@/components/ui/input";
 import { useBufferedValue } from "@/hooks/use-buffered-value";
-import { uploadAsset } from "@/lib/assets";
+import { useEntitlements } from "@/hooks/use-entitlements";
+import { INLINE_IMAGE, INLINE_VIDEO, uploadAsset, type UploadedAsset } from "@/lib/assets";
 import { cn } from "@/lib/utils";
 import { fieldInputClass } from "./fields";
 
@@ -45,6 +55,106 @@ const YoutubeLine = Youtube.extend({
   parseMarkdown: (token, helpers) => helpers.createNode("youtube", { src: String(token.url ?? "") }),
   renderMarkdown: (node) => String(node.attrs?.src ?? ""),
 });
+
+/** `]` and `\` would end or break the link text a file's name is stored as. */
+const escapeLinkText = (s: string) => s.replace(/([\\[\]])/g, "\\$1");
+const unescapeLinkText = (s: string) => s.replace(/\\(.)/g, "$1");
+
+/**
+ * An attached file (File Drops), as a card with a name you can edit.
+ *
+ * Stored as `[name](asset-url#file=<bytes>)` on a line of its own — see
+ * `fileFromUrl` in `@repo/form-schema` rich-text — so the name the author types
+ * is the link text, and is the name the respondent's download is saved under.
+ */
+const FileAttachment = Node.create({
+  name: "fileAttachment",
+  group: "block",
+  atom: true,
+  selectable: true,
+  draggable: false,
+  addAttributes() {
+    return { href: { default: "" }, name: { default: "" } };
+  },
+  parseHTML() {
+    return [{ tag: "div[data-file-attachment]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["div", { "data-file-attachment": "", ...HTMLAttributes }];
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(FileAttachmentView);
+  },
+  markdownTokenName: "fileAttachment",
+  markdownTokenizer: {
+    name: "fileAttachment",
+    level: "block",
+    start: (src: string) => src.search(/^\[[^\n]+\]\(https:\/\/\S+#file/m),
+    tokenize: (src: string) => {
+      const m = /^\[((?:\\.|[^\]\\\n])+)\]\((https:\/\/[^\s)]+)\)[ \t]*(?:\n|$)/.exec(src);
+      if (!m || !fileFromUrl(m[2]!)) return undefined;
+      return { type: "fileAttachment", raw: m[0], name: unescapeLinkText(m[1]!), href: m[2] };
+    },
+  },
+  parseMarkdown: (token, helpers) =>
+    helpers.createNode("fileAttachment", { href: String(token.href ?? ""), name: String(token.name ?? "") }),
+  renderMarkdown: (node) => {
+    const name = String(node.attrs?.name ?? "").trim() || "file";
+    return `[${escapeLinkText(name)}](${String(node.attrs?.href ?? "")})`;
+  },
+});
+
+function FileAttachmentView({ node, updateAttributes, deleteNode, selected }: ReactNodeViewProps) {
+  const href = String(node.attrs.href ?? "");
+  const name = String(node.attrs.name ?? "");
+  const file = fileFromUrl(href);
+  return (
+    <NodeViewWrapper contentEditable={false} className="my-1">
+      <FileCard
+        filename={name || "file"}
+        ext={file?.ext}
+        sizeBytes={file?.sizeBytes}
+        downloadHref={fileDownloadUrl(href, name || "file")}
+        className={cn("bg-background", selected && "ring-ring ring-2")}
+        name={
+          <input
+            value={name}
+            aria-label="File name"
+            placeholder="File name"
+            title="Rename — this is the name it downloads as"
+            onChange={(e) => updateAttributes({ name: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === "Escape") {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+            }}
+            className="hover:bg-accent/60 focus:bg-accent/60 -mx-1 w-full rounded px-1 font-medium outline-none"
+          />
+        }
+        actions={
+          <button
+            type="button"
+            aria-label="Remove file"
+            title="Remove file"
+            onClick={deleteNode}
+            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive grid size-7 shrink-0 place-items-center rounded-md transition-colors"
+          >
+            <X className="size-3.5" />
+          </button>
+        }
+      />
+    </NodeViewWrapper>
+  );
+}
+
+function insertFile(editor: Editor, asset: UploadedAsset, name: string) {
+  editor
+    .chain()
+    .focus()
+    .insertContent({ type: "fileAttachment", attrs: { href: fileLink(asset.url, asset.sizeBytes, name), name } })
+    .run();
+}
 
 /**
  * The questions @ can recall, read by the editor's extension long after the
@@ -183,7 +293,8 @@ type Panel = "link" | "image" | "youtube" | null;
  * The description editor: a handful of buttons and a box.
  *
  * Bold, italic, a bullet list, a link, an image or video (link or upload), a
- * YouTube video (link), a file (upload), and @ to recall an earlier answer.
+ * YouTube video (link), a file of any type (upload, drawn as a card with a
+ * download button), and @ to recall an earlier answer.
  * Media is three buttons rather than one clever box, so nobody has to guess
  * what a single "media" input will do with what they paste. Nothing else on
  * purpose — the description sits under a question in a chat bubble.
@@ -236,6 +347,7 @@ export function RichDescription({
       Image.configure({ HTMLAttributes: { class: "my-1 max-h-48 rounded-lg" } }),
       YoutubeLine.configure({ nocookie: true, HTMLAttributes: { class: "my-1 aspect-video w-full rounded-lg" } }),
       recallExtension(recallStore),
+      FileAttachment,
       Markdown,
     ],
     content: value,
@@ -267,20 +379,15 @@ export function RichDescription({
   const toggle = (p: Panel) => setPanel((cur) => (cur === p ? null : p));
   const [uploadingFile, setUploadingFile] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const maxMb = useEntitlements().limit("max_upload_mb_per_file");
 
   const attachFile = async (file: File) => {
     if (!editor) return;
     setUploadingFile(true);
     try {
-      const asset = await uploadAsset(file);
-      editor
-        .chain()
-        .focus()
-        .insertContent({
-          type: "paragraph",
-          content: [{ type: "text", text: asset.filename, marks: [{ type: "link", attrs: { href: asset.url } }] }],
-        })
-        .run();
+      const asset = await uploadAsset(file, { maxMb });
+      // The original name, not the server's filesystem-safe copy of it.
+      insertFile(editor, asset, file.name);
     } catch (err) {
       toast.error("Couldn't upload", { description: err instanceof Error ? err.message : undefined });
     } finally {
@@ -322,16 +429,17 @@ export function RichDescription({
           <ImageIcon className="size-3.5" />
         </ToolButton>
         <ToolButton label="YouTube video" active={panel === "youtube"} onClick={() => toggle("youtube")}>
-          <SquarePlay className="size-3.5" />
+          <YoutubeMark className="size-4" />
         </ToolButton>
         <ToolButton label="Attach a file" onClick={() => fileRef.current?.click()}>
           {uploadingFile ? <Loader2 className="size-3.5 animate-spin" /> : <Paperclip className="size-3.5" />}
         </ToolButton>
+        {/* No `accept`: any file at all. The server serves anything it cannot
+            render as a sandboxed download, so the type is not the risk. */}
         <input
           ref={fileRef}
           type="file"
           hidden
-          accept="application/pdf,text/csv,text/plain,.doc,.docx,.xlsx"
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) void attachFile(file);
@@ -346,7 +454,7 @@ export function RichDescription({
       </div>
 
       {editor && panel === "link" && <LinkPanel editor={editor} onDone={() => setPanel(null)} />}
-      {editor && panel === "image" && <ImagePanel editor={editor} onDone={() => setPanel(null)} />}
+      {editor && panel === "image" && <ImagePanel editor={editor} maxMb={maxMb} onDone={() => setPanel(null)} />}
       {editor && panel === "youtube" && <YoutubePanel editor={editor} onDone={() => setPanel(null)} />}
 
       <EditorContent editor={editor} />
@@ -496,19 +604,23 @@ function insertVideoLine(editor: Editor, url: string) {
 }
 
 /** An image or a clip, from a link or an upload. */
-function ImagePanel({ editor, onDone }: { editor: Editor; onDone: () => void }) {
+function ImagePanel({ editor, maxMb, onDone }: { editor: Editor; maxMb: number | null; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const upload = async (file: File) => {
     setBusy(true);
     try {
-      const asset = await uploadAsset(file);
-      if (asset.mime.startsWith("video/")) {
+      const asset = await uploadAsset(file, { maxMb });
+      if (INLINE_VIDEO.test(asset.mime)) {
         // Asset URLs have no extension; the `#video` fragment marks a clip.
         insertVideoLine(editor, `${asset.url}#video`);
-      } else {
+      } else if (INLINE_IMAGE.test(asset.mime)) {
         editor.chain().focus().setImage({ src: asset.url, alt: asset.filename }).run();
+      } else {
+        // An SVG, a HEIC, a .mov: served as a download, so it becomes one
+        // rather than a broken picture.
+        insertFile(editor, asset, file.name);
       }
       onDone();
     } catch (err) {
@@ -568,5 +680,25 @@ function YoutubePanel({ editor, onDone }: { editor: Editor; onDone: () => void }
         return true;
       }}
     />
+  );
+}
+
+/**
+ * YouTube's own mark, in its own red.
+ *
+ * Lucide dropped its brand icons in v1, and the nearest thing left — a play
+ * triangle in a rounded square — sat next to the image button reading as "some
+ * other kind of media" rather than as YouTube. The rest of this toolbar is
+ * monochrome line work on purpose; this one is a logo, and a logo drawn in the
+ * toolbar's grey is a logo nobody recognises.
+ *
+ * One path with `evenodd`, so the triangle is a hole rather than a second fill:
+ * the button's own background shows through it, in either theme.
+ */
+function YoutubeMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="#FF0000" fillRule="evenodd" clipRule="evenodd">
+      <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.5 15.6V8.4l6.3 3.6-6.3 3.6z" />
+    </svg>
   );
 }

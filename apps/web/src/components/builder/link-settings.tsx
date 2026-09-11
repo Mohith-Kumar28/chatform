@@ -11,8 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { LockedControl } from "@/components/billing/gate";
 import { useClientValue } from "@/hooks/use-client-value";
-import { assetUrl } from "@/lib/assets";
-import { API_ORIGIN } from "@/lib/api/mutator";
+import { assetUrl, uploadAsset } from "@/lib/assets";
 import { cn } from "@/lib/utils";
 import { useBufferedValue } from "@/hooks/use-buffered-value";
 
@@ -233,18 +232,7 @@ function ImageField({
   async function upload(file: File) {
     setBusy(true);
     try {
-      const body = new FormData();
-      body.append("file", file);
-      const res = await fetch(`${API_ORIGIN}/api/assets`, {
-        method: "POST",
-        credentials: "include",
-        body,
-      });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-        throw new Error(err?.error?.message ?? "Upload failed");
-      }
-      const asset = (await res.json()) as { key: string };
+      const asset = await uploadAsset(file);
       onChange(asset.key);
     } catch (err) {
       toast.error(`Couldn't upload the ${label.toLowerCase()}`, {

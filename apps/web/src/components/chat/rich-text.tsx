@@ -2,9 +2,10 @@
 
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { embedFromUrl, type Embed } from "@repo/form-schema";
+import { embedFromUrl, fileDownloadUrl, fileFromUrl, type Embed } from "@repo/form-schema";
 import { API_ORIGIN } from "@/lib/api/mutator";
 import { cn } from "@/lib/utils";
+import { FileCard } from "./file-card";
 
 /**
  * What an author's description may contain: the editor's six buttons and the
@@ -59,6 +60,16 @@ function soleUrl(node: HastNode | undefined): string | null {
     return href && text === href ? href : null;
   }
   return null;
+}
+
+/** The link a paragraph consists of, whatever its text — an attached file's name. */
+function soleLink(node: HastNode | undefined): { href: string; text: string } | null {
+  const kids = (node?.children ?? []).filter((k) => !(k.type === "text" && !k.value?.trim()));
+  const only = kids.length === 1 ? kids[0]! : null;
+  if (only?.type !== "element" || only.tagName !== "a") return null;
+  const href = typeof only.properties?.href === "string" ? only.properties.href : "";
+  const text = (only.children ?? []).map((c) => c.value ?? "").join("").trim();
+  return href && text ? { href, text } : null;
 }
 
 function EmbedView({ embed }: { embed: Embed }) {
@@ -120,6 +131,18 @@ export function RichText({
 
   const components: Components = {
     p: ({ node, children }) => {
+      const link = soleLink(node as HastNode | undefined);
+      const file = link ? fileFromUrl(link.href) : null;
+      if (link && file && (trusted || file.url.startsWith(ASSET_PREFIX))) {
+        return (
+          <FileCard
+            filename={link.text}
+            ext={file.ext}
+            sizeBytes={file.sizeBytes}
+            downloadHref={fileDownloadUrl(file.url, link.text)}
+          />
+        );
+      }
       const url = soleUrl(node as HastNode | undefined);
       const embed = url ? embedFromUrl(url) : null;
       if (embed && allowed(embed)) return <EmbedView embed={embed} />;

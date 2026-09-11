@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { embedFromUrl, interpolate, stripRichText, youtubeId, type Block } from "@repo/form-schema";
+import {
+  embedFromUrl,
+  fileDownloadUrl,
+  fileFromUrl,
+  fileLink,
+  interpolate,
+  stripRichText,
+  youtubeId,
+  type Block,
+} from "@repo/form-schema";
 import { questionText } from "../src/lib/phrasing.js";
 import { extractUrls, mediaUrls } from "../src/lib/research.js";
 
@@ -30,6 +39,25 @@ describe("rich description", () => {
     expect(embedFromUrl("https://example.com/pricing")).toBeNull();
     // Mixed content would be blocked on the respondent's https page anyway.
     expect(embedFromUrl("http://example.com/a.png")).toBeNull();
+  });
+
+  it("reads an attached file, with its size, and nothing that merely looks like one", () => {
+    const link = fileLink("https://api.chatform.in/p/assets/ast_1#video", 2_400_000, "Prices.PDF");
+    expect(link).toBe("https://api.chatform.in/p/assets/ast_1#file=2400000.pdf");
+    // The real extension rides along, so a rename to "Price list" is still a PDF.
+    expect(fileFromUrl(link)).toEqual({ url: link, sizeBytes: 2_400_000, ext: "pdf" });
+    expect(fileLink("https://x.com/a", 5, "README")).toBe("https://x.com/a#file=5");
+    expect(fileFromUrl("https://x.com/a#file")).toEqual({ url: "https://x.com/a#file", sizeBytes: null, ext: null });
+    expect(fileFromUrl("https://x.com/a#filed")).toBeNull();
+    expect(fileFromUrl("http://x.com/a#file=1")).toBeNull();
+    // A file is never mistaken for an embed.
+    expect(embedFromUrl(link)).toBeNull();
+  });
+
+  it("downloads under the name shown", () => {
+    expect(fileDownloadUrl("https://api.chatform.in/p/assets/ast_1#file=9", "Q3 prices & terms.pdf")).toBe(
+      "https://api.chatform.in/p/assets/ast_1?download=Q3%20prices%20%26%20terms.pdf",
+    );
   });
 
   it("recalls answers, and never leaks braces for an unknown ref", () => {

@@ -43,6 +43,19 @@ import { cn } from "@/lib/utils";
 export const QuestionAffordance = memo(function QuestionAffordance(props: {
   block: PublicBlock;
   disabled?: boolean;
+  /**
+   * Drawn for an author rather than offered to a respondent — the builder's
+   * question preview.
+   *
+   * Not `disabled`: that means "an answer is in flight", and says so by fading
+   * the controls to 55% and greying every chip. A preview has to look exactly
+   * like the live thing, so it keeps full strength and is sealed off by `inert`
+   * alone. What it must not do is listen: the digit keys that pick a choice are
+   * bound to the window, and a builder where typing `1` into an empty inspector
+   * field was swallowed by a preview would be a builder with a haunted
+   * keyboard.
+   */
+  preview?: boolean;
   uploadBase: string | null;
   respondentToken: string | null;
   onStructured: (value: unknown, display: string) => void;
@@ -50,7 +63,7 @@ export const QuestionAffordance = memo(function QuestionAffordance(props: {
 }) {
   return (
     <div
-      inert={props.disabled}
+      inert={props.disabled || props.preview}
       aria-busy={props.disabled}
       /* Read by `useChoiceKeys`: inside this subtree Enter means "continue",
          even when a chip has focus. */
@@ -157,6 +170,7 @@ function choicesFor(block: PublicBlock): Choice[] {
 function AffordanceControls({
   block,
   disabled,
+  preview,
   uploadBase,
   respondentToken,
   onStructured,
@@ -164,6 +178,7 @@ function AffordanceControls({
 }: {
   block: PublicBlock;
   disabled?: boolean;
+  preview?: boolean;
   uploadBase: string | null;
   respondentToken: string | null;
   onStructured: (value: unknown, display: string) => void;
@@ -202,12 +217,12 @@ function AffordanceControls({
   }, [minSelections, multi, onStructured, options]);
 
   useChoiceKeys(
-    disabled ? [] : choices,
+    disabled || preview ? [] : choices,
     (choice) => {
       if (isMulti) toggle(choice.id);
       else onStructured(choice.value, choice.label);
     },
-    isMulti && !disabled ? submitMulti : undefined,
+    isMulti && !disabled && !preview ? submitMulti : undefined,
   );
 
   switch (block.type) {

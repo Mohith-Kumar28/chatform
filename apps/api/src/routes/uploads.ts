@@ -11,15 +11,47 @@ import {
 } from "../lib/guards.js";
 import { requireScope, type AuthzVars } from "../lib/authorize.js";
 import { getEntitlements, storageBytes } from "../lib/entitlements.js";
-import { limitReached } from "@repo/entitlements";
+import { PLAN_LIST } from "@repo/entitlements";
 
 /**
  * File uploads — R2 binding based (no S3 credentials needed).
  * Flow: intent (validate + register pending) → PUT raw body → confirm (HEAD-check + flip).
- * Max 25MB per file (Workers body limit headroom).
+ *
+ * The per-file ceiling is the plan's `max_upload_mb_per_file`. Bodies are
+ * streamed into R2 rather than read into memory: a Worker has 128MB, and the
+ * largest plan allows a 100MB file.
  */
 
-const MAX_FILE_MB = 25;
+/** The largest file any plan allows — the hard stop when a plan says "unlimited". */
+const MAX_FILE_MB = Math.max(...PLAN_LIST.map((p) => p.limits.max_upload_mb_per_file ?? 0));
+const MB = 1024 * 1024;
+
+/** The plan's per-file limit in bytes, never above `MAX_FILE_MB`. */
+function perFileBytes(limitMb: number | null): number {
+  return Math.min(limitMb ?? MAX_FILE_MB, MAX_FILE_MB) * MB;
+}
+
+function formatMb(bytes: number): string {
+  const mb = bytes / MB;
+  return mb >= 10 ? `${Math.round(mb)} MB` : `${Math.round(mb * 10) / 10} MB`;
+}
+
+/**
+ * The request body as a stream R2 will take, when its length is declared.
+ *
+ * R2 refuses a stream of unknown length, and `FixedLengthStream` also errors if
+ * the client sends more or fewer bytes than it promised — so a lying
+ * `content-length` cannot slip extra bytes past the size check.
+ */
+function sizedBody(req: Request, length: number): ReadableStream | null {
+  if (!req.body) return null;
+  return req.body.pipeThrough(new FixedLengthStream(length));
+}
+
+function contentLength(c: { req: { header: (name: string) => string | undefined } }): number | null {
+  const n = Number(c.req.header("content-length"));
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
 
 /**
  * Who is allowed to upload into a session.
@@ -105,7 +137,7 @@ uploadsRouter.post(
       ref: z.string(),
       filename: z.string().min(1).max(300),
       mime: z.string().min(3).max(120),
-      size: z.number().int().min(1).max(MAX_FILE_MB * 1024 * 1024),
+      size: z.number().int().min(1).max(MAX_FILE_MB * MB),
     }),
   ),
   describeRoute({
@@ -125,7 +157,7 @@ uploadsRouter.post(
     if (!ALLOWED_MIME.has(mime)) {
       return c.json({ error: { code: "unsupported_type", message: `File type ${mime} is not allowed` } }, 415);
     }
-    if (size > MAX_FILE_MB * 1024 * 1024) {
+    if (size > MAX_FILE_MB * MB) {
       return c.json({ error: { code: "too_large", message: `Max ${MAX_FILE_MB}MB` } }, 413);
     }
 
@@ -203,17 +235,34 @@ uploadsRouter.put(
       .first<{ r2_key: string; size_bytes: number; status: string }>();
     if (!file || file.status !== "pending") return c.json({ error: { code: "not_found", message: "Upload intent not found" } }, 404);
 
-    const body = await c.req.arrayBuffer();
-    if (body.byteLength > MAX_FILE_MB * 1024 * 1024) {
-      return c.json({ error: { code: "too_large", message: `Max ${MAX_FILE_MB}MB` } }, 413);
-    }
-    if (Math.abs(body.byteLength - file.size_bytes) > 1024) {
-      return c.json({ error: { code: "size_mismatch", message: "Uploaded size differs from declared" } }, 400);
+    // The intent already checked `size_bytes` against the plan, so holding the
+    // body to the declared size holds it to the plan.
+    const mismatch = () =>
+      c.json({ error: { code: "size_mismatch", message: "Uploaded size differs from declared" } }, 400);
+    const httpMetadata = { contentType: c.req.header("content-type") ?? "application/octet-stream" };
+    const length = contentLength(c);
+
+    if (length !== null) {
+      if (Math.abs(length - file.size_bytes) > 1024) return mismatch();
+      const stream = sizedBody(c.req.raw, length);
+      if (!stream) return mismatch();
+      try {
+        await c.env.R2.put(file.r2_key, stream, { httpMetadata });
+      } catch {
+        return mismatch();
+      }
+      return c.json({ ok: true });
     }
 
-    await c.env.R2.put(file.r2_key, body, {
-      httpMetadata: { contentType: c.req.header("content-type") ?? "application/octet-stream" },
-    });
+    // No declared length (a hand-rolled chunked client): buffer it, which is
+    // only safe because the declared size is already capped.
+    const body = await c.req.arrayBuffer();
+    if (body.byteLength > MAX_FILE_MB * MB) {
+      return c.json({ error: { code: "too_large", message: `Max ${MAX_FILE_MB}MB` } }, 413);
+    }
+    if (Math.abs(body.byteLength - file.size_bytes) > 1024) return mismatch();
+
+    await c.env.R2.put(file.r2_key, body, { httpMetadata });
     return c.json({ ok: true });
   },
 );
@@ -237,7 +286,7 @@ uploadsRouter.post(
 
     const obj = await c.env.R2.head(file.r2_key);
     if (!obj) return c.json({ error: { code: "not_uploaded", message: "File body missing — PUT first" } }, 400);
-    if (obj.size > MAX_FILE_MB * 1024 * 1024) {
+    if (obj.size > MAX_FILE_MB * MB || Math.abs(obj.size - file.size_bytes) > 1024) {
       await c.env.R2.delete(file.r2_key);
       return c.json({ error: { code: "too_large", message: `Max ${MAX_FILE_MB}MB` } }, 413);
     }
@@ -270,53 +319,108 @@ filesAdminRouter.use("*", requireSession);
 filesAdminRouter.use("*", requireOrg);
 
 /**
- * Builder-owned assets: question media, cover images, favicons.
+ * Builder-owned assets: question media, cover images, favicons, and files an
+ * author hands out in a description (File Drops).
  *
  * Distinct from respondent uploads, which are scoped to a chat session. These
  * belong to the organization and are served publicly, because a respondent
  * must be able to see the image attached to a question.
+ *
+ * Any type is accepted. That is safe because of how they are served, not how
+ * they are taken in: `GET /assets/:id` renders only a short list of image,
+ * video and PDF types and sends everything else — HTML and SVG included — as a
+ * sandboxed `application/octet-stream` download.
+ *
+ * Two request shapes:
+ * - the raw file as the body, its name in `?filename=` — streamed straight to
+ *   R2, which is the only way a 100MB file fits in a 128MB Worker;
+ * - legacy `multipart/form-data` with a `file` field, still accepted for
+ *   clients built before the raw shape, and held to the same limits.
  */
-const ASSET_MIME = new Set([
-  "image/png", "image/jpeg", "image/gif", "image/webp",
-  // Favicons. `.ico` arrives under either name depending on the browser.
-  "image/x-icon", "image/vnd.microsoft.icon",
-  "video/mp4", "video/webm",
-  "application/pdf", "text/csv", "text/plain",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-]);
-const MAX_ASSET_MB = 25;
-
 filesAdminRouter.post("/assets", async (c) => {
   const orgId = c.get("orgId");
   const userId = c.get("userId");
   if (!orgId || !userId) return c.json({ error: { code: "unauthorized", message: "Sign in required" } }, 401);
 
-  const form = await c.req.formData();
-  const file = form.get("file");
-  if (!(file instanceof File)) {
-    return c.json({ error: { code: "no_file", message: "Send a file" } }, 400);
+  const ent = await getEntitlements(c.env, orgId);
+  const maxBytes = perFileBytes(ent.limits.max_upload_mb_per_file);
+  const tooLarge = (size: number) =>
+    c.json(
+      {
+        error: {
+          code: "too_large",
+          message: `This file is ${formatMb(size)}. Your plan takes files up to ${formatMb(maxBytes)}.`,
+        },
+      },
+      413,
+    );
+
+  // Refused on the declared length, before a byte is read.
+  const declared = contentLength(c);
+  if (declared === null) {
+    return c.json({ error: { code: "length_required", message: "Send a Content-Length" } }, 411);
   }
-  if (!ASSET_MIME.has(file.type)) {
-    return c.json({ error: { code: "unsupported_type", message: `${file.type} is not allowed` } }, 415);
+  const multipart = (c.req.header("content-type") ?? "").startsWith("multipart/form-data");
+  // Multipart framing adds a boundary and headers around the file; allow for it.
+  if (declared > maxBytes + (multipart ? 64 * 1024 : 0)) return tooLarge(declared);
+
+  let name: string;
+  let mime: string;
+  let size: number;
+  let body: ReadableStream | ArrayBuffer | null;
+  if (multipart) {
+    const form = await c.req.formData();
+    const file = form.get("file");
+    if (!(file instanceof File)) {
+      return c.json({ error: { code: "no_file", message: "Send a file" } }, 400);
+    }
+    if (file.size > maxBytes) return tooLarge(file.size);
+    name = file.name;
+    mime = file.type;
+    size = file.size;
+    body = await file.arrayBuffer();
+  } else {
+    name = c.req.query("filename") ?? "";
+    mime = (c.req.header("content-type") ?? "").split(";")[0]!.trim();
+    size = declared;
+    body = sizedBody(c.req.raw, declared);
   }
-  if (file.size > MAX_ASSET_MB * 1024 * 1024) {
-    return c.json({ error: { code: "too_large", message: `Max ${MAX_ASSET_MB}MB` } }, 413);
+  if (!body || !name.trim()) return c.json({ error: { code: "no_file", message: "Send a file" } }, 400);
+  // The browser leaves `type` empty for anything it has no name for — a .dmg,
+  // a .tsx. Stored as bytes, which is what it is.
+  if (!/^[\w.+-]+\/[\w.+-]+$/.test(mime) || mime.length > 120) mime = "application/octet-stream";
+
+  const quota = ent.limits.file_storage_mb;
+  if (quota != null) {
+    const used = await storageBytes(c.env, orgId);
+    if (used + size > quota * MB) {
+      return c.json(
+        {
+          error: {
+            code: "storage_full",
+            message: `This would take you past your plan's ${formatMb(quota * MB)} of file storage.`,
+          },
+        },
+        507,
+      );
+    }
   }
 
   const fileId = `ast_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
+  const safeName = name.trim().replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
   const r2Key = `assets/${orgId}/${fileId}-${safeName}`;
 
-  await c.env.R2.put(r2Key, await file.arrayBuffer(), {
-    httpMetadata: { contentType: file.type },
-  });
+  try {
+    await c.env.R2.put(r2Key, body, { httpMetadata: { contentType: mime } });
+  } catch {
+    // A body shorter or longer than its Content-Length errors the stream.
+    return c.json({ error: { code: "size_mismatch", message: "Uploaded size differs from declared" } }, 400);
+  }
   await c.env.DB.prepare(
     `INSERT INTO files (id, organization_id, uploaded_by, uploader_user_id, r2_key, filename, mime, size_bytes, status, created_at, confirmed_at)
      VALUES (?, ?, 'builder', ?, ?, ?, ?, ?, 'confirmed', ?, ?)`,
   )
-    .bind(fileId, orgId, userId, r2Key, safeName, file.type, file.size, Date.now(), Date.now())
+    .bind(fileId, orgId, userId, r2Key, safeName, mime, size, Date.now(), Date.now())
     .run();
 
   return c.json({
@@ -324,8 +428,8 @@ filesAdminRouter.post("/assets", async (c) => {
     key: r2Key,
     url: `/p/assets/${fileId}`,
     filename: safeName,
-    mime: file.type,
-    sizeBytes: file.size,
+    mime,
+    sizeBytes: size,
   });
 });
 
@@ -372,10 +476,10 @@ export const assetsRouter = new Hono<{ Bindings: Bindings }>();
  */
 assetsRouter.get("/assets/:id", async (c) => {
   const row = await c.env.DB.prepare(
-    `SELECT r2_key, mime FROM files WHERE id = ?1 AND uploaded_by = 'builder' AND status = 'confirmed'`,
+    `SELECT r2_key, mime, filename FROM files WHERE id = ?1 AND uploaded_by = 'builder' AND status = 'confirmed'`,
   )
     .bind(c.req.param("id"))
-    .first<{ r2_key: string; mime: string }>();
+    .first<{ r2_key: string; mime: string; filename: string }>();
   if (!row) return c.json({ error: { code: "not_found", message: "Asset not found" } }, 404);
 
   // SVG renders script, so it is never served inline from any origin of ours.
@@ -385,9 +489,17 @@ assetsRouter.get("/assets/:id", async (c) => {
   const obj = await c.env.R2.get(row.r2_key);
   if (!obj) return c.json({ error: { code: "not_found", message: "Object missing" } }, 404);
 
+  // `?download=<name>` is a File Drops card's button: save, under the name the
+  // author gave it. Anything not renderable downloads regardless, under its
+  // own name rather than the bare asset id.
+  const asked = c.req.query("download");
+  const disposition =
+    asked !== undefined || !renderable ? attachment(downloadName(asked, row.filename)) : null;
+
   return new Response(obj.body, {
     headers: {
       "content-type": renderable ? row.mime : "application/octet-stream",
+      ...(disposition ? { "content-disposition": disposition } : {}),
       "x-content-type-options": "nosniff",
       // Assets are immutable: the id changes whenever the bytes do.
       "cache-control": "public, max-age=31536000, immutable",
@@ -395,6 +507,26 @@ assetsRouter.get("/assets/:id", async (c) => {
     },
   });
 });
+
+/**
+ * The name a download is saved under.
+ *
+ * The author's display name, with the uploaded file's extension put back when
+ * the rename dropped it — "Price list" has to arrive as "Price list.pdf" or the
+ * respondent's computer does not know what opens it.
+ */
+export function downloadName(asked: string | undefined, stored: string): string {
+  const clean = (asked ?? "").replace(/[\u0000-\u001f\u007f/\\]/g, "").trim().slice(0, 150);
+  if (!clean) return stored;
+  const ext = /\.[A-Za-z0-9]{1,10}$/.exec(stored)?.[0] ?? "";
+  return ext && !clean.toLowerCase().endsWith(ext.toLowerCase()) ? `${clean}${ext}` : clean;
+}
+
+/** RFC 6266: an ASCII fallback for old clients, the real name for the rest. */
+function attachment(name: string): string {
+  const ascii = name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+}
 
 /** The respondent-facing router, mounted under `/p`. */
 export const uploadsRouter = createUploadsRouter("respondent");

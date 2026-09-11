@@ -17,6 +17,13 @@ export function assetUrl(key: string | null | undefined): string | null {
   return `${API_ORIGIN}/p/assets/${id}`;
 }
 
+/**
+ * The types `/p/assets/:id` serves inline. Everything else it serves as a
+ * download, so an upload outside these is shown as a file card, not an image.
+ */
+export const INLINE_IMAGE = /^image\/(png|jpeg|gif|webp|avif)$/;
+export const INLINE_VIDEO = /^video\/(mp4|webm)$/;
+
 export interface UploadedAsset {
   fileId: string;
   key: string;
@@ -28,16 +35,38 @@ export interface UploadedAsset {
 }
 
 /**
+ * The plan's per-file limit, checked before the upload starts.
+ *
+ * The server refuses the same file on its declared length either way; this only
+ * saves someone watching a 90MB upload crawl to an error they could have been
+ * told about up front.
+ */
+export function checkUploadSize(file: File, maxMb: number | null | undefined): void {
+  if (maxMb != null && file.size > maxMb * 1024 * 1024) {
+    const mb = file.size / (1024 * 1024);
+    throw new Error(
+      `This file is ${mb >= 10 ? Math.round(mb) : Math.round(mb * 10) / 10} MB. Your plan takes files up to ${maxMb} MB.`,
+    );
+  }
+}
+
+/**
  * Put a builder file in the asset store.
  *
- * One copy of the request the question's media field and the description editor
- * both make; the API refuses types outside its allowlist with a message worth
- * showing as-is.
+ * One copy of the request every builder upload makes — question media, the
+ * description editor, logos, favicons, avatars. The file is the request body
+ * and its name rides in the query, so the API can stream it into storage
+ * rather than parse a multipart form in memory. The API refuses a file over the
+ * plan's limit, or past its storage, with a message worth showing as-is.
  */
-export async function uploadAsset(file: File): Promise<UploadedAsset> {
-  const body = new FormData();
-  body.append("file", file);
-  const res = await fetch(`${API_ORIGIN}/api/assets`, { method: "POST", credentials: "include", body });
+export async function uploadAsset(file: File, opts: { maxMb?: number | null } = {}): Promise<UploadedAsset> {
+  checkUploadSize(file, opts.maxMb);
+  const res = await fetch(`${API_ORIGIN}/api/assets?filename=${encodeURIComponent(file.name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": file.type || "application/octet-stream" },
+    body: file,
+  });
   if (!res.ok) {
     const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
     throw new Error(err?.error?.message ?? "Upload failed");

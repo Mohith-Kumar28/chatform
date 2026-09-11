@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, Check, GitBranch, Loader2, Minus, Shuffle, SlidersHorizontal, Sparkles } from "lucide-react";
+import { ArrowUp, Check, GitBranch, Loader2, Mic, Minus, Shuffle, SlidersHorizontal, Sparkles, Square } from "lucide-react";
 import { toast } from "sonner";
 import { FormDoc as FormDocSchema } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { customFetch } from "@/lib/api/mutator";
 import { blockMeta, TONE_CLASSES } from "./block-library";
 import { loadHistory, saveHistory, type Turn } from "./ai-bar-thread";
 import { KEY } from "./use-builder-shortcuts";
+import { useDictation } from "@/hooks/use-dictation";
 import { cn } from "@/lib/utils";
 
 /** Plain words for an edit whose summary came back empty. */
@@ -47,6 +48,20 @@ export function AiBar() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
+
+  /*
+   * Talking to the builder, using the recogniser the browser already has.
+   *
+   * Words land in the field rather than going straight off as a request: what
+   * you say to a form builder is "make the second one optional and move it
+   * above the email" — a sentence worth reading back before it is acted on,
+   * and the one place a recogniser's mistakes are cheap to fix.
+   */
+  const dictation = useDictation({
+    text: prompt,
+    onChange: setPrompt,
+    onError: (message) => toast.error(message),
+  });
 
   // Collapse on click-away and on Escape — but never mid-request, which would
   // hide the spinner and make it look like nothing happened.
@@ -91,6 +106,9 @@ export function AiBar() {
     const text = prompt.trim();
     if (!text || !doc || busy) return;
 
+    // The field is about to be cleared; a recogniser still writing into it
+    // would put the next half-sentence on top of an empty prompt.
+    dictation.stop();
     setPrompt("");
     setBusy(true);
     setTurns((t) => [...t, { id: crypto.randomUUID(), role: "user", text }]);
@@ -237,9 +255,13 @@ export function AiBar() {
             e.preventDefault();
             void run();
           }}
-          className="flex items-end gap-2 px-3 py-2"
+          className="flex items-start gap-2 px-3 py-2"
         >
-          <Sparkles className="text-primary mb-2 size-4 shrink-0" />
+          {/* Aligned to the first line rather than to the bottom of the box:
+              the field is a compose area now, so its text starts at the top and
+              everything that labels it has to start there too. The buttons are
+              the exception — they `self-end`, where a thumb expects them. */}
+          <Sparkles className="text-primary mt-2.5 size-4 shrink-0" />
           {/* The key that gets you here, at the head of the line beside the
               spark rather than trailing after the placeholder — it belongs with
               the label for the input, not with the send button, and on the right
@@ -250,7 +272,7 @@ export function AiBar() {
                is a keyboard to press, which is the question this was asking
                badly — a 640px viewport with a trackpad had the key and was not
                told, and a wide tablet without one was. */
-            <Kbd className="mb-2 shrink-0">{KEY.askAi}</Kbd>
+            <Kbd className="mt-[0.4375rem] h-6 min-w-6 rounded-md px-1.5 text-xs">{KEY.askAi}</Kbd>
           )}
           <textarea
             ref={inputRef}
@@ -267,15 +289,47 @@ export function AiBar() {
               }
             }}
             placeholder="Ask AI to make changes…"
-            className="max-h-28 min-h-9 flex-1 resize-none bg-transparent py-2 text-sm outline-none placeholder:text-[color-mix(in_oklch,currentColor_45%,transparent)]"
+            className="max-h-40 min-h-12 flex-1 resize-none bg-transparent py-2 text-sm outline-none placeholder:text-[color-mix(in_oklch,currentColor_45%,transparent)]"
           />
+          {/* Nothing at all where the browser has no recogniser — a mic that
+              cannot listen is worse than no mic. */}
+          {dictation.supported && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              shape="pill"
+              onClick={() => {
+                dictation.toggle();
+                inputRef.current?.focus();
+              }}
+              aria-pressed={dictation.listening}
+              aria-label={dictation.listening ? "Stop dictating" : "Dictate"}
+              className={cn(
+                "shrink-0 self-end",
+                dictation.listening && "text-destructive hover:text-destructive",
+              )}
+            >
+              {dictation.listening ? (
+                <span className="relative flex size-3.5 items-center justify-center">
+                  {/* The ring is the only thing on this bar that moves on its
+                      own, which is the point: a microphone that is open has to
+                      be visible from the corner of your eye. */}
+                  <span className="bg-destructive/25 absolute inline-flex size-full animate-ping rounded-full" />
+                  <Square className="size-2.5 fill-current" />
+                </span>
+              ) : (
+                <Mic className="size-3.5" />
+              )}
+            </Button>
+          )}
           <Button
             type="submit"
             size="icon-sm"
             shape="pill"
             disabled={busy || !prompt.trim()}
             aria-label="Ask"
-            className="mb-1 shrink-0"
+            className="shrink-0 self-end"
           >
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowUp className="size-3.5" />}
           </Button>

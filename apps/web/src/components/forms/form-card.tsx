@@ -658,7 +658,10 @@ export function FormCard({
           present for keyboard focus and on touch, where there is no hover. */}
           <div
             className={cn(
-              "absolute top-2 right-2 flex items-center gap-0.5 rounded-full",
+              // `z-20`, because the thumbnail's own content is `z-10`: without
+              // it these sit at `z-auto` in the same stacking context and the
+              // question bubble paints straight over the menu you reached for.
+              "absolute top-2 right-2 z-20 flex items-center gap-0.5 rounded-full",
               "p-0.5 backdrop-blur-sm",
               onThumb,
               // `ghost` resting has no colour of its own, so the icons inherit the

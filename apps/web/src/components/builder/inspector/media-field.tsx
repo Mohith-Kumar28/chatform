@@ -6,8 +6,9 @@ import { toast } from "sonner";
 import type { Block, BlockMedia } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { uploadAsset } from "@/lib/assets";
+import { INLINE_IMAGE, INLINE_VIDEO, uploadAsset } from "@/lib/assets";
 import { BufferedInput } from "@/components/ui/buffered-input";
+import { useEntitlements } from "@/hooks/use-entitlements";
 import { fieldInputClass } from "./fields";
 
 
@@ -26,13 +27,16 @@ export function MediaField({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const maxMb = useEntitlements().limit("max_upload_mb_per_file");
 
   async function upload(file: File) {
     setBusy(true);
     try {
-      const asset = await uploadAsset(file);
+      const asset = await uploadAsset(file, { maxMb });
       onChange({
-        kind: asset.mime.startsWith("image/") ? "image" : asset.mime.startsWith("video/") ? "video" : "file",
+        // Only what a browser draws inline is shown as an image or a clip — an
+        // SVG or a .mov is served as a download, so it is offered as one.
+        kind: INLINE_IMAGE.test(asset.mime) ? "image" : INLINE_VIDEO.test(asset.mime) ? "video" : "file",
         key: asset.key,
         url: asset.url,
         filename: asset.filename,
@@ -63,7 +67,6 @@ export function MediaField({
           ref={inputRef}
           type="file"
           hidden
-          accept="image/*,video/mp4,video/webm,application/pdf,text/csv,.doc,.docx,.xlsx"
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) void upload(file);

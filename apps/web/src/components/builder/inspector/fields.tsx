@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useBufferedValue } from "@/hooks/use-buffered-value";
+import { DragHandle, SortableList, moved, useSortableRow } from "./sortable-list";
 
 /**
  * Inspector field primitives.
@@ -263,6 +264,58 @@ function ListItemInput({
   );
 }
 
+/**
+ * One row: the grip, the label, and the way to remove it.
+ *
+ * Both affordances stay out of sight until the row is hovered or one of them
+ * is focused. What an author reads down this column is the answers a respondent
+ * will see, and a permanent grip and cross on every line turns that into a
+ * table of controls.
+ */
+function ListRow({
+  item,
+  index,
+  label,
+  sortable,
+  onCommit,
+  onRemove,
+}: {
+  item: { id: string; label: string };
+  index: number;
+  label: string;
+  sortable: boolean;
+  onCommit: (next: string) => void;
+  onRemove?: () => void;
+}) {
+  const { setNodeRef, style, handleProps, isDragging } = useSortableRow(item.id);
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn("group flex items-center gap-1", isDragging && "relative z-10 opacity-90")}
+    >
+      {sortable && (
+        <DragHandle
+          label={`Reorder ${item.label || `${label} ${index + 1}`}`}
+          {...handleProps}
+          className="-ml-1"
+        />
+      )}
+      <ListItemInput value={item.label} onCommit={onCommit} ariaLabel={`${label} ${index + 1}`} />
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label={`Remove ${item.label || "option"}`}
+        disabled={!onRemove}
+        onClick={onRemove}
+        className="text-muted-foreground hover:text-destructive shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-0"
+      >
+        <X className="size-3.5" />
+      </Button>
+    </div>
+  );
+}
+
 export function ListEditor({
   label,
   items,
@@ -283,29 +336,30 @@ export function ListEditor({
   return (
     <Field label={label} inspect={inspect}>
       <div className="space-y-1.5">
-        {items.map((item, i) => (
-          <div key={item.id} className="group flex items-center gap-1">
-            <ListItemInput
-              value={item.label}
-              onCommit={(label) => {
-                const next = [...items];
-                next[i] = { ...item, label };
-                onChange(next);
+        <SortableList
+          ids={items.map((item) => item.id)}
+          onReorder={(from, to) => onChange(moved(items, from, to))}
+        >
+          {items.map((item, i) => (
+            <ListRow
+              key={item.id}
+              item={item}
+              index={i}
+              label={label}
+              // One item is a list of one: nothing to reorder, and a grip that
+              // cannot move anything is a control that lies.
+              sortable={items.length > 1}
+              onCommit={(next) => {
+                const copy = [...items];
+                copy[i] = { ...item, label: next };
+                onChange(copy);
               }}
-              ariaLabel={`${label} ${i + 1}`}
+              onRemove={
+                items.length > minItems ? () => onChange(items.filter((_, j) => j !== i)) : undefined
+              }
             />
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label={`Remove ${item.label || "option"}`}
-              disabled={items.length <= minItems}
-              onClick={() => onChange(items.filter((_, j) => j !== i))}
-              className="text-muted-foreground hover:text-destructive shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-0"
-            >
-              <X className="size-3.5" />
-            </Button>
-          </div>
-        ))}
+          ))}
+        </SortableList>
         <Button
           variant="ghost"
           size="sm"

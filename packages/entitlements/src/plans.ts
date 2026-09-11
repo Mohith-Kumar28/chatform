@@ -128,7 +128,7 @@ const PRO: Plan = {
     seats: 3,
     file_storage_mb: 10_240,
 
-    max_upload_mb_per_file: 25,
+    max_upload_mb_per_file: 50,
     blocks_per_form: 300,
     webhooks_per_form: 10,
     knowledge_sources_count: 50,

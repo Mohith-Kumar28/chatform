@@ -11,6 +11,9 @@
  * - YouTube link alone on a line → a player.
  * - `![alt](url)` alone on a line → an image.
  * - An uploaded video's asset URL with a `#video` fragment → a `<video>`.
+ * - `[name](asset-url#file=<bytes>)` alone on a line → a file card with a
+ *   download button (see `fileFromUrl`). The link text is the name the
+ *   respondent sees and the name the download is saved under.
  * - `{{ref}}` → the respondent's answer to that question (see `interpolate`).
  */
 
@@ -68,6 +71,49 @@ export function embedFromUrl(raw: string): Embed | null {
   if (parsed.hash === "#video" || VIDEO_PATH.test(parsed.pathname)) return { kind: "video", url };
   if (IMAGE_PATH.test(parsed.pathname)) return { kind: "image", url };
   return null;
+}
+
+/**
+ * An attached file: a link whose fragment is `#file`, optionally
+ * `#file=<bytes>` and optionally `.<ext>` after that.
+ *
+ * The fragment is the same trick as `#video` — the server never sees it — and
+ * it carries the size and the real extension because the card shows both and
+ * the stored text is the only thing the renderer has. The extension cannot be
+ * read off the name: an author who renames "prices.pdf" to "Price list" still
+ * handed out a PDF.
+ */
+export function fileFromUrl(
+  raw: string,
+): { url: string; sizeBytes: number | null; ext: string | null } | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:") return null;
+  const m = /^#file(?:=(\d+))?(?:\.([A-Za-z0-9]{1,10}))?$/.exec(parsed.hash);
+  if (!m) return null;
+  return { url: raw.trim(), sizeBytes: m[1] ? Number(m[1]) : null, ext: m[2]?.toLowerCase() ?? null };
+}
+
+/** The attachment URL a description stores for an uploaded file. */
+export function fileLink(assetUrl: string, sizeBytes: number, filename?: string): string {
+  const ext = /\.([A-Za-z0-9]{1,10})$/.exec(filename ?? "")?.[1]?.toLowerCase();
+  return `${assetUrl.replace(/#.*$/, "")}#file=${Math.max(0, Math.round(sizeBytes))}${ext ? `.${ext}` : ""}`;
+}
+
+/**
+ * Where the download button points: the file, saved under the name shown.
+ *
+ * The asset host is a different origin from the page, so an `<a download>`
+ * attribute is ignored and the name has to come from the server's
+ * `content-disposition` — which reads it from `?download=`.
+ */
+export function fileDownloadUrl(url: string, name: string): string {
+  const base = url.replace(/#.*$/, "");
+  return `${base}${base.includes("?") ? "&" : "?"}download=${encodeURIComponent(name)}`;
 }
 
 /** Characters that would change the meaning of the Markdown an answer is spliced into. */

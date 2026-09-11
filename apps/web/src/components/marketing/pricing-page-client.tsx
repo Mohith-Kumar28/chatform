@@ -34,7 +34,10 @@ import { CtaBand } from "@/components/marketing/cta-band";
  */
 
 /** The comparison rows, grouped the way someone shopping actually thinks. */
-const GROUPS: { title: string; rows: ({ limit: string } | { feature: string })[] }[] = [
+const GROUPS: {
+  title: string;
+  rows: ({ limit: string; label?: string } | { feature: string } | { everyPlan: string })[];
+}[] = [
   {
     title: "Build & collect",
     rows: [
@@ -43,14 +46,23 @@ const GROUPS: { title: string; rows: ({ limit: string } | { feature: string })[]
       { limit: "forms_count" },
       { limit: "blocks_per_form" },
       { limit: "workspaces_count" },
-      { limit: "max_upload_mb_per_file" },
-      { limit: "file_storage_mb" },
       { feature: "duplicate_prevention" },
       { feature: "multi_language" },
       { feature: "respondent_auth_google" },
       { feature: "respondent_auth_phone" },
       { feature: "verified_answers" },
       { feature: "collect_payments" },
+    ],
+  },
+  {
+    // Files the form hands out (a brochure, a price list, an installer) and
+    // files it takes in. One limit governs both, so one group shows it.
+    title: "File Drops",
+    rows: [
+      { everyPlan: "Hand out any file in the chat — PDF, sheet, deck, zip, installer" },
+      { everyPlan: "Collect files from respondents" },
+      { limit: "max_upload_mb_per_file", label: "Largest file" },
+      { limit: "file_storage_mb" },
     ],
   },
   {
@@ -256,12 +268,30 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
                     </th>
                   </tr>
                   {group.rows.map((row) => {
+                    // Not a gate: something every plan does, so there is no
+                    // entitlement for the payload to disagree with.
+                    if ("everyPlan" in row) {
+                      return (
+                        <tr key={row.everyPlan} className="border-border/60 border-b">
+                          <td className="py-2.5 pr-4">{row.everyPlan}</td>
+                          {plans.map((p) => (
+                            <td key={p.id} className="px-3 py-2.5 text-center">
+                              <Check
+                                className="text-primary mx-auto size-4"
+                                strokeWidth={2.5}
+                                aria-label="Included"
+                              />
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    }
                     if ("limit" in row) {
                       const meta = data.limits[row.limit];
                       if (!meta) return null;
                       return (
                         <tr key={row.limit} className="border-border/60 border-b">
-                          <td className="py-2.5 pr-4">{meta.label}</td>
+                          <td className="py-2.5 pr-4">{row.label ?? meta.label}</td>
                           {plans.map((p) => (
                             <td key={p.id} className="tabular px-3 py-2.5 text-center">
                               {formatLimit(p.limits[row.limit] ?? null, meta.unit)}

@@ -1,6 +1,7 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { createContext, useContext } from "react";
+import { GripVertical, Plus, Trash2 } from "lucide-react";
 import {
   BLOCK_PRESENTATION,
   GROUP_FIELD_KINDS,
@@ -22,6 +23,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { Field, fieldInputClass, ListEditor } from "./fields";
 import { BufferedInput } from "@/components/ui/buffered-input";
+import { DragHandle, SortableList, moved, useSortableRow } from "./sortable-list";
 
 const uid = (p: string) =>
   `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
@@ -144,13 +146,14 @@ export function GroupFieldsEditor({
   return (
     <Field label="Fields">
       <div className="space-y-2">
+        <SortableList
+          ids={block.fields.map((f) => f.id)}
+          onReorder={(from, to) => setFields(moved(block.fields, from, to))}
+        >
         {block.fields.map((field, i) => {
           const hasPattern = field.kind === "short_text";
           return (
-            <div
-              key={field.id}
-              className="bg-muted/40 space-y-2 rounded-xl p-2.5"
-            >
+            <FieldCard key={field.id} id={field.id}>
               {/*
                 Row one is what the field *is*: the kind it collects, whether an
                 entry can be left without it, and the way to remove it. All three
@@ -158,9 +161,15 @@ export function GroupFieldsEditor({
                 a single strip of settings rather than three stacked decisions.
               */}
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground w-3 shrink-0 text-center text-[0.6875rem] tabular-nums">
-                  {i + 1}
-                </span>
+                {/*
+                  The position doubles as the grip.
+
+                  A column of numbers down the left of the cards is already
+                  exactly where a hand reaches to drag one, so the number simply
+                  becomes a grip while the card is hovered — no extra control,
+                  no shifted layout, and the card keeps its one left edge.
+                */}
+                <FieldHandle index={i} label={field.label} sortable={block.fields.length > 1} />
                 <Select
                   value={field.kind}
                   onValueChange={(v) =>
@@ -357,9 +366,10 @@ export function GroupFieldsEditor({
                   />
                 </div>
               )}
-            </div>
+            </FieldCard>
           );
         })}
+        </SortableList>
 
         {/* Ten is the schema's limit; past it the button could only fail. */}
         {block.fields.length < MAX_FIELDS && (
@@ -391,5 +401,76 @@ export function GroupFieldsEditor({
         )}
       </div>
     </Field>
+  );
+}
+
+/** The drag listeners of the card a handle is drawn inside. */
+const FieldHandleContext = createContext<Record<string, unknown> | null>(null);
+
+/**
+ * One field's card, which is also the thing that is dragged.
+ *
+ * `group/field` rather than a bare `group`: the card already contains rows that
+ * want their own hover states, and an unnamed group would have the grip
+ * appearing whenever any descendant was hovered.
+ */
+function FieldCard({ id, children }: { id: string; children: React.ReactNode }) {
+  const { setNodeRef, style, handleProps, isDragging } = useSortableRow(id);
+  return (
+    <FieldHandleContext.Provider value={handleProps}>
+      <div
+        ref={setNodeRef}
+        style={style}
+        className={cn(
+          "group/field bg-muted/40 space-y-2 rounded-xl p-2.5",
+          isDragging && "relative z-10 shadow-md",
+        )}
+      >
+        {children}
+      </div>
+    </FieldHandleContext.Provider>
+  );
+}
+
+/**
+ * The card's position, which becomes its grip on hover.
+ *
+ * It reads the drag listeners out of the card it sits in rather than taking
+ * them as props: the handle is three levels down inside the card's first row,
+ * and threading `{...listeners}` through that is how a component ends up with
+ * a prop nobody can name.
+ */
+function FieldHandle({
+  index,
+  label,
+  sortable,
+}: {
+  index: number;
+  label: string;
+  sortable: boolean;
+}) {
+  const handleProps = useContext(FieldHandleContext);
+
+  if (!sortable || !handleProps) {
+    return (
+      <span className="text-muted-foreground w-3 shrink-0 text-center text-[0.6875rem] tabular-nums">
+        {index + 1}
+      </span>
+    );
+  }
+
+  return (
+    <DragHandle
+      label={`Reorder ${label || `field ${index + 1}`}`}
+      {...handleProps}
+      // Not the shared fade: at rest this *is* the position number, which has
+      // to stay readable. Only the glyph swaps.
+      className="text-muted-foreground w-3 opacity-100 group-hover/field:opacity-100"
+    >
+      <span className="block text-[0.6875rem] leading-none tabular-nums group-hover/field:hidden">
+        {index + 1}
+      </span>
+      <GripVertical className="mx-auto hidden size-3.5 group-hover/field:block" />
+    </DragHandle>
   );
 }

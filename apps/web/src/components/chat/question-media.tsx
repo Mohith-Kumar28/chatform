@@ -1,8 +1,8 @@
 "use client";
 
-import { Download } from "lucide-react";
-import type { BlockMedia } from "@repo/form-schema";
+import { fileDownloadUrl, type BlockMedia } from "@repo/form-schema";
 import { assetUrl } from "@/lib/assets";
+import { FileCard } from "./file-card";
 
 /**
  * The image, clip or download a question carries.
@@ -69,16 +69,6 @@ export function QuestionMedia({
     );
   }
 
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      download={media.filename}
-      className="inline-flex items-center gap-2 rounded-xl border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3 py-2 text-sm transition-colors hover:border-[var(--cf-accent)]"
-    >
-      <Download className="size-3.5 shrink-0 opacity-60" />
-      <span className="min-w-0 truncate">{media.filename ?? "Download"}</span>
-    </a>
-  );
+  const name = media.filename ?? "Download";
+  return <FileCard filename={name} sizeBytes={media.sizeBytes} downloadHref={fileDownloadUrl(url, name)} />;
 }

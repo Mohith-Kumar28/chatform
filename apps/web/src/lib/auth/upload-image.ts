@@ -1,4 +1,4 @@
-import { API_ORIGIN } from "@/lib/auth/auth-client";
+import { uploadAsset } from "@/lib/assets";
 
 /**
  * Put an image in R2 and return the URL that serves it.
@@ -19,14 +19,9 @@ import { API_ORIGIN } from "@/lib/auth/auth-client";
  * MIME-checked. What comes back is a short URL, which is the point.
  */
 export async function uploadAuthImage(file: File): Promise<string> {
-  const body = new FormData();
-  body.append("file", file);
-  const res = await fetch(`${API_ORIGIN}/api/assets`, {
-    method: "POST",
-    credentials: "include",
-    body,
-  });
-  if (!res.ok) throw new Error("Could not upload that image");
-  const asset = (await res.json()) as { fileId: string };
-  return `${API_ORIGIN}/p/assets/${asset.fileId}`;
+  try {
+    return (await uploadAsset(file)).url;
+  } catch {
+    throw new Error("Could not upload that image");
+  }
 }
