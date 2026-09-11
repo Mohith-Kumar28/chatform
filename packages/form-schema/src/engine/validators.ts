@@ -1,4 +1,4 @@
-import { groupFieldBlock, type Block } from "../blocks";
+import { contactFieldBlock, groupFieldBlock, type Block } from "../blocks";
 import type { AnswerValue } from "../answers";
 
 /**
@@ -16,6 +16,8 @@ export const VALIDATION_CODES = [
   "too_long",
   "pattern",
   "invalid_email",
+  // The address is fine, but not on a domain this question accepts.
+  "wrong_domain",
   "freemail",
   "invalid_phone",
   "invalid_url",
@@ -93,6 +95,12 @@ const ok = (value?: AnswerValue): ValidationResult => ({ ok: true, value });
 const fail = (code: ValidationCode, hint: string): ValidationResult => ({ ok: false, code, hint });
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+/** "a, b or c" — for telling a respondent which domains are acceptable. */
+function orList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} or ${items[items.length - 1]}`;
+}
+
 const FREEMAIL = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com", "proton.me", "aol.com", "live.com"];
 const URL_RE = /^https?:\/\/[^\s]+\.[^\s]+$/i;
 const E164_RE = /^\+[1-9]\d{6,14}$/;
@@ -166,7 +174,19 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
       if (typeof raw !== "string") return fail("type", "Please enter an email address.");
       const v = raw.trim().toLowerCase();
       if (!EMAIL_RE.test(v)) return fail("invalid_email", "That doesn't look like a valid email address.");
-      if (block.businessOnly && FREEMAIL.includes(v.split("@")[1] ?? "")) {
+      const domain = v.split("@")[1] ?? "";
+      // Domains first: they are the narrower statement, so when an author has
+      // named them "use your work email" would be misleading advice — the
+      // address they need is not any work address, it is one of these.
+      if (block.allowedDomains.length > 0 && !block.allowedDomains.includes(domain)) {
+        return fail(
+          "wrong_domain",
+          block.allowedDomains.length === 1
+            ? `Please use your @${block.allowedDomains[0]} email address.`
+            : `Please use an email address from ${orList(block.allowedDomains.map((d) => `@${d}`))}.`,
+        );
+      }
+      if (block.businessOnly && FREEMAIL.includes(domain)) {
         return fail("freemail", "Please use your work email address.");
       }
       return ok(v);
@@ -397,8 +417,24 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
         }
         out[field] = String(v).trim();
       }
-      if (block.type === "contact_info" && out.email !== undefined) {
-        if (!EMAIL_RE.test(out.email)) return fail("invalid_email", "That doesn't look like a valid email address.");
+      /**
+       * Email and phone go through the real validators, for the reason
+       * `groupFieldBlock` exists: the moment the logic is written twice, one
+       * copy rots. This one had — an email here was checked against a regex and
+       * nothing else, so `businessOnly` and `allowedDomains` did not apply
+       * inside a contact block, and a phone was not checked at all. The same
+       * address refused by a standalone email question sailed through here.
+       */
+      if (block.type === "contact_info") {
+        for (const field of ["email", "phone"] as const) {
+          const given = out[field];
+          if (given === undefined) continue;
+          const res = validateAnswer(contactFieldBlock(block, field), given);
+          if (!res.ok) return res;
+          // Take the normalised value back — a lowercased address, a phone in
+          // E.164 — so what is stored matches what a standalone block stores.
+          out[field] = String(res.value);
+        }
       }
       return ok(out);
     }

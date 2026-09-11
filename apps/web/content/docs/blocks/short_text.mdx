@@ -210,7 +210,7 @@ Fields specific to `short_text`. The [fields every block has](/docs/blocks/commo
 }
 ```
 
-In a generated draft these arrive as `config` pairs: `unique=true to refuse a value another respondent already gave — a team name, a username, a seat number`.
+In a generated draft these arrive as `config` pairs: `pattern=<regular expression> when the author describes a SHAPE the answer must have — a student number like 1MS22CS045, an order id, a vehicle registration, a postcode. Write a real JavaScript regex anchored with ^ and $ (pattern=^1MS\d{2}[A-Z]{2}\d{3}$), and only when the author actually stated the format; never guess one, because a pattern nobody asked for refuses answers that were correct. unique=true to refuse a value another respondent already gave — a team name, a username, a seat number`.
 
 ## What you receive
 

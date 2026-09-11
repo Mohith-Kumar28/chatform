@@ -2,6 +2,8 @@ import {
   AddressField,
   Block as BlockSchema,
   BLOCK_TYPES,
+  parseEmailDomains,
+  safePattern,
   ContactField,
   Ending as EndingSchema,
   FormDoc,
@@ -158,6 +160,35 @@ const num = (v: string | undefined): number | undefined => {
 function flag(config: Map<string, string>, key: string): boolean {
   const v = config.get(key)?.trim().toLowerCase();
   return v === "true" || v === "yes" || v === "1" || v === "on";
+}
+
+/**
+ * `domains=acme.com|acme.co.uk` → the domains an email answer may come from.
+ *
+ * Tolerant on the way in because the model writes what the author said: a
+ * leading `@`, a whole address where a domain was meant ("careers@acme.com"),
+ * a stray "or". The schema normalises and validates what survives, and
+ * anything that is not domain-shaped is dropped rather than failing the
+ * generation — a malformed domain should cost the author one setting, not the
+ * whole form.
+ */
+function domainsOf(config: Map<string, string>): string[] {
+  return parseEmailDomains(config.get("domains") ?? config.get("domain") ?? config.get("alloweddomains") ?? "");
+}
+
+/**
+ * The rules a `contact_info` block's email and phone fields are held to.
+ *
+ * `undefined` rather than an empty object when nothing was asked for, so a
+ * plain contact block stays exactly the document it has always been.
+ */
+function contactFieldOptions(config: Map<string, string>): { email?: { businessOnly: boolean; allowedDomains: string[] }; phone?: { countryHint: string } } | undefined {
+  const domains = domainsOf(config);
+  const businessOnly = flag(config, "businessonly");
+  const countryHint = countryHintOf(config);
+  const email = domains.length > 0 || businessOnly ? { businessOnly, allowedDomains: domains } : undefined;
+  const phone = countryHint ? { countryHint } : undefined;
+  return email || phone ? { ...(email ? { email } : {}), ...(phone ? { phone } : {}) } : undefined;
 }
 
 /** `country=IN` → the two-letter hint the phone validator dials with. */
@@ -433,10 +464,22 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
         return done(BlockSchema.parse({ ...base, type: "welcome", buttonLabel: "Start" }));
       case "statement":
         return done(BlockSchema.parse({ ...base, type: "statement", buttonLabel: "Continue" }));
-      case "short_text":
+      case "short_text": {
+        // Dropped rather than stored when it will not compile: a pattern the
+        // respondent's answer is silently never checked against is worse than
+        // no pattern, because the author believes it is working.
+        const pattern = safePattern(config.get("pattern"));
         return done(
-          BlockSchema.parse({ ...base, type: "short_text", minLength: 0, maxLength: 300, unique: flag(config, "unique") }),
+          BlockSchema.parse({
+            ...base,
+            type: "short_text",
+            minLength: 0,
+            maxLength: 300,
+            unique: flag(config, "unique"),
+            ...(pattern ? { pattern } : {}),
+          }),
         );
+      }
       case "long_text":
         return done(BlockSchema.parse({ ...base, type: "long_text", minLength: 0, maxLength: 1500 }));
       case "email":
@@ -446,6 +489,7 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
             type,
             unique: flag(config, "unique"),
             businessOnly: flag(config, "businessonly"),
+            allowedDomains: domainsOf(config),
             verify: flag(config, "verify"),
           }),
         );
@@ -495,6 +539,7 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
             ...base,
             type,
             fields: pickFields(config.get("fields"), CONTACT_FIELDS),
+            fieldOptions: contactFieldOptions(config),
           }),
         );
       case "address":
@@ -614,11 +659,19 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
         // Against the schema's own defaults, which is what a block with
         // nothing written about it would have had.
         const { min, max } = entryBounds(config, { min: 1, max: 5 });
+        // Stated once for the group and applied to each email column — the
+        // author says "all of them have to be college addresses", not one
+        // sentence per column.
+        const domains = domainsOf(config);
+        const businessOnly = flag(config, "businessonly");
+        const ruled = fields.map((f) =>
+          f.kind === "email" ? { ...f, businessOnly, allowedDomains: domains } : f,
+        );
         return done(
           BlockSchema.parse({
             ...base,
             type,
-            fields,
+            fields: ruled,
             itemLabel: (config.get("item") ?? config.get("itemlabel") ?? "Entry").slice(0, 60),
             minEntries: min,
             maxEntries: max,
@@ -709,7 +762,7 @@ export function applyBlockConfig(block: Block, raw: string | undefined): Block |
       bool("unique", "unique");
       set("minlength", "minLength", (v) => num(v));
       set("maxlength", "maxLength", (v) => num(v));
-      set("pattern", "pattern", (v) => v);
+      set("pattern", "pattern", (v) => safePattern(v));
       break;
     case "long_text":
       set("minlength", "minLength", (v) => num(v));
@@ -830,6 +883,28 @@ export interface LooseEnding {
   body: string;
   kind?: "success" | "screen_out";
   requirements?: string;
+  /** Where to send them afterwards, if the author asked for anywhere. */
+  redirectUrl?: string;
+}
+
+/**
+ * A redirect target the model wrote, or nothing.
+ *
+ * Dropped rather than fixed up when it is not an absolute http(s) URL. The
+ * model is quoting the author here, and a half-guessed destination — a bare
+ * domain, a path, a sentence — is worse than none: `Ending.redirectUrl` is a
+ * `z.string().url()`, so a bad one fails the whole parse and costs the author
+ * the entire edit rather than one setting.
+ */
+function redirectTarget(raw: string | undefined): string | undefined {
+  const v = (raw ?? "").trim();
+  if (!v) return undefined;
+  try {
+    const url = new URL(v);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString().slice(0, 500) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** `end_thanks`, from whatever the model wrote, unique within `taken`. */
@@ -895,6 +970,9 @@ export function normalizeDraftEndings(
           title: e.title || prior.title,
           bodyMd: e.body || prior.bodyMd,
           kind,
+          // Only when the model wrote one. An edit about the wording of an
+          // ending must not drop the redirect the author set by hand.
+          redirectUrl: redirectTarget(e.redirectUrl) ?? prior.redirectUrl,
           // A screen-out that came back with no requirements keeps the ones it
           // had: "reword the ineligible screen" must not silently empty the list.
           requirements: requirements.length > 0 ? requirements : kind === "screen_out" ? prior.requirements : [],
@@ -908,6 +986,7 @@ export function normalizeDraftEndings(
         ref: endingRef(e.ref, i, taken),
         title: e.title,
         bodyMd: e.body,
+        redirectUrl: redirectTarget(e.redirectUrl),
         redirectDelaySec: 5,
         showSummary: false,
         kind,

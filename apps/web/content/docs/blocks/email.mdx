@@ -37,6 +37,13 @@ Fields specific to `email`. The [fields every block has](/docs/blocks/common-fie
       "default": false,
       "type": "boolean"
     },
+    "allowedDomains": {
+      "maxItems": 20,
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "verify": {
       "default": false,
       "type": "boolean"
@@ -198,7 +205,7 @@ Fields specific to `email`. The [fields every block has](/docs/blocks/common-fie
 }
 ```
 
-In a generated draft these arrive as `config` pairs: `businessOnly=true to refuse gmail and the other free providers; verify=true ONLY when the author asked for the address to be confirmed — it emails a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number`.
+In a generated draft these arrive as `config` pairs: `domains=<acme.com|acme.co.uk> to accept ONLY those domains — use it whenever the author names the company, college or organisation an address must belong to; businessOnly=true to refuse gmail and the other free providers when no particular domain was named; verify=true ONLY when the author asked for the address to be confirmed — it emails a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number`.
 
 ## What you receive
 

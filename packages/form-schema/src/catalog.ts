@@ -40,12 +40,13 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
 
   short_text: {
     summary: "One line of free text — a name, a job title, a company.",
-    config: "unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
+    config:
+      "pattern=<regular expression> when the author describes a SHAPE the answer must have — a student number like 1MS22CS045, an order id, a vehicle registration, a postcode. Write a real JavaScript regex anchored with ^ and $ (pattern=^1MS\\d{2}[A-Z]{2}\\d{3}$), and only when the author actually stated the format; never guess one, because a pattern nobody asked for refuses answers that were correct. unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
   },
   long_text: { summary: "A paragraph. Only when you genuinely want prose." },
   email: {
     summary: "An email address, validated as one.",
-    config: "businessOnly=true to refuse gmail and the other free providers; verify=true ONLY when the author asked for the address to be confirmed — it emails a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
+    config: "domains=<acme.com|acme.co.uk> to accept ONLY those domains — use it whenever the author names the company, college or organisation an address must belong to; businessOnly=true to refuse gmail and the other free providers when no particular domain was named; verify=true ONLY when the author asked for the address to be confirmed — it emails a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
   },
   phone: {
     summary: "A phone number, validated as one.",
@@ -107,7 +108,8 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
 
   contact_info: {
     summary: "Name, email and phone collected together in one step.",
-    config: "fields=<first_name|last_name|email|phone>",
+    config:
+      "fields=<first_name|last_name|email|phone>; domains=<acme.com|acme.co.uk> and businessOnly=true hold the email field to the same rules the standalone email block takes; country=<2-letter code> does the same for the phone field",
   },
   address: {
     summary: "A postal address.",
@@ -117,7 +119,7 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
     summary:
       "A small form asked once per person or item, repeated as many times as needed — two to five team members each with a name and an email, guests on a booking, line items on an order. Use this whenever the request describes the SAME set of details collected several times over; never a numbered run of separate questions (\"Member 1 name\", \"Member 2 name\"), which cannot stretch to a team of six or shrink to a team of two.",
     config:
-      "fields=<Label:kind|Label:kind> where kind is one of short_text, long_text, email, phone, url, number, date, single_select, yes_no — append * to make a field required, and list a select's choices in brackets (Role:single_select[Lead|Member]); item=<Team member> names one entry; min=<2>, max=<5> bound how many there may be",
+      "fields=<Label:kind|Label:kind> where kind is one of short_text, long_text, email, phone, url, number, date, single_select, yes_no — append * to make a field required, and list a select's choices in brackets (Role:single_select[Lead|Member]); item=<Team member> names one entry; min=<2>, max=<5> bound how many there may be; domains=<acme.com> and businessOnly=true apply to every email column in the group",
   },
   legal_consent: {
     summary:

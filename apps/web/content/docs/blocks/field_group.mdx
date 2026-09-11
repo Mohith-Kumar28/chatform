@@ -123,6 +123,17 @@ Fields specific to `field_group`. The [fields every block has](/docs/blocks/comm
           },
           "max": {
             "type": "number"
+          },
+          "businessOnly": {
+            "default": false,
+            "type": "boolean"
+          },
+          "allowedDomains": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -309,7 +320,7 @@ Fields specific to `field_group`. The [fields every block has](/docs/blocks/comm
 }
 ```
 
-In a generated draft these arrive as `config` pairs: `fields=<Label:kind|Label:kind> where kind is one of short_text, long_text, email, phone, url, number, date, single_select, yes_no — append * to make a field required, and list a select's choices in brackets (Role:single_select[Lead|Member]); item=<Team member> names one entry; min=<2>, max=<5> bound how many there may be`.
+In a generated draft these arrive as `config` pairs: `fields=<Label:kind|Label:kind> where kind is one of short_text, long_text, email, phone, url, number, date, single_select, yes_no — append * to make a field required, and list a select's choices in brackets (Role:single_select[Lead|Member]); item=<Team member> names one entry; min=<2>, max=<5> bound how many there may be; domains=<acme.com> and businessOnly=true apply to every email column in the group`.
 
 ## What you receive
 

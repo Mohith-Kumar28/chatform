@@ -41,6 +41,37 @@ Fields specific to `contact_info`. The [fields every block has](/docs/blocks/com
           "phone"
         ]
       }
+    },
+    "fieldOptions": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "object",
+          "properties": {
+            "businessOnly": {
+              "default": false,
+              "type": "boolean"
+            },
+            "allowedDomains": {
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "phone": {
+          "type": "object",
+          "properties": {
+            "countryHint": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 2
+            }
+          }
+        }
+      }
     }
   },
   "required": [
@@ -200,7 +231,7 @@ Fields specific to `contact_info`. The [fields every block has](/docs/blocks/com
 }
 ```
 
-In a generated draft these arrive as `config` pairs: `fields=<first_name|last_name|email|phone>`.
+In a generated draft these arrive as `config` pairs: `fields=<first_name|last_name|email|phone>; domains=<acme.com|acme.co.uk> and businessOnly=true hold the email field to the same rules the standalone email block takes; country=<2-letter code> does the same for the phone field`.
 
 ## What you receive
 

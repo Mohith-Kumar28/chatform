@@ -101,9 +101,26 @@ export function stripForPublish(input: FormDoc, ent: Entitlements): StripResult 
       note(stripped, "settings.meta", "form_metadata");
     }
   }
-  if (s.onComplete?.redirectUrl && !can(ent, "completion_redirect")) {
-    s.onComplete.redirectUrl = undefined;
-    note(stripped, "settings.onComplete.redirectUrl", "completion_redirect");
+  /**
+   * Both places a redirect can be set, not just the settings one.
+   *
+   * `Ending.redirectUrl` has always existed and `toPublicEnding` has always
+   * preferred it over the form-level setting, so the paid feature was reachable
+   * by writing it onto an ending — through the API, or through any builder
+   * control that offers it. Only the settings field was stripped, which made
+   * this a paywall with a door beside it. Gate the capability, wherever it is
+   * expressed.
+   */
+  if (!can(ent, "completion_redirect")) {
+    if (s.onComplete?.redirectUrl) {
+      s.onComplete.redirectUrl = undefined;
+      note(stripped, "settings.onComplete.redirectUrl", "completion_redirect");
+    }
+    for (const [i, ending] of doc.endings.entries()) {
+      if (!ending.redirectUrl) continue;
+      ending.redirectUrl = undefined;
+      note(stripped, `endings[${i}].redirectUrl`, "completion_redirect");
+    }
   }
   /**
    * The confirmation email is not a paid feature; writing your own is.

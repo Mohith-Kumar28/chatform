@@ -463,8 +463,8 @@ export function SettingsPanel({
           </SettingRow>
           <LockedControl feature="completion_redirect">
           <SettingRow
-            label="Redirect after completion"
-            description="Opens your own page in a new tab when they finish. The confirmation stays open behind it."
+            label="Default redirect after completion"
+            description="Where a success ending sends people when it has no redirect of its own. Set one on a particular ending to send those respondents somewhere else — accepted teams to a group chat, everyone else here. Screen-outs never inherit this."
             issuePath="settings.onComplete.redirectUrl"
           >
             <BufferedInput

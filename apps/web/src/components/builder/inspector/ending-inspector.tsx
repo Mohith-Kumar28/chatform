@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { LockedControl } from "@/components/billing/gate";
 import { Field, fieldInputClass } from "./fields";
 import { RichDescription } from "./rich-description";
 
@@ -148,6 +149,53 @@ export function EndingInspector({
               <Plus className="size-3.5" /> Add requirement
             </Button>
           </div>
+        </Field>
+      )}
+
+      {/*
+        Per ending, because that is how authors describe it: accepted teams go
+        to the WhatsApp group, everyone else back to the site. The form-level
+        setting in Settings stays as the default beneath every success ending —
+        `toPublicEnding` prefers this one — so a form that wants a single
+        destination still sets it once.
+
+        Offered on a screen-out too, and deliberately: a refusal that sends
+        somebody to the eligibility rules is a real thing to want. It just is
+        not inherited from the completion setting, which is about finishing.
+      */}
+      <LockedControl feature="completion_redirect">
+        <Field
+          label="Redirect when they reach this ending"
+          help={
+            ending.redirectUrl
+              ? `They land on this page after ${ending.redirectDelaySec} second${ending.redirectDelaySec === 1 ? "" : "s"}.`
+              : screenOut
+                ? "Leave empty to show this screen and stay put."
+                : "Leave empty to use the form's completion redirect, if it has one."
+          }
+        >
+          <BufferedInput
+            value={ending.redirectUrl ?? ""}
+            placeholder="https://example.com/welcome"
+            onCommit={(v) => patch({ redirectUrl: v.trim() || undefined })}
+            className={fieldInputClass}
+          />
+        </Field>
+      </LockedControl>
+
+      {ending.redirectUrl && (
+        <Field label="Wait before redirecting" help="Seconds the message stays on screen first.">
+          <BufferedInput
+            value={String(ending.redirectDelaySec)}
+            inputMode="numeric"
+            onCommit={(v) => {
+              // Clamped to the schema's own range rather than trusted: the box
+              // is free text, and a NaN here would fail the whole save.
+              const n = Number.parseInt(v, 10);
+              patch({ redirectDelaySec: Number.isFinite(n) ? Math.min(Math.max(n, 0), 120) : 5 });
+            }}
+            className={fieldInputClass}
+          />
         </Field>
       )}
     </div>

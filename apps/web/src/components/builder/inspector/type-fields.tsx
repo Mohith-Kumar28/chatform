@@ -1,6 +1,6 @@
 "use client";
 
-import { isValidUpiId, UPI_CURRENCY, type Block } from "@repo/form-schema";
+import { isValidUpiId, parseEmailDomains, UPI_CURRENCY, type Block } from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
 import { GroupFieldsEditor, PatternHelp, patternIsValid } from "./group-fields";
 import {
@@ -96,10 +96,10 @@ export function TypeFields({
     case "email":
       return (
         <>
-          <SwitchField
-            label="Business emails only"
-            checked={block.businessOnly}
-            onChange={(v) => patch({ businessOnly: v } as Partial<Block>)}
+          <EmailRuleFields
+            businessOnly={block.businessOnly}
+            allowedDomains={block.allowedDomains}
+            onChange={(next) => patch(next as Partial<Block>, key("emailRules"))}
           />
           <VerifyField
             label="Verify by email code"
@@ -557,20 +557,71 @@ export function TypeFields({
         />
       );
 
-    case "contact_info":
+    case "contact_info": {
+      /*
+        The rules only appear for the fields that are switched on. A domain box
+        under a contact block that is not collecting an email is a control that
+        cannot do anything, and the author has no way to know that from looking
+        at it.
+      */
+      const options = block.fieldOptions;
       return (
-        <CheckboxGroup
-          label="Fields to collect"
-          value={block.fields}
-          onChange={(fields) => patch({ fields } as Partial<Block>)}
-          options={[
-            { value: "first_name", label: "First name" },
-            { value: "last_name", label: "Last name" },
-            { value: "email", label: "Email" },
-            { value: "phone", label: "Phone" },
-          ]}
-        />
+        <>
+          <CheckboxGroup
+            label="Fields to collect"
+            value={block.fields}
+            onChange={(fields) => patch({ fields } as Partial<Block>)}
+            options={[
+              { value: "first_name", label: "First name" },
+              { value: "last_name", label: "Last name" },
+              { value: "email", label: "Email" },
+              { value: "phone", label: "Phone" },
+            ]}
+          />
+          {block.fields.includes("email") && (
+            <EmailRuleFields
+              businessOnly={options?.email?.businessOnly ?? false}
+              allowedDomains={options?.email?.allowedDomains ?? []}
+              onChange={(next) =>
+                patch(
+                  {
+                    fieldOptions: {
+                      ...options,
+                      email: {
+                        businessOnly: options?.email?.businessOnly ?? false,
+                        allowedDomains: options?.email?.allowedDomains ?? [],
+                        ...next,
+                      },
+                    },
+                  } as Partial<Block>,
+                  key("emailRules"),
+                )
+              }
+            />
+          )}
+          {block.fields.includes("phone") && (
+            <TextField
+              label="Country code"
+              placeholder="IN"
+              value={options?.phone?.countryHint ?? ""}
+              onChange={(v) =>
+                patch(
+                  {
+                    fieldOptions: {
+                      ...options,
+                      phone: { countryHint: v.toUpperCase().slice(0, 2) || undefined },
+                    },
+                  } as Partial<Block>,
+                  key("countryHint"),
+                )
+              }
+              maxLength={2}
+              help="Lets someone type a national number without the dialling code."
+            />
+          )}
+        </>
       );
+    }
 
     case "address":
       return (
@@ -687,6 +738,46 @@ export function TypeFields({
  * the builder: an author should be able to see what the plan holds, and the
  * publish path strips it if they somehow get it switched on anyway.
  */
+/**
+ * The two rules an email answer can be held to, wherever one is asked for.
+ *
+ * One component because the rules are one idea: the standalone block and the
+ * email inside a contact block should offer the same thing and word it the same
+ * way. `allowedDomains` is the narrower of the two, so it sits underneath — an
+ * author who knows the domain reaches for the box, and one who only knows "not
+ * gmail" reaches for the switch above it.
+ */
+function EmailRuleFields({
+  businessOnly,
+  allowedDomains,
+  onChange,
+}: {
+  businessOnly: boolean;
+  allowedDomains: string[];
+  onChange: (next: { businessOnly?: boolean; allowedDomains?: string[] }) => void;
+}) {
+  return (
+    <>
+      <SwitchField
+        label="Business emails only"
+        checked={businessOnly}
+        onChange={(v) => onChange({ businessOnly: v })}
+      />
+      <TextField
+        label="Accept only these domains"
+        placeholder="acme.com, acme.edu"
+        value={allowedDomains.join(", ")}
+        onChange={(v) => onChange({ allowedDomains: parseEmailDomains(v) })}
+        help={
+          allowedDomains.length > 0
+            ? `Only addresses ending in ${allowedDomains.map((d) => `@${d}`).join(", ")} are accepted.`
+            : "Leave empty to accept any domain. Separate several with commas."
+        }
+      />
+    </>
+  );
+}
+
 function VerifyField({
   label,
   checked,

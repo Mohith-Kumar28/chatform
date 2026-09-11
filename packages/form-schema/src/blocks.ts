@@ -155,6 +155,101 @@ const Unique = z.boolean().default(false);
  */
 const VerifyAnswer = z.boolean().default(false);
 
+/**
+ * The exact domains an email answer may come from.
+ *
+ * `businessOnly` answers a different question and the two are not
+ * interchangeable: it refuses the eight free providers in `FREEMAIL`, which is
+ * what you want when you do not know the respondent's employer. This is for
+ * when you do — an internal hackathon that only its own students may enter, a
+ * partner portal, a beta for one customer — and "not gmail" does not express
+ * that at all.
+ *
+ * Empty means no domain restriction, so the default is the behaviour every
+ * existing form already has. Stored normalised — lowercased, with the `@`
+ * people inevitably type stripped — because an author typing "@Abc.com" and a
+ * respondent typing "someone@abc.com" mean the same thing and only one of them
+ * should have to care.
+ */
+const DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+
+const EmailDomain = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .transform((d) => d.replace(/^@+/, ""))
+  .pipe(
+    z
+      .string()
+      .min(3)
+      .max(253)
+      .regex(DOMAIN_RE, "Enter a domain like acme.com"),
+  );
+export const EmailDomains = z.array(EmailDomain).max(20).default([]);
+
+/**
+ * Free text → the domains in it.
+ *
+ * One implementation, shared by the inspector box the author types into and by
+ * the config the AI writes, because they are the same job and two copies would
+ * disagree about "@Acme.com " on exactly the day it mattered. Separators are
+ * whatever anyone would reach for; a whole address is reduced to its domain,
+ * since "careers@acme.com" is what people paste when asked for a domain; and
+ * anything still not domain-shaped is dropped rather than stored, so a
+ * half-typed entry costs a setting instead of failing the document.
+ */
+/**
+ * A regular expression we are willing to store, or nothing.
+ *
+ * Two things get dropped. One that does not compile — which matters most for
+ * patterns the AI writes, since nobody proofreads those — because
+ * `validateAnswer` catches the throw and skips the check, so a broken pattern
+ * does not fail loudly, it just quietly stops validating while the author
+ * believes it is. And one built out of nested quantifiers, the shape that
+ * backtracks exponentially: the pattern runs against respondent input on every
+ * keystroke, so `(a+)+$` is a way to hang the composer from the answer box.
+ *
+ * Deliberately crude. It is a guard against a footgun, not a ReDoS analyser,
+ * and the cost of being slightly too strict is one author rephrasing a pattern.
+ */
+export function safePattern(raw: string | undefined): string | undefined {
+  const v = (raw ?? "").trim();
+  if (!v || v.length > 500) return undefined;
+  // A quantifier applied to a group that is itself quantified.
+  if (/\([^)]*[+*][^)]*\)\s*[+*]/.test(v)) return undefined;
+  try {
+    new RegExp(v);
+    return v;
+  } catch {
+    return undefined;
+  }
+}
+
+export function parseEmailDomains(raw: string): string[] {
+  return raw
+    .split(/[\s,|]+/)
+    .map((d) => d.trim().toLowerCase().replace(/^@+/, ""))
+    .map((d) => (d.includes("@") ? (d.split("@")[1] ?? "") : d))
+    .filter((d) => DOMAIN_RE.test(d))
+    .filter((d, i, all) => all.indexOf(d) === i)
+    .slice(0, 20);
+}
+
+/**
+ * The rules an email answer is held to, wherever it is asked for.
+ *
+ * Shared rather than repeated because an email is an email: the same question
+ * asked standalone, inside `contact_info`, or as a column of a `field_group`
+ * should accept and refuse the same addresses. They did not — only the
+ * standalone block had any of this — so "work email only" silently became
+ * "any email" the moment an author put it inside a contact block.
+ */
+export const EmailRules = {
+  /** Refuse gmail and the other free providers. */
+  businessOnly: z.boolean().default(false),
+  allowedDomains: EmailDomains,
+};
+
 export const ContactField = z.enum(["first_name", "last_name", "email", "phone"]);
 export const AddressField = z.enum(["street", "city", "state", "postal", "country"]);
 
@@ -210,6 +305,14 @@ export const GroupField = z.object({
   /** `number` only. */
   min: z.number().optional(),
   max: z.number().optional(),
+  /**
+   * `email` only — the same two rules the standalone block takes, applied per
+   * cell by `groupFieldBlock`. A roster of team members whose addresses must
+   * all be on the college's domain is the ordinary case, and before this the
+   * column accepted anything shaped like an email.
+   */
+  businessOnly: z.boolean().default(false),
+  allowedDomains: EmailDomains,
 });
 export type GroupField = z.output<typeof GroupField>;
 
@@ -237,7 +340,7 @@ export const Block = z.discriminatedUnion("type", [
     ...BlockBase,
     type: z.literal("email"),
     unique: Unique,
-    businessOnly: z.boolean().default(false),
+    ...EmailRules,
     /** Email a six-digit code and hold the answer until it comes back. */
     verify: VerifyAnswer,
   }),
@@ -393,6 +496,27 @@ export const Block = z.discriminatedUnion("type", [
     ...BlockBase,
     type: z.literal("contact_info"),
     fields: z.array(ContactField).min(1),
+    /**
+     * Rules for the fields that have any, keyed by field name.
+     *
+     * Beside `fields` rather than inside it, and that is the whole design. Made
+     * `fields` an array of objects and every form ever saved would need
+     * migrating, every integration reading `fields` would break, and the common
+     * case — four plain fields, no rules — would carry four objects to say
+     * nothing. Keyed and optional, an author who wants none pays nothing and an
+     * existing document parses unchanged.
+     *
+     * A key for a field not in `fields` is ignored rather than rejected: turning
+     * the email field off should not invalidate the document, and turning it
+     * back on should find its rules where it left them.
+     */
+    fieldOptions: z
+      .object({
+        email: z.object(EmailRules).partial().optional(),
+        /** Same meaning as the standalone phone block's — which country a bare national number belongs to. */
+        phone: z.object({ countryHint: z.string().length(2).optional() }).optional(),
+      })
+      .optional(),
   }),
   z.object({
     ...BlockBase,
@@ -488,6 +612,32 @@ export function enforcesUnique(block: Block): boolean {
  * outside one — and the moment that logic is written twice, one copy is the
  * one that rots. `validateAnswer` calls this and then calls itself.
  */
+/**
+ * One `contact_info` field as the standalone block it is really asking for.
+ *
+ * The sibling of `groupFieldBlock`, and for the same reason: a contact block's
+ * email should accept exactly what an email question accepts, and the only way
+ * to guarantee that is to hand it to the same validator rather than to a second
+ * implementation that drifts. `ref` and `title` are borrowed from the parent
+ * because nothing downstream of validation reads them here.
+ */
+export function contactFieldBlock(
+  block: Extract<Block, { type: "contact_info" }>,
+  field: "email" | "phone",
+): Block {
+  const base = { id: block.id, ref: block.ref, title: block.title, required: false };
+  if (field === "phone") {
+    return Block.parse({ ...base, type: "phone", ...(block.fieldOptions?.phone ?? {}) });
+  }
+  const rules = block.fieldOptions?.email ?? {};
+  return Block.parse({
+    ...base,
+    type: "email",
+    businessOnly: rules.businessOnly ?? false,
+    allowedDomains: rules.allowedDomains ?? [],
+  });
+}
+
 export function groupFieldBlock(field: GroupField): Block {
   const base = {
     id: field.id,
@@ -508,7 +658,12 @@ export function groupFieldBlock(field: GroupField): Block {
     case "long_text":
       return Block.parse({ ...base, type: "long_text", maxLength: 2000 });
     case "email":
-      return Block.parse({ ...base, type: "email" });
+      return Block.parse({
+        ...base,
+        type: "email",
+        businessOnly: field.businessOnly,
+        allowedDomains: field.allowedDomains,
+      });
     case "phone":
       return Block.parse({ ...base, type: "phone" });
     case "url":

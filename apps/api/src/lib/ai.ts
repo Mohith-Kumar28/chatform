@@ -366,6 +366,16 @@ export const GenerationDraft = z.object({
          * rejected before the model is reached. Empty on a `success` ending.
          */
         requirements: z.string(),
+        /**
+         * Where the respondent goes after this ending, or "".
+         *
+         * Per ending rather than per form, because that is how authors talk
+         * about it: accepted teams go to the WhatsApp group, everyone else to
+         * the newsletter. Only ever what the author actually named — a guessed
+         * destination is worse than none, and `redirectTarget` drops anything
+         * that is not an absolute http(s) URL rather than failing the parse.
+         */
+        redirectUrl: z.string(),
       }),
     )
     .min(1),
@@ -487,6 +497,8 @@ export const EditDraft = z.object({
         kind: z.enum(["success", "screen_out"]),
         /** `screen_out` only: what they did not meet, as "a | b | c". */
         requirements: z.string(),
+        /** Where the respondent goes afterwards, or "". See `GenerationDraft`. */
+        redirectUrl: z.string(),
       }),
     ),
   /** Refs of questions the request asks to be taken out. Usually empty. */

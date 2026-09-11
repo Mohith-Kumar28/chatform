@@ -5,6 +5,7 @@ import { GripVertical, Plus, Trash2 } from "lucide-react";
 import {
   BLOCK_PRESENTATION,
   GROUP_FIELD_KINDS,
+  parseEmailDomains,
   type Block,
   type GroupField,
   type GroupFieldKind,
@@ -21,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { Field, fieldInputClass, ListEditor } from "./fields";
+import { Field, fieldInputClass, ListEditor, SwitchField, TextField } from "./fields";
 import { BufferedInput } from "@/components/ui/buffered-input";
 import { DragHandle, SortableList, moved, useSortableRow } from "./sortable-list";
 
@@ -340,6 +341,27 @@ export function GroupFieldsEditor({
                   )}
               </div>
 
+              {field.kind === "email" && (
+                <div className="space-y-2 pl-5">
+                  <SwitchField
+                    label="Business emails only"
+                    checked={field.businessOnly}
+                    onChange={(v) => update(i, { businessOnly: v })}
+                  />
+                  <TextField
+                    label="Accept only these domains"
+                    placeholder="acme.com, acme.edu"
+                    value={field.allowedDomains.join(", ")}
+                    onChange={(v) => update(i, { allowedDomains: parseEmailDomains(v) })}
+                    help={
+                      field.allowedDomains.length > 0
+                        ? `Only ${field.allowedDomains.map((d) => `@${d}`).join(", ")} accepted in this column.`
+                        : "Leave empty to accept any domain."
+                    }
+                  />
+                </div>
+              )}
+
               {field.kind === "single_select" && (
                 <div className="pl-5">
                   <ListEditor
@@ -390,6 +412,10 @@ export function GroupFieldsEditor({
                   kind: "short_text",
                   required: false,
                   options: [],
+                  // Both default off; they only mean anything once the kind is
+                  // `email`, and the editor only offers them there.
+                  businessOnly: false,
+                  allowedDomains: [],
                 },
               ])
             }
