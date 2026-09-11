@@ -118,7 +118,7 @@ export function TemplateCard({
           </div>
         )}
 
-        <div className="z-10 ml-auto flex items-center gap-1">
+        <div className="z-10 ml-auto flex items-center gap-2.5">
           {pending ? (
             <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
               <Loader2 className="size-3.5 animate-spin" />
@@ -141,7 +141,10 @@ export function TemplateCard({
                   // this" hint, and two pieces of small grey text a few pixels
                   // apart — one of which creates a form — is exactly the
                   // ambiguity this whole screen was changed to remove.
-                  className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100"
+                  // Held at the row's own type size and a step shorter than
+                  // `sm`: at 14px in a 12px line it read as a stray control
+                  // dropped onto the card rather than one of its two actions.
+                  className="h-7 px-3 text-xs opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100"
                 >
                   Use
                 </Button>

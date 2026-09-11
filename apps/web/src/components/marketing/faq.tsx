@@ -57,13 +57,22 @@ export const FAQ_ITEMS = [
   },
 ] as const;
 
+/**
+ * Only ever rendered on a vivid band, so it takes the band's ink. The
+ * accordion's defaults are for cream: grey answers and an orange hover and
+ * ring, which on a saturated ground read as washed out and as a clash.
+ */
 export function Faq() {
   return (
     <Accordion type="single" collapsible className="mx-auto max-w-3xl">
       {FAQ_ITEMS.map((item) => (
         <AccordionItem key={item.question} value={item.question}>
-          <AccordionTrigger>{item.question}</AccordionTrigger>
-          <AccordionContent>{item.answer}</AccordionContent>
+          <AccordionTrigger className="hover:text-inherit hover:opacity-70 focus-visible:ring-current/40 [&>svg]:text-current">
+            {item.question}
+          </AccordionTrigger>
+          <AccordionContent className="text-(color:--on-band-vivid-muted)">
+            {item.answer}
+          </AccordionContent>
         </AccordionItem>
       ))}
     </Accordion>

@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Plus, Search, Sparkles } from "lucide-react";
+import { ArrowRight, Mic, Plus, Search, Sparkles, Square } from "lucide-react";
 import { toast } from "sonner";
+import { useDictation } from "@/hooks/use-dictation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -360,6 +361,21 @@ function AiPanel({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
+  // Describing a form is a few sentences, which is easier said than typed.
+  // Words land in the box to be read back, not straight off to the generator.
+  const dictation = useDictation({
+    text: prompt,
+    onChange: setPrompt,
+    onError: (message) => toast.error(message),
+  });
+
+  // A recogniser still writing into the box would keep changing a brief that
+  // has already gone.
+  const submit = () => {
+    dictation.stop();
+    onGenerate();
+  };
+
   // Grow to fit, between a floor and a ceiling. The floor is three lines, so
   // the box reads as the main event before anything is typed; the ceiling
   // stops a pasted paragraph from pushing the gallery off the screen.
@@ -392,7 +408,7 @@ function AiPanel({
         maxLength={PROMPT_MAX}
         onChange={(e) => setPrompt(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canGenerate) onGenerate();
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canGenerate) submit();
         }}
         aria-label="Describe the form you need"
         placeholder="Describe the form you need…"
@@ -412,14 +428,45 @@ function AiPanel({
             form should ask, and what it should already know. Quiet, because
             Generate is the thing on this row that has to be found. */}
         <AddKnowledgeButton count={knowledgeCount} onClick={onOpenKnowledge} />
-        <span className="text-muted-foreground ml-auto hidden items-center gap-1 text-xs sm:flex">
-          <Kbd>⌘</Kbd>
-          <Kbd>↵</Kbd>
-        </span>
-        <Button shape="pill" disabled={!canGenerate} onClick={onGenerate} className="max-sm:ml-auto">
-          <Sparkles className="size-4" />
-          Generate
-        </Button>
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-muted-foreground hidden items-center gap-1 text-xs sm:flex">
+            <Kbd>⌘</Kbd>
+            <Kbd>↵</Kbd>
+          </span>
+          {/* Nothing at all where the browser has no recogniser — a mic that
+              cannot listen is worse than no mic. */}
+          {dictation.supported && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              shape="pill"
+              onClick={() => {
+                dictation.toggle();
+                ref.current?.focus();
+              }}
+              aria-pressed={dictation.listening}
+              aria-label={dictation.listening ? "Stop dictating" : "Dictate"}
+              className={cn(
+                "text-muted-foreground shrink-0",
+                dictation.listening && "text-destructive hover:text-destructive",
+              )}
+            >
+              {dictation.listening ? (
+                <span className="relative flex size-3.5 items-center justify-center">
+                  <span className="bg-destructive/25 absolute inline-flex size-full animate-ping rounded-full" />
+                  <Square className="size-2.5 fill-current" />
+                </span>
+              ) : (
+                <Mic className="size-[1.125rem]" />
+              )}
+            </Button>
+          )}
+          <Button shape="pill" disabled={!canGenerate} onClick={submit}>
+            <Sparkles className="size-4" />
+            Generate
+          </Button>
+        </div>
       </div>
     </section>
   );
