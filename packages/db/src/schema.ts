@@ -1316,3 +1316,79 @@ export const mailDeliveries = sqliteTable(
     index("idx_mail_deliveries_kind").on(t.kind, t.status, t.createdAt),
   ],
 );
+
+// ───────────────────────── Respondents ─────────────────────────
+
+/**
+ * A person who fills in forms, across every form on the platform.
+ *
+ * The one table here that is deliberately not scoped to an organization or a
+ * form. Everything else about a response is a customer's data; this is the
+ * platform's own record that the same person answered a form in March and
+ * another one in September, which is the question it exists to answer.
+ *
+ * Identity on a `submissions` row stays exactly where it was — copied onto the
+ * response, because a response has to stay attributable long after sessions are
+ * pruned. This does not replace that; it is the join key those copies never had.
+ */
+export const respondents = sqliteTable("respondents", {
+  id: text("id").primaryKey(),
+  /**
+   * Best known, never authoritative.
+   *
+   * Whatever the most recent verified sign-in or answered question told us, so
+   * a row reads as a person rather than as a hash. A respondent who signs in
+   * with a different name later simply has a different name here.
+   */
+  displayName: text("display_name"),
+  email: text("email"),
+  phone: text("phone"),
+  firstSeenAt: ts("first_seen_at").notNull(),
+  lastSeenAt: ts("last_seen_at").notNull(),
+  /**
+   * Set when this row lost a merge, pointing at the survivor.
+   *
+   * A tombstone rather than a delete: the id may already be stamped on
+   * responses, sitting in a downloaded export, or quoted in a support thread,
+   * and each of those should lead to the person rather than to nothing.
+   */
+  mergedInto: text("merged_into"),
+  createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+});
+
+/**
+ * Every identifier one person has ever been seen under.
+ *
+ * A visit hands us up to three — the browser fingerprint, a verified sign-in
+ * subject, an email address — and any one is enough to recognise somebody. The
+ * composite primary key is the rule that makes that work: **one identifier
+ * names one person, platform-wide, no duplicates.** The insert that would break
+ * it is exactly the insert that has discovered two rows are the same person,
+ * and that is what triggers a merge.
+ *
+ * Note the `device` values are salted platform-wide, unlike
+ * `submissions.fingerprint`, which is salted per form and keeps doing its own
+ * per-form job. Same browser, two derivations, two different questions.
+ */
+export const respondentKeys = sqliteTable(
+  "respondent_keys",
+  {
+    /** `device` | `identity` | `email`. */
+    kind: text("kind").notNull(),
+    /**
+     * `device`   — sha256(`<signing salt>:rsp:<fingerprint>`)
+     * `identity` — `<provider>:<subject>` from a verified sign-in
+     * `email`    — the address, lowercased
+     */
+    value: text("value").notNull(),
+    respondentId: text("respondent_id")
+      .notNull()
+      .references(() => respondents.id, { onDelete: "cascade" }),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [
+    primaryKey({ columns: [t.kind, t.value] }),
+    // Repointing every key of a losing row is the hot half of a merge.
+    index("idx_respondent_keys_respondent").on(t.respondentId),
+  ],
+);

@@ -1,4 +1,5 @@
 import { Hono, type MiddlewareHandler } from "hono";
+import { resolveRespondent } from "../../lib/respondents.js";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import { sha256Hex, toPublicBlock, readFormDoc } from "@repo/form-schema";
@@ -162,6 +163,17 @@ const createSessionRoute = (path: string) =>
       hiddenFields: body.hiddenFields ?? {},
       ipHash: opened.ipHash || null,
       fingerprint: opened.device.value || null,
+      /*
+        Who this is, platform-wide, resolved once as the session opens and
+        carried on the session rather than recomputed per response. A visit that
+        offered nothing to recognise anybody by resolves to null and stays
+        unattributed, which is the honest answer and keeps the count of people
+        meaning what it says.
+      */
+      respondentId: await resolveRespondent(c.env, {
+        deviceKey: opened.respondentDeviceKey,
+      }),
+      respondentDeviceKey: opened.respondentDeviceKey,
       // The source travels with the value, so a reader can tell "no fingerprint"
       // from "a fingerprint that happens to look like nothing".
       fingerprintSource: opened.device.source,

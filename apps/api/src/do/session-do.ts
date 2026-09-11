@@ -99,6 +99,16 @@ interface DoSessionMeta {
    * open response, above all — must honour only a real device signal.
    */
   fingerprintSource?: RespondentKeySource | null;
+  /**
+   * Who this is, platform-wide, resolved when the session opened.
+   *
+   * Stamped onto the response so a person's history can be assembled across
+   * forms. Null when the visit offered nothing to recognise anybody by — see
+   * `lib/respondents.ts`.
+   */
+  respondentId?: string | null;
+  /** The platform-wide device key, so a sign-in mid-form can link this browser. */
+  respondentDeviceKey?: string | null;
   /** They pressed "Start over": never reuse an earlier open response. */
   startedOver?: boolean;
   country: string | null;
@@ -434,6 +444,8 @@ export class SessionDO extends DurableObject<Bindings> {
     ipHash: string | null;
     fingerprint?: string | null;
     fingerprintSource?: RespondentKeySource | null;
+    respondentId?: string | null;
+    respondentDeviceKey?: string | null;
     /**
      * Opened by "Start over", which is a respondent saying they want nothing to
      * do with what they had. It already declines the device match in
@@ -483,6 +495,8 @@ export class SessionDO extends DurableObject<Bindings> {
       ipHash: params.ipHash,
       fingerprint: params.fingerprint ?? null,
       fingerprintSource: params.fingerprintSource ?? null,
+      respondentId: params.respondentId ?? null,
+      respondentDeviceKey: params.respondentDeviceKey ?? null,
       startedOver: params.startedOver === true,
       country: params.country,
       userAgent: params.userAgent,
@@ -678,7 +692,11 @@ export class SessionDO extends DurableObject<Bindings> {
      * not land is a stale results table, not a failed sign-in.
      */
     const openRow = await this.ctx.storage.get<string>("submission_id").catch(() => null);
-    if (openRow) await attachRespondent(this.env, openRow, identity);
+    // The device key travels with the identity, because signing in is the
+    // moment the graph learns that this browser and this person are one.
+    if (openRow) {
+      await attachRespondent(this.env, openRow, identity, this.meta?.respondentDeviceKey ?? null);
+    }
     try {
       await this.env.DB.prepare(`UPDATE chat_sessions SET respondent_identity = ? WHERE id = ?`)
         .bind(JSON.stringify(identity), this.meta.sessionId)
@@ -3445,6 +3463,7 @@ export class SessionDO extends DurableObject<Bindings> {
         country: this.meta!.country,
         startedAt: this.meta!.startedAt,
         fingerprint: this.meta!.fingerprint ?? null,
+        respondentId: this.meta!.respondentId ?? null,
         // Usually present: the gate refuses every turn until it is, and this row
         // is opened by the first accepted answer.
         identity: this.meta!.identity ?? null,

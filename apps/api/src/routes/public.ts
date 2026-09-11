@@ -10,6 +10,7 @@ import { SessionDO } from "../do/session-do.js";
 import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
 import { completedSubmissions, openSession, type FormRow } from "../lib/open-session.js";
 import { respondentKey } from "../lib/respondent-key.js";
+import { resolveRespondent } from "../lib/respondents.js";
 import { canonicalZone } from "../lib/quiet-hours.js";
 import { findDeviceResumable } from "../lib/respondent-history.js";
 import { reopenAbandonedResponse } from "../lib/submissions.js";
@@ -404,6 +405,17 @@ sessionsRouter.post(
       hiddenFields: body.hiddenFields ?? {},
       ipHash: opened.ipHash,
       fingerprint: opened.device.value || null,
+      /*
+        Who this is, platform-wide, resolved once as the session opens and
+        carried on the session rather than recomputed per response. A visit that
+        offered nothing to recognise anybody by resolves to null and stays
+        unattributed, which is the honest answer and keeps the count of people
+        meaning what it says.
+      */
+      respondentId: await resolveRespondent(c.env, {
+        deviceKey: opened.respondentDeviceKey,
+      }),
+      respondentDeviceKey: opened.respondentDeviceKey,
       // The source travels with the value, so a reader can tell "no fingerprint"
       // from "a fingerprint that happens to look like nothing".
       fingerprintSource: opened.device.source,

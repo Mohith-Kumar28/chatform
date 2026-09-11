@@ -3,6 +3,7 @@ import type { Bindings } from "../env.js";
 import { getEntitlements, meter, checkQuota } from "./entitlements.js";
 import { clampForRuntime, brandingHiddenFor } from "./doc-entitlements.js";
 import { respondentKey, type RespondentKey } from "./respondent-key.js";
+import { deviceKeyFor } from "./respondents.js";
 import { can } from "@repo/entitlements";
 import { isHashedPassword, verifyPassword, timingSafeEqual } from "./crypto.js";
 import type { ResponseSource } from "./submissions.js";
@@ -156,6 +157,14 @@ export type OpenSessionResult =
       ipHash: string;
       /** The salted device key, and how much of it is a real device signal. */
       device: RespondentKey;
+      /**
+       * The same browser fingerprint under the platform-wide salt.
+       *
+       * `device` is per form and answers "has this browser answered *this*
+       * form"; this one is global and answers "who is this". Both derive from
+       * the one signal, and neither can be computed from the other.
+       */
+      respondentDeviceKey: string | null;
     }
   | { ok: false; status: 401 | 403 | 409; body: { error: { code: string; message: string } } };
 
@@ -455,5 +464,6 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
     aiDegraded,
     ipHash,
     device,
+    respondentDeviceKey: deviceKeyFor(env, input.deviceSignal),
   };
 }

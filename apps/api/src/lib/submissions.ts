@@ -1,4 +1,5 @@
 import type { Bindings } from "../env.js";
+import { resolveRespondent } from "./respondents.js";
 import type { AnswerMap, RespondentIdentity } from "@repo/form-schema";
 import { enqueueMail } from "./mail.js";
 import { cancelFollowUps, creditFollowUpRecovery, scheduleFollowUps } from "./followups.js";
@@ -66,6 +67,14 @@ export interface OpenResponseArgs {
    */
   fingerprint?: string | null;
   /**
+   * Who this response belongs to, platform-wide. See `lib/respondents.ts`.
+   *
+   * Resolved when the session opened, because that is where the raw browser
+   * fingerprint is. Null for a headless caller who offered nothing to recognise
+   * anybody by, and re-stamped by `attachRespondent` if they sign in later.
+   */
+  respondentId?: string | null;
+  /**
    * The verified respondent, when one is already known at creation.
    *
    * Normally they are: the sign-in gate refuses every turn until an identity
@@ -89,8 +98,9 @@ export async function openResponse(o: ResponseOwner, a: OpenResponseArgs): Promi
     `INSERT INTO submissions
        (id, form_id, form_version_id, organization_id, session_id, source, is_test, status,
         hidden_fields, meta, started_at, updated_at, expires_at, api_key_id, fingerprint,
-        respondent_provider, respondent_subject, respondent_email, respondent_phone, respondent_name)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        respondent_id, respondent_provider, respondent_subject, respondent_email, respondent_phone,
+        respondent_name)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO NOTHING`,
   )
     .bind(
@@ -110,6 +120,7 @@ export async function openResponse(o: ResponseOwner, a: OpenResponseArgs): Promi
       a.expiresAt ?? null,
       a.apiKeyId ?? null,
       a.fingerprint || null,
+      a.respondentId ?? null,
       a.identity?.provider ?? null,
       a.identity?.subject ?? null,
       a.identity?.email ?? null,
@@ -147,6 +158,8 @@ export async function attachRespondent(
   env: Bindings,
   responseId: string,
   identity: RespondentIdentity,
+  /** The platform-wide device key, so signing in links this browser to the person. */
+  deviceKey?: string | null,
 ): Promise<void> {
   try {
     await env.DB.prepare(
@@ -164,6 +177,31 @@ export async function attachRespondent(
         identity.name ?? null,
       )
       .run();
+
+    /*
+      Signing in is where the identity graph usually learns something.
+      
+      Until this moment the person was a browser; now they are a verified
+      subject and an address, and either of those may already name somebody —
+      the same person on their laptop last week. `resolveRespondent` merges the
+      two rows if so, and the stamp moves to whichever id survived.
+
+      Written unconditionally rather than only when it changes: the update is a
+      single indexed write, and skipping it would need a read to find out
+      whether it was needed.
+    */
+    const respondentId = await resolveRespondent(env, {
+      identity: { provider: identity.provider, subject: identity.subject },
+      email: identity.email,
+      name: identity.name,
+      phone: identity.phone,
+      deviceKey: deviceKey ?? null,
+    });
+    if (respondentId) {
+      await env.DB.prepare(`UPDATE submissions SET respondent_id = ?2 WHERE id = ?1`)
+        .bind(responseId, respondentId)
+        .run();
+    }
   } catch (err) {
     console.error("respondent_attach_failed", responseId, err);
   }

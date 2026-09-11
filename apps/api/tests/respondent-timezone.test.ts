@@ -93,3 +93,51 @@ describe("the respondent's time zone", () => {
     expect((await open({ timezone: "a".repeat(120) })).status).toBe(400);
   });
 });
+
+/**
+ * The wiring, end to end: opening a session records a person.
+ *
+ * The resolution logic has its own tests; this one exists because the wiring is
+ * where it would silently do nothing — a route that never calls it, or a value
+ * that never reaches the session object, looks exactly like a platform nobody
+ * has visited yet.
+ */
+describe("a session records who is on the other end", () => {
+  it("creates a respondent for a browser it has not seen", async () => {
+    const { deviceKeyFor } = await import("../src/lib/respondents.js");
+    const signal = "visitor-e2e-abcdef12";
+
+    const res = await open({ deviceSignal: signal });
+    expect(res.status).toBe(200);
+
+    const row = await env.DB.prepare(
+      `SELECT r.id, r.first_seen_at FROM respondents r
+         JOIN respondent_keys k ON k.respondent_id = r.id
+        WHERE k.kind = 'device' AND k.value = ?`,
+    )
+      .bind(deviceKeyFor(env as never, signal))
+      .first<{ id: string; first_seen_at: number }>();
+    expect(row?.id).toMatch(/^rsp_/);
+  });
+
+  it("recognises the same browser on a second visit rather than counting two", async () => {
+    const signal = "visitor-e2e-returning";
+    await open({ deviceSignal: signal, fresh: true });
+    await open({ deviceSignal: signal, fresh: true });
+
+    const { deviceKeyFor } = await import("../src/lib/respondents.js");
+    const n = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM respondent_keys WHERE kind = 'device' AND value = ?`,
+    )
+      .bind(deviceKeyFor(env as never, signal))
+      .first<{ n: number }>();
+    expect(n?.n).toBe(1);
+  });
+
+  it("records nobody for a visit that offered nothing to recognise", async () => {
+    const before = await env.DB.prepare(`SELECT COUNT(*) AS n FROM respondents`).first<{ n: number }>();
+    await open({});
+    const after = await env.DB.prepare(`SELECT COUNT(*) AS n FROM respondents`).first<{ n: number }>();
+    expect(after?.n).toBe(before?.n);
+  });
+});
