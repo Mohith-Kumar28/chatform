@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Clock,
   Download,
+  Fingerprint,
   Link2,
   ListChecks,
   Maximize2,
@@ -121,6 +122,15 @@ export interface SubmissionRecord {
   transcript: { role: string; content: string; createdAt: number }[];
   /** Only for forms that required sign-in. */
   respondent: { provider: string; label: string; name: string | null } | null;
+  /**
+   * The person behind this response, platform-wide, whether or not they signed in.
+   *
+   * Two rows sharing one of these are one human, and that is the only thing on
+   * an ungated form that can say so — `respondent` above is null there. Null
+   * itself for a response made through the API by a caller who offered nothing
+   * to recognise anybody by.
+   */
+  respondentId?: string | null;
   /** Null when this response was never in a follow-up sequence. */
   followUp?: {
     sent: number;
@@ -816,6 +826,12 @@ export function SubmissionsTable({
   }, [full, columns.length, rows.length]);
 
   const hasRespondents = rows.some((r) => r.respondent);
+  /*
+    Hidden when nothing on the page has one — a form answered entirely through
+    the API — rather than shown as a column of dashes. Every browser visit
+    resolves one, so in practice this is on.
+  */
+  const hasRespondentIds = rows.some((r) => r.respondentId);
   const openIndex = openId ? rows.findIndex((r) => r.id === openId) : -1;
   const open = openIndex >= 0 ? rows[openIndex]! : null;
 
@@ -1091,6 +1107,17 @@ export function SubmissionsTable({
                   );
                 })}
                 {/*
+                  Last of the scrolling columns rather than last on screen.
+
+                  Past Submitted is where it was asked for and there is nothing
+                  there: the right edge is two pinned columns, and a third one
+                  would either join them — spending pinned width, the most
+                  expensive on the table, on a hash — or sit underneath them.
+                  Here it is the end of the row you scroll to, which is what
+                  "last column" meant.
+                */}
+                {hasRespondentIds && <HeadCell icon={Fingerprint}>Respondent ID</HeadCell>}
+                {/*
                   Pinned beside Submitted rather than left to scroll, because
                   "when is the next reminder" is read against "when did they
                   leave" — the two numbers only mean something together.
@@ -1183,6 +1210,11 @@ export function SubmissionsTable({
                         </span>
                       </td>
                     ))}
+                    {hasRespondentIds && (
+                      <td className="px-3 py-2.5">
+                        <RespondentId id={row.respondentId} />
+                      </td>
+                    )}
                     {showFollowUp && (
                       <td
                         className={cn(
@@ -1274,6 +1306,54 @@ export function SubmissionsTable({
         }}
       />
     </>
+  );
+}
+
+/**
+ * The respondent id, as something you can actually compare two of.
+ *
+ * Monospace and whole. The distinguishing part of `rsp_1a2b…` is its tail, so
+ * the usual `truncate` would hide precisely what the column is for, and the
+ * shared `rsp_` prefix is dimmed instead — it is on every one of them and
+ * carries none of the difference. Twenty hex characters fit.
+ *
+ * Click copies. The question this column answers is "are these two the same
+ * person", and the next thing anybody does with the answer is paste it
+ * somewhere — a support thread, a spreadsheet, a query.
+ */
+function RespondentId({ id }: { id?: string | null }) {
+  const [copied, setCopied] = useState(false);
+  if (!id) return <span className="text-muted-foreground/60">—</span>;
+  const [prefix, rest] = id.startsWith("rsp_") ? ["rsp_", id.slice(4)] : ["", id];
+  return (
+    <button
+      type="button"
+      title={copied ? "Copied" : `${id} — click to copy`}
+      className="text-muted-foreground hover:text-foreground font-mono text-[0.6875rem] tracking-tight transition-colors"
+      onClick={(e) => {
+        // The row opens the response dialog; copying an id is not asking to read it.
+        e.stopPropagation();
+        void navigator.clipboard
+          .writeText(id)
+          .then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+          })
+          .catch(() => toast.error("Could not copy"));
+      }}
+    >
+      {copied ? (
+        <span className="inline-flex items-center gap-1 text-[var(--success)]">
+          <Check className="size-3" />
+          Copied
+        </span>
+      ) : (
+        <>
+          <span className="opacity-45">{prefix}</span>
+          {rest}
+        </>
+      )}
+    </button>
   );
 }
 
@@ -1560,6 +1640,17 @@ function SubmissionDialog({
                 {row.respondent.label}
               </span>
             )}
+            {/*
+              Here as well as in the table, because this is the view somebody
+              opens to answer "is this the same person as that one" — and the
+              table's column is off screen behind the dialog while they ask it.
+            */}
+            {row.respondentId && (
+              <span className="flex items-center gap-1">
+                <Fingerprint className="size-3.5 opacity-60" />
+                <RespondentId id={row.respondentId} />
+              </span>
+            )}
           </div>
 
           <FollowUpDetail row={row} />
@@ -1680,6 +1771,7 @@ function displayCell(block: ResultColumn, value: unknown): string {
 /** Selected rows, as the spreadsheet the export endpoint would have given. */
 function downloadCsv(rows: SubmissionRecord[], columns: ResultColumn[], withRespondent: boolean) {
   const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const withRespondentId = rows.some((r) => r.respondentId);
   const header = [
     "Submitted",
     "Status",
@@ -1688,6 +1780,9 @@ function downloadCsv(rows: SubmissionRecord[], columns: ResultColumn[], withResp
     // screen it was downloaded from, and by then "Team member 3" being a
     // question the form no longer asks is not recoverable from the header.
     ...columns.map((c) => (c.retired ? `${c.title} (removed)` : c.title)),
+    // Last, like its column: the thing you sort by after opening the file, not
+    // the thing you read first.
+    ...(withRespondentId ? ["Respondent ID"] : []),
   ];
   const lines = [header.map(esc).join(",")];
   for (const row of rows) {
@@ -1698,6 +1793,7 @@ function downloadCsv(rows: SubmissionRecord[], columns: ResultColumn[], withResp
         row.status,
         ...(withRespondent ? [row.respondent?.label ?? ""] : []),
         ...columns.map((b) => displayCell(b, byRef.get(b.ref))),
+        ...(withRespondentId ? [row.respondentId ?? ""] : []),
       ]
         .map((v) => esc(String(v)))
         .join(","),

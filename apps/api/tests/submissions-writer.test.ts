@@ -325,6 +325,54 @@ describe("chat and API writers agree", () => {
     expect(still?.respondent_email).toBe("signed.in@northwind.example");
   });
 
+  /**
+   * The constraint `0027` added, met from the writer's side.
+   *
+   * The lookup in `ensureSubmissionRow` runs before this and catches nearly
+   * every case; what it cannot catch is the gap between that read and this
+   * write, which is where two tabs answering at once land. Losing that race
+   * must cost the respondent nothing: the draft that won is theirs too.
+   */
+  it("adopts the draft that is already there instead of failing the insert", async () => {
+    const owner: ResponseOwner = {
+      env: env as never,
+      formId: t.formId,
+      formVersionId: VERSION_ID,
+      organizationId: t.orgId,
+      sessionId: "chs_race_a",
+      source: "chat",
+    };
+    const common = {
+      hiddenFields: {},
+      variables: {},
+      userAgent: null,
+      country: null,
+      startedAt: Date.now(),
+      respondentId: "rsp_race",
+    };
+
+    const first = await openResponse(owner, common);
+    const second = await openResponse({ ...owner, sessionId: "chs_race_b" }, common);
+    expect(second).toBe(first);
+
+    const rows = await env.DB.prepare(
+      `SELECT id FROM submissions WHERE form_id = ?1 AND respondent_id = 'rsp_race'`,
+    )
+      .bind(t.formId)
+      .all<{ id: string }>();
+    expect(rows.results).toHaveLength(1);
+
+    // And an answer written through the adopted id lands, which is the only
+    // thing the caller wanted somewhere to put.
+    await recordAnswerRow(owner, { responseId: second, block: { ref: "q_email", type: "email" }, value: "race@x.co" });
+    const answer = await env.DB.prepare(
+      `SELECT value_json FROM submission_answers WHERE submission_id = ?`,
+    )
+      .bind(first)
+      .first<{ value_json: string }>();
+    expect(JSON.parse(answer!.value_json)).toBe("race@x.co");
+  });
+
   it("writes nothing at all for a preview session", async () => {
     const owner: ResponseOwner = {
       env: env as never,

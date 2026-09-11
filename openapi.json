@@ -6467,6 +6467,16 @@
                               }
                             ]
                           },
+                          "respondentId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "answers": {
                             "type": "array",
                             "items": {
@@ -6605,6 +6615,7 @@
                           "completedAt",
                           "durationMs",
                           "respondent",
+                          "respondentId",
                           "answers",
                           "transcript",
                           "followUp",

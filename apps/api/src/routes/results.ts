@@ -51,6 +51,20 @@ const SubmissionRow = z.object({
       name: z.string().nullable(),
     })
     .nullable(),
+  /**
+   * The person behind the response, platform-wide — `respondents.id` from `0026`.
+   *
+   * Returned whether or not they ever signed in, which is the point of it: the
+   * verified identity above is null on every form that does not ask, and this is
+   * then the only thing in the row that says two responses came from one human.
+   * It is also the key `uq_submissions_one_open_per_respondent` is declared on,
+   * so it is what an author is looking at when they ask why two rows are — or
+   * are not — the same person.
+   *
+   * Null for a response opened through the headless API by a caller who
+   * volunteered nothing to recognise anybody by.
+   */
+  respondentId: z.string().nullable(),
   answers: z.array(
     z.object({
       blockRef: z.string(),
@@ -311,6 +325,7 @@ resultsRouter.get(
       completed_at: number | null;
       duration_ms: number | null;
       session_id: string | null;
+      respondent_id: string | null;
       respondent_provider: string | null;
       respondent_email: string | null;
       respondent_phone: string | null;
@@ -367,6 +382,7 @@ resultsRouter.get(
     const [subs, answerRows, transcriptRows, followUps, formRow, totalRow, countsRow] = (await c.env.DB.batch([
       c.env.DB.prepare(
         `SELECT s.id, s.status, s.started_at, s.completed_at, s.duration_ms, s.session_id,
+                s.respondent_id,
                 s.respondent_provider, s.respondent_email, s.respondent_phone, s.respondent_name,
                 -- Why no reminder was ever scheduled for this response. Written by
                 -- \`scheduleFollowUps\`, which otherwise makes that decision in silence.
@@ -520,6 +536,7 @@ resultsRouter.get(
         startedAt: s.started_at,
         completedAt: s.completed_at,
         durationMs: s.duration_ms,
+        respondentId: s.respondent_id,
         // Present only for forms that required sign-in.
         respondent: s.respondent_provider
           ? {

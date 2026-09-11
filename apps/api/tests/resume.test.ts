@@ -505,6 +505,21 @@ describe("one response in progress per person", () => {
     ).all<{ id: string }>();
 
   /*
+    The row is projected under `waitUntil`, so it lands a moment after the
+    answer has been acknowledged. Polling rather than sleeping a fixed amount:
+    the assertions below are about how many rows there are, and a bare sleep
+    would make a slow run look like the bug they are watching for.
+  */
+  const openRowsOnce = async (n: number) => {
+    for (let i = 0; i < 50; i++) {
+      const rows = await openRows();
+      if ((rows.results ?? []).length >= n) return rows.results!;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    return (await openRows()).results ?? [];
+  };
+
+  /*
    * Pins the invariant, not the mechanism — and it is honest to say that this
    * one already passed before `findOpenResponseId` existed, because
    * `findDeviceResumable` catches it at session open when the earlier row is
@@ -526,26 +541,54 @@ describe("one response in progress per person", () => {
     const second = await openWith({ deviceSignal: SIGNAL });
     await answer(second.sessionId, second.respondentToken, "q_name", "Maya");
 
-    const rows = await openRows();
-    expect(rows.results).toHaveLength(1);
+    const rows = await openRowsOnce(1);
+    expect(rows).toHaveLength(1);
   });
 
-  it("still gives Start over a clean sheet", async () => {
+  it("gives Start over a clean sheet without leaving the old one behind", async () => {
     /*
-     * The one case where reusing the draft would be wrong. "Start over" is a
-     * respondent saying they want nothing to do with what they had, so writing
-     * this session's answers into that row would hand back the very thing the
-     * button exists to get rid of.
+     * "Start over" is a respondent saying they want nothing to do with what
+     * they had, so their old answers must not follow them into this attempt.
+     * It is not them saying they are now two people, which is what a second
+     * open row means to everybody downstream — two partial responses in the
+     * results table, two reminder sequences, two rows in the author's export.
+     *
+     * The row is theirs and stays theirs; what the button empties is its
+     * contents. This is the pair `0027` found in production: one respondent,
+     * one form, two abandoned rows three minutes apart, both sessions carrying
+     * `started_over`.
      */
     const SIGNAL = "startoverdevice";
     const first = await openWith({ deviceSignal: SIGNAL });
     await answer(first.sessionId, first.respondentToken, "q_name", "Maya");
+    const before = await openRowsOnce(1);
+    expect(before).toHaveLength(1);
 
     const fresh = await openWith({ deviceSignal: SIGNAL, fresh: true });
     await answer(fresh.sessionId, fresh.respondentToken, "q_name", "Someone else");
 
-    const rows = await openRows();
-    expect(rows.results).toHaveLength(2);
+    const answersOn = (id: string) =>
+      env.DB.prepare(`SELECT block_ref, value_json FROM submission_answers WHERE submission_id = ?`)
+        .bind(id)
+        .all<{ block_ref: string; value_json: string }>();
+
+    const rows = await openRowsOnce(1);
+    expect(rows).toHaveLength(1);
+    // Same row, emptied and written again — not a new one.
+    expect(rows[0]!.id).toBe(before[0]!.id);
+
+    // Same wait as above, for the same reason: the second answer is projected
+    // under `waitUntil` too.
+    let answers = (await answersOn(rows[0]!.id)).results ?? [];
+    for (let i = 0; i < 50 && answers[0]?.value_json !== '"Someone else"'; i++) {
+      await new Promise((r) => setTimeout(r, 20));
+      answers = (await answersOn(rows[0]!.id)).results ?? [];
+    }
+    // One answer, and it is this attempt's. "Maya" was not carried forward and
+    // was not left beside it.
+    expect(answers).toHaveLength(1);
+    expect(JSON.parse(answers[0]!.value_json)).toBe("Someone else");
+    expect(await openRowsOnce(1)).toHaveLength(1);
   });
 });
 

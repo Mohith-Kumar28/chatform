@@ -444,7 +444,9 @@ export async function reopenResponse(
       is to read the row and decide, which is a better answer to this than an
       error surfacing to a respondent as a conversation that has expired.
     */
-    console.warn("reopen_response_refused", { responseId, ...errorInfo(err) });
+    // Positional, like every other log in this module: a bare `{ err }` reaches
+    // Workers Logs as `{}`.
+    console.warn("reopen_response_refused", responseId, err);
     return { changed: false };
   }
 }

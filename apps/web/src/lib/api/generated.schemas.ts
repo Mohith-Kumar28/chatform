@@ -814,6 +814,8 @@ export type PostPFormsBySlugSessionsBody = {
   resumeToken?: string;
   /** @maxLength 128 */
   deviceSignal?: string;
+  /** @maxLength 64 */
+  timezone?: string;
   fresh?: boolean;
   /** @maxLength 60 */
   followUpId?: string;
@@ -879,7 +881,7 @@ export type PostPSessionsByIdUploadsIntentBody = {
   mime: string;
   /**
      * @minimum 1
-     * @maximum 26214400
+     * @maximum 104857600
      */
   size: number;
 };
@@ -1616,6 +1618,7 @@ export type GetApiFormsByIdSubmissions200SubmissionsItem = {
   completedAt: number | null;
   durationMs: number | null;
   respondent: GetApiFormsByIdSubmissions200SubmissionsItemRespondent;
+  respondentId: string | null;
   answers: GetApiFormsByIdSubmissions200SubmissionsItemAnswersItem[];
   transcript: GetApiFormsByIdSubmissions200SubmissionsItemTranscriptItem[];
   followUp: GetApiFormsByIdSubmissions200SubmissionsItemFollowUp;
@@ -2489,7 +2492,7 @@ export type PostV1SessionsBySidUploadsIntentBody = {
   mime: string;
   /**
      * @minimum 1
-     * @maximum 26214400
+     * @maximum 104857600
      */
   size: number;
 };
