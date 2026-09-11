@@ -1,0 +1,735 @@
+{
+  "schemaVersion": 9,
+  "title": "Gandhari Vidya Intake & Interest Form",
+  "description": "Discover and awaken extra-ocular perception (blindsight). Register your interest for upcoming batches.",
+  "blocks": [
+    {
+      "id": "blk_b0462cff",
+      "ref": "welcome_step",
+      "title": "Welcome to Gandhari Vidya",
+      "description": "Experience the ancient science of intuitive vision and blindfolded perception — akin to modern blindsight. Learn more at [Hrid Vidya](https://gandharividya.hridvidya.com/). Let's explore your journey and find the right batch for you.",
+      "required": false,
+      "visibility": null,
+      "image_key": null,
+      "agentHints": null,
+      "media": null,
+      "buttonLabel": "Start",
+      "type": "welcome"
+    },
+    {
+      "id": "blk_5695f18b",
+      "ref": "q_applicant_type",
+      "title": "Who are you filling this application for?",
+      "description": "The program is specifically structured for ages 6 to 25.",
+      "required": true,
+      "visibility": null,
+      "image_key": null,
+      "agentHints": null,
+      "media": null,
+      "type": "single_select",
+      "options": [
+        {
+          "id": "opt_for_myself",
+          "label": "For myself",
+          "image_key": null
+        },
+        {
+          "id": "opt_for_my_child_dependent",
+          "label": "For my child / dependent",
+          "image_key": null
+        }
+      ],
+      "allowOther": false
+    },
+    {
+      "id": "blk_aa0ccb0d",
+      "ref": "q_contact",
+      "title": "Your Contact Details",
+      "description": "We will share orientation materials and batch announcements here.",
+      "required": true,
+      "visibility": null,
+      "image_key": null,
+      "agentHints": null,
+      "media": null,
+      "type": "contact_info",
+      "fields": [
+        "first_name",
+        "last_name",
+        "email",
+        "phone"
+      ],
+      "fieldOptions": {
+        "email": {
+          "businessOnly": false,
+          "allowedDomains": []
+        }
+      }
+    },
+    {
+      "id": "blk_cdc732cc",
+      "ref": "q_age",
+      "title": "What is the participant's age?",
+      "description": "Participants must be between 6 and 25 years old to enrol in the core Gandhari Vidya modules.",
+      "required": true,
+      "visibility": null,
+      "image_key": null,
+      "agentHints": null,
+      "media": null,
+      "type": "number",
+      "unique": false,
+      "min": 1,
+      "max": 100,
+      "integerOnly": true
+    },
+    {
+      "id": "blk_fa9ef39c",
+      "ref": "q_knows_referral",
+      "title": "Do you know someone between 6 and 25 years old who would benefit from Gandhari Vidya?",
+      "description": "Our current courses are designed for participants aged 6–25.",
+      "required": true,
+      "visibility": null,
+      "image_key": null,
+      "agentHints": null,
+      "media": null,
+      "type": "yes_no",
+      "yesLabel": "Yes",
+      "noLabel": "No"
+    },
+    {
+      "id": "blk_097eccb3",
+      "ref": "q_referral_contact",
+      "title": "Referral Contact Details",
+      "description": "Please provide the contact details of the person you are referring.",
+      "required": true,
+      "visibility": null,
+      "image_key": null,
+      "agentHints": null,
+      "media": null,
+      "type": "contact_info",
+      "fields": [
+        "first_name",
+        "last_name",
+        "email",
+        "phone"
+      ],
+      "fieldOptions": {
+        "email": {
+          "businessOnly": false,
+          "allowedDomains": [
+            "adhirate.abc.com"
+          ]
+        }
+      }
+    },
+    {
+      "id": "blk_0906dab2",
+      "ref": "q_awareness",
+      "title": "Have you ever experienced or witnessed blindfolded perception (blindsight) before?",
+      "description": "No prior experience is necessary; we customize foundational exercises to your familiarity.",
+      "required": true,
+      "visibility": null,
+      "image_key": null,
+      "agentHints": null,
+      "media": null,
+      "type": "single_select",
+      "options": [
+        {
+          "id": "opt_yes_seen_demonstrations_",
+          "label": "Yes, seen demonstrations in person",
+          "image_key": null
+        },
+        {
+          "id": "opt_yes_watched_videos_read_",
+          "label": "Yes, watched videos / read about it",
+          "image_key": null
+        },
+        {
+          "id": "opt_heard_of_it_but_new_to_t",
+          "label": "Heard of it, but new to the practice",
+          "image_key": null
+        },
+        {
+          "id": "opt_completely_new_to_this_c",
+          "label": "Completely new to this concept",
+          "image_key": null
+        }
+      ],
+      "allowOther": false
+    },
+    {
+      "id": "blk_f4ec040b",
+      "ref": "q_curiosity_focus",
+      "title": "What excites you most about developing Gandhari Vidya?",
+      "description": "Select all aspects that spark your curiosity.",
+      "required": true,
+      "visibility": null,
+      "image_key": null,
+      "agentHints": null,
+      "media": null,
+      "type": "multi_select",
+      "options": [
+        {
+          "id": "opt_enhanced_sensory_acuity_",
+          "label": "Enhanced sensory acuity & intuition",
+          "image_key": null
+        },
+        {
+          "id": "opt_deep_mental_focus_memory",
+          "label": "Deep mental focus, memory & concentration",
+          "image_key": null
+        },
+        {
+          "id": "opt_scientific_understanding",
+          "label": "Scientific understanding of blindsight and neuroplasticity",
+          "image_key": null
+        },
+        {
+          "id": "opt_inner_stillness_yogic_di",
+          "label": "Inner stillness, yogic discipline & self-discovery",
+          "image_key": null
+        },
+        {
+          "id": "opt_unique_skill_development",
+          "label": "Unique skill development & cognitive empowerment",
+          "image_key": null
+        }
+      ],
+      "minSelections": 1,
+      "maxSelections": 5,
+      "allowOther": false
+    },
+    {
+      "id": "blk_37ac5213",
+      "ref": "q_batch_duration_pref",
+      "title": "What course format best fits your schedule?",
+      "description": "Program duration adapts monthly based on batch depth and seasonal schedules.",
+      "required": true,
+      "visibility": null,
+      "image_key": null,
+      "agentHints": null,
+      "media": null,
+      "type": "single_select",
+      "options": [
+        {
+          "id": "opt_1_week_intensive_7_days",
+          "label": "1-Week Intensive (7 days)",
+          "image_key": null
+        },
+        {
+          "id": "opt_8_day_deep_dive_program",
+          "label": "8-Day Deep-Dive program",
+          "image_key": null
+        },
+        {
+          "id": "opt_2_week_extended_mastercl",
+          "label": "2-Week Extended Masterclass (14 days)",
+          "image_key": null
+        },
+        {
+          "id": "opt_flexible_open_to_any_upc",
+          "label": "Flexible / Open to any upcoming schedule",
+          "image_key": null
+        }
+      ],
+      "allowOther": false
+    },
+    {
+      "id": "blk_081b7a40",
+      "ref": "q_timing_pref",
+      "title": "Preferred session timing window",
+      "description": "Batches are conducted in small groups for focused guidance.",
+      "required": true,
+      "visibility": null,
+      "image_key": null,
+      "agentHints": null,
+      "media": null,
+      "type": "single_select",
+      "options": [
+        {
+          "id": "opt_early_morning_before_sch",
+          "label": "Early Morning (before school/work)",
+          "image_key": null
+        },
+        {
+          "id": "opt_evening_after_5_pm",
+          "label": "Evening (after 5 PM)",
+          "image_key": null
+        },
+        {
+          "id": "opt_weekend_focused_schedule",
+          "label": "Weekend-focused schedule",
+          "image_key": null
+        },
+        {
+          "id": "opt_no_preference",
+          "label": "No preference",
+          "image_key": null
+        }
+      ],
+      "allowOther": false
+    },
+    {
+      "id": "blk_9f4ffb4d",
+      "ref": "q_commitment_intent",
+      "title": "Course Registration & Next Steps",
+      "description": "The course fee is ₹10,000 per participant for any enrolled batch. How would you like to proceed?",
+      "required": true,
+      "visibility": null,
+      "image_key": null,
+      "agentHints": null,
+      "media": null,
+      "type": "single_select",
+      "options": [
+        {
+          "id": "opt_ready_to_reserve_a_seat_",
+          "label": "Ready to reserve a seat for the next batch (₹10,000)",
+          "image_key": null
+        },
+        {
+          "id": "opt_interested_in_attending_",
+          "label": "Interested in attending a preliminary briefing / Q&A first",
+          "image_key": null
+        },
+        {
+          "id": "opt_keep_me_on_the_monthly_a",
+          "label": "Keep me on the monthly announcement waitlist",
+          "image_key": null
+        }
+      ],
+      "allowOther": false
+    },
+    {
+      "id": "blk_de31f3f4",
+      "ref": "q_payment",
+      "title": "Gandhari Vidya Batch Registration Fee",
+      "description": "Complete your payment via checkout link to confirm your seat reservation.",
+      "required": true,
+      "visibility": null,
+      "image_key": null,
+      "agentHints": null,
+      "media": null,
+      "type": "payment",
+      "method": "upi",
+      "amountMode": "fixed",
+      "amount": 10000,
+      "currency": "INR",
+      "url": "https://gandharividya.hridvidya.com/",
+      "upiId": "mohith808@axl"
+    },
+    {
+      "id": "blk_ab988477",
+      "ref": "q_questions",
+      "title": "Any specific goals or questions for the instructor?",
+      "description": "Share anything you would like us to know regarding focus areas, expectations, or schedule constraints.",
+      "required": false,
+      "visibility": null,
+      "image_key": null,
+      "agentHints": null,
+      "media": null,
+      "type": "long_text",
+      "minLength": 0,
+      "maxLength": 1500,
+      "aiQualityCheck": false
+    }
+  ],
+  "endings": [
+    {
+      "id": "end_3acc75f3",
+      "ref": "end_thanks",
+      "title": "Registration Received!",
+      "bodyMd": "Thank you for stepping into the world of Gandhari Vidya. Our team will review your batch preferences and reach out via email and phone with the upcoming schedule details.",
+      "imageUrl": null,
+      "redirectDelaySec": 5,
+      "showSummary": false,
+      "kind": "success",
+      "requirements": []
+    },
+    {
+      "id": "end_f55c1e56",
+      "ref": "end_ineligible_age",
+      "title": "Eligibility Criteria Not Met",
+      "bodyMd": "Thank you for your interest in Gandhari Vidya. Currently, the developmental framework and training methodologies are formulated exclusively for participants aged 6 to 25 years.",
+      "imageUrl": null,
+      "redirectDelaySec": 5,
+      "showSummary": false,
+      "kind": "screen_out",
+      "requirements": [
+        {
+          "id": "req_59d733dc",
+          "label": "Participant age between 6 and 25 years",
+          "when": null
+        }
+      ]
+    },
+    {
+      "id": "end_962c5573",
+      "ref": "end_referral_thanks",
+      "title": "Thank You for the Referral!",
+      "bodyMd": "We have received the referral details and will reach out to them soon.",
+      "imageUrl": null,
+      "redirectDelaySec": 5,
+      "showSummary": false,
+      "kind": "success",
+      "requirements": []
+    }
+  ],
+  "endingRules": [],
+  "logic": [
+    {
+      "id": "rl_23ad24c6",
+      "action_kind": "goto",
+      "when": {
+        "op": "and",
+        "conditions": [
+          {
+            "left": {
+              "kind": "ref",
+              "ref": "q_commitment_intent"
+            },
+            "op": "eq",
+            "value": "opt_ready_to_reserve_a_seat_"
+          }
+        ],
+        "groups": []
+      },
+      "from": "q_commitment_intent",
+      "target": "q_payment",
+      "targetKind": "block",
+      "branch": "true"
+    },
+    {
+      "id": "rl_a935ca68",
+      "action_kind": "goto",
+      "when": {
+        "op": "and",
+        "conditions": [
+          {
+            "left": {
+              "kind": "ref",
+              "ref": "q_commitment_intent"
+            },
+            "op": "eq",
+            "value": "opt_interested_in_attending_"
+          }
+        ],
+        "groups": []
+      },
+      "from": "q_commitment_intent",
+      "target": "q_questions",
+      "targetKind": "block",
+      "branch": "true"
+    },
+    {
+      "id": "rl_cd306900",
+      "action_kind": "goto",
+      "when": {
+        "op": "and",
+        "conditions": [
+          {
+            "left": {
+              "kind": "ref",
+              "ref": "q_commitment_intent"
+            },
+            "op": "eq",
+            "value": "opt_keep_me_on_the_monthly_a"
+          }
+        ],
+        "groups": []
+      },
+      "from": "q_commitment_intent",
+      "target": "q_questions",
+      "targetKind": "block",
+      "branch": "true"
+    },
+    {
+      "id": "rl_b67bc10a",
+      "action_kind": "goto",
+      "when": {
+        "op": "and",
+        "conditions": [
+          {
+            "left": {
+              "kind": "ref",
+              "ref": "q_age"
+            },
+            "op": "gt",
+            "value": 6
+          }
+        ],
+        "groups": []
+      },
+      "from": "q_age",
+      "target": "q_knows_referral",
+      "targetKind": "block",
+      "branch": "true"
+    },
+    {
+      "id": "rl_12b8e2f1",
+      "action_kind": "goto",
+      "when": {
+        "op": "and",
+        "conditions": [
+          {
+            "left": {
+              "kind": "ref",
+              "ref": "q_age"
+            },
+            "op": "lt",
+            "value": 25
+          }
+        ],
+        "groups": []
+      },
+      "from": "q_age",
+      "target": "q_knows_referral",
+      "targetKind": "block",
+      "branch": "true"
+    },
+    {
+      "id": "rl_1e27584c",
+      "action_kind": "goto",
+      "when": {
+        "op": "and",
+        "conditions": [
+          {
+            "left": {
+              "kind": "ref",
+              "ref": "q_knows_referral"
+            },
+            "op": "eq",
+            "value": false
+          }
+        ],
+        "groups": []
+      },
+      "from": "q_knows_referral",
+      "target": "end_ineligible_age",
+      "targetKind": "ending",
+      "branch": "true"
+    },
+    {
+      "id": "rl_af4a6aad",
+      "action_kind": "goto",
+      "when": {
+        "op": "and",
+        "conditions": [
+          {
+            "left": {
+              "kind": "ref",
+              "ref": "q_knows_referral"
+            },
+            "op": "eq",
+            "value": true
+          }
+        ],
+        "groups": []
+      },
+      "from": "q_knows_referral",
+      "target": "q_referral_contact",
+      "targetKind": "block",
+      "branch": "true"
+    },
+    {
+      "id": "rl_1b4ee8a6",
+      "action_kind": "goto",
+      "when": null,
+      "from": "q_referral_contact",
+      "target": "q_curiosity_focus",
+      "targetKind": "block"
+    },
+    {
+      "id": "rl_f55cd179",
+      "action_kind": "goto",
+      "when": null,
+      "from": "q_referral_contact",
+      "target": "end_referral_thanks",
+      "targetKind": "ending"
+    }
+  ],
+  "layout": {
+    "welcome_step": {
+      "x": 40,
+      "y": 151
+    },
+    "q_applicant_type": {
+      "x": 330,
+      "y": 145
+    },
+    "q_contact": {
+      "x": 650,
+      "y": 145
+    },
+    "q_age": {
+      "x": 970,
+      "y": 145
+    },
+    "branch_q_age": {
+      "x": 1290,
+      "y": 119
+    },
+    "q_knows_referral": {
+      "x": 1620,
+      "y": 108.5
+    },
+    "branch_q_knows_referral": {
+      "x": 1940,
+      "y": 93.5
+    },
+    "q_referral_contact": {
+      "x": 2270,
+      "y": 55
+    },
+    "q_awareness": {
+      "x": 2920,
+      "y": 171
+    },
+    "q_curiosity_focus": {
+      "x": 3240,
+      "y": 171
+    },
+    "q_batch_duration_pref": {
+      "x": 3560,
+      "y": 171
+    },
+    "q_timing_pref": {
+      "x": 3880,
+      "y": 171
+    },
+    "q_commitment_intent": {
+      "x": 4200,
+      "y": 171
+    },
+    "branch_q_commitment_intent": {
+      "x": 4520,
+      "y": 145
+    },
+    "q_payment": {
+      "x": 4850,
+      "y": 142
+    },
+    "q_questions": {
+      "x": 5170,
+      "y": 171
+    },
+    "end_thanks": {
+      "x": 5490,
+      "y": 177
+    },
+    "end_ineligible_age": {
+      "x": 2275.3846153846152,
+      "y": -23.769230769230752
+    },
+    "end_referral_thanks": {
+      "x": 2930,
+      "y": 54.5
+    }
+  },
+  "variables": [],
+  "hiddenFields": [],
+  "settings": {
+    "language": "en",
+    "rtl": false,
+    "progressBar": "percent",
+    "navigation": {
+      "allowBack": true,
+      "allowSkip": true
+    },
+    "closeRules": {
+      "closedMessageMd": "This form is no longer accepting responses.",
+      "showCountdown": true,
+      "showRemaining": false
+    },
+    "requireAuth": {
+      "enabled": true,
+      "method": "google",
+      "message": "Before we start, could you verify who you are? It only takes a moment.",
+      "afterBlocks": 0
+    },
+    "password": {
+      "enabled": false,
+      "value": ""
+    },
+    "captcha": {
+      "enabled": true,
+      "provider": "turnstile",
+      "mode": "adaptive"
+    },
+    "allowResubmissions": true,
+    "onComplete": {
+      "requireSubmit": true,
+      "redirectUrl": "https://gandharividya.hridvidya.com/",
+      "delaySec": 5,
+      "notificationEmails": [],
+      "autoReplyEmail": {
+        "enabled": true,
+        "subject": "Thanks for your response",
+        "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+        "includeAnswers": true
+      }
+    },
+    "followUp": {
+      "enabled": true,
+      "channel": "email",
+      "steps": [
+        {
+          "delayHours": 4,
+          "subject": "You're {{remaining}} questions from finishing",
+          "bodyMd": "Everything you answered is saved, and picking up where you left off takes about a minute."
+        },
+        {
+          "delayHours": 24,
+          "subject": "Your {{form.title}} is still open",
+          "bodyMd": "Just a nudge in case it slipped. Your answers are still here whenever you're ready."
+        }
+      ],
+      "showProgress": true,
+      "holdoutPercent": 0,
+      "quietHours": true
+    },
+    "meta": {
+      "ogImageKey": null,
+      "faviconKey": null,
+      "noIndex": false
+    },
+    "branding": {
+      "hidePoweredBy": false
+    },
+    "embed": {
+      "allowedOrigins": []
+    },
+    "agent": {
+      "mode": "ai",
+      "tone": "friendly",
+      "language": "en",
+      "rephraseQuestions": true,
+      "guardrails": {
+        "answerOffTopic": true,
+        "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+        "forbiddenTopics": []
+      },
+      "maxClarificationsPerBlock": 2,
+      "escalateAfterInvalid": 3,
+      "responseMaxTokens": 400
+    }
+  },
+  "theme": {
+    "colorScheme": "light",
+    "background": "#faf7f2",
+    "surface": "#ffffff",
+    "text": "#1c1917",
+    "accent": "#FD6F29",
+    "accentText": "#201a16",
+    "botBubble": "#ffffff",
+    "userBubble": "#C9AEEE",
+    "userBubbleText": "#201a16",
+    "radius": "lg",
+    "fontHeading": "Bricolage Grotesque",
+    "fontBody": "Inter",
+    "avatarKey": null,
+    "backgroundImageKey": null,
+    "backgroundBrightness": 1,
+    "backgroundPattern": "auto",
+    "logoUrl": null,
+    "logoKey": null
+  }
+}
