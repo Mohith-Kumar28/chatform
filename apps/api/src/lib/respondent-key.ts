@@ -27,8 +27,8 @@ import { sha256Hex } from "@repo/form-schema";
  * here that actually holds.
  */
 
-/** How the key was derived, for the caller that wants to know how much to trust it. */
-export type RespondentKeySource = "device" | "ip" | "none";
+/** Whether there was a fingerprint to key on at all. */
+export type RespondentKeySource = "device" | "none";
 
 export interface RespondentKey {
   /** Salted hash, or "" when there was nothing to hash. */
@@ -58,20 +58,25 @@ export function readDeviceSignal(raw: unknown): string | null {
  * would be a cross-tenant record of which devices filled in which forms, which
  * is not a thing we should be able to compute even for ourselves.
  *
- * The IP is folded in beside the device signal rather than replaced by it. A
- * signal that fails to arrive — the script blocked, an old browser, a bot —
- * would otherwise collapse every such respondent onto one shared key and have
- * them de-duplicate each other; falling back to the IP keeps them as separate
- * as they used to be, which is the behaviour this replaces.
+ * The browser's fingerprint is the only input. There is no second source and
+ * no fallback: a respondent whose browser does not produce one has no key, and
+ * every decision that reads this key is simply not made for them. A network
+ * address was once folded in behind the signal, and it was the wrong thing to
+ * key a person on — one campus or one office is a single value shared by
+ * everybody sitting in it, so it merged strangers into one respondent and split
+ * one respondent in two as they walked out of the building.
+ *
+ * Salted with the form's own `fingerprint_salt`, so the same browser answering
+ * two customers' forms produces two unrelated values. Without that, this table
+ * would be a cross-tenant record of which devices filled in which forms, which
+ * is not a thing we should be able to compute even for ourselves.
  */
 export function respondentKey(input: {
   signal?: string | null;
-  ip?: string | null;
   /** `forms.fingerprint_salt`. */
   salt: string;
 }): RespondentKey {
   const signal = readDeviceSignal(input.signal);
   if (signal) return { value: sha256Hex(`${input.salt}:d:${signal}`), source: "device" };
-  if (input.ip) return { value: sha256Hex(`${input.salt}:i:${input.ip}`), source: "ip" };
   return { value: "", source: "none" };
 }

@@ -1561,3 +1561,130 @@ function nextUtcHour(hour: number): number {
   );
   return today > Date.now() + 2 * 3_600_000 ? today : today + 86_400_000;
 }
+
+/**
+ * The ceiling is a person, not a response.
+ *
+ * A sequence is numbered per response, and one person can have several: they
+ * start the form, give up, come back later or on another device, and start
+ * again. Before this, each abandonment opened a fresh sequence — so an author
+ * who asked for three reminders sent six to one person, and somebody opening
+ * and abandoning repeatedly could be mailed indefinitely by a form whose
+ * settings said three.
+ *
+ * Keyed on the browser fingerprint, which is what this product uses to tell one
+ * respondent from another. A visit that produced no fingerprint has no key, and
+ * the rule does not apply to it.
+ */
+describe("the per-person reminder cap", () => {
+  const HOUR = 3_600_000;
+  const SAME_PERSON = "fp_same_person_key";
+
+  /** An abandoned response carrying `key`, with its sequence already scheduled. */
+  async function abandonAs(id: string, key: string | null, agoMs = HOUR): Promise<void> {
+    await seedAbandoned(id);
+    await env.DB.prepare(
+      `UPDATE submissions SET updated_at = ?, started_at = ?, fingerprint = ? WHERE id = ?`,
+    )
+      .bind(Date.now() - agoMs, Date.now() - agoMs - HOUR, key, id)
+      .run();
+    await scheduleFollowUps({
+      env: env as never,
+      submissionId: id,
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt: Date.now() - agoMs,
+    });
+  }
+
+  /** Every reminder this person has on the form, whatever response wrote it. */
+  function forPerson(key: string) {
+    return env.DB.prepare(
+      `SELECT fu.status FROM followups fu JOIN submissions s ON s.id = fu.submission_id
+        WHERE fu.form_id = ? AND s.fingerprint = ? ORDER BY fu.scheduled_at`,
+    )
+      .bind(t.formId, key)
+      .all<{ status: string }>();
+  }
+
+  it("gives a second response from the same person nothing", async () => {
+    await abandonAs("sbm_cap_first", SAME_PERSON);
+    await abandonAs("sbm_cap_second", SAME_PERSON);
+
+    // Two steps configured, so two reminders — not two each.
+    expect((await forPerson(SAME_PERSON)).results).toHaveLength(2);
+    expect((await rowsFor("sbm_cap_second")).results).toHaveLength(0);
+  });
+
+  it("says why, where the author is already looking", async () => {
+    await abandonAs("sbm_cap_note_first", SAME_PERSON);
+    await abandonAs("sbm_cap_note_second", SAME_PERSON);
+
+    const row = await env.DB.prepare(
+      `SELECT json_extract(meta, '$.followUpSkip') AS skip FROM submissions WHERE id = ?`,
+    )
+      .bind("sbm_cap_note_second")
+      .first<{ skip: string | null }>();
+    expect(row?.skip).toBe("already_reminded");
+  });
+
+  it("spends what is left of the budget rather than all or nothing", async () => {
+    // One reminder used, so the next response may write exactly one — and it
+    // writes the *first* of the author's messages, not the last.
+    await abandonAs("sbm_cap_partial_first", SAME_PERSON);
+    await env.DB.prepare(`DELETE FROM followups WHERE submission_id = ? AND step = 2`)
+      .bind("sbm_cap_partial_first")
+      .run();
+
+    await abandonAs("sbm_cap_partial_second", SAME_PERSON);
+
+    const second = (await rowsFor("sbm_cap_partial_second")).results;
+    expect(second).toHaveLength(1);
+    expect(second[0]!.step).toBe(1);
+    expect((await forPerson(SAME_PERSON)).results).toHaveLength(2);
+  });
+
+  it("does not spend the budget on a sequence that was cancelled", async () => {
+    // They came back and finished, so the rows were cancelled and nothing
+    // landed. A later abandonment starts with a clean budget.
+    await abandonAs("sbm_cap_cancelled", SAME_PERSON);
+    await cancelFollowUps(env as never, "sbm_cap_cancelled", "resumed");
+
+    await abandonAs("sbm_cap_after_cancel", SAME_PERSON);
+    expect((await rowsFor("sbm_cap_after_cancel")).results).toHaveLength(2);
+  });
+
+  it("leaves a different person alone", async () => {
+    await abandonAs("sbm_cap_theirs", SAME_PERSON);
+    await abandonAs("sbm_cap_someone_else", "fp_a_different_person");
+
+    expect((await rowsFor("sbm_cap_someone_else")).results).toHaveLength(2);
+  });
+
+  it("does not cap a visit that produced no fingerprint", async () => {
+    // No key, no rule. The library is the only source, and when it says nothing
+    // there is nothing to say.
+    await abandonAs("sbm_cap_keyless_one", null);
+    await abandonAs("sbm_cap_keyless_two", null);
+
+    expect((await rowsFor("sbm_cap_keyless_two")).results).toHaveLength(2);
+  });
+
+  it("holds inside one catch-up chunk, where nothing is written until the end", async () => {
+    /*
+      Both responses are decided before either is written, so they read the same
+      stored count. Without a running tally inside the chunk they would each be
+      granted the whole budget and the batch would spend it twice.
+    */
+    await seedAbandoned("sbm_cap_chunk_a");
+    await seedAbandoned("sbm_cap_chunk_b");
+    await env.DB.prepare(
+      `UPDATE submissions SET updated_at = ?, fingerprint = ? WHERE id IN (?, ?)`,
+    )
+      .bind(Date.now() - 2 * 86_400_000, SAME_PERSON, "sbm_cap_chunk_a", "sbm_cap_chunk_b")
+      .run();
+
+    await backfillFollowUps(env as never, t.formId, t.orgId);
+    expect((await forPerson(SAME_PERSON)).results).toHaveLength(2);
+  });
+});

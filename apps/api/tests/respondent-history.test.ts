@@ -177,10 +177,17 @@ describe("findIdentityHistory", () => {
 });
 
 describe("respondentKey", () => {
-  it("prefers the device signal and falls back to the IP", () => {
-    expect(respondentKey({ signal: "abcdefgh1234", ip: "1.2.3.4", salt: "s" }).source).toBe("device");
-    expect(respondentKey({ signal: null, ip: "1.2.3.4", salt: "s" }).source).toBe("ip");
-    expect(respondentKey({ signal: null, ip: "", salt: "s" })).toEqual({ value: "", source: "none" });
+  it("keys on the fingerprint, and on nothing else", () => {
+    /*
+      The fingerprint library is the only source. It used to fall back to the
+      network address when no signal arrived, which is a rule about a network
+      pretending to be a rule about a person: one campus is a single value
+      shared by everybody on it. No signal now means no key, and every rule that
+      reads one is simply not applied to that visit.
+    */
+    expect(respondentKey({ signal: "abcdefgh1234", salt: "s" }).source).toBe("device");
+    expect(respondentKey({ signal: null, salt: "s" })).toEqual({ value: "", source: "none" });
+    expect(respondentKey({ signal: "  ", salt: "s" })).toEqual({ value: "", source: "none" });
   });
 
   /**
@@ -189,8 +196,8 @@ describe("respondentKey", () => {
    * of which devices filled in which forms.
    */
   it("gives one device different keys on different forms", () => {
-    const a = respondentKey({ signal: "abcdefgh1234", ip: null, salt: "salt-a" });
-    const b = respondentKey({ signal: "abcdefgh1234", ip: null, salt: "salt-b" });
+    const a = respondentKey({ signal: "abcdefgh1234", salt: "salt-a" });
+    const b = respondentKey({ signal: "abcdefgh1234", salt: "salt-b" });
     expect(a.value).not.toBe(b.value);
     expect(a.value).toHaveLength(64);
   });

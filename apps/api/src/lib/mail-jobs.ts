@@ -112,6 +112,8 @@ interface FollowUpRow {
   respondent_email: string | null;
   respondent_name: string | null;
   hidden_fields: string | null;
+  /** The respondent key, for the per-person cap below. */
+  fingerprint: string | null;
   sub_status: string;
   form_title: string;
   schema_json: string;
@@ -159,7 +161,7 @@ async function runFollowUpJob(
 ): Promise<MailJobOutcome> {
   const row = await env.DB.prepare(
     `SELECT fu.id, fu.submission_id, fu.form_id, fu.organization_id, fu.address, fu.step, fu.status,
-            s.respondent_email, s.respondent_name, s.hidden_fields, s.status AS sub_status,
+            s.respondent_email, s.respondent_name, s.hidden_fields, s.fingerprint, s.status AS sub_status,
             f.title AS form_title, fv.schema_json
        FROM followups fu
        JOIN submissions s ON s.id = fu.submission_id
@@ -202,6 +204,49 @@ async function runFollowUpJob(
   if (!cfg?.enabled || !step) {
     await settleFollowUp(env, row.id, "skipped", cfg?.enabled ? "step_removed" : "disabled");
     return NO_MAIL;
+  }
+
+  /**
+   * How many reminders this person has had from this form, ever.
+   *
+   * The sequence is numbered per *response*, and a person can have several: the
+   * same student opens the registration on a lab machine, gives up, opens it
+   * again that evening, gives up again. Two responses, two sequences, and an
+   * author who asked for three reminders has sent six to one person. On the
+   * form this was written for that had already happened twice before anybody
+   * noticed, and nothing in the schedule would have stopped it — the ceiling
+   * was `(submission_id, step)`, which is a statement about a row rather than
+   * about a person.
+   *
+   * Keyed on the browser fingerprint, which is what this product uses to tell
+   * one respondent from another, and the only thing it uses.
+   *
+   * `sent` and `queued` only. A `scheduled` row has cost the recipient nothing
+   * yet and may never — the response can be finished, the address unsubscribed,
+   * the form closed — so counting it here would let a pending row from a
+   * sequence that is about to be cancelled suppress a message that should go.
+   * The scheduler does count them, because there the job is to avoid writing
+   * rows it can already see are surplus; here the job is to be right about what
+   * actually landed.
+   *
+   * Checked at the last possible moment rather than only at scheduling, because
+   * this is the gate that cannot be raced: two sequences scheduled seconds apart
+   * both pass a schedule-time check, and only one of them can be first here.
+   */
+  if (row.fingerprint) {
+    const priorSends = await env.DB.prepare(
+      `SELECT COUNT(*) AS n
+         FROM followups fu
+         JOIN submissions s2 ON s2.id = fu.submission_id
+        WHERE fu.form_id = ?1 AND s2.fingerprint = ?2 AND fu.id <> ?3
+          AND fu.status IN ('sent', 'queued')`,
+    )
+      .bind(row.form_id, row.fingerprint, row.id)
+      .first<{ n: number }>();
+    if ((priorSends?.n ?? 0) >= cfg.steps.length) {
+      await settleFollowUp(env, row.id, "skipped", "already_reminded");
+      return NO_MAIL;
+    }
   }
 
   const answers = await env.DB.prepare(

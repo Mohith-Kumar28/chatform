@@ -304,19 +304,17 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
   const ipHash = input.respondentIpHash ?? (input.ip ? sha256Hex(input.ip) : "");
 
   /**
-   * The device key, which is what the duplicate rule keys on now.
+   * The respondent key: the browser fingerprint, and nothing else.
    *
-   * `ipHash` is still computed and still stored — it is what analytics and the
-   * abuse paths read, and it is the fallback when no device signal arrives —
-   * but it is no longer what decides whether somebody has answered before. An
-   * IP is a network: it treated a hundred people in one office as one person,
-   * and one person moving from wifi to mobile data as two.
+   * The fingerprint library already combines everything worth combining to tell
+   * one visitor from another, so this does not try to improve on it or to stand
+   * in for it when it is absent. No signal, no key, and every rule that keys on
+   * a respondent simply does not apply to that visit.
+   *
+   * `ipHash` is still computed and stored for the analytics and abuse paths,
+   * and it has nothing to do with identifying a respondent.
    */
-  const device = respondentKey({
-    signal: input.deviceSignal,
-    ip: input.ip,
-    salt: form.fingerprint_salt,
-  });
+  const device = respondentKey({ signal: input.deviceSignal, salt: form.fingerprint_salt });
 
   /**
    * "One response per person", enforced on the device.

@@ -157,6 +157,7 @@ const SKIP_COPY: Record<string, string> = {
   no_answers: "nothing answered yet",
   no_address: "no email to send to",
   suppressed: "unsubscribed",
+  already_reminded: "already had the full set of reminders",
   closed: "form closes first",
   response_settled: "they finished first",
   step_removed: "step was removed",

@@ -162,8 +162,8 @@ const createSessionRoute = (path: string) =>
       hiddenFields: body.hiddenFields ?? {},
       ipHash: opened.ipHash || null,
       fingerprint: opened.device.value || null,
-      // The source travels with the value: a hashed IP is a whole office, and
-      // only a real device signal may stand in for a person.
+      // The source travels with the value, so a reader can tell "no fingerprint"
+      // from "a fingerprint that happens to look like nothing".
       fingerprintSource: opened.device.source,
       country: body.respondent?.country ?? null,
       userAgent: body.respondent?.userAgent ?? "api",

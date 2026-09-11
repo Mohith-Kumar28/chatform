@@ -69,6 +69,8 @@ function readAnswers(rows: { block_ref: string; value_json: string }[]): Map<str
 
 interface SubRow {
   respondent_email: string | null;
+  /** The browser fingerprint this response was given. See `respondent-key.ts`. */
+  fingerprint: string | null;
   /** The respondent's IANA zone, when their browser named one. See `quiet-hours.ts`. */
   timezone: string | null;
   hidden_fields: string | null;
@@ -225,6 +227,7 @@ type SkipReason =
   | "no_answers"
   | "no_address"
   | "suppressed"
+  | "already_reminded"
   | "closed";
 
 function skipStatement(env: Bindings, submissionId: string, reason: SkipReason | null) {
@@ -340,6 +343,13 @@ interface Prefetched {
   sub: SubRow;
   byRef: Map<string, unknown>;
   suppressed: boolean;
+  /**
+   * Reminders this person already has on this form, from *other* responses.
+   *
+   * Resolved by the caller for the whole chunk in one query, for the same
+   * reason `suppressed` is: asking per response would be a round trip each.
+   */
+  priorForPerson: number;
 }
 
 /**
@@ -378,7 +388,7 @@ async function scheduleOne(
   const sub =
     pre?.sub ??
     (await env.DB.prepare(
-      `SELECT s.respondent_email, s.hidden_fields, cs.timezone,
+      `SELECT s.respondent_email, s.hidden_fields, s.fingerprint, cs.timezone,
               COALESCE(cs.followup_opt_out, 0) AS opted_out
          FROM submissions s
          LEFT JOIN chat_sessions cs ON cs.id = s.session_id
@@ -431,6 +441,47 @@ async function scheduleOne(
 
   const suppressed = pre ? pre.suppressed : await isSuppressed(env, organizationId, resolved.address);
   if (suppressed) return note("suppressed");
+
+  /**
+   * The ceiling is a person, not a response.
+   *
+   * A sequence is numbered per response and one person can have several of
+   * them: they start the form, give up, come back later or on another device,
+   * and start again. Each abandonment used to open a fresh sequence, so an
+   * author who asked for three reminders sent six to one person — and somebody
+   * who kept opening and abandoning could be mailed indefinitely, three at a
+   * time, by a form whose settings said three.
+   *
+   * Keyed on the browser fingerprint, which is the identifier this product
+   * already has for "who is this". It is the only input: the library behind it
+   * combines what needs combining, and second-guessing it here with some
+   * fallback of our own is how a rule about people turns into a rule about
+   * networks. A visit with no fingerprint has no key, and this rule does not
+   * apply to it.
+   *
+   * `scheduled` counts, unlike at send time, because the question here is
+   * whether to *write* rows: one already on the books is one this person is
+   * going to get. The send-time check in `mail-jobs.ts` is the one that cannot
+   * be raced, and it counts only what actually went.
+   */
+  const cap = cfg.steps.length;
+  const priorForPerson = sub.fingerprint
+    ? (pre?.priorForPerson ??
+      (
+        await env.DB.prepare(
+          `SELECT COUNT(*) AS n
+             FROM followups fu
+             JOIN submissions s2 ON s2.id = fu.submission_id
+            WHERE fu.form_id = ?1 AND s2.fingerprint = ?2 AND fu.submission_id <> ?3
+              AND fu.status IN ('sent', 'queued', 'scheduled')`,
+        )
+          .bind(formId, sub.fingerprint, submissionId)
+          .first<{ n: number }>()
+      )?.n ??
+      0)
+    : 0;
+  const allowance = Math.max(0, cap - priorForPerson);
+  if (allowance === 0) return note("already_reminded");
 
   /**
    * The holdout.
@@ -547,6 +598,20 @@ async function scheduleOne(
   });
   // Every step would land after the form stops accepting answers.
   if (rows.length === 0) return note("closed");
+
+  /*
+   * The earliest steps survive the trim, not the latest.
+   *
+   * An address with one reminder left in its budget should get the first one
+   * the author wrote — the four-hour nudge that does the work — rather than the
+   * "last reminder" that reads as the end of a conversation the recipient never
+   * had. `rows` is already in step order, so the trim is a slice.
+   *
+   * The rows that survive keep their own step numbers, so a response that can
+   * only write step 1 writes step 1, and the ladder in the results table stays
+   * a true account of which of the author's messages went.
+   */
+  if (rows.length > allowance) rows.length = allowance;
 
   const stmts = rows.map((r) =>
     env.DB.prepare(
@@ -779,7 +844,7 @@ async function scheduleChunk(
 
   const [subsRes, answersRes] = (await env.DB.batch([
     env.DB.prepare(
-      `SELECT s.id, s.respondent_email, s.hidden_fields, cs.timezone,
+      `SELECT s.id, s.respondent_email, s.hidden_fields, s.fingerprint, cs.timezone,
               COALESCE(cs.followup_opt_out, 0) AS opted_out
          FROM submissions s
          LEFT JOIN chat_sessions cs ON cs.id = s.session_id
@@ -831,6 +896,49 @@ async function scheduleChunk(
   const suppressed = await isSuppressedIn(env, addresses);
 
   /**
+   * What each of these people already has on this form, from other responses.
+   *
+   * Rows rather than a `COUNT(*) ... GROUP BY`, with the arithmetic done in
+   * memory, because the exclusion is per response: a response must not count
+   * its own rows against its own budget, or a catch-up would refuse to top up a
+   * sequence it wrote itself. Doing that in SQL needs a second variable-length
+   * `IN (...)`, and two of those in one statement cannot both be bounded under
+   * D1's hundred-parameter ceiling — the trap `isSuppressedIn` documents.
+   */
+  const keys = [...new Set(rows.map((r) => subById.get(r.id)?.fingerprint).filter(Boolean))] as string[];
+  const priorRows = keys.length
+    ? ((await env.DB.batch(
+        bindChunks(keys).map((chunk) =>
+          env.DB
+            .prepare(
+              `SELECT s2.fingerprint AS fingerprint, fu.submission_id
+                 FROM followups fu
+                 JOIN submissions s2 ON s2.id = fu.submission_id
+                WHERE fu.form_id = ? AND fu.status IN ('sent', 'queued', 'scheduled')
+                  AND s2.fingerprint IN (${holesFor(chunk)})`,
+            )
+            .bind(formId, ...chunk),
+        ),
+      )) as D1Result<{ fingerprint: string; submission_id: string }>[])
+    : [];
+  /** Rows per person, and per person-and-response, so one can be taken from the other. */
+  const priorByKey = new Map<string, number>();
+  const priorByPair = new Map<string, number>();
+  for (const r of priorRows.flatMap((p) => p.results ?? [])) {
+    priorByKey.set(r.fingerprint, (priorByKey.get(r.fingerprint) ?? 0) + 1);
+    const pair = `${r.fingerprint}|${r.submission_id}`;
+    priorByPair.set(pair, (priorByPair.get(pair) ?? 0) + 1);
+  }
+  /**
+   * What this chunk itself has handed out, as it goes.
+   *
+   * Two responses from the same person inside one chunk both read the same
+   * stored count — the writes have not happened yet — so without this they
+   * would each be granted the whole budget and the batch would spend it twice.
+   */
+  const grantedHere = new Map<string, number>();
+
+  /**
    * Every write the chunk produces, in one batch.
    *
    * All-or-nothing rather than per response, which is a change of failure shape
@@ -840,13 +948,21 @@ async function scheduleChunk(
    * whole thing runs again on the next publish, and bounded because a chunk is
    * twenty responses rather than the entire page.
    */
+  /** This person's rows on this form, minus their own, plus whatever this chunk already gave them. */
+  const priorFor = (submissionId: string, key: string | null): number => {
+    if (!key) return 0;
+    const all = priorByKey.get(key) ?? 0;
+    const mine = priorByPair.get(`${key}|${submissionId}`) ?? 0;
+    return all - mine + (grantedHere.get(key) ?? 0);
+  };
+
   const writes: D1PreparedStatement[] = [];
   let scheduled = 0;
   for (const row of rows) {
     const sub = subById.get(row.id);
     const d = decided.get(row.id);
     if (!sub || !d) continue;
-    scheduled += await scheduleOne(
+    const count = await scheduleOne(
       gate,
       {
         env,
@@ -860,9 +976,16 @@ async function scheduleChunk(
         sub,
         byRef: d.byRef,
         suppressed: d.address ? suppressed.has(`${organizationId}|${d.address.toLowerCase()}`) : false,
+        priorForPerson: priorFor(row.id, sub.fingerprint),
       },
       writes,
     );
+    // Only what was actually scheduled: a held-out response writes `holdout`
+    // rows, which never send and so never spend anybody's budget.
+    if (sub.fingerprint && count > 0) {
+      grantedHere.set(sub.fingerprint, (grantedHere.get(sub.fingerprint) ?? 0) + count);
+    }
+    scheduled += count;
   }
   /**
    * Undo anything this batch just wrote for somebody who came back while it ran.
