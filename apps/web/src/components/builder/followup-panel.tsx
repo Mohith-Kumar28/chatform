@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ChevronDown, MessageCircle, X } from "lucide-react";
 import type { FormDoc } from "@repo/form-schema";
 import { Switch } from "@/components/ui/switch";
@@ -17,6 +17,8 @@ import { FollowUpAddressDialog } from "./followup-address-dialog";
 import { FollowUpEmailPreview } from "./followup-email-preview";
 import { BufferedInput, BufferedTextarea } from "@/components/ui/buffered-input";
 import { InfoHint } from "@/components/ui/info-hint";
+import { useBuilderStore } from "@/stores/builder-store";
+import { VariablePalette, insertAtCaret, type VariableOption } from "./followup-variables";
 
 type FollowUp = FormDoc["settings"]["followUp"];
 type Step = FollowUp["steps"][number];
@@ -82,6 +84,56 @@ export function FollowUpPanel({
   const hasAddress = Boolean((justSaved ?? stored)?.trim());
 
   const patch = (p: Partial<FollowUp>) => onChange({ ...settings, followUp: { ...followUp, ...p } });
+
+  /**
+   * Which box the next inserted value lands in.
+   *
+   * A reminder has two places worth personalising and the subject is the one
+   * that decides whether the mail is opened, so the palette cannot simply
+   * target the message. It follows the cursor instead: whichever field the
+   * author last had focus in is the one that receives, which is the only rule
+   * that needs no explaining on screen.
+   */
+  const subjectRef = useRef<HTMLInputElement | null>(null);
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+  const [target, setTarget] = useState<"subject" | "body">("body");
+
+  const blocks = useBuilderStore((st) => st.doc?.blocks);
+
+  /**
+   * What a reminder can actually say, in the order an author reaches for it.
+   *
+   * The list is the send-time vocabulary and nothing more — see
+   * `interpolationVars` in the API. Questions come last and are the same set
+   * the `@` recall menu offers elsewhere, minus the screens that collect no
+   * answer.
+   *
+   * `Questions left` appears only while the progress line is on, because that
+   * is the switch the number is computed behind: offered with it off, it would
+   * insert a token that silently renders as nothing.
+   */
+  const variables = useMemo<VariableOption[]>(() => {
+    const base: VariableOption[] = [
+      { token: "{{form.title}}", label: "Form title" },
+      { token: "{{respondent.name}}", label: "Their name" },
+      { token: "{{respondent.email}}", label: "Their email" },
+    ];
+    if (followUp.showProgress) base.push({ token: "{{remaining}}", label: "Questions left" });
+    const questions = (blocks ?? [])
+      .filter((b) => b.type !== "welcome" && b.type !== "statement")
+      .map((b) => ({ token: `{{${b.ref}}}`, label: b.title || b.ref }));
+    return [...base, ...questions];
+  }, [followUp.showProgress, blocks]);
+
+  /**
+   * Fall back to the message when there is no live cursor to insert at — the
+   * author opened the step and pressed a value without touching either box.
+   */
+  function insertVariable(i: number, token: string) {
+    const el = target === "subject" ? subjectRef.current : bodyRef.current;
+    if (el) return insertAtCaret(el, token);
+    setStep(i, { bodyMd: `${followUp.steps[i]?.bodyMd ?? ""}${token}` });
+  }
 
   /**
    * Switching quiet hours on records the author's own time zone with it.
@@ -222,6 +274,8 @@ export function FollowUpPanel({
                     </SelectContent>
                   </Select>
                   <BufferedInput
+                    ref={expanded === i ? subjectRef : undefined}
+                    onFocus={() => setTarget("subject")}
                     className="h-8 flex-1 border-0 bg-transparent px-2 text-sm shadow-none"
                     value={step.subject}
                     placeholder="Subject"
@@ -252,20 +306,37 @@ export function FollowUpPanel({
                   )}
                 </div>
                 {expanded === i && (
-                  <div className="space-y-2 px-3 pb-3 sm:pl-[10.25rem]">
-                    <BufferedTextarea
-                      className="min-h-16 text-sm"
-                      value={step.bodyMd}
-                      placeholder="Message"
-                      onCommit={(v) => setStep(i, { bodyMd: v })}
-                    />
-                    <FollowUpEmailPreview
-                      subject={step.subject}
-                      body={step.bodyMd}
-                      formTitle={formTitle}
-                      showProgress={followUp.showProgress}
-                      postalAddress={stored}
-                    />
+                  <div className="flex flex-col gap-2 px-3 pb-3 sm:flex-row sm:gap-2">
+                    {/*
+                      In the gutter the delay select leaves empty, so the values
+                      sit beside the writing rather than above it — and so the
+                      author reading "4 hours later" sees what that email can
+                      say without opening anything else.
+                    */}
+                    <div className="space-y-1.5 sm:w-36 sm:shrink-0">
+                      <p className="text-muted-foreground text-[11px]">Insert</p>
+                      <VariablePalette
+                        options={variables}
+                        onInsert={(token) => insertVariable(i, token)}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <BufferedTextarea
+                        ref={bodyRef}
+                        onFocus={() => setTarget("body")}
+                        className="min-h-16 text-sm"
+                        value={step.bodyMd}
+                        placeholder="Message"
+                        onCommit={(v) => setStep(i, { bodyMd: v })}
+                      />
+                      <FollowUpEmailPreview
+                        subject={step.subject}
+                        body={step.bodyMd}
+                        formTitle={formTitle}
+                        showProgress={followUp.showProgress}
+                        postalAddress={stored}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -283,23 +354,6 @@ export function FollowUpPanel({
           </div>
 
           {/*
-            Says what "later" is measured from. It is the respondent's last
-            answer, not the moment we decide the response was abandoned — those
-            are half an hour apart, and without this line a "2 hours later"
-            reminder arriving at two and a half hours reads as a fault.
-
-            And when quiet hours is on, "later" has a second qualifier that
-            matters more than the first: a reminder can be held overnight, so a
-            "2 hours later" step can land thirteen hours later. An author
-            watching that happen looks here, which is why the sentence grows
-            rather than hiding the caveat behind the icon.
-          */}
-          <p className="text-muted-foreground text-xs">
-            Timed from the respondent&rsquo;s last answer
-            {followUp.quietHours ? ", and held until morning if it lands overnight." : "."}
-          </p>
-
-          {/*
             Outside "Advanced", deliberately.
 
             Everything in that disclosure is off or absent until an author goes
@@ -310,14 +364,12 @@ export function FollowUpPanel({
           <div className="rounded-xl border">
             <Row
               label="Quiet hours"
-              hint="Nothing sends between 9 PM and 9 AM where they are."
+              hint="Nothing sends 9 PM – 9 AM, their time."
               info={
                 <>
-                  A reminder that falls due overnight waits until 9 a.m. in the
-                  respondent&rsquo;s own time zone &mdash; their browser&rsquo;s, or yours when
-                  their browser won&rsquo;t say. Nothing is dropped; it arrives in the morning
-                  instead. Two reminders pushed out of the same night land two hours apart
-                  rather than together.
+                  Delays are counted from the respondent&rsquo;s last answer. One that
+                  falls due overnight waits for 9 a.m. in their own time zone &mdash;
+                  nothing is dropped, it arrives in the morning instead.
                 </>
               }
             >
@@ -399,14 +451,10 @@ export function FollowUpPanel({
         verification and per-template approval, which is not ours to schedule.
       */}
       {followUp.enabled && hasAddress && (
-        <div className="text-muted-foreground flex items-start gap-2 rounded-xl border border-dashed px-4 py-3 text-xs">
-          <MessageCircle className="mt-0.5 size-3.5 shrink-0" />
-          <p>
-            <span className="text-foreground font-medium">WhatsApp follow-ups are coming.</span>{" "}
-            When a respondent has verified a phone number, a reminder can go where they will
-            actually see it. Email is the only channel today.
-          </p>
-        </div>
+        <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+          <MessageCircle className="size-3.5 shrink-0" />
+          WhatsApp follow-ups coming soon.
+        </p>
       )}
 
       {org?.id && (
