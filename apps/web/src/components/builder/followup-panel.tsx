@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { FollowUpAddressDialog } from "./followup-address-dialog";
 import { FollowUpEmailPreview } from "./followup-email-preview";
 import { BufferedInput, BufferedTextarea } from "@/components/ui/buffered-input";
+import { InfoHint } from "@/components/ui/info-hint";
 
 type FollowUp = FormDoc["settings"]["followUp"];
 type Step = FollowUp["steps"][number];
@@ -81,6 +82,28 @@ export function FollowUpPanel({
   const hasAddress = Boolean((justSaved ?? stored)?.trim());
 
   const patch = (p: Partial<FollowUp>) => onChange({ ...settings, followUp: { ...followUp, ...p } });
+
+  /**
+   * Switching quiet hours on records the author's own time zone with it.
+   *
+   * It is the fallback for a respondent whose browser did not report one, and
+   * the author's morning is a much better guess at their respondents' morning
+   * than UTC — most forms are answered in one country, and it is usually the
+   * author's. Captured at the toggle rather than on every save, so an author
+   * travelling does not quietly re-point the form at whatever airport they are
+   * sitting in.
+   */
+  function setQuietHours(quietHours: boolean) {
+    if (!quietHours) return patch({ quietHours: false });
+    let timezone = followUp.timezone;
+    try {
+      timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || timezone;
+    } catch {
+      // Keep whatever was already there. A browser that will not name a zone is
+      // not a reason to refuse the setting.
+    }
+    patch({ quietHours: true, ...(timezone ? { timezone } : {}) });
+  }
 
   /**
    * Reminders are kept in the order they go out.
@@ -264,10 +287,43 @@ export function FollowUpPanel({
             answer, not the moment we decide the response was abandoned — those
             are half an hour apart, and without this line a "2 hours later"
             reminder arriving at two and a half hours reads as a fault.
+
+            And when quiet hours is on, "later" has a second qualifier that
+            matters more than the first: a reminder can be held overnight, so a
+            "2 hours later" step can land thirteen hours later. An author
+            watching that happen looks here, which is why the sentence grows
+            rather than hiding the caveat behind the icon.
           */}
           <p className="text-muted-foreground text-xs">
-            Timed from the respondent&rsquo;s last answer.
+            Timed from the respondent&rsquo;s last answer
+            {followUp.quietHours ? ", and held until morning if it lands overnight." : "."}
           </p>
+
+          {/*
+            Outside "Advanced", deliberately.
+
+            Everything in that disclosure is off or absent until an author goes
+            looking. This ships on and it silently delays mail, so it has to be
+            visible to the person wondering why a reminder was late — which is
+            exactly the person reading the line above.
+          */}
+          <div className="rounded-xl border">
+            <Row
+              label="Quiet hours"
+              hint="Nothing sends between 9 PM and 9 AM where they are."
+              info={
+                <>
+                  A reminder that falls due overnight waits until 9 a.m. in the
+                  respondent&rsquo;s own time zone &mdash; their browser&rsquo;s, or yours when
+                  their browser won&rsquo;t say. Nothing is dropped; it arrives in the morning
+                  instead. Two reminders pushed out of the same night land two hours apart
+                  rather than together.
+                </>
+              }
+            >
+              <Switch checked={followUp.quietHours} onCheckedChange={setQuietHours} />
+            </Row>
+          </div>
 
           <button
             type="button"
@@ -371,16 +427,22 @@ export function FollowUpPanel({
 function Row({
   label,
   hint,
+  info,
   children,
 }: {
   label: string;
   hint: string;
+  /** The paragraph that will not fit in `hint`, folded behind an icon. */
+  info?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3">
       <div className="min-w-0">
-        <p className="text-sm">{label}</p>
+        <div className="flex items-center gap-1">
+          <p className="text-sm">{label}</p>
+          {info && <InfoHint label={`About ${label.toLowerCase()}`}>{info}</InfoHint>}
+        </div>
         <p className="text-muted-foreground mt-0.5 text-xs">{hint}</p>
       </div>
       {children}

@@ -62,6 +62,23 @@ import { useBuilderStore } from "@/stores/builder-store";
  * hand rather than imported, because the panel's array is local to a component
  * this one must not depend on.
  */
+/**
+ * The author's own time zone, as a settings fragment, or nothing.
+ *
+ * The fallback used when a respondent's browser did not report one. Absent
+ * rather than guessed when this browser will not say either: the scheduler
+ * reads a missing zone as UTC, which is a worse answer than the author's but a
+ * defensible one, and inventing a zone here would be neither.
+ */
+function quietHoursZone(): { timezone: string } | null {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return tz ? { timezone: tz } : null;
+  } catch {
+    return null;
+  }
+}
+
 const DEFAULT_BODIES = [
   "Everything you answered is saved, and picking up where you left off takes about a minute.",
   "Just a nudge in case it slipped. Your answers are still here whenever you're ready.",
@@ -290,6 +307,18 @@ export function FollowUpNudge({
           followUp: {
             ...doc.settings.followUp,
             enabled: true,
+            /*
+              Quiet hours too, and the author's own zone with it.
+
+              This nudge only ever appears on a form that is not sending at all
+              yet, so there is no prior behaviour to preserve — which is the
+              whole reason the v8→v9 migration pins existing documents to
+              `false`. Somebody switching sending on for the first time should
+              get the same safe default whether they did it here or in Settings,
+              and without this line they would get the opposite one.
+            */
+            quietHours: true,
+            ...(quietHoursZone() ?? {}),
             /*
               Backfill the copy, the same way the settings panel's `enable`
               does. A step whose body was cleared would otherwise go out as a

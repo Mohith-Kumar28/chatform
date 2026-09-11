@@ -52,13 +52,48 @@ they already gave — the same syntax the auto-reply uses. `{{remaining}}` is th
 number of questions left, which is what makes a subject line like *"You're 3
 questions from finishing"* work.
 
+## When they arrive
+
+Reminders are held out of the respondent's night. With **Quiet hours** on —
+under Settings → Follow-ups — nothing sends between 9 PM and 9 AM, and the hours
+are read on *their* clock, not yours. A reminder that falls due at two in the
+morning waits until nine that same morning; one that falls due at ten in the
+evening waits until nine the next day. Nothing is dropped, and nothing is ever
+sent earlier than the delay you set.
+
+Which clock, in order:
+
+1. **The respondent's own**, from the browser they opened the form in.
+2. **Your form's**, recorded from your browser when you switched quiet hours on.
+   This covers the respondents whose browser did not say.
+3. **UTC**, if neither is known — which in practice means a session opened
+   through the API, where there is no browser to ask.
+
+Two things worth knowing. If a night swallows two steps — say one due at ten in
+the evening and one at two in the morning — they land two hours apart in the
+morning rather than arriving together. And a reminder that the hold would carry
+past your form's close time is dropped rather than sent, because an invitation
+to a form that has already closed is worse than no reminder at all.
+
+Quiet hours is on for forms created from now on, and off for forms that existed
+before it shipped — switching it on is one toggle, and it applies to reminders
+scheduled from that point.
+
+<Callout>
+Quiet hours decides *when a reminder is scheduled*, and reminders go out on a
+five-minute sweep. A message scheduled for one minute to nine in the evening can
+land a few minutes after nine. It will not land at three in the morning, which
+is the thing this is for.
+</Callout>
+
 ## When a follow-up is not sent
 
 Every reminder is re-checked at the moment it is due, not when it was scheduled.
 It is dropped if:
 
 - the respondent finished, or was screened out, in the meantime
-- the form closed, or would be closed by the time the email lands
+- the form closed, or would be closed by the time the email lands — including
+  when quiet hours would hold it past the close
 - the address unsubscribed, bounced, or opted out on the form itself
 - the plan lapsed, or the monthly email allowance is spent
 - the response was made in test mode

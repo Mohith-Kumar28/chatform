@@ -172,6 +172,39 @@ const MIGRATIONS: ((doc: AnyDoc) => AnyDoc)[] = [
       },
     };
   },
+
+  // ── v8 → v9 ────────────────────────────────────────────────────────────
+  // Quiet hours arrive switched on, and this is what stops that reaching
+  // backwards.
+  //
+  // A document written before this existed describes a form whose author agreed
+  // to a cadence measured in hours from the last answer and to nothing else.
+  // Adding a nightly twelve-hour hold to it would move mail they have already
+  // scheduled, on a sequence they may already be measuring — so every such
+  // document says `false` out loud, once, here, and the schema default only
+  // ever reaches documents minted from now on.
+  //
+  // The opposite of the v7→v8 step above, and deliberately: that one changed
+  // what a published form does because the absence of a decision was not a
+  // decision. Here the absence is the same either way, and the tie is broken by
+  // which mistake is cheaper to undo — an author who wants quiet hours flips a
+  // switch, while an author whose sequence quietly slid by twelve hours cannot
+  // un-send anything.
+  (doc) => {
+    const settings = (doc.settings ?? {}) as Record<string, unknown>;
+    const followUp = (settings.followUp ?? {}) as Record<string, unknown>;
+    return {
+      ...doc,
+      schemaVersion: 9,
+      settings: {
+        ...settings,
+        followUp: {
+          ...followUp,
+          quietHours: typeof followUp.quietHours === "boolean" ? followUp.quietHours : false,
+        },
+      },
+    };
+  },
 ];
 
 export function migrateFormDoc(raw: unknown): unknown {

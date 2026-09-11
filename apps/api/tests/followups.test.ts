@@ -17,6 +17,7 @@ import { sweepFollowUps } from "../src/lib/sweeps.js";
 import { resolveRespondentAddress } from "../src/lib/respondent-address.js";
 import { sendMail } from "../src/lib/mail.js";
 import { readFormDoc } from "@repo/form-schema";
+import { inWindow } from "../src/lib/quiet-hours.js";
 import type { Bindings } from "../src/env.js";
 
 /**
@@ -1111,3 +1112,452 @@ describe("publishing catches up the people already waiting", () => {
     expect(results.every((r) => r.status === "scheduled")).toBe(true);
   });
 });
+
+/**
+ * Topping up a sequence the author lengthened after people had already left.
+ *
+ * The bug this fixes was visible in the results table as two ladders side by
+ * side on the same form: "2 of 2 sent" for everyone who walked away under the
+ * old settings, "0 of 3" for everyone who arrived after the edit. Both were
+ * honest reports of the rows that existed. The rows were the problem.
+ */
+describe("topping up a lengthened sequence", () => {
+  const HOUR = 3_600_000;
+  const DAY = 86_400_000;
+
+  /** The published two-step sequence, plus a third at 72 hours. */
+  const THREE_STEP = {
+    ...DOC,
+    settings: {
+      followUp: {
+        ...DOC.settings.followUp,
+        steps: [
+          ...DOC.settings.followUp.steps,
+          { delayHours: 72, subject: "Last reminder about {{form.title}}", bodyMd: "" },
+        ],
+      },
+    },
+  };
+
+  /** Abandoned `agoMs` ago, with the two-step sequence already on the books. */
+  async function seedWithTwoSteps(id: string, agoMs = 2 * DAY): Promise<number> {
+    const abandonedAt = Date.now() - agoMs;
+    await seedAbandoned(id);
+    await env.DB.prepare(`UPDATE submissions SET updated_at = ?, started_at = ? WHERE id = ?`)
+      .bind(abandonedAt, abandonedAt - HOUR, id)
+      .run();
+    await scheduleFollowUps({
+      env: env as never,
+      submissionId: id,
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt,
+    });
+    return abandonedAt;
+  }
+
+  it("writes the step that did not exist when they walked away", async () => {
+    await seedWithTwoSteps("sbm_topup_basic");
+    expect((await rowsFor("sbm_topup_basic")).results).toHaveLength(2);
+
+    await publish(THREE_STEP);
+    try {
+      await backfillFollowUps(env as never, t.formId, t.orgId);
+      const { results } = await rowsFor("sbm_topup_basic");
+      expect(results.map((r) => r.step)).toEqual([1, 2, 3]);
+      expect(results[2]!.status).toBe("scheduled");
+    } finally {
+      await publish();
+    }
+  });
+
+  it("leaves the steps that already existed exactly where they were", async () => {
+    await seedWithTwoSteps("sbm_topup_untouched");
+    const before = (await rowsFor("sbm_topup_untouched")).results.map((r) => r.scheduled_at);
+
+    await publish(THREE_STEP);
+    try {
+      await backfillFollowUps(env as never, t.formId, t.orgId);
+      const after = (await rowsFor("sbm_topup_untouched")).results.map((r) => r.scheduled_at);
+      // The insert is ON CONFLICT DO NOTHING, so a top-up cannot re-time a
+      // reminder somebody is already waiting on.
+      expect(after.slice(0, 2)).toEqual(before);
+    } finally {
+      await publish();
+    }
+  });
+
+  it("does not land the new step on top of one that just went out", async () => {
+    await seedWithTwoSteps("sbm_topup_after_sent");
+    await env.DB.prepare(
+      `UPDATE followups SET status = 'sent', sent_at = ? WHERE submission_id = ? AND step IN (1, 2)`,
+    )
+      .bind(Date.now() - HOUR, "sbm_topup_after_sent")
+      .run();
+
+    await publish(THREE_STEP);
+    try {
+      await backfillFollowUps(env as never, t.formId, t.orgId);
+      const { results } = await rowsFor("sbm_topup_after_sent");
+      expect(results.map((r) => r.status)).toEqual(["sent", "sent", "scheduled"]);
+      /*
+        The catch-up chain is what guarantees this without a query: every step
+        starts from `now` and keeps the author's own gap, so the new third step
+        is at least the 48 hours between step two and step three away from a
+        send that happened a moment ago. This is the assertion that makes it
+        safe not to read `MAX(sent_at)`.
+      */
+      expect(results[2]!.scheduled_at).toBeGreaterThanOrEqual(Date.now() + 48 * HOUR - HOUR);
+    } finally {
+      await publish();
+    }
+  });
+
+  it("stays idempotent once the sequence is whole", async () => {
+    await seedWithTwoSteps("sbm_topup_idempotent");
+    await publish(THREE_STEP);
+    try {
+      await backfillFollowUps(env as never, t.formId, t.orgId);
+      const first = (await rowsFor("sbm_topup_idempotent")).results.map((r) => r.scheduled_at);
+
+      expect(await backfillFollowUps(env as never, t.formId, t.orgId)).toBe(0);
+      await backfillFollowUps(env as never, t.formId, t.orgId);
+
+      const { results } = await rowsFor("sbm_topup_idempotent");
+      expect(results).toHaveLength(3);
+      expect(results.map((r) => r.scheduled_at)).toEqual(first);
+    } finally {
+      await publish();
+    }
+  });
+
+  /**
+   * The three ways a sequence is already over, none of which a longer ladder
+   * is a reason to restart.
+   */
+  it.each([
+    ["cancelled", "they came back or unsubscribed"],
+    ["failed", "delivery gave up after five attempts"],
+    ["holdout", "they are the control arm"],
+  ])("does not restart a %s sequence (%s)", async (status) => {
+    const id = `sbm_topup_${status}`;
+    await seedWithTwoSteps(id);
+    await env.DB.prepare(`UPDATE followups SET status = ? WHERE submission_id = ?`)
+      .bind(status, id)
+      .run();
+
+    await publish(THREE_STEP);
+    try {
+      await backfillFollowUps(env as never, t.formId, t.orgId);
+      const { results } = await rowsFor(id);
+      expect(results).toHaveLength(2);
+      expect(results.some((r) => r.status === "scheduled")).toBe(false);
+    } finally {
+      await publish();
+    }
+  });
+
+  it("still bootstraps a response that has no rows at all", async () => {
+    // The case the old predicate was written for. The new one has to subsume
+    // it, not replace it.
+    await seedAbandoned("sbm_topup_bootstrap");
+    await env.DB.prepare(`UPDATE submissions SET updated_at = ? WHERE id = ?`)
+      .bind(Date.now() - 2 * DAY, "sbm_topup_bootstrap")
+      .run();
+
+    await backfillFollowUps(env as never, t.formId, t.orgId);
+    expect((await rowsFor("sbm_topup_bootstrap")).results).toHaveLength(2);
+  });
+
+  it("is not a candidate when the author shortened the sequence instead", async () => {
+    await seedWithTwoSteps("sbm_topup_shortened");
+    const before = (await rowsFor("sbm_topup_shortened")).results.map((r) => r.scheduled_at);
+
+    const oneStep = {
+      ...DOC,
+      settings: { followUp: { ...DOC.settings.followUp, steps: [DOC.settings.followUp.steps[0]!] } },
+    };
+    await publish(oneStep);
+    try {
+      expect(await backfillFollowUps(env as never, t.formId, t.orgId)).toBe(0);
+      expect((await rowsFor("sbm_topup_shortened")).results.map((r) => r.scheduled_at)).toEqual(before);
+    } finally {
+      await publish();
+    }
+  });
+
+  it("cancels what it just wrote for somebody who came back while it ran", async () => {
+    await seedWithTwoSteps("sbm_topup_resumed");
+    // Stands in for the resume that lands between the candidate read and the
+    // write batch: the true interleaving is not reproducible, the state it
+    // leaves behind is.
+    await env.DB.prepare(`UPDATE submissions SET status = 'in_progress' WHERE id = ?`)
+      .bind("sbm_topup_resumed")
+      .run();
+
+    await publish(THREE_STEP);
+    try {
+      await backfillFollowUps(env as never, t.formId, t.orgId);
+      const { results } = await rowsFor("sbm_topup_resumed");
+      expect(results.some((r) => r.status === "scheduled" && r.step === 3)).toBe(false);
+    } finally {
+      await publish();
+    }
+  });
+});
+
+/**
+ * Quiet hours: the same sequence, held out of the respondent's night.
+ *
+ * The exact minute a reminder lands is the module's business and is tested in
+ * `quiet-hours.test.ts`. What matters here is that the scheduler reads the
+ * right clock — the respondent's before the author's — and that the shift
+ * composes correctly with the two rules that were already in this loop: the
+ * catch-up spacing, and the refusal to invite somebody to a form that has
+ * closed.
+ */
+describe("quiet hours", () => {
+  const HOUR = 3_600_000;
+
+  /** UTC+12 the year round, so its waking window is exactly UTC's night. */
+  const ANTIPODE = "Etc/GMT-12";
+
+  function withQuietHours(extra: Record<string, unknown> = {}, steps = DOC.settings.followUp.steps) {
+    return {
+      ...DOC,
+      settings: {
+        followUp: { ...DOC.settings.followUp, steps, quietHours: true, timezone: "UTC", ...extra },
+      },
+    };
+  }
+
+  /** An abandoned response whose session reported `tz`. */
+  async function seedWithSession(id: string, tz: string | null): Promise<void> {
+    await seedAbandoned(id);
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT INTO chat_sessions (id, form_id, form_version_id, organization_id, respondent_token_hash,
+                                  status, timezone, created_at, last_activity_at)
+       VALUES (?, ?, ?, ?, ?, 'abandoned', ?, ?, ?)`,
+    )
+      .bind(`cs_${id}`, t.formId, VERSION_ID, t.orgId, `hash_${id}`, tz, now, now)
+      .run();
+    await env.DB.prepare(`UPDATE submissions SET session_id = ? WHERE id = ?`)
+      .bind(`cs_${id}`, id)
+      .run();
+  }
+
+  async function schedule(id: string, abandonedAt = Date.now()): Promise<void> {
+    await scheduleFollowUps({
+      env: env as never,
+      submissionId: id,
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt,
+    });
+  }
+
+  it("changes nothing at all while it is switched off", async () => {
+    const abandonedAt = Date.now();
+    await seedAbandoned("sbm_quiet_off");
+    await schedule("sbm_quiet_off", abandonedAt);
+
+    const { results } = await rowsFor("sbm_quiet_off");
+    // Byte-identical to the arithmetic that shipped before this feature: this
+    // is what keeps every form that predates quiet hours behaving as it did.
+    expect(results.map((r) => r.scheduled_at)).toEqual([
+      abandonedAt + 4 * HOUR,
+      abandonedAt + 24 * HOUR,
+    ]);
+  });
+
+  it("holds a step due overnight until the next morning", async () => {
+    /*
+      Pinned to a real night rather than to whenever the suite happens to run.
+      Step one falls due at 23:00 and must land at 09:00 the next morning, to
+      the millisecond; step two falls due at 19:00 the following evening and
+      must not move at all.
+    */
+    const target = nextUtcHour(23);
+    await publish(withQuietHours());
+    try {
+      await seedAbandoned("sbm_quiet_form_zone");
+      await schedule("sbm_quiet_form_zone", target - 4 * HOUR);
+
+      const { results } = await rowsFor("sbm_quiet_form_zone");
+      expect(results).toHaveLength(2);
+      expect(results[0]!.scheduled_at).toBe(target + 10 * HOUR);
+      expect(results[1]!.scheduled_at).toBe(target + 20 * HOUR);
+      for (const row of results) expect(inWindow(row.scheduled_at, "UTC")).toBe(true);
+    } finally {
+      await publish();
+    }
+  });
+
+  it("prefers the respondent's own clock over the form's", async () => {
+    await publish(withQuietHours());
+    try {
+      await seedWithSession("sbm_quiet_respondent", ANTIPODE);
+      await schedule("sbm_quiet_respondent");
+
+      const { results } = await rowsFor("sbm_quiet_respondent");
+      expect(results.length).toBeGreaterThan(0);
+      for (const row of results) {
+        /*
+          UTC+12's waking window is exactly UTC's night, so these two assertions
+          cannot both hold by accident: a scheduler that read the form's zone
+          instead would land every row inside the UTC window and fail the
+          second one.
+        */
+        expect(inWindow(row.scheduled_at, ANTIPODE)).toBe(true);
+        expect(inWindow(row.scheduled_at, "UTC")).toBe(false);
+      }
+    } finally {
+      await publish();
+    }
+  });
+
+  it("falls back to the form when the respondent's browser said nothing", async () => {
+    await publish(withQuietHours());
+    try {
+      const target = nextUtcHour(23);
+      await seedWithSession("sbm_quiet_no_session_zone", null);
+      await schedule("sbm_quiet_no_session_zone", target - 4 * HOUR);
+
+      const { results } = await rowsFor("sbm_quiet_no_session_zone");
+      expect(results[0]!.scheduled_at).toBe(target + 10 * HOUR);
+    } finally {
+      await publish();
+    }
+  });
+
+  it("falls through a zone nobody can read rather than throwing", async () => {
+    // Reachable by writing the document through the API. A zone we cannot
+    // parse must degrade to UTC, not take the whole schedule down with it.
+    await publish(withQuietHours({ timezone: "Mars/Olympus" }));
+    try {
+      const target = nextUtcHour(23);
+      await seedAbandoned("sbm_quiet_junk_zone");
+      await schedule("sbm_quiet_junk_zone", target - 4 * HOUR);
+
+      const { results } = await rowsFor("sbm_quiet_junk_zone");
+      expect(results).toHaveLength(2);
+      // UTC, which is what an unreadable zone resolves to.
+      expect(results[0]!.scheduled_at).toBe(target + 10 * HOUR);
+    } finally {
+      await publish();
+    }
+  });
+
+  it("does not let two steps squeezed out of one night arrive together", async () => {
+    /*
+      Both steps fall inside the same UTC night — 23:00 and 01:00 — so both
+      resolve to nine the next morning unless something holds them apart.
+    */
+    const target = nextUtcHour(23);
+    await publish(
+      withQuietHours({}, [
+        { delayHours: 1, subject: "First", bodyMd: "" },
+        { delayHours: 3, subject: "Second", bodyMd: "" },
+      ]),
+    );
+    try {
+      await seedAbandoned("sbm_quiet_spacing");
+      await schedule("sbm_quiet_spacing", target - HOUR);
+
+      const { results } = await rowsFor("sbm_quiet_spacing");
+      expect(results).toHaveLength(2);
+      expect(results[1]!.scheduled_at - results[0]!.scheduled_at).toBeGreaterThanOrEqual(2 * HOUR);
+      for (const row of results) expect(inWindow(row.scheduled_at, "UTC")).toBe(true);
+    } finally {
+      await publish();
+    }
+  });
+
+  it("drops a step the hold would carry past the form's close", async () => {
+    /*
+      Due at 23:00, held until 09:00, and the form shuts at 08:00 in between.
+      Checked against the time it will actually go rather than the time it was
+      due, or this becomes an invitation to a door we locked overnight.
+    */
+    const target = nextUtcHour(23);
+    const closeAt = new Date(target + 9 * HOUR).toISOString();
+    await publish({
+      ...withQuietHours(),
+      settings: { ...withQuietHours().settings, closeRules: { closeAt } },
+    });
+    try {
+      await seedAbandoned("sbm_quiet_close");
+      await schedule("sbm_quiet_close", target - 4 * HOUR);
+
+      expect((await rowsFor("sbm_quiet_close")).results).toHaveLength(0);
+      const row = await env.DB.prepare(
+        `SELECT json_extract(meta, '$.followUpSkip') AS skip FROM submissions WHERE id = ?`,
+      )
+        .bind("sbm_quiet_close")
+        .first<{ skip: string | null }>();
+      expect(row?.skip).toBe("closed");
+    } finally {
+      await publish();
+    }
+  });
+
+  it("holds an already-overdue step to the next morning, not the last one", async () => {
+    /*
+      A response abandoned by a sweep long after the respondent actually left.
+      Its configured times are in the past, and the window they fell in is over
+      — shifting from the stored instant would compute a morning that has been
+      and gone and send at three regardless.
+    */
+    await publish(withQuietHours());
+    try {
+      await seedAbandoned("sbm_quiet_overdue");
+      await schedule("sbm_quiet_overdue", Date.now() - 5 * 86_400_000);
+
+      const { results } = await rowsFor("sbm_quiet_overdue");
+      expect(results).toHaveLength(2);
+      for (const row of results) {
+        expect(row.scheduled_at).toBeGreaterThanOrEqual(Date.now() - HOUR);
+        expect(inWindow(row.scheduled_at, "UTC")).toBe(true);
+      }
+    } finally {
+      await publish();
+    }
+  });
+
+  it("keeps a caught-up sequence in the window too", async () => {
+    await publish(withQuietHours());
+    try {
+      await seedAbandoned("sbm_quiet_catchup");
+      await env.DB.prepare(`UPDATE submissions SET updated_at = ? WHERE id = ?`)
+        .bind(Date.now() - 2 * 86_400_000, "sbm_quiet_catchup")
+        .run();
+
+      await backfillFollowUps(env as never, t.formId, t.orgId);
+
+      const { results } = await rowsFor("sbm_quiet_catchup");
+      expect(results.length).toBeGreaterThan(0);
+      for (const row of results) {
+        expect(row.scheduled_at).toBeGreaterThanOrEqual(Date.now() - HOUR);
+        expect(inWindow(row.scheduled_at, "UTC")).toBe(true);
+      }
+    } finally {
+      await publish();
+    }
+  });
+});
+
+/** The next time it is `hour` o'clock UTC, strictly in the future. */
+function nextUtcHour(hour: number): number {
+  const now = new Date();
+  const today = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    hour,
+    0,
+    0,
+    0,
+  );
+  return today > Date.now() + 2 * 3_600_000 ? today : today + 86_400_000;
+}

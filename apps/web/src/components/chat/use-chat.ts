@@ -282,6 +282,22 @@ function clearSubmitted(slug: string): void {
 
 /** Exponential backoff with jitter, capped — a fixed linear retry hammers a
  *  server that is already struggling. */
+/**
+ * The respondent's IANA time zone, as a body fragment, or nothing.
+ *
+ * Spread into the session request rather than returned as a string so the
+ * "could not tell" case adds no key at all — the server reads a missing zone
+ * and an unreadable one the same way, and neither is an error.
+ */
+function respondentTimezone(): { timezone?: string } {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return tz ? { timezone: tz } : {};
+  } catch {
+    return {};
+  }
+}
+
 function backoffMs(attempt: number): number {
   const base = Math.min(500 * 2 ** attempt, 8000);
   return base * (0.7 + Math.random() * 0.6);
@@ -998,6 +1014,18 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
              * computed, which the server handles by falling back to the IP.
              */
             ...(deviceSignal ? { deviceSignal } : {}),
+            /**
+             * Which clock this respondent is on, so a reminder that would fall
+             * in the middle of their night waits for the morning instead.
+             *
+             * Read from the browser rather than guessed at the edge: geo-IP
+             * gets a VPN user and a corporate egress wrong, and this is the one
+             * source that knows where the person is actually sitting. Wrapped
+             * because `resolvedOptions` is missing in a few hardened browsers,
+             * and a form that would not open because it could not name a time
+             * zone would be an absurd trade.
+             */
+            ...respondentTimezone(),
             ...(freshRef.current ? { fresh: true } : {}),
           }),
         });

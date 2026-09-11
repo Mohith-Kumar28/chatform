@@ -4,6 +4,7 @@ import type { Bindings } from "../env.js";
 import { getEntitlements } from "./entitlements.js";
 import { resolveRespondentAddress, type AddressSource } from "./respondent-address.js";
 import { bindChunks, holesFor } from "./d1-bindings.js";
+import { QUIET_MIN_SPACING_MS, resolveZone, shiftIntoWindow } from "./quiet-hours.js";
 
 /**
  * Scheduling and cancelling the nudges sent to someone who walked away.
@@ -68,6 +69,8 @@ function readAnswers(rows: { block_ref: string; value_json: string }[]): Map<str
 
 interface SubRow {
   respondent_email: string | null;
+  /** The respondent's IANA zone, when their browser named one. See `quiet-hours.ts`. */
+  timezone: string | null;
   hidden_fields: string | null;
   opted_out: number;
 }
@@ -375,7 +378,7 @@ async function scheduleOne(
   const sub =
     pre?.sub ??
     (await env.DB.prepare(
-      `SELECT s.respondent_email, s.hidden_fields,
+      `SELECT s.respondent_email, s.hidden_fields, cs.timezone,
               COALESCE(cs.followup_opt_out, 0) AS opted_out
          FROM submissions s
          LEFT JOIN chat_sessions cs ON cs.id = s.session_id
@@ -457,15 +460,78 @@ async function scheduleOne(
    * hours apart, however late the sequence starts.
    */
   let earliest = now;
+  /**
+   * Whose night to keep out of, or null when the author has not asked us to.
+   *
+   * Resolved once for the whole sequence rather than per step: it cannot change
+   * between steps, and `resolveZone` is three string checks and a formatter
+   * construction that would otherwise repeat for every rung.
+   *
+   * Null when the setting is off, and that is what makes this whole block inert
+   * for every form that predates it — with no zone, each step keeps exactly the
+   * instant it had before quiet hours existed.
+   */
+  const zone = cfg.quietHours ? resolveZone(sub.timezone, cfg.timezone) : null;
+  /** The previous step's final time, for the spacing rule below. */
+  let previous: number | null = null;
+
   cfg.steps.forEach((step, i) => {
     const configured = abandonedAt + step.delayHours * 3_600_000;
-    const at = input.catchUp ? Math.max(configured, earliest) : configured;
+    let at = input.catchUp ? Math.max(configured, earliest) : configured;
+
+    if (zone) {
+      /**
+       * Quiet hours applies to the moment the message will actually go, not to
+       * the moment it was nominally due.
+       *
+       * Those are the same thing while `at` is in the future, which is the
+       * ordinary case. They come apart when a response is abandoned long after
+       * the respondent actually stopped — an expired response the sweep only
+       * notices days later — and there the stored time is already a statement
+       * about the past while the sweep will send within five minutes of now.
+       * Shifting the past instant would compute a quiet window that has been
+       * and gone, and the message would go out at three in the morning anyway:
+       * exactly the bug this feature exists to prevent, wearing an
+       * honest-looking timestamp.
+       */
+      at = shiftIntoWindow(Math.max(at, now), zone);
+      /**
+       * And not on top of the step before it.
+       *
+       * A night swallows every step that fell inside it, so a reminder due at
+       * ten in the evening and one due at two in the morning both resolve to
+       * nine and arrive together — which reads as a bug to the recipient and as
+       * a burst to their provider. Pushed apart, then shifted again in case the
+       * push crossed an evening; that second shift settles, because the window
+       * is twelve hours wide and the push is two.
+       */
+      if (previous !== null && at < previous + QUIET_MIN_SPACING_MS) {
+        at = shiftIntoWindow(previous + QUIET_MIN_SPACING_MS, zone);
+      }
+      previous = at;
+    }
+
     if (input.catchUp) {
       const next = cfg.steps[i + 1];
+      /*
+       * Measured from where this step actually landed, not from where it was
+       * nominally due. Seeding the next step's floor with the pre-shift time
+       * would let it compute a target back inside the night this one was just
+       * pulled out of, and the pair would collapse onto the same morning again.
+       */
       // Clamped non-negative: nothing in the schema stops an author putting
       // step two sooner than step one, and a negative gap would walk backwards.
       earliest = at + (next ? Math.max(0, (next.delayHours - step.delayHours) * 3_600_000) : 0);
     }
+    /*
+     * The close check last, and deliberately after the shift.
+     *
+     * Holding a nudge until morning can carry it past the moment the form stops
+     * accepting answers — a ten o'clock reminder on a form that closes at six
+     * becomes a nine o'clock invitation to a door we locked in the night.
+     * Checking the time it was due rather than the time it will go would pass
+     * exactly that message, which is the one thing this check exists to stop.
+     */
     // A nudge that lands after the form stops accepting answers is worse than
     // no nudge: it invites somebody to a door we already locked.
     if (closeAt !== null && at >= closeAt) return;
@@ -535,6 +601,16 @@ export const CATCHUP_LOOKBACK_DAYS = 7;
  * next publish, which is the right failure: it under-sends rather than
  * over-sends, and it never blows the budget out from under the audit and
  * activity writes sharing the same request.
+ *
+ * Worth saying plainly what "the next publish" now costs, because the candidate
+ * rule below widened from "never scheduled" to "missing the last step": the
+ * moment an author adds a reminder, every recent response on the form is a
+ * candidate rather than a handful. At a hundred a publish that converges fine
+ * for a form taking tens or hundreds of responses a week, and does not converge
+ * for one taking thousands — publishes are rare, and nothing else runs this.
+ * The fix when a form gets there is a bounded sweep on the five-minute cron,
+ * not a larger number here: the all-or-nothing write batch below is the real
+ * ceiling, and raising this only makes a failure more expensive.
  */
 const CATCHUP_LIMIT = 100;
 
@@ -548,15 +624,20 @@ const CATCHUP_LIMIT = 100;
  * the HTTP API does.
  *
  * It also bounds what one failed write costs. A batch is all-or-nothing, so a
- * chunk that fails schedules nobody in that chunk — twenty-five people rather
- * than a hundred, with the rest of the page unaffected. Four batches of reads
- * and four of writes for a full page is still two orders of magnitude fewer
- * round trips than asking per response.
+ * chunk that fails schedules nobody in that chunk — twenty people rather than a
+ * hundred, with the rest of the page unaffected. Five batches of reads and five
+ * of writes for a full page is still two orders of magnitude fewer round trips
+ * than asking per response.
  *
  * Deliberately below `BIND_CHUNK`: here the chunk is also the blast radius of a
  * failed write batch, which is a stricter thing to size for than the bind limit.
+ *
+ * Twenty rather than the twenty-five it was, because the sequence is three
+ * steps now and the write batch is what actually bounds this: three inserts and
+ * a skip-note per response, plus the resume guard below, put a chunk of
+ * twenty-five at over a hundred statements in one all-or-nothing batch.
  */
-const CATCHUP_CHUNK = 25;
+const CATCHUP_CHUNK = 20;
 
 /**
  * Schedule the reminders for people who walked away *before* the sequence
@@ -598,6 +679,36 @@ export async function backfillFollowUps(
         Only `abandoned`: an `in_progress` response is somebody who may still be
         typing, and its session object's idle alarm owns the decision about when
         that stops being true.
+
+        Missing the *last* step, rather than missing every step.
+
+        "Has no rows at all" only ever caught a response that had never been
+        scheduled, which meant an author who added a third reminder to a
+        sequence got it for nobody already waiting: their rows existed, so they
+        were not candidates, and the step nobody had was never written. The
+        ladder in the results table then said "2 of 2" for them and "0 of 3" for
+        everyone who arrived after the edit — both honest reports of a database
+        that had quietly forked.
+
+        One correlated subquery rather than two, because both terms seek the
+        same `uq_followups_submission_step` prefix: SQLite seeks to this
+        submission and reads its at-most-three rows once, deciding both. It
+        costs what the old single probe cost, and it subsumes it — a response
+        with no rows has no last step either.
+
+        The status terms are the sequences that must stay stopped. `cancelled`
+        is a respondent who finished, resumed or unsubscribed. `failed` is a
+        delivery that exhausted the queue's retries, where the next step would
+        most likely burn five more against a shared sending domain. `holdout` is
+        the control arm, and it is the one that would do real damage: `held` is
+        recomputed from the *current* `holdoutPercent`, so an author lowering it
+        would top up the people who were deliberately sent nothing, mail them,
+        and destroy the only number that makes the recovery figure mean
+        anything.
+
+        `skipped` is deliberately not here. Its reasons include `email_quota`
+        and `not_entitled`, and repairing exactly those is what this function
+        promises above.
       */
       `SELECT s.id, s.updated_at
          FROM submissions s
@@ -605,11 +716,15 @@ export async function backfillFollowUps(
           AND s.status = 'abandoned'
           AND s.is_test = 0
           AND s.updated_at > ?2
-          AND NOT EXISTS (SELECT 1 FROM followups fu WHERE fu.submission_id = s.id)
+          AND NOT EXISTS (
+            SELECT 1 FROM followups fu
+             WHERE fu.submission_id = s.id
+               AND (fu.step = ?4 OR fu.status IN ('cancelled', 'failed', 'holdout'))
+          )
         ORDER BY s.updated_at DESC
         LIMIT ?3`,
     )
-      .bind(formId, since, CATCHUP_LIMIT)
+      .bind(formId, since, CATCHUP_LIMIT, gate.cfg.steps.length)
       .all<{ id: string; updated_at: number }>();
 
     const rows = candidates.results ?? [];
@@ -664,7 +779,7 @@ async function scheduleChunk(
 
   const [subsRes, answersRes] = (await env.DB.batch([
     env.DB.prepare(
-      `SELECT s.id, s.respondent_email, s.hidden_fields,
+      `SELECT s.id, s.respondent_email, s.hidden_fields, cs.timezone,
               COALESCE(cs.followup_opt_out, 0) AS opted_out
          FROM submissions s
          LEFT JOIN chat_sessions cs ON cs.id = s.session_id
@@ -723,7 +838,7 @@ async function scheduleChunk(
    * per-response loop would have left the ones it had already reached
    * scheduled. Safe because the insert is `ON CONFLICT DO NOTHING` and the
    * whole thing runs again on the next publish, and bounded because a chunk is
-   * twenty-five responses rather than the entire page.
+   * twenty responses rather than the entire page.
    */
   const writes: D1PreparedStatement[] = [];
   let scheduled = 0;
@@ -749,7 +864,36 @@ async function scheduleChunk(
       writes,
     );
   }
-  if (writes.length > 0) await env.DB.batch(writes);
+  /**
+   * Undo anything this batch just wrote for somebody who came back while it ran.
+   *
+   * The candidate read and this write are separate round trips, and in between
+   * a respondent can click a resume link: `reopenAbandonedResponse` flips the
+   * response to `in_progress` and `cancelFollowUps` cancels its scheduled rows
+   * — neither of which has anything to say about the rows we are inserting
+   * here, because they did not exist yet. The sweep accepts `in_progress` as
+   * well as `abandoned`, so the next tick would mail somebody who is at that
+   * moment answering the form.
+   *
+   * Never reachable while a candidate was by definition a response that had
+   * never been scheduled at all. It is reachable now: a top-up candidate is a
+   * response with a live sequence and a live resume link in somebody's inbox,
+   * which is precisely the kind that gets resumed.
+   *
+   * Last in the batch, so it sees this chunk's inserts rather than racing them.
+   */
+  if (writes.length > 0) {
+    writes.push(
+      env.DB.prepare(
+        `UPDATE followups SET status = 'cancelled', reason = 'resumed'
+          WHERE submission_id IN (${holes})
+            AND status = 'scheduled'
+            AND EXISTS (SELECT 1 FROM submissions s
+                         WHERE s.id = followups.submission_id AND s.status <> 'abandoned')`,
+      ).bind(...ids),
+    );
+    await env.DB.batch(writes);
+  }
   return scheduled;
 }
 

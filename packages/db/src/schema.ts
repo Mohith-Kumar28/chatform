@@ -488,6 +488,14 @@ export const chatSessions = sqliteTable(
     submissionId: text("submission_id"),
     ipHash: text("ip_hash"),
     country: text("country"),
+    /**
+     * The respondent's IANA zone, from their browser or Cloudflare's geo-IP.
+     *
+     * Read by the follow-up scheduler to keep a reminder out of their night.
+     * Null whenever nobody could say — an API-key session, or a browser that
+     * declined to answer — and the scheduler falls back to the form's own zone.
+     */
+    timezone: text("timezone"),
     hiddenFields: text("hidden_fields"),
     meta: text("meta"),
     /** JSON `RespondentIdentity`, set once the sign-in gate is satisfied. */

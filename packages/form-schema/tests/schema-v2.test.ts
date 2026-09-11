@@ -267,6 +267,62 @@ describe("agent layer", () => {
     });
   });
 
+  /**
+   * v8 → v9: quiet hours, and the line drawn around them.
+   *
+   * The schema default is `true`, so a document minted today holds its
+   * reminders out of the respondent's night. The migration exists to make sure
+   * that default never reaches a document written before the feature did —
+   * an author already running a sequence did not agree to a twelve-hour
+   * nightly hold, and mail cannot be un-sent if we guess wrong.
+   */
+  describe("v8 → v9: quiet hours", () => {
+    type Migrated = {
+      schemaVersion: number;
+      settings: { followUp: Record<string, unknown> };
+    };
+
+    it("pins a document that predates the setting to off", () => {
+      const migrated = migrateFormDoc({ ...v1Doc, schemaVersion: 8 }) as Migrated;
+      expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
+      expect(migrated.settings.followUp.quietHours).toBe(false);
+      expect(FormDoc.parse(migrated).settings.followUp.quietHours).toBe(false);
+    });
+
+    it("pins a document from the very beginning of the chain too", () => {
+      // The whole chain runs, so a v1 doc is as much "written before this
+      // existed" as a v8 one is.
+      expect(FormDoc.parse(migrateFormDoc(v1Doc)).settings.followUp.quietHours).toBe(false);
+    });
+
+    it("gives a freshly minted document the safer default", () => {
+      // The shape `defaultDoc`, the seed templates and the AI generator all
+      // produce: no stored version, parsed rather than migrated.
+      const { schemaVersion: _ignored, ...unversioned } = v1Doc;
+      expect(FormDoc.parse({ ...unversioned, settings: {} }).settings.followUp.quietHours).toBe(true);
+    });
+
+    it("leaves an explicit choice alone in either direction", () => {
+      const on = migrateFormDoc({
+        ...v1Doc,
+        schemaVersion: 8,
+        settings: { followUp: { quietHours: true } },
+      }) as Migrated;
+      expect(on.settings.followUp.quietHours).toBe(true);
+    });
+
+    it("leaves the rest of the follow-up settings alone", () => {
+      const migrated = migrateFormDoc({
+        ...v1Doc,
+        schemaVersion: 8,
+        settings: { followUp: { enabled: true, holdoutPercent: 10, replyTo: "a@b.com" } },
+      }) as Migrated;
+      expect(migrated.settings.followUp.enabled).toBe(true);
+      expect(migrated.settings.followUp.holdoutPercent).toBe(10);
+      expect(migrated.settings.followUp.replyTo).toBe("a@b.com");
+    });
+  });
+
   it("ignores a knowledge key on a parsed document", () => {
     const doc = FormDoc.parse({
       ...v1Doc,

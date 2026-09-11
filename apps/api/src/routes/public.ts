@@ -10,6 +10,7 @@ import { SessionDO } from "../do/session-do.js";
 import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
 import { completedSubmissions, openSession, type FormRow } from "../lib/open-session.js";
 import { respondentKey } from "../lib/respondent-key.js";
+import { canonicalZone } from "../lib/quiet-hours.js";
 import { findDeviceResumable } from "../lib/respondent-history.js";
 import { reopenAbandonedResponse } from "../lib/submissions.js";
 import { mountRespondentAuth } from "./respondent-auth.js";
@@ -59,6 +60,16 @@ const createSessionSchema = z.object({
    * existed.
    */
   deviceSignal: z.string().max(128).optional(),
+  /**
+   * The respondent's own clock, as their browser reports it.
+   *
+   * Used for one thing: deciding whether a follow-up reminder would land in the
+   * middle of their night. The bound here is a size limit and not a correctness
+   * one — an unrecognisable zone must never be a reason the form refuses to
+   * open, so the handler resolves this to a canonical id or to nothing, and
+   * nothing is the same as absent.
+   */
+  timezone: z.string().max(64).optional(),
   /**
    * Start this response from nothing, whatever the device key matches.
    *
@@ -292,6 +303,22 @@ sessionsRouter.post(
       (body.fresh ? null : await findDeviceResumable(c.env, formRow.id, device));
 
     /**
+     * Which clock this respondent is on: the browser's answer, then the edge's.
+     *
+     * The browser knows where the person is sitting; Cloudflare knows where the
+     * packets came out, which is the same place often enough to be worth having
+     * and wrong often enough — a VPN, a corporate egress — not to prefer.
+     *
+     * Resolved here rather than inside `openSession` because `/v1` shares that
+     * function, and there `cf` describes the customer's own datacentre rather
+     * than any respondent. A headless session simply has no zone, which is the
+     * honest answer.
+     */
+    const timezone =
+      canonicalZone(body.timezone) ??
+      canonicalZone((c.req.raw as { cf?: { timezone?: string } }).cf?.timezone);
+
+    /**
      * Every gate now lives in `openSession`, shared with the headless API.
      *
      * They used to live inline here, which is exactly why `/v1` had none of
@@ -320,6 +347,7 @@ sessionsRouter.post(
        */
       embedOrigin: c.req.header("origin") ?? null,
       deviceSignal: body.deviceSignal ?? null,
+      timezone,
       /**
        * Carried onto the session, not just used here.
        *

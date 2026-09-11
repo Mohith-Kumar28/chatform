@@ -155,6 +155,8 @@ const SETTING_LABELS: Record<string, string> = {
   "followUp.showProgress": "Follow-up progress line",
   "followUp.holdoutPercent": "Follow-up holdout",
   "followUp.replyTo": "Follow-up reply-to",
+  "followUp.quietHours": "Follow-up quiet hours",
+  "followUp.timezone": "Follow-up time zone",
   "meta.ogTitle": "Share title",
   "meta.ogDescription": "Share description",
   "meta.ogImageKey": "Share image",

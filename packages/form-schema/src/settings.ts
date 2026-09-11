@@ -313,6 +313,34 @@ export const SettingsDoc = z.object({
        * measures it at all.
        */
       holdoutPercent: z.number().int().min(0).max(20).default(0),
+      /**
+       * Hold a reminder out of the respondent's night.
+       *
+       * Nothing sends between 9 PM and 9 AM where *they* are — their browser's
+       * zone, falling back to the author's. The hours are fixed rather than a
+       * range the author picks: when people are asleep is a fact about people,
+       * not a preference about a campaign, and every product that made it
+       * editable turned one safe default into a support question.
+       *
+       * On by default, which is only true of documents written from v9 onward
+       * — the v8→v9 migration pins every document older than this to `false`,
+       * because silently adding a twelve-hour nightly hold to a sequence
+       * somebody is already running and already measuring would be a change
+       * they did not ask for. See `migrations.ts`.
+       */
+      quietHours: z.boolean().default(true),
+      /**
+       * The form's own clock, used only when the respondent's is unknown.
+       *
+       * Written by the builder from the author's browser at the moment they
+       * switch quiet hours on. Their morning is a far better guess at their
+       * respondents' morning than UTC is — most forms are answered in one
+       * country, and it is usually the author's.
+       *
+       * Not named `quietHoursTimezone`: the day this grows a "weekdays only"
+       * rule, it will be the same field.
+       */
+      timezone: z.string().max(64).optional(),
       /** Where a reply goes. `noreply@` on a nudge is how you get marked spam. */
       replyTo: z.string().email().optional(),
       /**

@@ -72,6 +72,15 @@ export interface OpenSessionInput {
    * back to the IP, which is what it was before. See `lib/respondent-key.ts`.
    */
   deviceSignal?: string | null;
+  /**
+   * The respondent's IANA zone, already canonicalised by the caller.
+   *
+   * Stored so a follow-up reminder can be held out of their night. Resolved on
+   * the public route rather than here because `/v1` also opens sessions, and
+   * the edge properties available there describe the customer's own
+   * datacentre — a headless session honestly has no respondent zone.
+   */
+  timezone?: string | null;
   /** Opened with a test-mode key: real rows, excluded from every count. */
   isTest?: boolean;
   apiKeyId?: string | null;
@@ -387,9 +396,9 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
 
   await env.DB.prepare(
     `INSERT INTO chat_sessions (id, form_id, form_version_id, organization_id, respondent_token_hash, status,
-                                hidden_fields, ip_hash, fingerprint, country, source, is_test, started_over,
-                                submission_id, created_at, last_activity_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                hidden_fields, ip_hash, fingerprint, country, timezone, source, is_test,
+                                started_over, submission_id, created_at, last_activity_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       sessionId,
@@ -403,6 +412,7 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
       // match every other one on the resubmission gate.
       device.value || null,
       input.country,
+      input.timezone ?? null,
       input.source,
       input.isTest ? 1 : 0,
       input.startedOver ? 1 : 0,

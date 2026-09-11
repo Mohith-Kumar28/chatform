@@ -1,0 +1,19 @@
+-- The respondent's own clock, so a reminder due at 3 AM does not go out at 3 AM.
+--
+-- A column rather than a key in the `meta` blob this table already has, for the same reason
+-- `followup_opt_out` got one: the follow-up scheduler reads it on every abandonment, through a
+-- join it is already making, and `json_extract` on a nullable TEXT column is not a thing to put
+-- in that path.
+--
+-- No index. The only reader joins `cs.id = s.session_id` — the primary key — so this rides along
+-- free on a lookup already being paid for.
+--
+-- An IANA zone id, validated and canonicalised on the way in by `lib/quiet-hours.ts`, never an
+-- offset: an offset cannot answer "is it 3 AM there in March", which is the only question asked
+-- of it. Nullable and staying that way — an API-key session has no browser to ask, and a
+-- respondent whose browser will not say must still be able to open the form.
+--
+-- Hand-written, as 0021 through 0024 were: `chat_sessions.fingerprint` exists in D1 from 0018
+-- but never landed in the Drizzle table definition, so `drizzle-kit generate` diffs against a
+-- meta snapshot that disagrees with the database and re-emits statements that fail.
+ALTER TABLE chat_sessions ADD COLUMN timezone TEXT;
