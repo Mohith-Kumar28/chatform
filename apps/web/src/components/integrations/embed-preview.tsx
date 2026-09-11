@@ -44,6 +44,7 @@ const LAUNCHER_CLEARANCE = 68;
 export function EmbedPreview({
   config,
   formTitle,
+  slug,
   theme,
   blocks,
   device,
@@ -53,6 +54,8 @@ export function EmbedPreview({
 }: {
   config: EmbedConfig;
   formTitle: string;
+  /** Seeds the background pattern — see `MockConversation`. */
+  slug: string;
   theme: ThemeDoc;
   blocks: Block[];
   device: PreviewDevice;
@@ -124,6 +127,7 @@ export function EmbedPreview({
                   >
                     <MockConversation
                       title={formTitle}
+                      slug={slug}
                       theme={theme}
                       blocks={blocks}
                       compact={device === "mobile"}
@@ -139,6 +143,7 @@ export function EmbedPreview({
             <div className="absolute inset-0">
               <MockConversation
                 title={formTitle}
+                slug={slug}
                 theme={theme}
                 blocks={blocks}
                 compact={device === "mobile"}
@@ -156,6 +161,7 @@ export function EmbedPreview({
                 >
                   <MockConversation
                     title={formTitle}
+                    slug={slug}
                     theme={theme}
                     blocks={blocks}
                     compact={takeover || config.width < 380}
@@ -361,6 +367,7 @@ function MockPage({ narrow, inline }: { narrow: boolean; inline: React.ReactNode
  */
 function MockConversation({
   title,
+  slug,
   theme,
   blocks,
   compact,
@@ -368,6 +375,12 @@ function MockConversation({
   onClose,
 }: {
   title: string;
+  /**
+   * The form's slug. It seeds the background tile, which is part of "the panel
+   * in this picture is the panel a respondent gets" — a flat page here for a
+   * textured form would be the picture lying about the product.
+   */
+  slug: string;
   theme: ThemeDoc;
   blocks: Block[];
   compact: boolean;
@@ -397,7 +410,7 @@ function MockConversation({
   const pct = Math.round((1 / Math.max(script.total, 2)) * 100);
 
   return (
-    <div className="chat-surface flex h-full flex-col overflow-hidden" style={chatThemeVars(theme)}>
+    <div className="chat-surface flex h-full flex-col overflow-hidden" style={chatThemeVars(theme, slug)}>
       <header className="shrink-0">
         <div className={cn("flex items-center gap-3 py-3", pad)}>
           {logoUrl ? (

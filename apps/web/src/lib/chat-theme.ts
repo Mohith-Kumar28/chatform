@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { THEME_DEFAULT_INK, type ThemeDoc } from "@repo/form-schema";
+import { patternImage, patternSize, patternWeight, rgbaFromHex } from "@/lib/background-patterns";
 
 /**
  * Maps a form's ThemeDoc onto the scoped `--cf-*` variables the chat surface
@@ -93,7 +94,36 @@ function inkFor(fill: string, stored: string): string {
   return contrast(fill, stored) >= AA_BODY ? stored : readableInk(fill);
 }
 
-export function chatThemeVars(theme: ThemeDoc): CSSProperties {
+/**
+ * The ink the background tile is drawn in, and how strongly.
+ *
+ * The accent, because the pattern has to read as part of the form somebody
+ * designed rather than as chrome we added. Two things override that:
+ *
+ *   - an accent that does not stand clear of the page at all (a near-white
+ *     accent on white) would draw nothing, so the text colour takes over;
+ *   - a dark page needs a little more alpha than a light one. Low-alpha ink
+ *     over a dark fill loses contrast faster than the same ink over a light
+ *     one, and 5% on near-black is indistinguishable from no pattern.
+ *
+ * The ceiling is the point: at 8% the tile is a property of the paper, and at
+ * 12% it is something the eye keeps returning to while trying to read an
+ * answer. This is a background, and a background that gets noticed twice has
+ * failed.
+ */
+export function patternInk(theme: ThemeDoc, seed: string): string {
+  const dark = isDarkColor(theme.background);
+  const usable = contrast(theme.background, theme.accent) >= 1.3;
+  const alpha = (dark ? 0.075 : 0.055) * patternWeight(seed);
+  return rgbaFromHex(usable ? theme.accent : theme.text, Number(alpha.toFixed(4)));
+}
+
+/**
+ * @param seed the form's slug, which is what decides its tile. Omitted only
+ *   where there is no form — the marketing demo — and the surface then paints
+ *   the flat background it always did.
+ */
+export function chatThemeVars(theme: ThemeDoc, seed?: string | null): CSSProperties {
   const darkSurface = isDarkColor(theme.background);
 
   // The bot bubble needs a border only when it would otherwise be invisible
@@ -142,6 +172,18 @@ export function chatThemeVars(theme: ThemeDoc): CSSProperties {
      */
     "--cf-sunken": shift(theme.surface, 0.045, darkSurface ? "light" : "dark"),
     "--cf-radius": RADIUS_PX[theme.radius],
+    /*
+     * The background tile, as two variables `.chat-surface` paints.
+     *
+     * It lives here rather than in each surface because this function is the
+     * "preview ≡ production" contract: the hosted page, the builder's question
+     * preview and the embed preview all theme through it, so none of them can
+     * end up with a different tile — or no tile — from the one a respondent
+     * sees. `none` is a valid `background-image`, which is what lets the
+     * seedless case fall through to a flat fill with no branch in the CSS.
+     */
+    "--cf-pattern": seed ? patternImage(seed, patternInk(theme, seed)) : "none",
+    "--cf-pattern-size": seed ? patternSize(seed) : "auto",
     fontFamily: `${theme.fontBody}, ui-sans-serif, system-ui, sans-serif`,
     "--cf-font-heading": `${theme.fontHeading}, ${theme.fontBody}, ui-sans-serif, sans-serif`,
   } as CSSProperties;

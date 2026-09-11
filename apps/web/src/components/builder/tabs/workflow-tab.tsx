@@ -20,7 +20,7 @@ export function WorkflowTab() {
   if (!doc) return null;
 
   return (
-    <div className="h-[calc(100svh-3.5rem)]">
+    <div className="h-[calc(100svh-var(--app-header-h))]">
       {/* The toolbar is handed to the editor so it renders above the canvas,
           between the library and the details panel — the same place it sits on
           the Questions view. */}

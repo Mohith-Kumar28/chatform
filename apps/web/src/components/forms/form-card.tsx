@@ -39,7 +39,8 @@ import {
 } from "@/components/ui/context-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { isDarkColor, readableInk } from "@/lib/chat-theme";
+import { contrast, isDarkColor, readableInk } from "@/lib/chat-theme";
+import { patternImage, patternSize, patternWeight, rgbaFromHex } from "@/lib/background-patterns";
 
 /**
  * The pieces of a menu, so one list of items can be rendered by two of them.
@@ -593,6 +594,7 @@ export function FormCard({
               opener={opener}
               answer={asks[0]}
               theme={form.theme}
+              slug={form.slug}
               logoAlt={form.title}
               pills={thumbPills}
             />
@@ -625,7 +627,7 @@ export function FormCard({
                 aria-hidden
                 className="pointer-events-none absolute inset-x-0 top-0 z-0"
                 style={{
-                  ...thumbSurface(form.theme ?? null, "bleed"),
+                  ...thumbSurface(form.theme ?? null, "bleed", form.slug),
                   height: SEAM_BELOW,
                   maskImage: SEAM_BLEED_MASK,
                   WebkitMaskImage: SEAM_BLEED_MASK,
@@ -837,12 +839,15 @@ function ChatThumb({
   opener,
   answer,
   theme,
+  slug,
   logoAlt,
   pills,
 }: {
   opener: string;
   answer?: string;
   theme?: FormRow["theme"];
+  /** Seeds the background tile. See `thumbSurface`. */
+  slug: string;
   logoAlt: string;
   /** The strip along the bottom edge. Built by the card, which is where the
    *  thumbnail's surface is already worked out for the quick actions. */
@@ -861,7 +866,7 @@ function ChatThumb({
     return (
       <ThumbFrame
         pills={pills}
-        style={thumbSurface(null, "thumb")}
+        style={thumbSurface(null, "thumb", slug)}
       >
         <ThumbBubbles
           opener={opener}
@@ -889,7 +894,7 @@ function ChatThumb({
    * somebody picks a pale accent.
    */
   return (
-    <ThumbFrame pills={pills} style={thumbSurface(theme, "thumb")}>
+    <ThumbFrame pills={pills} style={thumbSurface(theme, "thumb", slug)}>
       <ThumbBubbles
         opener={opener}
         answer={answer}
@@ -1047,13 +1052,68 @@ const BRAND_BAND =
 function thumbSurface(
   theme: FormRow["theme"],
   part: "thumb" | "bleed",
+  /**
+   * The form's slug. It decides which background tile the form carries — the
+   * same derivation the hosted runtime uses — so the picture on the card is
+   * the page a respondent opens, texture included.
+   */
+  seed?: string,
 ): CSSProperties {
-  if (theme) return { backgroundColor: theme.background };
+  /*
+   * The tile offsets by the thumbnail's own height in the bleed, exactly as
+   * the band does, and for the same reason: `background-position` resolves
+   * against the box, so the strip below the seam has to be told to show the
+   * slice that comes next rather than starting the tile over. A repeat wraps,
+   * so a negative offset larger than the tile is still the right phase.
+   */
+  const tilePos = part === "thumb" ? "0 0" : `0 -${THUMB_H}px`;
+
+  if (theme) {
+    /*
+     * A themed form gets its tile in its own accent. Deliberately weaker than
+     * the runtime's alpha: a 144px thumbnail already carries two bubbles, a
+     * logo, a status strip and a fade, and a texture at full runtime strength
+     * turns a card you recognise into a card you have to decode.
+     */
+    if (!seed) return { backgroundColor: theme.background };
+    const usable = contrast(theme.background, theme.accent) >= 1.3;
+    const ink = rgbaFromHex(
+      usable ? theme.accent : theme.userBubbleText,
+      (isDarkColor(theme.background) ? 0.07 : 0.05) * patternWeight(seed),
+    );
+    return {
+      backgroundColor: theme.background,
+      backgroundImage: patternImage(seed, ink),
+      backgroundSize: patternSize(seed),
+      backgroundRepeat: "repeat",
+      backgroundPosition: tilePos,
+    };
+  }
+
+  /*
+   * The band case layers the tile over the sweep — tile first, so it is the
+   * top layer. Each longhand takes both values in the same order, which is the
+   * only way two background layers can keep different sizes: the band is one
+   * stretched copy of the combined height, the tile repeats at its own scale.
+   *
+   * White ink rather than the accent, because the band is already two
+   * saturated hues and nothing drawn in a third would read as texture.
+   */
+  const bandSize = `100% ${THUMB_H + SEAM_BELOW}px`;
+  const bandPos = part === "thumb" ? "0 0" : `0 -${THUMB_H}px`;
+  if (!seed) {
+    return {
+      backgroundImage: BRAND_BAND,
+      backgroundRepeat: "no-repeat",
+      backgroundSize: bandSize,
+      backgroundPosition: bandPos,
+    };
+  }
   return {
-    backgroundImage: BRAND_BAND,
-    backgroundRepeat: "no-repeat",
-    backgroundSize: `100% ${THUMB_H + SEAM_BELOW}px`,
-    backgroundPosition: part === "thumb" ? "0 0" : `0 -${THUMB_H}px`,
+    backgroundImage: `${patternImage(seed, `rgba(255,255,255,${0.085 * patternWeight(seed)})`)}, ${BRAND_BAND}`,
+    backgroundRepeat: "repeat, no-repeat",
+    backgroundSize: `${patternSize(seed)}, ${bandSize}`,
+    backgroundPosition: `${tilePos}, ${bandPos}`,
   };
 }
 

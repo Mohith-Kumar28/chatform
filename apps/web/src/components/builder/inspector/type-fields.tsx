@@ -77,10 +77,8 @@ export function TypeFields({
               <TextField
                 label="Pattern"
                 help={<PatternHelp />}
-                hint={
-                  block.pattern && !patternIsValid(block.pattern)
-                    ? "This isn't a valid pattern, so nothing is checked against it."
-                    : undefined
+                error={
+                  block.pattern && !patternIsValid(block.pattern) ? "Invalid pattern" : undefined
                 }
                 placeholder="^[0-9]{10}$"
                 className="font-mono text-xs"
@@ -102,8 +100,7 @@ export function TypeFields({
             onChange={(v) => patch({ businessOnly: v } as Partial<Block>)}
           />
           <VerifyField
-            label="Verify with an emailed code"
-            hint="Emails a 6-digit code and keeps the answer only once they type it back"
+            label="Verify by email code"
             checked={block.verify}
             patch={patch}
           />
@@ -118,7 +115,8 @@ export function TypeFields({
       return (
         <>
           <TextField
-            label="Country hint"
+            label="Country code"
+            placeholder="IN"
             value={block.countryHint ?? ""}
             onChange={(v) =>
               patch({ countryHint: v.toUpperCase().slice(0, 2) || undefined } as Partial<Block>, key("countryHint"))
@@ -126,8 +124,7 @@ export function TypeFields({
             maxLength={2}
           />
           <VerifyField
-            label="Verify with an SMS code"
-            hint="Texts a 6-digit code and keeps the answer only once they type it back"
+            label="Verify by SMS code"
             checked={block.verify}
             patch={patch}
           />
@@ -159,6 +156,7 @@ export function TypeFields({
           />
           <TextField
             label="Currency"
+            placeholder="INR"
             value={block.currency ?? ""}
             onChange={(v) =>
               patch({ currency: v.toUpperCase().slice(0, 3) || undefined } as Partial<Block>, key("currency"))
@@ -190,13 +188,13 @@ export function TypeFields({
           <div className="grid grid-cols-2 gap-3">
             <TextField
               label="Earliest"
-              hint="ISO date"
+              placeholder="YYYY-MM-DD"
               value={block.min ?? ""}
               onChange={(v) => patch({ min: v || undefined } as Partial<Block>, key("dmin"))}
             />
             <TextField
               label="Latest"
-              hint="ISO date"
+              placeholder="YYYY-MM-DD"
               value={block.max ?? ""}
               onChange={(v) => patch({ max: v || undefined } as Partial<Block>, key("dmax"))}
             />
@@ -214,13 +212,13 @@ export function TypeFields({
             <div className="grid grid-cols-3 gap-3">
               <TextField
                 label="From"
-                hint="HH:mm"
+                placeholder="09:00"
                 value={block.timeMin}
                 onChange={(v) => patch({ timeMin: v } as Partial<Block>, key("tmin"))}
               />
               <TextField
                 label="To"
-                hint="HH:mm"
+                placeholder="17:00"
                 value={block.timeMax}
                 onChange={(v) => patch({ timeMax: v } as Partial<Block>, key("tmax"))}
               />
@@ -278,7 +276,7 @@ export function TypeFields({
           />
           {(block.type === "single_select" || block.type === "multi_select") && (
             <SwitchField
-              label={'Allow an "Other" answer'}
+              label={'Allow "Other"'}
               checked={block.allowOther}
               onChange={(v) => patch({ allowOther: v } as Partial<Block>)}
             />
@@ -472,7 +470,7 @@ export function TypeFields({
       return (
         <>
           <SelectField
-            label="How they pay"
+            label="Method"
             value={block.method}
             onChange={(v) =>
               patch({
@@ -497,37 +495,29 @@ export function TypeFields({
                 onChange={(v) => patch({ upiId: v.trim() || undefined } as Partial<Block>, key("upi"))}
               />
               {block.upiId && !isValidUpiId(block.upiId) ? (
-                <p className="text-xs text-[var(--destructive)]">
-                  That doesn&apos;t look like a UPI ID. It should read like name@bank.
-                </p>
+                <p className="text-destructive -mt-4 text-xs">Use the name@bank format</p>
               ) : null}
               <TextField
                 label="Payee name"
                 value={block.upiPayeeName ?? ""}
-                placeholder="Shown in their UPI app"
                 onChange={(v) => patch({ upiPayeeName: v || undefined } as Partial<Block>, key("payee"))}
               />
             </>
           ) : (
-            <>
-              <TextField
-                label="Payment link"
-                value={block.url ?? ""}
-                placeholder="https://rzp.io/l/…"
-                onChange={(v) => patch({ url: v.trim() || undefined } as Partial<Block>, key("url"))}
-              />
-              <p className="text-xs opacity-60">
-                Any checkout page you already have — Razorpay, Stripe, PayPal, Cashfree.
-              </p>
-            </>
+            <TextField
+              label="Payment link"
+              value={block.url ?? ""}
+              placeholder="https://rzp.io/l/…"
+              onChange={(v) => patch({ url: v.trim() || undefined } as Partial<Block>, key("url"))}
+            />
           )}
 
           <SelectField
-            label="Amount"
+            label="Amount type"
             value={block.amountMode}
             onChange={(v) => patch({ amountMode: v } as Partial<Block>)}
             options={[
-              { value: "fixed", label: "Fixed amount" },
+              { value: "fixed", label: "Fixed" },
               { value: "variable", label: "From a variable" },
             ]}
           />
@@ -551,27 +541,17 @@ export function TypeFields({
             onChange={(v) => patch({ currency: v.toUpperCase().slice(0, 3) } as Partial<Block>, key("cur"))}
             maxLength={3}
           />
-          <p className="text-xs opacity-60">
-            Payment happens on your side, so we can&apos;t confirm it. Answers are recorded as
-            unverified for you to reconcile.
-          </p>
         </>
       );
 
     case "scheduling":
       return (
-        <>
-          <TextField
-            label="Booking link"
-            value={block.url}
-            placeholder="https://cal.com/your-handle"
-            onChange={(v) => patch({ url: v } as Partial<Block>, key("url"))}
-          />
-          <p className="text-xs opacity-60">
-            Cal.com, Calendly, Google Calendar, or a plain Meet, Zoom or Teams link — whatever you
-            already use.
-          </p>
-        </>
+        <TextField
+          label="Booking link"
+          value={block.url}
+          placeholder="https://cal.com/your-handle"
+          onChange={(v) => patch({ url: v } as Partial<Block>, key("url"))}
+        />
       );
 
     case "contact_info":
@@ -609,8 +589,8 @@ export function TypeFields({
       return (
         <>
           <TextField
-            label="What one entry is called"
-            hint="Shown above each row — “Team member 1”, “Guest 2”."
+            label="Entry name"
+            placeholder="Team member"
             value={block.itemLabel}
             onChange={(v) => patch({ itemLabel: v || "Entry" } as Partial<Block>, key("itemLabel"))}
             maxLength={60}
@@ -622,8 +602,7 @@ export function TypeFields({
               who says "at least two" wants two boxes waiting.
             */}
             <NumberField
-              label="Start with"
-              hint="Rows shown, and the fewest allowed"
+              label="Min entries"
               value={block.minEntries}
               min={1}
               max={20}
@@ -639,7 +618,7 @@ export function TypeFields({
               }}
             />
             <NumberField
-              label="Allow up to"
+              label="Max entries"
               value={block.maxEntries}
               min={1}
               max={20}
@@ -670,8 +649,7 @@ export function TypeFields({
             maxLength={10000}
           />
           <SwitchField
-            label="Let them decline"
-            hint="Adds an “I do not agree” button. Declining becomes a real answer you can branch on — point it at an ending that turns them away. Off, the form simply won’t continue without agreement."
+            label="Allow decline"
             checked={block.allowDecline}
             onChange={(v) => patch({ allowDecline: v } as Partial<Block>, key("decline"))}
           />
@@ -700,15 +678,6 @@ export function TypeFields({
 }
 
 /**
- * "No two people can give the same answer."
- *
- * One control rather than five copies, because the sentence an author needs to
- * read is the same on all of them and it is not the obvious one: the check is
- * against everybody else's answers to THIS question on THIS form, so the hint
- * says so. Without that, "unique" reads as "unique in this response", which is
- * trivially true and would make the switch look broken.
- */
-/**
  * Make the respondent prove the value they typed.
  *
  * Locked rather than hidden below Business, like every other paid control in
@@ -717,12 +686,10 @@ export function TypeFields({
  */
 function VerifyField({
   label,
-  hint,
   checked,
   patch,
 }: {
   label: string;
-  hint: string;
   checked: boolean;
   patch: (p: Partial<Block>, coalesceKey?: string) => void;
 }) {
@@ -730,7 +697,6 @@ function VerifyField({
     <LockedControl feature="verified_answers" chip="inline">
       <SwitchField
         label={label}
-        hint={hint}
         checked={checked}
         onChange={(v) => patch({ verify: v } as Partial<Block>)}
       />
@@ -738,6 +704,10 @@ function VerifyField({
   );
 }
 
+/**
+ * "No two people can give the same answer" — checked against everybody else's
+ * answers to this question on this form. One control rather than five copies.
+ */
 function UniqueField({
   checked,
   patch,
@@ -748,7 +718,6 @@ function UniqueField({
   return (
     <SwitchField
       label="No duplicate answers"
-      hint="Refuses a value another respondent has already given to this question"
       checked={checked}
       onChange={(v) => patch({ unique: v } as Partial<Block>)}
     />

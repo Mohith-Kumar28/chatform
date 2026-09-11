@@ -117,6 +117,14 @@ export interface PublicBlock {
    */
   verify?: boolean;
   /**
+   * phone: the two-letter country the author expects, where they set one.
+   *
+   * Where the composer's country picker opens. The validator has always used it
+   * to read a bare national number — see `validateAnswer` — so sending it is
+   * what lets the field agree with the rule it will be judged by.
+   */
+  countryHint?: string;
+  /**
    * Which reusable detail this question holds, already resolved.
    *
    * The author's mapping, the three self-describing block types and the refusals
@@ -291,8 +299,17 @@ export function toPublicBlock(b: Block): PublicBlock {
       pub.maxLength = b.maxLength;
       break;
     case "email":
+      pub.verify = b.verify;
+      break;
     case "phone":
       pub.verify = b.verify;
+      /*
+        Projected so the composer's country picker can open on the country the
+        author is expecting. It already governed whether a bare national number
+        was accepted server-side; withholding it from the client meant the one
+        place it could have *prevented* a wrong answer never saw it.
+      */
+      pub.countryHint = b.countryHint;
       break;
     default:
       break;

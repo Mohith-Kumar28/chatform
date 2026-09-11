@@ -28,6 +28,7 @@ import { LinkSettings } from "./link-settings";
 import { FollowUpPanel } from "./followup-panel";
 import { ShortcutsList } from "@/components/ui/shortcuts-dialog";
 import { useBuilderStore } from "@/stores/builder-store";
+import { SettingsShell } from "@/components/settings/settings-shell";
 
 interface SettingsPanelProps {
   settings: FormDoc["settings"];
@@ -94,401 +95,425 @@ export function SettingsPanel({
   const shortcuts = useBuilderStore((s) => s.shortcuts);
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-8">
-      <h1 className="font-display mb-6 text-xl font-semibold">
-        Settings{formTitle ? <span className="text-muted-foreground font-normal"> for {formTitle}</span> : null}
-      </h1>
-      <div className="bg-card flex gap-0 overflow-hidden rounded-2xl">
-        {/* sub-nav */}
-        <nav className="bg-muted/30 w-56 shrink-0 space-y-0.5 p-3">
+    <SettingsShell
+      /*
+        The frame, the fixed height and the mobile stacking are shared with
+        `/settings/*`. This used to cap the pane at `calc(100svh - 220px)` — a
+        number that had to be re-derived by hand whenever the heading above it
+        changed — and cap nothing else, so the card still grew past the window
+        on "Keyboard shortcuts" and shrank to a strip on "Hidden fields".
+      */
+      header={
+        <h1 className="font-display mb-6 text-xl font-semibold">
+          Settings{formTitle ? <span className="text-muted-foreground font-normal"> for {formTitle}</span> : null}
+        </h1>
+      }
+      paneClassName="space-y-3"
+      nav={
+        /*
+          A rail at `md`, a scrolling strip below it — the same two shapes
+          `SettingsNav` takes, from one list, so the order and the labels cannot
+          disagree between viewports. This used to hold a 14rem rail at every
+          width, which at 375px left the pane about 100px of usable room.
+        */
+        <nav
+          aria-label="Form settings"
+          className={cn(
+            "-mx-4 flex shrink-0 snap-x gap-1 overflow-x-auto px-4 pb-3",
+            "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+            "md:bg-muted/30 md:mx-0 md:block md:w-56 md:space-y-0.5 md:overflow-visible md:p-3 md:pb-3",
+          )}
+        >
           {SECTIONS.map((s) => (
             <Link
               key={s.id}
               href={`/forms/${params.id}/settings/${s.id}`}
               scroll={false}
               aria-current={section === s.id ? "page" : undefined}
-              className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                section === s.id ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent/50"
-              }`}
+              className={cn(
+                "shrink-0 snap-start rounded-full px-3 py-1.5 text-sm whitespace-nowrap",
+                "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
+                "md:block md:w-full md:rounded-lg md:px-3 md:py-2 md:text-left",
+                section === s.id
+                  ? "bg-accent font-medium"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              )}
             >
               {s.label}
             </Link>
           ))}
         </nav>
-
-        {/* content */}
-        <div className="min-w-0 flex-1 space-y-3 overflow-y-auto p-6" style={{ maxHeight: "calc(100svh - 220px)" }}>
-          {section === "general" && (
-            <>
-            {onTitleChange && (
-              <SettingSection title="Form">
-                <SettingGroup>
-                  <SettingRow
-                    label="Form name"
-                    description="Shown at the top of the chat, and in your dashboard. Renaming does not change the form's link."
-                  >
-                    <FormNameField title={formTitle ?? ""} onChange={onTitleChange} />
-                  </SettingRow>
-                </SettingGroup>
-              </SettingSection>
-            )}
-            <SettingSection title="Display">
-              <SettingGroup>
+      }
+    >
+      {section === "general" && (
+        <>
+        {onTitleChange && (
+          <SettingSection title="Form">
+            <SettingGroup>
               <SettingRow
-                label="Progress bar"
-                description="Show respondents how far they are."
+                label="Form name"
+                description="Shown at the top of the chat, and in your dashboard. Renaming does not change the form's link."
               >
-                <Select value={settings.progressBar} onValueChange={(v) => patch({ progressBar: v as "percent" | "steps" | "none" })}>
-                  <SelectTrigger className="w-auto min-w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="percent">Percent</SelectItem>
-                    <SelectItem value="steps">Steps</SelectItem>
-                    <SelectItem value="none">None</SelectItem>
-                  </SelectContent>
-                </Select>
+                <FormNameField title={formTitle ?? ""} onChange={onTitleChange} />
               </SettingRow>
-              <SettingRow
-                label="Allow skipping optional questions"
-                description="Respondents can skip anything not marked required."
-                checked={settings.navigation.allowSkip}
-                onCheckedChange={(v) => patch({ navigation: { ...settings.navigation, allowSkip: v } })}
-              />
+            </SettingGroup>
+          </SettingSection>
+        )}
+        <SettingSection title="Display">
+          <SettingGroup>
+          <SettingRow
+            label="Progress bar"
+            description="Show respondents how far they are."
+          >
+            <Select value={settings.progressBar} onValueChange={(v) => patch({ progressBar: v as "percent" | "steps" | "none" })}>
+              <SelectTrigger className="w-auto min-w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="percent">Percent</SelectItem>
+                <SelectItem value="steps">Steps</SelectItem>
+                <SelectItem value="none">None</SelectItem>
+              </SelectContent>
+            </Select>
+          </SettingRow>
+          <SettingRow
+            label="Allow skipping optional questions"
+            description="Respondents can skip anything not marked required."
+            checked={settings.navigation.allowSkip}
+            onCheckedChange={(v) => patch({ navigation: { ...settings.navigation, allowSkip: v } })}
+          />
+          {/*
+            Visible and locked, never hidden. The toggle sits exactly where it would
+            if it worked, switched off, with a chip naming the plan — a feature nobody
+            can see is a feature nobody will want. The server ignores the flag on an
+            unentitled plan regardless of what the document says.
+          */}
+          <LockedControl feature="remove_branding">
+            <SettingRow
+              label='Hide "Powered by chatform"'
+              description="Remove the chatform badge from the chat."
+              checked={settings.branding.hidePoweredBy}
+              onCheckedChange={(v) => patch({ branding: { ...settings.branding, hidePoweredBy: v } })}
+            />
+          </LockedControl>
+          </SettingGroup>
+        </SettingSection>
+        </>
+      )}
+
+      {/* The AI Interviewer settings moved to the Agent tab, which has room
+          for the persona, goal, knowledge base and guardrails. */}
+      {section === "access" && (
+        <SettingSection title="Access & closing">
+          <SettingGroup label="Who can respond">
+          <LockedControl feature="respondent_auth_google">
+            <SettingRow
+              label="Require sign-in"
+              description="Respondents verify who they are before they can finish."
+              checked={settings.requireAuth.enabled}
+              onCheckedChange={(v) => patch({ requireAuth: { ...settings.requireAuth, enabled: v } })}
+            />
+          </LockedControl>
+          {settings.requireAuth.enabled && (
+            <>
               {/*
-                Visible and locked, never hidden. The toggle sits exactly where it would
-                if it worked, switched off, with a chip naming the plan — a feature nobody
-                can see is a feature nobody will want. The server ignores the flag on an
-                unentitled plan regardless of what the document says.
+                One method, chosen — not a pair of toggles that could both
+                be on. Offering two doors produces two identities for the
+                same person, so "one response per person" below could be
+                walked around by coming back through the other one.
               */}
-              <LockedControl feature="remove_branding">
-                <SettingRow
-                  label='Hide "Powered by chatform"'
-                  description="Remove the chatform badge from the chat."
-                  checked={settings.branding.hidePoweredBy}
-                  onCheckedChange={(v) => patch({ branding: { ...settings.branding, hidePoweredBy: v } })}
-                />
-              </LockedControl>
-              </SettingGroup>
-            </SettingSection>
-            </>
-          )}
-
-          {/* The AI Interviewer settings moved to the Agent tab, which has room
-              for the persona, goal, knowledge base and guardrails. */}
-          {section === "access" && (
-            <SettingSection title="Access & closing">
-              <SettingGroup label="Who can respond">
-              <LockedControl feature="respondent_auth_google">
-                <SettingRow
-                  label="Require sign-in"
-                  description="Respondents verify who they are before they can finish."
-                  checked={settings.requireAuth.enabled}
-                  onCheckedChange={(v) => patch({ requireAuth: { ...settings.requireAuth, enabled: v } })}
-                />
-              </LockedControl>
-              {settings.requireAuth.enabled && (
-                <>
-                  {/*
-                    One method, chosen — not a pair of toggles that could both
-                    be on. Offering two doors produces two identities for the
-                    same person, so "one response per person" below could be
-                    walked around by coming back through the other one.
-                  */}
-                  <SettingRow
-                    label="Verify with"
-                    description="How a respondent proves who they are. Pick one."
-                  >
-                    <div role="radiogroup" aria-label="Sign-in method" className="flex gap-1.5">
-                      {(["google", "phone"] as const).map((m) => {
-                        const on = settings.requireAuth.method === m;
-                        return (
-                          <button
-                            key={m}
-                            type="button"
-                            role="radio"
-                            aria-checked={on}
-                            onClick={() => patch({ requireAuth: { ...settings.requireAuth, method: m } })}
-                            className={cn(
-                              "h-8 rounded-full border px-3 text-xs font-medium transition-colors",
-                              on
-                                ? "border-primary bg-primary/10 text-primary"
-                                : "border-border text-muted-foreground hover:bg-muted",
-                            )}
-                          >
-                            {m === "google" ? "Google" : "Phone (SMS)"}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </SettingRow>
-                  {/*
-                    Where the gate sits, not whether there is one. Zero is the
-                    old behaviour and stays the default; above zero the
-                    respondent answers that many questions first, and what they
-                    already said is kept either way.
-                  */}
-                  <SettingRow
-                    label="Ask after"
-                    description="Questions to answer before signing in. 0 asks before the first one."
-                  >
-                    <BufferedInput
-                      type="number"
-                      min={0}
-                      max={20}
-                      className="w-32"
-                      value={String(settings.requireAuth.afterBlocks)}
-                      onCommit={(v) =>
-                        patch({
-                          requireAuth: {
-                            ...settings.requireAuth,
-                            afterBlocks: Math.max(0, Math.min(20, Number(v) || 0)),
-                          },
-                        })
-                      }
-                    />
-                  </SettingRow>
-                  <SettingRow
-                    label="What the agent says"
-                    description="The sentence shown above the sign-in buttons."
-                    stacked
-                  >
-                    <BufferedTextarea
-                      rows={2}
-                      value={settings.requireAuth.message}
-                      onCommit={(v) => patch({ requireAuth: { ...settings.requireAuth, message: v } })}
-                    />
-                  </SettingRow>
-                </>
-              )}
-              {/*
-                One question, asked once.
-
-                This used to be two switches. "Allow resubmissions" sat in
-                General → Display, and "One response per person" sat here,
-                inside the sign-in block — opposite polarity, two sections
-                apart, and both answering "may one person answer twice?". All
-                that differed was which key they enforced on: the browser, or
-                the verified identity.
-
-                Which key to use is not a decision an author can make well,
-                because it is not a decision at all — it follows from whether
-                the form asks people to sign in. So the switch states the rule
-                and the description states the consequence, and the author is
-                never asked to pick a mechanism.
-
-                It lives here rather than under Display because it is a rule
-                about who may respond, alongside sign-in, the password, the
-                captcha and the closing date. Display is the progress bar and
-                the branding.
-              */}
-              <LockedControl feature="duplicate_prevention">
-                <SettingRow
-                  label="One response per person"
-                  description={onePerPersonBlurb(settings.requireAuth.enabled, canVerifiedIdentity)}
-                  checked={!settings.allowResubmissions}
-                  onCheckedChange={(v) => patch({ allowResubmissions: !v })}
-                />
-              </LockedControl>
               <SettingRow
-                label="Require password"
-                description="Only people with the password can respond."
-                checked={settings.password.enabled}
-                onCheckedChange={(v) => patch({ password: { ...settings.password, enabled: v, value: settings.password.value || "letmein" } })}
-              />
-              {settings.password.enabled && (
-                <SettingRow label="Password">
-                  <BufferedInput
-                    className="max-w-xs"
-                    value={settings.password.value}
-                    onCommit={(v) => patch({ password: { ...settings.password, value: v } })}
-                  />
-                </SettingRow>
-              )}
-              <SettingRow
-                label="Captcha (Turnstile)"
-                description="Verify respondents with Cloudflare Turnstile."
-                checked={settings.captcha.enabled}
-                onCheckedChange={(v) => patch({ captcha: { ...settings.captcha, enabled: v } })}
-              />
-              </SettingGroup>
-
-              <SettingGroup label="Closing">
-              <SettingRow label="Close automatically at" description="Stop accepting responses after this date.">
-                <Input
-                  type="datetime-local"
-                  value={toLocalInput(settings.closeRules.closeAt)}
-                  onChange={(e) =>
-                    patch({
-                      closeRules: {
-                        ...settings.closeRules,
-                        closeAt: e.target.value ? new Date(e.target.value).toISOString() : undefined,
-                      },
-                    })
-                  }
-                />
+                label="Verify with"
+                description="How a respondent proves who they are. Pick one."
+              >
+                <div role="radiogroup" aria-label="Sign-in method" className="flex gap-1.5">
+                  {(["google", "phone"] as const).map((m) => {
+                    const on = settings.requireAuth.method === m;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        onClick={() => patch({ requireAuth: { ...settings.requireAuth, method: m } })}
+                        className={cn(
+                          "h-8 rounded-full border px-3 text-xs font-medium transition-colors",
+                          on
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:bg-muted",
+                        )}
+                      >
+                        {m === "google" ? "Google" : "Phone (SMS)"}
+                      </button>
+                    );
+                  })}
+                </div>
               </SettingRow>
               {/*
-                Both of these appear only once the thing they qualify is set. A
-                switch for a countdown on a form with no closing date is a
-                control with nothing to control, and it would sit here on every
-                form in the product to be useful on the few that have one.
+                Where the gate sits, not whether there is one. Zero is the
+                old behaviour and stays the default; above zero the
+                respondent answers that many questions first, and what they
+                already said is kept either way.
               */}
-              {settings.closeRules.closeAt && (
-                <SettingRow
-                  label="Show a countdown"
-                  description="Respondents see how long they have left, at the top of the conversation. Also puts the date on the link preview."
-                  checked={settings.closeRules.showCountdown}
-                  onCheckedChange={(v) => patch({ closeRules: { ...settings.closeRules, showCountdown: v } })}
-                />
-              )}
-              <SettingRow label="Close after N submissions" description="Cap the total number of responses.">
+              <SettingRow
+                label="Ask after"
+                description="Questions to answer before signing in. 0 asks before the first one."
+              >
                 <BufferedInput
                   type="number"
-                  min={1}
+                  min={0}
+                  max={20}
                   className="w-32"
-                  placeholder="No limit"
-                  value={settings.closeRules.maxSubmissions === undefined ? "" : String(settings.closeRules.maxSubmissions)}
+                  value={String(settings.requireAuth.afterBlocks)}
                   onCommit={(v) =>
                     patch({
-                      closeRules: {
-                        ...settings.closeRules,
-                        maxSubmissions: v ? Number(v) : undefined,
+                      requireAuth: {
+                        ...settings.requireAuth,
+                        afterBlocks: Math.max(0, Math.min(20, Number(v) || 0)),
                       },
                     })
                   }
                 />
               </SettingRow>
-              {settings.closeRules.maxSubmissions !== undefined && (
-                <SettingRow
-                  label="Show spots left"
-                  /*
-                    Says what it publishes, not just what it does. A remaining
-                    count lets anyone holding the link work out how many people
-                    have responded — which is the point on a workshop signup and
-                    a leak on a hiring form, and the author is the only one who
-                    knows which of those this is.
-                  */
-                  description="Respondents see how many places remain — which also tells anyone with the link how many people have answered. Best for a genuinely limited intake."
-                  checked={settings.closeRules.showRemaining}
-                  onCheckedChange={(v) => patch({ closeRules: { ...settings.closeRules, showRemaining: v } })}
-                />
-              )}
-              <SettingRow label="Closed message" description="Shown when the form is closed." stacked>
+              <SettingRow
+                label="What the agent says"
+                description="The sentence shown above the sign-in buttons."
+                stacked
+              >
                 <BufferedTextarea
                   rows={2}
-                  value={settings.closeRules.closedMessageMd}
-                  onCommit={(v) => patch({ closeRules: { ...settings.closeRules, closedMessageMd: v } })}
+                  value={settings.requireAuth.message}
+                  onCommit={(v) => patch({ requireAuth: { ...settings.requireAuth, message: v } })}
                 />
               </SettingRow>
-              </SettingGroup>
-            </SettingSection>
+            </>
           )}
+          {/*
+            One question, asked once.
 
-          {section === "hidden" && (
-            <SettingSection title="Hidden fields & variables">
-              <HiddenFieldsEditor fields={hiddenFields} onChange={onHiddenFieldsChange} />
-              <VariablesEditor variables={variables} onChange={onVariablesChange} />
-            </SettingSection>
-          )}
+            This used to be two switches. "Allow resubmissions" sat in
+            General → Display, and "One response per person" sat here,
+            inside the sign-in block — opposite polarity, two sections
+            apart, and both answering "may one person answer twice?". All
+            that differed was which key they enforced on: the browser, or
+            the verified identity.
 
-          {section === "link" && (
-            <SettingSection title="Link & social">
-              {/* One line, not three: the panel below shows the card, which
-                  explains itself better than a list of the platforms it
-                  appears on. */}
-              <p className="text-muted-foreground -mt-1 text-sm">
-                How your link looks when someone shares it.
-              </p>
-              <LinkSettings
-                settings={settings}
-                formTitle={formTitle ?? ""}
-                slug={slug ?? null}
-                onChange={onChange}
+            Which key to use is not a decision an author can make well,
+            because it is not a decision at all — it follows from whether
+            the form asks people to sign in. So the switch states the rule
+            and the description states the consequence, and the author is
+            never asked to pick a mechanism.
+
+            It lives here rather than under Display because it is a rule
+            about who may respond, alongside sign-in, the password, the
+            captcha and the closing date. Display is the progress bar and
+            the branding.
+          */}
+          <LockedControl feature="duplicate_prevention">
+            <SettingRow
+              label="One response per person"
+              description={onePerPersonBlurb(settings.requireAuth.enabled, canVerifiedIdentity)}
+              checked={!settings.allowResubmissions}
+              onCheckedChange={(v) => patch({ allowResubmissions: !v })}
+            />
+          </LockedControl>
+          <SettingRow
+            label="Require password"
+            description="Only people with the password can respond."
+            checked={settings.password.enabled}
+            onCheckedChange={(v) => patch({ password: { ...settings.password, enabled: v, value: settings.password.value || "letmein" } })}
+          />
+          {settings.password.enabled && (
+            <SettingRow label="Password">
+              <BufferedInput
+                className="max-w-xs"
+                value={settings.password.value}
+                onCommit={(v) => patch({ password: { ...settings.password, value: v } })}
               />
-            </SettingSection>
+            </SettingRow>
           )}
+          <SettingRow
+            label="Captcha (Turnstile)"
+            description="Verify respondents with Cloudflare Turnstile."
+            checked={settings.captcha.enabled}
+            onCheckedChange={(v) => patch({ captcha: { ...settings.captcha, enabled: v } })}
+          />
+          </SettingGroup>
 
-          {section === "completion" && (
-            <SettingSection title="On completion">
-              <SettingGroup>
-              <SettingRow
-                label="Notification emails"
-                description="Get an email for every completed response."
-                issuePath="settings.onComplete.notificationEmails"
-              >
-                <BufferedInput
-                  className="max-w-md"
-                  value={settings.onComplete.notificationEmails.join(", ")}
-                  placeholder="you@company.com"
-                  onCommit={(v) =>
-                    patch({
-                      onComplete: {
-                        ...settings.onComplete,
-                        notificationEmails: v
-                          .split(",")
-                          .map((x) => x.trim())
-                          .filter(Boolean),
-                      },
-                    })
-                  }
-                />
-              </SettingRow>
-              <LockedControl feature="completion_redirect">
-              <SettingRow
-                label="Redirect after completion"
-                description="Opens your own page in a new tab when they finish. The confirmation stays open behind it."
-                issuePath="settings.onComplete.redirectUrl"
-              >
-                <BufferedInput
-                  className="max-w-md"
-                  value={settings.onComplete.redirectUrl ?? ""}
-                  placeholder="https://yoursite.com/thanks"
-                  onCommit={(v) =>
-                    patch({
-                      onComplete: {
-                        ...settings.onComplete,
-                        redirectUrl: v || undefined,
-                      },
-                    })
-                  }
-                />
-              </SettingRow>
-              </LockedControl>
-              </SettingGroup>
-
-              <ConfirmationEmailSettings settings={settings} onChange={onChange} />
-            </SettingSection>
+          <SettingGroup label="Closing">
+          <SettingRow label="Close automatically at" description="Stop accepting responses after this date.">
+            <Input
+              type="datetime-local"
+              value={toLocalInput(settings.closeRules.closeAt)}
+              onChange={(e) =>
+                patch({
+                  closeRules: {
+                    ...settings.closeRules,
+                    closeAt: e.target.value ? new Date(e.target.value).toISOString() : undefined,
+                  },
+                })
+              }
+            />
+          </SettingRow>
+          {/*
+            Both of these appear only once the thing they qualify is set. A
+            switch for a countdown on a form with no closing date is a
+            control with nothing to control, and it would sit here on every
+            form in the product to be useful on the few that have one.
+          */}
+          {settings.closeRules.closeAt && (
+            <SettingRow
+              label="Show a countdown"
+              description="Respondents see how long they have left, at the top of the conversation. Also puts the date on the link preview."
+              checked={settings.closeRules.showCountdown}
+              onCheckedChange={(v) => patch({ closeRules: { ...settings.closeRules, showCountdown: v } })}
+            />
           )}
-
-          {section === "shortcuts" && (
-            <SettingSection title="Keyboard shortcuts">
-              <p className="text-muted-foreground -mt-1 text-sm">
-                These work whenever you are not typing in a field.
-              </p>
-              <ShortcutsList shortcuts={shortcuts} />
-            </SettingSection>
+          <SettingRow label="Close after N submissions" description="Cap the total number of responses.">
+            <BufferedInput
+              type="number"
+              min={1}
+              className="w-32"
+              placeholder="No limit"
+              value={settings.closeRules.maxSubmissions === undefined ? "" : String(settings.closeRules.maxSubmissions)}
+              onCommit={(v) =>
+                patch({
+                  closeRules: {
+                    ...settings.closeRules,
+                    maxSubmissions: v ? Number(v) : undefined,
+                  },
+                })
+              }
+            />
+          </SettingRow>
+          {settings.closeRules.maxSubmissions !== undefined && (
+            <SettingRow
+              label="Show spots left"
+              /*
+                Says what it publishes, not just what it does. A remaining
+                count lets anyone holding the link work out how many people
+                have responded — which is the point on a workshop signup and
+                a leak on a hiring form, and the author is the only one who
+                knows which of those this is.
+              */
+              description="Respondents see how many places remain — which also tells anyone with the link how many people have answered. Best for a genuinely limited intake."
+              checked={settings.closeRules.showRemaining}
+              onCheckedChange={(v) => patch({ closeRules: { ...settings.closeRules, showRemaining: v } })}
+            />
           )}
+          <SettingRow label="Closed message" description="Shown when the form is closed." stacked>
+            <BufferedTextarea
+              rows={2}
+              value={settings.closeRules.closedMessageMd}
+              onCommit={(v) => patch({ closeRules: { ...settings.closeRules, closedMessageMd: v } })}
+            />
+          </SettingRow>
+          </SettingGroup>
+        </SettingSection>
+      )}
 
-          {section === "followup" && (
-            <SettingSection title="Follow-ups">
-              <p className="text-muted-foreground -mt-1 text-sm">
-                Email people who started your form and left, with a link back to where they
-                stopped.
-              </p>
-              <LockedControl feature="followup_email">
-                <FollowUpPanel
-                  settings={settings}
-                  hiddenFields={hiddenFields}
-                  formTitle={formTitle ?? "your form"}
-                  onChange={onChange}
-                />
-              </LockedControl>
-            </SettingSection>
-          )}
-        </div>
-      </div>
-    </div>
+      {section === "hidden" && (
+        <SettingSection title="Hidden fields & variables">
+          <HiddenFieldsEditor fields={hiddenFields} onChange={onHiddenFieldsChange} />
+          <VariablesEditor variables={variables} onChange={onVariablesChange} />
+        </SettingSection>
+      )}
+
+      {section === "link" && (
+        <SettingSection title="Link & social">
+          {/* One line, not three: the panel below shows the card, which
+              explains itself better than a list of the platforms it
+              appears on. */}
+          <p className="text-muted-foreground -mt-1 text-sm">
+            How your link looks when someone shares it.
+          </p>
+          <LinkSettings
+            settings={settings}
+            formTitle={formTitle ?? ""}
+            slug={slug ?? null}
+            onChange={onChange}
+          />
+        </SettingSection>
+      )}
+
+      {section === "completion" && (
+        <SettingSection title="On completion">
+          <SettingGroup>
+          <SettingRow
+            label="Notification emails"
+            description="Get an email for every completed response."
+            issuePath="settings.onComplete.notificationEmails"
+          >
+            <BufferedInput
+              className="max-w-md"
+              value={settings.onComplete.notificationEmails.join(", ")}
+              placeholder="you@company.com"
+              onCommit={(v) =>
+                patch({
+                  onComplete: {
+                    ...settings.onComplete,
+                    notificationEmails: v
+                      .split(",")
+                      .map((x) => x.trim())
+                      .filter(Boolean),
+                  },
+                })
+              }
+            />
+          </SettingRow>
+          <LockedControl feature="completion_redirect">
+          <SettingRow
+            label="Redirect after completion"
+            description="Opens your own page in a new tab when they finish. The confirmation stays open behind it."
+            issuePath="settings.onComplete.redirectUrl"
+          >
+            <BufferedInput
+              className="max-w-md"
+              value={settings.onComplete.redirectUrl ?? ""}
+              placeholder="https://yoursite.com/thanks"
+              onCommit={(v) =>
+                patch({
+                  onComplete: {
+                    ...settings.onComplete,
+                    redirectUrl: v || undefined,
+                  },
+                })
+              }
+            />
+          </SettingRow>
+          </LockedControl>
+          </SettingGroup>
+
+          <ConfirmationEmailSettings settings={settings} onChange={onChange} />
+        </SettingSection>
+      )}
+
+      {section === "shortcuts" && (
+        <SettingSection title="Keyboard shortcuts">
+          <p className="text-muted-foreground -mt-1 text-sm">
+            These work whenever you are not typing in a field.
+          </p>
+          <ShortcutsList shortcuts={shortcuts} />
+        </SettingSection>
+      )}
+
+      {section === "followup" && (
+        <SettingSection title="Follow-ups">
+          <p className="text-muted-foreground -mt-1 text-sm">
+            Email people who started your form and left, with a link back to where they
+            stopped.
+          </p>
+          <LockedControl feature="followup_email">
+            <FollowUpPanel
+              settings={settings}
+              hiddenFields={hiddenFields}
+              formTitle={formTitle ?? "your form"}
+              onChange={onChange}
+            />
+          </LockedControl>
+        </SettingSection>
+      )}
+    </SettingsShell>
   );
 }
 

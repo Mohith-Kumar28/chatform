@@ -331,6 +331,19 @@
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
 
+  /* ── layout: the chrome every full-height page has to subtract ──
+     Both shells put a 3.5rem bar above their content — `DashboardShell`'s
+     sticky header and `BuilderShell`'s builder header — so a page that wants
+     to be exactly one viewport tall subtracts this rather than repeating the
+     number. The builder tabs already hardcoded `calc(100svh - 3.5rem)` in three
+     places; they now have a name to use.
+
+     `--settings-pane-min-h` is the floor under the settings frame: below it the
+     pane stops shrinking and the page scrolls instead, because a 12rem pane
+     with its own scrollbar is worse than a short window you can scroll. */
+  --app-header-h: 3.5rem;
+  --settings-pane-min-h: 32rem;
+
   /* ── layering ── */
   --z-sticky: 20;
   --z-dropdown: 40;
@@ -1175,8 +1188,22 @@
   --cf-chip-bg: var(--card);
   --cf-chip-border: var(--border);
   --cf-radius: var(--radius);
+  --cf-pattern: none;
+  --cf-pattern-size: auto;
 
-  background: var(--cf-bg);
+  /* `background-color`, not `background`: the shorthand resets
+     `background-image`, so a flat fill declared here would wipe out the tile
+     `chatThemeVars()` sets on the very same element.
+
+     The tile paints on the shell, which is a fixed-height flex container — not
+     on the thread that scrolls inside it. So the texture stays put while the
+     conversation moves over it, the way paper does. A pattern that scrolled
+     with the messages would be a second thing in motion behind the one thing
+     the respondent is reading. */
+  background-color: var(--cf-bg);
+  background-image: var(--cf-pattern);
+  background-size: var(--cf-pattern-size);
+  background-repeat: repeat;
   color: var(--cf-text);
 }
 

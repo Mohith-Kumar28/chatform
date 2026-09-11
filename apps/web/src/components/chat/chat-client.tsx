@@ -27,6 +27,8 @@ import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./emb
 import { useChat, type ChatMessage } from "./use-chat";
 import { KeyHint, SendRow, TextInput, keepFocus } from "./composers/primitives";
 import { inputSemanticsFor } from "./composers/input-semantics";
+import { PhoneInput } from "./composers/phone";
+import { isSendablePhone } from "./composers/phone-value";
 import { forgetValue, rememberValue, suggestionsFor } from "./respondent-profile";
 import { QuestionAffordance } from "./question-affordance";
 import { QuestionMedia } from "./question-media";
@@ -282,7 +284,12 @@ export function ChatClient({
     return () => clearTimeout(t);
   }, [redirectTarget, redirectDelaySec, previewMode]);
 
-  const themeVars = useMemo(() => chatThemeVars(config.theme), [config.theme]);
+  // The slug is the pattern seed, so the background tile a respondent sees is
+  // the one the dashboard card and the builder preview already showed.
+  const themeVars = useMemo(
+    () => chatThemeVars(config.theme, config.slug),
+    [config.theme, config.slug],
+  );
 
   /**
    * A framed form gets its own way out.
@@ -1891,6 +1898,12 @@ const Composer = memo(function Composer({
     if (text !== opening) setText(opening);
   }
 
+  /**
+   * A phone question answers into a different control — see `PhoneInput` — and
+   * the value it holds is E.164 rather than anything anybody typed.
+   */
+  const isPhone = block?.type === "phone";
+
   /** Everything remembered for this question except whatever is already typed. */
   const alternatives = suggestions.filter((s) => s !== text);
 
@@ -1912,7 +1925,15 @@ const Composer = memo(function Composer({
    * the badges disappear with them, which is the honest way round: a key hint
    * that is drawn is a key hint that works.
    */
-  const digitsPickSuggestions = text === "" || suggestions.includes(text);
+  /*
+    Never on a phone question. The rule below is about a box holding a value
+    nobody typed, and it takes the digit away from the field to do it — which is
+    survivable in a box you can retype a word into and not survivable in one
+    that only takes digits. A saved number is still one tap away in the list;
+    only the keyboard shortcut is withdrawn, and with it the badges that
+    advertise it.
+  */
+  const digitsPickSuggestions = !isPhone && (text === "" || suggestions.includes(text));
 
   useEffect(() => {
     if (!digitsPickSuggestions || alternatives.length === 0) return;
@@ -1993,6 +2014,13 @@ const Composer = memo(function Composer({
   function submit() {
     const value = text.trim();
     if (!value) return;
+    /*
+      The same gate as the Send button, because Enter reaches this from inside
+      the phone field. `+9198765` passes the server's E.164 rule while being
+      five digits short of any Indian number, so the country's own numbering
+      plan is what decides — before it is sent, not after it comes back.
+    */
+    if (isPhone && !isSendablePhone(value)) return;
     setText("");
     /*
       Kept before it is sent, not after it is accepted.
@@ -2089,26 +2117,37 @@ const Composer = memo(function Composer({
 
       <SendRow
         onSend={submit}
-        disabled={disabled || !text.trim()}
+        disabled={disabled || (isPhone ? !isSendablePhone(text) : !text.trim())}
         canSkip={canSkip}
         onSkip={() => void sendAction("skip")}
       >
-        <TextInput
-          value={text}
-          onChange={setText}
-          onSubmit={submit}
-          autoFocus
-          multiline={block.type === "long_text"}
-          placeholder={block.placeholder || placeholderFor(block.type)}
-          /*
-            The box declares what the question is asking for — keyboard,
-            capitalisation, and the autofill token that lets a browser offer the
-            address or number it already holds. One input serving thirty block
-            types used to declare "text" for all of them, so the one thing a
-            chat form asks for most was the one thing nothing could fill in.
-          */
-          semantics={inputSemanticsFor(block)}
-        />
+        {isPhone ? (
+          <PhoneInput
+            value={text}
+            onChange={setText}
+            onSubmit={submit}
+            countryHint={block.countryHint}
+            placeholder="Your number"
+            autoFocus
+          />
+        ) : (
+          <TextInput
+            value={text}
+            onChange={setText}
+            onSubmit={submit}
+            autoFocus
+            multiline={block.type === "long_text"}
+            placeholder={block.placeholder || placeholderFor(block.type)}
+            /*
+              The box declares what the question is asking for — keyboard,
+              capitalisation, and the autofill token that lets a browser offer the
+              address or number it already holds. One input serving thirty block
+              types used to declare "text" for all of them, so the one thing a
+              chat form asks for most was the one thing nothing could fill in.
+            */
+            semantics={inputSemanticsFor(block)}
+          />
+        )}
       </SendRow>
 
     </div>

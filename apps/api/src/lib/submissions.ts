@@ -414,8 +414,7 @@ export interface FinalizeResult {
  */
 export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promise<FinalizeResult> {
   const now = Date.now();
-  const durationMs = now - a.startedAt;
-  if (isPreview(o)) return { changed: false, durationMs };
+  if (isPreview(o)) return { changed: false, durationMs: now - a.startedAt };
 
   /**
    * When the respondent actually stopped, read before the UPDATE below
@@ -429,8 +428,8 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
    * no way to say so. `updated_at` is bumped by every answer, on both the chat
    * and API paths, which makes it the same clock the author is thinking about.
    *
-   * Only read on the abandon path — it is the only one that schedules — and it
-   * falls back to `now`, which is the old behaviour.
+   * Only read on the abandon path — it is the only one that has a gap between
+   * stopping and being noticed — and it falls back to `now`.
    */
   let lastActivityAt = now;
   if (a.status === "abandoned") {
@@ -440,6 +439,23 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
       .catch(() => null);
     if (prior?.updated_at) lastActivityAt = prior.updated_at;
   }
+
+  /**
+   * How long they spent, which on the abandon path is not how long it took us
+   * to notice.
+   *
+   * The same half hour the schedule above had to subtract was going straight
+   * into `duration_ms`, because the clock stopped when the idle alarm fired
+   * rather than when the respondent did. Every partial abandoned at the first
+   * question therefore read "took 30m 1s" — the timeout and the alarm's own
+   * latency, reported as effort — and the figure was identical on all of them,
+   * which is what gave it away. Worse than cosmetic: `active_ms` accumulates,
+   * so a respondent who came back and finished carried each earlier sitting's
+   * phantom half hour into the completion-time analytics.
+   *
+   * `lastActivityAt` is `now` on every other path, so this is unchanged there.
+   */
+  const durationMs = Math.max(0, lastActivityAt - a.startedAt);
 
   const id = a.identity ?? null;
   const stmts = [

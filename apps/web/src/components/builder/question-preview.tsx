@@ -23,8 +23,22 @@ import { useEntitlements } from "@/hooks/use-entitlements";
  * Themed with `chatThemeVars`, the same function the live runtime uses, so
  * what shows here is what ships.
  */
-export function QuestionPreview({ doc, block }: { doc: FormDoc; block: Block }) {
-  const themeVars = useMemo(() => chatThemeVars(doc.theme), [doc.theme]);
+export function QuestionPreview({
+  doc,
+  block,
+  slug,
+}: {
+  doc: FormDoc;
+  block: Block;
+  /**
+   * The form's public slug, which seeds its background pattern. It lives on
+   * the form row rather than the document, so it arrives separately — and
+   * without it this preview would show a flat page for a form that ships with
+   * a texture, which is the exact drift `chatThemeVars` exists to prevent.
+   */
+  slug?: string | null;
+}) {
+  const themeVars = useMemo(() => chatThemeVars(doc.theme, slug), [doc.theme, slug]);
   const pub = useMemo(() => toPublicBlock(block), [block]);
   const agentName = doc.settings.agent.displayName || doc.title;
 

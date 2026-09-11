@@ -5,11 +5,21 @@ import type { Block, FormDoc } from "@repo/form-schema";
  * The AI agent layer (M5) replaces these with LLM-generated phrasing.
  */
 
+/**
+ * An opening line for a document that has none of its own.
+ *
+ * This used to return the first block's text when that block was a welcome —
+ * which is a tautology, because a welcome block *is* the greeting (see
+ * `catalog.ts`) and the flow emits it as the conversation's first message like
+ * any other prelude. Saying it here as well wrote it into the transcript twice.
+ * Respondents never saw the extra copy — `appendMessage` stores without
+ * emitting — so it surfaced only where the record is read back: the response
+ * drawer, and the model's own conversation context.
+ *
+ * So the welcome case belongs to the flow, and this covers the other one.
+ * `SessionDO.init` decides which applies.
+ */
 export function greeting(doc: FormDoc): string {
-  const first = doc.blocks[0];
-  if (first?.type === "welcome") {
-    return [first.title, first.description].filter(Boolean).join("\n\n");
-  }
   return `Hi! I'll walk you through "${doc.title}" — it only takes a minute.`;
 }
 

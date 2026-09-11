@@ -8,7 +8,6 @@ import {
   IDENTITY_FIELDS,
   IDENTITY_FIELD_LABELS,
   canMapIdentityField,
-  identityFieldForBlock,
   type Block,
   type IdentityFieldSetting,
 } from "@repo/form-schema";
@@ -29,7 +28,7 @@ import { useBuilderStore, useSelectedBlock } from "@/stores/builder-store";
 import { EndingInspector } from "./ending-inspector";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_CLASSES } from "../block-library";
 import { defaultBlock } from "../default-block";
-import { Field, SelectField, SwitchField, TextField } from "./fields";
+import { SelectField, SwitchField, TextField } from "./fields";
 import { MediaField } from "./media-field";
 import { TypeFields } from "./type-fields";
 import { cn } from "@/lib/utils";
@@ -45,19 +44,6 @@ const IDENTITY_FIELD_OPTIONS = [
   { value: "never", label: "Never remember" },
   ...IDENTITY_FIELDS.map((f) => ({ value: f, label: IDENTITY_FIELD_LABELS[f] })),
 ] as const;
-
-/**
- * Says what "Automatic" actually decided, rather than leaving the author to
- * guess whether the wording was understood.
- */
-function identityHint(block: Block): string {
-  if (block.identityField === "never") return "This answer is never kept";
-  if (block.identityField) return "Offered back on later forms, from this browser only";
-  const resolved = identityFieldForBlock(block);
-  return resolved
-    ? `Read as “${IDENTITY_FIELD_LABELS[resolved]}” from the question`
-    : "Nothing reusable in this question, so nothing is kept";
-}
 
 /**
  * The right-hand inspector.
@@ -112,8 +98,7 @@ export function BlockInspector() {
         <EmptyState
           compact
           icon={Sparkles}
-          title="Nothing selected"
-          description="Pick a block on the left to edit how the agent asks for it."
+          title="Select a block"
         />
       </div>
     );
@@ -206,7 +191,7 @@ export function BlockInspector() {
         )}
       </div>
 
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pt-2 pb-6">
         <TextField
           label="Question"
           // Where ↵ lands when a question is selected in the list.
@@ -225,9 +210,7 @@ export function BlockInspector() {
           maxLength={5000}
         />
 
-        <Field label="Media">
-          <MediaField media={block.media} onChange={(media) => patch({ media })} />
-        </Field>
+        <MediaField media={block.media} onChange={(media) => patch({ media })} />
 
         {block.type !== "welcome" && block.type !== "statement" && (
           <SwitchField label="Required" checked={block.required} onChange={(v) => patch({ required: v })} />
@@ -238,6 +221,7 @@ export function BlockInspector() {
         <Section title="Agent hints" icon={Bot} badge={block.agentHints ? "Set" : undefined}>
           <TextField
             label="How to ask"
+            multiline
             value={block.agentHints?.askStyle ?? ""}
             onChange={(v) =>
               patch({ agentHints: { ...(block.agentHints ?? { examples: [] }), askStyle: v || undefined } }, key("askStyle"))
@@ -245,6 +229,7 @@ export function BlockInspector() {
           />
           <TextField
             label="Why we ask"
+            multiline
             value={block.agentHints?.whyWeAsk ?? ""}
             onChange={(v) =>
               patch({ agentHints: { ...(block.agentHints ?? { examples: [] }), whyWeAsk: v || undefined } }, key("whyWeAsk"))
@@ -252,6 +237,7 @@ export function BlockInspector() {
           />
           <TextField
             label="If they push back"
+            multiline
             value={block.agentHints?.retryHint ?? ""}
             onChange={(v) =>
               patch({ agentHints: { ...(block.agentHints ?? { examples: [] }), retryHint: v || undefined } }, key("retryHint"))
@@ -272,8 +258,7 @@ export function BlockInspector() {
           */}
           {canMapIdentityField(block.type) && (
             <SelectField
-              label="Remember this answer as"
-              hint={identityHint(block)}
+              label="Remember as"
               value={block.identityField ?? AUTO_IDENTITY}
               onChange={(v) =>
                 patch(
@@ -288,25 +273,26 @@ export function BlockInspector() {
             />
           )}
           <TextField
-            label="Auto-fill from URL parameter"
-            hint="?param=value on the form link"
+            label="URL parameter"
+            placeholder="?name="
             value={block.prefillParam ?? ""}
             onChange={(v) => patch({ prefillParam: v || undefined }, key("prefill"))}
           />
-          <TextField
-            label="Button text"
-            value={block.buttonLabel ?? ""}
-            onChange={(v) => patch({ buttonLabel: v || undefined }, key("btn"))}
-            maxLength={60}
-          />
-          <Field label="Branching">
-            <Button variant="outline" size="sm" asChild className="w-full justify-start">
-              <Link href={`/forms/${params.id}/workflow?focus=${block.ref}`}>
-                <GitBranch className="size-3.5" />
-                {rulesHere > 0 ? `${rulesHere} rule${rulesHere > 1 ? "s" : ""} from here` : "Add branching logic"}
-              </Link>
-            </Button>
-          </Field>
+          {/* Welcome and statement blocks already show this field above. */}
+          {block.type !== "welcome" && block.type !== "statement" && (
+            <TextField
+              label="Button text"
+              value={block.buttonLabel ?? ""}
+              onChange={(v) => patch({ buttonLabel: v || undefined }, key("btn"))}
+              maxLength={60}
+            />
+          )}
+          <Button variant="outline" size="sm" asChild className="w-full justify-start">
+            <Link href={`/forms/${params.id}/workflow?focus=${block.ref}`}>
+              <GitBranch className="size-3.5" />
+              {rulesHere > 0 ? `${rulesHere} rule${rulesHere > 1 ? "s" : ""} from here` : "Add branching"}
+            </Link>
+          </Button>
         </Section>
       </div>
 
@@ -336,12 +322,12 @@ function Section({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="bg-muted/25 rounded-xl">
+    <div className="border-border/60 border-t pt-2">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="hover:bg-muted/50 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors"
+        className="hover:bg-muted/50 -mx-2 flex w-[calc(100%+1rem)] items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors"
       >
         <Icon className="text-muted-foreground size-3.5 shrink-0" strokeWidth={1.75} />
         <span className="text-caption flex-1 font-medium">{title}</span>
@@ -358,7 +344,7 @@ function Section({
         />
       </button>
       {open && (
-        <div className="space-y-4 px-3 pb-3">{children}</div>
+        <div className="space-y-5 pt-3 pb-1">{children}</div>
       )}
     </div>
   );

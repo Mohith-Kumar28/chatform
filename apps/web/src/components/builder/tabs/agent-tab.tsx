@@ -44,7 +44,7 @@ export function AgentTab() {
     });
 
   return (
-    <div className="mx-auto h-[calc(100svh-3.5rem)] w-full max-w-3xl overflow-y-auto p-6">
+    <div className="mx-auto h-[calc(100svh-var(--app-header-h))] w-full max-w-3xl overflow-y-auto p-6">
       <div className="min-w-0 space-y-6">
         {/*
           No page heading. The tab you are on already says "Agent", and the
@@ -218,8 +218,7 @@ export function AgentTab() {
               prose and puts the plain widget on screen.
             */}
             <NumberField
-              label="Give up after"
-              hint="Bad answers before it shows a widget."
+              label="Bad answers before showing a widget"
               value={agent.escalateAfterInvalid}
               min={1}
               max={10}

@@ -60,7 +60,7 @@ import {
   LayoutGrid,
   Plus,
   ChevronLeft, ChevronRight, Flag,
-  GitBranch, GripVertical, Play,
+  GitBranch, Play,
   ShieldAlert, Sparkles, Trash2, X,
 } from "lucide-react";
 
@@ -945,18 +945,9 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
               ) : selEnding ? (
                 <div className="px-4 py-4"><EndingInspector ending={selEnding} doc={doc} onChange={onChange} /></div>
               ) : (
-                <div className="space-y-3 px-4 py-4">
-                  <p className="text-muted-foreground text-sm">Select a node or a wire to edit it.</p>
-                  <div className="text-muted-foreground space-y-2 rounded-xl border border-dashed p-3 text-xs leading-relaxed">
-                    <p className="flex items-center gap-1.5 font-medium">
-                      <GripVertical className="size-3" /> Quick start
-                    </p>
-                    <p>1. Drag questions from the library onto the canvas.</p>
-                    <p>2. Drag from a node&apos;s edge dot to another node to wire the flow.</p>
-                    <p>3. Drop a Branch onto a question to send answers different ways.</p>
-                    <p>4. Click any wire to edit its condition.</p>
-                  </div>
-                </div>
+                <p className="text-muted-foreground px-4 py-10 text-center text-sm">
+                  Select a node or wire
+                </p>
               )}
             </div>
           </>
@@ -1322,14 +1313,11 @@ function BranchInspector({
     : (fallthrough?.title ?? "the ending");
 
   return (
-    <div className="space-y-4">
-      <div className="min-w-0">
-        <p className="flex items-center gap-1.5 text-sm font-semibold">
-          <GitBranch className="text-primary size-4 shrink-0" />
-          Branch
-        </p>
-        <p className="text-muted-foreground mt-0.5 truncate text-xs">{sourceBlock?.title ?? sourceRef}</p>
-      </div>
+    <div className="space-y-5">
+      <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
+        <GitBranch className="text-primary size-4 shrink-0" />
+        <span className="truncate">{sourceBlock?.title ?? "Branch"}</span>
+      </p>
 
       <div className="space-y-3">
         {rules.map((rule) => (
@@ -1346,7 +1334,7 @@ function BranchInspector({
 
       <Button variant="outline" size="sm" shape="pill" className="w-full" onClick={onAddCase}>
         <Plus className="size-3.5" />
-        Add a route
+        Add route
       </Button>
 
       {/*
@@ -1364,9 +1352,7 @@ function BranchInspector({
         target picker and a way to remove it, like every other route.
       */}
       {exhaustive ? (
-        <p className="text-muted-foreground rounded-lg border border-dashed px-3 py-2 text-xs leading-relaxed">
-          Every answer is covered by a route above, so nothing falls through.
-        </p>
+        <p className="text-muted-foreground text-xs">Every answer is routed</p>
       ) : explicitElse ? (
         <div className="bg-muted/40 space-y-2 rounded-xl p-2.5">
           <div className="flex items-center justify-between gap-2">
@@ -1392,20 +1378,18 @@ function BranchInspector({
           </div>
         </div>
       ) : (
-        <div className="space-y-2">
-          <p className="text-muted-foreground rounded-lg border border-dashed px-3 py-2 text-xs leading-relaxed">
-            Anything the routes above do not match goes to <span className="font-medium">{elseTarget}</span>. You do
-            not have to set this up — it is what happens anyway.
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-muted-foreground min-w-0 truncate text-xs">
+            Otherwise → <span className="text-foreground">{elseTarget}</span>
           </p>
-          <Button variant="ghost" size="sm" shape="pill" className="w-full" onClick={onAddElse}>
-            <Plus className="size-3.5" />
-            Send everything else somewhere
+          <Button variant="ghost" size="sm" className="text-muted-foreground shrink-0" onClick={onAddElse}>
+            Change
           </Button>
         </div>
       )}
 
       {answerableBlocks.length === 0 && (
-        <p className="text-muted-foreground text-xs">Add a question before wiring conditions.</p>
+        <p className="text-muted-foreground text-xs">Add a question first</p>
       )}
 
       {/* The same button, in the same place, as every other panel. This was a
@@ -1546,7 +1530,7 @@ function EdgeRuleEditor({
       <p className="text-sm font-semibold">Connection</p>
 
       <div className="space-y-1.5">
-        <Label>Source question</Label>
+        <Label>From</Label>
         <Picker value={rule.from ?? ""} onValueChange={(v) => onPatch(rule.id, { from: v })}>
           {doc.blocks
             .filter((b) => b.type !== "welcome")
@@ -1597,7 +1581,7 @@ function EdgeRuleEditor({
       )}
 
       <div className="space-y-1.5">
-        <Label>Jumps to</Label>
+        <Label>Go to</Label>
         <TargetSelect doc={doc} value={rule.target} onChange={(t, kind) => onPatch(rule.id, { target: t, targetKind: kind })} />
       </div>
 

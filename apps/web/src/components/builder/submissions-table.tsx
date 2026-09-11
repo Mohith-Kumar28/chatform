@@ -3,10 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   Clock,
   Download,
   Link2,
@@ -33,7 +31,9 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogBody, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipHint } from "@/components/ui/kbd";
 import { formatDateTime, formatDuration, formatRelative, formatShortDateTime, isPast } from "@/lib/format";
 import { useClientValue } from "@/hooks/use-client-value";
 import { useEntitlements } from "@/hooks/use-entitlements";
@@ -252,7 +252,7 @@ function followUpLabel(
         }
       : {
           text: shortIn(f.nextScheduledAt),
-          detail: `Reminder sends ${formatDateTime(f.nextScheduledAt)}`,
+          detail: `Reminder goes out ${formatDateTime(f.nextScheduledAt)}`,
           tone: "muted",
         };
   }
@@ -307,124 +307,298 @@ function FollowUpCell({ row, empty = "dash" }: { row: SubmissionRecord; empty?: 
   if (!label) {
     return empty === "dash" ? <span className="text-muted-foreground/60">—</span> : null;
   }
-  const badge = (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
-        // `--warning-soft` pairs with `--warning-soft-foreground`, never with
-        // `--warning` — that pairing is the one that reads in both themes.
-        label.tone === "good"
-          ? "bg-[var(--success-soft,var(--primary-soft))] text-[var(--success)]"
-          : label.tone === "warn"
-            ? "bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)]"
-            : "bg-muted text-muted-foreground",
-        // The affordance, without which the explanation may as well not exist.
-        "cursor-help",
-      )}
-    >
+  const chip = cn(
+    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
+    // `--warning-soft` pairs with `--warning-soft-foreground`, never with
+    // `--warning` — that pairing is the one that reads in both themes.
+    label.tone === "good"
+      ? "bg-[var(--success-soft,var(--primary-soft))] text-[var(--success)]"
+      : label.tone === "warn"
+        ? "bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)]"
+        : "bg-muted text-muted-foreground",
+  );
+
+  const face = (
+    <>
       <MailCheck className="size-3 shrink-0" />
       {/*
         A dotted underline is the one convention that reads as "there is more
         here" without spending a second icon on a badge that already has one.
+        Only where there *is* more: inside the dialog this is a plain chip.
       */}
-      <span className="decoration-muted-foreground/50 underline decoration-dotted underline-offset-2 whitespace-nowrap">
+      <span
+        className={cn(
+          "whitespace-nowrap",
+          empty === "dash" && "decoration-muted-foreground/50 underline decoration-dotted underline-offset-2",
+        )}
+      >
         {label.text}
       </span>
-    </span>
+    </>
   );
-  /*
-    A real tooltip rather than the `title` attribute this used to carry.
-    "Not sent" is the cell's whole vocabulary for five different causes, and the
-    reason was technically present the entire time — on a native tooltip that
-    takes a second of motionless hover, gives no hint it exists, and was
-    therefore never read. The author's question is "why did nothing arrive",
-    and an answer nobody can find does not answer it.
 
-    Still on the row dialog too, with absolute times: this is a phrase, that is
-    the account, and a touch device gets only the second one.
+  if (empty === "none") {
+    /*
+      Inside the dialog the whole account is already on the page, three lines
+      below this chip. Repeating it in a hover card there would be a panel
+      explaining something the reader can see — and a chip with nothing behind
+      it must not be a button, which is a promise of somewhere to go.
+    */
+    return <span className={chip}>{face}</span>;
+  }
+
+  const badge = (
+    <button
+      type="button"
+      /*
+        The phrase the hover card draws, said once for anyone not reading it.
+        `detail` has no other reader now that the card carries the ladder, and
+        leaving it unspoken would make the badge a two-word button on a screen
+        reader — "Sent", with no clue what was sent or when.
+      */
+      aria-label={`Reminders: ${label.detail}`}
+      className={cn(chip, "cursor-help focus-visible:ring-ring/60 focus-visible:ring-2 focus-visible:outline-none")}
+    >
+      {face}
+    </button>
+  );
+
+  /*
+    A hover card rather than the tooltip this used to carry, and before that the
+    `title` attribute.
+
+    "Not sent" is the cell's whole vocabulary for five different causes, and the
+    reason was technically present the entire time — first on a native tooltip
+    nobody waits for, then on one line of a real one. But one line is all a
+    tooltip can hold: it is drawn on `--foreground`, so every colour inside has
+    to be restated against the inverse, and it can say "Reminder 2 of 3 goes out
+    Friday" without ever saying that the first went, when, or what is behind it.
+    That is the author's actual question — "where is this sequence up to" — and
+    it is a shape, not a sentence.
+
+    So the column shows the same ladder the dialog does, on the ordinary surface
+    where a green tick is a green tick. The badge is a real button: the card
+    opens on focus as well as hover, and clicking it falls through to the row,
+    which is the whole response and the answer for anything without a pointer.
   */
   return (
-    <TooltipProvider delayDuration={150}>
-      <Tooltip>
-        <TooltipTrigger asChild>{badge}</TooltipTrigger>
-        <TooltipContent side="top" className="max-w-[16rem]">
-          {label.detail}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <HoverCard>
+      <HoverCardTrigger asChild>{badge}</HoverCardTrigger>
+      <HoverCardContent
+        side="top"
+        align="end"
+        className="w-80"
+        // The row underneath opens a dialog on click. Without this, dismissing
+        // the card by clicking away opens a response the author did not ask for.
+        onClick={(e) => e.stopPropagation()}
+      >
+        <FollowUpDetail row={row} className="border-0 bg-transparent p-0" />
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 
 /**
- * The reminder sequence for one response, with real times on it.
+ * The reminder sequence as a list of steps, derived from the counts.
  *
- * The badge says "in 1h", which is the right density for a table and the wrong
- * one for somebody who has opened a response to work out what the product did. Here the times are absolute — a relative time is unfalsifiable,
- * and "why has this not gone" is exactly the question you cannot answer without
- * a clock you can compare against your own.
- *
- * Step numbers are derived rather than fetched: the counts already say how many
- * steps this response's sequence has and how many have gone, which is the whole
- * of "2 of 3" without a second query.
+ * The API reports how many went, how many are in the mail queue and how many
+ * are still scheduled — not a row per step — so the ladder is reconstructed
+ * from those three numbers. Only two times are known: when the last one went,
+ * and when the next one is due. Steps that fall either side of those get no
+ * time rather than a guessed one, which is the whole reason this returns a
+ * model instead of a sentence.
  */
-function FollowUpDetail({ row }: { row: SubmissionRecord }) {
+type FollowUpStepModel = {
+  n: number;
+  state: "sent" | "sending" | "next" | "later";
+  /** Absolute, and null when this particular step's time is not known. */
+  at: number | null;
+};
+
+function followUpSteps(f: NonNullable<SubmissionRecord["followUp"]>): FollowUpStepModel[] {
+  const total = f.sent + f.queued + f.scheduled;
+  const steps: FollowUpStepModel[] = [];
+  for (let n = 1; n <= total; n += 1) {
+    if (n <= f.sent) {
+      // `lastSentAt` belongs to the most recent one that went, and to no other.
+      steps.push({ n, state: "sent", at: n === f.sent ? f.lastSentAt : null });
+    } else if (n <= f.sent + f.queued) {
+      steps.push({ n, state: "sending", at: null });
+    } else if (n === f.sent + f.queued + 1) {
+      steps.push({ n, state: "next", at: f.nextScheduledAt });
+    } else {
+      steps.push({ n, state: "later", at: null });
+    }
+  }
+  return steps;
+}
+
+/**
+ * The ladder: a dot per step, a rail between them, the time on the right.
+ *
+ * The state is carried by the dot and only by the dot — filled and ticked for
+ * one that has gone, filled for the one in flight, hollow for one that has
+ * not. Reading down the column of dots is meant to answer "where is this up
+ * to" before any of the words are read, which is the only thing a stepper is
+ * better at than a sentence.
+ *
+ * The rail stops at the last dot rather than running past it, because a line
+ * leaving the final step implies a step after it.
+ */
+function FollowUpTimeline({ steps }: { steps: FollowUpStepModel[] }) {
+  return (
+    <ol className="space-y-0">
+      {steps.map((s, i) => (
+        <li key={s.n} className="relative flex gap-2.5 pb-2.5 last:pb-0">
+          {i < steps.length - 1 && (
+            <span aria-hidden className="bg-border absolute top-4 bottom-0 left-[7.5px] w-px" />
+          )}
+          <span
+            aria-hidden
+            className={cn(
+              "z-10 mt-px grid size-4 shrink-0 place-items-center rounded-full",
+              s.state === "sent" && "bg-[var(--success)]",
+              s.state === "sending" && "bg-[var(--primary)]",
+              // Hollow, and dashed for the one that is actually next: it has a
+              // time against it, so it needs to read as pending rather than as
+              // one more unscheduled step below it.
+              s.state === "next" && "border-muted-foreground/60 bg-card border border-dashed",
+              s.state === "later" && "border-muted-foreground/25 bg-card border",
+            )}
+          >
+            {s.state === "sent" && <Check className="size-2.5 text-white" strokeWidth={3} />}
+            {s.state === "sending" && <span className="size-1.5 animate-pulse rounded-full bg-white" />}
+          </span>
+          <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
+            {/* No "of 3" per rung: the ladder is three rungs long, and the
+                header above it already counts them. */}
+            <span className={cn(s.state === "later" ? "text-muted-foreground" : "text-foreground")}>
+              Reminder {s.n}
+            </span>
+            <span className="text-muted-foreground ml-auto shrink-0 tabular">
+              {s.state === "sent" && (s.at ? formatDateTime(s.at) : "sent")}
+              {s.state === "sending" && "sending now"}
+              {s.state === "next" &&
+                (s.at
+                  ? isPast(s.at)
+                    ? // Due in the past means it is waiting on the next sweep,
+                      // not that it went.
+                      `due ${formatDateTime(s.at)}`
+                    : formatDateTime(s.at)
+                  : "scheduled")}
+              {s.state === "later" && "after that"}
+            </span>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** The block the ladder sits in, shared with the "nothing scheduled" notes. */
+function FollowUpBlock({
+  count,
+  children,
+  className,
+}: {
+  count?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={cn("bg-muted/30 rounded-lg border px-3 py-2.5", className)}>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs font-medium">
+          <MailCheck className="size-3.5" />
+          Reminders
+        </span>
+        {count && <span className="text-muted-foreground text-micro tabular">{count}</span>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * Everything known about one response's reminder sequence.
+ *
+ * Shared by the dialog, where it sits under the status row, and by the hover
+ * card on the table's Follow-up column — one component, so the phrase in the
+ * column and the account behind it cannot drift, and so the column's reader
+ * gets the whole thing without opening the response.
+ *
+ * It was three grey sentences in a row, which is the shape of a paragraph and
+ * not of a schedule: "Reminder sent 11 Sept." above "Reminder 2 of 3 sends 12
+ * Sept." read as two unrelated remarks, and "sends" read as a verb looking for
+ * its subject. A sequence is a list of steps in order, so it is drawn as one.
+ *
+ * Times are absolute here, unlike the "in 1h" in the column. A relative time is
+ * unfalsifiable, and "why has this not gone" is exactly the question you cannot
+ * answer without a clock you can compare against your own.
+ */
+function FollowUpDetail({ row, className }: { row: SubmissionRecord; className?: string }) {
   const f = row.followUp;
   if (!f) {
     if (row.followUpSkip) {
       return (
-        <p className="text-muted-foreground text-xs">
-          No reminder scheduled — {skipCopy(row.followUpSkip)}.
-        </p>
+        <FollowUpBlock className={className}>
+          <p className="text-muted-foreground text-xs">Nothing scheduled — {skipCopy(row.followUpSkip)}.</p>
+        </FollowUpBlock>
       );
     }
     // See `followUpLabel`: nothing is decided until the conversation goes idle.
     if (row.status === "in_progress") {
       return (
-        <p className="text-muted-foreground text-xs">
-          No reminder decided yet — this conversation is still open. Whether one is sent is worked
-          out 30 minutes after their last message.
-        </p>
+        <FollowUpBlock className={className}>
+          <p className="text-muted-foreground text-xs">
+            Not decided yet — this conversation is still open. Whether a reminder is sent is worked
+            out 30 minutes after their last message.
+          </p>
+        </FollowUpBlock>
       );
     }
     return null;
   }
 
-  const total = f.sent + f.queued + f.scheduled;
-  const done = f.sent + f.queued;
-  const lines: string[] = [];
-
   if (f.holdout) {
-    lines.push("Held back from the reminder sequence, to keep the recovery figure honest.");
-  }
-  if (f.lastSentAt) {
-    const which = f.sent === 1 ? "Reminder sent" : `${f.sent} reminders sent, last`;
-    lines.push(`${which} ${formatDateTime(f.lastSentAt)}.`);
-  }
-  if (f.queued > 0) {
-    lines.push("A reminder is with the mail queue now.");
-  }
-  if (f.nextScheduledAt) {
-    const step = total > 1 ? `Reminder ${Math.min(done + 1, total)} of ${total}` : "The reminder";
-    // Due in the past means it is waiting on the next sweep, not that it went.
-    lines.push(
-      isPast(f.nextScheduledAt)
-        ? `${step} was due ${formatDateTime(f.nextScheduledAt)} and goes out on the next sweep.`
-        : `${step} sends ${formatDateTime(f.nextScheduledAt)}.`,
+    return (
+      <FollowUpBlock count="held back" className={className}>
+        <p className="text-muted-foreground text-xs">
+          Held back from the reminder sequence, to keep the recovery figure honest.
+        </p>
+      </FollowUpBlock>
     );
   }
-  if (f.stoppedReason) {
-    lines.push(
-      `${f.stoppedStatus === "failed" ? "Delivery failed" : "Sequence stopped"} — ${skipCopy(f.stoppedReason)}.`,
-    );
-  }
-  if (lines.length === 0) return null;
+
+  const total = f.sent + f.queued + f.scheduled;
+  const steps = followUpSteps(f);
+  if (steps.length === 0 && !f.stoppedReason && !f.recovered) return null;
 
   return (
-    <div className="text-muted-foreground space-y-1 text-xs">
-      {lines.map((l) => (
-        <p key={l}>{l}</p>
-      ))}
-    </div>
+    <FollowUpBlock count={total > 0 ? `${f.sent} of ${total} sent` : undefined} className={className}>
+      {steps.length > 0 && <FollowUpTimeline steps={steps} />}
+      {/*
+        The two things that are about the sequence as a whole rather than about
+        any one step in it, so they sit under the ladder with a rule above them
+        instead of pretending to be another rung.
+      */}
+      {(f.stoppedReason || f.recovered) && (
+        <div className={cn("space-y-1 text-xs", steps.length > 0 && "mt-2.5 border-t pt-2.5")}>
+          {f.stoppedReason && (
+            <p className="text-[var(--warning-soft-foreground)]">
+              {f.stoppedStatus === "failed" ? "Delivery failed" : "Sequence stopped"} —{" "}
+              {skipCopy(f.stoppedReason)}.
+            </p>
+          )}
+          {f.recovered && (
+            <p className="flex items-center gap-1.5 text-[var(--success)]">
+              <Check className="size-3 shrink-0" />
+              They came back and finished after a reminder.
+            </p>
+          )}
+        </div>
+      )}
+    </FollowUpBlock>
   );
 }
 
@@ -665,14 +839,61 @@ export function SubmissionsTable({
     return () => window.removeEventListener("keydown", onKey);
   }, [full, openId]);
 
-  const toggle = useCallback((id: string) => {
-    setPicked((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+  /**
+   * Where a shift-click measures from, and whether the last click held shift.
+   *
+   * Two refs rather than state because neither is rendered and both have to be
+   * read inside the same click that sets them — a re-render in between would
+   * mean the range was computed against the previous anchor.
+   *
+   * `shiftRef` is written by the checkbox's `onClick` and read by its
+   * `onChange`, which is the only order available: a change event carries no
+   * modifier keys, and the click that produces it does. Browsers fire click
+   * first on a checkbox, and a keyboard activation fires both too, with
+   * `shiftKey` correctly false.
+   */
+  const anchorRef = useRef<string | null>(null);
+  const shiftRef = useRef(false);
+
+  /**
+   * One checkbox, or every checkbox between this one and the last.
+   *
+   * Shift-click extends a selection in every table people already use, and the
+   * absence of it here meant tidying up a page of forty meant forty clicks.
+   * The range takes whichever state the clicked box is moving *to*, so a
+   * shift-click on a ticked row clears the span rather than re-ticking it —
+   * the same rule GitHub and every mail client follow.
+   *
+   * The anchor deliberately stays put while extending, so a second shift-click
+   * further down grows the same range instead of starting a new one from the
+   * middle of it. Only a plain click moves it.
+   */
+  const toggle = useCallback(
+    (id: string) => {
+      const extend = shiftRef.current;
+      shiftRef.current = false;
+      const ids = rows.map((r) => r.id);
+      setPicked((prev) => {
+        const next = new Set(prev);
+        // The state this click is putting the row into, which is what the rest
+        // of the range is then made to agree with.
+        const selecting = !next.has(id);
+        const from = anchorRef.current === null ? -1 : ids.indexOf(anchorRef.current);
+        const to = ids.indexOf(id);
+        const span =
+          extend && from !== -1 && to !== -1
+            ? ids.slice(Math.min(from, to), Math.max(from, to) + 1)
+            : [id];
+        for (const rowId of span) {
+          if (selecting) next.add(rowId);
+          else next.delete(rowId);
+        }
+        return next;
+      });
+      if (!extend) anchorRef.current = id;
+    },
+    [rows],
+  );
 
   const allSelected = rows.length > 0 && selected.size === rows.length;
 
@@ -751,9 +972,20 @@ export function SubmissionsTable({
         <div className="flex items-center gap-1.5">
           {selected.size > 0 && (
             <>
-              <span className="text-muted-foreground text-caption tabular mr-1">
-                {selected.size} selected
-              </span>
+              {/*
+                The count is on the buttons, not beside them.
+
+                It used to be a "3 selected" label next to a bare "Download" and
+                a bare "Delete", which puts the number one control away from the
+                thing it qualifies — and leaves the destructive button as the
+                only one on screen that does not say what it is about to touch.
+                Naming the scope twice is cheap; a Delete that reads as though it
+                might mean everything is not.
+
+                It is also the answer to the other question this toolbar raises:
+                the Download above the table takes every response, and this one
+                takes exactly the rows that are ticked.
+              */}
               <Button
                 variant="outline"
                 size="sm"
@@ -761,7 +993,7 @@ export function SubmissionsTable({
                 onClick={() => downloadCsv(rows.filter((r) => selected.has(r.id)), columns, hasRespondents)}
               >
                 <Download className="size-3.5" />
-                Download
+                Download {selected.size === 1 ? "1 response" : `${selected.size} responses`}
               </Button>
               {canDelete && (
                 <Button
@@ -772,7 +1004,7 @@ export function SubmissionsTable({
                   onClick={() => setConfirming([...selected])}
                 >
                   <Trash2 className="size-3.5" />
-                  Delete
+                  Delete {selected.size}
                 </Button>
               )}
               <Button variant="ghost" size="icon-sm" aria-label="Clear selection" onClick={() => setPicked(new Set())}>
@@ -889,7 +1121,14 @@ export function SubmissionsTable({
                         className="size-3.5 accent-[var(--primary)] align-middle"
                         aria-label={`Select response from ${formatWhen(row)}`}
                         checked={picked}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          shiftRef.current = e.shiftKey;
+                          // Shift-clicking inside a table is also the browser's
+                          // gesture for selecting text, and it will have swept
+                          // up half the rows on the way here.
+                          if (e.shiftKey) window.getSelection()?.removeAllRanges();
+                        }}
                         onChange={() => toggle(row.id)}
                       />
                     </td>
@@ -942,7 +1181,8 @@ export function SubmissionsTable({
 
       <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
         <p className="text-muted-foreground text-micro">
-          Scroll sideways for the rest of the columns. Click a row to read the whole response.
+          Scroll sideways for the rest of the columns. Click a row to read the whole response, or
+          shift-click a checkbox to tick everything between it and the last one.
         </p>
         {page && <Pager {...page} />}
       </div>
@@ -1062,6 +1302,37 @@ function SubmissionDialog({
     [row],
   );
   const [view, setView] = useState<"answers" | "chat">("answers");
+
+  /**
+   * Left and right step through the responses, matching the chevrons.
+   *
+   * Bound on the window rather than on the dialog, because the panel does not
+   * hold focus after a step: the button that was clicked belongs to the row
+   * that has just been replaced, and a key handler hanging off it stops
+   * working exactly when it is being used. The dialog is modal and there is
+   * only ever one of these open, so the window is the honest scope.
+   *
+   * Guarded on the modifiers and on where the key came from. A respondent's
+   * answer is not editable here, but the panel does hold real text — the
+   * search field behind it, a future note — and a cursor moved with the arrow
+   * keys must not also change what is on screen. `⌘←` is the browser's Back.
+   */
+  useEffect(() => {
+    if (!row || total <= 1) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el?.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el?.tagName ?? "")) return;
+      const delta = e.key === "ArrowLeft" ? -1 : 1;
+      if (index + delta < 0 || index + delta > total - 1) return;
+      e.preventDefault();
+      onStep(delta);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [row, index, total, onStep]);
+
   if (!row) return null;
 
   const answered = columns.filter((b) => displayCell(b, byRef.get(b.ref)) !== "").length;
@@ -1088,18 +1359,55 @@ function SubmissionDialog({
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
             {total > 1 && (
-              <>
-                <Button variant="ghost" size="icon-sm" aria-label="Previous response" disabled={index <= 0} onClick={() => onStep(-1)}>
-                  <ChevronUp className="size-4" />
-                </Button>
+              <TooltipProvider delayDuration={150}>
+                {/*
+                  Left and right, not up and down.
+
+                  The list underneath is a table and these do step through its
+                  rows, which is the case for the vertical pair — but nobody
+                  reads them against the table. They are read against the panel
+                  they sit on, where the gesture is "the next one of these",
+                  the same one a lightbox or a mail client spends left and
+                  right on. And now that the keys are bound, the icon has to
+                  agree with the key or one of them is lying.
+                */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Previous response"
+                      disabled={index <= 0}
+                      onClick={() => onStep(-1)}
+                    >
+                      <ChevronLeft className="size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <TooltipHint label="Previous response" keys="←" />
+                  </TooltipContent>
+                </Tooltip>
                 <span className="text-muted-foreground tabular px-1 text-xs">
                   {index + 1}/{total}
                 </span>
-                <Button variant="ghost" size="icon-sm" aria-label="Next response" disabled={index >= total - 1} onClick={() => onStep(1)}>
-                  <ChevronDown className="size-4" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Next response"
+                      disabled={index >= total - 1}
+                      onClick={() => onStep(1)}
+                    >
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <TooltipHint label="Next response" keys="→" />
+                  </TooltipContent>
+                </Tooltip>
                 <span className="bg-border mx-1 h-5 w-px" />
-              </>
+              </TooltipProvider>
             )}
             <Button
               variant="ghost"
@@ -1203,7 +1511,15 @@ function SubmissionDialog({
             <span className="text-muted-foreground">
               {answered} of {columns.length} answered
             </span>
-            {row.durationMs !== null && (
+            {/*
+              Guarded on more than null now that an abandoned response is
+              measured to the respondent's last message rather than to the idle
+              alarm that noticed. Somebody who opened the form and closed it
+              has a real duration of a second or two, and one who never got as
+              far as a first answer can round to zero — which `formatDuration`
+              renders as an em-dash, and "· took —" is worse than silence.
+            */}
+            {row.durationMs !== null && row.durationMs >= 1000 && (
               <span className="text-muted-foreground">· took {formatDuration(row.durationMs)}</span>
             )}
             {row.respondent && (

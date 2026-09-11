@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { Plus, Trash2, GripVertical } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -20,45 +20,59 @@ import { useBufferedValue } from "@/hooks/use-buffered-value";
 /**
  * Inspector field primitives.
  *
- * Every control here is labelled and described in one place so the per-type
- * inspectors stay declarative. The previous inspector reached for native
- * <select> elements while the shadcn Select sat unused in one file — these
- * wrappers make the styled control the path of least resistance.
+ * Every control here is labelled in one place so the per-type inspectors stay
+ * declarative. The panel carries a label and a control per field and nothing
+ * else: explanatory subtext under every box made it read as a wall of grey, so
+ * the only line a field may print beneath itself is an `error`. Anything worth
+ * explaining once goes behind a `help` icon.
  */
+
+/**
+ * The inspector's box: filled rather than outlined, so a panel of fields reads
+ * as a column of soft surfaces instead of a grid of rules. The border only
+ * appears on hover and focus, where it is telling you something.
+ */
+export const fieldInputClass =
+  "rounded-lg border-transparent bg-muted/70 shadow-none dark:bg-muted/70 hover:border-border focus-visible:border-ring focus-visible:bg-background dark:focus-visible:bg-background";
+
+/** The same surface, sized for prose. */
+export const fieldTextareaClass = cn(
+  fieldInputClass,
+  "min-h-20 resize-none px-3 py-2.5 leading-relaxed",
+);
 
 export function Field({
   label,
-  hint,
+  error,
   help,
   children,
   className,
 }: {
-  label: string;
-  hint?: string;
-  /**
-   * An explanation too long to print under every field — an `InfoHint`, folded
-   * away behind its icon beside the label. `hint` is for a line worth reading
-   * every time; this is for the one you go looking for once.
-   */
+  label?: string;
+  /** The one line a field may print under itself. */
+  error?: string;
+  /** An `InfoHint` beside the label, for the explanation you look for once. */
   help?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
-    <div className={cn("space-y-1.5", className)}>
-      <div className="flex items-center gap-0.5">
-        <Label className="text-caption font-medium">{label}</Label>
-        {help}
-      </div>
+    <div className={cn("space-y-2", className)}>
+      {label && (
+        <div className="flex items-center gap-0.5">
+          <Label className="text-muted-foreground text-xs font-medium">{label}</Label>
+          {help}
+        </div>
+      )}
       {children}
-      {hint && <p className="text-muted-foreground text-[0.6875rem] leading-snug">{hint}</p>}
+      {error && <p className="text-destructive text-xs">{error}</p>}
     </div>
   );
 }
 
 export function TextField({
   label,
-  hint,
+  error,
   help,
   value,
   onChange,
@@ -68,8 +82,8 @@ export function TextField({
   className,
   shortcutTarget,
 }: {
-  label: string;
-  hint?: string;
+  label?: string;
+  error?: string;
   help?: React.ReactNode;
   className?: string;
   value: string;
@@ -95,7 +109,7 @@ export function TextField({
   */
   const buffered = useBufferedValue(value, onChange);
   return (
-    <Field label={label} hint={hint} help={help}>
+    <Field label={label} error={error} help={help}>
       {multiline ? (
         <Textarea
           data-shortcut-target={shortcutTarget}
@@ -105,7 +119,7 @@ export function TextField({
           placeholder={placeholder}
           maxLength={maxLength}
           rows={3}
-          className="resize-y"
+          className={fieldTextareaClass}
         />
       ) : (
         <Input
@@ -115,7 +129,7 @@ export function TextField({
           onBlur={buffered.onBlur}
           placeholder={placeholder}
           maxLength={maxLength}
-          className={className}
+          className={cn(fieldInputClass, className)}
         />
       )}
     </Field>
@@ -124,7 +138,6 @@ export function TextField({
 
 export function NumberField({
   label,
-  hint,
   value,
   onChange,
   min,
@@ -132,7 +145,6 @@ export function NumberField({
   placeholder,
 }: {
   label: string;
-  hint?: string;
   value: number | undefined;
   onChange: (v: number | undefined) => void;
   min?: number;
@@ -152,9 +164,10 @@ export function NumberField({
     onChange(raw === "" ? undefined : Number(raw)),
   );
   return (
-    <Field label={label} hint={hint}>
+    <Field label={label}>
       <Input
         type="number"
+        className={fieldInputClass}
         value={buffered.value}
         min={min}
         max={max}
@@ -168,46 +181,39 @@ export function NumberField({
 
 export function SwitchField({
   label,
-  hint,
   checked,
   onChange,
 }: {
   label: string;
-  hint?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
 }) {
   const id = useId();
   return (
-    <div className="flex items-start justify-between gap-4 py-1">
-      <div className="min-w-0 space-y-0.5">
-        <Label htmlFor={id} className="text-caption font-medium">
-          {label}
-        </Label>
-        {hint && <p className="text-muted-foreground text-[0.6875rem] leading-snug">{hint}</p>}
-      </div>
-      <Switch id={id} checked={checked} onCheckedChange={onChange} className="mt-0.5 shrink-0" />
+    <div className="flex items-center justify-between gap-4">
+      <Label htmlFor={id} className="min-w-0 cursor-pointer text-sm font-normal">
+        {label}
+      </Label>
+      <Switch id={id} checked={checked} onCheckedChange={onChange} className="shrink-0" />
     </div>
   );
 }
 
 export function SelectField<T extends string>({
   label,
-  hint,
   value,
   onChange,
   options,
 }: {
   label: string;
-  hint?: string;
   value: T;
   onChange: (v: T) => void;
   options: readonly { value: T; label: string }[];
 }) {
   return (
-    <Field label={label} hint={hint}>
+    <Field label={label}>
       <Select value={value} onValueChange={(v) => onChange(v as T)}>
-        <SelectTrigger className="w-full">
+        <SelectTrigger className={cn("w-full", fieldInputClass)}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -247,14 +253,13 @@ function ListItemInput({
       value={buffered.value}
       onChange={(e) => buffered.onChange(e.target.value)}
       onBlur={buffered.onBlur}
-      className="h-8"
+      className={cn("h-9", fieldInputClass)}
     />
   );
 }
 
 export function ListEditor({
   label,
-  hint,
   items,
   onChange,
   makeItem,
@@ -262,7 +267,6 @@ export function ListEditor({
   addLabel = "Add option",
 }: {
   label: string;
-  hint?: string;
   items: { id: string; label: string }[];
   onChange: (items: { id: string; label: string }[]) => void;
   makeItem: () => { id: string; label: string };
@@ -270,11 +274,10 @@ export function ListEditor({
   addLabel?: string;
 }) {
   return (
-    <Field label={label} hint={hint}>
+    <Field label={label}>
       <div className="space-y-1.5">
         {items.map((item, i) => (
-          <div key={item.id} className="group flex items-center gap-1.5">
-            <GripVertical className="text-muted-foreground/40 size-3.5 shrink-0" />
+          <div key={item.id} className="group flex items-center gap-1">
             <ListItemInput
               value={item.label}
               onCommit={(label) => {
@@ -292,7 +295,7 @@ export function ListEditor({
               onClick={() => onChange(items.filter((_, j) => j !== i))}
               className="text-muted-foreground hover:text-destructive shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-0"
             >
-              <Trash2 className="size-3" />
+              <X className="size-3.5" />
             </Button>
           </div>
         ))}
@@ -300,7 +303,7 @@ export function ListEditor({
           variant="ghost"
           size="sm"
           onClick={() => onChange([...items, makeItem()])}
-          className="text-muted-foreground w-full justify-start"
+          className="text-muted-foreground hover:text-foreground -ml-2 justify-start"
         >
           <Plus className="size-3.5" />
           {addLabel}
@@ -313,19 +316,17 @@ export function ListEditor({
 /** Multi-checkbox for the fixed field sets on contact_info and address. */
 export function CheckboxGroup<T extends string>({
   label,
-  hint,
   value,
   onChange,
   options,
 }: {
   label: string;
-  hint?: string;
   value: readonly T[];
   onChange: (v: T[]) => void;
   options: readonly { value: T; label: string }[];
 }) {
   return (
-    <Field label={label} hint={hint}>
+    <Field label={label}>
       <div className="grid grid-cols-2 gap-1.5">
         {options.map((o) => {
           const checked = value.includes(o.value);
@@ -339,11 +340,11 @@ export function CheckboxGroup<T extends string>({
                 onChange(checked ? value.filter((v) => v !== o.value) : [...value, o.value])
               }
               className={cn(
-                "rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors",
+                "rounded-lg border px-2.5 py-2 text-left text-xs transition-colors",
                 "duration-[var(--duration-micro)] ease-[var(--ease-out)]",
                 checked
                   ? "border-primary bg-primary-soft text-primary font-medium"
-                  : "border-border text-muted-foreground hover:border-muted-foreground/40",
+                  : "bg-muted/70 text-muted-foreground border-transparent hover:border-border",
               )}
             >
               {o.label}

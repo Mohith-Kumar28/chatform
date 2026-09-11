@@ -8,6 +8,7 @@ import { QuestionPreview } from "../question-preview";
 import { EmptyState } from "@/components/ui/empty-state";
 import { BuildToolbar } from "../build-toolbar";
 import { useBuilderStore, useSelectedBlock } from "@/stores/builder-store";
+import { useGetApiFormsById } from "@/lib/api/dashboard/dashboard";
 
 /**
  * Build: the questions, and the one you are editing.
@@ -23,6 +24,12 @@ export function BuildTab() {
   const doc = useBuilderStore((s) => s.doc);
   const block = useSelectedBlock();
   const selectedEndingRef = useBuilderStore((s) => s.selectedEndingRef);
+  // The slug seeds the preview's background pattern. It lives on the form row,
+  // not the document — the same already-cached query the Settings tab reads, so
+  // this costs a cache hit rather than a request.
+  const formId = useBuilderStore((s) => s.formId);
+  const { data: row } = useGetApiFormsById(formId as never);
+  const slug = (row as { slug?: string } | undefined)?.slug ?? null;
   if (!doc) return null;
 
   // An ending has no question to render here, but "Pick a question" is a lie
@@ -30,7 +37,7 @@ export function BuildTab() {
   const ending = selectedEndingRef ? doc.endings.find((e) => e.ref === selectedEndingRef) : undefined;
 
   return (
-    <div className="flex h-[calc(100svh-3.5rem)] min-h-0">
+    <div className="flex h-[calc(100svh-var(--app-header-h))] min-h-0">
       <aside className="bg-sidebar hidden w-72 shrink-0 md:block">
         <BlockList />
       </aside>
@@ -41,7 +48,7 @@ export function BuildTab() {
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 pt-3 pb-28">
           <div className="flex max-h-full w-full max-w-lg flex-col">
             {block ? (
-              <QuestionPreview doc={doc} block={block} />
+              <QuestionPreview doc={doc} block={block} slug={slug} />
             ) : ending ? (
               <EmptyState
                 icon={ending.kind === "screen_out" ? ShieldAlert : Flag}

@@ -4,7 +4,6 @@
 import { FormCard, type FormRow } from "@/components/forms/form-card";
 
 const base = {
-  slug: "x",
   responses: 1,
   partials: 37,
   updatedAt: Date.now() - 4 * 3600_000,
@@ -16,6 +15,7 @@ const rows: FormRow[] = [
   {
     ...base,
     id: "1",
+    slug: "campus-catalyst-2026",
     title: "Campus Catalyst 2026 - Internal SIH Hackathon",
     status: "published",
     theme: {
@@ -30,6 +30,7 @@ const rows: FormRow[] = [
   {
     ...base,
     id: "2",
+    slug: "memorie-waitlist",
     title: "Memorie VIP Waitlist & Beta Access",
     status: "published",
     hasUnpublishedChanges: true,
@@ -46,6 +47,7 @@ const rows: FormRow[] = [
   {
     ...base,
     id: "3",
+    slug: "membership-application",
     title: "Membership application",
     status: "draft",
     questionCount: 16,
@@ -61,6 +63,7 @@ const rows: FormRow[] = [
   {
     ...base,
     id: "4",
+    slug: "dark-themed-form",
     title: "Dark themed form",
     status: "published",
     questionCount: 7,
@@ -73,7 +76,7 @@ const rows: FormRow[] = [
       logoUrl: null,
     },
   },
-  { ...base, id: "5", title: "Appointment booking (brand band)", status: "draft", questionCount: 15, theme: null },
+  { ...base, id: "5", slug: "appointment-booking", title: "Appointment booking (brand band)", status: "draft", questionCount: 15, theme: null },
 ];
 
 export default function Page() {

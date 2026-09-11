@@ -163,6 +163,7 @@ export function EmbedStudio({
             <EmbedPreview
               config={config}
               formTitle={formTitle}
+              slug={slug}
               theme={theme}
               blocks={blocks}
               device={device}

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { API_ORIGIN } from "@/lib/api/mutator";
 import { BufferedInput } from "@/components/ui/buffered-input";
+import { fieldInputClass } from "./fields";
 
 
 /**
@@ -66,14 +67,14 @@ export function MediaField({
     return (
       <>
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className="w-full justify-start"
+          className="text-muted-foreground hover:text-foreground -ml-2 justify-start"
           disabled={busy}
           onClick={() => inputRef.current?.click()}
         >
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Paperclip className="size-3.5" />}
-          {busy ? "Uploading…" : "Add image, video or file"}
+          {busy ? "Uploading…" : "Add media"}
         </Button>
         <input
           ref={inputRef}
@@ -111,9 +112,9 @@ export function MediaField({
       {media.kind === "image" && (
         <BufferedInput
           value={media.alt ?? ""}
-          placeholder="Describe the image"
+          placeholder="Alt text"
           onCommit={(v) => onChange({ ...media, alt: v || undefined })}
-          className={cn("h-8", !media.alt && "border-[var(--warning)]/50")}
+          className={cn("h-9", fieldInputClass, !media.alt && "border-[var(--warning)]/50")}
         />
       )}
     </div>

@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { Field, ListEditor } from "./fields";
+import { Field, fieldInputClass, ListEditor } from "./fields";
 import { BufferedInput } from "@/components/ui/buffered-input";
 
 const uid = (p: string) =>
@@ -142,14 +142,14 @@ export function GroupFieldsEditor({
     );
 
   return (
-    <Field label="Fields in each entry">
+    <Field label="Fields">
       <div className="space-y-2">
         {block.fields.map((field, i) => {
           const hasPattern = field.kind === "short_text";
           return (
             <div
               key={field.id}
-              className="border-border bg-muted/25 space-y-2 rounded-xl border p-2.5"
+              className="bg-muted/40 space-y-2 rounded-xl p-2.5"
             >
               {/*
                 Row one is what the field *is*: the kind it collects, whether an
@@ -174,7 +174,7 @@ export function GroupFieldsEditor({
                     })
                   }
                 >
-                  <SelectTrigger className="h-8 min-w-0 flex-1 text-xs">
+                  <SelectTrigger className={cn("h-8 min-w-0 flex-1 text-xs", fieldInputClass, "bg-background dark:bg-background")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -301,7 +301,7 @@ export function GroupFieldsEditor({
                         `gflabel:${field.id}`,
                       );
                     }}
-                    className="h-8 min-w-0 text-sm font-medium"
+                    className={cn("h-8 min-w-0 text-sm font-medium", fieldInputClass, "bg-background dark:bg-background")}
                   />
                   {hasPattern && (
                     <BufferedInput
@@ -319,7 +319,7 @@ export function GroupFieldsEditor({
                       aria-invalid={
                         !!field.pattern && !patternIsValid(field.pattern)
                       }
-                      className="h-8 min-w-0 font-mono text-xs"
+                      className={cn("h-8 min-w-0 font-mono text-xs", fieldInputClass, "bg-background dark:bg-background")}
                     />
                   )}
                 </div>
@@ -327,10 +327,7 @@ export function GroupFieldsEditor({
                 {hasPattern &&
                   field.pattern &&
                   !patternIsValid(field.pattern) && (
-                    <p className="text-destructive text-[0.6875rem] leading-snug">
-                      This isn&apos;t a valid pattern, so nothing is checked
-                      against it.
-                    </p>
+                    <p className="text-destructive text-xs">Invalid pattern</p>
                   )}
               </div>
 
@@ -386,7 +383,7 @@ export function GroupFieldsEditor({
                 },
               ])
             }
-            className="text-muted-foreground w-full justify-start"
+            className="text-muted-foreground hover:text-foreground -ml-2 justify-start"
           >
             <Plus className="size-3.5" />
             Add field

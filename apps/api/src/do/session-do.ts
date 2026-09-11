@@ -527,8 +527,20 @@ export class SessionDO extends DurableObject<Bindings> {
      * the thread they left: the questions, their answers, and the next question
      * under them — exactly what they see after a refresh. `replayAnswerHistory`
      * puts that thread back, so nothing here has to describe it.
+     *
+     * And only when the document does not open itself. A welcome block is the
+     * greeting, and the flow says it: `beginInterview` walks to it and
+     * `advanceTo` emits it, or on a resume `replayAnswerHistory` puts it back
+     * at the top of the thread. Writing it here as well put the same paragraph
+     * in the transcript twice — invisibly to the respondent, because this
+     * stores without emitting, and then plainly in the response drawer, which
+     * reads the stored record rather than the stream. Asked here with the same
+     * `resolveNext` both of those paths start from, so the two cannot disagree.
      */
-    await this.appendMessage("assistant", greeting(this.doc));
+    const opening = resolveNext(this.doc, null, this.state);
+    if (!(opening.kind === "block" && opening.block.type === "welcome")) {
+      await this.appendMessage("assistant", greeting(this.doc));
+    }
     await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
 
     // Sign-in comes before the first question, not after it. Asking someone to

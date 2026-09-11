@@ -4,7 +4,6 @@ import { Flag, Plus, ShieldAlert, X } from "lucide-react";
 import type { FormDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { BufferedInput, BufferedTextarea } from "@/components/ui/buffered-input";
 import {
   Select,
@@ -13,6 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { Field, fieldInputClass, fieldTextareaClass } from "./fields";
 
 const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
 
@@ -56,20 +57,22 @@ export function EndingInspector({
   const setRequirements = (next: FormDoc["endings"][number]["requirements"]) => patch({ requirements: next });
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-1.5">
+    <div className="space-y-6">
+      <div className="flex items-center gap-2">
         {/* The same green/red the node and the list use, so the panel and the
             thing it is describing agree about which outcome this is. */}
-        {screenOut ? (
-          <ShieldAlert className="text-destructive size-4" />
-        ) : (
-          <Flag className="text-success size-4" />
-        )}
+        <div
+          className={cn(
+            "grid size-7 shrink-0 place-items-center rounded-lg",
+            screenOut ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success",
+          )}
+        >
+          {screenOut ? <ShieldAlert className="size-3.5" /> : <Flag className="size-3.5" />}
+        </div>
         <p className="text-sm font-semibold">Ending</p>
       </div>
 
-      <div className="space-y-1.5">
-        <Label>Outcome</Label>
+      <Field label="Outcome">
         <Select
           value={ending.kind}
           onValueChange={(v) => {
@@ -85,73 +88,71 @@ export function EndingInspector({
             });
           }}
         >
-          <SelectTrigger size="sm" className="w-full">
+          <SelectTrigger className={cn("w-full", fieldInputClass)}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="success">Response accepted</SelectItem>
+            <SelectItem value="success">Accept response</SelectItem>
             <SelectItem value="screen_out" disabled={!otherSuccess}>
-              Can&apos;t submit — turn them away
+              Turn them away
             </SelectItem>
           </SelectContent>
         </Select>
-        <p className="text-muted-foreground text-xs">
-          {screenOut
-            ? "Nothing is submitted. The response is kept as screened out, and no completion webhook or email fires."
-            : otherSuccess
-              ? "The response is submitted and counts as a completion."
-              : "This is the only ending that accepts a response, so it cannot turn people away."}
-        </p>
-      </div>
+      </Field>
 
-      <div className="space-y-1.5">
-        <Label>Title</Label>
-        <BufferedInput value={ending.title} onCommit={(v) => patch({ title: v })} />
-      </div>
-      <div className="space-y-1.5">
-        <Label>{screenOut ? "What they can do about it" : "Message"}</Label>
-        <BufferedTextarea rows={3} value={ending.bodyMd} onCommit={(v) => patch({ bodyMd: v })} />
-      </div>
+      <Field label="Title">
+        <BufferedInput
+          value={ending.title}
+          onCommit={(v) => patch({ title: v })}
+          className={fieldInputClass}
+        />
+      </Field>
+
+      <Field label="Message">
+        <BufferedTextarea
+          rows={3}
+          value={ending.bodyMd}
+          onCommit={(v) => patch({ bodyMd: v })}
+          className={fieldTextareaClass}
+        />
+      </Field>
 
       {screenOut && (
-        <div className="space-y-1.5">
-          <Label>Requirements they didn&apos;t meet</Label>
-          <p className="text-muted-foreground text-xs">
-            Listed on the screen so they know what to fix.
-          </p>
+        <Field label="Requirements">
           <div className="space-y-1.5">
             {requirements.map((r, i) => (
-              <div key={r.id} className="flex gap-1.5">
+              <div key={r.id} className="group flex items-center gap-1">
                 <Input
-                  className="h-8 min-w-0 flex-1 text-xs"
+                  className={cn("h-9 min-w-0 flex-1", fieldInputClass)}
                   value={r.label}
                   placeholder="A team of 2 to 5 people"
                   onChange={(e) =>
                     setRequirements(requirements.map((x) => (x.id === r.id ? { ...x, label: e.target.value } : x)))
                   }
                 />
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
                   aria-label={`Remove requirement ${i + 1}`}
                   onClick={() => setRequirements(requirements.filter((x) => x.id !== r.id))}
-                  className="text-muted-foreground hover:text-destructive shrink-0 px-1"
+                  className="text-muted-foreground hover:text-destructive shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                 >
                   <X className="size-3.5" />
-                </button>
+                </Button>
               </div>
             ))}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground -ml-2 justify-start"
+              onClick={() =>
+                setRequirements([...requirements, { id: uid("req"), label: "", when: null }])
+              }
+            >
+              <Plus className="size-3.5" /> Add requirement
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() =>
-              setRequirements([...requirements, { id: uid("req"), label: "", when: null }])
-            }
-          >
-            <Plus className="size-3.5" /> Add a requirement
-          </Button>
-        </div>
+        </Field>
       )}
     </div>
   );
