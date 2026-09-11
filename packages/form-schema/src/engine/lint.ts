@@ -282,11 +282,12 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
    * says, and what to do about it is the author's call — widen the first route
    * into a range, or move this one above it.
    *
-   * Only what can be decided from the numbers is reported. A route is read as
-   * an interval when every one of its conditions is a comparison on the
-   * branch's own question joined by "and"; anything else — a text match, a
-   * mixture of questions, an "any of" — is left alone, which errs towards
-   * saying nothing rather than towards a warning nobody can act on.
+   * Two shapes are read: a route with no conditions, which matches every answer
+   * there is and so kills everything below it, and a route that is a stretch of
+   * the number line — every condition a comparison on the branch's own question,
+   * joined by "and". Anything else — a text match, a mixture of questions, an
+   * "any of" — is left alone, which errs towards saying nothing rather than
+   * towards a warning nobody can act on.
    */
   for (const [from, rules] of gotoFrom) {
     const spans = rules.map((r) => numericSpan(r, from));
@@ -296,13 +297,16 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
       const shadow = spans.findIndex((s, earlier) => earlier < later && s !== null && covers(s, mine));
       if (shadow === -1) continue;
       const block = doc.blocks.find((b) => b.ref === from);
+      const catchAll = !spans[shadow]!.low && !spans[shadow]!.high;
       issues.push({
         level: "warning",
         code: "unreachable_route",
         message:
           `On "${block?.title || from}", route ${later + 1} can never run: route ${shadow + 1} above it already ` +
-          `matches every answer it does. Give route ${shadow + 1} an upper and a lower bound, or move route ` +
-          `${later + 1} above it.`,
+          `matches every answer it does. ` +
+          (catchAll
+            ? `Route ${shadow + 1} takes every answer — give it a condition, or move route ${later + 1} above it.`
+            : `Give route ${shadow + 1} an upper and a lower bound, or move route ${later + 1} above it.`),
         refs: [from],
       });
     }
@@ -450,13 +454,22 @@ interface Span {
  * A route as a stretch of the number line, or null when it is not one.
  *
  * Null for everything this is not willing to reason about: a text or option
- * test, a condition on some other question, an "any of" group, a route with no
- * conditions at all (which is the "otherwise" rule and catches the leftovers by
- * design).
+ * test, a condition on some other question, an "any of" group.
+ *
+ * An unconditional route is the unbounded stretch, which is the literal truth
+ * about it — it matches every answer — and is what makes the second half of
+ * "carry on → thank them" reportable. Two unconditional routes off one question
+ * is not a flow with a fallback; it is a flow whose author wrote two endings
+ * for the same path and only ever gets the first. On a live referral form the
+ * second one was a thank-you nobody had ever seen.
  */
 function numericSpan(rule: GotoRule, from: string): Span | null {
   const when = rule.when;
-  if (!when || when.op !== "and" || when.groups.length > 0 || when.conditions.length === 0) return null;
+  if (!when || when.conditions.length === 0) {
+    if (when && when.groups.length > 0) return null;
+    return { low: null, high: null };
+  }
+  if (when.op !== "and" || when.groups.length > 0) return null;
   const span: Span = { low: null, high: null };
   for (const c of when.conditions) {
     if (c.left.kind !== "ref" || c.left.ref !== from) return null;

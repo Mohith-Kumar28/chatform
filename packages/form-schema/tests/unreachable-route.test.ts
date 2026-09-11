@@ -89,6 +89,30 @@ describe("a route an earlier route already answers for", () => {
     expect(found).toBeUndefined();
   });
 
+  it("reports what an unconditional route above kills", () => {
+    // Two "always" routes off one question: the second is a destination the
+    // author wrote and no respondent can reach. A real referral form ended
+    // this way, with a thank-you nobody ever saw.
+    const found = lintFormDoc(
+      doc([
+        { id: "rl_aaaa01", action_kind: "goto", from: "q_age", when: null, target: "q_about", targetKind: "block" },
+        { id: "rl_aaaa02", action_kind: "goto", from: "q_age", when: null, target: "q_referral", targetKind: "block" },
+      ]),
+    ).find((i) => i.code === "unreachable_route");
+    expect(found?.message).toContain("route 2 can never run");
+    expect(found?.message).toContain("takes every answer");
+  });
+
+  it("leaves a single catch-all route alone, which is what a fallback is", () => {
+    const found = lintFormDoc(
+      doc([
+        goto("rl_aaaa01", [{ op: "gte", value: 6 }, { op: "lte", value: 25 }], "q_about"),
+        { id: "rl_aaaa02", action_kind: "goto", from: "q_age", when: null, target: "q_referral", targetKind: "block" },
+      ]),
+    ).find((i) => i.code === "unreachable_route");
+    expect(found).toBeUndefined();
+  });
+
   it("does not read an 'any of' route as a stretch of the number line", () => {
     // `≥ 6 OR ≤ 25` is every number there is, but this only reasons about
     // "and" — and saying nothing is the right failure for a warning.
