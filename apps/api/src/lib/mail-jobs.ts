@@ -218,8 +218,12 @@ async function runFollowUpJob(
    * was `(submission_id, step)`, which is a statement about a row rather than
    * about a person.
    *
-   * Keyed on the browser fingerprint, which is what this product uses to tell
-   * one respondent from another, and the only thing it uses.
+   * Two keys, either of which means the same person: the address the mail is
+   * delivered to, and the browser fingerprint. The address is the identity
+   * whenever they signed in, and it is the only key that survives someone
+   * abandoning on a laptop and again on a phone — two fingerprints, one inbox.
+   * The fingerprint catches the reverse, a second attempt that has not reached
+   * the address question yet.
    *
    * `sent` and `queued` only. A `scheduled` row has cost the recipient nothing
    * yet and may never — the response can be finished, the address unsubscribed,
@@ -233,20 +237,19 @@ async function runFollowUpJob(
    * this is the gate that cannot be raced: two sequences scheduled seconds apart
    * both pass a schedule-time check, and only one of them can be first here.
    */
-  if (row.fingerprint) {
-    const priorSends = await env.DB.prepare(
-      `SELECT COUNT(*) AS n
-         FROM followups fu
-         JOIN submissions s2 ON s2.id = fu.submission_id
-        WHERE fu.form_id = ?1 AND s2.fingerprint = ?2 AND fu.id <> ?3
-          AND fu.status IN ('sent', 'queued')`,
-    )
-      .bind(row.form_id, row.fingerprint, row.id)
-      .first<{ n: number }>();
-    if ((priorSends?.n ?? 0) >= cfg.steps.length) {
-      await settleFollowUp(env, row.id, "skipped", "already_reminded");
-      return NO_MAIL;
-    }
+  const priorSends = await env.DB.prepare(
+    `SELECT COUNT(*) AS n
+       FROM followups fu
+       JOIN submissions s2 ON s2.id = fu.submission_id
+      WHERE fu.form_id = ?1 AND fu.id <> ?2
+        AND (fu.address = ?3 OR (?4 IS NOT NULL AND s2.fingerprint = ?4))
+        AND fu.status IN ('sent', 'queued')`,
+  )
+    .bind(row.form_id, row.id, row.address.toLowerCase(), row.fingerprint)
+    .first<{ n: number }>();
+  if ((priorSends?.n ?? 0) >= cfg.steps.length) {
+    await settleFollowUp(env, row.id, "skipped", "already_reminded");
+    return NO_MAIL;
   }
 
   const answers = await env.DB.prepare(

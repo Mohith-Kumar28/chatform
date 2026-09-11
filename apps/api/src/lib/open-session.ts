@@ -311,8 +311,10 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
    * in for it when it is absent. No signal, no key, and every rule that keys on
    * a respondent simply does not apply to that visit.
    *
-   * `ipHash` is still computed and stored for the analytics and abuse paths,
-   * and it has nothing to do with identifying a respondent.
+   * `ipHash` is still computed and written to the column it has always had, and
+   * nothing reads it: the rate limiters work off the live request header, and
+   * the one gate that once joined on it was retired above. Left in place rather
+   * than dropped in the same change as the key it used to stand beside.
    */
   const device = respondentKey({ signal: input.deviceSignal, salt: form.fingerprint_salt });
 

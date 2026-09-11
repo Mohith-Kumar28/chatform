@@ -452,12 +452,17 @@ async function scheduleOne(
    * who kept opening and abandoning could be mailed indefinitely, three at a
    * time, by a form whose settings said three.
    *
-   * Keyed on the browser fingerprint, which is the identifier this product
-   * already has for "who is this". It is the only input: the library behind it
-   * combines what needs combining, and second-guessing it here with some
-   * fallback of our own is how a rule about people turns into a rule about
-   * networks. A visit with no fingerprint has no key, and this rule does not
-   * apply to it.
+   * Two keys, either of which means "this is the same person": the browser
+   * fingerprint, and the address the reminder is delivered to. Neither alone is
+   * enough. The fingerprint misses somebody who abandons on a laptop and again
+   * on a phone — two devices, one inbox, twice the mail — and it is absent
+   * entirely on the headless API, where no browser ever runs. The address
+   * misses somebody who has not given one yet on their second attempt. Together
+   * they are the rule as stated: the verified identity when there is one, the
+   * fingerprint when there is not.
+   *
+   * The fingerprint half is the library's value and nothing else, salted per
+   * form. Nothing about a network is consulted.
    *
    * `scheduled` counts, unlike at send time, because the question here is
    * whether to *write* rows: one already on the books is one this person is
@@ -465,21 +470,21 @@ async function scheduleOne(
    * be raced, and it counts only what actually went.
    */
   const cap = cfg.steps.length;
-  const priorForPerson = sub.fingerprint
-    ? (pre?.priorForPerson ??
-      (
-        await env.DB.prepare(
-          `SELECT COUNT(*) AS n
-             FROM followups fu
-             JOIN submissions s2 ON s2.id = fu.submission_id
-            WHERE fu.form_id = ?1 AND s2.fingerprint = ?2 AND fu.submission_id <> ?3
-              AND fu.status IN ('sent', 'queued', 'scheduled')`,
-        )
-          .bind(formId, sub.fingerprint, submissionId)
-          .first<{ n: number }>()
-      )?.n ??
-      0)
-    : 0;
+  const priorForPerson =
+    pre?.priorForPerson ??
+    (
+      await env.DB.prepare(
+        `SELECT COUNT(*) AS n
+           FROM followups fu
+           JOIN submissions s2 ON s2.id = fu.submission_id
+          WHERE fu.form_id = ?1 AND fu.submission_id <> ?2
+            AND (fu.address = ?3 OR (?4 IS NOT NULL AND s2.fingerprint = ?4))
+            AND fu.status IN ('sent', 'queued', 'scheduled')`,
+      )
+        .bind(formId, submissionId, resolved.address.toLowerCase(), sub.fingerprint)
+        .first<{ n: number }>()
+    )?.n ??
+    0;
   const allowance = Math.max(0, cap - priorForPerson);
   if (allowance === 0) return note("already_reminded");
 
@@ -899,44 +904,46 @@ async function scheduleChunk(
    * What each of these people already has on this form, from other responses.
    *
    * Rows rather than a `COUNT(*) ... GROUP BY`, with the arithmetic done in
-   * memory, because the exclusion is per response: a response must not count
-   * its own rows against its own budget, or a catch-up would refuse to top up a
-   * sequence it wrote itself. Doing that in SQL needs a second variable-length
-   * `IN (...)`, and two of those in one statement cannot both be bounded under
-   * D1's hundred-parameter ceiling — the trap `isSuppressedIn` documents.
+   * memory, because "the same person" is two keys and the exclusion is per
+   * response: a response must not count its own rows against its own budget, or
+   * a catch-up would refuse to top up a sequence it wrote itself.
+   *
+   * Two variable-length `IN (...)` lists in one statement is the shape
+   * `isSuppressedIn` warns about — but the warning is about *unbounded* lists.
+   * Both of these are bounded by `CATCHUP_CHUNK`, so the statement binds at
+   * most a form id plus twice twenty, comfortably inside D1's hundred.
    */
-  const keys = [...new Set(rows.map((r) => subById.get(r.id)?.fingerprint).filter(Boolean))] as string[];
-  const priorRows = keys.length
-    ? ((await env.DB.batch(
-        bindChunks(keys).map((chunk) =>
-          env.DB
-            .prepare(
-              `SELECT s2.fingerprint AS fingerprint, fu.submission_id
-                 FROM followups fu
-                 JOIN submissions s2 ON s2.id = fu.submission_id
-                WHERE fu.form_id = ? AND fu.status IN ('sent', 'queued', 'scheduled')
-                  AND s2.fingerprint IN (${holesFor(chunk)})`,
-            )
-            .bind(formId, ...chunk),
-        ),
-      )) as D1Result<{ fingerprint: string; submission_id: string }>[])
-    : [];
-  /** Rows per person, and per person-and-response, so one can be taken from the other. */
-  const priorByKey = new Map<string, number>();
-  const priorByPair = new Map<string, number>();
-  for (const r of priorRows.flatMap((p) => p.results ?? [])) {
-    priorByKey.set(r.fingerprint, (priorByKey.get(r.fingerprint) ?? 0) + 1);
-    const pair = `${r.fingerprint}|${r.submission_id}`;
-    priorByPair.set(pair, (priorByPair.get(pair) ?? 0) + 1);
-  }
+  const chunkAddresses = [...new Set(
+    [...decided.values()].map((d) => d.address?.toLowerCase()).filter(Boolean),
+  )] as string[];
+  const chunkKeys = [...new Set(
+    rows.map((r) => subById.get(r.id)?.fingerprint).filter(Boolean),
+  )] as string[];
+  const priorRows =
+    chunkAddresses.length || chunkKeys.length
+      ? ((
+          await env.DB.prepare(
+            `SELECT fu.address AS address, s2.fingerprint AS fingerprint, fu.submission_id
+               FROM followups fu
+               JOIN submissions s2 ON s2.id = fu.submission_id
+              WHERE fu.form_id = ? AND fu.status IN ('sent', 'queued', 'scheduled')
+                AND (fu.address IN (${holesFor(chunkAddresses)})
+                     OR s2.fingerprint IN (${holesFor(chunkKeys)}))`,
+          )
+            .bind(formId, ...chunkAddresses, ...chunkKeys)
+            .all<{ address: string | null; fingerprint: string | null; submission_id: string }>()
+        ).results ?? [])
+      : [];
+
   /**
    * What this chunk itself has handed out, as it goes.
    *
    * Two responses from the same person inside one chunk both read the same
-   * stored count — the writes have not happened yet — so without this they
-   * would each be granted the whole budget and the batch would spend it twice.
+   * stored rows — the writes have not happened yet — so without this they would
+   * each be granted the whole budget and the batch would spend it twice. Shaped
+   * like the stored rows so one matching rule serves both.
    */
-  const grantedHere = new Map<string, number>();
+  const issuedHere: { address: string | null; fingerprint: string | null; n: number }[] = [];
 
   /**
    * Every write the chunk produces, in one batch.
@@ -948,12 +955,15 @@ async function scheduleChunk(
    * whole thing runs again on the next publish, and bounded because a chunk is
    * twenty responses rather than the entire page.
    */
-  /** This person's rows on this form, minus their own, plus whatever this chunk already gave them. */
-  const priorFor = (submissionId: string, key: string | null): number => {
-    if (!key) return 0;
-    const all = priorByKey.get(key) ?? 0;
-    const mine = priorByPair.get(`${key}|${submissionId}`) ?? 0;
-    return all - mine + (grantedHere.get(key) ?? 0);
+  /** Same person: same inbox, or same browser. Never the response's own rows. */
+  const priorFor = (submissionId: string, address: string | null, key: string | null): number => {
+    const addr = address?.toLowerCase() ?? null;
+    const matches = (row: { address: string | null; fingerprint: string | null }) =>
+      (addr !== null && row.address?.toLowerCase() === addr) ||
+      (key !== null && row.fingerprint === key);
+    const stored = priorRows.filter((r) => r.submission_id !== submissionId && matches(r)).length;
+    const inFlight = issuedHere.filter(matches).reduce((sum, e) => sum + e.n, 0);
+    return stored + inFlight;
   };
 
   const writes: D1PreparedStatement[] = [];
@@ -976,14 +986,14 @@ async function scheduleChunk(
         sub,
         byRef: d.byRef,
         suppressed: d.address ? suppressed.has(`${organizationId}|${d.address.toLowerCase()}`) : false,
-        priorForPerson: priorFor(row.id, sub.fingerprint),
+        priorForPerson: priorFor(row.id, d.address, sub.fingerprint),
       },
       writes,
     );
     // Only what was actually scheduled: a held-out response writes `holdout`
     // rows, which never send and so never spend anybody's budget.
-    if (sub.fingerprint && count > 0) {
-      grantedHere.set(sub.fingerprint, (grantedHere.get(sub.fingerprint) ?? 0) + count);
+    if (count > 0) {
+      issuedHere.push({ address: d.address?.toLowerCase() ?? null, fingerprint: sub.fingerprint, n: count });
     }
     scheduled += count;
   }

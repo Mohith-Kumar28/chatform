@@ -774,7 +774,12 @@ describe("follow-up attribution", () => {
 
   it("refuses a follow-up id that belongs to another response", async () => {
     const mine = await seedAbandoned("sub_mine");
-    const theirs = await seedAbandoned("sub_theirs");
+    // A different inbox: the per-person cap counts one address as one person,
+    // and these two are meant to be strangers.
+    const theirs = await seedAbandoned("sub_theirs", {
+      q_name: "Ana",
+      q_email: "ana@northwind.example",
+    });
     for (const s of [mine, theirs]) {
       await scheduleFollowUps({
         env: env as unknown as Bindings,
@@ -1580,9 +1585,14 @@ describe("the per-person reminder cap", () => {
   const HOUR = 3_600_000;
   const SAME_PERSON = "fp_same_person_key";
 
-  /** An abandoned response carrying `key`, with its sequence already scheduled. */
-  async function abandonAs(id: string, key: string | null, agoMs = HOUR): Promise<void> {
-    await seedAbandoned(id);
+  /** An abandoned response carrying `key` and `email`, with its sequence scheduled. */
+  async function abandonAs(
+    id: string,
+    key: string | null,
+    email = "repeat@northwind.example",
+    agoMs = HOUR,
+  ): Promise<void> {
+    await seedAbandoned(id, { q_name: "Maya", q_email: email });
     await env.DB.prepare(
       `UPDATE submissions SET updated_at = ?, started_at = ?, fingerprint = ? WHERE id = ?`,
     )
@@ -1598,12 +1608,13 @@ describe("the per-person reminder cap", () => {
   }
 
   /** Every reminder this person has on the form, whatever response wrote it. */
-  function forPerson(key: string) {
+  function forPerson(key: string, email = "repeat@northwind.example") {
     return env.DB.prepare(
       `SELECT fu.status FROM followups fu JOIN submissions s ON s.id = fu.submission_id
-        WHERE fu.form_id = ? AND s.fingerprint = ? ORDER BY fu.scheduled_at`,
+        WHERE fu.form_id = ? AND (s.fingerprint = ? OR fu.address = ?)
+        ORDER BY fu.scheduled_at`,
     )
-      .bind(t.formId, key)
+      .bind(t.formId, key, email)
       .all<{ status: string }>();
   }
 
@@ -1656,18 +1667,40 @@ describe("the per-person reminder cap", () => {
 
   it("leaves a different person alone", async () => {
     await abandonAs("sbm_cap_theirs", SAME_PERSON);
-    await abandonAs("sbm_cap_someone_else", "fp_a_different_person");
+    await abandonAs("sbm_cap_someone_else", "fp_a_different_person", "else@northwind.example");
 
     expect((await rowsFor("sbm_cap_someone_else")).results).toHaveLength(2);
   });
 
-  it("does not cap a visit that produced no fingerprint", async () => {
-    // No key, no rule. The library is the only source, and when it says nothing
-    // there is nothing to say.
+  /**
+   * The two halves of "the same person", each covering what the other misses.
+   */
+  it("recognises one inbox reached from two browsers", async () => {
+    // A laptop and a phone are two fingerprints. They are not two people, and
+    // the mail lands in one place. This is the case a fingerprint-only cap
+    // misses, and the case the headless API — which has no fingerprint at all —
+    // consists entirely of.
+    await abandonAs("sbm_cap_laptop", "fp_laptop");
+    await abandonAs("sbm_cap_phone", "fp_phone");
+
+    expect((await rowsFor("sbm_cap_phone")).results).toHaveLength(0);
+  });
+
+  it("recognises one browser that gave two addresses", async () => {
+    // The reverse: same browser, a second attempt typed with another address.
+    // This is the case an address-only cap misses.
+    await abandonAs("sbm_cap_addr_one", SAME_PERSON, "first@northwind.example");
+    await abandonAs("sbm_cap_addr_two", SAME_PERSON, "second@northwind.example");
+
+    expect((await rowsFor("sbm_cap_addr_two")).results).toHaveLength(0);
+  });
+
+  it("caps a visit with no fingerprint by the inbox alone", async () => {
+    // Every response made through the headless API looks like this.
     await abandonAs("sbm_cap_keyless_one", null);
     await abandonAs("sbm_cap_keyless_two", null);
 
-    expect((await rowsFor("sbm_cap_keyless_two")).results).toHaveLength(2);
+    expect((await rowsFor("sbm_cap_keyless_two")).results).toHaveLength(0);
   });
 
   it("holds inside one catch-up chunk, where nothing is written until the end", async () => {
@@ -1676,8 +1709,8 @@ describe("the per-person reminder cap", () => {
       stored count. Without a running tally inside the chunk they would each be
       granted the whole budget and the batch would spend it twice.
     */
-    await seedAbandoned("sbm_cap_chunk_a");
-    await seedAbandoned("sbm_cap_chunk_b");
+    await seedAbandoned("sbm_cap_chunk_a", { q_name: "A", q_email: "chunk@northwind.example" });
+    await seedAbandoned("sbm_cap_chunk_b", { q_name: "B", q_email: "chunk@northwind.example" });
     await env.DB.prepare(
       `UPDATE submissions SET updated_at = ?, fingerprint = ? WHERE id IN (?, ?)`,
     )
@@ -1685,6 +1718,6 @@ describe("the per-person reminder cap", () => {
       .run();
 
     await backfillFollowUps(env as never, t.formId, t.orgId);
-    expect((await forPerson(SAME_PERSON)).results).toHaveLength(2);
+    expect((await forPerson(SAME_PERSON, "chunk@northwind.example")).results).toHaveLength(2);
   });
 });
