@@ -426,11 +426,11 @@ export function renderShareCard({ headline, kicker }: ShareCardInput = {}) {
               style={{
                 display: "flex",
                 fontFamily: TEXT,
-                fontSize: 25,
+                fontSize: 28,
                 fontWeight: 500,
-                lineHeight: 1.4,
+                lineHeight: 1.38,
                 color: INK_MUTED,
-                maxWidth: 540,
+                maxWidth: 590,
               }}
             >
               {kicker ?? DEFAULT_KICKER}
@@ -441,9 +441,9 @@ export function renderShareCard({ headline, kicker }: ShareCardInput = {}) {
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 16,
+              gap: 18,
               fontFamily: TEXT,
-              fontSize: 19,
+              fontSize: 24,
               fontWeight: 600,
               color: INK,
             }}
@@ -451,7 +451,7 @@ export function renderShareCard({ headline, kicker }: ShareCardInput = {}) {
             <div
               style={{
                 display: "flex",
-                padding: "10px 20px",
+                padding: "13px 26px",
                 borderRadius: 999,
                 background: INK,
                 color: "#FFFFFF",
