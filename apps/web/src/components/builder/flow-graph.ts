@@ -245,7 +245,11 @@ export function deriveGraph(
         // A case whose destination is gone gets no wire, which is what makes
         // the unconnected handle on the node the honest picture.
         if (c.missing) continue;
-        edges.push(wire(`case_${c.ruleId}`, branchId, c.target, c.label, c.ruleId));
+        // Unlabelled: the row the wire leaves from already names the answer.
+        // Repeating it on the wire put a second copy of every option's full
+        // text in the gap between nodes, where the labels of neighbouring
+        // wires ran over one another.
+        edges.push(wire(`case_${c.ruleId}`, branchId, c.target, undefined, c.ruleId));
       }
       if (fallback) {
         edges.push(wire(`else_${b.ref}`, branchId, fallback.ref, undefined, OTHERWISE));

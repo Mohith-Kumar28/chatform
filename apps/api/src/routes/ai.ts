@@ -568,20 +568,23 @@ export const editFormHandler = async (c: AiCtx) => {
       .bind(formId)
       .first<{ working_schema: string }>();
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
-    const doc = FormDoc.parse(migrateFormDoc(JSON.parse(row.working_schema)));
+type EditDraftOut = Awaited<ReturnType<typeof generateEdit>>["draft"];
+
+    const base = FormDoc.parse(migrateFormDoc(JSON.parse(row.working_schema)));
 
     // The model call is a network call to a third party, and it fails: two 504s
     // from OpenRouter in one afternoon while this was being written. Uncaught,
     // it reached the app's error handler and the builder's chat printed
     // "Internal server error" into the thread — which reads as a bug in
     // chatform and tells the author nothing about what to do next.
-    let draft, tokens;
+    let draft: EditDraftOut;
+    let tokens: number;
     let usage: TokenUsage = { input: 0, output: 0 };
     try {
       const result = await generateEdit({
         env: c.env,
         system: FORM_DESIGNER_SYSTEM,
-        prompt: buildEditPrompt(doc, prompt, history as BuilderTurn[]),
+        prompt: buildEditPrompt(base, prompt, history as BuilderTurn[]),
       });
       draft = result.draft;
       tokens = result.tokens;
@@ -614,6 +617,16 @@ export const editFormHandler = async (c: AiCtx) => {
      *
      * Before removals would be wrong (a question on its way out has no
      * settings worth changing) and after additions would be ambiguous, since
+    /**
+     * One draft applied to a fresh copy of the form.
+     *
+     * A function rather than straight-line code so the same surgery can run a
+     * second time on a corrected draft — see the retry below — without the
+     * first attempt's changes already in the document.
+     */
+    const applyDraft = (draft: EditDraftOut) => {
+    const doc = structuredClone(base);
+
      * a new block's ref may collide with one of these. Between the two, every
      * ref in `updateBlocks` names a question that was in the form when the
      * model read it, which is the only thing it can honestly be talking about.
@@ -757,6 +770,65 @@ export const editFormHandler = async (c: AiCtx) => {
           },
         },
         422,
+    return { doc, added, removed, updated, newRules, rewired, endingChanges };
+    };
+
+    /**
+     * Flow errors go back to the model once.
+     *
+     * The linter already knew when an edit broke the flow — "No path reaches
+     * these questions" — and the answer went nowhere: the proposal was offered
+     * with a plain Apply, and one that cut seven questions off a live draft was
+     * applied. The model is usually one sentence of feedback away from the
+     * right routing, so it gets that sentence, in the linter's own words, and
+     * one more try. Only problems this edit INTRODUCED count; a form that was
+     * already broken is not the request's fault.
+     *
+     * The second attempt is kept only if it is strictly better, and its failure
+     * is swallowed: the first proposal is still a proposal, and the builder
+     * still sees the warning on it before applying.
+     */
+    const FLOW_CODES = new Set(["unreachable_blocks", "no_route_to_ending", "dangling_target"]);
+    const flowProblems = (d: typeof base) => lintFormDoc(d).filter((i) => FLOW_CODES.has(i.code));
+    const problemKeys = (issues: ReturnType<typeof flowProblems>) =>
+      issues.flatMap((i) => (i.refs?.length ? i.refs.map((r) => `${i.code}:${r}`) : [`${i.code}:${i.message}`]));
+    const preexisting = new Set(problemKeys(flowProblems(base)));
+    const introduced = (d: typeof base) =>
+      flowProblems(d).filter((i) => problemKeys([i]).some((k) => !preexisting.has(k)));
+
+    let attempt = applyDraft(draft);
+    let problems = introduced(attempt.doc);
+    if (problems.length > 0) {
+      const feedback = [
+        prompt,
+        "",
+        "YOUR PREVIOUS ANSWER TO THIS REQUEST BROKE THE FLOW. With it applied, the form checker reported:",
+        ...problems.map((i) => `  - ${i.message}`),
+        "It routed these branches:",
+        ...draft.branches.map((b) => `  - from ${b.whenRef}: if ${b.op} ${JSON.stringify(b.value)} → ${b.then}`),
+        "Answer the same request again so that every question stays reachable. Remember that answers you do not branch fall through to the question directly below — if a question is only for some answers, the others must be routed past it.",
+      ].join("\n");
+      try {
+        const retry = await generateEdit({
+          env: c.env,
+          system: FORM_DESIGNER_SYSTEM,
+          prompt: buildEditPrompt(base, feedback, history as BuilderTurn[]),
+        });
+        tokens += retry.tokens;
+        usage = { input: usage.input + retry.usage.input, output: usage.output + retry.usage.output };
+        const second = applyDraft(retry.draft);
+        const secondProblems = introduced(second.doc);
+        if (secondProblems.length < problems.length) {
+          attempt = second;
+          problems = secondProblems;
+          draft = retry.draft;
+        }
+      } catch (err) {
+        // Flattened: Workers Logs serialise an Error object to `{}`.
+        console.error("edit_form_retry_failed", { message: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    const { doc, added, removed, updated, newRules, rewired, endingChanges } = attempt;
       );
     }
 

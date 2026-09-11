@@ -1233,12 +1233,18 @@ function BranchRow({
 }) {
   return (
     <div
-      className={cn("relative flex h-[22px] items-center gap-1.5 px-3", derived && "border-t border-dashed")}
-      title={title}
+      // `pr-4` keeps the text clear of the dot, which sits on the card's edge.
+      className={cn("relative flex h-[22px] items-center gap-1.5 pr-4 pl-3", derived && "border-t border-dashed")}
+      title={title ?? label}
     >
       <span
         className={cn(
-          "shrink-0 truncate text-[10px]",
+          // Shrinkable, so a long answer truncates inside the card. It was
+          // `shrink-0`, which makes `truncate` a no-op: "Ready to reserve a
+          // seat for the next batch (₹10,000)" ran out past the border and
+          // under its own handle.
+          "min-w-0 truncate text-[10px]",
+          !destination && "flex-1",
           missing && "text-destructive font-medium",
           derived && "text-muted-foreground italic",
           !missing && !derived && "font-medium",
