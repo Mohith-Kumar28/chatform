@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { CornerDownLeft, Download, FileText, FileUp, PenLine } from "lucide-react";
 import { schedulingLabel, toPublicBlock, type Block, type FormDoc } from "@repo/form-schema";
 import { DateComposer } from "@/components/chat/composers/date";
+import { PhoneInput } from "@/components/chat/composers/phone";
 import { PaymentAffordance } from "@/components/chat/payment-affordance";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { cn } from "@/lib/utils";
@@ -476,19 +477,56 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
     // deciding whether to ask for it should see that here rather than only in
     // the live preview.
     case "email":
+      return (
+        <div className="space-y-1.5">
+          {block.verify && (
+            <p className="text-[0.6875rem] opacity-55">
+              We'll email a 6-digit code to confirm this address.
+            </p>
+          )}
+          <div className="flex items-end gap-2">
+            <div className={cn(input, "flex-1")} style={chipStyle}>
+              you@example.com
+            </div>
+            <div
+              className="flex h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium"
+              style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+            >
+              Send
+              <CornerDownLeft className="hidden size-3.5 opacity-60 sm:block" aria-hidden />
+            </div>
+          </div>
+        </div>
+      );
+
+    /*
+      The runtime's own field, not a drawing of it.
+
+      A phone question is the one text question whose box is not a text box —
+      a country picker and a national number — and the author choosing a
+      country code needs to see where the picker opens. Rendered as-is inside
+      `Inert` for the same reason `DateComposer` is: it is prop-driven, so a
+      mock of it is just a second thing to keep in step.
+    */
     case "phone":
       return (
         <div className="space-y-1.5">
           {block.verify && (
             <p className="text-[0.6875rem] opacity-55">
-              {block.type === "phone"
-                ? "We'll text a 6-digit code to confirm this number."
-                : "We'll email a 6-digit code to confirm this address."}
+              We'll text a 6-digit code to confirm this number.
             </p>
           )}
           <div className="flex items-end gap-2">
-            <div className={cn(input, "flex-1")} style={chipStyle}>
-              {block.type === "phone" ? "+1 415 555 0132" : "you@example.com"}
+            <div className="min-w-0 flex-1">
+              <Inert>
+                <PhoneInput
+                  value=""
+                  onChange={() => {}}
+                  onSubmit={() => {}}
+                  countryHint={block.countryHint}
+                  placeholder="Your number"
+                />
+              </Inert>
             </div>
             <div
               className="flex h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium"
