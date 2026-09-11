@@ -26,6 +26,7 @@ import {
   type ConditionGroup,
   type PublicBlock,
   type PublicEnding,
+  interpolate,
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { ServerEvent, SSEEnvelope } from "../lib/events.js";
@@ -2373,7 +2374,7 @@ export class SessionDO extends DurableObject<Bindings> {
       this.meta.currentRef = next.block.ref;
       if (next.block.type === "welcome" || next.block.type === "statement") {
         // statement/welcome: emit as assistant message, auto-advance
-        await this.emitMessage(questionText(next.block));
+        await this.emitMessage(questionText(next.block, this.recallVars()));
         await this.persistMeta();
         const after = resolveNext(this.doc, next.block.ref, this.state);
         await this.advanceTo(after, next.block.ref);
@@ -2753,6 +2754,16 @@ export class SessionDO extends DurableObject<Bindings> {
     return null;
   }
 
+  /** This respondent's answers so far, by ref, as they read — what `{{ref}}` recalls. */
+  private recallVars(): Map<string, string> {
+    const vars = new Map<string, string>();
+    for (const block of this.doc?.blocks ?? []) {
+      const value = this.state.answers[block.ref];
+      if (value !== undefined) vars.set(block.ref, summarizeAnswer(block, value));
+    }
+    return vars;
+  }
+
   private async emitQuestion(): Promise<void> {
     if (!this.doc || !this.meta) return;
     let block = await this.currentBlock();
@@ -2766,9 +2777,14 @@ export class SessionDO extends DurableObject<Bindings> {
     }
     if (!block) return;
     const answered = Object.keys(this.state.answers).length;
+    const pub = toPublicBlock(block);
     await this.emit("question", {
       messageId: crypto.randomUUID(),
-      block: toPublicBlock(block),
+      // The description is shown verbatim, so `{{ref}}` is filled here, where
+      // the answers are, rather than trusting a client to do it.
+      block: pub.description
+        ? { ...pub, description: interpolate(pub.description, this.recallVars(), { escapeMarkdown: true }) }
+        : pub,
       progress: {
         answered,
         totalEstimate: this.doc.blocks.filter((b) => !["welcome", "statement"].includes(b.type)).length,

@@ -4,7 +4,7 @@ import { Flag, Plus, ShieldAlert, X } from "lucide-react";
 import type { FormDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BufferedInput, BufferedTextarea } from "@/components/ui/buffered-input";
+import { BufferedInput } from "@/components/ui/buffered-input";
 import {
   Select,
   SelectContent,
@@ -13,7 +13,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { Field, fieldInputClass, fieldTextareaClass } from "./fields";
+import { Field, fieldInputClass } from "./fields";
+import { RichDescription } from "./rich-description";
 
 const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
 
@@ -109,12 +110,7 @@ export function EndingInspector({
       </Field>
 
       <Field label="Message">
-        <BufferedTextarea
-          rows={3}
-          value={ending.bodyMd}
-          onCommit={(v) => patch({ bodyMd: v })}
-          className={fieldTextareaClass}
-        />
+        <RichDescription key={ending.ref} value={ending.bodyMd} onChange={(v) => patch({ bodyMd: v })} ariaLabel="Message" />
       </Field>
 
       {screenOut && (

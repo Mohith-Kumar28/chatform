@@ -1,4 +1,4 @@
-import type { Block, FormDoc } from "@repo/form-schema";
+import { interpolate, type Block, type FormDoc } from "@repo/form-schema";
 
 /**
  * Template-mode phrasing: deterministic, zero-cost question/ack text.
@@ -23,8 +23,22 @@ export function greeting(doc: FormDoc): string {
   return `Hi! I'll walk you through "${doc.title}" — it only takes a minute.`;
 }
 
-export function questionText(block: Block): string {
-  return [block.title, block.description].filter(Boolean).join("\n\n");
+/**
+ * What the interviewer says to put a block on screen.
+ *
+ * A question's description is not part of it: it is rich text — links, a
+ * video, an image — drawn under the bubble from the \`question\` event, and
+ * printing it here too showed it twice. Welcome and statement blocks have no
+ * \`question\` event, so theirs travels in the message, with \`{{ref}}\` filled
+ * from \`recall\`.
+ */
+export function questionText(block: Block, recall?: Map<string, string>): string {
+  if (block.type !== "welcome" && block.type !== "statement") return block.title;
+  const description =
+    block.description && recall
+      ? interpolate(block.description, recall, { escapeMarkdown: true })
+      : block.description;
+  return [block.title, description].filter(Boolean).join("\n\n");
 }
 
 const TRANSITIONS = ["Got it!", "Thanks!", "Perfect.", "Great!", "Noted."];

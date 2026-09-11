@@ -1,18 +1,21 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   absorbInternational,
+  asPhoneCountry,
   composePhone,
   defaultPhoneCountry,
+  FALLBACK_COUNTRY,
   dialOf,
   digitsAfterEdit,
   flagOf,
   looksInternational,
   phoneCountries,
   phoneProblem,
+  type PhoneCountry,
   splitPhone,
   type CountryCode,
 } from "./phone-value";
@@ -36,6 +39,7 @@ import {
  * is ours, so the closed state can read `🇮🇳 +91` while the list reads
  * `India (+91)`.
  */
+
 export function PhoneInput({
   value,
   onChange,
@@ -53,7 +57,6 @@ export function PhoneInput({
   placeholder?: string;
   autoFocus?: boolean;
 }) {
-  const countries = phoneCountries();
   const numberRef = useRef<HTMLInputElement>(null);
 
   /**
@@ -64,12 +67,21 @@ export function PhoneInput({
    * saved number picked from the suggestions, or a different question
    * altogether. Only the latter may overwrite what is being typed.
    */
-  const [state, setState] = useState(() => {
-    const split = splitPhone(value, defaultPhoneCountry(countryHint));
-    return { ...split, mirror: value };
-  });
+  const opening = useOpeningCountry(countryHint);
+  const options = useCountryOptions(opening);
+  const [state, setState] = useState(() => ({
+    ...splitPhone(value, opening),
+    mirror: value,
+    opened: opening,
+  }));
   if (value !== state.mirror) {
-    setState({ ...splitPhone(value, state.country), mirror: value });
+    setState({ ...splitPhone(value, state.country), mirror: value, opened: state.opened });
+  } else if (opening !== state.opened) {
+    // Detection landed after hydration (see `useOpeningCountry`). It may move
+    // the flag over an empty box and never over a number already being typed.
+    setState((s) =>
+      s.typed ? { ...s, opened: opening } : { ...splitPhone(value, opening), mirror: value, opened: opening },
+    );
   }
   const { country, typed } = state;
 
@@ -84,7 +96,7 @@ export function PhoneInput({
 
   function emit(nextCountry: CountryCode, nextTyped: string) {
     const composed = composePhone(nextCountry, nextTyped);
-    setState({ country: nextCountry, typed: composed.display, mirror: composed.value });
+    setState((s) => ({ ...s, country: nextCountry, typed: composed.display, mirror: composed.value }));
     onChange(composed.value);
   }
 
@@ -105,7 +117,7 @@ export function PhoneInput({
       sendable in it either way, so the value goes out empty.
     */
     if (looksInternational(raw)) {
-      setState({ country, typed: raw.trimStart(), mirror: "" });
+      setState((s) => ({ ...s, country, typed: raw.trimStart(), mirror: "" }));
       onChange("");
       return;
     }
@@ -157,7 +169,7 @@ export function PhoneInput({
             onChange={(e) => pickCountry(e.target.value as CountryCode)}
             className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent text-base opacity-0"
           >
-            {countries.map((c) => (
+            {options.map((c) => (
               <option key={c.code} value={c.code}>
                 {`${c.name} (+${c.dial})`}
               </option>
@@ -199,4 +211,53 @@ export function PhoneInput({
       </div>
     </div>
   );
+}
+
+/**
+ * The flag the picker opens on, without breaking hydration to get it.
+ *
+ * Where the respondent is can only be read in a browser, so a field rendered on
+ * the server and hydrated in one would draw two different flags and React would
+ * throw out the tree. `useSyncExternalStore` is the way to say that honestly:
+ * the server snapshot is what anyone can compute, the client snapshot is what
+ * this device knows, and the swap between them is a re-render rather than a
+ * mismatch. Mounted fresh in the chat runtime — which is every respondent —
+ * there is no server snapshot at all and the detected country is the first
+ * thing painted.
+ */
+const NEVER_CHANGES = () => () => {};
+let detected: CountryCode | null = null;
+
+function useOpeningCountry(hint?: string): CountryCode {
+  return useSyncExternalStore(
+    NEVER_CHANGES,
+    () => asPhoneCountry(hint) ?? (detected ??= defaultPhoneCountry()),
+    () => asPhoneCountry(hint) ?? FALLBACK_COUNTRY,
+  );
+}
+
+/**
+ * The list itself, for the same reason and by the same mechanism.
+ *
+ * `Intl.DisplayNames` is not one list: Node's full ICU calls the Falklands
+ * "Falkland Islands (Islas Malvinas)" and a browser calls them "Falkland
+ * Islands", so rendering 245 names on a server and 245 on a client was a
+ * hydration mismatch in its own right. The server renders the one option the
+ * select is on — which is all a closed select shows anyway — and the rest
+ * arrive with the client snapshot.
+ */
+function useCountryOptions(current: CountryCode): PhoneCountry[] {
+  return useSyncExternalStore(NEVER_CHANGES, phoneCountries, () => serverOptions(current));
+}
+
+/*
+  Held rather than rebuilt, because a snapshot that is a new array every time it
+  is read is one React treats as a store changing during render.
+*/
+let onlyCurrent: PhoneCountry[] = [];
+function serverOptions(current: CountryCode): PhoneCountry[] {
+  if (onlyCurrent[0]?.code !== current) {
+    onlyCurrent = [{ code: current, dial: dialOf(current), name: current, flag: flagOf(current) }];
+  }
+  return onlyCurrent;
 }

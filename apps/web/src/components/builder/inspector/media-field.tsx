@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import type { Block, BlockMedia } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { API_ORIGIN } from "@/lib/api/mutator";
+import { uploadAsset } from "@/lib/assets";
 import { BufferedInput } from "@/components/ui/buffered-input";
 import { fieldInputClass } from "./fields";
 
@@ -30,28 +30,11 @@ export function MediaField({
   async function upload(file: File) {
     setBusy(true);
     try {
-      const body = new FormData();
-      body.append("file", file);
-      const res = await fetch(`${API_ORIGIN}/api/assets`, {
-        method: "POST",
-        credentials: "include",
-        body,
-      });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-        throw new Error(err?.error?.message ?? "Upload failed");
-      }
-      const asset = (await res.json()) as {
-        fileId: string;
-        key: string;
-        filename: string;
-        mime: string;
-        sizeBytes: number;
-      };
+      const asset = await uploadAsset(file);
       onChange({
         kind: asset.mime.startsWith("image/") ? "image" : asset.mime.startsWith("video/") ? "video" : "file",
         key: asset.key,
-        url: `${API_ORIGIN}/p/assets/${asset.fileId}`,
+        url: asset.url,
         filename: asset.filename,
         mime: asset.mime,
         sizeBytes: asset.sizeBytes,

@@ -3876,6 +3876,9 @@
                                     "type": "null"
                                   }
                                 ]
+                              },
+                              "backgroundPattern": {
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -3884,7 +3887,8 @@
                               "userBubble",
                               "userBubbleText",
                               "accent",
-                              "logoUrl"
+                              "logoUrl",
+                              "backgroundPattern"
                             ]
                           },
                           {

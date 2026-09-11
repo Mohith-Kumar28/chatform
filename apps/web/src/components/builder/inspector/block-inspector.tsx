@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Bot, ChevronDown, GitBranch, Sparkles, Trash2 } from "lucide-react";
@@ -28,9 +28,11 @@ import { useBuilderStore, useSelectedBlock } from "@/stores/builder-store";
 import { EndingInspector } from "./ending-inspector";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_CLASSES } from "../block-library";
 import { defaultBlock } from "../default-block";
-import { SelectField, SwitchField, TextField } from "./fields";
+import { Field, SelectField, SwitchField, TextField } from "./fields";
+import { RichDescription } from "./rich-description";
 import { MediaField } from "./media-field";
 import { TypeFields } from "./type-fields";
+import { useRevealOpens } from "../inspector-reveal";
 import { cn } from "@/lib/utils";
 
 /**
@@ -128,6 +130,12 @@ export function BlockInspector() {
   };
   const key = (f: string) => `${f}:${block.ref}`;
 
+  // What @ can recall: answers given before this question is asked.
+  const position = doc?.blocks.findIndex((b) => b.ref === block.ref) ?? -1;
+  const recallOptions = (doc?.blocks.slice(0, Math.max(0, position)) ?? [])
+    .filter((b) => b.type !== "welcome" && b.type !== "statement")
+    .map((b) => ({ id: b.ref, label: b.title || b.ref }));
+
   // Logic rules that fire on this block, surfaced so the Workflow tab isn't a
   // black box from here.
   const rulesHere =
@@ -194,6 +202,7 @@ export function BlockInspector() {
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pt-2 pb-6">
         <TextField
           label="Question"
+          inspect="title"
           // Where ↵ lands when a question is selected in the list.
           shortcutTarget="question-title"
           value={block.title}
@@ -202,21 +211,32 @@ export function BlockInspector() {
           maxLength={2000}
         />
 
-        <TextField
-          label="Description"
-          value={block.description ?? ""}
-          onChange={(v) => patch({ description: v || undefined }, key("description"))}
-          multiline
-          maxLength={5000}
-        />
+        <Field label="Description" inspect="description">
+          <RichDescription
+            key={block.ref}
+            value={block.description ?? ""}
+            onChange={(v) => patch({ description: v || undefined }, key("description"))}
+            recall={recallOptions}
+          />
+        </Field>
 
-        <MediaField media={block.media} onChange={(media) => patch({ media })} />
+        {/* Media goes in the description now. A question saved with media
+            before that keeps showing it here until it is removed. */}
+        {block.media && (
+          <div data-inspect-target="media">
+            <MediaField media={block.media} onChange={(media) => patch({ media })} />
+          </div>
+        )}
 
         {block.type !== "welcome" && block.type !== "statement" && (
           <SwitchField label="Required" checked={block.required} onChange={(v) => patch({ required: v })} />
         )}
 
-        <TypeFields block={block} patch={patch} />
+        {/* Where a click on the preview's answer area lands when it names no
+            field more precisely. `empty:hidden` for the types with none. */}
+        <div data-inspect-target="answer" className="space-y-6 empty:hidden">
+          <TypeFields block={block} patch={patch} />
+        </div>
 
         <Section title="Agent hints" icon={Bot} badge={block.agentHints ? "Set" : undefined}>
           <TextField
@@ -245,7 +265,12 @@ export function BlockInspector() {
           />
         </Section>
 
-        <Section title="Advanced" icon={GitBranch}>
+        <Section
+          title="Advanced"
+          icon={GitBranch}
+          // Its Button text is what a click on the preview's Send button asks for.
+          reveals={block.type !== "welcome" && block.type !== "statement" ? BUTTON_REVEAL : undefined}
+        >
           {/*
             What this question collects, so a respondent is offered what they
             typed last time instead of typing it again.
@@ -282,6 +307,7 @@ export function BlockInspector() {
           {block.type !== "welcome" && block.type !== "statement" && (
             <TextField
               label="Button text"
+              inspect="button"
               value={block.buttonLabel ?? ""}
               onChange={(v) => patch({ buttonLabel: v || undefined }, key("btn"))}
               maxLength={60}
@@ -308,19 +334,27 @@ export function BlockInspector() {
   );
 }
 
+const BUTTON_REVEAL = ["button"] as const;
+const NO_REVEALS: readonly string[] = [];
+
 /** Collapsible inspector section — collapsed by default to keep the panel short. */
 function Section({
   title,
   icon: Icon,
   badge,
+  reveals = NO_REVEALS,
   children,
 }: {
   title: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   badge?: string;
+  /** Preview targets whose field lives in here, so a click on one opens it. */
+  reveals?: readonly string[];
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const openSection = useCallback(() => setOpen(true), []);
+  useRevealOpens(reveals, openSection);
   return (
     <div className="border-border/60 border-t pt-2">
       <button

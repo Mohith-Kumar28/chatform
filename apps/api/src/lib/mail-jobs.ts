@@ -8,6 +8,7 @@ import {
   type Block,
   type FormDoc,
 } from "@repo/form-schema";
+import { interpolate } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import {
   mailTally,
@@ -566,17 +567,6 @@ function interpolationVars(
   return vars;
 }
 
-/**
- * Replace `{{ref}}` with the answer.
- *
- * An unknown reference resolves to an empty string rather than being left as
- * literal braces: a respondent should never receive `{{q_name}}`, and a form
- * owner who mistypes a ref is better served by a gap than by leaking the
- * template. Whitespace inside the braces is tolerated because people type it.
- */
-function interpolate(input: string, vars: Map<string, string>): string {
-  return input.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key: string) => vars.get(key) ?? "");
-}
 
 /**
  * The small subset of Markdown an auto-reply body may use.

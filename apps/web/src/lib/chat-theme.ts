@@ -1,6 +1,13 @@
 import type { CSSProperties } from "react";
 import { THEME_DEFAULT_INK, type ThemeDoc } from "@repo/form-schema";
-import { patternImage, patternSize, patternWeight, rgbaFromHex } from "@/lib/background-patterns";
+import {
+  PatternDef,
+  patternImage,
+  patternSize,
+  patternWeight,
+  resolvePattern,
+  rgbaFromHex,
+} from "@/lib/background-patterns";
 
 /**
  * Maps a form's ThemeDoc onto the scoped `--cf-*` variables the chat surface
@@ -104,27 +111,39 @@ function inkFor(fill: string, stored: string): string {
  *     accent on white) would draw nothing, so the text colour takes over;
  *   - a dark page needs a little more alpha than a light one. Low-alpha ink
  *     over a dark fill loses contrast faster than the same ink over a light
- *     one, and 5% on near-black is indistinguishable from no pattern.
+ *     one, and 3% on near-black is indistinguishable from no pattern.
  *
- * The ceiling is the point: at 8% the tile is a property of the paper, and at
- * 12% it is something the eye keeps returning to while trying to read an
- * answer. This is a background, and a background that gets noticed twice has
- * failed.
+ * Both edges of the band are real, and the lower one is closer than it looks.
+ * Below about 6% on a light page the tile stops being a texture and becomes a
+ * rumour — findable if you go looking for it, which is not the same as the
+ * page having a surface, and it was the complaint about the 5.5% this first
+ * shipped with. Past about 11% it is a pattern drawn on the page rather than
+ * the grain of it, and the eye keeps going back to it while trying to read an
+ * answer. 8% and 9.5% sit where the texture is plainly there at a glance and
+ * still never competes with a question.
  */
-export function patternInk(theme: ThemeDoc, seed: string): string {
+export function patternInk(theme: ThemeDoc, pattern: PatternDef): string {
   const dark = isDarkColor(theme.background);
   const usable = contrast(theme.background, theme.accent) >= 1.3;
-  const alpha = (dark ? 0.075 : 0.055) * patternWeight(seed);
+  const alpha = (dark ? 0.095 : 0.08) * patternWeight(pattern);
   return rgbaFromHex(usable ? theme.accent : theme.text, Number(alpha.toFixed(4)));
 }
 
 /**
- * @param seed the form's slug, which is what decides its tile. Omitted only
- *   where there is no form — the marketing demo — and the surface then paints
- *   the flat background it always did.
+ * @param seed the form's slug, which is what decides its tile while
+ *   `theme.backgroundPattern` is `auto`. Omitted only where there is no form —
+ *   the marketing demo — and the surface then paints the flat background it
+ *   always did unless the theme names a tile outright.
  */
 export function chatThemeVars(theme: ThemeDoc, seed?: string | null): CSSProperties {
   const darkSurface = isDarkColor(theme.background);
+
+  /*
+   * The author's choice, resolved against the slug. `undefined` on a theme that
+   * predates the field resolves to `auto`, so an existing form keeps the tile
+   * it has always had.
+   */
+  const tile = resolvePattern(theme.backgroundPattern, seed);
 
   // The bot bubble needs a border only when it would otherwise be invisible
   // against the page. This used to be a hardcoded comparison against the
@@ -182,8 +201,8 @@ export function chatThemeVars(theme: ThemeDoc, seed?: string | null): CSSPropert
      * sees. `none` is a valid `background-image`, which is what lets the
      * seedless case fall through to a flat fill with no branch in the CSS.
      */
-    "--cf-pattern": seed ? patternImage(seed, patternInk(theme, seed)) : "none",
-    "--cf-pattern-size": seed ? patternSize(seed) : "auto",
+    "--cf-pattern": tile ? patternImage(tile, patternInk(theme, tile)) : "none",
+    "--cf-pattern-size": tile ? patternSize(tile) : "auto",
     fontFamily: `${theme.fontBody}, ui-sans-serif, system-ui, sans-serif`,
     "--cf-font-heading": `${theme.fontHeading}, ${theme.fontBody}, ui-sans-serif, sans-serif`,
   } as CSSProperties;

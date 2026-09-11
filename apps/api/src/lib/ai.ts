@@ -376,6 +376,11 @@ export const EditDraft = z.object({
         ref: z.string(),
         /** `key=value; key=value`, using the keys the type documents. */
         config: z.string(),
+        /**
+         * The whole new description, or "" to leave it as it is — how the AI
+         * bar puts a video, an image or a link into a question that exists.
+         */
+        description: z.string(),
       }),
     )
     .max(12),

@@ -1,3 +1,4 @@
+import { stripRichText } from "@repo/form-schema";
 import type { Block, FormDoc } from "@repo/form-schema";
 
 /**
@@ -94,7 +95,7 @@ function questionHtml(block: Block, index: number): string {
       <p class="q-title"><span class="n">${index}.</span> ${escapeHtml(block.title)}${
         block.required ? '<span class="req" aria-label="required">*</span>' : ""
       }</p>
-      ${block.description ? `<p class="q-desc">${escapeHtml(block.description)}</p>` : ""}
+      ${block.description ? `<p class="q-desc">${escapeHtml(stripRichText(block.description))}</p>` : ""}
       ${hint ? `<p class="q-hint">${hint}</p>` : ""}
       ${answerArea(block)}
     </li>`;

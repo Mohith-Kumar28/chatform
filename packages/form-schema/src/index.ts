@@ -10,6 +10,7 @@ export * from "./answers";
 export * from "./answer-catalog";
 export * from "./payment-link";
 export * from "./display";
+export * from "./rich-text";
 export * from "./form-doc";
 export * from "./engine/index";
 export * from "./fixtures";

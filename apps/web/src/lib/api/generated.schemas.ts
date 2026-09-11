@@ -940,6 +940,7 @@ export type GetApiForms200ItemTheme = {
   userBubbleText: string;
   accent: string;
   logoUrl: string | null;
+  backgroundPattern: string;
 } | null;
 
 export type GetApiForms200Item = {

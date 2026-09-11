@@ -42,6 +42,7 @@ export function TypeFields({
       return (
         <TextField
           label="Button text"
+          inspect="button"
           value={block.buttonLabel}
           onChange={(v) => patch({ buttonLabel: v } as Partial<Block>, key("buttonLabel"))}
           maxLength={60}
@@ -54,6 +55,7 @@ export function TypeFields({
         <>
           <TextField
             label="Placeholder"
+            inspect="placeholder"
             value={block.placeholder ?? ""}
             onChange={(v) => patch({ placeholder: v || undefined } as Partial<Block>, key("placeholder"))}
             maxLength={200}
@@ -263,6 +265,7 @@ export function TypeFields({
         <>
           <ListEditor
             label="Options"
+            inspect="options"
             items={block.options}
             onChange={(items) =>
               patch({

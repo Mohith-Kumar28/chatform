@@ -1,5 +1,6 @@
 "use client";
 
+import { QuestionDescription } from "@/components/chat/rich-text";
 import { useMemo } from "react";
 import { CornerDownLeft, Download, FileText, FileUp, PenLine } from "lucide-react";
 import { schedulingLabel, toPublicBlock, type Block, type FormDoc } from "@repo/form-schema";
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { API_ORIGIN } from "@/lib/api/mutator";
 import { LogoMark } from "@/components/brand/logo";
 import { useEntitlements } from "@/hooks/use-entitlements";
+import { revealInInspector } from "./inspector-reveal";
 
 
 /**
@@ -54,8 +56,14 @@ export function QuestionPreview({
 
   return (
     <div
-      className="chat-surface shadow-md flex max-h-full flex-col overflow-hidden rounded-2xl"
+      className="chat-surface shadow-md flex max-h-full flex-col overflow-hidden rounded-2xl [&_[data-inspect]]:cursor-pointer"
       style={themeVars}
+      // Nothing here is editable in place, and people click it expecting it to
+      // be — so a click points them at the field that is. See `inspector-reveal`.
+      onClick={(e) => {
+        const hit = (e.target as HTMLElement).closest<HTMLElement>("[data-inspect]");
+        if (hit?.dataset.inspect) revealInInspector(hit.dataset.inspect);
+      }}
     >
       <header className="flex items-center gap-2.5 px-4 py-3">
         {logoUrl ? (
@@ -76,10 +84,13 @@ export function QuestionPreview({
 
       <div className="min-h-0 overflow-y-auto px-4 pt-2 pb-4">
         <div className="mx-auto flex w-full max-w-md flex-col gap-3">
-          <MediaBlock block={block} />
+          <div data-inspect="media" className="empty:hidden">
+            <MediaBlock block={block} />
+          </div>
 
           <div className="flex justify-start">
             <div
+              data-inspect="title"
               className="bubble-bot max-w-[90%] border px-4 py-2.5 text-[0.9375rem] leading-relaxed"
               style={{
                 background: "var(--cf-bot-bubble)",
@@ -88,13 +99,23 @@ export function QuestionPreview({
               }}
             >
               <p className="whitespace-pre-wrap">{block.title || "Your question"}</p>
-              {block.description && (
-                <p className="mt-1 text-sm opacity-70">{block.description}</p>
-              )}
             </div>
           </div>
 
-          <div className="pt-1">
+          {/* Under the bubble, as the chat draws it (`chat-client`). */}
+          {block.description && (
+            <div data-inspect="description">
+              <QuestionDescription
+                markdown={block.description}
+                recall={new Map(doc.blocks.map((b) => [b.ref, b.title || b.ref]))}
+                className="max-w-[90%] px-1 opacity-85"
+              />
+            </div>
+          )}
+
+          {/* `answer` is the catch-all; the composer marks its own parts more
+              precisely where the inspector has a field for them. */}
+          <div className="pt-1" data-inspect="answer">
             <StaticComposer block={pub} />
           </div>
         </div>
@@ -204,6 +225,7 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
     case "statement":
       return (
         <div
+          data-inspect="button"
           className="grid h-11 place-items-center rounded-full text-sm font-medium"
           style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
         >
@@ -224,7 +246,7 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
     case "dropdown":
     case "picture_choice":
       return (
-        <div className="flex flex-wrap gap-2">
+        <div data-inspect="options" className="flex flex-wrap gap-2">
           {(block.options ?? []).slice(0, 8).map((o) => (
             <span key={o.id} className={chip} style={chipStyle}>
               {o.label || "Option"}
@@ -481,7 +503,7 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
         <div className="space-y-1.5">
           {block.verify && (
             <p className="text-[0.6875rem] opacity-55">
-              We'll email a 6-digit code to confirm this address.
+              We’ll email a 6-digit code to confirm this address.
             </p>
           )}
           <div className="flex items-end gap-2">
@@ -489,6 +511,7 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
               you@example.com
             </div>
             <div
+              data-inspect="button"
               className="flex h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium"
               style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
             >
@@ -513,7 +536,7 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
         <div className="space-y-1.5">
           {block.verify && (
             <p className="text-[0.6875rem] opacity-55">
-              We'll text a 6-digit code to confirm this number.
+              We’ll text a 6-digit code to confirm this number.
             </p>
           )}
           <div className="flex items-end gap-2">
@@ -529,6 +552,7 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
               </Inert>
             </div>
             <div
+              data-inspect="button"
               className="flex h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium"
               style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
             >
@@ -542,10 +566,11 @@ function StaticComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) 
     default:
       return (
         <div className="flex items-end gap-2">
-          <div className={cn(input, "flex-1")} style={chipStyle}>
+          <div data-inspect="placeholder" className={cn(input, "flex-1")} style={chipStyle}>
             {block.placeholder || "Type your answer…"}
           </div>
           <div
+            data-inspect="button"
             className="flex h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium"
             style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
           >

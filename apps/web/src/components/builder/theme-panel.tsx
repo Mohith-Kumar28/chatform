@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { BrandField } from "./brand-field";
+import { PatternField } from "./pattern-field";
 import { LockedControl } from "@/components/billing/gate";
 import { BufferedInput } from "@/components/ui/buffered-input";
 
@@ -81,9 +82,17 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function ThemePanel({
   theme,
+  seed,
   onChange,
 }: {
   theme: Theme;
+  /**
+   * The form's public slug. It seeds the `Auto` background pattern, so the
+   * picker can show the tile this particular form would land on rather than a
+   * generic one. Absent while the form row is still loading, which only costs
+   * the `Auto` swatch its picture.
+   */
+  seed?: string | null;
   /** `coalesceKey` merges a burst of changes to one control into a single undo step. */
   onChange: (next: Theme, coalesceKey?: string) => void;
 }) {
@@ -162,6 +171,10 @@ export function ThemePanel({
           Text on the accent and on their bubble is chosen for you, so an answer stays readable
           whatever colour you pick.
         </p>
+      </Section>
+
+      <Section title="Background">
+        <PatternField theme={theme} seed={seed} onChange={patch} />
       </Section>
 
       <Section title="Shape">

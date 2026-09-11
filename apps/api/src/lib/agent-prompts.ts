@@ -1,3 +1,4 @@
+import { mediaUrls } from "./research.js";
 import { ADDABLE_BLOCK_TYPES, enforcesUnique, renderBlockCatalog, type Block, type FormDoc } from "@repo/form-schema";
 
 /**
@@ -390,7 +391,7 @@ WRITING THE QUESTIONS
 - One thing per question. "What's your name and company?" is two questions in one box.
 - The respondent's words, not the author's. Ask "which phone do you use?", not "specify device platform".
 - Options must be exhaustive and mutually exclusive for the people being asked, and short enough to scan. Add the escape hatch the set needs — "Something else", "Not sure yet" — when one honestly exists.
-- \`description\` is where the reassurance goes: why you are asking, what happens next, what format you want. Leave it "" rather than restating the title.
+- \`description\` is where the reassurance goes: why you are asking, what happens next, what format you want. Leave it "" rather than restating the title. It may use **bold**, *italic*, [a link](https://…) and "- " lists — nothing else. A video or an image goes in the description of the question it belongs to, as its URL alone on its own line. Only URLs the author gave you; never invent one.
 - Mark a question required only when the form is useless without it. Everything optional is a question fewer people abandon on.`;
 
 /**
@@ -437,9 +438,17 @@ Use this. Ask about the platforms, plans and concepts this product actually has,
       ? `- Decide how many questions this form needs, using the sizing guidance. Between 3 and 19; err towards covering the request rather than towards brevity, and give every segment the request names its own arm.`
       : `- Exactly ${questionCount} answerable questions — the author asked for this number, so hit it exactly.`;
 
+  const media = mediaUrls(prompt);
+  const mediaNote = media.length
+    ? `
+
+MEDIA THE AUTHOR GAVE YOU — place each one in the description of the question (or the welcome) it belongs to, as the URL alone on its own line:
+${media.map((u) => `- ${u}`).join("\n")}`
+    : "";
+
   return `Design a conversational form as a JSON document.
 
-Request: ${prompt}${context}
+Request: ${prompt}${context}${mediaNote}
 
 Shape of the document:
 ${sizing}
@@ -651,7 +660,7 @@ WORK OUT WHAT KIND OF EDIT THIS IS FIRST. Most requests about a working form cha
 - "rewireRefs": the refs of questions whose routing this edit changes. List them, then state their branches below.
 - "branches": every branch this edit asserts. Each one REPLACES the existing rule for that same question and the same answer, and leaves every other route untouched. So restate the routes you are changing, in full — including an answer whose destination stays the same but whose neighbours are moving. A route you do not mention keeps working exactly as it does now.
 - If a question has three options and you are changing where one of them goes, you may state just that one. But if the change means the other two should go somewhere different too, state those as well — they will not move on their own.
-- "updateBlocks": settings changed on questions that are ALREADY in the form — the answer to most requests that are neither a new question nor a route. "the team name has to be unique", "make the email required", "cap that number at 50", "work emails only". Each entry is { "ref": "<existing ref>", "config": "key=value; key=value" }, using the same keys the type documents below, and only the keys you write are changed. Never add a second copy of a question to carry a setting the original could have had.
+- "updateBlocks": settings changed on questions that are ALREADY in the form — the answer to most requests that are neither a new question nor a route. "the team name has to be unique", "make the email required", "cap that number at 50", "work emails only". Each entry is { "ref": "<existing ref>", "config": "key=value; key=value", "description": "" }, using the same keys the type documents below, and only the keys you write are changed. "description" is "" to leave it alone; anything else replaces the whole description — keep the text that is already there and add to it. That is how a video, an image or a link the author gives you reaches a question that already exists: its URL alone on its own line. Never add a second copy of a question to carry a setting the original could have had.
 - "removeRefs": only when the request actually asks for a question to go.
 - "endings": the outcomes this edit adds or changes, each { "ref", "title", "body", "kind": "success" | "screen_out", "requirements" }. A ref already in the list above is CHANGED in place; any other ref adds a new outcome. Leave it [] unless the request is about what happens at the end.
   This is the answer to a whole family of requests, and the one the form could not express before: "if they say no, don't let them submit", "they shouldn't be able to submit if they don't meet the requirements", "tell them why they can't apply", "what happens if they don't agree?". Each of those needs a "screen_out" ending, with "requirements" listing what they had to meet as " | "-separated lines — and a branch in the same edit pointing the failing answer at its ref. Do not point a failing answer at a success ending; that is what makes a form say "Submitted Successfully" to somebody it has just turned away.

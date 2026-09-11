@@ -95,6 +95,14 @@ const FormCardTheme = z.object({
   userBubbleText: z.string(),
   accent: z.string(),
   logoUrl: z.string().nullable(),
+  /**
+   * Which background tile the form carries — `auto`, `none`, or a tile id.
+   *
+   * Small enough to be worth the bytes at thirty cards, and the card cannot be
+   * "the form as a respondent sees it" without it: a form whose author turned
+   * the texture off used to keep showing it on the dashboard.
+   */
+  backgroundPattern: z.string(),
 });
 
 const FormListItem = FormSummary.extend({
@@ -154,6 +162,7 @@ const DEFAULT_CARD_THEME = {
   userBubbleText: THEME_DEFAULTS.userBubbleText,
   accent: THEME_DEFAULTS.accent,
   logoUrl: null,
+  backgroundPattern: THEME_DEFAULTS.backgroundPattern,
 } as const;
 
 type CardTheme = z.infer<typeof FormCardTheme>;
@@ -198,6 +207,7 @@ function summariseDoc(raw: string | null): {
       userBubbleText: pick(t.userBubbleText, DEFAULT_CARD_THEME.userBubbleText),
       accent: pick(t.accent, DEFAULT_CARD_THEME.accent),
       logoUrl: typeof t.logoUrl === "string" && t.logoUrl.trim() ? t.logoUrl : null,
+      backgroundPattern: pick(t.backgroundPattern, DEFAULT_CARD_THEME.backgroundPattern),
     };
     const untouched =
       theme.logoUrl === null &&

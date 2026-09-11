@@ -379,7 +379,9 @@ assetsRouter.get("/assets/:id", async (c) => {
   if (!row) return c.json({ error: { code: "not_found", message: "Asset not found" } }, 404);
 
   // SVG renders script, so it is never served inline from any origin of ours.
-  const renderable = /^(image\/(png|jpeg|gif|webp|avif|x-icon|vnd\.microsoft\.icon)|font\/)/.test(row.mime);
+  // Video and PDF too, since a description can embed an uploaded clip or show a
+  // brochure — the sandbox CSP below still applies to them.
+  const renderable = /^(image\/(png|jpeg|gif|webp|avif|x-icon|vnd\.microsoft\.icon)|font\/|video\/(mp4|webm)$|application\/pdf$)/.test(row.mime);
   const obj = await c.env.R2.get(row.r2_key);
   if (!obj) return c.json({ error: { code: "not_found", message: "Object missing" } }, 404);
 

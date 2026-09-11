@@ -896,7 +896,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
       {/* right: inspector (collapsible) */}
       <aside
         data-tour="wf-inspector"
-        className={`bg-panel relative flex shrink-0 flex-col overflow-y-auto transition-all duration-200 ${rightOpen ? "w-96" : "w-12"}`}
+        className={`bg-panel relative flex shrink-0 flex-col overflow-y-auto transition-all duration-200 ${rightOpen ? "w-80 xl:w-96" : "w-12"}`}
       >
         {rightOpen ? (
           <>

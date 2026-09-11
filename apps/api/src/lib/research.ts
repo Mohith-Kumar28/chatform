@@ -1,3 +1,4 @@
+import { embedFromUrl } from "@repo/form-schema";
 /**
  * Reading the web before drafting a form.
  *
@@ -79,6 +80,8 @@ export function extractUrls(text: string): string[] {
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return;
     if (isBlockedHost(parsed.hostname)) return;
     if (!parsed.hostname.includes(".")) return;
+    // A video or an image to show in the form, not a site to read about.
+    if (embedFromUrl(parsed.toString())) return;
     const key = `${parsed.hostname}${parsed.pathname.replace(/\/$/, "")}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -92,6 +95,16 @@ export function extractUrls(text: string): string[] {
   for (const m of withoutExplicit.matchAll(BARE_HOST)) consider(m[1]!);
 
   return found.slice(0, MAX_URLS);
+}
+
+/** Links in the prompt that are media to place in the form — see `embedFromUrl`. */
+export function mediaUrls(text: string): string[] {
+  const found: string[] = [];
+  for (const m of text.matchAll(EXPLICIT_URL)) {
+    const url = m[0].replace(/[.,;:!?)\]}'"]+$/, "");
+    if (embedFromUrl(url) && !found.includes(url)) found.push(url);
+  }
+  return found.slice(0, 10);
 }
 
 /** The `<title>`, cleaned of the site-name suffix sites append to it. */

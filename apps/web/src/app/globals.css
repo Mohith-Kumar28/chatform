@@ -1157,6 +1157,57 @@
   animation: cf-field-circle 17s ease-in-out infinite reverse;
 }
 
+/* The inspector field a preview click points at (`inspector-reveal.ts`).
+   Deliberately loud: it has to pull the eye across the screen from the
+   preview, so it is a hard shake that dies away, with an accent ring that
+   holds on a little longer so you still find the field if you blinked. */
+@keyframes cf-nudge-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  10% {
+    transform: translateX(-9px);
+  }
+  22% {
+    transform: translateX(8px);
+  }
+  34% {
+    transform: translateX(-7px);
+  }
+  46% {
+    transform: translateX(6px);
+  }
+  58% {
+    transform: translateX(-4px);
+  }
+  70% {
+    transform: translateX(3px);
+  }
+  82% {
+    transform: translateX(-1px);
+  }
+}
+
+@keyframes cf-nudge-ring {
+  0%,
+  55% {
+    outline-color: var(--color-primary);
+  }
+  100% {
+    outline-color: transparent;
+  }
+}
+
+.inspect-nudge {
+  border-radius: 0.625rem;
+  outline: 2px solid transparent;
+  outline-offset: 4px;
+  animation:
+    cf-nudge-shake 600ms var(--ease-out),
+    cf-nudge-ring 1400ms var(--ease-out);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

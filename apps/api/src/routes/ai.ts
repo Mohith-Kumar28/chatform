@@ -622,7 +622,13 @@ export const editFormHandler = async (c: AiCtx) => {
     for (const u of draft.updateBlocks ?? []) {
       const at = doc.blocks.findIndex((b) => b.ref === u.ref);
       if (at < 0) continue;
-      const next = applyBlockConfig(doc.blocks[at]!, u.config);
+      const current = doc.blocks[at]!;
+      const configured = applyBlockConfig(current, u.config);
+      const description = u.description?.trim().slice(0, 5000);
+      const next =
+        description && description !== current.description
+          ? { ...(configured ?? current), description }
+          : configured;
       // Null means the config named nothing this type reads, or asked for what
       // is already true. Either way it is not a change, and counting it as one
       // would let an edit that does nothing pass the "must change something"

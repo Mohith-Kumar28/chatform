@@ -507,6 +507,25 @@ export const ThemeDoc = z.object({
   backgroundBrightness: z.number().min(0).max(1).default(1),
 
   /**
+   * Which tile the form paints behind its conversation.
+   *
+   * Three kinds of value: `auto` hashes the slug, `none` is flat paper, and
+   * anything else is a tile id from `apps/web/src/lib/background-patterns.ts`.
+   *
+   * A plain string rather than an enum, because the tiles are drawn in the web
+   * app and the schema has no business importing SVG path data to list their
+   * names. The resolver (`resolvePattern`) is what validates: an id it does
+   * not recognise falls back to `auto`, so a retired tile leaves the form
+   * looking designed instead of blank, and a bad value out of the public API
+   * cannot render nothing.
+   *
+   * It defaults to `auto` and not to `none` because a flat fill is the one
+   * background that reads as nobody having chosen it — and because every form
+   * built before this field existed already showed its hashed tile.
+   */
+  backgroundPattern: z.string().max(40).default("auto"),
+
+  /**
    * Optional branding. Both are opt-in: a form with neither still looks
    * finished, using the form's initial and title.
    *

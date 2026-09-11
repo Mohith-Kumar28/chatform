@@ -6,6 +6,7 @@ import {
   countryForCallingCode,
   defaultPhoneCountry,
   digitsAfterEdit,
+  FALLBACK_COUNTRY,
   flagOf,
   isSendablePhone,
   phoneCountries,
@@ -148,6 +149,13 @@ describe("what the respondent is told", () => {
   it("says a short number is short, and names the country", () => {
     expect(phoneProblem("+9198765", "IN")).toContain("India");
     expect(phoneProblem("+9198765", "IN")).toContain("short");
+    // "a India number" is what naming the country the other way round costs.
+    expect(phoneProblem("+9198765", "IN")).toBe("That’s a few digits short for a number in India.");
+  });
+
+  it("puts the country in the sentence the way English does", () => {
+    expect(phoneProblem("+1415", "US")).toContain("in the United States");
+    expect(phoneProblem("+9198765", "IN")).toContain("in India");
   });
 
   it("says a long number is long", () => {
@@ -193,6 +201,14 @@ describe("the country list", () => {
 
   it("opens on the author's hint when there is one", () => {
     expect(defaultPhoneCountry("in")).toBe("IN");
+    // A hint nobody recognises is no hint, not a reason to give up.
     expect(defaultPhoneCountry("ZZ")).toBe(defaultPhoneCountry(null));
+  });
+
+  it("falls back to India rather than to America", () => {
+    // Node here has no navigator and a UTC timezone, which is the same
+    // position a browser that tells us nothing leaves us in.
+    expect(defaultPhoneCountry(null)).toBe(FALLBACK_COUNTRY);
+    expect(FALLBACK_COUNTRY).toBe("IN");
   });
 });

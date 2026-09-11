@@ -47,6 +47,7 @@ export function Field({
   help,
   children,
   className,
+  inspect,
 }: {
   label?: string;
   /** The one line a field may print under itself. */
@@ -55,9 +56,11 @@ export function Field({
   help?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  /** The preview region this field edits — see `inspector-reveal`. */
+  inspect?: string;
 }) {
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("space-y-2", className)} data-inspect-target={inspect}>
       {label && (
         <div className="flex items-center gap-0.5">
           <Label className="text-muted-foreground text-xs font-medium">{label}</Label>
@@ -81,11 +84,13 @@ export function TextField({
   maxLength,
   className,
   shortcutTarget,
+  inspect,
 }: {
   label?: string;
   error?: string;
   help?: React.ReactNode;
   className?: string;
+  inspect?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
@@ -109,7 +114,7 @@ export function TextField({
   */
   const buffered = useBufferedValue(value, onChange);
   return (
-    <Field label={label} error={error} help={help}>
+    <Field label={label} error={error} help={help} inspect={inspect}>
       {multiline ? (
         <Textarea
           data-shortcut-target={shortcutTarget}
@@ -265,6 +270,7 @@ export function ListEditor({
   makeItem,
   minItems = 1,
   addLabel = "Add option",
+  inspect,
 }: {
   label: string;
   items: { id: string; label: string }[];
@@ -272,9 +278,10 @@ export function ListEditor({
   makeItem: () => { id: string; label: string };
   minItems?: number;
   addLabel?: string;
+  inspect?: string;
 }) {
   return (
-    <Field label={label}>
+    <Field label={label} inspect={inspect}>
       <div className="space-y-1.5">
         {items.map((item, i) => (
           <div key={item.id} className="group flex items-center gap-1">

@@ -1,6 +1,8 @@
 "use client";
 
+import { useRef } from "react";
 import { Flag, MousePointerSquareDashed, ShieldAlert } from "lucide-react";
+import { useInspectorReveal } from "../inspector-reveal";
 import { BlockList } from "../block-list";
 import { BlockInspector } from "../inspector/block-inspector";
 import { AiBar } from "../ai-bar";
@@ -30,15 +32,24 @@ export function BuildTab() {
   const formId = useBuilderStore((s) => s.formId);
   const { data: row } = useGetApiFormsById(formId as never);
   const slug = (row as { slug?: string } | undefined)?.slug ?? null;
+  // A click on the preview scrolls this panel to the field that edits it.
+  const inspectorRef = useRef<HTMLElement>(null);
+  useInspectorReveal(inspectorRef);
   if (!doc) return null;
 
   // An ending has no question to render here, but "Pick a question" is a lie
   // when you have just picked something — its settings are in the inspector.
   const ending = selectedEndingRef ? doc.endings.find((e) => e.ref === selectedEndingRef) : undefined;
 
+  /*
+    Both panels, always. The inspector used to wait for `xl`, so on a 1280-ish
+    laptop the settings for the question you had just picked were nowhere, next
+    to half a screen of empty canvas. The panels narrow instead, and below `lg`
+    the canvas layout covers the whole view — see `SmallScreenGate`.
+  */
   return (
     <div className="flex h-[calc(100svh-var(--app-header-h))] min-h-0">
-      <aside className="bg-sidebar hidden w-72 shrink-0 md:block">
+      <aside className="bg-sidebar w-60 shrink-0 xl:w-72">
         <BlockList />
       </aside>
 
@@ -75,7 +86,7 @@ export function BuildTab() {
         </div>
       </main>
 
-      <aside className="bg-panel hidden w-96 shrink-0 xl:block">
+      <aside ref={inspectorRef} className="bg-panel w-80 shrink-0 xl:w-96">
         <BlockInspector />
       </aside>
     </div>

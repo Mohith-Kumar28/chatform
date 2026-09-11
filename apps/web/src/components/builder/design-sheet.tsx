@@ -3,6 +3,7 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ThemePanel } from "./theme-panel";
 import { useBuilderStore } from "@/stores/builder-store";
+import { useGetApiFormsById } from "@/lib/api/dashboard/dashboard";
 
 /**
  * Theme controls in a sheet over the builder, so the form stays on screen and
@@ -21,6 +22,12 @@ export function DesignSheet({
 }) {
   const doc = useBuilderStore((s) => s.doc);
   const edit = useBuilderStore((s) => s.edit);
+  // The slug seeds the `Auto` background pattern, exactly as it does in the
+  // preview. It lives on the form row rather than the document, and this is the
+  // same query the Build tab already has cached — a cache hit, not a request.
+  const formId = useBuilderStore((s) => s.formId);
+  const { data: row } = useGetApiFormsById(formId as never);
+  const slug = (row as { slug?: string } | undefined)?.slug ?? null;
   if (!doc) return null;
 
   return (
@@ -33,6 +40,7 @@ export function DesignSheet({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
           <ThemePanel
             theme={doc.theme}
+            seed={slug}
             onChange={(theme, coalesceKey) =>
               edit((d) => {
                 d.theme = theme;

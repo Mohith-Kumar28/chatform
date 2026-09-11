@@ -9,15 +9,20 @@
  * every tile is sized and weighted for this use — a wash behind body copy, not
  * a hero panel.
  *
- * ## Why they are derived and not stored
+ * ## Why the default is derived rather than stored
  *
- * A form does not pick its pattern; its pattern falls out of its slug. That
- * means every form that already exists got one the moment this shipped — no
- * `ThemeDoc` field, no migration, no reseeded templates, and no grid of
- * twenty forms all showing whichever tile happened to be the schema default.
- * Same slug, same tile, everywhere the form is drawn: the hosted runtime, the
- * builder's question preview, the embed preview and the dashboard card all
- * hash the same string and land on the same index.
+ * `theme.backgroundPattern` holds `auto` until somebody opens the picker, and
+ * `auto` means "hash the slug". That is how every form that already existed
+ * got a tile the moment this shipped — no migration, no reseeded templates,
+ * and no grid of twenty forms all showing whichever tile happened to be the
+ * schema default. Same slug, same tile, everywhere the form is drawn: the
+ * hosted runtime, the builder's question preview, the embed preview and the
+ * dashboard card all hash the same string and land on the same index.
+ *
+ * An author who wants a particular tile stores its id instead, and `none`
+ * stores the decision to have no texture at all — which has to be a stored
+ * value rather than the absence of one, or it would be indistinguishable from
+ * a form that has not been through the picker yet.
  *
  * ## Why the ink is the accent
  *
@@ -38,8 +43,10 @@
  */
 
 /** One tile: its intrinsic size, and its markup as a function of the ink. */
-interface PatternDef {
+export interface PatternDef {
   id: string;
+  /** What the picker calls it. Plain English, not the id. */
+  label: string;
   w: number;
   h: number;
   /** Everything inside the `<svg>`. `c` is a complete CSS colour. */
@@ -71,6 +78,7 @@ const lines = (c: string, d: string, width = 1) =>
 export const PATTERNS: PatternDef[] = [
   {
     id: "dots",
+    label: "Dots",
     w: 20,
     h: 20,
     weight: 0.85,
@@ -78,12 +86,14 @@ export const PATTERNS: PatternDef[] = [
   },
   {
     id: "dots-dense",
+    label: "Fine dots",
     w: 12,
     h: 12,
     draw: (c) => `<circle cx="6" cy="6" r="1.25" fill="${c}"/>`,
   },
   {
     id: "dots-offset",
+    label: "Scattered dots",
     w: 24,
     h: 24,
     // Two dots per tile on opposite diagonals, which halves the apparent
@@ -93,12 +103,14 @@ export const PATTERNS: PatternDef[] = [
   },
   {
     id: "rings",
+    label: "Rings",
     w: 28,
     h: 28,
     draw: (c) => `<circle cx="14" cy="14" r="5.5" fill="none" stroke="${c}" stroke-width="1.25"/>`,
   },
   {
     id: "overlapping-circles",
+    label: "Interlocking circles",
     w: 40,
     h: 40,
     // Radius exactly half the tile, centred on all four corners and the middle:
@@ -112,6 +124,7 @@ export const PATTERNS: PatternDef[] = [
   },
   {
     id: "diagonal",
+    label: "Diagonal lines",
     w: 14,
     h: 14,
     // The main stroke runs corner to corner; the two stubs are the same line
@@ -121,12 +134,14 @@ export const PATTERNS: PatternDef[] = [
   },
   {
     id: "diagonal-reverse",
+    label: "Reverse diagonal",
     w: 14,
     h: 14,
     draw: (c) => lines(c, "M-1,13 L1,15 M0,0 L14,14 M13,-1 L15,1", 1.25),
   },
   {
     id: "crosshatch",
+    label: "Crosshatch",
     w: 18,
     h: 18,
     // Two families of lines crossing, so twice the ink of a single diagonal.
@@ -140,12 +155,14 @@ export const PATTERNS: PatternDef[] = [
   },
   {
     id: "grid",
+    label: "Grid",
     w: 24,
     h: 24,
     draw: (c) => lines(c, "M0,0 H24 M0,0 V24", 1),
   },
   {
     id: "grid-fine",
+    label: "Fine grid",
     w: 10,
     h: 10,
     weight: 0.8,
@@ -153,24 +170,28 @@ export const PATTERNS: PatternDef[] = [
   },
   {
     id: "pinstripe",
+    label: "Pinstripe",
     w: 9,
     h: 9,
     draw: (c) => lines(c, "M0,0 V9", 1),
   },
   {
     id: "plus",
+    label: "Plus signs",
     w: 24,
     h: 24,
     draw: (c) => lines(c, "M12,7 V17 M7,12 H17", 1.5),
   },
   {
     id: "crosses",
+    label: "Crosses",
     w: 20,
     h: 20,
     draw: (c) => lines(c, "M6,6 L14,14 M14,6 L6,14", 1.25),
   },
   {
     id: "zigzag",
+    label: "Zigzag",
     w: 24,
     h: 12,
     // Both ends sit at y = 10, so a row of tiles is one unbroken chevron line.
@@ -178,6 +199,7 @@ export const PATTERNS: PatternDef[] = [
   },
   {
     id: "wave",
+    label: "Waves",
     w: 40,
     h: 20,
     // Mirrored cubics: the outgoing slope at x=40 is the incoming slope at x=0,
@@ -186,12 +208,14 @@ export const PATTERNS: PatternDef[] = [
   },
   {
     id: "scallops",
+    label: "Scallops",
     w: 24,
     h: 12,
     draw: (c) => lines(c, "M0,12 A6,6 0 0,1 12,12 A6,6 0 0,1 24,12", 1.25),
   },
   {
     id: "triangles",
+    label: "Triangles",
     w: 24,
     h: 22,
     weight: 0.6,
@@ -199,12 +223,14 @@ export const PATTERNS: PatternDef[] = [
   },
   {
     id: "diamonds",
+    label: "Diamonds",
     w: 26,
     h: 26,
     draw: (c) => `<path d="M13,3 L23,13 L13,23 L3,13 Z" fill="none" stroke="${c}" stroke-width="1.25"/>`,
   },
   {
     id: "bricks",
+    label: "Brickwork",
     w: 32,
     h: 16,
     // Courses every 8px, with the vertical joint alternating half a brick —
@@ -213,6 +239,7 @@ export const PATTERNS: PatternDef[] = [
   },
   {
     id: "rain",
+    label: "Rain",
     w: 20,
     h: 20,
     // Dashes kept clear of every edge, so this one needs no wrap segments.
@@ -220,6 +247,7 @@ export const PATTERNS: PatternDef[] = [
   },
   {
     id: "confetti",
+    label: "Confetti",
     w: 32,
     h: 32,
     // Scattered rather than latticed: the only tile here whose repeat is meant
@@ -233,6 +261,7 @@ export const PATTERNS: PatternDef[] = [
   },
   {
     id: "honeycomb",
+    label: "Honeycomb",
     w: 24.25,
     h: 42,
     /*
@@ -281,6 +310,35 @@ export function patternFor(seed: string): PatternDef {
   return PATTERNS[hash(seed) % PATTERNS.length];
 }
 
+/** The stored choice: a tile id, or one of the two words that are not tiles. */
+export const PATTERN_AUTO = "auto";
+export const PATTERN_NONE = "none";
+
+/**
+ * The author's choice, resolved to a tile or to nothing.
+ *
+ * Three cases, and the fallback is the interesting one. `auto` hashes the slug
+ * — the behaviour every form had before the picker existed, and still the
+ * default, because it gives a new form a texture that belongs to it without
+ * anybody deciding. `none` is flat paper. Anything else is looked up by id,
+ * and an id we no longer ship falls back to `auto` rather than to nothing: a
+ * renamed or retired tile should leave the form looking designed, not blank.
+ *
+ * A seedless caller — the marketing demo has no form — gets a tile only if it
+ * named one, since there is nothing to hash.
+ */
+export function resolvePattern(
+  choice: string | null | undefined,
+  seed?: string | null,
+): PatternDef | null {
+  if (choice === PATTERN_NONE) return null;
+  if (choice && choice !== PATTERN_AUTO) {
+    const named = PATTERNS.find((p) => p.id === choice);
+    if (named) return named;
+  }
+  return seed ? patternFor(seed) : null;
+}
+
 /**
  * Percent-encode an SVG for a CSS `url("data:…")`.
  *
@@ -299,23 +357,21 @@ function dataUri(svg: string): string {
   return `url("data:image/svg+xml,${encoded}")`;
 }
 
-/** A `background-image` value: the seed's tile, drawn in `ink`. */
-export function patternImage(seed: string, ink: string): string {
-  const p = patternFor(seed);
+/** A `background-image` value: this tile, drawn in `ink`. */
+export function patternImage(p: PatternDef, ink: string): string {
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${p.w}" height="${p.h}" ` +
     `viewBox="0 0 ${p.w} ${p.h}">${p.draw(ink)}</svg>`;
   return dataUri(svg);
 }
 
-/** How hard to pull this seed's alpha back. 1 for a plain hairline tile. */
-export function patternWeight(seed: string): number {
-  return patternFor(seed).weight ?? 1;
+/** How hard to pull this tile's alpha back. 1 for a plain hairline tile. */
+export function patternWeight(p: PatternDef): number {
+  return p.weight ?? 1;
 }
 
 /** The matching `background-size`, so the tile draws at its intrinsic scale. */
-export function patternSize(seed: string): string {
-  const p = patternFor(seed);
+export function patternSize(p: PatternDef): string {
   return `${p.w}px ${p.h}px`;
 }
 

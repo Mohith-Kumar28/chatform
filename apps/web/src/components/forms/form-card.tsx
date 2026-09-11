@@ -40,7 +40,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { contrast, isDarkColor, readableInk } from "@/lib/chat-theme";
-import { patternImage, patternSize, patternWeight, rgbaFromHex } from "@/lib/background-patterns";
+import { patternImage, patternSize, patternWeight, resolvePattern, rgbaFromHex } from "@/lib/background-patterns";
 
 /**
  * The pieces of a menu, so one list of items can be rendered by two of them.
@@ -118,6 +118,11 @@ export interface FormRow {
     userBubbleText: string;
     accent: string;
     logoUrl: string | null;
+    /**
+     * `auto`, `none`, or a tile id. Optional because a grid fed by an older
+     * payload still draws — `resolvePattern` reads a missing value as `auto`.
+     */
+    backgroundPattern?: string;
   } | null;
 }
 
@@ -1053,9 +1058,10 @@ function thumbSurface(
   theme: FormRow["theme"],
   part: "thumb" | "bleed",
   /**
-   * The form's slug. It decides which background tile the form carries — the
-   * same derivation the hosted runtime uses — so the picture on the card is
-   * the page a respondent opens, texture included.
+   * The form's slug. With `theme.backgroundPattern` on `auto` it decides which
+   * background tile the form carries — the same derivation the hosted runtime
+   * uses — so the picture on the card is the page a respondent opens, texture
+   * included, right down to an author who turned the texture off.
    */
   seed?: string,
 ): CSSProperties {
@@ -1067,6 +1073,7 @@ function thumbSurface(
    * so a negative offset larger than the tile is still the right phase.
    */
   const tilePos = part === "thumb" ? "0 0" : `0 -${THUMB_H}px`;
+  const tile = resolvePattern(theme?.backgroundPattern, seed);
 
   if (theme) {
     /*
@@ -1075,16 +1082,16 @@ function thumbSurface(
      * logo, a status strip and a fade, and a texture at full runtime strength
      * turns a card you recognise into a card you have to decode.
      */
-    if (!seed) return { backgroundColor: theme.background };
+    if (!tile) return { backgroundColor: theme.background };
     const usable = contrast(theme.background, theme.accent) >= 1.3;
     const ink = rgbaFromHex(
       usable ? theme.accent : theme.userBubbleText,
-      (isDarkColor(theme.background) ? 0.07 : 0.05) * patternWeight(seed),
+      (isDarkColor(theme.background) ? 0.085 : 0.07) * patternWeight(tile),
     );
     return {
       backgroundColor: theme.background,
-      backgroundImage: patternImage(seed, ink),
-      backgroundSize: patternSize(seed),
+      backgroundImage: patternImage(tile, ink),
+      backgroundSize: patternSize(tile),
       backgroundRepeat: "repeat",
       backgroundPosition: tilePos,
     };
@@ -1101,7 +1108,7 @@ function thumbSurface(
    */
   const bandSize = `100% ${THUMB_H + SEAM_BELOW}px`;
   const bandPos = part === "thumb" ? "0 0" : `0 -${THUMB_H}px`;
-  if (!seed) {
+  if (!tile) {
     return {
       backgroundImage: BRAND_BAND,
       backgroundRepeat: "no-repeat",
@@ -1110,9 +1117,9 @@ function thumbSurface(
     };
   }
   return {
-    backgroundImage: `${patternImage(seed, `rgba(255,255,255,${0.085 * patternWeight(seed)})`)}, ${BRAND_BAND}`,
+    backgroundImage: `${patternImage(tile, `rgba(255,255,255,${0.09 * patternWeight(tile)})`)}, ${BRAND_BAND}`,
     backgroundRepeat: "repeat, no-repeat",
-    backgroundSize: `${patternSize(seed)}, ${bandSize}`,
+    backgroundSize: `${patternSize(tile)}, ${bandSize}`,
     backgroundPosition: `${tilePos}, ${bandPos}`,
   };
 }

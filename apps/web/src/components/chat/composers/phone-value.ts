@@ -111,28 +111,102 @@ export function phoneCountries(): PhoneCountry[] {
 }
 
 /**
- * Where to open the country picker.
+ * Where the timezone says this browser is.
  *
- * The author's `countryHint` first — they know who is filling this in — then
- * whatever region the browser's own language tags name, which is the only
- * signal available that costs nothing and asks nobody. `US` last, as a
- * starting point and not a guess about anybody.
+ * The strongest signal available without asking anyone for anything: a laptop
+ * bought in California and used in Bengaluru says `en-US` and
+ * `Asia/Kolkata`, and only one of those two is about where the person is.
  *
- * Deliberately not geolocation or a timezone table: the respondent can change
- * this in one tap, so the cost of being wrong is a tap and the cost of being
- * clever is a permission prompt.
+ * Deliberately not exhaustive and deliberately not a lookup service. There is
+ * no API that maps a zone to a country, so this is the populous end of the
+ * list — enough that most respondents see their own flag, with the language tag
+ * and then the fallback underneath it for everyone else. Being wrong costs one
+ * tap on a picker that is already open in front of them.
  */
+const ZONE_COUNTRY: Record<string, string> = {
+  "Asia/Kolkata": "IN", "Asia/Calcutta": "IN", "Asia/Karachi": "PK", "Asia/Dhaka": "BD",
+  "Asia/Colombo": "LK", "Asia/Kathmandu": "NP", "Asia/Thimphu": "BT", "Asia/Kabul": "AF",
+  "Asia/Shanghai": "CN", "Asia/Urumqi": "CN", "Asia/Chongqing": "CN", "Asia/Hong_Kong": "HK",
+  "Asia/Macau": "MO", "Asia/Taipei": "TW", "Asia/Tokyo": "JP", "Asia/Seoul": "KR",
+  "Asia/Singapore": "SG", "Asia/Kuala_Lumpur": "MY", "Asia/Jakarta": "ID", "Asia/Makassar": "ID",
+  "Asia/Jayapura": "ID", "Asia/Manila": "PH", "Asia/Bangkok": "TH", "Asia/Ho_Chi_Minh": "VN",
+  "Asia/Saigon": "VN", "Asia/Yangon": "MM", "Asia/Phnom_Penh": "KH", "Asia/Vientiane": "LA",
+  "Asia/Dubai": "AE", "Asia/Riyadh": "SA", "Asia/Qatar": "QA", "Asia/Kuwait": "KW",
+  "Asia/Muscat": "OM", "Asia/Bahrain": "BH", "Asia/Tehran": "IR", "Asia/Baghdad": "IQ",
+  "Asia/Jerusalem": "IL", "Asia/Tel_Aviv": "IL", "Asia/Amman": "JO", "Asia/Beirut": "LB",
+  "Asia/Damascus": "SY", "Asia/Tashkent": "UZ", "Asia/Almaty": "KZ", "Asia/Baku": "AZ",
+  "Asia/Tbilisi": "GE", "Asia/Yerevan": "AM", "Asia/Istanbul": "TR", "Europe/Istanbul": "TR",
+  "Europe/London": "GB", "Europe/Dublin": "IE", "Europe/Paris": "FR", "Europe/Berlin": "DE",
+  "Europe/Madrid": "ES", "Europe/Rome": "IT", "Europe/Amsterdam": "NL", "Europe/Brussels": "BE",
+  "Europe/Zurich": "CH", "Europe/Vienna": "AT", "Europe/Stockholm": "SE", "Europe/Oslo": "NO",
+  "Europe/Copenhagen": "DK", "Europe/Helsinki": "FI", "Europe/Warsaw": "PL", "Europe/Prague": "CZ",
+  "Europe/Budapest": "HU", "Europe/Bucharest": "RO", "Europe/Athens": "GR", "Europe/Lisbon": "PT",
+  "Europe/Moscow": "RU", "Asia/Yekaterinburg": "RU", "Asia/Novosibirsk": "RU", "Europe/Kyiv": "UA",
+  "Europe/Kiev": "UA", "Europe/Minsk": "BY", "Europe/Sofia": "BG", "Europe/Belgrade": "RS",
+  "Europe/Zagreb": "HR", "Europe/Bratislava": "SK", "Europe/Ljubljana": "SI", "Europe/Vilnius": "LT",
+  "Europe/Riga": "LV", "Europe/Tallinn": "EE", "Atlantic/Reykjavik": "IS",
+  "America/New_York": "US", "America/Chicago": "US", "America/Denver": "US", "America/Phoenix": "US",
+  "America/Los_Angeles": "US", "America/Anchorage": "US", "America/Detroit": "US", "Pacific/Honolulu": "US",
+  "America/Toronto": "CA", "America/Vancouver": "CA", "America/Edmonton": "CA", "America/Winnipeg": "CA",
+  "America/Halifax": "CA", "America/Mexico_City": "MX", "America/Monterrey": "MX", "America/Tijuana": "MX",
+  "America/Sao_Paulo": "BR", "America/Bahia": "BR", "America/Fortaleza": "BR", "America/Manaus": "BR",
+  "America/Argentina/Buenos_Aires": "AR", "America/Santiago": "CL", "America/Bogota": "CO",
+  "America/Lima": "PE", "America/Caracas": "VE", "America/Guayaquil": "EC", "America/La_Paz": "BO",
+  "America/Montevideo": "UY", "America/Asuncion": "PY", "America/Panama": "PA", "America/Havana": "CU",
+  "America/Santo_Domingo": "DO", "America/Guatemala": "GT", "America/Costa_Rica": "CR",
+  "America/Jamaica": "JM", "America/Puerto_Rico": "PR",
+  "Africa/Lagos": "NG", "Africa/Cairo": "EG", "Africa/Nairobi": "KE", "Africa/Johannesburg": "ZA",
+  "Africa/Accra": "GH", "Africa/Casablanca": "MA", "Africa/Algiers": "DZ", "Africa/Tunis": "TN",
+  "Africa/Addis_Ababa": "ET", "Africa/Dar_es_Salaam": "TZ", "Africa/Kampala": "UG",
+  "Africa/Khartoum": "SD", "Africa/Dakar": "SN", "Africa/Abidjan": "CI", "Africa/Kinshasa": "CD",
+  "Africa/Luanda": "AO", "Africa/Harare": "ZW", "Africa/Lusaka": "ZM", "Africa/Maputo": "MZ",
+  "Australia/Sydney": "AU", "Australia/Melbourne": "AU", "Australia/Brisbane": "AU",
+  "Australia/Perth": "AU", "Australia/Adelaide": "AU", "Australia/Darwin": "AU",
+  "Pacific/Auckland": "NZ", "Pacific/Fiji": "FJ",
+};
+
+/**
+ * Where the picker opens before anybody touches it.
+ *
+ * Four signals, strongest first. The author's `countryHint` — they know who is
+ * filling this in. Then the browser's timezone, which is about where the device
+ * is. Then the region in its language tags, which is often about where it was
+ * bought. Then India, because that is where most of these forms are answered;
+ * a default has to be *some* country, and the honest choice is the likeliest
+ * one rather than the one the industry defaults to out of habit.
+ *
+ * Deliberately not geolocation and not an IP lookup: one puts a permission
+ * prompt in front of a respondent mid-question, the other sends their address
+ * to a third party. Both are a lot to spend on something one tap can fix.
+ */
+export const FALLBACK_COUNTRY: CountryCode = "IN";
+
 export function defaultPhoneCountry(hint?: string | null): CountryCode {
-  const hinted = asPhoneCountry(hint);
-  if (hinted) return hinted;
-  if (typeof navigator !== "undefined") {
-    const tags = navigator.languages?.length ? navigator.languages : [navigator.language];
-    for (const tag of tags) {
-      const region = asPhoneCountry(regionOf(tag));
-      if (region) return region;
-    }
+  return (
+    asPhoneCountry(hint) ??
+    asPhoneCountry(countryFromTimezone()) ??
+    asPhoneCountry(countryFromLanguage()) ??
+    FALLBACK_COUNTRY
+  );
+}
+
+function countryFromTimezone(): string | null {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return zone ? (ZONE_COUNTRY[zone] ?? null) : null;
+  } catch {
+    return null;
   }
-  return "US";
+}
+
+function countryFromLanguage(): string | null {
+  if (typeof navigator === "undefined") return null;
+  const tags = navigator.languages?.length ? navigator.languages : [navigator.language];
+  for (const tag of tags) {
+    const region = regionOf(tag);
+    if (region) return region;
+  }
+  return null;
 }
 
 function regionOf(tag: string | undefined): string | null {
@@ -287,19 +361,32 @@ export function phoneProblem(value: string, country: CountryCode): string | null
   try {
     switch (validatePhoneNumberLength(value)) {
       case "TOO_SHORT":
-        return `That's a few digits short of a ${where} number.`;
+        return `That’s a few digits short for a number in ${where}.`;
       case "TOO_LONG":
-        return `That's a few digits too many for a ${where} number.`;
+        return `That’s a few digits too many for a number in ${where}.`;
       default:
-        return `That doesn't look like a ${where} number.`;
+        return `That doesn’t look like a number in ${where}.`;
     }
   } catch {
-    return `That doesn't look like a ${where} number.`;
+    return `That doesn’t look like a number in ${where}.`;
   }
 }
 
+/**
+ * The country, as it goes in the middle of a sentence.
+ *
+ * "a number in United States" is the kind of wrong that makes a product sound
+ * machine-written, and `Intl` gives names, not noun phrases. The rule is the
+ * ordinary English one — plurals and unions take "the" — and a name it guesses
+ * wrong on costs one article in one hint.
+ */
 function countryName(country: CountryCode): string {
-  return phoneCountries().find((c) => c.code === country)?.name ?? country;
+  const name = phoneCountries().find((c) => c.code === country)?.name ?? country;
+  const takesThe =
+    /^(United|Netherlands|Philippines|Bahamas|Gambia|Comoros|Maldives|Seychelles|Congo|Isle of|Dominican Republic|Central African Republic)/.test(
+      name,
+    ) || /\bIslands$/.test(name);
+  return takesThe ? `the ${name}` : name;
 }
 
 /**

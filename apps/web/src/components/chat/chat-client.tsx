@@ -14,8 +14,8 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { stripRichText } from "@repo/form-schema";
+import { QuestionDescription, RichText } from "./rich-text";
 import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { LogoMark } from "@/components/brand/logo";
@@ -345,12 +345,15 @@ export function ChatClient({
    */
   const media = chat.question?.block.media;
   const imageKey = chat.question?.block.imageKey;
+  // Rich text — links, a video, an image — drawn under the question rather than
+  // put in the agent's mouth, so it reads exactly as written in AI mode too.
+  const description = chat.question?.block.description;
   const mediaMessageId = useMemo(
     () =>
-      media || imageKey
+      media || imageKey || description
         ? chat.messages.filter((m) => m.role === "assistant" && !m.streaming).at(-1)?.id
         : undefined,
-    [media, imageKey, chat.messages],
+    [media, imageKey, description, chat.messages],
   );
   const uploadBase = chat.getUploadBase();
   const respondentToken = chat.getRespondentToken();
@@ -509,6 +512,9 @@ export function ChatClient({
                     : undefined
                 }
               />
+              {m.id === mediaMessageId && description && !chat.ending && !chat.auth && !chat.verify && (
+                <QuestionDescription markdown={description} className="mt-2 max-w-[90%] px-1 opacity-85" />
+              )}
             </div>
           ))}
 
@@ -952,11 +958,7 @@ const Bubble = memo(function Bubble({
             <span className="animate-caret ml-0.5 inline-block align-baseline">▍</span>
           </p>
         ) : (
-          <div className="chat-prose">
-            <Markdown remarkPlugins={[remarkGfm]} allowedElements={SAFE_ELEMENTS} unwrapDisallowed>
-              {message.text}
-            </Markdown>
-          </div>
+          <RichText markdown={message.text} trusted={false} allowedElements={[...SAFE_ELEMENTS, "img"]} />
         )}
       </div>
     </div>
@@ -978,12 +980,15 @@ const LiveRegion = memo(function LiveRegion({ messages }: { messages: ChatMessag
   );
   return (
     <div className="sr-only" aria-live="polite" aria-atomic="false">
-      {latest}
+      {latest ? stripRichText(latest) : latest}
     </div>
   );
 });
 
-/** Markdown from a model is untrusted input: no raw HTML, no images, no scripts. */
+/**
+ * Markdown from a model is untrusted input: no raw HTML, no scripts, and — via
+ * `RichText trusted={false}` — no images except the form's own uploads.
+ */
 const SAFE_ELEMENTS = [
   "p", "br", "strong", "em", "del", "code", "pre", "blockquote",
   "ul", "ol", "li", "a", "h1", "h2", "h3", "h4", "hr",
@@ -1664,11 +1669,11 @@ function EndingCard({
         </h2>
 
         {ending.bodyMd && (
-          <div className="chat-prose mt-2 w-full max-w-sm min-w-0 text-[0.9375rem] opacity-75">
-            <Markdown remarkPlugins={[remarkGfm]} allowedElements={SAFE_ELEMENTS} unwrapDisallowed>
-              {ending.bodyMd}
-            </Markdown>
-          </div>
+          <RichText
+            markdown={ending.bodyMd}
+            allowedElements={[...SAFE_ELEMENTS, "img"]}
+            className="mt-2 w-full max-w-sm min-w-0 text-[0.9375rem] opacity-75"
+          />
         )}
 
         {/*
