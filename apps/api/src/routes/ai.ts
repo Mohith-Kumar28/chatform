@@ -92,6 +92,12 @@ interface Generated {
   tokens: number;
   /** The same tokens, split, because only the split can be priced. */
   usage: TokenUsage;
+  /**
+   * The vendor that actually answered — `MODELS.generation` unless a schema
+   * refusal fell this back to `MODELS.generationFallback`. Every fallback used
+   * to be logged (and priced) as Gemini regardless of which vendor ran.
+   */
+  model: string;
 }
 
 /**
@@ -114,6 +120,10 @@ async function generateWithRetry(opts: {
   // twice, and a cost figure that hides that is a cost figure that will not
   // show the day a prompt change doubles the retry rate.
   const usage: TokenUsage = { input: 0, output: 0 };
+  // The last attempt's vendor wins — a retry that succeeded on the fallback
+  // vendor should be logged as the fallback, not as whichever vendor answered
+  // (or refused) the first attempt.
+  let model: string = MODELS.generation;
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const fixNote =
@@ -129,6 +139,7 @@ async function generateWithRetry(opts: {
       tokens += result.tokens;
       usage.input += result.usage.input;
       usage.output += result.usage.output;
+      model = result.model;
     } catch (err) {
       // An upstream failure — OpenRouter 5xx, a provider timeout, a rate limit.
       // Worth one retry; the second is the author's problem to hear about
@@ -161,7 +172,7 @@ async function generateWithRetry(opts: {
     }
 
     if (!hasErrors(normalized.issues)) {
-      return { doc: normalized.doc, issues: normalized.issues, tokens, usage };
+      return { doc: normalized.doc, issues: normalized.issues, tokens, usage, model };
     }
 
     lastError = normalized.issues
@@ -172,7 +183,7 @@ async function generateWithRetry(opts: {
       // Second attempt still has lint errors. The document is structurally
       // valid — it parsed — so the author is better served by a form with a
       // flagged issue in the builder than by nothing at all.
-      return { doc: normalized.doc, issues: normalized.issues, tokens, usage };
+      return { doc: normalized.doc, issues: normalized.issues, tokens, usage, model };
     }
     opts.onRetry?.("Fixing a problem with the flow");
   }
@@ -223,7 +234,7 @@ export const generateFormHandler = async (c: AiCtx) => {
     const research = await researchFor(c.env, prompt);
     try {
       const started = Date.now();
-      const { doc, issues, tokens, usage } = await generateWithRetry({
+      const { doc, issues, tokens, usage, model } = await generateWithRetry({
         env: c.env,
         prompt,
         questionCount,
@@ -240,11 +251,14 @@ export const generateFormHandler = async (c: AiCtx) => {
         // is logged separately because it runs on its own budget and a cost
         // chart that cannot separate "reading their website" from "writing the
         // form" cannot tell you which one to make cheaper.
+        //
+        // `model` is whichever vendor actually answered — every fallback to
+        // `MODELS.generationFallback` used to be logged here as Gemini.
         await logAiGeneration(c.env, {
           organizationId: orgId,
           userId: c.get("userId"),
           kind: "generate",
-          model: MODELS.generation,
+          model,
           usage,
           latencyMs: Date.now() - started,
         });
@@ -423,7 +437,7 @@ aiRouter.post(
         }
 
         await stage("drafting", "start");
-        const { doc, issues, tokens, usage: genUsage } = await generateWithRetry({
+        const { doc, issues, tokens, usage: genUsage, model: genModel } = await generateWithRetry({
           env: c.env,
           prompt,
           questionCount,
@@ -465,7 +479,7 @@ aiRouter.post(
             userId,
             formId: id,
             kind: "generate_stream",
-            model: MODELS.generation,
+            model: genModel,
             usage: genUsage,
             latencyMs: Date.now() - startedAt,
           });
@@ -600,9 +614,11 @@ export const editFormHandler = async (c: AiCtx) => {
     // it reached the app's error handler and the builder's chat printed
     // "Internal server error" into the thread — which reads as a bug in
     // chatform and tells the author nothing about what to do next.
+    const editStarted = Date.now();
     let draft: EditDraftOut;
     let tokens: number;
     let usage: TokenUsage = { input: 0, output: 0 };
+    let usedModel: string = MODELS.generation;
     try {
       const result = await generateEdit({
         env: c.env,
@@ -612,6 +628,7 @@ export const editFormHandler = async (c: AiCtx) => {
       draft = result.draft;
       tokens = result.tokens;
       usage = result.usage;
+      usedModel = result.model;
     } catch (err) {
       // Flattened, and not `err` on its own: Workers Logs serialise an Error
       // object to `{}`, so the one record of why an edit died was the empty
@@ -836,6 +853,10 @@ export const editFormHandler = async (c: AiCtx) => {
           attempt = second;
           problems = secondProblems;
           draft = retry.draft;
+          // Only adopted with the retry's draft — if the retry was discarded
+          // for being no better, the model that produced the KEPT draft is
+          // still the one that should be logged and priced.
+          usedModel = retry.model;
         }
       } catch (err) {
         // Flattened: Workers Logs serialise an Error object to `{}`.
@@ -877,13 +898,17 @@ export const editFormHandler = async (c: AiCtx) => {
     if (orgId) {
       await meter(c.env, orgId, "ai_generations");
       if (tokens > 0) await meter(c.env, orgId, "ai_tokens", tokens);
+      // `usedModel` is whichever vendor's draft was actually kept — every
+      // fallback (and every kept retry) used to be logged here as Gemini
+      // regardless of which vendor answered.
       await logAiGeneration(c.env, {
         organizationId: orgId,
         userId: c.get("userId"),
         formId: c.get("form")?.id ?? null,
         kind: "edit",
-        model: MODELS.generation,
+        model: usedModel,
         usage,
+        latencyMs: Date.now() - editStarted,
       });
     }
     return c.json({

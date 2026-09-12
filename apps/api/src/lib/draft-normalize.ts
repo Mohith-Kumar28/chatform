@@ -771,10 +771,20 @@ export function applyBlockConfig(block: Block, raw: string | undefined): Block |
     case "email":
       bool("unique", "unique");
       bool("businessonly", "businessOnly");
+      // `domains=` and `verify=` were only ever wired into the ADD path
+      // (normalizeBlock, above) — an edit asking for either on a question that
+      // already exists silently did nothing, and because that left `patch`
+      // empty for a domains-only request, the route treated it as no change at
+      // all and told the author "that already looks the way you described."
+      if (config.has("domains") || config.has("domain") || config.has("alloweddomains")) {
+        patch.allowedDomains = domainsOf(config);
+      }
+      bool("verify", "verify");
       break;
     case "phone":
       bool("unique", "unique");
       if (config.has("country") || config.has("countryhint")) patch.countryHint = countryHintOf(config);
+      bool("verify", "verify");
       break;
     case "url":
       bool("unique", "unique");
@@ -856,9 +866,15 @@ export function applyBlockConfig(block: Block, raw: string | undefined): Block |
       }
       break;
     }
-    case "contact_info":
+    case "contact_info": {
       if (config.has("fields")) patch.fields = pickFields(config.get("fields"), CONTACT_FIELDS);
+      // Same gap as email/phone above: contactFieldOptions only ran on the
+      // add path, so "only work emails" on an existing contact block did
+      // nothing.
+      const options = contactFieldOptions(config);
+      if (options) patch.fieldOptions = options;
       break;
+    }
     case "address":
       if (config.has("fields")) patch.fields = pickFields(config.get("fields"), ADDRESS_FIELDS);
       break;

@@ -1713,6 +1713,22 @@ export class SessionDO extends DurableObject<Bindings> {
       const usage = await result.usage;
       const inTok = usage?.inputTokens ?? 0;
       const outTok = usage?.outputTokens ?? 0;
+      // The stable-prefix restructure above was measured once, by hand, against
+      // 5,700 turns that all showed 0. Nothing since has logged it on an
+      // ongoing basis, so there was no way to tell whether the fix held, or
+      // whether Google's own implicit-caching threshold (or its interaction
+      // with the tool declarations also in this prefix) moved out from under
+      // it. One number, every turn, so a regression shows up in Workers Logs
+      // instead of on the bill. Turn 0 is excluded — there is nothing to hit
+      // yet on the first turn of a session.
+      if (this.turnCount > 0) {
+        console.log("interview_turn_cache", {
+          sessionId: this.meta.sessionId,
+          turn: this.turnCount,
+          cacheReadTokens: usage?.inputTokenDetails?.cacheReadTokens ?? 0,
+          inputTokens: inTok,
+        });
+      }
       /**
        * Raw tokens, counted once, against a ceiling nobody reaches.
        *

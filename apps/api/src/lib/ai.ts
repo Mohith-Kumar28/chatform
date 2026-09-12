@@ -646,18 +646,24 @@ async function withSchemaFallback<T>(label: string, run: (model: string) => Prom
  * about covering every option and keeping arms contiguous matter more here, not
  * less. It used to see none of them.
  */
-export async function generateEdit(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: EditDraft; tokens: number; usage: TokenUsage }> {
-  const result = await withSchemaFallback("edit", (model) =>
-    generateObject({
+export async function generateEdit(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: EditDraft; tokens: number; usage: TokenUsage; model: string }> {
+  // Which vendor actually answered — `MODELS.generation` unless the schema was
+  // refused and this fell back to `MODELS.generationFallback`. Reported back so
+  // the caller can log the model that was actually billed, not the one that
+  // was asked first; every fallback used to be logged (and priced) as Gemini.
+  let usedModel: string = MODELS.generation;
+  const result = await withSchemaFallback("edit", (model) => {
+    usedModel = model;
+    return generateObject({
       model: chatModel(opts.env, model),
       schema: EditDraft,
       system: opts.system,
       prompt: opts.prompt,
       providerOptions: GENERATION_PROVIDER_OPTIONS,
-    }),
-  );
+    });
+  });
   const usage = splitUsage(result.usage);
-  return { draft: clampDraft(result.object as EditDraft), tokens: usage.input + usage.output, usage };
+  return { draft: clampDraft(result.object as EditDraft), tokens: usage.input + usage.output, usage, model: usedModel };
 }
 
 /**
@@ -667,18 +673,20 @@ export async function generateEdit(opts: { env: Bindings; prompt: string; system
  * the larger half and is byte-identical on every call — sits in front of the
  * provider's prompt cache instead of being billed as fresh input each time.
  */
-export async function generateFormDraft(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage }> {
-  const result = await withSchemaFallback("generate", (model) =>
-    generateObject({
+export async function generateFormDraft(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage; model: string }> {
+  let usedModel: string = MODELS.generation;
+  const result = await withSchemaFallback("generate", (model) => {
+    usedModel = model;
+    return generateObject({
       model: chatModel(opts.env, model),
       schema: GenerationDraft,
       system: opts.system,
       prompt: opts.prompt,
       providerOptions: GENERATION_PROVIDER_OPTIONS,
-    }),
-  );
+    });
+  });
   const usage = splitUsage(result.usage);
-  return { draft: clampDraft(result.object as GenerationDraft), tokens: usage.input + usage.output, usage };
+  return { draft: clampDraft(result.object as GenerationDraft), tokens: usage.input + usage.output, usage, model: usedModel };
 }
 
 /** A question as it appears mid-stream, before the draft is complete. */
@@ -709,13 +717,14 @@ export async function streamFormDraft(opts: {
   system?: string;
   onBlock?: (block: DraftBlockPreview) => void;
   abortSignal?: AbortSignal;
-}): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage }> {
+}): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage; model: string }> {
   // Whether this attempt has already put a question on the author's screen.
   // A schema refusal lands before the first token, so the fallback normally
   // starts from a blank spinner — but if anything HAS been announced, falling
   // back would replay the list from index 0 and show every question twice. In
   // that case the error is honest and the fallback is not taken.
   let streamed = false;
+  let usedModel: string = MODELS.generation;
 
   const draw = async (model: string) => {
     const result = streamObject({
@@ -762,12 +771,14 @@ export async function streamFormDraft(opts: {
     return { draft, tokens: split.input + split.output, usage: split };
   };
 
-  return withSchemaFallback("generate_stream", (model) => {
+  const result = await withSchemaFallback("generate_stream", (model) => {
+    usedModel = model;
     if (model !== MODELS.generation && streamed) {
       throw new Error("Schema refused after the draft had started streaming; not restarting it.");
     }
     return draw(model);
   });
+  return { ...result, model: usedModel };
 }
 
 /**

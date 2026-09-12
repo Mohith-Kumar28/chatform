@@ -583,6 +583,44 @@ describe("applyBlockConfig", () => {
     if (capped?.type !== "number") throw new Error("not a number block");
     expect(capped.max).toBe(50);
   });
+
+  /**
+   * `domains=` and `verify=` were wired into the ADD path (normalizeBlock)
+   * from the start but never into the UPDATE path (applyBlockConfig). "Only
+   * accept @college.edu addresses" on an email question that already exists
+   * did nothing — and because the patch stayed empty, the edit route counted
+   * it as no change at all and told the author "that already looks the way
+   * you described." Shipped with the email-domains feature; caught here so it
+   * cannot come back silently.
+   */
+  it("holds an existing email question to a domain", () => {
+    const email = Block.parse({ id: "blk_apply005", ref: "q_email", type: "email", title: "Email?", required: true });
+    const next = applyBlockConfig(email, "domains=college.edu");
+    if (next?.type !== "email") throw new Error("not an email block");
+    expect(next.allowedDomains).toEqual(["college.edu"]);
+  });
+
+  it("turns on verification for an existing email or phone question", () => {
+    const email = Block.parse({ id: "blk_apply006", ref: "q_email", type: "email", title: "Email?", required: true });
+    const nextEmail = applyBlockConfig(email, "verify=true");
+    if (nextEmail?.type !== "email") throw new Error("not an email block");
+    expect(nextEmail.verify).toBe(true);
+
+    const phone = Block.parse({ id: "blk_apply007", ref: "q_phone", type: "phone", title: "Phone?", required: true });
+    const nextPhone = applyBlockConfig(phone, "verify=true");
+    if (nextPhone?.type !== "phone") throw new Error("not a phone block");
+    expect(nextPhone.verify).toBe(true);
+  });
+
+  it("holds an existing contact_info question's email field to a domain", () => {
+    const contact = Block.parse({
+      id: "blk_apply008", ref: "q_contact", type: "contact_info", title: "Your details", required: true,
+      fields: ["first_name", "email"],
+    });
+    const next = applyBlockConfig(contact, "domains=college.edu");
+    if (next?.type !== "contact_info") throw new Error("not a contact_info block");
+    expect(next.fieldOptions?.email?.allowedDomains).toEqual(["college.edu"]);
+  });
 });
 
 describe("editing a repeating group", () => {
