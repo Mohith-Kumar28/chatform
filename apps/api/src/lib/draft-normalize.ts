@@ -2,6 +2,7 @@ import {
   AddressField,
   Block as BlockSchema,
   BLOCK_TYPES,
+  BLOCK_CATALOG,
   parseEmailDomains,
   safePattern,
   ContactField,
@@ -12,6 +13,7 @@ import {
   buildFlowRules,
   orderBlocksForBranches,
   type Block,
+  type BlockType,
   type DraftBranch,
   type Ending,
   type FormDocInput,
@@ -140,6 +142,67 @@ export function parseBlockConfig(raw: string | undefined): Map<string, string> {
     if (key && value) out.set(key, value);
   }
   return out;
+}
+
+/**
+ * What `parseBlockConfig` would silently drop, said out loud.
+ *
+ * `parseBlockConfig` ignores any key it does not recognise, which is the right
+ * behaviour at apply time — a model that writes prose in `config` should cost
+ * the author a setting, not a question. It is exactly the wrong behaviour at
+ * CALL time, where the model is still in a position to fix its own mistake and
+ * nothing tells it there was one. `ammount=499` and `pattern=` on a number
+ * question both vanish, and the author gets a question missing the thing they
+ * asked for.
+ *
+ * So this is the same knowledge, read in the other direction: given a type and
+ * the string the model wrote, say whether every key lands, and if not, name the
+ * ones that do. It is a guard's function, never the applier's — nothing here
+ * changes what `applyBlockConfig` accepts.
+ *
+ * `mode` exists because the two paths genuinely read different keys.
+ * `normalizeBlock` builds a block from nothing and can act on
+ * `configRequiresOneOf`; `applyBlockConfig` patches one that already exists, so
+ * a missing `fields=` on an existing `field_group` means "leave the columns
+ * alone", not "this cannot be built".
+ */
+export function validateBlockConfig(
+  type: BlockType,
+  raw: string | undefined,
+  mode: "add" | "update",
+): { ok: true } | { ok: false; message: string } {
+  const entry = BLOCK_CATALOG[type];
+  const known = new Set<string>([...(entry.configKeys ?? []), "required"]);
+  const config = parseBlockConfig(raw);
+
+  const unknown = [...config.keys()].filter((k) => !known.has(k));
+  if (unknown.length > 0) {
+    const offered = entry.configKeys?.length
+      ? `A ${type} question reads ${[...(entry.configKeys ?? [])].join(", ")}, and required.`
+      : `A ${type} question reads no config keys except required.`;
+    return {
+      ok: false,
+      message: `${offered} It does not read ${unknown.map((k) => `"${k}"`).join(", ")}.`,
+    };
+  }
+
+  // Only on the way in: an update that does not mention a key is asking for
+  // that setting to stay as it is, which is never a missing requirement.
+  if (mode === "add") {
+    for (const group of entry.configRequiresOneOf ?? []) {
+      if (group.some((k) => config.has(k))) continue;
+      const names = group.map((k) => `${k}=`).join(" or ");
+      const hint =
+        type === "scheduling"
+          ? ' If you do not have the builder\'s booking link, use type="date" and ask them for a time directly.'
+          : type === "field_group"
+            ? " Name the columns, e.g. fields=Full name:short_text*|Email:email*."
+            : "";
+      return { ok: false, message: `A ${type} question needs ${names}. You gave neither.${hint}` };
+    }
+  }
+
+  return { ok: true };
 }
 
 const num = (v: string | undefined): number | undefined => {

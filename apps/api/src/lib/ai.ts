@@ -1,5 +1,5 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { streamText, streamObject, generateText, generateObject, tool, APICallError, type ToolSet, type LanguageModel } from "ai";
+import { streamText, streamObject, generateText, generateObject, tool, stepCountIs, hasToolCall, APICallError, type ToolSet, type LanguageModel } from "ai";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
 
@@ -226,7 +226,7 @@ export const DRAFT_LIMITS = {
  * Truncate every list in a draft to its limit, in place of the `.max()` the
  * schema cannot carry. Unknown keys are left alone.
  */
-function clampDraft<T extends Record<string, unknown>>(draft: T): T {
+export function clampDraft<T extends Record<string, unknown>>(draft: T): T {
   for (const [key, limit] of Object.entries(DRAFT_LIMITS)) {
     const list = draft[key as keyof T];
     if (Array.isArray(list) && list.length > limit) {
@@ -646,6 +646,121 @@ async function withSchemaFallback<T>(label: string, run: (model: string) => Prom
  * about covering every option and keeping arms contiguous matter more here, not
  * less. It used to see none of them.
  */
+/**
+ * How long an edit may take before the author is told it failed.
+ *
+ * The tool loop can take several round trips where the single call took one,
+ * and Cloudflare terminates a Worker request that has sent nothing for 100
+ * seconds. This has to land inside that with room for the response, so it is
+ * well under — an edit that is still going at 75s is not going to produce
+ * something good at 95s.
+ */
+const EDIT_TIMEOUT_MS = 75_000;
+
+/**
+ * How many steps the edit loop gets.
+ *
+ * A step is one model generation plus the tools it called, and Gemini emits
+ * parallel calls freely, so the realistic shapes are:
+ *   pure rewire      1 step of set_branch + finish_edit          = 2
+ *   add with routing add_question, set_branch, finish_edit       = 3
+ *   one rejection    + a corrected retry                          = 4
+ *   one failed check + the repair finish_edit asks for            = 5
+ *   a look-up first  + get_question_type                          = 6
+ * Eight leaves two spare. Past that the loop is not converging and the caller
+ * is better served by `ctx.best` than by more spend.
+ */
+const EDIT_MAX_STEPS = 8;
+
+export interface EditAgentRun {
+  /** Whatever the model said outside its tool calls. Usually empty. */
+  text: string;
+  steps: number;
+  toolCalls: number;
+  rejections: number;
+  tokens: number;
+  usage: TokenUsage;
+  /** The vendor that actually ran — Gemini, or the fallback after a refusal. */
+  model: string;
+}
+
+/**
+ * One edit, as a tool loop.
+ *
+ * The counterpart to `generateEdit`, which writes the whole proposal in a
+ * single structured-output call. What changes is not the model or the schema
+ * budget — a tool's `parameters` goes through the same provider validator, so
+ * `withSchemaFallback` is still load-bearing — but where the checking happens.
+ * Every mutation passes a guard that can refuse it with a reason, and the
+ * flow check the route used to run once, afterwards, is now a tool the model
+ * calls on itself while it still has its own work in context.
+ *
+ * The tools are built by the caller (`buildEditTools`) and own the proposal;
+ * this function owns only the conversation.
+ */
+export async function runEditAgent(opts: {
+  env: Bindings;
+  system: string;
+  prompt: string;
+  tools: ToolSet;
+  organizationId?: string;
+  formId?: string;
+  abortSignal?: AbortSignal;
+  /** Called as each step completes, for the SSE stage events. */
+  onStep?: (step: { number: number; toolNames: string[] }) => void;
+}): Promise<EditAgentRun> {
+  let usedModel: string = MODELS.generation;
+  let steps = 0;
+  let toolCalls = 0;
+  let rejections = 0;
+
+  const result = await withSchemaFallback("edit_tools", (model) => {
+    usedModel = model;
+    return generateText({
+      model: chatModel(opts.env, model),
+      system: opts.system,
+      prompt: opts.prompt,
+      tools: opts.tools,
+      // Either the model says it is done, or it runs out of room to keep going.
+      stopWhen: [stepCountIs(EDIT_MAX_STEPS), hasToolCall("finish_edit")],
+      /**
+       * The commonest tool-loop failure is a model that DESCRIBES the edit in
+       * prose instead of making it, and a sentence changes nothing. Required on
+       * the opening step only: every step after it may legitimately be the
+       * closing summary.
+       */
+      prepareStep: ({ stepNumber }) => (stepNumber === 0 ? { toolChoice: "required" as const } : {}),
+      providerOptions: {
+        openrouter: {
+          ...GENERATION_PROVIDER_OPTIONS.openrouter,
+          user: callTag("form_edit", opts.organizationId ?? "", opts.formId),
+        },
+      },
+      onStepFinish: (step) => {
+        steps++;
+        const names = step.toolCalls.map((c) => c.toolName);
+        toolCalls += names.length;
+        for (const r of step.toolResults) {
+          if (typeof r.output === "string" && r.output.startsWith("Rejected:")) rejections++;
+        }
+        opts.onStep?.({ number: steps, toolNames: names });
+      },
+      abortSignal: opts.abortSignal ?? AbortSignal.timeout(EDIT_TIMEOUT_MS),
+    });
+  });
+
+  const usage = splitUsage(result.usage);
+  return {
+    text: result.text,
+    steps,
+    toolCalls,
+    rejections,
+    tokens: usage.input + usage.output,
+    usage,
+    model: usedModel,
+  };
+}
+
 export async function generateEdit(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: EditDraft; tokens: number; usage: TokenUsage; model: string }> {
   // Which vendor actually answered — `MODELS.generation` unless the schema was
   // refused and this fell back to `MODELS.generationFallback`. Reported back so

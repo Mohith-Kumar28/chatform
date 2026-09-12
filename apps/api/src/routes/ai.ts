@@ -10,16 +10,20 @@ import { meter } from "../lib/entitlements.js";
 import {
   generateFormDraft,
   generateEdit,
+  runEditAgent,
   streamFormDraft,
   researchBrief,
   isSchemaRejection,
+  clampDraft,
   MODELS,
   type GenerationDraft,
   type TokenUsage,
 } from "../lib/ai.js";
 import { logAiGeneration } from "../lib/ai-usage.js";
-import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, type BuilderTurn } from "../lib/agent-prompts.js";
-import { applyBlockConfig, draftToDoc, normalizeDraftEndings, normalizeEditBlocks, resolveBranches } from "../lib/draft-normalize.js";
+import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL, type BuilderTurn } from "../lib/agent-prompts.js";
+import { draftToDoc } from "../lib/draft-normalize.js";
+import { applyEditDraft, introducedFlowProblems } from "../lib/edit-apply.js";
+import { buildEditContext, buildEditTools, type EditOutcome } from "../lib/edit-tools.js";
 import { extractUrls, readSites } from "../lib/research.js";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
 
@@ -615,20 +619,55 @@ export const editFormHandler = async (c: AiCtx) => {
     // "Internal server error" into the thread — which reads as a bug in
     // chatform and tells the author nothing about what to do next.
     const editStarted = Date.now();
+    const mode = c.env.AI_EDIT_MODE === "tools" ? "tools" : "object";
     let draft: EditDraftOut;
     let tokens: number;
     let usage: TokenUsage = { input: 0, output: 0 };
     let usedModel: string = MODELS.generation;
+    /** Loop shape, for the log line. Zero on the single-call path. */
+    let loop = { steps: 0, toolCalls: 0, rejections: 0 };
     try {
-      const result = await generateEdit({
-        env: c.env,
-        system: FORM_DESIGNER_SYSTEM,
-        prompt: buildEditPrompt(base, prompt, history as BuilderTurn[]),
-      });
-      draft = result.draft;
-      tokens = result.tokens;
-      usage = result.usage;
-      usedModel = result.model;
+      if (mode === "tools") {
+        /**
+         * The guarded loop.
+         *
+         * `buildEditContext` is handed the same apply-and-lint the route used
+         * to run afterwards, so `finish_edit` checks the real document rather
+         * than a description of one — and the model gets the linter's own
+         * sentences back while its work is still in context.
+         */
+        const ctx = buildEditContext(base, (d) => ({
+          introduced: introducedFlowProblems(base, applyEditDraft(base, d).doc),
+        }));
+        const outcomes: EditOutcome[] = [];
+        const result = await runEditAgent({
+          env: c.env,
+          system: `${FORM_DESIGNER_SYSTEM}\n\n${EDIT_TOOL_PROTOCOL}`,
+          prompt: buildEditPrompt(base, prompt, history as BuilderTurn[], "tools"),
+          tools: buildEditTools(ctx, (o) => outcomes.push(o)),
+          organizationId: c.get("orgId"),
+          formId,
+        });
+        // `best` when the model reached a check, `draft` when the step cap ended
+        // the loop first. Either way what it managed is kept: returning nothing
+        // because the model forgot to call finish_edit would be the worst
+        // possible failure.
+        draft = clampDraft(ctx.best?.draft ?? ctx.draft);
+        tokens = result.tokens;
+        usage = result.usage;
+        usedModel = result.model;
+        loop = { steps: result.steps, toolCalls: result.toolCalls, rejections: result.rejections };
+      } else {
+        const result = await generateEdit({
+          env: c.env,
+          system: FORM_DESIGNER_SYSTEM,
+          prompt: buildEditPrompt(base, prompt, history as BuilderTurn[]),
+        });
+        draft = result.draft;
+        tokens = result.tokens;
+        usage = result.usage;
+        usedModel = result.model;
+      }
     } catch (err) {
       // Flattened, and not `err` on its own: Workers Logs serialise an Error
       // object to `{}`, so the one record of why an edit died was the empty
@@ -649,162 +688,6 @@ export const editFormHandler = async (c: AiCtx) => {
     }
 
     /**
-     * One draft applied to a fresh copy of the form.
-     *
-     * A function rather than straight-line code so the same surgery can run a
-     * second time on a corrected draft — see the retry below — without the
-     * first attempt's changes already in the document.
-     */
-    const applyDraft = (draft: EditDraftOut) => {
-    const doc = structuredClone(base);
-
-    // ─── removals first, so a ref freed here can be reused below ───
-    const removable = new Set(
-      doc.blocks
-        .filter((b) => b.type !== "welcome")
-        .map((b) => b.ref),
-    );
-    const removed = draft.removeRefs.filter((ref) => removable.has(ref));
-    if (removed.length > 0) {
-      const gone = new Set(removed);
-      doc.blocks = doc.blocks.filter((b) => !gone.has(b.ref));
-      // A rule pointing at, or hanging off, a question that no longer exists is
-      // a dead end rather than a route.
-      doc.logic = doc.logic.filter(
-        (r) => !(r.action_kind === "goto" && ((r.from && gone.has(r.from)) || ((r.targetKind ?? "block") === "block" && gone.has(r.target)))),
-      );
-    }
-
-    /**
-     * ─── settings changed on questions that are already here ───
-     *
-     * Before removals would be wrong (a question on its way out has no
-     * settings worth changing) and after additions would be ambiguous, since
-     * a new block's ref may collide with one of these. Between the two, every
-     * ref in `updateBlocks` names a question that was in the form when the
-     * model read it, which is the only thing it can honestly be talking about.
-     */
-    const updated: string[] = [];
-    for (const u of draft.updateBlocks ?? []) {
-      const at = doc.blocks.findIndex((b) => b.ref === u.ref);
-      if (at < 0) continue;
-      const current = doc.blocks[at]!;
-      const configured = applyBlockConfig(current, u.config);
-      const description = u.description?.trim().slice(0, 5000);
-      const next =
-        description && description !== current.description
-          ? { ...(configured ?? current), description }
-          : configured;
-      // Null means the config named nothing this type reads, or asked for what
-      // is already true. Either way it is not a change, and counting it as one
-      // would let an edit that does nothing pass the "must change something"
-      // check below.
-      if (!next) continue;
-      doc.blocks[at] = next;
-      updated.push(u.ref);
-    }
-
-    // ─── additions, each where the model asked for it ───
-    // Resolving against the list as it grows lets one new block follow another.
-    // Appending everything to the end — which is all this route used to do —
-    // puts the arms of a condition below the questions they should skip.
-    const existingRefs = new Set(doc.blocks.map((b) => b.ref));
-    const { blocks: proposed, optionIdsByRef, renamed } = normalizeEditBlocks(draft, existingRefs);
-
-    const added: Block[] = [];
-    for (const { block, insertAfter } of proposed) {
-      const anchor = renamed.get(insertAfter) ?? insertAfter;
-      const at = anchor ? doc.blocks.findIndex((x) => x.ref === anchor) : -1;
-      if (at >= 0) doc.blocks.splice(at + 1, 0, block);
-      else doc.blocks.push(block);
-      added.push(block);
-    }
-
-    // Option ids for questions that were already here come from the form
-    // itself; only the new ones come from this draft.
-    for (const b of doc.blocks) {
-      if (optionIdsByRef.has(b.ref)) continue;
-      if ("options" in b && Array.isArray(b.options)) {
-        optionIdsByRef.set(
-          b.ref,
-          new Map((b.options as { id: string; label: string }[]).map((o) => [o.label.toLowerCase(), o.id])),
-        );
-      }
-    }
-
-    /**
-     * ─── outcomes, before the wiring that points at them ───
-     *
-     * Order is the whole reason this sits here: a branch in the same edit
-     * routinely names the ending the same edit is adding ("if they don't meet
-     * the requirements, tell them they can't submit"), and `buildFlowRules`
-     * only accepts an ending ref it is given. Added after, the branch would
-     * be dropped as dangling and the edit would land as questions with no
-     * route to the outcome it just created.
-     */
-    const endingEdits = normalizeDraftEndings(draft.endings ?? [], doc.endings);
-    const endingChanges: string[] = [];
-    for (const e of endingEdits) {
-      const at = doc.endings.findIndex((x) => x.ref === e.ref);
-      if (at >= 0) {
-        // Only count it when something actually differs, for the same reason
-        // `applyBlockConfig` returns null: an edit has to change something.
-        if (JSON.stringify(doc.endings[at]) !== JSON.stringify(e)) {
-          doc.endings[at] = e;
-          endingChanges.push(e.ref);
-        }
-      } else if (doc.endings.length < 20) {
-        doc.endings.push(e);
-        endingChanges.push(e.ref);
-      }
-    }
-
-    const branches = resolveBranches(
-      draft.branches.map((br) => ({
-        ...br,
-        whenRef: renamed.get(br.whenRef) ?? br.whenRef,
-        then: renamed.get(br.then) ?? br.then,
-      })),
-      doc.blocks,
-      optionIdsByRef,
-    );
-    const priorGotos = doc.logic.filter((r) => r.action_kind === "goto");
-    const newRules = buildFlowRules(branches, doc.blocks, doc.endings.map((e) => e.ref), priorGotos);
-
-    /**
-     * Replacement is per ANSWER, not per question.
-     *
-     * The first version of this dropped every existing branch from any question
-     * the model listed in `rewireRefs`, on the reasoning that its new branches
-     * were then the whole truth. They are not reliably the whole truth: asked
-     * to send Chrome users straight to the ending, the model rewired
-     * `q_platform` and restated two of its three options — so the Android route
-     * was deleted and iOS was quietly pointed at the wrong question. A model
-     * that forgets one arm should cost that arm nothing.
-     *
-     * So an old rule is dropped only when a new rule speaks about exactly the
-     * same question and the same condition. Anything the edit did not mention
-     * keeps working.
-     */
-    const conditionKey = (from: string | null | undefined, when: unknown): string => {
-      const conditions = (when as { conditions?: unknown[] } | undefined)?.conditions ?? [];
-      return `${from ?? ""}\u0000${JSON.stringify(conditions)}`;
-    };
-    const replaced = new Set(newRules.map((r) => conditionKey(r.action_kind === "goto" ? r.from : null, r.when)));
-    const supersededCount = doc.logic.filter(
-      (r) => r.action_kind === "goto" && replaced.has(conditionKey(r.from, r.when)),
-    ).length;
-    if (newRules.length > 0) {
-      const kept = doc.logic.filter(
-        (r) => !(r.action_kind === "goto" && replaced.has(conditionKey(r.from, r.when))),
-      );
-      doc.logic = FormDoc.parse({ ...doc, logic: [...kept, ...newRules] }).logic;
-    }
-    const rewired = supersededCount;
-    return { doc, added, removed, updated, newRules, rewired, endingChanges };
-    };
-
-    /**
      * Flow errors go back to the model once.
      *
      * The linter already knew when an edit broke the flow — "No path reaches
@@ -819,17 +702,16 @@ export const editFormHandler = async (c: AiCtx) => {
      * is swallowed: the first proposal is still a proposal, and the builder
      * still sees the warning on it before applying.
      */
-    const FLOW_CODES = new Set(["unreachable_blocks", "no_route_to_ending", "dangling_target"]);
-    const flowProblems = (d: typeof base) => lintFormDoc(d).filter((i) => FLOW_CODES.has(i.code));
-    const problemKeys = (issues: ReturnType<typeof flowProblems>) =>
-      issues.flatMap((i) => (i.refs?.length ? i.refs.map((r) => `${i.code}:${r}`) : [`${i.code}:${i.message}`]));
-    const preexisting = new Set(problemKeys(flowProblems(base)));
-    const introduced = (d: typeof base) =>
-      flowProblems(d).filter((i) => problemKeys([i]).some((k) => !preexisting.has(k)));
+    const applyDraft = (d: EditDraftOut) => applyEditDraft(base, d);
+    const introduced = (d: typeof base) => introducedFlowProblems(base, d);
 
     let attempt = applyDraft(draft);
     let problems = introduced(attempt.doc);
-    if (problems.length > 0) {
+    // The tool loop has already done this, from the inside, against a cached
+    // prefix and with its own work still in context — see `finish_edit`. A
+    // second full-prompt redraft here would be the same feedback for ~10 KB
+    // more, and would discard the guards the loop just satisfied.
+    if (problems.length > 0 && mode === "object") {
       const feedback = [
         prompt,
         "",
@@ -894,6 +776,24 @@ export const editFormHandler = async (c: AiCtx) => {
     // exactly as it was. Writing here meant a rejected suggestion was already
     // in the database, and the client's own copy then had to fight it.
     const issues = lintFormDoc(doc);
+    /**
+     * One line per edit, both paths, so the two can be compared on real
+     * traffic rather than only on the bench. `rejections` is the interesting
+     * number: a guard that fires constantly is a tool description that needs
+     * rewriting, and there is no way to know which without counting.
+     */
+    console.log("edit_form_done", {
+      formId,
+      mode,
+      model: usedModel,
+      ms: Date.now() - editStarted,
+      ...(mode === "tools" ? loop : {}),
+      added: added.length,
+      updated: updated.length,
+      removed: removed.length,
+      rules: newRules.length,
+      unresolvedFlowProblems: problems.length,
+    });
     const orgId = c.get("orgId");
     if (orgId) {
       await meter(c.env, orgId, "ai_generations");

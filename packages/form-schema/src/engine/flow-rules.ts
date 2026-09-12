@@ -45,6 +45,28 @@ const NEGATE: Record<Op, Op> = {
   is_not_empty: "is_empty",
 };
 
+/**
+ * The operators a MODEL may write on a branch.
+ *
+ * Deliberately short of the full `Op` set: `is_empty` and `is_not_empty` are
+ * how a model spells "and then", which is already what falling through to the
+ * next question does. A rule that says so adds nothing to the flow and draws a
+ * decision node on the author's canvas with one live arm and one dead one,
+ * over a choice the form never makes. `resolveBranches` strips them; keeping
+ * them out of the tool schema means the model cannot reach for them at all.
+ */
+export const DRAFT_BRANCH_OPS = [
+  "eq",
+  "neq",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+  "contains",
+  "not_contains",
+] as const;
+export type DraftBranchOp = (typeof DRAFT_BRANCH_OPS)[number];
+
 export interface DraftBranch {
   when: { ref: string; op: Op; value: string | number | boolean | null };
   then: string;

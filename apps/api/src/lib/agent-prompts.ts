@@ -546,6 +546,22 @@ export interface BuilderTurn {
   text: string;
 }
 
+/**
+ * The protocol note, appended to the design doctrine when the edit bar runs as
+ * a tool loop.
+ *
+ * Kept in `system` beside `FORM_DESIGNER_SYSTEM` rather than in the request, so
+ * the whole stable head stays byte-identical between steps and sits in front of
+ * the provider's prompt cache. It is deliberately four lines: everything about
+ * WHAT to change is doctrine or tool description, and this is only about how
+ * the turn works.
+ */
+export const EDIT_TOOL_PROTOCOL = `You are editing a form that already exists, using tools.
+
+Make every change by calling a tool — a sentence describing a change does not make it. You may call several tools in one turn.
+A call that comes back "Rejected:" has NOT happened: read the reason, fix it, and call again.
+When the edit is complete, call finish_edit once. Do not call any tool after it.`;
+
 export function buildEditPrompt(
   doc: FormDoc,
   request: string,
@@ -559,6 +575,18 @@ export function buildEditPrompt(
    * the whole time and only the client knew about it.
    */
   history: BuilderTurn[] = [],
+  /**
+   * `"object"` writes the whole JSON shape out, for the single
+   * structured-output call. `"tools"` leaves it out: the shape now lives in
+   * the tool schemas, where the provider enforces it instead of the model
+   * remembering it, and repeating it here would be ~6 KB of prose competing
+   * with the definitions the model can actually see.
+   *
+   * Everything ABOVE the request — the manifest, the outcomes, the existing
+   * rules, the conversation — is identical in both. That half is this form's
+   * state, and no tool description can carry it.
+   */
+  mode: "object" | "tools" = "object",
 ): string {
   const gotos = doc.logic.filter((r) => r.action_kind === "goto");
 
@@ -654,7 +682,21 @@ ${rules}
 ${conversation}
 WHAT THE BUILDER ASKED FOR:
 ${request}
+${mode === "tools" ? `
+WORK OUT WHAT KIND OF EDIT THIS IS FIRST. Most requests about a working form change the ROUTING, not the questions — who gets asked what, in which order. Those need NO new questions, and adding one to have something to show is the commonest way an edit goes wrong.
 
+Make every change by calling a tool. Describing a change in prose does not make it.
+
+- A request that is purely about who gets asked what is set_branch calls and nothing else.
+- A request about how one question behaves — "the team name has to be unique", "make the email required", "cap that at 50", "work emails only" — is configure_question on the question that is already there. Never add a second copy of a question to carry a setting the original could have had.
+- Add a question only when the request needs one that does not exist. If a new question is only for SOME answers, it must sit immediately below the question that decides it: say so with insertAfter.
+- If the request states a condition on who may SUBMIT — must, mandatory, requirement, eligible, only open to, minimum — there is a screen_out in this form, and a branch aimed at it.
+
+A \`legal_consent\` question only accepts "yes" unless it carries \`decline=true\`. So "what if they don't agree?" is two calls together: configure_question with "decline=true" on that question, and set_branch from it — value "declined" — pointing at a screen_out ending. Without the flag the question is a turnstile and no route off it can ever fire.
+
+The manifest above marks a question "unique" when it already refuses answers another respondent gave. If the request asks for something that is already true, change nothing and say so in your summary.
+
+When the edit is complete, call finish_edit once. It checks the flow and will tell you if something needs fixing.` : `
 WORK OUT WHAT KIND OF EDIT THIS IS FIRST. Most requests about a working form change the ROUTING, not the questions — who gets asked what, in which order. Those need NO new questions.
 
 - "addBlocks": [] is a correct and common answer. Never invent a question to have something to return. If every question the request needs is already in the form, add nothing.
@@ -684,5 +726,5 @@ Pick the type that actually collects the thing. A price, a fee, a ticket or a UP
 
 "options" are plain labels as the respondent reads them — ["Android", "iPhone"] — and [] when the type is not a choice. "insertAfter" is the ref it goes directly after, "" for the end; a question only asked in some cases MUST sit immediately below the question that decides it.
 
-"summary" is one plain sentence telling the builder what you changed. Describe only what you actually returned — if you added nothing and only rewired, say that.`;
+"summary" is one plain sentence telling the builder what you changed. Describe only what you actually returned — if you added nothing and only rewired, say that.`}`;
 }

@@ -18,11 +18,12 @@
  * non-zero if anything is refused.
  */
 import { readFileSync } from "node:fs";
-import { generateObject } from "ai";
+import { generateObject, generateText, stepCountIs } from "ai";
 import { z } from "zod";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { extractionSchema, type Block } from "@repo/form-schema";
+import { extractionSchema, FormDoc, type Block } from "@repo/form-schema";
 import { GenerationDraft, EditDraft, MODELS, isSchemaRejection } from "../src/lib/ai.js";
+import { buildEditContext, buildEditTools } from "../src/lib/edit-tools.js";
 
 function apiKey(): string {
   if (process.env.OPENROUTER_API_KEY) return process.env.OPENROUTER_API_KEY;
@@ -95,9 +96,63 @@ for (const c of CASES) {
   }
 }
 
+/**
+ * The tool set goes through the same validator as a response schema.
+ *
+ * A tool's `parameters` is JSON Schema like any other, judged by the same
+ * budget that refused `GenerationDraft` the day Google tightened it — with no
+ * deploy on our side. And unlike a response schema, the whole set is re-sent on
+ * every step of every loop, so it is the more expensive thing to get wrong.
+ *
+ * One step is enough: the question is only ever "was the request accepted",
+ * not what the model did with it.
+ */
+const TOOL_FORM = FormDoc.parse({
+  id: "frm_probe00001",
+  version: 1,
+  title: "Probe",
+  description: "",
+  blocks: [
+    { id: "blk_0000000001", ref: "welcome", type: "welcome", title: "Hi", required: false },
+    {
+      id: "blk_0000000002", ref: "q_platform", type: "single_select", title: "Which platform?", required: true,
+      options: [{ id: "opt_000000001", label: "iPhone" }, { id: "opt_000000002", label: "Android" }],
+    },
+  ],
+  endings: [{ id: "end_0000000001", ref: "end_thanks", title: "Thanks", kind: "success" }],
+  logic: [],
+});
+
+const editTools = buildEditTools(
+  buildEditContext(TOOL_FORM, () => ({ introduced: [] })),
+  () => {},
+);
+
+for (const model of [MODELS.generation, MODELS.generationFallback]) {
+  const name = `edit tool set${model === MODELS.generationFallback ? " (fallback vendor)" : ""}`;
+  const started = Date.now();
+  try {
+    await generateText({
+      model: or.chat(model),
+      tools: editTools,
+      prompt: EDIT,
+      stopWhen: stepCountIs(1),
+    });
+    console.log(`  ok       ${name}  [${model}]  ${Date.now() - started}ms`);
+  } catch (err) {
+    if (isSchemaRejection(err)) {
+      refused++;
+      console.error(`  REFUSED  ${name}  [${model}]  ${err instanceof Error ? err.message : String(err)}`);
+    } else {
+      console.warn(`  skipped  ${name}  [${model}]  ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
+
 if (refused > 0) {
   console.error(`\n${refused} schema(s) refused by the provider. Generation or extraction is broken or about to be.`);
   console.error("Look for `maxItems` first — it is the only keyword measured to trigger this, and the budget multiplies it by the per-item property count. See the note on GenerationDraft.");
+  console.error("If it is the tool set: the budget counts the WHOLE set, re-sent on every step. Count properties across all tools, and keep every inputSchema flat — no unions, no nesting.");
   process.exit(1);
 }
 console.log("\nEvery schema we send is still accepted.");

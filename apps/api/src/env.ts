@@ -142,6 +142,17 @@ export interface Bindings {
   OPENROUTER_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   AI_GATEWAY_ACCOUNT_ID?: string;
+  /**
+   * How the builder's AI edit bar talks to the model.
+   *
+   * `"tools"` runs it as a guarded tool loop that checks its own flow before
+   * answering; `"object"` is the single structured-output call it has always
+   * been. A flag rather than a swap because the failure modes are genuinely
+   * new — a model that narrates instead of calling, a loop that does not
+   * converge — and the only honest comparison is both paths on the same
+   * prompts. Absent means `"object"`.
+   */
+  AI_EDIT_MODE?: "tools" | "object";
   RESEND_API_KEY?: string;
   DODO_API_KEY?: string;
   DODO_WEBHOOK_SECRET?: string;

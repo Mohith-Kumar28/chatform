@@ -32,6 +32,35 @@ export interface BlockCatalogEntry {
   config?: string;
   /** Marks the choice-based types, whose `options` are not optional. */
   needsOptions?: boolean;
+  /**
+   * The `config` keys this type actually reads, lowercase.
+   *
+   * `config` above is prose for the model; this is the list a guard checks
+   * against. `parseBlockConfig` silently drops anything it does not recognise,
+   * so a model that writes `ammount=499` or reaches for `pattern` on a number
+   * question costs the author a setting and is told nothing. With this, the
+   * same mistake comes back as a sentence naming the keys that do work.
+   *
+   * `required` is read by every type and is not repeated here.
+   */
+  configKeys?: readonly string[];
+  /**
+   * Groups of keys where at least one member must be present, or the type
+   * cannot be built at all.
+   *
+   * These are the silent downgrades in `normalizeBlock`: a `scheduling` block
+   * with no link quietly becomes a `date`, a `field_group` with no columns
+   * becomes a `short_text`. The author sees a different question than the one
+   * they asked for, and nothing anywhere says why. Stated here, a guard can
+   * refuse the call and tell the model what is missing while it can still fix
+   * it.
+   *
+   * `payment` is deliberately absent. Its missing-destination case is not a
+   * downgrade — it builds the payment block with a visible gap for the author
+   * to fill, and the linter flags it — which is the right outcome when the
+   * author named a price but no UPI id. See the note in `normalizeBlock`.
+   */
+  configRequiresOneOf?: readonly (readonly string[])[];
 }
 
 export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
@@ -40,31 +69,37 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
 
   short_text: {
     summary: "One line of free text — a name, a job title, a company.",
+    configKeys: ["unique", "pattern", "minlength", "maxlength"],
     config:
       "pattern=<regular expression> when the author describes a SHAPE the answer must have — a student number like 1MS22CS045, an order id, a vehicle registration, a postcode. Write a real JavaScript regex anchored with ^ and $ (pattern=^1MS\\d{2}[A-Z]{2}\\d{3}$), and only when the author actually stated the format; never guess one, because a pattern nobody asked for refuses answers that were correct. unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
   },
-  long_text: { summary: "A paragraph. Only when you genuinely want prose." },
+  long_text: { summary: "A paragraph. Only when you genuinely want prose.", configKeys: ["minlength", "maxlength"] },
   email: {
     summary: "An email address, validated as one.",
+    configKeys: ["unique", "businessonly", "domains", "domain", "alloweddomains", "verify"],
     config: "domains=<acme.com|acme.co.uk> to accept ONLY those domains — use it whenever the author names the company, college or organisation an address must belong to; businessOnly=true to refuse gmail and the other free providers when no particular domain was named; verify=true ONLY when the author asked for the address to be confirmed — it emails a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
   },
   phone: {
     summary: "A phone number, validated as one.",
+    configKeys: ["unique", "country", "countryhint", "verify"],
     config: "country=<2-letter code> to assume a dialling code; verify=true ONLY when the author asked for the number to be confirmed — it texts a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
   },
-  url: { summary: "A web address.", config: "unique=true to refuse a value another respondent already gave — a team name, a username, a seat number" },
+  url: { summary: "A web address.", configKeys: ["unique"], config: "unique=true to refuse a value another respondent already gave — a team name, a username, a seat number" },
   number: {
     summary: "A quantity — how many guests, how many seats, a budget.",
+    configKeys: ["unique", "integeronly", "min", "max", "currency"],
     config: "min, max, integerOnly=true, currency=<3-letter code> when it is money; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
   },
   date: {
     summary:
       "A date, or a date and time they choose — an arrival time, a preferred day. This is the right type when YOU are asking them when; `scheduling` is for booking against a calendar you own.",
     config: "disablePast=true to refuse dates already gone",
+    configKeys: ["disablepast"],
   },
   yes_no: {
     summary: "A yes/no answer. The best decider for a branch.",
     config: "yes=<label>, no=<label> to relabel the two buttons",
+    configKeys: ["yes", "no"],
   },
 
   single_select: { summary: "Pick one from a short list.", needsOptions: true },
@@ -75,22 +110,26 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
     needsOptions: true,
   },
 
-  rating: { summary: "Stars, 1 to `scale`.", config: "scale sets how many stars" },
+  rating: { summary: "Stars, 1 to `scale`.", config: "scale sets how many stars", configKeys: ["scale"] },
   nps: { summary: "The 0–10 'how likely are you to recommend us' question." },
   opinion_scale: {
     summary: "Agree/disagree on a numbered scale.",
     config: "scale sets the number of steps",
+    configKeys: ["scale"],
   },
   ranking: { summary: "Drag a list into order of preference. `options` are the things being ranked.", needsOptions: true },
   matrix: {
     summary: "A grid — the same choice made once per row.",
     config: "rows=<Row A|Row B|Row C>; `options` are the columns",
+    configKeys: ["rows", "multipleperrow"],
+    configRequiresOneOf: [["rows"]],
     needsOptions: true,
   },
 
   file_upload: {
     summary: "A file or image — a CV, a screenshot, a receipt.",
     config: "accept=<image/*|application/pdf>, maxFiles=<1-10>, maxSizeMB=<0.1-100>",
+    configKeys: ["accept", "maxfiles", "maxsizemb"],
   },
   signature: { summary: "A signature drawn with a finger or mouse, for agreements." },
 
@@ -99,32 +138,40 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
       "Takes money. Use this whenever the request mentions a price, a fee, a ticket, a deposit or a UPI id — never a text question asking them to confirm they paid.",
     config:
       "method=upi with upi=<vpa like name@bank>, OR method=link with url=<checkout page>; amount=<number>, currency=<3-letter code, INR for rupees>",
+    configKeys: ["method", "upi", "upiid", "vpa", "url", "link", "payee", "amount", "currency"],
   },
   scheduling: {
     summary:
       "Books a slot on a calendar the builder already owns — Cal.com, Calendly, a Meet room. Needs their booking link. If you do not have one, use `date` instead and ask them for a time directly.",
     config: "url=<booking link> — required; without it this becomes a date question",
+    configKeys: ["url", "link"],
+    configRequiresOneOf: [["url", "link"]],
   },
 
   contact_info: {
     summary: "Name, email and phone collected together in one step.",
     config:
       "fields=<first_name|last_name|email|phone>; domains=<acme.com|acme.co.uk> and businessOnly=true hold the email field to the same rules the standalone email block takes; country=<2-letter code> does the same for the phone field",
+    configKeys: ["fields", "domains", "domain", "alloweddomains", "businessonly", "country", "countryhint"],
   },
   address: {
     summary: "A postal address.",
     config: "fields=<street|city|state|postal|country>",
+    configKeys: ["fields"],
   },
   field_group: {
     summary:
       "A small form asked once per person or item, repeated as many times as needed — two to five team members each with a name and an email, guests on a booking, line items on an order. Use this whenever the request describes the SAME set of details collected several times over; never a numbered run of separate questions (\"Member 1 name\", \"Member 2 name\"), which cannot stretch to a team of six or shrink to a team of two.",
     config:
       "fields=<Label:kind|Label:kind> where kind is one of short_text, long_text, email, phone, url, number, date, single_select, yes_no — append * to make a field required, and list a select's choices in brackets (Role:single_select[Lead|Member]); item=<Team member> names one entry; min=<2>, max=<5> bound how many there may be; domains=<acme.com> and businessOnly=true apply to every email column in the group",
+    configKeys: ["fields", "columns", "item", "itemlabel", "min", "max", "domains", "domain", "alloweddomains", "businessonly"],
+    configRequiresOneOf: [["fields", "columns"]],
   },
   legal_consent: {
     summary:
       "Agreeing to terms, a waiver, a code of conduct. Put the wording in `description`. By default the only answer is yes; add decline=true when a refusal has to be a real answer you can route on — an eligibility gate, a policy someone may decline.",
     config: "decline=true to offer an explicit refusal; agree=<label>, declineLabel=<label> to relabel the two buttons",
+    configKeys: ["decline", "allowdecline", "agree", "declinelabel"],
   },
 };
 
@@ -147,6 +194,59 @@ export function renderBlockCatalog(only?: readonly BlockType[]): string {
       return parts.join("\n");
     })
     .join("\n");
+}
+
+/**
+ * The same catalog, names and one-liners only.
+ *
+ * This is the always-visible half of the tool-calling builder: the model needs
+ * to know every type that EXISTS on every turn, or it will reach for a type it
+ * remembers rather than one we have. What it does not need on every turn is the
+ * per-type `config` prose, which is the bulk of `renderBlockCatalog` — that is
+ * fetched for the two or three types an edit actually touches.
+ *
+ * Measured against the 27 types we have: ~2.5 KB here against ~5.7 KB for the
+ * full rendering, and the gap widens with every type added, because this one
+ * grows by a line and the other grows by a paragraph.
+ *
+ * Never narrow this to a subset by relevance. The failure mode of a searchable
+ * tool catalog is the search missing the right entry, and a list this small has
+ * no reason to take that risk.
+ */
+export function renderBlockIndex(only?: readonly BlockType[]): string {
+  const types = only ?? BLOCK_TYPES;
+  return types
+    .map((type) => {
+      const entry = BLOCK_CATALOG[type];
+      return `- ${type} — ${entry.summary}${entry.needsOptions ? " (needs options)" : ""}`;
+    })
+    .join("\n");
+}
+
+/**
+ * Everything one type needs, for a model that has chosen it.
+ *
+ * The other half of the split above: called by `get_question_type` once the
+ * model knows which type it wants, so the `config` keys arrive as a tool result
+ * rather than sitting in the prompt for all 27 types at once.
+ */
+export function describeBlockType(type: BlockType): {
+  type: BlockType;
+  summary: string;
+  needsOptions: boolean;
+  config: string | null;
+  configKeys: readonly string[];
+  requires: readonly (readonly string[])[];
+} {
+  const entry = BLOCK_CATALOG[type];
+  return {
+    type,
+    summary: entry.summary,
+    needsOptions: entry.needsOptions === true,
+    config: entry.config ?? null,
+    configKeys: entry.configKeys ?? [],
+    requires: entry.configRequiresOneOf ?? [],
+  };
 }
 
 /** Everything a model may add to a form that already has its welcome block. */
