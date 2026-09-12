@@ -8,12 +8,12 @@ import { FormDoc as FormDocSchema, lintFormDoc, type FormDoc } from "@repo/form-
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { useBuilderStore } from "@/stores/builder-store";
-import { customFetch } from "@/lib/api/mutator";
 import { blockMeta, TONE_CLASSES } from "./block-library";
 import { loadHistory, saveHistory, type Turn } from "./ai-bar-thread";
 import { KEY } from "./use-builder-shortcuts";
 import { useDictation } from "@/hooks/use-dictation";
 import { cn } from "@/lib/utils";
+import { streamEvents, type SseEvent } from "@/lib/api/stream";
 
 /** Refs of questions no path through the form reaches. */
 function unreachableRefs(doc: FormDoc): string[] {
@@ -39,6 +39,17 @@ function describeEdit(added: number, updated: number, removed: number, rules: nu
  * blocks are reviewed before they land, and applying them is a single undo
  * step.
  */
+/** The steps an edit reports, matching the server's `EditStage`. */
+type EditStage = "reading" | "editing" | "checking" | "repairing";
+
+/** What each looks like to somebody watching. */
+const STAGE_COPY: Record<EditStage, string> = {
+  reading: "Reading your form",
+  editing: "Making the change",
+  checking: "Checking the flow",
+  repairing: "Fixing the flow",
+};
+
 export function AiBar() {
   const doc = useBuilderStore((s) => s.doc);
   const formId = useBuilderStore((s) => s.formId);
@@ -48,6 +59,14 @@ export function AiBar() {
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
+  /**
+   * Which step the edit is on, or null when nothing is running.
+   *
+   * Only the kinds of waiting an author would recognise as different. The tool
+   * loop's own step numbers mean nothing to somebody who asked for an email
+   * question, so they never reach here.
+   */
+  const [stage, setStage] = useState<EditStage | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -141,23 +160,62 @@ export function AiBar() {
      */
     const history = turns.slice(-8).map((t) => ({ role: t.role, text: t.text }));
 
+    type EditResult = {
+      doc?: unknown;
+      rules?: number;
+      rewired?: number;
+      updatedRefs?: string[];
+      removedRefs?: string[];
+      summary?: string;
+      /** Set when the model stopped to ask rather than to propose. */
+      question?: string;
+      /** Set when a review flagged the proposal and could not fix it. */
+      reviewNote?: string | null;
+    };
+
     try {
-      const res = await customFetch<{
-        doc: unknown;
-        rules?: number;
-        rewired?: number;
-        updatedRefs?: string[];
-        removedRefs?: string[];
-        summary?: string;
-      }>("/api/ai/edit-form", {
-        method: "POST",
-        body: JSON.stringify({ formId, prompt: text, history }),
+      /**
+       * Streamed, so the wait says what it is doing.
+       *
+       * An edit that runs as a tool loop takes ten seconds and sometimes
+       * thirty, and one spinner for thirty seconds is indistinguishable from a
+       * hang — the same problem, and the same fix, as the generator's progress
+       * list. `stage` events drive the line under the composer; the proposal
+       * still arrives whole, at the end, exactly as it did over JSON.
+       */
+      let res: EditResult | null = null;
+      let failure: { message: string } | null = null;
+      await streamEvents("/api/ai/edit-form/stream", {
+        body: { formId, prompt: text, history },
+        onEvent: ({ event, data }: SseEvent) => {
+          if (event === "stage") setStage((data as { id: EditStage }).id);
+          else if (event === "done") res = data as EditResult;
+          else if (event === "error") failure = data as { message: string };
+        },
       });
+      setStage(null);
+      if (failure) throw new Error((failure as { message: string }).message);
+      if (!res) throw new Error("That edit didn't finish. Try again.");
+
+      /**
+       * It asked something instead of changing something.
+       *
+       * An ordinary assistant message with no proposal attached and nothing to
+       * apply — the form is untouched. The author's reply goes back as the next
+       * message, and `history` carries the question with it, so the answer
+       * lands against the thing that was asked rather than arriving as a new
+       * request out of nowhere.
+       */
+      const result: EditResult = res;
+      if (result.question) {
+        setTurns((t) => [...t, { id: crypto.randomUUID(), role: "assistant", text: result.question! }]);
+        return;
+      }
 
       // The proposal is the whole document — the new questions, where they sit,
       // and any branching. It is diffed only to describe what changed; applying
       // takes the document as a whole.
-      const proposed = FormDocSchema.safeParse(res.doc);
+      const proposed = FormDocSchema.safeParse(result.doc);
       if (!proposed.success) throw new Error("The proposal came back in a shape I couldn't read.");
 
       // Questions this proposal cuts off. Compared against the form as it is,
@@ -169,9 +227,9 @@ export function AiBar() {
 
       const existing = new Set(doc.blocks.map((b) => b.ref));
       const added = proposed.data.blocks.filter((b) => !existing.has(b.ref));
-      const removed = res.removedRefs ?? [];
-      const updated = res.updatedRefs ?? [];
-      const rules = res.rules ?? 0;
+      const removed = result.removedRefs ?? [];
+      const updated = result.updatedRefs ?? [];
+      const rules = result.rules ?? 0;
 
       /**
        * An edit that adds no questions is a real edit.
@@ -187,12 +245,12 @@ export function AiBar() {
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: res.summary?.trim() || describeEdit(added.length, updated.length, removed.length, rules),
+          text: result.summary?.trim() || describeEdit(added.length, updated.length, removed.length, rules),
           blocks: added,
           removed,
           updated,
           rules,
-          rewired: res.rewired ?? 0,
+          rewired: result.rewired ?? 0,
           orphaned,
           doc: proposed.data,
         },
@@ -208,6 +266,7 @@ export function AiBar() {
       ]);
     } finally {
       setBusy(false);
+      setStage(null);
     }
   }
 
@@ -266,7 +325,10 @@ export function AiBar() {
                 {busy && (
                   <div className="text-muted-foreground flex items-center gap-2 px-1 text-sm">
                     <Loader2 className="size-3.5 animate-spin" />
-                    Thinking…
+                    {/* "Thinking…" for thirty seconds is indistinguishable
+                        from a hang. Each of these is a step the server has
+                        actually reached. */}
+                    {stage ? STAGE_COPY[stage] : "Thinking…"}
                   </div>
                 )}
               </div>

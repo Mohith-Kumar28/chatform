@@ -1916,6 +1916,27 @@
                     "minimum": 2,
                     "maximum": 19
                   },
+                  "clarifications": {
+                    "maxItems": 3,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "question": {
+                          "type": "string",
+                          "maxLength": 300
+                        },
+                        "answer": {
+                          "type": "string",
+                          "maxLength": 500
+                        }
+                      },
+                      "required": [
+                        "question",
+                        "answer"
+                      ]
+                    }
+                  },
                   "workspaceId": {
                     "type": "string"
                   }
@@ -2352,6 +2373,156 @@
           },
           "502": {
             "description": "Generation failed after retries"
+          }
+        },
+        "x-required-scope": "ai:generate",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/ai/clarify-form": {
+      "post": {
+        "operationId": "postV1AiClarifyForm",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 5,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "prompt"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Ask what a form request leaves open, before generating from it",
+        "description": "Returns up to three questions whose answers would change the form — and **usually returns none**, which is the intended answer rather than a failure. Worth calling when a person is going to see the result: a request that asks to take a payment but names no UPI id, or to branch by plan without naming the plans, produces a form with a hole in it that only they can fill.\n\nFeed the answers back as `clarifications` on `POST /v1/ai/generate-form`. Skipping this endpoint entirely is fine; generation does not require it.\n\nRuns on the cheapest tier and is not charged as a generation — it is a question about a form, not a form — though its tokens are still counted.",
+        "responses": {
+          "200": {
+            "description": "Questions worth asking, oldest concern first. An empty list means the request is answerable as it stands.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "questions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "question": {
+                            "type": "string"
+                          },
+                          "why": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "choice",
+                              "text"
+                            ]
+                          },
+                          "options": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "question",
+                          "why",
+                          "kind",
+                          "options"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "questions"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key lacks the ai:generate scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         },
         "x-required-scope": "ai:generate",

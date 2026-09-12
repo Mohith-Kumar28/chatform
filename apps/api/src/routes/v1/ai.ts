@@ -25,7 +25,7 @@ import type { Bindings } from "../../env.js";
 import { ErrorEnvelope } from "../../lib/openapi.js";
 import type { GuardVars } from "../../lib/guards.js";
 import { requireScope, requireQuota, type AuthzVars } from "../../lib/authorize.js";
-import { GenerateBody, EditFormBody, generateFormHandler, editFormHandler } from "../ai.js";
+import { GenerateBody, EditFormBody, ClarifyBody, generateFormHandler, editFormHandler, clarifyFormHandler } from "../ai.js";
 
 export const aiV1Router = new Hono<{
   Bindings: Bindings;
@@ -91,4 +91,45 @@ aiV1Router.post(
     },
   }),
   editFormHandler,
+);
+
+aiV1Router.post(
+  "/ai/clarify-form",
+  validator("json", ClarifyBody),
+  describeRoute({
+    tags: ["v1"],
+    summary: "Ask what a form request leaves open, before generating from it",
+    description:
+      "Returns up to three questions whose answers would change the form — and **usually returns none**, which is the " +
+      "intended answer rather than a failure. Worth calling when a person is going to see the result: a request that " +
+      "asks to take a payment but names no UPI id, or to branch by plan without naming the plans, produces a form with " +
+      "a hole in it that only they can fill.\n\n" +
+      "Feed the answers back as `clarifications` on `POST /v1/ai/generate-form`. Skipping this endpoint entirely is " +
+      "fine; generation does not require it.\n\n" +
+      "Runs on the cheapest tier and is not charged as a generation — it is a question about a form, not a form — " +
+      "though its tokens are still counted.",
+    responses: {
+      200: {
+        description: "Questions worth asking, oldest concern first. An empty list means the request is answerable as it stands.",
+        content: {
+          "application/json": {
+            schema: resolver(
+              z.object({
+                questions: z.array(
+                  z.object({
+                    question: z.string(),
+                    why: z.string(),
+                    kind: z.enum(["choice", "text"]),
+                    options: z.array(z.string()),
+                  }),
+                ),
+              }),
+            ),
+          },
+        },
+      },
+      403: { description: "The key lacks the ai:generate scope", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
+    },
+  }),
+  clarifyFormHandler,
 );

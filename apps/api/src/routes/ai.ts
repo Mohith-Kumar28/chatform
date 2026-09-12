@@ -11,6 +11,7 @@ import {
   generateFormDraft,
   generateEdit,
   runEditAgent,
+  reviewEdit,
   streamFormDraft,
   researchBrief,
   clarifyRequest,
@@ -23,7 +24,7 @@ import {
 import { logAiGeneration } from "../lib/ai-usage.js";
 import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL, CLARIFY_SYSTEM, withClarifications, type BuilderTurn } from "../lib/agent-prompts.js";
 import { draftToDoc } from "../lib/draft-normalize.js";
-import { applyEditDraft, introducedFlowProblems } from "../lib/edit-apply.js";
+import { applyEditDraft, introducedFlowProblems, describeEditChanges } from "../lib/edit-apply.js";
 import { buildEditContext, buildEditTools, type EditOutcome } from "../lib/edit-tools.js";
 import { extractUrls, readSites } from "../lib/research.js";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
@@ -367,7 +368,10 @@ aiRouter.post(
       503: { description: "AI not configured" },
     },
   }),
-  async (c) => {
+  clarifyFormHandler,
+);
+
+export async function clarifyFormHandler(c: AiCtx) {
     // No key is not an error here. The author can still describe their form and
     // have it drafted; they simply are not asked anything first.
     if (!c.env.OPENROUTER_API_KEY) return c.json({ questions: [] });
@@ -387,8 +391,7 @@ aiRouter.post(
     }
     console.log("clarify_form", { asked: questions.length, ms: Date.now() - started });
     return c.json({ questions });
-  },
-);
+}
 
 /** Read whatever sites the prompt mentions. Never throws; never blocks for long. */
 async function researchFor(
@@ -673,9 +676,33 @@ export const EditFormBody = z.object({
  */
 type EditDraftOut = Awaited<ReturnType<typeof generateEdit>>["draft"];
 
-export const editFormHandler = async (c: AiCtx) => {
+/**
+ * The steps of an edit, as the AI bar draws them.
+ *
+ * Only the ones an author would recognise as different kinds of waiting. The
+ * tool loop's own steps are not stages — "step 4 of 8" means nothing to
+ * somebody who asked for an email question.
+ */
+type EditStage = "reading" | "editing" | "checking" | "repairing";
+
+/** One edit's outcome, before it is either serialised or streamed. */
+type EditOutcomeResult = { status: 200 | 404 | 422 | 502 | 503; body: Record<string, unknown> };
+
+/**
+ * The whole edit, with its progress reported rather than hidden.
+ *
+ * Lifted out of the handler so two surfaces can share it without sharing a
+ * transport. `/v1/ai/edit-form` is a JSON API and must stay one; the builder's
+ * own bar wants the stages, because a tool loop can run for half a minute and
+ * a single spinner for half a minute is indistinguishable from a hang — the
+ * same reason generation was made to stream.
+ *
+ * `onStage` is fire-and-forget on purpose: the JSON caller passes a no-op, and
+ * nothing in here should be able to fail because a socket closed.
+ */
+async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) => void): Promise<EditOutcomeResult> {
     if (!c.env.OPENROUTER_API_KEY) {
-      return c.json({ error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } }, 503);
+      return { status: 503, body: { error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } } };
     }
   const { formId, prompt, history } = validBody<z.infer<typeof EditFormBody>>(c);
     /**
@@ -687,15 +714,16 @@ export const editFormHandler = async (c: AiCtx) => {
      * unaffected.
      */
     if (!keyOwnsForm(c, formId)) {
-      return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+      return { status: 404, body: { error: { code: "not_found", message: "Form not found" } } };
     }
     const form = await assertFormAccess(c, formId);
-    if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    if (!form) return { status: 404, body: { error: { code: "not_found", message: "Form not found" } } };
     const row = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ? AND deleted_at IS NULL`)
       .bind(formId)
       .first<{ working_schema: string }>();
-    if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    if (!row) return { status: 404, body: { error: { code: "not_found", message: "Form not found" } } };
     const base = FormDoc.parse(migrateFormDoc(JSON.parse(row.working_schema)));
+    onStage("editing");
 
     // The model call is a network call to a third party, and it fails: two 504s
     // from OpenRouter in one afternoon while this was being written. Uncaught,
@@ -710,6 +738,8 @@ export const editFormHandler = async (c: AiCtx) => {
     let usedModel: string = MODELS.generation;
     /** Loop shape, for the log line. Zero on the single-call path. */
     let loop = { steps: 0, toolCalls: 0, rejections: 0 };
+    /** Set on the tools path only; the reviewer runs behind it. */
+    let toolsCtx: ReturnType<typeof buildEditContext> | null = null;
     try {
       if (mode === "tools") {
         /**
@@ -723,6 +753,7 @@ export const editFormHandler = async (c: AiCtx) => {
         const ctx = buildEditContext(base, (d) => ({
           introduced: introducedFlowProblems(base, applyEditDraft(base, d).doc),
         }));
+        toolsCtx = ctx;
         const outcomes: EditOutcome[] = [];
         const result = await runEditAgent({
           env: c.env,
@@ -731,6 +762,10 @@ export const editFormHandler = async (c: AiCtx) => {
           tools: buildEditTools(ctx, (o) => outcomes.push(o)),
           organizationId: c.get("orgId"),
           formId,
+          // `finish_edit` is the model checking its own work, so it is the one
+          // tool call worth a different word on screen.
+          onStep: ({ toolNames }) =>
+            onStage(toolNames.includes("finish_edit") ? "checking" : "editing"),
         });
         // `best` when the model reached a check, `draft` when the step cap ended
         // the loop first. Either way what it managed is kept: returning nothing
@@ -741,6 +776,33 @@ export const editFormHandler = async (c: AiCtx) => {
         usage = result.usage;
         usedModel = result.model;
         loop = { steps: result.steps, toolCalls: result.toolCalls, rejections: result.rejections };
+        /**
+         * The model stopped to ask rather than to propose.
+         *
+         * Answered here and not further down because there is no proposal to
+         * apply, lint or meter — nothing happened to the form. The question
+         * goes back to the AI bar as an ordinary assistant message, and the
+         * author's reply arrives as the next request with the thread attached,
+         * which is how that surface has worked since it learned to read its own
+         * history.
+         */
+        if (result.question) {
+          const orgId = c.get("orgId");
+          if (orgId && tokens > 0) {
+            await meter(c.env, orgId, "ai_tokens", tokens);
+            await logAiGeneration(c.env, {
+              organizationId: orgId,
+              userId: c.get("userId"),
+              formId: c.get("form")?.id ?? null,
+              kind: "edit_question",
+              model: usedModel,
+              usage,
+              latencyMs: Date.now() - editStarted,
+            });
+          }
+          console.log("edit_form_question", { formId, ms: Date.now() - editStarted, steps: result.steps });
+          return { status: 200, body: { question: result.question, summary: result.question } };
+        }
       } else {
         const result = await generateEdit({
           env: c.env,
@@ -768,7 +830,7 @@ export const editFormHandler = async (c: AiCtx) => {
         message,
         body: APICallError.isInstance(err) ? String(err.responseBody ?? "").slice(0, 800) : undefined,
       });
-      return c.json({ error: { code: "generation_failed", message: upstreamMessage(message) } }, 502);
+      return { status: 502, body: { error: { code: "generation_failed", message: upstreamMessage(message) } } };
     }
 
     /**
@@ -789,13 +851,99 @@ export const editFormHandler = async (c: AiCtx) => {
     const applyDraft = (d: EditDraftOut) => applyEditDraft(base, d);
     const introduced = (d: typeof base) => introducedFlowProblems(base, d);
 
+    onStage("checking");
     let attempt = applyDraft(draft);
     let problems = introduced(attempt.doc);
+
+    /**
+     * A second opinion, for the half the linter cannot see.
+     *
+     * `introduced` answers "is the flow still sound" and answers it perfectly.
+     * It has nothing to say about "is this what they asked for" — an edit can
+     * pass every structural check and still have invented a question, or left
+     * the one thing the request was about untouched. So one cheap call on the
+     * extraction tier reads the request against the DIFF, and if it objects,
+     * the loop gets one more turn with the objection in front of it.
+     *
+     * Tools mode only, and not because the object path would not benefit:
+     * without a loop there is nowhere to send the objection, and a reviewer
+     * whose findings go nowhere is a cost with no mechanism behind it.
+     *
+     * OFF BY DEFAULT, on the measurement rather than on principle.
+     *
+     * Run against the bench it objected to 4 of 12 edits, and every objection
+     * was wrong: it reasoned about routing from a diff that does not contain
+     * the flow, misread a repeating group as a deletion, and twice demanded a
+     * change that was already true. Told explicitly that a checker owns the
+     * routing and given a worked example of the already-true case, it still
+     * did all three — and took pass^2 from 12/12 to 9/12. A reviewer that
+     * invents work is worse than no reviewer: every false objection spends a
+     * repair round undoing something correct.
+     *
+     * Kept, flagged and measurable because the idea is sound and the failure is
+     * the tier: this is a judgement about intent, and intent is the thing the
+     * cheapest model in the stack is worst at. Worth re-running against a
+     * stronger one — `pnpm --filter @repo/api bench:edit --review` — before
+     * turning it on for anybody.
+     */
+    let reviewNote: string | null = null;
+    if (c.env.AI_EDIT_REVIEW === "on" && mode === "tools" && problems.length === 0 && toolsCtx) {
+      const { review, tokens: reviewTokens, usage: reviewUsage } = await reviewEdit({
+        env: c.env,
+        request: prompt,
+        diff: describeEditChanges(base, attempt),
+      });
+      tokens += reviewTokens;
+      usage = { input: usage.input + reviewUsage.input, output: usage.output + reviewUsage.output };
+
+      if (review && !review.ok && review.problem.trim()) {
+        console.log("edit_review_objected", { formId, problem: review.problem.slice(0, 200) });
+        try {
+          const retryCtx = buildEditContext(base, (d) => ({
+            introduced: introducedFlowProblems(base, applyEditDraft(base, d).doc),
+          }));
+          const retry = await runEditAgent({
+            env: c.env,
+            system: `${FORM_DESIGNER_SYSTEM}\n\n${EDIT_TOOL_PROTOCOL}`,
+            prompt: `${buildEditPrompt(base, prompt, history as BuilderTurn[], "tools")}
+
+YOUR PREVIOUS ANSWER TO THIS REQUEST WAS REVIEWED AND SENT BACK:
+  ${review.problem.trim()}
+
+It made these changes, which have NOT been applied — you are starting again from the form above:
+${describeEditChanges(base, attempt)}
+
+Answer the same request again, addressing that.`,
+            tools: buildEditTools(retryCtx, () => {}),
+            organizationId: c.get("orgId"),
+            formId,
+          });
+          tokens += retry.tokens;
+          usage = { input: usage.input + retry.usage.input, output: usage.output + retry.usage.output };
+          const second = applyDraft(clampDraft(retryCtx.best?.draft ?? retryCtx.draft));
+          // Kept only if it is still structurally sound AND actually did
+          // something — the same "strictly better" rule the flow retry uses.
+          // A reviewer's opinion is not worth a broken form.
+          const secondProblems = introduced(second.doc);
+          const changed = second.added.length + second.removed.length + second.updated.length + second.newRules.length;
+          if (secondProblems.length === 0 && changed > 0) {
+            attempt = second;
+            draft = clampDraft(retryCtx.best?.draft ?? retryCtx.draft);
+          } else {
+            reviewNote = review.problem.trim();
+          }
+        } catch (err) {
+          console.error("edit_review_retry_failed", { message: err instanceof Error ? err.message : String(err) });
+          reviewNote = review.problem.trim();
+        }
+      }
+    }
     // The tool loop has already done this, from the inside, against a cached
     // prefix and with its own work still in context — see `finish_edit`. A
     // second full-prompt redraft here would be the same feedback for ~10 KB
     // more, and would discard the guards the loop just satisfied.
     if (problems.length > 0 && mode === "object") {
+      onStage("repairing");
       const feedback = [
         prompt,
         "",
@@ -842,8 +990,9 @@ export const editFormHandler = async (c: AiCtx) => {
       newRules.length === 0 &&
       endingChanges.length === 0
     ) {
-      return c.json(
-        {
+      return {
+        status: 422,
+        body: {
           error: {
             code: "no_change",
             message: draft.summary?.trim()
@@ -851,8 +1000,7 @@ export const editFormHandler = async (c: AiCtx) => {
               : "That already looks the way you described. Try describing the change differently.",
           },
         },
-        422,
-      );
+      };
     }
 
     // Deliberately not persisted. The builder reviews the proposal and
@@ -869,6 +1017,7 @@ export const editFormHandler = async (c: AiCtx) => {
     console.log("edit_form_done", {
       formId,
       mode,
+      reviewObjected: reviewNote !== null,
       model: usedModel,
       ms: Date.now() - editStarted,
       ...(mode === "tools" ? loop : {}),
@@ -895,7 +1044,7 @@ export const editFormHandler = async (c: AiCtx) => {
         latencyMs: Date.now() - editStarted,
       });
     }
-    return c.json({
+    return { status: 200, body: {
       doc,
       added: added.length,
       addedRefs: added.map((b) => b.ref),
@@ -908,10 +1057,100 @@ export const editFormHandler = async (c: AiCtx) => {
       endings: endingChanges.length,
       endingRefs: endingChanges,
       summary: draft.summary,
+      /**
+       * The reviewer objected and the second attempt did not fix it.
+       *
+       * Shown rather than swallowed: the proposal is still a proposal and the
+       * author decides, but they decide better knowing a check flagged it.
+       * Null in the ordinary case, which is nearly all of them.
+       */
+      reviewNote,
       tokens,
       issues,
-    });
+    } };
+}
+
+/**
+ * The JSON surface, unchanged for every caller it already has.
+ *
+ * `/v1/ai/edit-form` is a documented API and answers JSON; the dashboard's own
+ * non-streaming path answers the same. Neither sees a stage.
+ */
+export const editFormHandler = async (c: AiCtx) => {
+  const { status, body } = await runEdit(c, () => {});
+  return c.json(body, status);
 };
+
+/**
+ * The same edit, with its stages on the wire.
+ *
+ * A separate route rather than a mode on the existing one, because the
+ * existing one is `/v1/ai/edit-form` as well — a documented JSON API that must
+ * keep answering JSON. This is the dashboard's own path, exactly as
+ * `/ai/generate-form/stream` is.
+ *
+ * Two reasons, the same two as generation. An edit that runs as a tool loop
+ * takes ten seconds and sometimes thirty, and a single spinner for thirty
+ * seconds is indistinguishable from a hang — a bar that says "checking the
+ * flow" is telling the truth about a real step. And a Worker that sends no
+ * headers for 100 seconds is terminated with a 524; streaming flushes them
+ * immediately, so the loop can use its whole budget without the edge deciding
+ * it has died.
+ */
+aiRouter.post(
+  "/ai/edit-form/stream",
+  validator("json", EditFormBody),
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Edit a form, streaming progress as server-sent events",
+    description:
+      "Server-sent events: `stage` (a step started), `done` (the proposal, or the question it stopped to ask), `error`. " +
+      "Nothing is saved — the proposal is returned for the builder to apply, exactly as the JSON route does.",
+    responses: { 200: { description: "An event stream" }, 503: { description: "AI not configured" } },
+  }),
+  async (c) => {
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+    let closed = false;
+
+    const send = async (event: string, data: unknown) => {
+      if (closed) return;
+      try {
+        await writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      } catch {
+        // The author navigated away or hit cancel.
+        closed = true;
+      }
+    };
+
+    const run = async () => {
+      try {
+        // Stages are fired and not awaited: the edit is the thing being waited
+        // on, and a slow socket must not pace the model.
+        const { status, body } = await runEdit(c, (stage) => void send("stage", { id: stage }));
+        if (status === 200) await send("done", body);
+        else {
+          const error = (body as { error?: { message?: string; code?: string } }).error;
+          await send("error", { message: error?.message ?? "That edit didn't work.", code: error?.code });
+        }
+      } catch (err) {
+        console.error("edit_stream_failed", { message: err instanceof Error ? err.message : String(err) });
+        await send("error", { message: "That edit didn't work. Try describing it differently." });
+      } finally {
+        closed = true;
+        try {
+          await writer.close();
+        } catch {
+          /* already gone */
+        }
+      }
+    };
+
+    c.executionCtx.waitUntil(run());
+    return new Response(readable, { headers: streamHeaders });
+  },
+);
 
 for (const path of ["/ai/edit-form", "/ai/add-blocks"] as const) {
   aiRouter.post(

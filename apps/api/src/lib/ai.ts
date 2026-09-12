@@ -717,6 +717,78 @@ export async function clarifyRequest(opts: {
 }
 
 /**
+ * A second opinion on an edit, for the half a linter cannot see.
+ *
+ * `lintFormDoc` answers "is this form structurally sound" and answers it
+ * perfectly: unreachable questions, dangling targets, a payment block with
+ * nowhere to pay. What it cannot answer is "is this what they asked for" — an
+ * edit can be immaculate and still have added a question nobody wanted, or
+ * left the one thing the request was about untouched.
+ *
+ * Judged on the DIFF and the request, not the whole form: what changed is the
+ * only thing in question, and a reviewer given the entire document starts
+ * having opinions about questions this edit never touched.
+ *
+ * It reports; it never edits. The same rule as everywhere else here — one
+ * writer, and a second model's opinion is not a writer.
+ */
+export const EditReview = z.object({
+  /** True when the edit answers the request. */
+  ok: z.boolean(),
+  /**
+   * What is wrong with it, in one sentence, as an instruction. "" when ok.
+   *
+   * One string rather than a list: a reviewer allowed to enumerate finds
+   * three things, and an editor told three things fixes the wrong one.
+   */
+  problem: z.string(),
+});
+export type EditReview = z.output<typeof EditReview>;
+
+export async function reviewEdit(opts: {
+  env: Bindings;
+  request: string;
+  /** What changed, rendered compactly by the caller. */
+  diff: string;
+  abortSignal?: AbortSignal;
+}): Promise<{ review: EditReview | null; tokens: number; usage: TokenUsage }> {
+  try {
+    const result = await generateObject({
+      model: chatModel(opts.env, MODELS.extraction),
+      schema: EditReview,
+      system:
+        "You are checking one edit to a conversational form against the request that asked for it. " +
+        "You are not redesigning the form and you are not being asked whether you would have done it differently.\n\n" +
+        "THE ROUTING IS NOT YOUR JOB, AND YOU CANNOT SEE ENOUGH OF IT TO JUDGE IT. A checker has already verified, " +
+        "against the whole document, that every question is reachable and every answer reaches an ending — it runs " +
+        "before you and this edit has passed it. You are shown a summary of what changed, not the flow, so any " +
+        "opinion you form about who gets asked what is a guess about lines you were not given. Never answer ok=false " +
+        "about branching, routing, conditions, or which questions appear for whom. If that is the only thing you can " +
+        "find to say, the answer is ok=true.\n\n" +
+        "Answer ok=false ONLY for one of these, and only when you are sure:\n" +
+        "- The request asked for something and nothing in the change does it.\n" +
+        "- The change does something the request did not ask for — most often a question nobody asked to add.\n\n" +
+        "Answer ok=true for everything else. In particular:\n" +
+        "- An edit that changed NOTHING is ok when the request asked for something that was already true. " +
+        "\"Make the email required\" against an email that is already required is correctly answered by doing nothing.\n" +
+        "- Wording, phrasing, question order, how many questions, and where one sits are the author\'s to change, " +
+        "and they are looking at the form. An edit that does what was asked is ok even if it is not what you would " +
+        "have written.\n\n" +
+        'When ok=false, "problem" is one sentence saying what to do about it, addressed to whoever is fixing it.',
+      prompt: `THEY ASKED FOR:\n${opts.request}\n\nTHE EDIT DID:\n${opts.diff}`,
+      abortSignal: opts.abortSignal ?? AbortSignal.timeout(12_000),
+    });
+    const usage = splitUsage(result.usage);
+    return { review: result.object as EditReview, tokens: usage.input + usage.output, usage };
+  } catch (err) {
+    // A reviewer having a bad minute must never be the reason a good edit is
+    // withheld. Null means "no opinion", and the edit stands.
+    console.error("edit_review_failed", { message: err instanceof Error ? err.message : String(err) });
+    return { review: null, tokens: 0, usage: { input: 0, output: 0 } };
+  }
+}
+
+/**
  * How long an edit may take before the author is told it failed.
  *
  * The tool loop can take several round trips where the single call took one,
@@ -752,6 +824,12 @@ export interface EditAgentRun {
   usage: TokenUsage;
   /** The vendor that actually ran — Gemini, or the fallback after a refusal. */
   model: string;
+  /**
+   * Set when the model stopped to ask the author something instead of
+   * proposing an edit. The turn produced no change and none should be applied;
+   * the question goes back to the thread and their reply starts the next one.
+   */
+  question?: string;
 }
 
 /**
@@ -791,13 +869,25 @@ export async function runEditAgent(opts: {
       system: opts.system,
       prompt: opts.prompt,
       tools: opts.tools,
-      // Either the model says it is done, or it runs out of room to keep going.
-      stopWhen: [stepCountIs(EDIT_MAX_STEPS), hasToolCall("finish_edit")],
+      // Either the model says it is done, stops to ask something, or runs out
+      // of room to keep going. `ask_user` has no `execute`, so the loop would
+      // end on it anyway; naming it here makes that intent explicit rather
+      // than incidental.
+      stopWhen: [stepCountIs(EDIT_MAX_STEPS), hasToolCall("finish_edit"), hasToolCall("ask_user")],
       /**
        * The commonest tool-loop failure is a model that DESCRIBES the edit in
        * prose instead of making it, and a sentence changes nothing. Required on
        * the opening step only: every step after it may legitimately be the
        * closing summary.
+       *
+       * `prepareStep` can also raise the reasoning effort for this step alone,
+       * and the obvious theory is that it should: working out WHAT an edit is
+       * happens once, and everything after is filling in refs. Measured, that
+       * theory is wrong here. `medium` on step 0 against `low` throughout took
+       * the loop from 8,485ms to 15,351ms and 10,468 tokens to 11,601 — 81%
+       * more wall clock for 12/12 either way. The planning is not the hard
+       * part; the guards already constrain what a step can get wrong. Left flat
+       * on purpose, with the number recorded so it is not re-theorised.
        */
       prepareStep: ({ stepNumber }) => (stepNumber === 0 ? { toolChoice: "required" as const } : {}),
       providerOptions: {
@@ -837,6 +927,13 @@ export async function runEditAgent(opts: {
   });
 
   const usage = splitUsage(result.usage);
+  // Read off the finished call rather than from a collector: `ask_user` has no
+  // `execute`, so it never reaches one.
+  const asked = result.staticToolCalls.find((c) => c.toolName === "ask_user");
+  const question =
+    asked && typeof (asked.input as { question?: unknown } | undefined)?.question === "string"
+      ? ((asked.input as { question: string }).question.trim() || undefined)
+      : undefined;
   return {
     text: result.text,
     steps,
@@ -845,6 +942,7 @@ export async function runEditAgent(opts: {
     tokens: usage.input + usage.output,
     usage,
     model: usedModel,
+    question,
   };
 }
 

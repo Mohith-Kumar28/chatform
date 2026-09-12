@@ -228,6 +228,40 @@ export function buildEditTools(
       },
     }),
 
+    /**
+     * Stop, and ask the author.
+     *
+     * No `execute`, which is how the SDK's loop is told to end the turn: the
+     * call comes back to us unanswered, the route returns the question instead
+     * of a proposal, and the author's reply arrives as the next message in a
+     * thread that already carries the history. So this costs no new plumbing —
+     * the AI bar has been a conversation since it learned to read its own
+     * transcript.
+     *
+     * Deliberately hard to reach. An editor that asks instead of acting is
+     * worse than one that guesses and gets corrected, because the author came
+     * here to change something and a question puts the work back on them. The
+     * bar is the same as the generator's clarifier: ask only when NO reading of
+     * the request can be acted on, and never for a preference where a default
+     * they can see beats a question they have to answer.
+     */
+    ask_user: tool({
+      description:
+        "Ask the author one question, when the request cannot be acted on as written and guessing would waste their time. " +
+        "Calling this ENDS your turn and changes nothing — so use it only when no reading of the request is actionable: " +
+        "a ref that could mean two different questions, a routing change where you cannot tell which answer goes where, " +
+        "a destination only they have (their UPI id, their booking link). " +
+        "Never ask about wording, length, or anything you could pick a sensible default for — they are looking at the form " +
+        "and can change it. If you can make a reasonable change and say what you assumed in your summary, do that instead.",
+      inputSchema: z.object({
+        question: z
+          .string()
+          .min(1)
+          .describe("One plain sentence, in their words. Say what you will do with the answer if it is not obvious."),
+      }),
+      // No execute: the loop stops here and the caller reads the call.
+    }),
+
     add_question: tool({
       description:
         "Add a new question to the form.\n\n" +

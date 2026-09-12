@@ -153,6 +153,12 @@ export interface Bindings {
    * prompts. Absent means `"object"`.
    */
   AI_EDIT_MODE?: "tools" | "object";
+  /**
+   * Whether a second model checks each edit against the request before it is
+   * offered. Off unless set to "on" — see the note at its call site: measured,
+   * it objected to four correct edits in twelve and improved none.
+   */
+  AI_EDIT_REVIEW?: "on" | "off";
   RESEND_API_KEY?: string;
   DODO_API_KEY?: string;
   DODO_WEBHOOK_SECRET?: string;

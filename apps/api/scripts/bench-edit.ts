@@ -19,10 +19,10 @@
  */
 import { readFileSync } from "node:fs";
 import { FormDoc, lintFormDoc, type FormDoc as FormDocType } from "@repo/form-schema";
-import { generateEdit, runEditAgent, clampDraft, MODELS, type TokenUsage } from "../src/lib/ai.js";
+import { generateEdit, runEditAgent, reviewEdit, clampDraft, MODELS, type TokenUsage } from "../src/lib/ai.js";
 import { costUsdMicro } from "../src/lib/ai-pricing.js";
 import { buildEditPrompt, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL } from "../src/lib/agent-prompts.js";
-import { applyEditDraft, introducedFlowProblems } from "../src/lib/edit-apply.js";
+import { applyEditDraft, introducedFlowProblems, describeEditChanges } from "../src/lib/edit-apply.js";
 import { buildEditContext, buildEditTools } from "../src/lib/edit-tools.js";
 import { EDIT_CASES, type EditCase } from "./fixtures/edit-cases.js";
 import type { Bindings } from "../src/env.js";
@@ -110,6 +110,8 @@ async function runOne(c: EditCase, mode: "tools" | "object"): Promise<Attempt> {
   let model: string = MODELS.generation;
   let steps = 0;
   let rejections = 0;
+  let asked: string | null = null;
+  let objected: string | null = null;
 
   if (mode === "tools") {
     const ctx = buildEditContext(base, (d) => ({
@@ -126,6 +128,21 @@ async function runOne(c: EditCase, mode: "tools" | "object"): Promise<Attempt> {
     });
     draft = clampDraft(ctx.best?.draft ?? ctx.draft);
     ({ tokens, usage, model, steps, rejections } = r);
+    asked = r.question ?? null;
+
+    // The reviewer, on the same terms the route runs it: only when the flow is
+    // sound, and only as an opinion.
+    if (!asked && process.argv.includes("--review")) {
+      const applied = applyEditDraft(base, draft);
+      if (introducedFlowProblems(base, applied.doc).length === 0) {
+        const { review, tokens: rt, usage: ru } = await reviewEdit({
+          env, request: c.prompt, diff: describeEditChanges(base, applied),
+        });
+        tokens += rt;
+        usage = { input: usage.input + ru.input, output: usage.output + ru.output };
+        if (review && !review.ok) objected = review.problem.slice(0, 90);
+      }
+    }
   } else {
     const r = await generateEdit({
       env,
@@ -145,6 +162,9 @@ async function runOne(c: EditCase, mode: "tools" | "object"): Promise<Attempt> {
     endings: applied.endingChanges,
   };
   const why = judge(c, base, applied.doc, changed);
+  // A question is not a wrong answer, but it is not the edit either.
+  if (asked) why.push(`ASKED instead: ${asked.slice(0, 70)}`);
+  if (objected) why.push(`REVIEWER: ${objected}`);
   return {
     ok: why.length === 0,
     why,

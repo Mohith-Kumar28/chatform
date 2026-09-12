@@ -103,7 +103,7 @@ describe("the tool set itself", () => {
       // `maxItems` is the one keyword measured to trigger a refusal.
       expect(JSON.stringify(json)).not.toContain("maxItems");
     }
-    expect(properties).toBeLessThanOrEqual(30);
+    expect(properties).toBeLessThanOrEqual(32);
   });
 });
 
@@ -346,6 +346,29 @@ describe("set_ending", () => {
     });
     expect(out).toContain("Rejected");
     expect(out).toContain("https://");
+  });
+});
+
+describe("ask_user", () => {
+  it("has no execute, so calling it ends the turn", () => {
+    // That is the whole mechanism: the loop stops, the route reads the call
+    // off the result and returns the question instead of a proposal.
+    const { tools } = harness();
+    expect(tools.ask_user.execute).toBeUndefined();
+  });
+
+  it("tells the model when NOT to use it", () => {
+    // An editor that asks instead of acting is worse than one that guesses and
+    // gets corrected — the author came here to change something.
+    const description = harness().tools.ask_user.description ?? "";
+    expect(description).toContain("ENDS your turn");
+    expect(description).toContain("Never ask about wording");
+  });
+
+  it("takes one question and nothing else", () => {
+    const { tools } = harness();
+    const shape = (tools.ask_user.inputSchema as z.ZodObject<Record<string, unknown>>).shape;
+    expect(Object.keys(shape)).toEqual(["question"]);
   });
 });
 
