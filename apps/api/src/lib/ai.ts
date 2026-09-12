@@ -733,6 +733,23 @@ export async function runEditAgent(opts: {
       providerOptions: {
         openrouter: {
           ...GENERATION_PROVIDER_OPTIONS.openrouter,
+          /**
+           * `exclude` is OFF here, and it is not a preference.
+           *
+           * Gemini 3 attaches a thought signature to the first function call of
+           * every response and requires it back, unmodified, on the next turn —
+           * even at minimal thinking. `exclude: true` suppresses the reasoning
+           * blocks that carry it, so from the third step onwards the loop
+           * started failing with "Corrupted thought signature", fell through to
+           * the fallback VENDOR, and paid for both. Measured on the bench: one
+           * case in ten on the first run.
+           *
+           * It costs nothing to leave on. OpenRouter bills reasoning as output
+           * either way; `exclude` only hides the text from the response.
+           * `GENERATION_PROVIDER_OPTIONS` keeps it for the single-call paths,
+           * which have no second turn to replay anything into.
+           */
+          reasoning: { effort: "low" as const, exclude: false },
           user: callTag("form_edit", opts.organizationId ?? "", opts.formId),
         },
       },

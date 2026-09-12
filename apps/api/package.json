@@ -12,6 +12,7 @@
     "d1:migrate:remote": "wrangler d1 migrations apply chatform --remote",
     "test": "vitest run",
     "check:schemas": "tsx scripts/check-model-schemas.ts",
+    "bench:edit": "tsx scripts/bench-edit.ts",
     "test:watch": "vitest",
     "gen:openapi": "tsx scripts/gen-openapi.ts"
   },

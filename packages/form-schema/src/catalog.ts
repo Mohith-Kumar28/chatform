@@ -205,9 +205,16 @@ export function renderBlockCatalog(only?: readonly BlockType[]): string {
  * per-type `config` prose, which is the bulk of `renderBlockCatalog` — that is
  * fetched for the two or three types an edit actually touches.
  *
- * Measured against the 27 types we have: ~2.5 KB here against ~5.7 KB for the
+ * Measured against the 27 types we have: ~2.6 KB here against ~5.7 KB for the
  * full rendering, and the gap widens with every type added, because this one
  * grows by a line and the other grows by a paragraph.
+ *
+ * NOT currently used by the edit tools, and the measurement is why. Paired with
+ * a `get_question_type` lookup it saved ~3 KB of prompt and cost a round trip,
+ * and a round trip is ~5,000 tokens because the whole context is re-sent. At 27
+ * types that trade is a clear loss (see the note in `edit-tools.ts`). It starts
+ * paying when the full catalog costs more than a round trip — roughly 90-100
+ * types at today's per-type size — which is the point of keeping it.
  *
  * Never narrow this to a subset by relevance. The failure mode of a searchable
  * tool catalog is the search missing the right entry, and a list this small has

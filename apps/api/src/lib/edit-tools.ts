@@ -5,7 +5,7 @@ import {
   BLOCK_CATALOG,
   DRAFT_BRANCH_OPS,
   describeBlockType,
-  renderBlockIndex,
+  renderBlockCatalog,
   type BlockType,
   type FormDoc,
 } from "@repo/form-schema";
@@ -37,11 +37,24 @@ import { validateBlockConfig } from "./draft-normalize.js";
  *    is ("add a question, route Android to it"). What they mutate is the
  *    DRAFT — never a `FormDoc`. `applyEditDraft` stays the single place a
  *    proposal becomes a document, so there is still one writer.
- * 2. There is a discovery tool. The interview agent works against one block at
- *    a time and is told about it; an editor chooses from the whole catalog, and
- *    the catalog is the part that grows without bound. `get_question_type`
- *    keeps the per-type detail out of the prompt without ever hiding which
- *    types exist — see `renderBlockIndex`.
+ * 2. The catalog is INLINE, not discovered — and that is a measured decision
+ *    that went against the design it started from.
+ *
+ *    The plan was a names-only index in `add_question` plus a
+ *    `get_question_type` lookup for the two or three types an edit touches,
+ *    on the reasoning that the catalog is the part which grows without bound.
+ *    Measured on `bench-edit`, it cost more than it saved: the model called
+ *    the lookup defensively on almost every edit, and one extra step is
+ *    ~5,000 tokens — the whole context is re-sent — where the entire 27-type
+ *    catalog is ~1,400. Inlining it took the loop from 11,887ms/14,962 tokens
+ *    to 8,485ms/10,468 with identical results.
+ *
+ *    The crossover is arithmetic, so it can be checked rather than guessed:
+ *    discovery starts paying when the catalog costs more than a round trip,
+ *    around 5,000 tokens of catalog — roughly 90-100 block types at today's
+ *    per-type size. `renderBlockIndex` is kept for that day; until then the
+ *    model sees everything, every turn, which is also the arrangement with no
+ *    retrieval step to get wrong.
  */
 
 /** One tool call's outcome, collected for the caller. */
@@ -181,20 +194,20 @@ export function buildEditTools(
 
   return {
     /**
-     * The discovery half of the catalog split.
+     * The per-type detail, on demand.
      *
-     * Every type's NAME and one-line summary is in `add_question`'s description
-     * already, so the model never has to search for a type it half-remembers —
-     * the failure mode of a searchable tool catalog is the search missing the
-     * right entry, and a 27-line list has no reason to take that risk. What
-     * lives here is the per-type detail: the exact `config` keys, and what the
-     * type refuses to be built without.
+     * Demoted from "call this first" to "call this if a key was refused", for
+     * the cost reason in the header note — as the expected opening move it
+     * added a round trip to almost every edit. It stays because a rejection
+     * naming the keys a type accepts is more useful when the model can also
+     * ask for the list directly, and because it is the half that survives when
+     * the catalog outgrows the prompt.
      */
     get_question_type: tool({
       description:
-        "Look up exactly how one question type is configured: its config keys, what it requires, and whether it needs options. " +
-        "Call this before add_question or configure_question for any type whose settings you are not certain of — a config key " +
-        "that is not on the list is dropped, and the setting the author asked for silently does not happen.",
+        "The exact config keys for one question type, as a checked list rather than prose. " +
+        "You should not normally need this — add_question already describes every type. Use it only when a config key has " +
+        "been rejected and you need to see precisely what that type accepts.",
       inputSchema: z.object({
         type: z.enum(ADDABLE_BLOCK_TYPES).describe("The question type to describe."),
       }),
@@ -220,9 +233,8 @@ export function buildEditTools(
         "Add a new question to the form.\n\n" +
         "Most edits to a working form need NONE of these — a request about who gets asked what is a routing change, so use " +
         "set_branch. Never add a question to carry a setting an existing one could have had; use configure_question.\n\n" +
-        "The types you may add, and what each collects:\n" +
-        renderBlockIndex(ADDABLE_BLOCK_TYPES) +
-        "\n\nCall get_question_type for the config keys of whichever you pick.",
+        "The types you may add, what each collects, and how each is configured:\n" +
+        renderBlockCatalog(ADDABLE_BLOCK_TYPES),
       inputSchema: z.object({
         ref: z.string().describe("lowercase snake_case, unique, prefixed by topic: q_email, q_role, q_team_size."),
         type: z.enum(ADDABLE_BLOCK_TYPES),
