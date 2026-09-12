@@ -103,7 +103,13 @@ export function useFormGeneration() {
 
   const start = useCallback(
     async (
-      body: { prompt: string; questionCount?: number; workspaceId?: string },
+      body: {
+        prompt: string;
+        questionCount?: number;
+        workspaceId?: string;
+        /** What the author answered when asked first — see `ClarifyPanel`. */
+        clarifications?: { question: string; answer: string }[];
+      },
       onDone: (result: GenerationResult) => void,
     ) => {
       reset();

@@ -21,9 +21,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FormGenerationProgress, useFormGeneration } from "@/components/forms/form-generation";
+import { ClarifyPanel, type ClarifyAnswer, type ClarifyQuestion } from "@/components/forms/clarify-panel";
 import { TemplateCard, TemplateCardSkeleton } from "@/components/templates/template-card";
 import { usePostApiForms, usePostApiTemplatesBySlugUse } from "@/lib/api/dashboard/dashboard";
 import { apiData } from "@/lib/api/payload";
+import { customFetch } from "@/lib/api/mutator";
 import { invalidateForms } from "@/lib/query-keys";
 import { filterTemplates, templateCategories, useTemplates } from "@/lib/templates";
 import { cn } from "@/lib/utils";
@@ -103,6 +105,19 @@ export function CreateFormDialog({
 
   const drafting = generation.running || generation.error !== null;
 
+  /**
+   * The short pause between "Generate" and the draft starting, when the
+   * request has a hole in it the generator cannot fill on its own.
+   *
+   * Null the whole time for most requests — `CLARIFY_SYSTEM` is written to
+   * return nothing unless an answer would genuinely change the form — so this
+   * screen is the exception rather than a step everybody walks through.
+   */
+  const [clarify, setClarify] = useState<{ prompt: string; questions: ClarifyQuestion[] } | null>(null);
+  const [asking, setAsking] = useState(false);
+  /** Kept so a retry after a failed draft does not ask the same questions twice. */
+  const lastAnswers = useRef<ClarifyAnswer[]>([]);
+
   const createBlank = usePostApiForms<Error>({
     mutation: {
       onSuccess: async (created) => {
@@ -128,13 +143,41 @@ export function CreateFormDialog({
     },
   });
 
-  const busy = generation.running || createBlank.isPending || useTemplate.isPending;
+  const busy = generation.running || asking || createBlank.isPending || useTemplate.isPending;
   const canGenerate = prompt.trim().length > 5 && !busy;
 
-  const generate = () => {
+  /**
+   * Ask before drafting — but never for long, and never as a gate.
+   *
+   * A failure here is silence, not an error: the clarifier is an improvement
+   * on a guess, and an author whose network hiccuped should still get their
+   * form. Same when it has nothing to ask, which is the common case.
+   */
+  const generate = async () => {
     const brief = prompt.trim().slice(0, PROMPT_MAX);
+    setAsking(true);
+    try {
+      const res = await customFetch<{ questions: ClarifyQuestion[] }>("/api/ai/clarify-form", {
+        method: "POST",
+        body: JSON.stringify({ prompt: brief }),
+      });
+      if (res.questions?.length) {
+        setClarify({ prompt: brief, questions: res.questions });
+        return;
+      }
+    } catch {
+      // Straight to drafting.
+    } finally {
+      setAsking(false);
+    }
+    draft(brief, []);
+  };
+
+  const draft = (brief: string, clarifications: ClarifyAnswer[]) => {
+    lastAnswers.current = clarifications;
+    setClarify(null);
     void generation.start(
-      { prompt: brief, workspaceId: ws },
+      { prompt: brief, workspaceId: ws, clarifications: clarifications.filter((a) => a.answer.trim()) },
       (result) => {
         void invalidateForms(queryClient);
         // The brief starts the builder's AI thread, so the first message about
@@ -177,6 +220,8 @@ export function CreateFormDialog({
     if (!next) {
       generation.cancel();
       generation.reset();
+      setClarify(null);
+      setAsking(false);
       setSearch("");
       setCategory("all");
     }
@@ -189,19 +234,37 @@ export function CreateFormDialog({
       <DialogContent size="3xl" layout="panel" className="gap-0">
         <DialogHeader className="border-border shrink-0 border-b px-6 py-4 text-left">
           <DialogTitle className="font-display text-xl">
-            {drafting ? "Building your form" : "Create a form"}
+            {drafting ? "Building your form" : clarify ? "Just checking" : "Create a form"}
           </DialogTitle>
           {/* Idle, the screen explains itself — a box, a blank row, a
               gallery. The description stays for screen readers only. */}
-          <DialogDescription className={cn(!drafting && "sr-only")}>
+          <DialogDescription className={cn(!drafting && !clarify && "sr-only")}>
             {drafting
               ? "Reading what you gave me and drafting the conversation."
-              : "Describe the form you need, start from a template, or start blank."}
+              : clarify
+                ? "A couple of answers will make this a much better first draft."
+                : "Describe the form you need, start from a template, or start blank."}
           </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="px-6 py-5">
-          {drafting ? (
+          {clarify ? (
+            /**
+             * The alternatives are gone rather than greyed out.
+             *
+             * Everything on the idle screen — the blank row, the gallery, the
+             * search — is an answer to "what do you want to make", and that
+             * question has been answered. Leaving them up would invite the
+             * author to reconsider at the one moment they should be finishing.
+             */
+            <ClarifyPanel
+              prompt={clarify.prompt}
+              questions={clarify.questions}
+              busy={generation.running}
+              onSubmit={(answers) => draft(clarify.prompt, answers)}
+              onSkip={() => draft(clarify.prompt, [])}
+            />
+          ) : drafting ? (
             <FormGenerationProgress
               stages={generation.stages}
               questions={generation.questions}
@@ -212,7 +275,10 @@ export function CreateFormDialog({
                 generation.cancel();
                 generation.reset();
               }}
-              onRetry={generate}
+              // Straight back to drafting, not back through the questions.
+              // The prompt has not changed since they were asked, so asking
+              // again would spend a round trip to arrive at the same answers.
+              onRetry={() => draft(prompt.trim().slice(0, PROMPT_MAX), lastAnswers.current)}
             />
           ) : (
             <div>

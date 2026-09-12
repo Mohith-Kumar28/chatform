@@ -13,6 +13,7 @@ import {
   runEditAgent,
   streamFormDraft,
   researchBrief,
+  clarifyRequest,
   isSchemaRejection,
   clampDraft,
   MODELS,
@@ -20,7 +21,7 @@ import {
   type TokenUsage,
 } from "../lib/ai.js";
 import { logAiGeneration } from "../lib/ai-usage.js";
-import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL, type BuilderTurn } from "../lib/agent-prompts.js";
+import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL, CLARIFY_SYSTEM, withClarifications, type BuilderTurn } from "../lib/agent-prompts.js";
 import { draftToDoc } from "../lib/draft-normalize.js";
 import { applyEditDraft, introducedFlowProblems } from "../lib/edit-apply.js";
 import { buildEditContext, buildEditTools, type EditOutcome } from "../lib/edit-tools.js";
@@ -77,6 +78,19 @@ aiRouter.post("/ai/generate-form/stream", requireGauge("forms_count", "forms.cre
 export const GenerateBody = z.object({
   prompt: z.string().min(5).max(2000),
   questionCount: z.number().int().min(2).max(19).optional(),
+  /**
+   * What the author answered when asked (see `/ai/clarify-form`).
+   *
+   * Appended to their request rather than merged into it: the prompt is what
+   * they wrote, and these are what they clarified, and a model reading both
+   * writes a better form than one reading a request rewritten on their behalf.
+   * Absent or empty on every generation that needed no questions, which is
+   * most of them.
+   */
+  clarifications: z
+    .array(z.object({ question: z.string().max(300), answer: z.string().max(500) }))
+    .max(3)
+    .optional(),
   /**
    * The workspace to create into — a slug or an id, resolved inside the
    * caller's organization. Omitted means the organization's first workspace.
@@ -233,7 +247,8 @@ export const generateFormHandler = async (c: AiCtx) => {
     if (!c.env.OPENROUTER_API_KEY) {
       return c.json({ error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } }, 503);
     }
-    const { prompt, questionCount } = validBody<z.infer<typeof GenerateBody>>(c);
+    const { prompt: rawPrompt, questionCount, clarifications } = validBody<z.infer<typeof GenerateBody>>(c);
+    const prompt = withClarifications(rawPrompt, clarifications ?? []);
 
     const research = await researchFor(c.env, prompt);
     try {
@@ -307,6 +322,74 @@ aiRouter.post(
   generateFormHandler,
 );
 
+/**
+ * "Is there anything I need to ask before I draft this?"
+ *
+ * Its own request rather than a step inside the stream, because the answer has
+ * to come back to a human and an SSE stream only goes one way. Cheap enough to
+ * be worth the round trip — the extraction tier, a tiny schema, a 12s ceiling —
+ * and it returns an empty list far more often than not, which is the intended
+ * behaviour rather than a failure of it.
+ *
+ * Not metered as a generation. It is a question about a form, not a form, and
+ * an author who asks for clarity and then changes their mind should not have
+ * spent an allowance on it. The tokens are still logged, because they are still
+ * tokens.
+ */
+export const ClarifyBody = z.object({ prompt: z.string().min(5).max(2000) });
+
+aiRouter.post(
+  "/ai/clarify-form",
+  validator("json", ClarifyBody),
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Ask what the request leaves open, before drafting",
+    responses: {
+      200: {
+        description: "Questions worth asking — usually none",
+        content: {
+          "application/json": {
+            schema: resolver(
+              z.object({
+                questions: z.array(
+                  z.object({
+                    question: z.string(),
+                    why: z.string(),
+                    kind: z.enum(["choice", "text"]),
+                    options: z.array(z.string()),
+                  }),
+                ),
+              }),
+            ),
+          },
+        },
+      },
+      503: { description: "AI not configured" },
+    },
+  }),
+  async (c) => {
+    // No key is not an error here. The author can still describe their form and
+    // have it drafted; they simply are not asked anything first.
+    if (!c.env.OPENROUTER_API_KEY) return c.json({ questions: [] });
+    const { prompt } = validBody<z.infer<typeof ClarifyBody>>(c);
+    const started = Date.now();
+    const { questions, usage } = await clarifyRequest({ env: c.env, prompt, system: CLARIFY_SYSTEM });
+    const orgId = c.get("orgId");
+    if (orgId && usage.input + usage.output > 0) {
+      await logAiGeneration(c.env, {
+        organizationId: orgId,
+        userId: c.get("userId"),
+        kind: "clarify",
+        model: MODELS.extraction,
+        usage,
+        latencyMs: Date.now() - started,
+      });
+    }
+    console.log("clarify_form", { asked: questions.length, ms: Date.now() - started });
+    return c.json({ questions });
+  },
+);
+
 /** Read whatever sites the prompt mentions. Never throws; never blocks for long. */
 async function researchFor(
   env: Bindings,
@@ -375,7 +458,8 @@ aiRouter.post(
     if (!c.env.OPENROUTER_API_KEY) {
       return c.json({ error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } }, 503);
     }
-    const { prompt, questionCount, workspaceId } = c.req.valid("json");
+    const { prompt: rawPrompt, questionCount, workspaceId, clarifications } = c.req.valid("json");
+    const prompt = withClarifications(rawPrompt, clarifications ?? []);
     const ws = await requireWorkspace(c, workspaceId);
     if (ws === undefined) {
       return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);

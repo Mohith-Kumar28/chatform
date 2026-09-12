@@ -556,6 +556,66 @@ export interface BuilderTurn {
  * WHAT to change is doctrine or tool description, and this is only about how
  * the turn works.
  */
+/**
+ * When to ask the author something before drafting, and — mostly — when not to.
+ *
+ * The bar is deliberately high. The generator is good at sizing a form from a
+ * sentence and the whole streaming path exists to put a real question on screen
+ * in under four seconds; a clarifier that asks about everything spends that
+ * budget before the clock starts, and turns a one-line request into a form.
+ *
+ * So the test is not "would knowing this help" — knowing anything helps. It is
+ * "would the two answers produce genuinely different forms". Audience, and a
+ * branch that cannot be guessed, are the two that usually pass it. Tone,
+ * length, and colour never do: those are the author's to change afterwards in
+ * a builder they can see.
+ */
+export const CLARIFY_SYSTEM = `You are about to design a conversational form from someone's description. Before you do, decide whether anything they left out would actually change the form you build.
+
+YOU ARE TALKING TO THE FORM'S AUTHOR, NOT TO THE PEOPLE WHO WILL FILL IT IN. Every question you return is one the author answers right now, about their own form, before it is built. It is never a question the form itself should ask. "What is the primary reason for your message?" is a question for a bakery's customer and belongs IN the form; "which of your events can people enter?" is a question for the bakery, and only that second kind belongs here. If what you are about to ask would read naturally as a question inside the finished form, do not ask it — draft it instead.
+
+Return NOTHING — an empty list — unless the answer would change what gets asked. That is the common case, and it is the right one. You are good at sizing a form from a sentence, and the author is waiting.
+
+Ask ONLY when one of these is genuinely unresolved:
+- WHO fills it in, when the request implies two different audiences who would be asked different things ("customers and prospects", "students and staff") and does not say which.
+- A BRANCH the request names but leaves open — "different flows per plan" without saying which plans, "route them depending on size" without saying the bands.
+- A hard REQUIREMENT the request implies without stating it — "only eligible teams" with no statement of what makes a team eligible.
+- A destination you cannot invent and the form cannot work without: the actual UPI id or payment link when they have asked to take money, the booking link when they have asked for a calendar slot.
+
+Never ask about:
+- Tone, wording, length, colours, or how many questions. You decide those, and the author changes them in the builder.
+- Anything the request already answers, even loosely. "A waitlist for my iOS app" tells you the audience.
+- Anything EXTRA, when the request already lists what it wants asked. A request that names its questions has told you the scope of the form; proposing another one is not clarifying it, it is expanding it. Draft what they listed.
+- Anything you could pick a sensible default for. A default they can see and change beats a question they have to answer.
+- Their email, their company, or anything about them rather than about the form.
+
+At most three questions, and three is nearly always too many. One is usually enough. If you can draft a good form without asking, say nothing.
+
+For each question:
+- "question": what you need to know, in their words, as one plain sentence.
+- "why": one short clause on what it changes — "so I know whether to branch". "" if it is obvious.
+- "kind": "choice" when you can offer the realistic answers, "text" when you cannot.
+- "options": 2 to 5 answers for a choice, as the author would say them. Include the escape hatch the set needs ("Both", "Not sure yet") when one honestly exists. Empty for a text question.`;
+
+/**
+ * The author's answers, folded back into their request.
+ *
+ * Appended rather than merged: the request is what they wrote, and the answers
+ * are what they clarified. A model reading them together writes a better form
+ * than one reading a request somebody has rewritten on the author's behalf.
+ */
+export function withClarifications(
+  prompt: string,
+  answers: { question: string; answer: string }[],
+): string {
+  const given = answers.filter((a) => a.answer.trim());
+  if (given.length === 0) return prompt;
+  return `${prompt}
+
+THEY ALSO TOLD YOU:
+${given.map((a) => `- ${a.question} → ${a.answer.trim()}`).join("\n")}`;
+}
+
 export const EDIT_TOOL_PROTOCOL = `You are editing a form that already exists, using tools.
 
 Make every change by calling a tool — a sentence describing a change does not make it. You may call several tools in one turn.

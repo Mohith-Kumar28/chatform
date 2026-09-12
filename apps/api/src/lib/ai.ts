@@ -647,6 +647,76 @@ async function withSchemaFallback<T>(label: string, run: (model: string) => Prom
  * less. It used to see none of them.
  */
 /**
+ * What the author did not say, and the draft needs.
+ *
+ * Two or three questions at most, and usually none. A generator that
+ * interrogates everybody is worse than one that guesses well: the whole point
+ * of the streaming path is a real question on screen at 3.7s, and every
+ * question asked here is spent before that clock starts.
+ *
+ * Deliberately flat and tiny — this runs on the cheapest tier and its schema
+ * has to stay well inside the budget that has already refused a bigger one.
+ * `kind` is the render hint, not a block type: the author is answering a
+ * question about their form, not filling one in, so the only two shapes worth
+ * having are "pick from these" and "type something".
+ */
+export const ClarifyQuestions = z.object({
+  questions: z
+    .array(
+      z.object({
+        /** The question, in the author's terms. */
+        question: z.string().min(1),
+        /** One short line on why it changes the form. "" when self-evident. */
+        why: z.string(),
+        kind: z.enum(["choice", "text"]),
+        /** For `choice`: 2-5 labels. Empty for `text`. */
+        options: z.array(z.string()),
+      }),
+    )
+    .max(3),
+});
+export type ClarifyQuestions = z.output<typeof ClarifyQuestions>;
+
+/**
+ * Decide whether the request is answerable as it stands.
+ *
+ * Runs on the extraction tier because it is a judgement about one paragraph,
+ * not a design task, and it sits in front of the thing the author is waiting
+ * for. Returns an empty list on any failure: a clarifier that is having a bad
+ * minute must never be the reason a form does not get drafted.
+ */
+export async function clarifyRequest(opts: {
+  env: Bindings;
+  prompt: string;
+  system: string;
+  abortSignal?: AbortSignal;
+}): Promise<{ questions: ClarifyQuestions["questions"]; tokens: number; usage: TokenUsage }> {
+  try {
+    const result = await generateObject({
+      model: chatModel(opts.env, MODELS.extraction),
+      schema: ClarifyQuestions,
+      system: opts.system,
+      prompt: opts.prompt,
+      abortSignal: opts.abortSignal ?? AbortSignal.timeout(12_000),
+    });
+    const usage = splitUsage(result.usage);
+    const questions = (result.object as ClarifyQuestions).questions
+      .filter((q) => q.question.trim())
+      // A choice with fewer than two options is a text question wearing a hat.
+      .map((q) => ({
+        ...q,
+        options: q.kind === "choice" ? q.options.filter((o) => o.trim()).slice(0, 5) : [],
+      }))
+      .map((q) => (q.kind === "choice" && q.options.length < 2 ? { ...q, kind: "text" as const } : q))
+      .slice(0, 3);
+    return { questions, tokens: usage.input + usage.output, usage };
+  } catch (err) {
+    console.error("clarify_failed", { message: err instanceof Error ? err.message : String(err) });
+    return { questions: [], tokens: 0, usage: { input: 0, output: 0 } };
+  }
+}
+
+/**
  * How long an edit may take before the author is told it failed.
  *
  * The tool loop can take several round trips where the single call took one,
