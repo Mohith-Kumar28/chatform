@@ -15,13 +15,14 @@ import {
   TrendingDown,
   Users,
 } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import { type Block, type FormDoc } from "@repo/form-schema";
 import {
   getGetApiFormsByIdAnalyticsQueryKey,
   getGetApiFormsByIdFollowupAnalyticsQueryKey,
   getGetApiFormsByIdQueryKey,
   getGetApiFormsByIdSubmissionsQueryKey,
+  getGetApiFormsByIdSubmissionsQueryOptions,
   useGetApiFormsById,
   useGetApiFormsByIdAnalytics,
   useGetApiFormsByIdFollowupAnalytics,
@@ -134,13 +135,41 @@ export function ResultsClient({ formId }: ResultsClientProps) {
   const ent = useEntitlements();
   const canPartials = ent.can("partial_responses");
   const canAnalytics = ent.can("advanced_analytics");
-  const subsParams = {
-    status: statusFilter === "abandoned" && canPartials ? ("partial" as const) : ("completed" as const),
-    limit: rowsPerPage,
-    offset,
-  };
+  /*
+    Memoised because it is a cache key and a dependency, not just an argument.
+    Rebuilt every render it would re-run the prefetch effect below on renders
+    that changed nothing about which page is being asked for.
+  */
+  const subsParams = useMemo(
+    () => ({
+      status:
+        statusFilter === "abandoned" && canPartials ? ("partial" as const) : ("completed" as const),
+      limit: rowsPerPage,
+      offset,
+    }),
+    [statusFilter, canPartials, rowsPerPage, offset],
+  );
   const { data: rawSubs, isLoading, isFetching } = useGetApiFormsByIdSubmissions(formId as never, subsParams, {
-    query: { queryKey: getGetApiFormsByIdSubmissionsQueryKey(formId as never, subsParams), ...LIVE },
+    query: {
+      queryKey: getGetApiFormsByIdSubmissionsQueryKey(formId as never, subsParams),
+      /**
+       * The page you are reading stays on screen while the next one loads.
+       *
+       * Each page is its own cache entry — `[url, { status, limit, offset }]` —
+       * so turning the page used to mean landing on a key with nothing in it:
+       * the table unmounted, three skeleton bars appeared, and the open
+       * response detail was torn down with it. That last part is what made
+       * stepping past the end of a page impossible to do smoothly.
+       *
+       * `keepPreviousData` holds the previous page's rows as placeholder data
+       * until the new ones arrive, so the table never empties and the detail
+       * panel stays mounted across the boundary. `isFetching` is what says the
+       * screen is one page behind; `isLoading` now means only the very first
+       * load, which is the one that should show a skeleton.
+       */
+      placeholderData: keepPreviousData,
+      ...LIVE,
+    },
   });
   const { data: rawForm } = useGetApiFormsById(formId as never, {
     query: { queryKey: getGetApiFormsByIdQueryKey(formId as never), ...LIVE },
@@ -277,6 +306,60 @@ export function ResultsClient({ formId }: ResultsClientProps) {
       setRefreshing(false);
     }
   }, [formId, queryClient, refreshing]);
+
+  /**
+   * Warming the page next door, on intent rather than on sight.
+   *
+   * Not a blanket "always prefetch the next page": a page of this endpoint is
+   * every answer and the whole chat transcript for fifty responses, so fetching
+   * the one after it for every author who opens Results and never pages would
+   * roughly double the traffic on this screen to serve a minority. So the table
+   * asks for it at the two moments the reader has shown they are going: the
+   * pointer lands on a pager arrow, and a response detail is open — where the
+   * next arrow press can walk off the end of the page.
+   *
+   * Free when the page is already cached. `prefetchQuery` honours `staleTime`,
+   * and these entries are fresh for thirty seconds and kept for thirty minutes
+   * (`api-provider.tsx`), so paging back and forth over a table costs one
+   * request per page for as long as the screen is open — and a page that is
+   * still in flight is deduplicated against, not fetched twice.
+   */
+  const prefetchPage = useCallback(
+    (nextOffset: number) => {
+      if (nextOffset < 0 || nextOffset >= total || nextOffset === offset) return;
+      const params = { ...subsParams, offset: nextOffset };
+      void queryClient.prefetchQuery(
+        getGetApiFormsByIdSubmissionsQueryOptions(formId as never, params, {
+          query: { queryKey: getGetApiFormsByIdSubmissionsQueryKey(formId as never, params) },
+        }),
+      );
+    },
+    [formId, offset, queryClient, subsParams, total],
+  );
+
+  /**
+   * Handed down as one stable object.
+   *
+   * The table holds an effect keyed on this — the one that reopens the detail
+   * panel on the far side of a page boundary — and a fresh object literal every
+   * render would re-run it on renders that changed nothing.
+   */
+  const page = useMemo(
+    () => ({
+      offset,
+      limit: rowsPerPage,
+      total,
+      // A page in flight disables the arrows rather than letting a
+      // second click queue a jump the reader never sees land.
+      loading: isFetching,
+      onOffset: setOffset,
+      onLimit: changeRowsPerPage,
+      prefetch: prefetchPage,
+    }),
+    // `changeRowsPerPage` closes over nothing but two stable setters, so it is
+    // not a dependency worth re-running this for.
+    [offset, rowsPerPage, total, isFetching, prefetchPage],
+  );
 
   /**
    * Hoisted, because it belongs to the table rather than to the page: on the
@@ -461,16 +544,7 @@ export function ResultsClient({ formId }: ResultsClientProps) {
                 statusFilter === "abandoned" &&
                 (Boolean(doc?.settings.followUp?.enabled) || rows.some((r) => r.followUp))
               }
-              page={{
-                offset,
-                limit: rowsPerPage,
-                total,
-                // A page in flight disables the arrows rather than letting a
-                // second click queue a jump the reader never sees land.
-                loading: isFetching,
-                onOffset: setOffset,
-                onLimit: changeRowsPerPage,
-              }}
+              page={page}
             />
           )}
         </div>

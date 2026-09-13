@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { planStep, positionInTable, type PageEdge } from "./response-step";
 import {
   Check,
   ChevronLeft,
@@ -647,6 +648,7 @@ function Pager({
   loading,
   onOffset,
   onLimit,
+  prefetch,
 }: {
   offset: number;
   limit: number;
@@ -654,6 +656,8 @@ function Pager({
   loading?: boolean;
   onOffset: (offset: number) => void;
   onLimit: (limit: number) => void;
+  /** Warm a page we are about to be asked for. A no-op if it is already cached. */
+  prefetch?: (offset: number) => void;
 }) {
   if (total <= ROWS_PER_PAGE[0] && offset === 0) return null;
   const from = total === 0 ? 0 : offset + 1;
@@ -685,6 +689,13 @@ function Pager({
           shape="pill"
           aria-label="Previous page"
           disabled={offset === 0 || loading}
+          /*
+            The pointer arriving is the earliest honest signal that this page is
+            wanted, and it buys the round trip a head start the click would
+            otherwise spend waiting. `onFocus` for the same reason on a keyboard.
+          */
+          onMouseEnter={() => prefetch?.(Math.max(0, offset - limit))}
+          onFocus={() => prefetch?.(Math.max(0, offset - limit))}
           onClick={() => onOffset(Math.max(0, offset - limit))}
         >
           <ChevronLeft className="size-3.5" />
@@ -695,6 +706,8 @@ function Pager({
           shape="pill"
           aria-label="Next page"
           disabled={offset + limit >= total || loading}
+          onMouseEnter={() => prefetch?.(offset + limit)}
+          onFocus={() => prefetch?.(offset + limit)}
           onClick={() => onOffset(offset + limit)}
         >
           <ChevronRight className="size-3.5" />
@@ -770,6 +783,8 @@ export function SubmissionsTable({
     loading?: boolean;
     onOffset: (offset: number) => void;
     onLimit: (limit: number) => void;
+    /** Warm a page we are about to be asked for. A no-op if it is already cached. */
+    prefetch?: (offset: number) => void;
   };
 }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -834,6 +849,99 @@ export function SubmissionsTable({
   const hasRespondentIds = rows.some((r) => r.respondentId);
   const openIndex = openId ? rows.findIndex((r) => r.id === openId) : -1;
   const open = openIndex >= 0 ? rows[openIndex]! : null;
+
+  /**
+   * Where the open response sits in the *table*, not in the page.
+   *
+   * The detail panel's counter and its two arrows used to be given
+   * `rows.length` — the page — so on a form with 72 responses at 50 a page the
+   * panel read "50/50" and the Next arrow greyed out on the fiftieth. The other
+   * 22 were reachable only by closing the panel, turning the page, and opening
+   * one by hand. The arrows step through the responses; the responses are the
+   * table.
+   */
+  const pageOffset = page?.offset ?? 0;
+  const pageLimit = page?.limit ?? rows.length;
+  const pageTotal = page?.total ?? rows.length;
+  const pageLoading = page?.loading ?? false;
+  const onOffset = page?.onOffset;
+  const prefetch = page?.prefetch;
+
+  /**
+   * A step that ran off the edge of the page, waiting for the next one.
+   *
+   * Turning the page is not synchronous: `onOffset` re-keys the query and the
+   * rows arrive a round trip later. So the intent is parked here — which page
+   * was asked for, and which end of it to open — and settled by the effect
+   * below when that page is the one on screen.
+   */
+  const [crossing, setCrossing] = useState<{ offset: number; edge: PageEdge } | null>(null);
+
+  /**
+   * Landing on the far side.
+   *
+   * Adjusted during the render that brings the new page in, rather than in an
+   * effect after it: React re-runs the component with the corrected state
+   * before committing anything, so the panel never paints the wrong response
+   * for a frame. An effect would paint the old row, then replace it — the
+   * cascading render the lint rule exists to stop, and a visible flicker.
+   *
+   * Guarded on the offset as well as on `loading` because `keepPreviousData`
+   * means `rows` is still the *old* page for the length of the fetch — opening
+   * `rows[0]` the moment the offset changed would reopen the row the reader has
+   * just stepped away from.
+   */
+  if (crossing && pageOffset === crossing.offset && !pageLoading) {
+    const landing = crossing.edge === "first" ? rows[0] : rows[rows.length - 1];
+    if (landing) setOpenId(landing.id);
+    setCrossing(null);
+  }
+
+  /*
+    A page boundary is one arrow press away whenever the panel is open, so this
+    is the other moment worth warming the neighbours for. Both sides: the
+    reader who opened row 51 of page 2 is as likely to walk backwards.
+  */
+  useEffect(() => {
+    if (!openId || !prefetch) return;
+    prefetch(pageOffset + pageLimit);
+    if (pageOffset > 0) prefetch(pageOffset - pageLimit);
+  }, [openId, prefetch, pageOffset, pageLimit]);
+
+  /** One step, in table coordinates. The arithmetic is in `response-step.ts`. */
+  const stepResponse = useCallback(
+    (delta: number) => {
+      // A turn already in flight. A second press before it lands would compute
+      // its target from the page being left behind.
+      if (crossing) return;
+      const plan = planStep({
+        index: openIndex,
+        delta,
+        rowCount: rows.length,
+        offset: pageOffset,
+        limit: pageLimit,
+        total: pageTotal,
+        canTurnPage: Boolean(onOffset),
+      });
+      if (plan.kind === "same-page") {
+        setOpenId(rows[plan.index]!.id);
+        return;
+      }
+      if (plan.kind === "turn-page") {
+        setCrossing({ offset: plan.offset, edge: plan.edge });
+        onOffset!(plan.offset);
+      }
+    },
+    [crossing, openIndex, onOffset, pageLimit, pageOffset, pageTotal, rows, setOpenId],
+  );
+
+  /** Where the counter says we are — see `positionInTable` for the mid-turn case. */
+  const shownIndex = positionInTable({
+    index: openIndex,
+    offset: pageOffset,
+    limit: pageLimit,
+    crossing,
+  });
 
   // Written back while a response is open, so a refresh — or a pasted link —
   // lands on the same one.
@@ -1268,14 +1376,12 @@ export function SubmissionsTable({
       <SubmissionDialog
         row={open}
         columns={columns}
-        index={openIndex}
-        total={rows.length}
+        index={shownIndex}
+        total={pageTotal}
+        stepping={crossing !== null}
         canDelete={canDelete}
         onClose={() => setOpenId(null)}
-        onStep={(delta) => {
-          const next = rows[openIndex + delta];
-          if (next) setOpenId(next.id);
-        }}
+        onStep={stepResponse}
         onDelete={() => open && setConfirming([open.id])}
         onDownload={() => open && downloadCsv([open], columns, hasRespondents)}
       />
@@ -1393,6 +1499,7 @@ function SubmissionDialog({
   columns,
   index,
   total,
+  stepping,
   canDelete,
   onClose,
   onStep,
@@ -1401,8 +1508,12 @@ function SubmissionDialog({
 }: {
   row: SubmissionRecord | null;
   columns: ResultColumn[];
+  /** Position in the whole table, zero-based — not in the page on screen. */
   index: number;
+  /** How many responses the current filter matches, page aside. */
   total: number;
+  /** A page turn is in flight under this panel; the arrows are spent until it lands. */
+  stepping?: boolean;
   canDelete: boolean;
   onClose: () => void;
   onStep: (delta: number) => void;
@@ -1430,7 +1541,7 @@ function SubmissionDialog({
    * keys must not also change what is on screen. `⌘←` is the browser's Back.
    */
   useEffect(() => {
-    if (!row || total <= 1) return;
+    if (!row || total <= 1 || stepping) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
@@ -1443,7 +1554,7 @@ function SubmissionDialog({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [row, index, total, onStep]);
+  }, [row, index, total, stepping, onStep]);
 
   if (!row) return null;
 
@@ -1451,7 +1562,22 @@ function SubmissionDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent size="3xl" layout="panel" showCloseButton={false}>
+      {/*
+        One height, whatever is in it.
+
+        `layout="panel"` only caps the height, so the panel took its size from
+        the response — and these vary from one answer to forty. Stepping through
+        them with the arrows made the box grow and shrink under a cursor that
+        was resting on the arrow, which moved out from under the next click. A
+        fixed height means only the content inside `DialogBody` scrolls, and the
+        header, the tabs and the two arrows stay exactly where they were.
+      */}
+      <DialogContent
+        size="3xl"
+        layout="panel"
+        showCloseButton={false}
+        className="h-[min(46rem,calc(100dvh-4rem))]"
+      >
         <div className="flex items-start gap-3 border-b px-5 py-4">
           <div className="min-w-0 flex-1">
             <DialogTitle className="text-h3">
@@ -1489,7 +1615,7 @@ function SubmissionDialog({
                       variant="ghost"
                       size="icon-sm"
                       aria-label="Previous response"
-                      disabled={index <= 0}
+                      disabled={index <= 0 || stepping}
                       onClick={() => onStep(-1)}
                     >
                       <ChevronLeft className="size-4" />
@@ -1508,7 +1634,7 @@ function SubmissionDialog({
                       variant="ghost"
                       size="icon-sm"
                       aria-label="Next response"
-                      disabled={index >= total - 1}
+                      disabled={index >= total - 1 || stepping}
                       onClick={() => onStep(1)}
                     >
                       <ChevronRight className="size-4" />
@@ -1589,7 +1715,16 @@ function SubmissionDialog({
           height a typical answer list settles at, so the common case never
           grows into it and the sparse case stops collapsing.
         */}
-        <DialogBody className="min-h-[26rem] space-y-6 px-5 py-4">
+        {/*
+          No minimum of its own now that the panel has a height.
+
+          `min-h-[26rem]` was this problem's previous answer — a floor under the
+          shortest response so the box did not collapse around it. With the
+          height fixed above it is not only redundant, it overrides the
+          `min-h-0` that lets a flex child scroll: on a short window the body
+          would refuse to shrink and push the footer off the panel.
+        */}
+        <DialogBody className="space-y-6 px-5 py-4">
           <div className="text-caption flex flex-wrap items-center gap-2">
             {/*
               Three states, not two.
