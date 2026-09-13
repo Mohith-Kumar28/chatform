@@ -383,8 +383,13 @@ export function CreateFormDialog({
 
         {/* The ⌘↵ hint used to live down here, a full screen away from the box
             it applies to. It sits in the composer now, so this bar is left
-            with the one thing that belongs on it. */}
-        {!drafting && (
+            with the one thing that belongs on it.
+
+            Gone while drafting, and gone while asking, for the same reason the
+            gallery is: "what do you want to make" has been answered, and an
+            offer to go and browse instead belongs to the screen where it was
+            still an open question. */}
+        {!drafting && !clarify && (
           <div className="border-border text-muted-foreground flex shrink-0 items-center justify-end gap-3 border-t px-6 py-3 text-xs">
             <Link
               href="/templates"
