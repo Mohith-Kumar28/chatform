@@ -495,10 +495,6 @@ function AiPanel({
             Generate is the thing on this row that has to be found. */}
         <AddKnowledgeButton count={knowledgeCount} onClick={onOpenKnowledge} />
         <div className="ml-auto flex items-center gap-3">
-          <span className="text-muted-foreground hidden items-center gap-1 text-xs sm:flex">
-            <Kbd>⌘</Kbd>
-            <Kbd>↵</Kbd>
-          </span>
           {/* Nothing at all where the browser has no recogniser — a mic that
               cannot listen is worse than no mic. */}
           {dictation.supported && (
@@ -531,6 +527,12 @@ function AiPanel({
           <Button shape="pill" disabled={!canGenerate} onClick={submit}>
             <Sparkles className="size-4" />
             Generate
+            {/* On the button it fires, not floating beside it. Two loose key
+                chips in the middle of the row read as controls of their own;
+                inside the control they describe, they are a label. */}
+            <Kbd tone="inverse" className="w-auto px-1.5">
+              ⌘↵
+            </Kbd>
           </Button>
         </div>
       </div>

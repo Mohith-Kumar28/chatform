@@ -82,7 +82,9 @@ export function StagedKnowledgeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      {/* Opened from the create dialog, so it carries its own overlay above
+          that one — otherwise the screen behind it stays undimmed. */}
+      <DialogContent nested className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add knowledge</DialogTitle>
           <DialogDescription>

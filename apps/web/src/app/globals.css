@@ -349,6 +349,12 @@
   --z-dropdown: 40;
   --z-overlay: 50;
   --z-modal: 60;
+  /* A dialog opened from inside a dialog — "Add knowledge" over the create
+     screen. Its own overlay has to sit above the dialog it was opened from,
+     or the screen behind it never dims and the second modal reads as a panel
+     floating on an undimmed page. */
+  --z-overlay-nested: 62;
+  --z-modal-nested: 65;
   /* Popovers, selects and menus sit *above* a modal: they are opened from
      inside one as often as from the page, and at the old bare `z-50` they
      painted behind the dialog that owned them. */

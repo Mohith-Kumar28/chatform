@@ -51,9 +51,10 @@ export function TemplateCard({
     <div
       className={cn(
         "group bg-card border-border relative flex h-full w-full flex-col rounded-2xl border text-left",
-        "shadow-xs transition-[box-shadow,transform,border-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
-        // Cards lift, buttons don't (DESIGN.md §4.4).
-        "hover:border-border hover:shadow-md hover:-translate-y-0.5 motion-reduce:hover:translate-y-0",
+        "shadow-xs transition-[box-shadow,border-color] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
+        // Shadow and border only. The lift moved the card out from under
+        // the pointer on a dense grid and read as the row shifting.
+        "hover:border-border hover:shadow-md",
         "focus-within:ring-ring/40 focus-within:ring-2",
         disabled && "pointer-events-none opacity-60",
         compact ? "p-3.5" : "p-5",
@@ -85,6 +86,16 @@ export function TemplateCard({
           </h3>
           <p className="text-muted-foreground mt-0.5 text-xs">{template.category}</p>
         </div>
+        {meta.length > 0 && (
+          <div className="text-muted-foreground flex shrink-0 items-center gap-2.5 pt-1 text-xs">
+            {meta.map((m) => (
+              <span key={m.label} className="tabular inline-flex items-center gap-1">
+                <m.icon className="size-3" strokeWidth={1.75} />
+                {m.label}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <p
@@ -107,61 +118,48 @@ export function TemplateCard({
       )}
 
       <div className={cn("mt-auto flex items-center gap-3 pt-3", compact ? "pt-2.5" : "pt-4")}>
-        {meta.length > 0 && (
-          <div className="text-muted-foreground pointer-events-none flex items-center gap-3 text-xs">
-            {meta.map((m) => (
-              <span key={m.label} className="tabular inline-flex items-center gap-1">
-                <m.icon className="size-3" strokeWidth={1.75} />
-                {m.label}
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="z-10 ml-auto flex items-center gap-2.5">
-          {pending ? (
-            <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
-              <Loader2 className="size-3.5 animate-spin" />
-              Creating…
-            </span>
-          ) : (
-            <>
-              {/* The shortcut past the detail page, for someone who has been
-                  here before. Revealed on hover so the quiet state of the
-                  gallery stays a gallery, and always visible on touch, where
-                  there is no hover to reveal it with. */}
-              {onUse && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  shape="pill"
-                  onClick={onUse}
-                  aria-label={`Create a form from the ${template.title} template`}
-                  // Outlined, not ghost. It sits beside the card's own "open
-                  // this" hint, and two pieces of small grey text a few pixels
-                  // apart — one of which creates a form — is exactly the
-                  // ambiguity this whole screen was changed to remove.
-                  // Held at the row's own type size and a step shorter than
-                  // `sm`: at 14px in a 12px line it read as a stray control
-                  // dropped onto the card rather than one of its two actions.
-                  className="h-7 px-3 text-xs opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100"
-                >
-                  Use
-                </Button>
+        {pending ? (
+          <span className="text-muted-foreground ml-auto inline-flex items-center gap-1.5 text-xs">
+            <Loader2 className="size-3.5 animate-spin" />
+            Creating…
+          </span>
+        ) : (
+          <>
+            <span
+              aria-hidden
+              className={cn(
+                "text-muted-foreground group-hover:text-foreground pointer-events-none inline-flex items-center gap-1 text-xs font-medium",
+                "transition-colors duration-[var(--duration-micro)]",
               )}
-              <span
-                aria-hidden
+            >
+              Preview
+              <ArrowRight className="size-3.5 transition-transform duration-[var(--duration-micro)] group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0" />
+            </span>
+
+            {/* The shortcut past the detail page, for someone who already
+                knows this one. It holds its space at every moment — only the
+                paint is revealed — so nothing in the card moves on hover.
+                Always visible on touch, where there is no hover to reveal it
+                with, and reachable by keyboard, where there is none either. */}
+            {onUse && (
+              <Button
+                size="sm"
+                shape="pill"
+                onClick={onUse}
+                aria-label={`Create a form from the ${template.title} template`}
                 className={cn(
-                  "text-muted-foreground group-hover:text-foreground inline-flex items-center gap-1 text-xs font-medium",
-                  "transition-colors duration-[var(--duration-micro)]",
+                  "z-10 ml-auto h-7 px-3 text-xs",
+                  "pointer-events-none opacity-0 transition-opacity",
+                  "group-hover:pointer-events-auto group-hover:opacity-100",
+                  "focus-visible:pointer-events-auto focus-visible:opacity-100",
+                  "max-sm:pointer-events-auto max-sm:opacity-100",
                 )}
               >
-                Preview
-                <ArrowRight className="size-3.5 transition-transform duration-[var(--duration-micro)] group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0" />
-              </span>
-            </>
-          )}
-        </div>
+                Use template
+              </Button>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

@@ -103,19 +103,33 @@ function DialogContent({
   children,
   size,
   layout,
+  nested = false,
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> &
   VariantProps<typeof dialogContentVariants> & {
+    /**
+     * Opened from inside another dialog.
+     *
+     * Both layers move up a step, because at the shared scale a second
+     * dialog's overlay (50) lands *under* the first dialog's content (60):
+     * the screen behind never dims, and the second modal reads as a stray
+     * panel on a page that is still fully lit.
+     */
+    nested?: boolean
     showCloseButton?: boolean
   }) {
   return (
     <DialogPortal data-slot="dialog-portal">
-      <DialogOverlay />
+      <DialogOverlay className={cn(nested && "z-[var(--z-overlay-nested)]")} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         data-size={size ?? "lg"}
-        className={cn(dialogContentVariants({ size, layout }), className)}
+        className={cn(
+          dialogContentVariants({ size, layout }),
+          nested && "z-[var(--z-modal-nested)]",
+          className,
+        )}
         {...props}
       >
         {children}
