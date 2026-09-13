@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -68,6 +69,26 @@ export function ClarifyPanel({
 
   const submit = () =>
     onSubmit(questions.map((q, i) => ({ question: q.question, answer: answers[i] ?? "" })));
+
+  // Enter builds, Shift+Enter skips — the two things this screen is for, on the
+  // keys an author already has a finger on. Anywhere a key means something else
+  // it is left alone: Enter in a box is a newline and Enter on a chip picks it,
+  // so a control that takes typing or activation keeps its own behaviour and
+  // only the panel's empty space answers for the buttons.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || busy || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "TEXTAREA" || tag === "INPUT" || tag === "BUTTON" || el?.isContentEditable)
+        return;
+      e.preventDefault();
+      if (e.shiftKey) onSkip();
+      else submit();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   return (
     <div className="space-y-5">
@@ -146,9 +167,10 @@ export function ClarifyPanel({
                 placeholder="Type your answer, or leave it blank"
                 rows={2}
                 className="resize-none text-sm"
-                // Enter submits when every box has something; otherwise it is
-                // just a newline, because submitting a half-answered set on a
-                // stray keypress is worse than needing one more click.
+                // In a box Enter is still a newline — submitting a
+                // half-written answer on a stray keypress is worse than
+                // needing one more keystroke — so the panel's Enter gives way
+                // here and ⌘↵ carries it instead.
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                     e.preventDefault();
@@ -169,12 +191,17 @@ export function ClarifyPanel({
       >
         <Button onClick={submit} disabled={busy} shape="pill">
           {busy ? "Starting…" : answered > 0 ? "Build it" : "Build it anyway"}
-          <ArrowRight className="size-4" strokeWidth={1.75} />
+          {/* The key that fires it, on the control it fires — an arrow only
+              ever said "forward", which the label already said. */}
+          <Kbd tone="inverse" className="w-auto px-1.5">
+            ↵
+          </Kbd>
         </Button>
         {/* Always available, never a gate. An author who wants a draft more
             than they want to answer questions should get one. */}
         <Button variant="ghost" size="sm" shape="pill" onClick={onSkip} disabled={busy}>
           Skip these
+          <Kbd className="w-auto px-1.5">⇧↵</Kbd>
         </Button>
         <span className="text-muted-foreground ml-auto text-xs">
           {answered === 0

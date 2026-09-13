@@ -36,12 +36,18 @@ export function BuildToolbar() {
   // keyboard layer — which has no way to reach state declared in here.
   const designOpen = useBuilderStore((s) => s.designOpen);
   const setDesignOpen = useBuilderStore((s) => s.setDesignOpen);
-  const onFlow = pathname.endsWith("/workflow");
 
-  // The flow canvas already carries a node library on the left and an
-  // inspector on the right; a Design link and an upgrade pill on top of that
-  // is clutter. Keep the switcher there and nothing else.
-  const showSideActions = !onFlow;
+  /*
+    The same row on Questions and on Flow, down to the slots that are empty.
+
+    Flow used to drop Design, the save cloud and Upgrade on the grounds that the
+    canvas already carries two panels and did not need more chrome. What that
+    actually bought was a toolbar that changed shape under the cursor: switching
+    views moved the segmented control sideways, took away the one signal that
+    says the work is saved, and hid the only upgrade path in the builder from
+    anyone who happened to be looking at their flow. Flow is a way of shaping
+    the same form, not a different room.
+  */
   const ent = useEntitlements();
   /**
    * Only ever shown to someone who can act on it.
@@ -51,7 +57,7 @@ export function BuildToolbar() {
    * A nag aimed at a customer who already paid is worse than no chip at all.
    */
   const openPlans = usePlansDialog((s) => s.openPlans);
-  const showUpgrade = showSideActions && ent.ready && ent.data?.planId === "free";
+  const showUpgrade = ent.ready && ent.data?.planId === "free";
   /**
    * The autosave cloud is a paying-plan perk, not a free-plan consolation prize.
    *
@@ -60,35 +66,33 @@ export function BuildToolbar() {
    * row exists to make. Gated on `ent.ready` too, so it doesn't flash on before the
    * plan is known and then vanish under the Upgrade chip a moment later.
    */
-  const showSaveStatus = showSideActions && ent.ready && ent.data?.planId !== "free";
+  const showSaveStatus = ent.ready && ent.data?.planId !== "free";
 
   return (
     <TooltipProvider delayDuration={400}>
       <div className="flex items-center gap-2 px-4 pt-3">
         <div className="flex flex-1 justify-start">
-          {showSideActions && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => setDesignOpen(true)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
-                    "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
-                    designOpen
-                      ? "bg-primary-soft text-primary"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
-                  )}
-                >
-                  <Palette className="size-3.5" strokeWidth={1.75} />
-                  Design
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <TooltipHint label="Design" hint="Colours, type and layout" keys={KEY.design} />
-              </TooltipContent>
-            </Tooltip>
-          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => setDesignOpen(true)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
+                  "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
+                  designOpen
+                    ? "bg-primary-soft text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                )}
+              >
+                <Palette className="size-3.5" strokeWidth={1.75} />
+                Design
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <TooltipHint label="Design" hint="Colours, type and layout" keys={KEY.design} />
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         {/* Questions and Flow are two views of one thing — the same

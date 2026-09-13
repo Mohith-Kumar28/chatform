@@ -302,28 +302,46 @@ function SortableRow({
         boxShadow: selected ? `inset 3px 0 0 0 ${TONE_ACCENT[meta.tone]}` : undefined,
       }}
       className={cn(
-        "group relative flex items-start gap-1.5 overflow-hidden rounded-xl py-2 pr-1.5 pl-1",
+        "group relative flex items-start gap-1.5 overflow-hidden rounded-xl py-2 pr-1.5 pl-2",
         "transition-[background-color,box-shadow] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
         TONE_CLASSES[meta.tone],
         selected ? "ring-0" : "opacity-[0.82] hover:opacity-100",
         isDragging && "shadow-md z-10 opacity-100",
       )}
     >
+      {/*
+        The type icon *is* the grab handle: it swaps to a grip under the cursor
+        and takes the drag listeners itself.
+
+        It used to be a separate button ahead of the icon, invisible until
+        hover, which meant every row in the list carried a permanent 20px of
+        nothing down its left edge so that a control nobody was looking at
+        would have somewhere to appear. Titles wrap at around thirty
+        characters in this pane; twenty pixels is a word.
+
+        `onClick` as well as the listeners, so clicking the icon still picks
+        the question — the pointer sensor only starts a drag after 4px, so a
+        click never reaches the drag path.
+      */}
       <button
         type="button"
         {...attributes}
         {...listeners}
-        aria-label={`Reorder ${block.title}`}
-        className="mt-0.5 shrink-0 cursor-grab touch-none opacity-0 transition-opacity group-hover:opacity-40 hover:!opacity-80 active:cursor-grabbing"
+        onClick={onSelect}
+        aria-label={`${block.title || meta.label} — drag to reorder`}
+        className="mt-px flex shrink-0 cursor-grab touch-none items-center gap-1.5 active:cursor-grabbing"
       >
-        <GripVertical className="size-3.5" />
+        <span className="relative grid size-3.5 place-items-center">
+          <meta.icon
+            className="size-3.5 transition-opacity group-hover:opacity-0"
+            strokeWidth={2}
+          />
+          <GripVertical className="absolute size-3.5 opacity-0 transition-opacity group-hover:opacity-70" />
+        </span>
+        <span className="tabular text-[0.625rem] opacity-60">{index + 1}</span>
       </button>
 
-      <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-start gap-2 pr-5 text-left">
-        <span className="mt-px flex shrink-0 items-center gap-1.5">
-          <meta.icon className="size-3.5" strokeWidth={2} />
-          <span className="tabular text-[0.625rem] opacity-60">{index + 1}</span>
-        </span>
+      <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-start gap-2 pr-3 text-left">
         <span className="min-w-0 flex-1">
           {/* Two lines before the ellipsis: one line truncated after ~three
               words made the list unreadable. */}
@@ -359,12 +377,17 @@ function SortableRow({
         {flow?.branches && <GitBranch className="mt-0.5 size-3 shrink-0 opacity-45" aria-label="Branches" />}
       </button>
 
-      {/* Required marker, pinned top-right and always red — it is the one
-          signal in this list that is not about block type, so it should not
-          take the row's family colour. */}
+      {/* Required marker, in the corner and always red — it is the one signal
+          in this list that is not about block type, so it should not take the
+          row's family colour.
+
+          Literally the corner: it sat far enough in that the title had to keep
+          a 20px lane clear of it on every row, required or not. An asterisk is
+          six pixels wide and the corner above the first line of text is dead
+          space on every row in the list. */}
       {block.required && (
         <span
-          className="text-destructive pointer-events-none absolute top-1.5 right-2 text-sm leading-none font-medium"
+          className="text-destructive pointer-events-none absolute top-0.5 right-1 text-sm leading-none font-medium"
           aria-label="Required"
         >
           *

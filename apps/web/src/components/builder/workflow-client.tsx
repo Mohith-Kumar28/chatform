@@ -70,17 +70,23 @@ interface WorkflowClientProps {
   focusRef?: string | null;
   /** Rendered above the canvas, between the two panels. */
   toolbar?: React.ReactNode;
+  /**
+   * Floated over the foot of the canvas, clear of both panels — where the AI
+   * bar sits on the Questions view. Passed in rather than imported so this
+   * module keeps knowing nothing about the builder's chrome.
+   */
+  dock?: React.ReactNode;
 }
 
-export function WorkflowClient({ doc, onChange, focusRef, toolbar }: WorkflowClientProps) {
+export function WorkflowClient({ doc, onChange, focusRef, toolbar, dock }: WorkflowClientProps) {
   return (
     <ReactFlowProvider>
-      <WorkflowEditor doc={doc} onChange={onChange} focusRef={focusRef} toolbar={toolbar} />
+      <WorkflowEditor doc={doc} onChange={onChange} focusRef={focusRef} toolbar={toolbar} dock={dock} />
     </ReactFlowProvider>
   );
 }
 
-function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProps) {
+function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClientProps) {
   const { screenToFlowPosition, setViewport } = useReactFlow();
 
   /**
@@ -769,7 +775,10 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
       {/* left: node library (collapsible) */}
       <aside
         data-tour="wf-palette"
-        className={`bg-sidebar relative flex shrink-0 flex-col overflow-y-auto transition-all duration-200 ${leftOpen ? "w-60" : "w-12"}`}
+        /* `w-60 xl:w-72` is the Questions list's width, not a coincidence: the
+           two views are one screen apart and a 3rem jump on every switch made
+           the canvas look like it had moved. */
+        className={`bg-sidebar relative flex shrink-0 flex-col overflow-y-auto transition-all duration-200 ${leftOpen ? "w-60 xl:w-72" : "w-12"}`}
       >
         {leftOpen ? (
           <>
@@ -819,7 +828,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
           The toolbar sits inside this column, between the two panels, exactly
           as it does on the Questions view. Spanning it across the full width
           pushed both panels down and left dead space above them. */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-w-0 flex-1 flex-col">
         {toolbar}
         {/*
           A red node nobody scrolls to is a red node nobody sees. The canvas is
@@ -928,6 +937,15 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar }: WorkflowClientProp
             </div>
           </PaneMenu>
         </CanvasMenuProvider>
+
+        {/* Between the zoom controls and the minimap, which own the two bottom
+            corners. `pointer-events-none` so the strip either side of the bar
+            stays canvas you can drag on. */}
+        {dock && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-4 pb-4">
+            {dock}
+          </div>
+        )}
       </div>
 
       {/* right: inspector (collapsible) */}
