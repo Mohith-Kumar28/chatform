@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { planStep, positionInTable, type PageEdge } from "./response-step";
+import {
+  pageCount,
+  pageNumber,
+  planJump,
+  planStep,
+  positionInTable,
+  type PageView,
+  type StepPlan,
+} from "./response-step";
+import { JumpField } from "./jump-field";
 import {
   Check,
   ChevronLeft,
@@ -662,6 +671,8 @@ function Pager({
   if (total <= ROWS_PER_PAGE[0] && offset === 0) return null;
   const from = total === 0 ? 0 : offset + 1;
   const to = Math.min(total, offset + limit);
+  const pages = pageCount(total, limit);
+  const current = pageNumber(offset, limit);
   return (
     <div className="flex items-center gap-2">
       <label className="text-muted-foreground text-micro flex items-center gap-1.5">
@@ -679,9 +690,39 @@ function Pager({
           </SelectContent>
         </Select>
       </label>
-      <span className="text-muted-foreground text-caption tabular whitespace-nowrap">
-        {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}
-      </span>
+      {/*
+        The range, and a way out of it.
+
+        It still reads "51–72 of 72" rather than "page 2 of 2" — the numbers an
+        author is looking for are response counts, not page ordinals, and
+        changing the page size renumbers pages while leaving the range
+        meaningful. But it is now the thing you click to leave: on a table of
+        three thousand, page 28 was twenty-seven presses of the chevron, each
+        one fetching a page nobody wanted to see. Opening the field swaps in
+        the page ordinal, because a page is what it accepts.
+      */}
+      {pages > 1 ? (
+        <JumpField
+          value={current}
+          max={pages}
+          label="Go to page"
+          title={`Page ${current} of ${pages} — type a page to jump to it`}
+          render={(page) =>
+            page === current ? (
+              <>
+                {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}
+              </>
+            ) : (
+              <>Page {page}</>
+            )
+          }
+          onJump={(page) => onOffset((page - 1) * limit)}
+        />
+      ) : (
+        <span className="text-muted-foreground text-caption tabular whitespace-nowrap">
+          {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}
+        </span>
+      )}
       <div className="flex items-center gap-0.5">
         <Button
           variant="ghost"
@@ -875,7 +916,7 @@ export function SubmissionsTable({
    * was asked for, and which end of it to open — and settled by the effect
    * below when that page is the one on screen.
    */
-  const [crossing, setCrossing] = useState<{ offset: number; edge: PageEdge } | null>(null);
+  const [crossing, setCrossing] = useState<{ offset: number; want: number } | null>(null);
 
   /**
    * Landing on the far side.
@@ -892,7 +933,7 @@ export function SubmissionsTable({
    * just stepped away from.
    */
   if (crossing && pageOffset === crossing.offset && !pageLoading) {
-    const landing = crossing.edge === "first" ? rows[0] : rows[rows.length - 1];
+    const landing = rows[crossing.want - pageOffset];
     if (landing) setOpenId(landing.id);
     setCrossing(null);
   }
@@ -908,40 +949,61 @@ export function SubmissionsTable({
     if (pageOffset > 0) prefetch(pageOffset - pageLimit);
   }, [openId, prefetch, pageOffset, pageLimit]);
 
-  /** One step, in table coordinates. The arithmetic is in `response-step.ts`. */
-  const stepResponse = useCallback(
-    (delta: number) => {
-      // A turn already in flight. A second press before it lands would compute
-      // its target from the page being left behind.
-      if (crossing) return;
-      const plan = planStep({
-        index: openIndex,
-        delta,
-        rowCount: rows.length,
-        offset: pageOffset,
-        limit: pageLimit,
-        total: pageTotal,
-        canTurnPage: Boolean(onOffset),
-      });
+  /** The table as `response-step.ts` needs to see it. */
+  const view: PageView = useMemo(
+    () => ({
+      offset: pageOffset,
+      limit: pageLimit,
+      rowCount: rows.length,
+      total: pageTotal,
+      canTurnPage: Boolean(onOffset),
+    }),
+    [pageOffset, pageLimit, rows.length, pageTotal, onOffset],
+  );
+
+  /**
+   * Carrying out a plan, wherever it came from.
+   *
+   * A step and a typed response number differ only in how the target is worked
+   * out, so they share everything after that: open it if it is here, otherwise
+   * turn the page and park the intent for the render that brings the rows in.
+   */
+  const runPlan = useCallback(
+    (plan: StepPlan) => {
       if (plan.kind === "same-page") {
         setOpenId(rows[plan.index]!.id);
         return;
       }
       if (plan.kind === "turn-page") {
-        setCrossing({ offset: plan.offset, edge: plan.edge });
+        setCrossing({ offset: plan.offset, want: plan.want });
         onOffset!(plan.offset);
       }
     },
-    [crossing, openIndex, onOffset, pageLimit, pageOffset, pageTotal, rows, setOpenId],
+    [onOffset, rows, setOpenId],
+  );
+
+  /** One step from the open response. The arithmetic is in `response-step.ts`. */
+  const stepResponse = useCallback(
+    (delta: number) => {
+      // A turn already in flight. A second press before it lands would compute
+      // its target from the page being left behind.
+      if (crossing) return;
+      runPlan(planStep(openIndex, delta, view));
+    },
+    [crossing, openIndex, runPlan, view],
+  );
+
+  /** Straight to a response by its number, however many pages away it is. */
+  const jumpToResponse = useCallback(
+    (oneBased: number) => {
+      if (crossing) return;
+      runPlan(planJump(oneBased - 1, view));
+    },
+    [crossing, runPlan, view],
   );
 
   /** Where the counter says we are — see `positionInTable` for the mid-turn case. */
-  const shownIndex = positionInTable({
-    index: openIndex,
-    offset: pageOffset,
-    limit: pageLimit,
-    crossing,
-  });
+  const shownIndex = positionInTable({ index: openIndex, offset: pageOffset, crossing });
 
   // Written back while a response is open, so a refresh — or a pasted link —
   // lands on the same one.
@@ -1379,6 +1441,7 @@ export function SubmissionsTable({
         index={shownIndex}
         total={pageTotal}
         stepping={crossing !== null}
+        onJump={jumpToResponse}
         canDelete={canDelete}
         onClose={() => setOpenId(null)}
         onStep={stepResponse}
@@ -1503,6 +1566,7 @@ function SubmissionDialog({
   canDelete,
   onClose,
   onStep,
+  onJump,
   onDelete,
   onDownload,
 }: {
@@ -1517,6 +1581,8 @@ function SubmissionDialog({
   canDelete: boolean;
   onClose: () => void;
   onStep: (delta: number) => void;
+  /** Open the nth response of the table, one-based. */
+  onJump: (oneBased: number) => void;
   onDelete: () => void;
   onDownload: () => void;
 }) {
@@ -1625,9 +1691,25 @@ function SubmissionDialog({
                     <TooltipHint label="Previous response" keys="←" />
                   </TooltipContent>
                 </Tooltip>
-                <span className="text-muted-foreground tabular px-1 text-xs">
-                  {index + 1}/{total}
-                </span>
+                {/*
+                  The position, and a way to leave it.
+
+                  Between the two chevrons because that is where it already was
+                  and where the eye is during a walk — and because "63 of 72" is
+                  the question the arrows are a slow answer to. Twelve presses
+                  become one, and on a form with three thousand responses the
+                  arrows stop being the only way across.
+                */}
+                <JumpField
+                  value={index + 1}
+                  max={total}
+                  label="Go to response"
+                  title={`Response ${index + 1} of ${total} — type a number to jump to it`}
+                  render={(n) => `${n}/${total}`}
+                  onJump={onJump}
+                  hint={<TooltipHint label="Go to response" hint="Type a number to jump straight to it" />}
+                  disabled={stepping}
+                />
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
