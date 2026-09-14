@@ -43,12 +43,15 @@ const AiResponse = z.object({
   byModel: z.array(z.object({ key: z.string(), value: z.number() })),
   byKind: z.array(z.object({ key: z.string(), value: z.number() })),
   totals: z.object({
-    costMicro: z.number(),
+    /** USD, summed from what OpenRouter reported. Never computed here. */
+    costUsd: z.number(),
+    /** Calls OpenRouter reported no cost for — excluded from `costUsd`, not counted as free. */
+    unpricedCalls: z.number(),
     tokens: z.number(),
     calls: z.number(),
     errors: z.number(),
     errorRate: z.number(),
-    costPerConversationMicro: z.number(),
+    costPerConversationUsd: z.number(),
     conversations: z.number(),
   }),
   latency: z.array(
@@ -121,12 +124,13 @@ aiRouter.get(
       c.env.DB.prepare(
         `SELECT COUNT(*) AS calls,
                 COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens,
-                COALESCE(SUM(cost_usd_micro), 0) AS cost,
+                COALESCE(SUM(cost_usd), 0) AS cost,
+                COALESCE(SUM(CASE WHEN cost_usd IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
                 COALESCE(SUM(CASE WHEN status != 'ok' THEN 1 ELSE 0 END), 0) AS errors
            FROM ai_generations WHERE created_at >= ?`,
       )
         .bind(since)
-        .first<{ calls: number; tokens: number; cost: number; errors: number }>(),
+        .first<{ calls: number; tokens: number; cost: number; unpriced: number; errors: number }>(),
       c.env.DB.prepare(
         `SELECT COUNT(*) AS n FROM chat_sessions WHERE created_at >= ? AND is_test = 0`,
       )
@@ -152,7 +156,8 @@ aiRouter.get(
           `SELECT o.id AS org_id, o.name,
                   COALESCE((${PLAN_OF_ORG}), 'free') AS plan,
                   COALESCE(SUM(g.prompt_tokens + g.completion_tokens), 0) AS tokens,
-                  COALESCE(SUM(g.cost_usd_micro), 0) AS cost_micro,
+                  COALESCE(SUM(g.cost_usd), 0) AS cost_usd,
+                  COALESCE(SUM(CASE WHEN g.cost_usd IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
                   COUNT(g.id) AS calls,
                   COALESCE((SELECT ${MRR_CENTS} FROM subscriptions s JOIN plans p ON p.id = s.plan_id
                              WHERE s.organization_id = o.id AND s.status IN ('active','trialing') AND ${NOT_COMPED}
@@ -163,7 +168,7 @@ aiRouter.get(
              JOIN organizations o ON o.id = g.organization_id
             WHERE g.created_at >= ?1
             GROUP BY o.id
-            ORDER BY cost_micro DESC
+            ORDER BY cost_usd DESC
             LIMIT 40`,
         ).bind(since),
       ),
@@ -178,12 +183,12 @@ aiRouter.get(
      * make the list useless — so free accounts only appear once they have cost
      * something worth noticing. A cent of Gemini is not a business problem.
      */
-    const FREE_FLOOR_MICRO = 50_000; // $0.05
+    const FREE_FLOOR_USD = 0.05;
     const lossMakers = topSpenders
       .filter((r) => {
-        const cost = Number(r.cost_micro ?? 0);
-        const revenueMicro = Number(r.mrr_cents ?? 0) * 10_000; // cents → USD micros
-        return revenueMicro > 0 ? cost > revenueMicro : cost >= FREE_FLOOR_MICRO;
+        const cost = Number(r.cost_usd ?? 0);
+        const revenueUsd = Number(r.mrr_cents ?? 0) / 100;
+        return revenueUsd > 0 ? cost > revenueUsd : cost >= FREE_FLOOR_USD;
       })
       .slice(0, 20);
 
@@ -193,20 +198,28 @@ aiRouter.get(
 
     return c.json({
       days: window,
-      costSeries: seriesOf(metrics, "ai_cost_micro", window),
+      costSeries: seriesOf(metrics, "ai_cost_usd", window),
       tokenSeries: seriesOf(metrics, "ai_tokens", window),
       callSeries: seriesOf(metrics, "ai_calls", window),
-      byModel: sumByDimension(metrics, "ai_cost_micro_by_model", windowSet),
+      byModel: sumByDimension(metrics, "ai_cost_usd_by_model", windowSet),
       byKind: sumByDimension(metrics, "ai_calls_by_kind", windowSet),
       totals: {
-        costMicro: cost,
+        costUsd: cost,
+        /**
+         * Not part of `costUsd`, and deliberately visible.
+         *
+         * These are calls OpenRouter reported no cost for. Rolling them into
+         * the total as zero is how a spend figure drifts low without anyone
+         * noticing, so they are counted and shown instead.
+         */
+        unpricedCalls: totals?.unpriced ?? 0,
         tokens: totals?.tokens ?? 0,
         calls,
         errors: totals?.errors ?? 0,
         errorRate: calls > 0 ? Math.round(((totals?.errors ?? 0) / calls) * 1000) / 10 : 0,
         conversations: convos,
         // The unit-economics number: what one conversation costs to run.
-        costPerConversationMicro: convos > 0 ? Math.round(cost / convos) : 0,
+        costPerConversationUsd: convos > 0 ? cost / convos : 0,
       },
       latency: latency.sort((a, b) => b.calls - a.calls),
       topSpenders,

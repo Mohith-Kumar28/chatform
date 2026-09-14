@@ -207,7 +207,7 @@ export type GetApiAdminAccounts200AccountsItem = {
   forms: number;
   responses_30d: number;
   ai_tokens_30d: number;
-  ai_cost_micro_30d: number;
+  ai_cost_usd_30d: number;
   last_active_at: number | null;
   mrr_cents: number;
 };
@@ -473,12 +473,13 @@ export type GetApiAdminAi200ByKindItem = {
 };
 
 export type GetApiAdminAi200Totals = {
-  costMicro: number;
+  costUsd: number;
+  unpricedCalls: number;
   tokens: number;
   calls: number;
   errors: number;
   errorRate: number;
-  costPerConversationMicro: number;
+  costPerConversationUsd: number;
   conversations: number;
 };
 
@@ -1439,6 +1440,13 @@ export type PatchApiWorkspacesById200 = {
   createdAt: number;
 };
 
+export type PostApiAiGenerateFormBodyClarificationsItem = {
+  /** @maxLength 300 */
+  question: string;
+  /** @maxLength 500 */
+  answer: string;
+};
+
 export type PostApiAiGenerateFormBody = {
   /**
      * @minLength 5
@@ -1450,6 +1458,8 @@ export type PostApiAiGenerateFormBody = {
      * @maximum 19
      */
   questionCount?: number;
+  /** @maxItems 3 */
+  clarifications?: PostApiAiGenerateFormBodyClarificationsItem[];
   workspaceId?: string;
 };
 
@@ -1457,6 +1467,40 @@ export type PostApiAiGenerateForm200 = {
   doc: unknown;
   issues: unknown[];
   tokens: number;
+};
+
+export type PostApiAiClarifyFormBody = {
+  /**
+     * @minLength 5
+     * @maxLength 2000
+     */
+  prompt: string;
+};
+
+export type PostApiAiClarifyForm200QuestionsItemKind = typeof PostApiAiClarifyForm200QuestionsItemKind[keyof typeof PostApiAiClarifyForm200QuestionsItemKind];
+
+
+export const PostApiAiClarifyForm200QuestionsItemKind = {
+  choice: 'choice',
+  text: 'text',
+} as const;
+
+export type PostApiAiClarifyForm200QuestionsItem = {
+  question: string;
+  why: string;
+  kind: PostApiAiClarifyForm200QuestionsItemKind;
+  options: string[];
+};
+
+export type PostApiAiClarifyForm200 = {
+  questions: PostApiAiClarifyForm200QuestionsItem[];
+};
+
+export type PostApiAiGenerateFormStreamBodyClarificationsItem = {
+  /** @maxLength 300 */
+  question: string;
+  /** @maxLength 500 */
+  answer: string;
 };
 
 export type PostApiAiGenerateFormStreamBody = {
@@ -1470,7 +1514,39 @@ export type PostApiAiGenerateFormStreamBody = {
      * @maximum 19
      */
   questionCount?: number;
+  /** @maxItems 3 */
+  clarifications?: PostApiAiGenerateFormStreamBodyClarificationsItem[];
   workspaceId?: string;
+};
+
+export type PostApiAiEditFormStreamBodyHistoryItemRole = typeof PostApiAiEditFormStreamBodyHistoryItemRole[keyof typeof PostApiAiEditFormStreamBodyHistoryItemRole];
+
+
+export const PostApiAiEditFormStreamBodyHistoryItemRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export type PostApiAiEditFormStreamBodyHistoryItem = {
+  role: PostApiAiEditFormStreamBodyHistoryItemRole;
+  /** @maxLength 2000 */
+  text: string;
+};
+
+export type PostApiAiEditFormStreamBody = {
+  formId: string;
+  /**
+     * @minLength 3
+     * @maxLength 1000
+     */
+  prompt: string;
+  /** @maxItems 20 */
+  history?: PostApiAiEditFormStreamBodyHistoryItem[];
+  /**
+     * @minimum 1
+     * @maximum 10
+     */
+  count?: number;
 };
 
 export type PostApiAiEditFormBodyHistoryItemRole = typeof PostApiAiEditFormBodyHistoryItemRole[keyof typeof PostApiAiEditFormBodyHistoryItemRole];
@@ -2084,6 +2160,13 @@ export type PostV1FormsByIdVersionsByVersionRestore422 = {
   error: PostV1FormsByIdVersionsByVersionRestore422Error;
 };
 
+export type PostV1AiGenerateFormBodyClarificationsItem = {
+  /** @maxLength 300 */
+  question: string;
+  /** @maxLength 500 */
+  answer: string;
+};
+
 export type PostV1AiGenerateFormBody = {
   /**
      * @minLength 5
@@ -2095,6 +2178,8 @@ export type PostV1AiGenerateFormBody = {
      * @maximum 19
      */
   questionCount?: number;
+  /** @maxItems 3 */
+  clarifications?: PostV1AiGenerateFormBodyClarificationsItem[];
   workspaceId?: string;
 };
 
@@ -2232,6 +2317,53 @@ export type PostV1AiEditForm404Error = {
 
 export type PostV1AiEditForm404 = {
   error: PostV1AiEditForm404Error;
+};
+
+export type PostV1AiClarifyFormBody = {
+  /**
+     * @minLength 5
+     * @maxLength 2000
+     */
+  prompt: string;
+};
+
+export type PostV1AiClarifyForm200QuestionsItemKind = typeof PostV1AiClarifyForm200QuestionsItemKind[keyof typeof PostV1AiClarifyForm200QuestionsItemKind];
+
+
+export const PostV1AiClarifyForm200QuestionsItemKind = {
+  choice: 'choice',
+  text: 'text',
+} as const;
+
+export type PostV1AiClarifyForm200QuestionsItem = {
+  question: string;
+  why: string;
+  kind: PostV1AiClarifyForm200QuestionsItemKind;
+  options: string[];
+};
+
+export type PostV1AiClarifyForm200 = {
+  questions: PostV1AiClarifyForm200QuestionsItem[];
+};
+
+export type PostV1AiClarifyForm403ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1AiClarifyForm403Error = {
+  code: string;
+  message: string;
+  issues?: PostV1AiClarifyForm403ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1AiClarifyForm403 = {
+  error: PostV1AiClarifyForm403Error;
 };
 
 export type GetV1FormsByIdIntegrations200Item = {

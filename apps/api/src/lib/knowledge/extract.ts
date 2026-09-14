@@ -1,6 +1,6 @@
 import { generateText } from "ai";
 import type { Bindings } from "../../env.js";
-import { chatModel, MODELS, splitUsage } from "../ai.js";
+import { chatModel, MODELS, reportedUsage, tagged } from "../ai.js";
 import { logAiGeneration } from "../ai-usage.js";
 import { fetchSiteText } from "../research.js";
 import type { KnowledgeSourceInput } from "./store.js";
@@ -206,6 +206,7 @@ async function ocrFallback(
           ],
         },
       ],
+      providerOptions: tagged({}, "knowledge_ocr", ctx.organizationId, input.formId),
       abortSignal: AbortSignal.timeout(90_000),
     });
 
@@ -214,7 +215,7 @@ async function ocrFallback(
       formId: input.formId,
       kind: "knowledge_ocr",
       model: MODELS.ocr,
-      usage: splitUsage(result.usage),
+      usage: reportedUsage(result),
       latencyMs: Date.now() - started,
     });
 

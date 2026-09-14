@@ -38,6 +38,9 @@ import type {
   GetV1TemplatesBySlug200,
   GetV1TemplatesBySlug404,
   GetV1Webhooks200Item,
+  PostV1AiClarifyForm200,
+  PostV1AiClarifyForm403,
+  PostV1AiClarifyFormBody,
   PostV1AiEditForm402,
   PostV1AiEditForm403,
   PostV1AiEditForm404,
@@ -3260,6 +3263,107 @@ export const usePostV1AiEditForm = <TError = PostV1AiEditForm402 | PostV1AiEditF
         TContext
       > => {
       return useMutation(getPostV1AiEditFormMutationOptions(options));
+    }
+    export type postV1AiClarifyFormResponse200 = {
+  data: PostV1AiClarifyForm200
+  status: 200
+}
+
+export type postV1AiClarifyFormResponse403 = {
+  data: PostV1AiClarifyForm403
+  status: 403
+}
+
+export type postV1AiClarifyFormResponseSuccess = (postV1AiClarifyFormResponse200) & {
+  headers: Headers;
+};
+export type postV1AiClarifyFormResponseError = (postV1AiClarifyFormResponse403) & {
+  headers: Headers;
+};
+
+export type postV1AiClarifyFormResponse = (postV1AiClarifyFormResponseSuccess | postV1AiClarifyFormResponseError)
+
+export const getPostV1AiClarifyFormUrl = () => {
+
+
+
+
+  return `/v1/ai/clarify-form`
+}
+
+/**
+ * Returns up to three questions whose answers would change the form — and **usually returns none**, which is the intended answer rather than a failure. Worth calling when a person is going to see the result: a request that asks to take a payment but names no UPI id, or to branch by plan without naming the plans, produces a form with a hole in it that only they can fill.
+ *
+ * Feed the answers back as `clarifications` on `POST /v1/ai/generate-form`. Skipping this endpoint entirely is fine; generation does not require it.
+ *
+ * Runs on the cheapest tier and is not charged as a generation — it is a question about a form, not a form — though its tokens are still counted.
+ * @summary Ask what a form request leaves open, before generating from it
+ */
+export const postV1AiClarifyForm = async (postV1AiClarifyFormBody: PostV1AiClarifyFormBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1AiClarifyFormResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1AiClarifyFormResponse>(getPostV1AiClarifyFormUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1AiClarifyFormBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1AiClarifyFormMutationOptions = <TError = PostV1AiClarifyForm403,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1AiClarifyForm>>, TError,PostV1AiClarifyFormMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1AiClarifyForm>>, TError,PostV1AiClarifyFormMutationVariables, TContext> => {
+
+const mutationKey = ['postV1AiClarifyForm'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1AiClarifyForm>>, PostV1AiClarifyFormMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postV1AiClarifyForm(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1AiClarifyFormMutationResult = NonNullable<Awaited<ReturnType<typeof postV1AiClarifyForm>>>
+    export type PostV1AiClarifyFormMutationBody = PostV1AiClarifyFormBody
+    export type PostV1AiClarifyFormMutationError = PostV1AiClarifyForm403
+    export type PostV1AiClarifyFormMutationVariables = {data: PostV1AiClarifyFormBody}
+
+    /**
+ * @summary Ask what a form request leaves open, before generating from it
+ */
+export const usePostV1AiClarifyForm = <TError = PostV1AiClarifyForm403,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1AiClarifyForm>>, TError,PostV1AiClarifyFormMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1AiClarifyForm>>,
+        TError,
+        PostV1AiClarifyFormMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1AiClarifyFormMutationOptions(options));
     }
     export type getV1FormsByIdIntegrationsResponse200 = {
   data: GetV1FormsByIdIntegrations200Item[]

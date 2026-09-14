@@ -313,35 +313,47 @@ export async function rollupPlatformDaily(env: Bindings, date = utcDay()): Promi
   );
 
   // ── Cost ─────────────────────────────────────────────────────────────────
+  /**
+   * `SUM(cost_usd)` deliberately has no COALESCE around the NULLs.
+   *
+   * SQLite skips NULLs in SUM, which is exactly the behaviour wanted: a call
+   * OpenRouter reported no cost for drops out of the total rather than being
+   * added as zero. `unpriced` counts those separately, so the gap is a number
+   * on the page instead of a silent discount — the failure this whole change
+   * exists to end.
+   */
   const ai = await env.DB.prepare(
     `SELECT model AS dimension, kind,
             COUNT(*) AS calls,
             COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens,
-            COALESCE(SUM(cost_usd_micro), 0) AS cost,
+            COALESCE(SUM(cost_usd), 0) AS cost,
+            COALESCE(SUM(CASE WHEN cost_usd IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
             COALESCE(SUM(CASE WHEN status != 'ok' THEN 1 ELSE 0 END), 0) AS errors
        FROM ai_generations
       WHERE created_at >= ?1 AND created_at < ?2
       GROUP BY model, kind`,
   )
     .bind(from, to)
-    .all<{ dimension: string; kind: string; calls: number; tokens: number; cost: number; errors: number }>();
+    .all<{ dimension: string; kind: string; calls: number; tokens: number; cost: number; unpriced: number; errors: number }>();
   let aiTokens = 0;
   let aiCost = 0;
   let aiCalls = 0;
   let aiErrors = 0;
+  let aiUnpriced = 0;
   for (const r of ai.results ?? []) {
     aiTokens += r.tokens;
     aiCost += r.cost;
     aiCalls += r.calls;
     aiErrors += r.errors;
-    rows.push({ metric: "ai_tokens_by_model", dimension: r.dimension, value: r.tokens });
-    rows.push({ metric: "ai_cost_micro_by_model", dimension: r.dimension, value: r.cost });
+    aiUnpriced += r.unpriced;
+    rows.push({ metric: "ai_cost_usd_by_model", dimension: r.dimension, value: r.cost });
     rows.push({ metric: "ai_calls_by_kind", dimension: r.kind, value: r.calls });
   }
   total("ai_tokens", aiTokens);
-  total("ai_cost_micro", aiCost);
+  total("ai_cost_usd", aiCost);
   total("ai_calls", aiCalls);
   total("ai_errors", aiErrors);
+  total("ai_unpriced_calls", aiUnpriced);
 
   // ── Money ────────────────────────────────────────────────────────────────
   const paid = await env.DB.prepare(

@@ -20,7 +20,6 @@
 import { readFileSync } from "node:fs";
 import { FormDoc, lintFormDoc, type FormDoc as FormDocType } from "@repo/form-schema";
 import { generateEdit, runEditAgent, reviewEdit, clampDraft, MODELS, type TokenUsage } from "../src/lib/ai.js";
-import { costUsdMicro } from "../src/lib/ai-pricing.js";
 import { buildEditPrompt, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL } from "../src/lib/agent-prompts.js";
 import { applyEditDraft, introducedFlowProblems, describeEditChanges } from "../src/lib/edit-apply.js";
 import { buildEditContext, buildEditTools } from "../src/lib/edit-tools.js";
@@ -204,7 +203,7 @@ for (const mode of modes) {
     results.set(`${mode}:${c.name}`, attempts);
     const passed = attempts.filter((a) => a.ok).length;
     const avg = (f: (a: Attempt) => number) => Math.round(attempts.reduce((s, a) => s + f(a), 0) / attempts.length);
-    const cents = attempts.reduce((s, a) => s + costUsdMicro(a.model, a.usage.input, a.usage.output), 0) / attempts.length / 10_000;
+    const cents = (attempts.reduce((s, a) => s + (a.usage.costUsd ?? 0), 0) / attempts.length) * 100;
     console.log(
       `${pad(c.name, 42)} ${pad(`${passed}/${RUNS}`, 6)} ${pad(String(avg((a) => a.ms)), 7)} ` +
         `${pad(String(avg((a) => a.tokens)), 7)} ${pad(cents.toFixed(3), 7)} ` +
@@ -224,7 +223,7 @@ for (const mode of modes) {
   const flat = all.flat();
   const ms = Math.round(flat.reduce((s, a) => s + a.ms, 0) / flat.length);
   const tok = Math.round(flat.reduce((s, a) => s + a.tokens, 0) / flat.length);
-  const cents = flat.reduce((s, a) => s + costUsdMicro(a.model, a.usage.input, a.usage.output), 0) / flat.length / 10_000;
+  const cents = (flat.reduce((s, a) => s + (a.usage.costUsd ?? 0), 0) / flat.length) * 100;
   const broke = flat.filter((a) => a.broke > 0).length;
   console.log(
     `${pad(mode, 8)} pass^${RUNS}: ${everyRun}/${EDIT_CASES.length}   pass@1: ${anyRun}/${EDIT_CASES.length}   ` +

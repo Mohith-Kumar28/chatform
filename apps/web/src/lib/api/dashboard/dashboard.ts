@@ -60,8 +60,11 @@ import type {
   PatchApiWorkspacesByIdBody,
   PostApiAiAddBlocks200,
   PostApiAiAddBlocksBody,
+  PostApiAiClarifyForm200,
+  PostApiAiClarifyFormBody,
   PostApiAiEditForm200,
   PostApiAiEditFormBody,
+  PostApiAiEditFormStreamBody,
   PostApiAiGenerateForm200,
   PostApiAiGenerateFormBody,
   PostApiAiGenerateFormStreamBody,
@@ -2178,6 +2181,102 @@ export const usePostApiAiGenerateForm = <TError = void,
       > => {
       return useMutation(getPostApiAiGenerateFormMutationOptions(options));
     }
+    export type postApiAiClarifyFormResponse200 = {
+  data: PostApiAiClarifyForm200
+  status: 200
+}
+
+export type postApiAiClarifyFormResponse503 = {
+  data: void
+  status: 503
+}
+
+export type postApiAiClarifyFormResponseSuccess = (postApiAiClarifyFormResponse200) & {
+  headers: Headers;
+};
+export type postApiAiClarifyFormResponseError = (postApiAiClarifyFormResponse503) & {
+  headers: Headers;
+};
+
+export type postApiAiClarifyFormResponse = (postApiAiClarifyFormResponseSuccess | postApiAiClarifyFormResponseError)
+
+export const getPostApiAiClarifyFormUrl = () => {
+
+
+
+
+  return `/api/ai/clarify-form`
+}
+
+/**
+ * @summary Ask what the request leaves open, before drafting
+ */
+export const postApiAiClarifyForm = async (postApiAiClarifyFormBody: PostApiAiClarifyFormBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAiClarifyFormResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiAiClarifyFormResponse>(getPostApiAiClarifyFormUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiAiClarifyFormBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiAiClarifyFormMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiClarifyForm>>, TError,PostApiAiClarifyFormMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAiClarifyForm>>, TError,PostApiAiClarifyFormMutationVariables, TContext> => {
+
+const mutationKey = ['postApiAiClarifyForm'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAiClarifyForm>>, PostApiAiClarifyFormMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiAiClarifyForm(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiAiClarifyFormMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAiClarifyForm>>>
+    export type PostApiAiClarifyFormMutationBody = PostApiAiClarifyFormBody
+    export type PostApiAiClarifyFormMutationError = void
+    export type PostApiAiClarifyFormMutationVariables = {data: PostApiAiClarifyFormBody}
+
+    /**
+ * @summary Ask what the request leaves open, before drafting
+ */
+export const usePostApiAiClarifyForm = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiClarifyForm>>, TError,PostApiAiClarifyFormMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiAiClarifyForm>>,
+        TError,
+        PostApiAiClarifyFormMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiAiClarifyFormMutationOptions(options));
+    }
     export type postApiAiGenerateFormStreamResponse200 = {
   data: void
   status: 200
@@ -2274,6 +2373,103 @@ export const usePostApiAiGenerateFormStream = <TError = void,
         TContext
       > => {
       return useMutation(getPostApiAiGenerateFormStreamMutationOptions(options));
+    }
+    export type postApiAiEditFormStreamResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postApiAiEditFormStreamResponse503 = {
+  data: void
+  status: 503
+}
+
+export type postApiAiEditFormStreamResponseSuccess = (postApiAiEditFormStreamResponse200) & {
+  headers: Headers;
+};
+export type postApiAiEditFormStreamResponseError = (postApiAiEditFormStreamResponse503) & {
+  headers: Headers;
+};
+
+export type postApiAiEditFormStreamResponse = (postApiAiEditFormStreamResponseSuccess | postApiAiEditFormStreamResponseError)
+
+export const getPostApiAiEditFormStreamUrl = () => {
+
+
+
+
+  return `/api/ai/edit-form/stream`
+}
+
+/**
+ * Server-sent events: `stage` (a step started), `done` (the proposal, or the question it stopped to ask), `error`. Nothing is saved — the proposal is returned for the builder to apply, exactly as the JSON route does.
+ * @summary Edit a form, streaming progress as server-sent events
+ */
+export const postApiAiEditFormStream = async (postApiAiEditFormStreamBody: PostApiAiEditFormStreamBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAiEditFormStreamResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiAiEditFormStreamResponse>(getPostApiAiEditFormStreamUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiAiEditFormStreamBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiAiEditFormStreamMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiEditFormStream>>, TError,PostApiAiEditFormStreamMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAiEditFormStream>>, TError,PostApiAiEditFormStreamMutationVariables, TContext> => {
+
+const mutationKey = ['postApiAiEditFormStream'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAiEditFormStream>>, PostApiAiEditFormStreamMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiAiEditFormStream(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiAiEditFormStreamMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAiEditFormStream>>>
+    export type PostApiAiEditFormStreamMutationBody = PostApiAiEditFormStreamBody
+    export type PostApiAiEditFormStreamMutationError = void
+    export type PostApiAiEditFormStreamMutationVariables = {data: PostApiAiEditFormStreamBody}
+
+    /**
+ * @summary Edit a form, streaming progress as server-sent events
+ */
+export const usePostApiAiEditFormStream = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAiEditFormStream>>, TError,PostApiAiEditFormStreamMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiAiEditFormStream>>,
+        TError,
+        PostApiAiEditFormStreamMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiAiEditFormStreamMutationOptions(options));
     }
     export type postApiAiEditFormResponse200 = {
   data: PostApiAiEditForm200

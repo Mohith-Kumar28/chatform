@@ -74,7 +74,7 @@ interface Account {
   forms: number;
   responses_30d: number;
   ai_tokens_30d: number;
-  ai_cost_micro_30d: number;
+  ai_cost_usd_30d: number;
   last_active_at: number | null;
   mrr_cents: number;
 }
@@ -258,7 +258,7 @@ export function AccountsClient() {
                   <TableCell className="tabular text-right">{compact(a.responses_30d)}</TableCell>
                   <TableCell className="tabular text-right">
                     {a.ai_tokens_30d > 0 ? (
-                      <span title={`${a.ai_tokens_30d.toLocaleString()} tokens`}>{usd(a.ai_cost_micro_30d)}</span>
+                      <span title={`${a.ai_tokens_30d.toLocaleString()} tokens`}>{usd(a.ai_cost_usd_30d)}</span>
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}

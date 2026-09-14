@@ -812,7 +812,7 @@
                           "ai_tokens_30d": {
                             "type": "number"
                           },
-                          "ai_cost_micro_30d": {
+                          "ai_cost_usd_30d": {
                             "type": "number"
                           },
                           "last_active_at": {
@@ -840,7 +840,7 @@
                           "forms",
                           "responses_30d",
                           "ai_tokens_30d",
-                          "ai_cost_micro_30d",
+                          "ai_cost_usd_30d",
                           "last_active_at",
                           "mrr_cents"
                         ]
@@ -1746,7 +1746,10 @@
                     "totals": {
                       "type": "object",
                       "properties": {
-                        "costMicro": {
+                        "costUsd": {
+                          "type": "number"
+                        },
+                        "unpricedCalls": {
                           "type": "number"
                         },
                         "tokens": {
@@ -1761,7 +1764,7 @@
                         "errorRate": {
                           "type": "number"
                         },
-                        "costPerConversationMicro": {
+                        "costPerConversationUsd": {
                           "type": "number"
                         },
                         "conversations": {
@@ -1769,12 +1772,13 @@
                         }
                       },
                       "required": [
-                        "costMicro",
+                        "costUsd",
+                        "unpricedCalls",
                         "tokens",
                         "calls",
                         "errors",
                         "errorRate",
-                        "costPerConversationMicro",
+                        "costPerConversationUsd",
                         "conversations"
                       ]
                     },

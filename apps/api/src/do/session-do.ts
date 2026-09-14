@@ -40,6 +40,9 @@ import {
   INTERVIEW_PROVIDER_OPTIONS,
   callTag,
   REASONING_HEADROOM_TOKENS,
+  reportedUsage,
+  NO_USAGE,
+  type TokenUsage,
 } from "../lib/ai.js";
 import {
   affordanceNote,
@@ -53,7 +56,7 @@ import { getEntitlements } from "../lib/entitlements.js";
 import { clampForRuntime } from "../lib/doc-entitlements.js";
 import { can } from "@repo/entitlements";
 import { meter } from "../lib/entitlements.js";
-import { costUsdMicro } from "../lib/ai-pricing.js";
+import { logAiGeneration } from "../lib/ai-usage.js";
 import {
   newResponseId,
   openResponse,
@@ -1638,6 +1641,9 @@ export class SessionDO extends DurableObject<Bindings> {
      */
     const messageId = crypto.randomUUID();
     let opened = false;
+    // Declared out here so the catch below can still write a usage row for a
+    // turn that failed halfway. Starts unpriced, not free.
+    let turnUsage: TokenUsage = NO_USAGE;
 
     try {
       const answered = Object.keys(this.state.answers).length;
@@ -1726,6 +1732,11 @@ export class SessionDO extends DurableObject<Bindings> {
       if (opened) await this.emit("message_end", { messageId });
 
       const usage = await result.usage;
+      // Tokens from the SDK, cost from OpenRouter. This turn runs up to six
+      // steps and `result.providerMetadata` would carry only the last one, so
+      // `reportedUsage` is given the whole step list to add up — reading the
+      // top-level value instead under-reports a two-step call by more than half.
+      turnUsage = reportedUsage({ usage, steps: await result.steps, response: await result.response });
       const inTok = usage?.inputTokens ?? 0;
       const outTok = usage?.outputTokens ?? 0;
       // The stable-prefix restructure above was measured once, by hand, against
@@ -1774,7 +1785,7 @@ export class SessionDO extends DurableObject<Bindings> {
           turns: this.turnCount,
         });
       }
-      await this.logAiUsage("interview_turn", inTok, outTok, modelId, Date.now() - started);
+      await this.logAiUsage("interview_turn", turnUsage, modelId, Date.now() - started);
       if (text.trim()) await this.appendMessage("assistant", text);
 
       // Reliability floor (PLAN.md 4.3): three consecutive tool errors and the
@@ -1792,6 +1803,17 @@ export class SessionDO extends DurableObject<Bindings> {
       return text.trim().length > 0 || this.pendingEffects.length > 0;
     } catch (err) {
       console.error("ai_stream_failed", { sessionId: this.meta?.sessionId, ...errorInfo(err) });
+      /**
+       * A turn that threw still ran, and OpenRouter still charged for whatever
+       * it generated before it did. This used to write nothing at all, which is
+       * why the admin page could claim a 0% error rate over thousands of calls:
+       * failures were not counted as failures, they were not counted at all.
+       *
+       * `turnUsage` holds whatever was known when it broke — usually nothing,
+       * because the throw normally beats the final usage chunk, in which case
+       * the row is unpriced rather than free.
+       */
+      await this.logAiUsage("interview_turn", turnUsage, modelId, Date.now() - started, "error");
       // Close whatever was opened before returning to the template path, so
       // the caller's fallback question lands under a finished bubble.
       if (opened) {
@@ -1825,6 +1847,8 @@ export class SessionDO extends DurableObject<Bindings> {
       const { transcript } = await this.conversationContext();
       const out = await extractAnswer({
         env: this.env,
+        organizationId: this.meta?.organizationId,
+        sessionId: this.meta?.sessionId,
         schema: schema as never,
         question: block.title,
         guidance: extractionGuidance(block, new Date().toISOString().slice(0, 10)),
@@ -1835,7 +1859,7 @@ export class SessionDO extends DurableObject<Bindings> {
       // Metered like everything else, but never charged to the phrasing
       // allowance — see `comprehensionEnabled`.
       this.sessionTokensUsed += out.tokens;
-      await this.logAiUsage("extraction", out.tokens, 0, MODELS.extraction, Date.now() - started);
+      await this.logAiUsage("extraction", out.usage, MODELS.extraction, Date.now() - started);
       if (!out.confident || out.value === null || out.value === undefined) return null;
       return out.value;
     } catch (err) {
@@ -1970,42 +1994,35 @@ export class SessionDO extends DurableObject<Bindings> {
     return { transcript, answers };
   }
 
+  /**
+   * Record one model call from the conversation path.
+   *
+   * A thin wrapper over the shared writer, which is now the only thing that
+   * inserts into `ai_generations`. This used to be a second INSERT with its own
+   * column list, and the two drifted: this one never wrote `user_id` or
+   * `status`, so every conversation row claimed to have succeeded and none
+   * could be attributed to a person.
+   *
+   * `usage.costUsd` is OpenRouter's own figure, passed through untouched.
+   */
   private async logAiUsage(
     kind: string,
-    inputTokens: number,
-    outputTokens: number,
+    usage: TokenUsage,
     model: string,
     latencyMs: number,
+    status: "ok" | "error" = "ok",
   ): Promise<void> {
-    if (!this.meta || inputTokens + outputTokens === 0) return;
-    try {
-      await this.env.DB.prepare(
-        // model was hardcoded "openrouter/auto" and latency was never recorded,
-        // so per-model cost analysis was impossible. `cost_usd_micro` was the
-        // other half of that: the column existed and every row said zero, so the
-        // platform's largest variable cost was invisible. Priced at write time
-        // from `ai-pricing.ts`, which means a row keeps the cost it was actually
-        // incurred at rather than being re-priced later at today's rates.
-        `INSERT INTO ai_generations (id, organization_id, session_id, form_id, kind, provider, model, prompt_tokens, completion_tokens, cost_usd_micro, latency_ms, created_at)
-         VALUES (?, ?, ?, ?, ?, 'openrouter', ?, ?, ?, ?, ?, ?)`,
-      )
-        .bind(
-          `ai_${crypto.randomUUID().slice(0, 16)}`,
-          this.meta.organizationId,
-          this.meta.sessionId,
-          this.meta.formId,
-          kind,
-          model,
-          inputTokens,
-          outputTokens,
-          costUsdMicro(model, inputTokens, outputTokens),
-          latencyMs,
-          Date.now(),
-        )
-        .run();
-    } catch (err) {
-      console.error("ai_usage_log_failed", err);
-    }
+    if (!this.meta) return;
+    await logAiGeneration(this.env, {
+      organizationId: this.meta.organizationId,
+      sessionId: this.meta.sessionId,
+      formId: this.meta.formId,
+      kind,
+      model,
+      usage,
+      latencyMs,
+      status,
+    });
   }
 
   /**

@@ -20,6 +20,8 @@ import {
   MODELS,
   type GenerationDraft,
   type TokenUsage,
+  addUsage,
+  NO_USAGE,
 } from "../lib/ai.js";
 import { logAiGeneration } from "../lib/ai-usage.js";
 import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL, CLARIFY_SYSTEM, withClarifications, type BuilderTurn } from "../lib/agent-prompts.js";
@@ -125,6 +127,9 @@ interface Generated {
  */
 async function generateWithRetry(opts: {
   env: Bindings;
+  /** Carried only so the call reaches OpenRouter tagged with who is paying. */
+  organizationId?: string | null;
+  formId?: string | null;
   prompt: string;
   /** Undefined means "you decide" — see `GenerateBody`. */
   questionCount?: number;
@@ -138,7 +143,7 @@ async function generateWithRetry(opts: {
   // Accumulated across retries on purpose: a retried draft was really billed
   // twice, and a cost figure that hides that is a cost figure that will not
   // show the day a prompt change doubles the retry rate.
-  const usage: TokenUsage = { input: 0, output: 0 };
+  let usage: TokenUsage = NO_USAGE;
   // The last attempt's vendor wins — a retry that succeeded on the fallback
   // vendor should be logged as the fallback, not as whichever vendor answered
   // (or refused) the first attempt.
@@ -152,12 +157,23 @@ async function generateWithRetry(opts: {
     let draft: GenerationDraft;
     try {
       const result = opts.onBlock
-        ? await streamFormDraft({ env: opts.env, system: FORM_DESIGNER_SYSTEM, prompt, onBlock: opts.onBlock })
-        : await generateFormDraft({ env: opts.env, system: FORM_DESIGNER_SYSTEM, prompt });
+        ? await streamFormDraft({
+            env: opts.env,
+            system: FORM_DESIGNER_SYSTEM,
+            prompt,
+            onBlock: opts.onBlock,
+            organizationId: opts.organizationId,
+            formId: opts.formId,
+          })
+        : await generateFormDraft({
+            env: opts.env,
+            system: FORM_DESIGNER_SYSTEM,
+            prompt,
+            organizationId: opts.organizationId,
+          });
       draft = result.draft;
       tokens += result.tokens;
-      usage.input += result.usage.input;
-      usage.output += result.usage.output;
+      usage = addUsage(usage, result.usage);
       model = result.model;
     } catch (err) {
       // An upstream failure — OpenRouter 5xx, a provider timeout, a rate limit.
@@ -251,11 +267,12 @@ export const generateFormHandler = async (c: AiCtx) => {
     const { prompt: rawPrompt, questionCount, clarifications } = validBody<z.infer<typeof GenerateBody>>(c);
     const prompt = withClarifications(rawPrompt, clarifications ?? []);
 
-    const research = await researchFor(c.env, prompt);
+    const research = await researchFor(c.env, prompt, c.get("orgId"));
     try {
       const started = Date.now();
       const { doc, issues, tokens, usage, model } = await generateWithRetry({
         env: c.env,
+        organizationId: c.get("orgId"),
         prompt,
         questionCount,
         research: research.brief,
@@ -377,7 +394,12 @@ export async function clarifyFormHandler(c: AiCtx) {
     if (!c.env.OPENROUTER_API_KEY) return c.json({ questions: [] });
     const { prompt } = validBody<z.infer<typeof ClarifyBody>>(c);
     const started = Date.now();
-    const { questions, usage } = await clarifyRequest({ env: c.env, prompt, system: CLARIFY_SYSTEM });
+    const { questions, usage } = await clarifyRequest({
+      env: c.env,
+      prompt,
+      system: CLARIFY_SYSTEM,
+      organizationId: c.get("orgId"),
+    });
     const orgId = c.get("orgId");
     if (orgId && usage.input + usage.output > 0) {
       await logAiGeneration(c.env, {
@@ -397,13 +419,14 @@ export async function clarifyFormHandler(c: AiCtx) {
 async function researchFor(
   env: Bindings,
   prompt: string,
+  organizationId?: string | null,
 ): Promise<{ brief: { brief: string; sources: string[] } | null; urls: string[]; tokens: number; usage: TokenUsage }> {
-  const none = { input: 0, output: 0 };
+  const none = NO_USAGE;
   const urls = extractUrls(prompt);
   if (urls.length === 0) return { brief: null, urls, tokens: 0, usage: none };
   const sites = await readSites(urls);
   if (sites.length === 0) return { brief: null, urls, tokens: 0, usage: none };
-  const brief = await researchBrief({ env, request: prompt, sites });
+  const brief = await researchBrief({ env, request: prompt, sites, organizationId });
   return {
     brief: brief ? { brief: brief.brief, sources: brief.sources } : null,
     urls,
@@ -497,7 +520,7 @@ aiRouter.post(
         const urls = extractUrls(prompt);
         let research: { brief: string; sources: string[] } | null = null;
         let researchTokens = 0;
-        let researchUsage: TokenUsage = { input: 0, output: 0 };
+        let researchUsage: TokenUsage = NO_USAGE;
 
         if (urls.length > 0) {
           await stage("reading", "start", urls.length === 1 ? hostOf(urls[0]!) : `${urls.length} pages`);
@@ -507,7 +530,7 @@ aiRouter.post(
           if (sites.length > 0) {
             await send("sources", { pages: sites.map((s) => ({ url: s.url, title: s.title })) });
             await stage("researching", "start");
-            const brief = await researchBrief({ env: c.env, request: prompt, sites });
+            const brief = await researchBrief({ env: c.env, request: prompt, sites, organizationId: orgId });
             if (brief) {
               research = { brief: brief.brief, sources: brief.sources };
               researchTokens = brief.tokens;
@@ -530,6 +553,7 @@ aiRouter.post(
         await stage("drafting", "start");
         const { doc, issues, tokens, usage: genUsage, model: genModel } = await generateWithRetry({
           env: c.env,
+          organizationId: orgId,
           prompt,
           questionCount,
           research,
@@ -734,8 +758,45 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
     const mode = c.env.AI_EDIT_MODE === "tools" ? "tools" : "object";
     let draft: EditDraftOut;
     let tokens: number;
-    let usage: TokenUsage = { input: 0, output: 0 };
+    let usage: TokenUsage = NO_USAGE;
     let usedModel: string = MODELS.generation;
+    /**
+     * One entry per model call, because one edit is rarely one call.
+     *
+     * A single edit can run the drafting attempt, a reviewer, a review-driven
+     * retry and a flow repair — up to four calls, on two different tiers. All
+     * four used to be summed into ONE row under ONE model, so the reviewer's
+     * tokens (which run on the extraction tier) were attributed to the
+     * generation tier, and "Model calls" counted edits rather than calls.
+     *
+     * `usage` above still accumulates the total, because the meter charges the
+     * author once for the whole edit. This is only about what gets written down.
+     */
+    const billed: { kind: string; model: string; usage: TokenUsage }[] = [];
+    /**
+     * Write everything collected so far, once.
+     *
+     * Called at each of the three ways out — the clarifying question, the
+     * no-change rejection and the ordinary success. The no-change path in
+     * particular used to return before any logging at all, so an edit the model
+     * was paid for left no trace whatsoever.
+     */
+    const flushBilled = async (latencyMs: number) => {
+      const orgId = c.get("orgId");
+      if (!orgId) return;
+      const rows = billed.splice(0);
+      for (const row of rows) {
+        await logAiGeneration(c.env, {
+          organizationId: orgId,
+          userId: c.get("userId"),
+          formId: c.get("form")?.id ?? null,
+          kind: row.kind,
+          model: row.model,
+          usage: row.usage,
+          latencyMs,
+        });
+      }
+    };
     /** Loop shape, for the log line. Zero on the single-call path. */
     let loop = { steps: 0, toolCalls: 0, rejections: 0 };
     /** Set on the tools path only; the reviewer runs behind it. */
@@ -775,6 +836,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
         tokens = result.tokens;
         usage = result.usage;
         usedModel = result.model;
+        billed.push({ kind: "edit", model: result.model, usage: result.usage });
         loop = { steps: result.steps, toolCalls: result.toolCalls, rejections: result.rejections };
         /**
          * The model stopped to ask rather than to propose.
@@ -788,18 +850,10 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
          */
         if (result.question) {
           const orgId = c.get("orgId");
-          if (orgId && tokens > 0) {
-            await meter(c.env, orgId, "ai_tokens", tokens);
-            await logAiGeneration(c.env, {
-              organizationId: orgId,
-              userId: c.get("userId"),
-              formId: c.get("form")?.id ?? null,
-              kind: "edit_question",
-              model: usedModel,
-              usage,
-              latencyMs: Date.now() - editStarted,
-            });
-          }
+          if (orgId && tokens > 0) await meter(c.env, orgId, "ai_tokens", tokens);
+          // The call happened and was billed; only its purpose differs.
+          for (const row of billed) row.kind = "edit_question";
+          await flushBilled(Date.now() - editStarted);
           console.log("edit_form_question", { formId, ms: Date.now() - editStarted, steps: result.steps });
           return { status: 200, body: { question: result.question, summary: result.question } };
         }
@@ -808,11 +862,14 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
           env: c.env,
           system: FORM_DESIGNER_SYSTEM,
           prompt: buildEditPrompt(base, prompt, history as BuilderTurn[]),
+          organizationId: c.get("orgId"),
+          formId,
         });
         draft = result.draft;
         tokens = result.tokens;
         usage = result.usage;
         usedModel = result.model;
+        billed.push({ kind: "edit", model: result.model, usage: result.usage });
       }
     } catch (err) {
       // Flattened, and not `err` on its own: Workers Logs serialise an Error
@@ -892,9 +949,12 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
         env: c.env,
         request: prompt,
         diff: describeEditChanges(base, attempt),
+        organizationId: c.get("orgId"),
+        formId,
       });
       tokens += reviewTokens;
-      usage = { input: usage.input + reviewUsage.input, output: usage.output + reviewUsage.output };
+      usage = addUsage(usage, reviewUsage);
+      billed.push({ kind: "edit_review", model: MODELS.extraction, usage: reviewUsage });
 
       if (review && !review.ok && review.problem.trim()) {
         console.log("edit_review_objected", { formId, problem: review.problem.slice(0, 200) });
@@ -919,7 +979,8 @@ Answer the same request again, addressing that.`,
             formId,
           });
           tokens += retry.tokens;
-          usage = { input: usage.input + retry.usage.input, output: usage.output + retry.usage.output };
+          usage = addUsage(usage, retry.usage);
+          billed.push({ kind: "edit_retry", model: retry.model, usage: retry.usage });
           const second = applyDraft(clampDraft(retryCtx.best?.draft ?? retryCtx.draft));
           // Kept only if it is still structurally sound AND actually did
           // something — the same "strictly better" rule the flow retry uses.
@@ -958,9 +1019,12 @@ Answer the same request again, addressing that.`,
           env: c.env,
           system: FORM_DESIGNER_SYSTEM,
           prompt: buildEditPrompt(base, feedback, history as BuilderTurn[]),
+          organizationId: c.get("orgId"),
+          formId,
         });
         tokens += retry.tokens;
-        usage = { input: usage.input + retry.usage.input, output: usage.output + retry.usage.output };
+        usage = addUsage(usage, retry.usage);
+        billed.push({ kind: "edit_retry", model: retry.model, usage: retry.usage });
         const second = applyDraft(retry.draft);
         const secondProblems = introduced(second.doc);
         if (secondProblems.length < problems.length) {
@@ -990,6 +1054,7 @@ Answer the same request again, addressing that.`,
       newRules.length === 0 &&
       endingChanges.length === 0
     ) {
+      await flushBilled(Date.now() - editStarted);
       return {
         status: 422,
         body: {
@@ -1029,21 +1094,15 @@ Answer the same request again, addressing that.`,
     });
     const orgId = c.get("orgId");
     if (orgId) {
+      // One edit, one generation against the allowance, however many model
+      // calls it took to answer — the author asked once.
       await meter(c.env, orgId, "ai_generations");
       if (tokens > 0) await meter(c.env, orgId, "ai_tokens", tokens);
-      // `usedModel` is whichever vendor's draft was actually kept — every
-      // fallback (and every kept retry) used to be logged here as Gemini
-      // regardless of which vendor answered.
-      await logAiGeneration(c.env, {
-        organizationId: orgId,
-        userId: c.get("userId"),
-        formId: c.get("form")?.id ?? null,
-        kind: "edit",
-        model: usedModel,
-        usage,
-        latencyMs: Date.now() - editStarted,
-      });
     }
+    // The cost record is per call, and each carries the model that actually
+    // answered it — a kept fallback is logged as the fallback, and the reviewer
+    // is logged on its own tier rather than as whichever vendor drafted.
+    await flushBilled(Date.now() - editStarted);
     return { status: 200, body: {
       doc,
       added: added.length,

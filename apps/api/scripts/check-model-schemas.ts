@@ -22,7 +22,7 @@ import { generateObject, generateText, stepCountIs } from "ai";
 import { z } from "zod";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { extractionSchema, FormDoc, type Block } from "@repo/form-schema";
-import { GenerationDraft, EditDraft, MODELS, isSchemaRejection } from "../src/lib/ai.js";
+import { GenerationDraft, EditDraft, MODELS, isSchemaRejection, APP_HEADERS } from "../src/lib/ai.js";
 import { buildEditContext, buildEditTools } from "../src/lib/edit-tools.js";
 
 function apiKey(): string {
@@ -38,7 +38,15 @@ function apiKey(): string {
   throw new Error("OPENROUTER_API_KEY is not set, and apps/api/.dev.vars does not carry one.");
 }
 
-const or = createOpenRouter({ apiKey: apiKey() });
+/**
+ * Same app headers the worker sends.
+ *
+ * Without them OpenRouter cannot tell whose traffic this is, and every probe
+ * landed in its dashboard under a second, nameless app — 2.46M tokens of
+ * "Unknown" sitting beside Chatform, which is exactly the view you do not want
+ * when you are trying to work out where the money went.
+ */
+const or = createOpenRouter({ apiKey: apiKey(), headers: { ...APP_HEADERS } });
 
 const DRAFT = "Make a short waitlist form with one screen-out ending and one branch.";
 const EDIT = 'The form has a question with ref "q_platform" (options "iOS", "Android"). Add an email question after it, shown only to Android, and summarise the change.';

@@ -91,8 +91,13 @@ export const DEFAULT_MODEL = MODELS.interview;
  * feed is anonymous, which is exactly the view you do not want when you are
  * trying to work out which feature spent the money. Set once here rather than
  * at each call site so no caller can forget.
+ *
+ * Exported because the worker is not the only thing that spends this key.
+ * `scripts/check-model-schemas.ts` built its own client without these and its
+ * traffic landed in OpenRouter's dashboard as a nameless second app — 2.46M
+ * tokens of "Unknown" that no amount of fixing the worker could explain.
  */
-const APP_HEADERS = {
+export const APP_HEADERS = {
   "HTTP-Referer": "https://chatform.in",
   "X-Title": "Chatform",
 } as const;
@@ -116,6 +121,31 @@ export function openrouter(env: Bindings) {
  */
 export function callTag(kind: string, organizationId: string, sessionId?: string | null): string {
   return [kind, organizationId, sessionId].filter(Boolean).join("/");
+}
+
+type ProviderOptions = NonNullable<Parameters<typeof generateObject>[0]["providerOptions"]>;
+
+/**
+ * `providerOptions` carrying the attribution tag, merged onto whatever else the
+ * call already sends.
+ *
+ * Nine of the eleven call sites used to send no `user` at all, so most of the
+ * bill arrived at OpenRouter anonymous: the activity feed could show what was
+ * spent but not which feature or which account spent it, which is the one
+ * question you actually ask it. `callTag` existed and was wired to two places.
+ *
+ * Returns the options untouched when there is no org to name — an unattributed
+ * call is better than one tagged with an empty string.
+ */
+export function tagged(
+  base: ProviderOptions,
+  kind: string,
+  organizationId?: string | null,
+  subjectId?: string | null,
+): ProviderOptions {
+  if (!organizationId) return base;
+  const { openrouter, ...rest } = base;
+  return { ...rest, openrouter: { ...openrouter, user: callTag(kind, organizationId, subjectId) } };
 }
 
 export function chatModel(env: Bindings, model: string = DEFAULT_MODEL): LanguageModel {
@@ -164,44 +194,6 @@ export const INTERVIEW_PROVIDER_OPTIONS = {
  * they should not have to budget for tokens they never see.
  */
 export const REASONING_HEADROOM_TOKENS = 1200;
-
-export interface AgentTurnResult {
-  text: string;
-  toolCalls: { name: string; args: unknown }[];
-  usage?: { promptTokens: number; completionTokens: number };
-}
-
-/**
- * One agentic turn: given the transcript + toolset, run the model with tools.
- * Tools are provided by SessionDO; guard() enforcement lives there.
- */
-export async function runAgentTurn(opts: {
-  env: Bindings;
-  system: string;
-  messages: { role: "system" | "user" | "assistant"; content: string }[];
-  tools: ToolSet;
-  maxTokens?: number;
-}): Promise<AgentTurnResult> {
-  const result = streamText({
-    model: chatModel(opts.env),
-    system: opts.system,
-    messages: opts.messages as never,
-    tools: opts.tools,
-    maxOutputTokens: opts.maxTokens ?? 400,
-  });
-  const toolCalls: { name: string; args: unknown }[] = [];
-  for await (const part of result.fullStream) {
-    if (part.type === "tool-call") {
-      toolCalls.push({ name: part.toolName, args: (part as { input?: unknown }).input });
-    }
-  }
-  const usage = await result.usage;
-  return {
-    text: await result.text,
-    toolCalls,
-    usage: usage ? { promptTokens: usage.inputTokens ?? 0, completionTokens: usage.outputTokens ?? 0 } : undefined,
-  };
-}
 
 /**
  * How long a draft is allowed to be.
@@ -561,22 +553,118 @@ export const GENERATION_PROVIDER_OPTIONS = {
 } as const;
 
 /**
- * Input and output tokens, kept apart.
+ * What one call used, and what it cost.
  *
- * Every one of these functions used to return a single `tokens` total, which is
- * the right shape for metering — the plan's `ai_tokens` allowance does not care
- * which end they came from — and the wrong shape for cost. Output tokens are
- * roughly eight times the price of input ones, so a total cannot be priced to
- * better than an order of magnitude. `tokens` stays for the meters; `usage`
- * carries the split for `ai-pricing.ts`.
+ * The token split is kept apart from the `tokens` total because the two answer
+ * different questions: the plan's `ai_tokens` allowance does not care which end
+ * they came from, while anyone reading the usage of a model does. `tokens`
+ * stays for the meters; this carries the detail.
+ *
+ * Cost rides along rather than living in its own type so that it reaches the
+ * database by the same route the tokens already take — every call site that
+ * threads usage through now threads the price with it, and none of them had to
+ * learn a second thing to pass.
  */
 export interface TokenUsage {
   input: number;
   output: number;
+  /**
+   * What OpenRouter charged, in USD, exactly as it reported it.
+   *
+   * Never derived from the token counts beside it. This used to be computed
+   * from a hardcoded rate table, and every rate in that table had gone
+   * stale without anything in the repo being able to notice: Gemini Flash was
+   * priced at $0.30/$2.50 per million against an actual $0.75/$3.75, and the
+   * Haiku fallback — absent from the table entirely — was billed at Gemini's
+   * rate. The admin page read $0.70 for a month that cost $6.53.
+   *
+   * A price we maintain by hand is true the day it is written. OpenRouter
+   * returns the real figure on every response, automatically, so there is
+   * nothing to maintain and nothing to get wrong. It is also the only number
+   * that can see charges which are not tokens at all — the `web` plugin in
+   * `researchBrief` bills per search, and cached input reads bill at a tenth
+   * of the normal rate.
+   *
+   * `null` means OpenRouter reported no cost, which is not the same as free.
+   * See `reportedUsage`.
+   */
+  costUsd: number | null;
+  /** OpenRouter's `gen-…` id, so a row can be traced back to its generation. */
+  generationId: string | null;
 }
 
-export function splitUsage(usage: { inputTokens?: number; outputTokens?: number } | undefined): TokenUsage {
-  return { input: usage?.inputTokens ?? 0, output: usage?.outputTokens ?? 0 };
+/** The slice of `providerMetadata` the OpenRouter provider fills in. */
+type OpenRouterMeta = { openrouter?: { usage?: { cost?: number } } } | undefined;
+
+/**
+ * The shape every AI SDK result shares, once the streaming ones are awaited.
+ *
+ * `usage` and `providerMetadata` come from different places on purpose: the SDK
+ * owns the token counts, OpenRouter owns the money, and only the latter is
+ * authoritative about what we were charged.
+ */
+interface UsageBearing {
+  usage?: { inputTokens?: number; outputTokens?: number };
+  providerMetadata?: OpenRouterMeta;
+  steps?: readonly { providerMetadata?: OpenRouterMeta }[];
+  response?: { id?: string };
+}
+
+/**
+ * Tokens from the SDK, cost from OpenRouter.
+ *
+ * The subtlety is in `steps`. `result.usage` is already summed across every
+ * step of a tool loop, but `result.providerMetadata` is deprecated in AI SDK 7
+ * and carries the FINAL step only — measured on a two-step call, reading it
+ * directly reported $0.00007275 of an actual $0.00016125, i.e. under half. So
+ * where steps exist they are summed, and the top-level value is used only for
+ * the single-step object calls that have no `steps` at all.
+ *
+ * A step that reports no cost makes the whole call unpriced rather than
+ * cheaper. Adding up only the steps that answered would understate the bill
+ * quietly, which is the exact failure this function exists to end — better a
+ * visible gap than a plausible wrong number.
+ */
+export function reportedUsage(result: UsageBearing): TokenUsage {
+  const costOf = (meta: OpenRouterMeta) => meta?.openrouter?.usage?.cost;
+
+  let costUsd: number | null;
+  if (result.steps && result.steps.length > 0) {
+    const perStep = result.steps.map((s) => costOf(s.providerMetadata));
+    costUsd = perStep.every((c) => typeof c === "number")
+      ? perStep.reduce<number>((sum, c) => sum + (c as number), 0)
+      : null;
+  } else {
+    const single = costOf(result.providerMetadata);
+    costUsd = typeof single === "number" ? single : null;
+  }
+
+  return {
+    input: result.usage?.inputTokens ?? 0,
+    output: result.usage?.outputTokens ?? 0,
+    costUsd,
+    generationId: result.response?.id ?? null,
+  };
+}
+
+/** A call that was never made, or one whose usage never came back. */
+export const NO_USAGE: TokenUsage = { input: 0, output: 0, costUsd: null, generationId: null };
+
+/**
+ * Two calls billed as one row — the form edit runs up to four.
+ *
+ * Unknown plus known is unknown. If either half went unpriced the sum cannot be
+ * stated, so it is not: the row goes out as unpriced and says so, rather than
+ * reporting the half we happen to know as if it were the whole.
+ */
+export function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
+  return {
+    input: a.input + b.input,
+    output: a.output + b.output,
+    costUsd: a.costUsd === null || b.costUsd === null ? null : a.costUsd + b.costUsd,
+    // The later call's id — enough to find the run in OpenRouter's activity feed.
+    generationId: b.generationId ?? a.generationId,
+  };
 }
 
 /**
@@ -687,6 +775,7 @@ export type ClarifyQuestions = z.output<typeof ClarifyQuestions>;
  */
 export async function clarifyRequest(opts: {
   env: Bindings;
+  organizationId?: string | null;
   prompt: string;
   system: string;
   abortSignal?: AbortSignal;
@@ -697,9 +786,10 @@ export async function clarifyRequest(opts: {
       schema: ClarifyQuestions,
       system: opts.system,
       prompt: opts.prompt,
+      providerOptions: tagged({}, "clarify", opts.organizationId),
       abortSignal: opts.abortSignal ?? AbortSignal.timeout(12_000),
     });
-    const usage = splitUsage(result.usage);
+    const usage = reportedUsage(result);
     const questions = (result.object as ClarifyQuestions).questions
       .filter((q) => q.question.trim())
       // A choice with fewer than two options is a text question wearing a hat.
@@ -712,7 +802,7 @@ export async function clarifyRequest(opts: {
     return { questions, tokens: usage.input + usage.output, usage };
   } catch (err) {
     console.error("clarify_failed", { message: err instanceof Error ? err.message : String(err) });
-    return { questions: [], tokens: 0, usage: { input: 0, output: 0 } };
+    return { questions: [], tokens: 0, usage: NO_USAGE };
   }
 }
 
@@ -747,6 +837,8 @@ export type EditReview = z.output<typeof EditReview>;
 
 export async function reviewEdit(opts: {
   env: Bindings;
+  organizationId?: string | null;
+  formId?: string | null;
   request: string;
   /** What changed, rendered compactly by the caller. */
   diff: string;
@@ -776,15 +868,16 @@ export async function reviewEdit(opts: {
         "have written.\n\n" +
         'When ok=false, "problem" is one sentence saying what to do about it, addressed to whoever is fixing it.',
       prompt: `THEY ASKED FOR:\n${opts.request}\n\nTHE EDIT DID:\n${opts.diff}`,
+      providerOptions: tagged({}, "edit_review", opts.organizationId, opts.formId),
       abortSignal: opts.abortSignal ?? AbortSignal.timeout(12_000),
     });
-    const usage = splitUsage(result.usage);
+    const usage = reportedUsage(result);
     return { review: result.object as EditReview, tokens: usage.input + usage.output, usage };
   } catch (err) {
     // A reviewer having a bad minute must never be the reason a good edit is
     // withheld. Null means "no opinion", and the edit stands.
     console.error("edit_review_failed", { message: err instanceof Error ? err.message : String(err) });
-    return { review: null, tokens: 0, usage: { input: 0, output: 0 } };
+    return { review: null, tokens: 0, usage: NO_USAGE };
   }
 }
 
@@ -926,7 +1019,7 @@ export async function runEditAgent(opts: {
     });
   });
 
-  const usage = splitUsage(result.usage);
+  const usage = reportedUsage(result);
   // Read off the finished call rather than from a collector: `ask_user` has no
   // `execute`, so it never reaches one.
   const asked = result.staticToolCalls.find((c) => c.toolName === "ask_user");
@@ -946,7 +1039,7 @@ export async function runEditAgent(opts: {
   };
 }
 
-export async function generateEdit(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: EditDraft; tokens: number; usage: TokenUsage; model: string }> {
+export async function generateEdit(opts: { env: Bindings; prompt: string; system?: string; organizationId?: string | null; formId?: string | null }): Promise<{ draft: EditDraft; tokens: number; usage: TokenUsage; model: string }> {
   // Which vendor actually answered — `MODELS.generation` unless the schema was
   // refused and this fell back to `MODELS.generationFallback`. Reported back so
   // the caller can log the model that was actually billed, not the one that
@@ -959,10 +1052,10 @@ export async function generateEdit(opts: { env: Bindings; prompt: string; system
       schema: EditDraft,
       system: opts.system,
       prompt: opts.prompt,
-      providerOptions: GENERATION_PROVIDER_OPTIONS,
+      providerOptions: tagged(GENERATION_PROVIDER_OPTIONS, "form_edit", opts.organizationId, opts.formId),
     });
   });
-  const usage = splitUsage(result.usage);
+  const usage = reportedUsage(result);
   return { draft: clampDraft(result.object as EditDraft), tokens: usage.input + usage.output, usage, model: usedModel };
 }
 
@@ -973,7 +1066,7 @@ export async function generateEdit(opts: { env: Bindings; prompt: string; system
  * the larger half and is byte-identical on every call — sits in front of the
  * provider's prompt cache instead of being billed as fresh input each time.
  */
-export async function generateFormDraft(opts: { env: Bindings; prompt: string; system?: string }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage; model: string }> {
+export async function generateFormDraft(opts: { env: Bindings; prompt: string; system?: string; organizationId?: string | null }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage; model: string }> {
   let usedModel: string = MODELS.generation;
   const result = await withSchemaFallback("generate", (model) => {
     usedModel = model;
@@ -982,10 +1075,10 @@ export async function generateFormDraft(opts: { env: Bindings; prompt: string; s
       schema: GenerationDraft,
       system: opts.system,
       prompt: opts.prompt,
-      providerOptions: GENERATION_PROVIDER_OPTIONS,
+      providerOptions: tagged(GENERATION_PROVIDER_OPTIONS, "form_generate", opts.organizationId),
     });
   });
-  const usage = splitUsage(result.usage);
+  const usage = reportedUsage(result);
   return { draft: clampDraft(result.object as GenerationDraft), tokens: usage.input + usage.output, usage, model: usedModel };
 }
 
@@ -1015,6 +1108,8 @@ export async function streamFormDraft(opts: {
   env: Bindings;
   prompt: string;
   system?: string;
+  organizationId?: string | null;
+  formId?: string | null;
   onBlock?: (block: DraftBlockPreview) => void;
   abortSignal?: AbortSignal;
 }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage; model: string }> {
@@ -1032,7 +1127,7 @@ export async function streamFormDraft(opts: {
       schema: GenerationDraft,
       system: opts.system,
       prompt: opts.prompt,
-      providerOptions: GENERATION_PROVIDER_OPTIONS,
+      providerOptions: tagged(GENERATION_PROVIDER_OPTIONS, "form_generate_stream", opts.organizationId, opts.formId),
       abortSignal: opts.abortSignal,
     });
 
@@ -1067,7 +1162,11 @@ export async function streamFormDraft(opts: {
       streamed = true;
       opts.onBlock({ index: last, ref: b.ref, type: b.type, title: b.title, optionCount: b.options.length });
     }
-    const split = splitUsage(await result.usage);
+    const split = reportedUsage({
+      usage: await result.usage,
+      providerMetadata: await result.providerMetadata,
+      response: await result.response,
+    });
     return { draft, tokens: split.input + split.output, usage: split };
   };
 
@@ -1102,6 +1201,7 @@ export async function streamFormDraft(opts: {
  */
 export async function researchBrief(opts: {
   env: Bindings;
+  organizationId?: string | null;
   request: string;
   sites: { url: string; title: string | null; text: string }[];
   abortSignal?: AbortSignal;
@@ -1125,12 +1225,16 @@ VOCABULARY: 3-6 product-specific terms the questions should use
 WORTH ASKING: 3-4 things this product specifically needs to know from a respondent
 
 Use only what the page content and your search results support. If something is not evidenced, leave that line out rather than guessing — an invented detail becomes a question nobody can answer.`,
-      providerOptions: {
-        openrouter: {
-          plugins: [{ id: "web" as const, max_results: 3 }],
-          reasoning: { effort: "minimal" as const, exclude: true },
+      providerOptions: tagged(
+        {
+          openrouter: {
+            plugins: [{ id: "web" as const, max_results: 3 }],
+            reasoning: { effort: "minimal" as const, exclude: true },
+          },
         },
-      },
+        "research",
+        opts.organizationId,
+      ),
       abortSignal: opts.abortSignal,
     });
 
@@ -1143,7 +1247,7 @@ Use only what the page content and your search results support. If something is 
           .filter((u): u is string => !!u),
       ),
     ].slice(0, 6);
-    const usage = splitUsage(result.usage);
+    const usage = reportedUsage(result);
     return { brief, sources, tokens: usage.input + usage.output, usage };
   } catch (err) {
     console.error("research_failed", err);
@@ -1170,13 +1274,15 @@ export interface ExtractionEnvelope {
 
 export async function extractAnswer(opts: {
   env: Bindings;
+  organizationId?: string | null;
+  sessionId?: string | null;
   /** Built by `extractionSchema(block)` — always an envelope-shaped object. */
   schema: z.ZodType<ExtractionEnvelope>;
   question: string;
   guidance: string;
   answer: string;
   transcript?: string;
-}): Promise<{ value: unknown; confident: boolean; note?: string; tokens: number } | null> {
+}): Promise<{ value: unknown; confident: boolean; note?: string; tokens: number; usage: TokenUsage } | null> {
   try {
     const result = await generateObject({
       model: chatModel(opts.env, MODELS.extraction),
@@ -1199,13 +1305,20 @@ export async function extractAnswer(opts: {
 ${opts.guidance}
 ${opts.transcript ? `\nRecent conversation:\n${opts.transcript}\n` : ""}
 Their reply: """${opts.answer}"""`,
+      providerOptions: tagged({}, "extraction", opts.organizationId, opts.sessionId),
     });
     const out = result.object;
+    // The split is returned as well as the total, because the caller used to
+    // book every token here as an input token — the whole call logged as
+    // `(tokens, 0)`, so output was recorded at the input rate and the model's
+    // real shape was unreadable in the data.
+    const usage = reportedUsage(result);
     return {
       value: out.value,
       confident: out.confident,
       note: out.note ?? undefined,
-      tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
+      tokens: usage.input + usage.output,
+      usage,
     };
   } catch (err) {
     console.error("extraction_failed", err);

@@ -10,7 +10,6 @@ import {
   backfillPlatformDaily,
   utcDay,
 } from "../src/lib/platform-rollup.js";
-import { costUsdMicro } from "../src/lib/ai-pricing.js";
 import { IMPERSONATION_HEADER, signImpersonation, verifyImpersonation } from "../src/lib/impersonation.js";
 import { NO_MAIL, recordMailDelivery } from "../src/lib/mail.js";
 import { getEntitlements } from "../src/lib/entitlements.js";
@@ -1167,26 +1166,61 @@ describe("comped plans", () => {
   });
 });
 
-describe("AI pricing", () => {
-  it("prices output tokens above input ones", () => {
-    const input = costUsdMicro("google/gemini-3.7-flash", 1_000_000, 0);
-    const output = costUsdMicro("google/gemini-3.7-flash", 0, 1_000_000);
-    expect(output).toBeGreaterThan(input);
-    expect(input).toBe(300_000); // $0.30 per million input tokens
-    expect(output).toBe(2_500_000); // $2.50 per million output tokens
+describe("what a call cost", () => {
+  /**
+   * The bug this replaces: cost was computed from a hardcoded rate table that
+   * had gone stale, and a month OpenRouter charged $6.53 for was reported as
+   * $0.70. There is no arithmetic left to assert — only that the number
+   * OpenRouter gave us is the number that comes back out.
+   */
+  it("reports the cost OpenRouter gave, not one of its own", async () => {
+    const tenant = await seedTenant("priced");
+    await DB()
+      .DB.prepare(
+        `INSERT INTO ai_generations (id, organization_id, kind, provider, model, prompt_tokens, completion_tokens, cost_usd, created_at)
+         VALUES ('gen_priced', ?, 'reply', 'openrouter', 'google/gemini-3.7-flash', 1000, 1000, 0.00015675, ?)`,
+      )
+      .bind(tenant.orgId, Date.now())
+      .run();
+
+    const res = await fetchApi("/api/admin/ai", { headers: { cookie: admin.cookie } });
+    // Per org, not the platform total: every test in this file shares one
+    // database, and a global sum would be asserting on its neighbours.
+    const body = (await res.json()) as { topSpenders: { org_id: string; cost_usd: number }[] };
+    const row = body.topSpenders.find((r) => r.org_id === tenant.orgId);
+    // Verbatim, to the last digit — no rounding into micros on the way through.
+    expect(row?.cost_usd).toBeCloseTo(0.00015675, 10);
   });
 
   /**
-   * A model that ships before this table is updated must make the cost chart
-   * look alarming, not free — a silent zero is how a margin problem stays
-   * invisible for a quarter.
+   * A call OpenRouter reported no cost for is unknown, not free. Counting it as
+   * zero is precisely how a spend figure drifts low without anyone noticing.
    */
-  it("falls back to a non-zero rate for an unknown model", () => {
-    expect(costUsdMicro("some/model-we-have-not-priced", 1000, 1000)).toBeGreaterThan(0);
-  });
+  it("counts an unpriced call instead of treating it as free", async () => {
+    const tenant = await seedTenant("unpriced");
+    const now = Date.now();
+    await DB()
+      .DB.prepare(
+        `INSERT INTO ai_generations (id, organization_id, kind, provider, model, prompt_tokens, completion_tokens, cost_usd, status, created_at)
+         VALUES ('gen_known', ?, 'reply', 'openrouter', 'google/gemini-3.7-flash', 10, 10, 0.25, 'ok', ?),
+                ('gen_null', ?, 'reply', 'openrouter', 'google/gemini-3.7-flash', 10, 10, NULL, 'error', ?)`,
+      )
+      .bind(tenant.orgId, now, tenant.orgId, now)
+      .run();
 
-  it("costs nothing when nothing was spent", () => {
-    expect(costUsdMicro("google/gemini-3.7-flash", 0, 0)).toBe(0);
+    const res = await fetchApi("/api/admin/ai", { headers: { cookie: admin.cookie } });
+    const body = (await res.json()) as {
+      totals: { unpricedCalls: number; calls: number; errors: number };
+      topSpenders: { org_id: string; cost_usd: number; unpriced: number; calls: number }[];
+    };
+    const row = body.topSpenders.find((r) => r.org_id === tenant.orgId);
+    // The NULL row is excluded from this org's money and counted separately.
+    expect(row?.cost_usd).toBeCloseTo(0.25, 10);
+    expect(row?.unpriced).toBe(1);
+    // It is still a call, and still a failed one. The old writer dropped rows
+    // with no tokens entirely, which is why the page could read 0% errors.
+    expect(row?.calls).toBe(2);
+    expect(body.totals.errors).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -1207,8 +1241,8 @@ describe("the margin table", () => {
       .run();
     await DB()
       .DB.prepare(
-        `INSERT INTO ai_generations (id, organization_id, kind, provider, model, prompt_tokens, completion_tokens, cost_usd_micro, created_at)
-         VALUES ('gen_granted', ?, 'reply', 'openrouter', 'google/gemini-3.7-flash', 1000, 1000, 100000, ?)`,
+        `INSERT INTO ai_generations (id, organization_id, kind, provider, model, prompt_tokens, completion_tokens, cost_usd, created_at)
+         VALUES ('gen_granted', ?, 'reply', 'openrouter', 'google/gemini-3.7-flash', 1000, 1000, 0.1, ?)`,
       )
       .bind(granted.orgId, now)
       .run();
@@ -1239,8 +1273,8 @@ describe("the margin table", () => {
       .run();
     await DB()
       .DB.prepare(
-        `INSERT INTO ai_generations (id, organization_id, kind, provider, model, prompt_tokens, completion_tokens, cost_usd_micro, created_at)
-         VALUES ('gen_paying', ?, 'reply', 'openrouter', 'google/gemini-3.7-flash', 1000, 1000, 100000, ?)`,
+        `INSERT INTO ai_generations (id, organization_id, kind, provider, model, prompt_tokens, completion_tokens, cost_usd, created_at)
+         VALUES ('gen_paying', ?, 'reply', 'openrouter', 'google/gemini-3.7-flash', 1000, 1000, 0.1, ?)`,
       )
       .bind(paying.orgId, now)
       .run();

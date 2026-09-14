@@ -11,9 +11,14 @@ export function money(cents: number): string {
   return `$${Math.round(cents / 100).toLocaleString()}`;
 }
 
-/** USD micros → `$12.40`, or `$0.0031` when the figure is genuinely tiny. */
-export function usd(micro: number): string {
-  const dollars = micro / 1_000_000;
+/**
+ * USD → `$12.40`, or `$0.0031` when the figure is genuinely tiny.
+ *
+ * Takes dollars, not micros. AI cost is no longer computed from a rate table
+ * into an integer of millionths — it arrives from OpenRouter as a fraction of a
+ * dollar and is stored exactly as given, so there is nothing left to scale.
+ */
+export function usd(dollars: number): string {
   if (dollars === 0) return "$0";
   if (dollars < 0.01) return `$${dollars.toPrecision(2)}`;
   return `$${dollars.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;

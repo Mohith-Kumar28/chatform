@@ -1,0 +1,53 @@
+-- AI cost stops being something we calculate.
+--
+-- `cost_usd_micro` was never a measurement. It was computed at write time by `ai-pricing.ts`
+-- from a hardcoded table of two model rates, and by the time anyone checked, every rate in it
+-- had gone stale with nothing in the repo able to notice:
+--
+--     google/gemini-3.7-flash        table $0.30/$2.50   actual $0.75/$3.75
+--     google/gemini-3.1-flash-lite   table $0.10/$0.40   actual $0.25/$1.50
+--     anthropic/claude-haiku-4.5     not in the table    actual $1.00/$5.00
+--
+-- The Haiku fallback, absent from the table entirely, billed at Gemini's rate. The admin page
+-- read $0.70 for a month OpenRouter charged $6.53 for, and every other figure derived from this
+-- column — Directory, Overview, per-org spend, loss-makers — was wrong by the same factor.
+--
+-- A rate we maintain by hand is true on the day it is written and quietly wrong afterwards. It
+-- also cannot see charges that are not tokens at all, and that gap is larger than the stale rates.
+-- Measured on one real `researchBrief` call, which runs the `web` plugin on every generation whose
+-- prompt carries a URL: 39 input and 88 output tokens, and a charge of $0.04235925. The tokens
+-- account for $0.00036 of it; the other $0.042 is three web searches at $0.014 each, which no
+-- token-based formula can see. That call was being reported at under 1% of what it cost.
+--
+-- OpenRouter folds the search charge into the same `cost` it reports for everything else, so
+-- storing that number needs no special case — which is the point of not doing the arithmetic.
+--
+-- OpenRouter returns the exact amount it charged on every response, automatically, with no flag
+-- to set. That number is now stored verbatim and nothing multiplies anything.
+--
+-- ── Why REAL, and why nullable ──
+--
+-- REAL because the reported figure is a fraction of a dollar (0.00015675) and micros would mean
+-- rounding it — arithmetic of ours, reintroduced at the last step, on the one value whose whole
+-- point is that we did not touch it.
+--
+-- NULL because OpenRouter does not always answer. A call that dies before the final usage chunk
+-- has no cost, and "no cost" is not "free". Unpriced rows are counted and shown as unpriced on
+-- the admin page; SUM() skips them, so they can never again be silently averaged in as zero.
+--
+-- ── Why history is blanked rather than re-priced ──
+--
+-- Re-pricing old rows at today's rates would be the same mistake with fresher numbers, and we
+-- never stored generation ids, so those calls genuinely cannot be looked up. Dropping the column
+-- leaves them with no cost at all, which is the truth. The AI page marks the cutover.
+
+ALTER TABLE `ai_generations` ADD COLUMN `cost_usd` real;
+--> statement-breakpoint
+ALTER TABLE `ai_generations` ADD COLUMN `generation_id` text;
+--> statement-breakpoint
+ALTER TABLE `ai_generations` DROP COLUMN `cost_usd_micro`;
+--> statement-breakpoint
+-- `platform_metrics_daily` is derived, and only the current day is recomputed on each rollup
+-- tick — every historical day would otherwise keep the cost it was rolled up with. Clearing it
+-- forces a recount against the new column. Same reason, same statement, as `0015`.
+DELETE FROM `platform_metrics_daily`;

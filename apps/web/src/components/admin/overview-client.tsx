@@ -163,8 +163,8 @@ export function OverviewClient() {
         <KpiTile label="MRR" {...kpi("mrr_cents")} series={o.mrrSeries} format={money} comparedTo={comparedTo} />
         <KpiTile
           label="AI spend"
-          {...kpi("ai_cost_micro")}
-          series={o.series?.ai_cost_micro}
+          {...kpi("ai_cost_usd")}
+          series={o.series?.ai_cost_usd}
           format={usd}
           comparedTo={comparedTo}
           // The one tile where climbing is bad.

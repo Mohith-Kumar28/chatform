@@ -798,7 +798,14 @@ export const aiGenerations = sqliteTable(
     model: text("model").notNull(),
     promptTokens: integer("prompt_tokens").notNull().default(0),
     completionTokens: integer("completion_tokens").notNull().default(0),
-    costUsdMicro: integer("cost_usd_micro").notNull().default(0),
+    /**
+     * What OpenRouter charged, in USD, exactly as it reported it — never
+     * computed here. `null` means it reported no cost, which is not free; see
+     * `0028_openrouter_reported_cost.sql`.
+     */
+    costUsd: real("cost_usd"),
+    /** OpenRouter's `gen-…` id, so a row can be traced back to its generation. */
+    generationId: text("generation_id"),
     latencyMs: integer("latency_ms"),
     status: text("status").notNull().default("ok"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),

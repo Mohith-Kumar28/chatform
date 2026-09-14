@@ -146,7 +146,7 @@ coreRouter.get(
       forms_created: kpiFor("forms_created"),
       responses_completed: kpiFor("responses_completed"),
       responses_partial: kpiFor("responses_partial"),
-      ai_cost_micro: kpiFor("ai_cost_micro"),
+      ai_cost_usd: kpiFor("ai_cost_usd"),
       // Snapshots, not sums: "MRR over the last 30 days" is not a number. The
       // comparison is where it stood a period ago.
       mrr_cents: { value: mrrSeries.at(-1) ?? 0, previous: seriesOf(rows, "mrr_cents", previous).at(-1) ?? 0 },
@@ -164,7 +164,7 @@ coreRouter.get(
       active_orgs: seriesOf(rows, "active_orgs", window),
       views: seriesOf(rows, "views", window),
       ai_tokens: seriesOf(rows, "ai_tokens", window),
-      ai_cost_micro: seriesOf(rows, "ai_cost_micro", window),
+      ai_cost_usd: seriesOf(rows, "ai_cost_usd", window),
     };
 
     const [funnel, cohorts, actionCounts, formStatsAsOf, activeNow, activeBefore] = await Promise.all([
@@ -677,7 +677,7 @@ coreRouter.get(
                     forms: z.number(),
                     responses_30d: z.number(),
                     ai_tokens_30d: z.number(),
-                    ai_cost_micro_30d: z.number(),
+                    ai_cost_usd_30d: z.number(),
                     last_active_at: z.number().nullable(),
                     mrr_cents: z.number(),
                   }),
@@ -749,7 +749,7 @@ coreRouter.get(
              (SELECT COUNT(*) FROM forms f WHERE f.organization_id = o.id AND f.deleted_at IS NULL) AS forms,
              (SELECT COUNT(*) FROM submissions s WHERE s.organization_id = o.id AND s.is_test = 0 AND s.started_at >= ?1) AS responses_30d,
              (SELECT COALESCE(SUM(g.prompt_tokens + g.completion_tokens), 0) FROM ai_generations g WHERE g.organization_id = o.id AND g.created_at >= ?1) AS ai_tokens_30d,
-             (SELECT COALESCE(SUM(g.cost_usd_micro), 0) FROM ai_generations g WHERE g.organization_id = o.id AND g.created_at >= ?1) AS ai_cost_micro_30d,
+             (SELECT COALESCE(SUM(g.cost_usd), 0) FROM ai_generations g WHERE g.organization_id = o.id AND g.created_at >= ?1) AS ai_cost_usd_30d,
              (SELECT MAX(t) FROM (
                 SELECT MAX(s.started_at) AS t FROM submissions s WHERE s.organization_id = o.id
                 UNION ALL SELECT MAX(a.created_at) FROM form_activity a WHERE a.organization_id = o.id

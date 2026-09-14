@@ -36,12 +36,13 @@ interface Ai {
   byModel: { key: string; value: number }[];
   byKind: { key: string; value: number }[];
   totals: {
-    costMicro: number;
+    costUsd: number;
+    unpricedCalls: number;
     tokens: number;
     calls: number;
     errors: number;
     errorRate: number;
-    costPerConversationMicro: number;
+    costPerConversationUsd: number;
     conversations: number;
   };
   latency: { model: string; calls: number; p50: number; p90: number; errorRate: number }[];
@@ -61,11 +62,11 @@ const KIND_LABEL: Record<string, string> = {
   generate: "Form generation",
   generate_stream: "Form generation (streamed)",
   edit: "Builder edits",
+  edit_question: "Builder edits (clarifying)",
+  clarify: "Clarifying questions",
   research: "Website research",
+  knowledge_ocr: "Reading uploads",
 };
-
-/** USD micros → cents, so a dollars-axis chart reads correctly. */
-const microToCents = (micro: number) => micro / 10_000;
 
 export function AiClient() {
   const range = useRange();
@@ -86,17 +87,26 @@ export function AiClient() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiTile
           label="Spend"
-          value={t.costMicro ?? 0}
-          previous={t.costMicro ?? 0}
+          value={t.costUsd ?? 0}
+          previous={t.costUsd ?? 0}
           series={a.costSeries}
           format={usd}
           lowerIsBetter
-          hint="in this period"
+          /**
+           * The hint carries the gap rather than hiding it. These are calls
+           * OpenRouter reported no cost for; counting them as free is how this
+           * page came to show $0.70 for a month that cost $6.53.
+           */
+          hint={
+            (t.unpricedCalls ?? 0) > 0
+              ? `as billed by OpenRouter · ${(t.unpricedCalls ?? 0).toLocaleString()} unpriced`
+              : "as billed by OpenRouter"
+          }
         />
         <KpiTile
           label="Per conversation"
-          value={t.costPerConversationMicro ?? 0}
-          previous={t.costPerConversationMicro ?? 0}
+          value={t.costPerConversationUsd ?? 0}
+          previous={t.costPerConversationUsd ?? 0}
           format={usd}
           lowerIsBetter
           hint="the unit economics"
@@ -122,12 +132,19 @@ export function AiClient() {
 
       <ChartCard
         title="Spend over time"
+        /**
+         * Rows written before the cutover have no cost at all — they were
+         * priced by a stale rate table we have since deleted, and without a
+         * generation id they cannot be looked up. The subtitle says so rather
+         * than letting a flat early stretch read as a cheap fortnight.
+         */
+        subtitle="As charged by OpenRouter. Earlier days read as zero — they predate it."
         aside={<Legend items={[{ label: "Cost", color: SERIES[0]! }]} />}
       >
         <TrendChart
           days={days}
           series={[{ key: "cost", label: "Cost ($)" }]}
-          data={{ cost: (a.costSeries ?? []).map((m) => Math.round(microToCents(m)) / 100) }}
+          data={{ cost: a.costSeries ?? [] }}
           averageOf="cost"
         />
       </ChartCard>
@@ -223,7 +240,7 @@ export function AiClient() {
             },
             { key: "conversations", header: "Chats", width: "5rem", numeric: true, render: (row) => compact(num(row, "conversations")) },
             { key: "tokens", header: "Tokens", width: "5.5rem", numeric: true, render: (row) => compact(num(row, "tokens")) },
-            { key: "cost", header: "Costs us", width: "6rem", numeric: true, render: (row) => usd(num(row, "cost_micro")) },
+            { key: "cost", header: "Costs us", width: "6rem", numeric: true, render: (row) => usd(num(row, "cost_usd")) },
             {
               key: "mrr",
               header: "Pays us",
@@ -256,7 +273,7 @@ export function AiClient() {
             { key: "plan", header: "Plan", width: "5.5rem", render: (row) => str(row, "plan") },
             { key: "calls", header: "Calls", width: "5rem", numeric: true, render: (row) => compact(num(row, "calls")) },
             { key: "tokens", header: "Tokens", width: "5.5rem", numeric: true, render: (row) => compact(num(row, "tokens")) },
-            { key: "cost", header: "Cost", width: "6rem", numeric: true, render: (row) => usd(num(row, "cost_micro")) },
+            { key: "cost", header: "Cost", width: "6rem", numeric: true, render: (row) => usd(num(row, "cost_usd")) },
           ]}
         />
         </ChartCard>
