@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { displayAnswer, type Block } from "@repo/form-schema";
+import { displayCell, splitAnswers, type ResultColumn } from "./response-answers";
 import {
   getGetApiFormsByIdAnalyticsQueryKey,
   getGetApiFormsByIdSubmissionsQueryKey,
@@ -631,7 +631,7 @@ function FollowUpDetail({ row, className }: { row: SubmissionRecord; className?:
  * its answers are still here, and hiding the column because the question was
  * deleted is what this flag exists to stop.
  */
-export type ResultColumn = Pick<Block, "ref" | "title" | "type"> & { retired?: boolean };
+export type { ResultColumn };
 
 /** The rows-per-page choices. 200 is the endpoint's ceiling and not offered. */
 const ROWS_PER_PAGE = [25, 50, 100] as const;
@@ -1872,48 +1872,7 @@ function SubmissionDialog({
 
           <FollowUpDetail row={row} />
 
-          {/*
-            The answer is the thing; the question is its label.
-            
-            Both were `text-sm` and both were ink, one merely a weight apart, so
-            eleven questions and eleven answers came out as twenty-two lines of
-            the same grey and you had to count to work out which was which. The
-            question is now a small muted label and the answer sits under it at
-            reading size in full-strength ink — the same relationship a field
-            has to its value everywhere else in the product — and a hairline
-            between rows says where one answer stops.
-          */}
-          {view === "answers" && (
-          <dl className="divide-border/60 divide-y">
-            {columns.map((b) => {
-              const meta = blockMeta(b.type);
-              const value = displayCell(b, byRef.get(b.ref));
-              return (
-                <div key={b.ref} className="flex gap-3 py-3 first:pt-0 last:pb-0">
-                  <span className={cn("mt-0.5 grid size-5 shrink-0 place-items-center rounded", TONE_CLASSES[meta.tone])}>
-                    <meta.icon className="size-3" strokeWidth={2} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <dt className="text-muted-foreground text-caption flex items-center gap-1.5 leading-snug">
-                      <span className="min-w-0 break-words">{b.title}</span>
-                      {b.retired && <RemovedTag />}
-                    </dt>
-                    <dd
-                      className={cn(
-                        "mt-1 break-words whitespace-pre-wrap",
-                        value
-                          ? "text-[0.9375rem] leading-snug font-medium"
-                          : "text-muted-foreground/60 text-sm italic",
-                      )}
-                    >
-                      {value || "Not answered"}
-                    </dd>
-                  </div>
-                </div>
-              );
-            })}
-          </dl>
-          )}
+          {view === "answers" && <AnswerList key={row.id} columns={columns} byRef={byRef} />}
 
           {view === "chat" &&
             (row.transcript.length > 0 ? (
@@ -1980,10 +1939,102 @@ function formatWhen(row: SubmissionRecord): string {
  * option labels rather than `opt_founder001`, readable pairs rather than
  * `{"row_ui000001":"col_bad00001"}`.
  */
-function displayCell(block: ResultColumn, value: unknown): string {
-  if (value === undefined || value === null || value === "") return "";
-  return displayAnswer(block as Block, value);
+/**
+ * What this person said, and nothing else.
+ *
+ * Every column used to get a row, so a branching form read as a wall of "Not
+ * answered": the open mic registration printed fourteen questions for somebody
+ * who had been asked nine, and five of those rows were arms of the form he was
+ * never taken down. That is not a respondent who skipped five questions — it is
+ * a respondent who was never asked them, and printing the two identically asks
+ * the reader to hold the whole flow in their head to tell which is which.
+ *
+ * So the list is the answers. Nothing is lost by leaving the blanks out: the
+ * count is already in the tab badge and in the line above it ("7 of 14
+ * answered"). They stay one click away, because which optional question
+ * everybody skips is a real thing to want to know, and it is unknowable if the
+ * rows simply do not exist.
+ *
+ * Keyed on the response id by its caller, so stepping to the next response
+ * arrives collapsed instead of inheriting the last one's open disclosure.
+ */
+function AnswerList({
+  columns,
+  byRef,
+}: {
+  columns: ResultColumn[];
+  byRef: Map<string, unknown>;
+}) {
+  const [showBlanks, setShowBlanks] = useState(false);
+  const valueOf = (b: ResultColumn) => displayCell(b, byRef.get(b.ref));
+  const { answered, blank } = splitAnswers(columns, byRef);
+
+  /**
+   * One row: the answer is the thing, the question is its label.
+   *
+   * Both were `text-sm` and both were ink, one merely a weight apart, so eleven
+   * questions and eleven answers came out as twenty-two lines of the same grey
+   * and you had to count to work out which was which. The question is a small
+   * muted label and the answer sits under it at reading size in full-strength
+   * ink — the same relationship a field has to its value everywhere else in the
+   * product — and a hairline between rows says where one answer stops.
+   */
+  const line = (b: ResultColumn) => {
+    const meta = blockMeta(b.type);
+    const value = valueOf(b);
+    return (
+      <div key={b.ref} className="flex gap-3 py-3 first:pt-0 last:pb-0">
+        <span className={cn("mt-0.5 grid size-5 shrink-0 place-items-center rounded", TONE_CLASSES[meta.tone])}>
+          <meta.icon className="size-3" strokeWidth={2} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <dt className="text-muted-foreground text-caption flex items-center gap-1.5 leading-snug">
+            <span className="min-w-0 break-words">{b.title}</span>
+            {b.retired && <RemovedTag />}
+          </dt>
+          <dd
+            className={cn(
+              "mt-1 break-words whitespace-pre-wrap",
+              value ? "text-[0.9375rem] leading-snug font-medium" : "text-muted-foreground/60 text-sm italic",
+            )}
+          >
+            {value || "Not answered"}
+          </dd>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      {answered.length > 0 ? (
+        <dl className="divide-border/60 divide-y">{answered.map(line)}</dl>
+      ) : (
+        /* Not an error: somebody who opened the form and walked away has a row
+           here too, and "nothing yet" is the honest thing for it to say. */
+        <p className="text-muted-foreground py-3 text-sm italic">Nothing answered yet.</p>
+      )}
+
+      {blank.length > 0 && (
+        <div className={cn("pt-3", answered.length > 0 && "border-border/60 border-t")}>
+          <button
+            type="button"
+            onClick={() => setShowBlanks((v) => !v)}
+            className="text-muted-foreground hover:text-foreground text-caption font-medium"
+            aria-expanded={showBlanks}
+          >
+            {showBlanks
+              ? "Hide unanswered"
+              : `Show ${blank.length} unanswered question${blank.length === 1 ? "" : "s"}`}
+          </button>
+          {showBlanks && <dl className="divide-border/60 mt-1 divide-y opacity-70">{blank.map(line)}</dl>}
+        </div>
+      )}
+    </>
+  );
 }
+
+
 
 /** Selected rows, as the spreadsheet the export endpoint would have given. */
 function downloadCsv(rows: SubmissionRecord[], columns: ResultColumn[], withRespondent: boolean) {
