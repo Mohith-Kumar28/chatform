@@ -38,11 +38,18 @@ describe("money formatting", () => {
     expect(money(0)).toBe("$0");
   });
 
-  /** A sub-cent AI call must not round away to "$0" and read as free. */
+  /*
+    A sub-cent AI call must not round away to "$0" and read as free.
+
+    In dollars, which is what `cost_usd` holds. These were micros until AI spend
+    started arriving from OpenRouter as a fraction of a dollar and being stored
+    verbatim; the figures below are the same two costs, and they still have to
+    render the same way.
+  */
   it("keeps tiny AI costs visible", () => {
     expect(usd(0)).toBe("$0");
-    expect(usd(25_272)).toBe("$0.03");
-    expect(usd(1_404)).toBe("$0.0014");
+    expect(usd(0.025272)).toBe("$0.03");
+    expect(usd(0.001404)).toBe("$0.0014");
   });
 
   it("compacts large counts", () => {
