@@ -27,6 +27,7 @@ import {
   type PublicBlock,
   type PublicEnding,
   interpolate,
+  contactFieldPhrase,
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { ServerEvent, SSEEnvelope } from "../lib/events.js";
@@ -216,6 +217,8 @@ interface StoredSession {
   turnCount: number;
   collectedCount: number;
   invalidCounts?: Record<string, number>;
+  /** Per block ref: the sub-fields of a refused contact/address card that were good. */
+  partials?: Record<string, Record<string, string>>;
   sessionTokensUsed?: number;
   /** Retired: merged into `sessionTokensUsed`. Still read when resuming an old session. */
   phrasingTokensUsed?: number;
@@ -315,6 +318,16 @@ export class SessionDO extends DurableObject<Bindings> {
   private doc: FormDoc | null = null;
   private state: EvalState = { answers: {}, variables: {}, hidden: {} };
   private invalidCounts = new Map<string, number>();
+  /**
+   * What a refused record-shaped answer kept, per block ref.
+   *
+   * A `contact_info` card refused for one bad field is not four bad fields, and
+   * re-asking it as though it were is how a respondent ends up typing their
+   * name and email a second time to fix a phone number. `validateAnswer` hands
+   * back the fields that passed; they live here until the block is answered,
+   * and `emitQuestion` sends them with the question as a prefill.
+   */
+  private partials = new Map<string, Record<string, string>>();
   /**
    * Whether this form has any indexed knowledge, resolved once per session.
    *
@@ -1255,6 +1268,7 @@ export class SessionDO extends DurableObject<Bindings> {
     // and reset the token budget to zero (so `sessionTokenBudget` was not
     // actually a cap). They are part of session state and must survive.
     this.invalidCounts = new Map(Object.entries(stored.invalidCounts ?? {}));
+    this.partials = new Map(Object.entries(stored.partials ?? {}));
     // `phrasingTokensUsed` was the larger of the two while both existed, so a
     // session written before they merged carries its spend across rather than
     // being handed a fresh allowance mid-conversation.
@@ -1280,6 +1294,7 @@ export class SessionDO extends DurableObject<Bindings> {
       turnCount: this.turnCount,
       collectedCount: this.collectedCount,
       invalidCounts: Object.fromEntries(this.invalidCounts),
+      partials: Object.fromEntries(this.partials),
       sessionTokensUsed: this.sessionTokensUsed,
       extractionCalls: this.extractionCalls,
       editingRef: this.editingRef,
@@ -2361,8 +2376,10 @@ export class SessionDO extends DurableObject<Bindings> {
     } else if (this.aiEnabled()) {
       // Agentic retry: address what they actually said — which is often a
       // question of their own — then steer back. The form author's per-block
-      // retryHint is folded in by buildRetryObjective.
-      const ok = await this.aiStreamMessage(buildRetryObjective(block, count, hint));
+      // retryHint is folded in by buildRetryObjective, and so is what a
+      // half-good contact card already banked — without which the agent asks
+      // for the whole card again, having just been given three quarters of it.
+      const ok = await this.aiStreamMessage(buildRetryObjective(block, count, hint, this.keptFields(block)));
       if (ok) {
         await this.applyPendingEffects();
         // Same rule on a retry: the question text is never reworded.
@@ -2377,6 +2394,18 @@ export class SessionDO extends DurableObject<Bindings> {
       await this.emitQuestion();
     }
     return { accepted: true };
+  }
+
+  /**
+   * The sub-fields of this block a refused attempt already banked, as words.
+   *
+   * Empty for every block type but `contact_info` and `address`, which are the
+   * only ones whose answer has parts that can be right while the whole is not.
+   */
+  private keptFields(block: Block): string[] {
+    const held = this.partials.get(block.ref);
+    if (!held) return [];
+    return Object.keys(held).map(contactFieldPhrase);
   }
 
   private async record(block: Block, raw: unknown): Promise<{ accepted: boolean; error?: string }> {
@@ -2417,6 +2446,20 @@ export class SessionDO extends DurableObject<Bindings> {
         await this.emit("user_message", { messageId: echoId, text: attempt, blockRef: block.ref });
       }
       this.pendingUserTextPersisted = false;
+      /**
+       * Keep what the card got right, before re-asking it.
+       *
+       * Merged onto whatever an earlier attempt kept rather than replacing it:
+       * a respondent who fixes their phone number in a message of its own has
+       * sent a record holding only the phone, and overwriting would drop the
+       * name and email the first attempt already banked. Only ever set from a
+       * refusal that produced one — a `type` failure on the whole value knows
+       * nothing about fields and must not erase what is held.
+       */
+      if (result.partial && Object.keys(result.partial).length > 0) {
+        this.partials.set(block.ref, { ...this.partials.get(block.ref), ...result.partial });
+        await this.persistMeta();
+      }
       if (duplicate) return this.recordInvalid(block, "duplicate", DUPLICATE_HINT);
       return this.recordInvalid(block, result.code ?? "invalid", result.hint ?? "That answer doesn't look right.");
     }
@@ -2451,6 +2494,10 @@ export class SessionDO extends DurableObject<Bindings> {
       this.state.answers[block.ref] = result.value;
     }
     this.invalidCounts.delete(block.ref);
+    // Answered. Nothing to hand back next time this ref is asked — and an edit
+    // from the review step must start from the stored answer, not from a
+    // half-filled card two questions ago.
+    this.partials.delete(block.ref);
     const echo = summarizeAnswer(block, result.value);
     this.lastAnswerDisplay = echo;
     let answerMessageId = this.pendingUserMessageId;
@@ -2992,6 +3039,7 @@ export class SessionDO extends DurableObject<Bindings> {
     if (!block) return;
     const answered = Object.keys(this.state.answers).length;
     const pub = toPublicBlock(block);
+    const prefill = this.partials.get(block.ref);
     await this.emit("question", {
       messageId: crypto.randomUUID(),
       // The description is shown verbatim, so `{{ref}}` is filled here, where
@@ -2999,6 +3047,8 @@ export class SessionDO extends DurableObject<Bindings> {
       block: pub.description
         ? { ...pub, description: interpolate(pub.description, this.recallVars(), { escapeMarkdown: true }) }
         : pub,
+      // What a refused card already got right, so it comes back holding it.
+      ...(prefill && Object.keys(prefill).length > 0 ? { prefill } : {}),
       progress: {
         answered,
         totalEstimate: this.doc.blocks.filter((b) => !["welcome", "statement"].includes(b.type)).length,

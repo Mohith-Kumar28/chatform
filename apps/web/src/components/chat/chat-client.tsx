@@ -564,6 +564,9 @@ export function ChatClient({
             <div key={chat.question.block.ref} className="animate-message-in pt-0.5 pl-1">
               <QuestionAffordance
                 block={chat.question.block}
+                // A card refused for one bad field comes back holding the
+                // fields that were fine. See `validateAnswer`'s `partial`.
+                prefill={chat.question.prefill}
                 // Only the error state disables now; the in-flight case is
                 // handled by not rendering at all. Kept rather than folded into
                 // the condition above, because a dropped stream is a state the

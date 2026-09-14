@@ -44,6 +44,14 @@ export const QuestionAffordance = memo(function QuestionAffordance(props: {
   block: PublicBlock;
   disabled?: boolean;
   /**
+   * What a refused record-shaped answer keeps.
+   *
+   * Only `contact_info` and `address` ever carry one: the server validated the
+   * card field by field, kept what was good, and re-asked with the rest. See
+   * `validateAnswer`'s `partial`.
+   */
+  prefill?: Record<string, string>;
+  /**
    * Drawn for an author rather than offered to a respondent — the builder's
    * question preview.
    *
@@ -171,6 +179,7 @@ function AffordanceControls({
   block,
   disabled,
   preview,
+  prefill,
   uploadBase,
   respondentToken,
   onStructured,
@@ -179,6 +188,7 @@ function AffordanceControls({
   block: PublicBlock;
   disabled?: boolean;
   preview?: boolean;
+  prefill?: Record<string, string>;
   uploadBase: string | null;
   respondentToken: string | null;
   onStructured: (value: unknown, display: string) => void;
@@ -388,7 +398,15 @@ function AffordanceControls({
 
     case "contact_info":
     case "address":
-      return <FieldsComposer fields={block.fields ?? []} required={block.required} onSubmit={onStructured} />;
+      return (
+        <FieldsComposer
+          fields={block.fields ?? []}
+          required={block.required}
+          countryHint={block.countryHint}
+          prefill={prefill}
+          onSubmit={onStructured}
+        />
+      );
 
     case "field_group":
       return (

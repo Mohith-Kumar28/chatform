@@ -47,16 +47,34 @@ export function PhoneInput({
   countryHint,
   placeholder,
   autoFocus,
+  name,
+  variant = "composer",
 }: {
   /** E.164, owned by the composer. Empty until there is something to send. */
   value: string;
   onChange: (value: string) => void;
-  onSubmit: () => void;
+  /**
+   * Enter, where Enter means send.
+   *
+   * Omitted inside a record composer — a contact card, a group row — where the
+   * field is one cell of a form the wrapper submits: `enterSubmits` there
+   * decides between submitting and jumping to the next empty cell, and a field
+   * that also submitted on its own would do both on one keypress.
+   */
+  onSubmit?: () => void;
   /** The author's `countryHint`, where they set one. */
   countryHint?: string;
   placeholder?: string;
   autoFocus?: boolean;
+  /** Distinguishes one row's number from another's, on a repeating group. */
+  name?: string;
+  /**
+   * `composer` is the message box; `field` is one cell of a contact card or a
+   * group row, which is squarer and says less.
+   */
+  variant?: "composer" | "field";
 }) {
+  const cell = variant === "field";
   const numberRef = useRef<HTMLInputElement>(null);
 
   /**
@@ -133,12 +151,16 @@ export function PhoneInput({
   }
 
   return (
-    <div className="space-y-1.5">
-      {problem && <p className="px-1 text-sm opacity-70">{problem}</p>}
+    <div className={cn(cell ? "space-y-1" : "space-y-1.5")}>
+      {/* Above the box in the composer, where there is nothing below it but the
+          send button; under the box in a grid cell, where the next field is. */}
+      {problem && !cell && <p className="px-1 text-sm opacity-70">{problem}</p>}
       <div
         className={cn(
           // The plain composer's shell, to the pixel: see `TextInput`.
-          "flex h-11 w-full items-stretch overflow-hidden rounded-2xl border bg-[var(--cf-composer-bg)] text-[0.9375rem] transition-colors",
+          "flex h-11 w-full items-stretch overflow-hidden border bg-[var(--cf-composer-bg)] text-[0.9375rem] transition-colors",
+          // A cell matches the boxes beside it, not the message box below it.
+          cell ? "rounded-xl" : "rounded-2xl",
           problem
             ? "border-[var(--cf-warning)] focus-within:border-[var(--cf-warning)]"
             : "border-[var(--cf-chip-border)] focus-within:border-[var(--cf-accent)]",
@@ -188,27 +210,33 @@ export function PhoneInput({
           onBlur={() => setTouched(true)}
           onKeyDown={(e) => {
             if (e.key !== "Enter") return;
-            e.preventDefault();
             // Reveals why nothing happened when the number is not sendable yet;
             // the composer refuses it either way.
             setTouched(true);
+            if (!onSubmit) return;
+            e.preventDefault();
             onSubmit();
           }}
           type="tel"
           inputMode="tel"
           /* The browser fills a whole international number here, `+` and all,
-             and `onType` absorbs it into both halves. */
-          autoComplete="tel"
-          name="tel"
+             and `onType` absorbs it into both halves. A group row opts out with
+             its own `name`: one saved contact filled every row at once. */
+          autoComplete={name ? "off" : "tel"}
+          name={name ?? "tel"}
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
           enterKeyHint="send"
           autoFocus={autoFocus}
           placeholder={placeholder}
+          aria-invalid={Boolean(problem) || undefined}
           className="min-w-0 flex-1 bg-transparent px-3 outline-none placeholder:opacity-50"
         />
       </div>
+      {problem && cell && (
+        <span className="block text-[0.6875rem] text-[var(--cf-warning)]">{problem}</span>
+      )}
     </div>
   );
 }

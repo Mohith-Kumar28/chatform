@@ -1,5 +1,5 @@
 import { mediaUrls } from "./research.js";
-import { ADDABLE_BLOCK_TYPES, enforcesUnique, renderBlockCatalog, type Block, type FormDoc } from "@repo/form-schema";
+import { ADDABLE_BLOCK_TYPES, andList, enforcesUnique, renderBlockCatalog, type Block, type FormDoc } from "@repo/form-schema";
 
 /**
  * The interview agent's prompts.
@@ -284,9 +284,26 @@ export function buildSystemPrompt(
 }
 
 /** Retry phrasing when an answer failed validation. */
-export function buildRetryObjective(block: Block, attempt: number, hint?: string): string {
+export function buildRetryObjective(
+  block: Block,
+  attempt: number,
+  hint?: string,
+  /**
+   * On a `contact_info` or `address` card, the fields already accepted —
+   * phrased for the middle of a sentence.
+   *
+   * Without this the agent re-asks for the whole card, because the block is all
+   * it can see. The respondent then reads "could you share your contact details
+   * again?" after getting three of the four right, which is the product
+   * forgetting what it was told thirty seconds ago.
+   */
+  kept?: string[],
+): string {
   const custom = block.agentHints?.retryHint;
-  const base = `Their answer didn't work${hint ? `: ${hint}` : ""}. Acknowledge it kindly, explain what you need in plain words, and ask again.`;
+  const banked = kept?.length
+    ? ` You already have their ${andList(kept)} — do not ask for those again, only for what is still missing or wrong.`
+    : "";
+  const base = `Their answer didn't work${hint ? `: ${hint}` : ""}. Acknowledge it kindly, explain what you need in plain words, and ask again.${banked}`;
   if (custom) return `${base}\nGuidance from the form's author: ${custom}`;
   if (attempt >= 2) return `${base} They have tried ${attempt} times — be concrete and give an example.`;
   return base;

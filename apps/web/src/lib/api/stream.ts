@@ -1,4 +1,4 @@
-import { API_ORIGIN, throwApiError } from "./mutator";
+import { API_ORIGIN, apiHeaders, throwApiError } from "./mutator";
 
 /**
  * Server-sent events over `fetch`, for the routes that narrate their work.
@@ -30,7 +30,10 @@ export async function streamEvents(
   const res = await fetch(path.startsWith("http") ? path : `${API_ORIGIN}${path}`, {
     method: "POST",
     credentials: "include",
-    headers: { "content-type": "application/json", accept: "text/event-stream" },
+    // `apiHeaders` and not an object literal, so a platform admin acting as a
+    // customer generates against *their* form rather than being told there is
+    // no such form. See `apiHeaders`.
+    headers: apiHeaders({ "content-type": "application/json", accept: "text/event-stream" }),
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
     signal: init.signal,
   });

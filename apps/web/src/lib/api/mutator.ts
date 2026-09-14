@@ -16,24 +16,39 @@ export const API_ORIGIN = (
   process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.in"
 ).replace(/\/$/, "");
 
+/**
+ * Headers for a call to the API, with "acting as a customer" folded in.
+ *
+ * Exported rather than kept inside `customFetch`, because not every call to the
+ * API can go through the generated client: the preview session, the AI
+ * generator's SSE stream, and the two direct uploads all build their own
+ * request. Every one of them was therefore invisible to impersonation — and
+ * the failure was silent and confusing rather than loud. An admin acting as a
+ * customer opened the builder (generated client: the header rode along, the
+ * form loaded) and pressed play (raw fetch: no header, so the API resolved the
+ * *admin's* own organization, found no such form in it, and answered 404).
+ * "Form not found", over a form that was on the screen behind the dialog.
+ *
+ * Attached here rather than carried as a cookie so it is never sent by
+ * accident: every request that carries it does so because this ran. The API
+ * re-verifies the signature *and* that the caller is still an allowlisted
+ * admin, so a stale or stolen token buys nothing.
+ */
+export function apiHeaders(init?: HeadersInit): Headers {
+  const headers = new Headers(init);
+  const acting = readImpersonation();
+  if (acting) headers.set("x-chatform-impersonate", acting.token);
+  return headers;
+}
+
 export const customFetch = async <T>(url: string, options?: RequestInit): Promise<T> => {
   const { body, ...rest } = options ?? {};
   const serialized =
     body !== undefined && typeof body !== "string" ? JSON.stringify(body) : body;
-  const headers = new Headers(rest.headers);
+  const headers = apiHeaders(rest.headers);
   if (!headers.has("content-type") && serialized !== undefined) {
     headers.set("content-type", "application/json");
   }
-  /**
-   * Acting as a customer, when a platform admin has chosen to.
-   *
-   * Attached here rather than carried as a cookie so it is never sent by
-   * accident: every request that carries it does so because this line ran. The
-   * API re-verifies the signature *and* that the caller is still an allowlisted
-   * admin, so a stale or stolen token buys nothing.
-   */
-  const acting = readImpersonation();
-  if (acting) headers.set("x-chatform-impersonate", acting.token);
   // An absolute URL is honoured as-is; anything relative is resolved against API_ORIGIN.
   // Generated code emits relative paths (see orval.config.ts) precisely so this works.
   const res = await fetch(url.startsWith("http") ? url : `${API_ORIGIN}${url}`, {

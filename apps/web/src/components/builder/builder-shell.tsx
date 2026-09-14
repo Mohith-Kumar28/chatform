@@ -42,7 +42,9 @@ export function BuilderShell({
   children: React.ReactNode;
 }) {
   const queryClient = useQueryClient();
-  const { data: form, isLoading, error } = useGetApiFormsById(formId as never);
+  const { data: form, isLoading, isFetching, failureCount, error } = useGetApiFormsById(
+    formId as never,
+  );
   const publish = usePostApiFormsByIdPublish();
   const unpublish = usePostApiFormsByIdUnpublish();
 
@@ -101,6 +103,25 @@ export function BuilderShell({
    */
   const editedSincePublish = useBuilderStore((s) => s.editedSincePublish);
   const unpublished = editedSincePublish || Boolean(row?.hasUnpublishedChanges);
+
+  /**
+   * "We couldn't open this form", and when to say it.
+   *
+   * This branched on `error` alone, and the spinner beneath it branched on
+   * `!doc` — the builder store's document, which is only ever set by a
+   * *successful* load. Between them was a hole: a request that failed without
+   * leaving `error` populated left "Loading your form…" turning for as long as
+   * the tab stayed open, with the 404 sitting in the console and nothing on the
+   * screen admitting it. Opening any form id this account cannot reach —
+   * someone else's, a deleted one, a typo — did exactly that, and so did the
+   * builder while a platform admin was acting as a customer.
+   *
+   * `failureCount` is the honest question: it counts attempts that came back
+   * wrong, whatever state the query settled into afterwards. Nothing is claimed
+   * until one has — it is 0 on mount and through the whole first fetch, so
+   * there is no render where this flashes before the request has had its say.
+   */
+  const unavailable = Boolean(error) || (failureCount > 0 && !isFetching && !row);
 
   /**
    * Saved is not the same as live, and only one of those two facts survives
@@ -278,7 +299,10 @@ export function BuilderShell({
   return (
     <AuthGuard>
       <div className="bg-background flex min-h-svh flex-col">
-        {isLoading || !row ? (
+        {/* No chrome over a form that could not be opened: a skeleton header
+            above "we couldn't open this form" reads as a page still arriving,
+            which is the thing the message exists to stop saying. */}
+        {unavailable ? null : isLoading || !row ? (
           <HeaderSkeleton />
         ) : (
           <BuilderHeader
@@ -306,7 +330,7 @@ export function BuilderShell({
         )}
 
         <div className="min-h-0 flex-1">
-          {error ? (
+          {unavailable ? (
             <div className="mx-auto max-w-md px-6 py-24">
               <EmptyState
                 icon={AlertTriangle}
@@ -319,7 +343,7 @@ export function BuilderShell({
                 }
               />
             </div>
-          ) : isLoading || !doc ? (
+          ) : !doc ? (
             <div className="text-muted-foreground flex min-h-[60vh] items-center justify-center gap-2 text-sm">
               <Loader2 className="size-4 animate-spin" />
               Loading your form…

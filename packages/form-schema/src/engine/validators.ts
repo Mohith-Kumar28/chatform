@@ -1,4 +1,4 @@
-import { contactFieldBlock, groupFieldBlock, type Block } from "../blocks";
+import { andList, contactFieldBlock, contactFieldPhrase, groupFieldBlock, type Block } from "../blocks";
 import type { AnswerValue } from "../answers";
 
 /**
@@ -89,10 +89,40 @@ export interface ValidationResult {
   hint?: string;
   /** Normalized/canonicalized value to store. */
   value?: AnswerValue;
+  /**
+   * Which sub-field of a record-shaped block was refused.
+   *
+   * Only `contact_info` and `address` set it. It is what lets a retry say
+   * "your phone number" rather than "that answer", and what lets the client
+   * put the caret in the one box that still needs something.
+   */
+  field?: string;
+  /**
+   * The sub-fields that *were* good, normalized, on a failed record.
+   *
+   * A refused card is not a blank card. `SessionDO` keeps this against the
+   * block ref and hands it back with the re-asked question, so the respondent
+   * corrects one field instead of filling in four again. Never a value that
+   * failed: a box redrawn holding the answer that was just refused reads as
+   * though the refusal did not happen.
+   */
+  partial?: Record<string, string>;
 }
 
 const ok = (value?: AnswerValue): ValidationResult => ({ ok: true, value });
 const fail = (code: ValidationCode, hint: string): ValidationResult => ({ ok: false, code, hint });
+
+/**
+ * What a phone number that cannot be dialled is told.
+ *
+ * "Please enter a valid phone number with country code" states a rule and
+ * leaves the respondent to work out what satisfies it — and "country code" is
+ * jargon to most of the people typing into these forms. An example is the whole
+ * instruction. The Indian one because that is where most of these forms are
+ * answered; the same choice `FALLBACK_COUNTRY` makes in the composer.
+ */
+const PHONE_HINT =
+  "That number needs its country code — for example +91 98765 43210.";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 /** "a, b or c" — for telling a respondent which domains are acceptable. */
@@ -196,7 +226,7 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
       if (typeof raw !== "string") return fail("type", "Please enter a phone number.");
       let v = raw.trim().replace(/[\s\-().]/g, "");
       if (/^\d+$/.test(v) && block.countryHint) v = `+${countryDial(block.countryHint)}${v}`;
-      if (!E164_RE.test(v)) return fail("invalid_phone", "Please enter a valid phone number with country code.");
+      if (!E164_RE.test(v)) return fail("invalid_phone", PHONE_HINT);
       return ok(v);
     }
 
@@ -402,6 +432,22 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
       });
     }
 
+    /**
+     * A card of related fields, refused as a whole but never *forgotten* as a
+     * whole.
+     *
+     * This used to `return` on the first thing wrong with it. One phone number
+     * missing its country code therefore threw away the first name, the last
+     * name and the email typed beside it, and the client — which draws the card
+     * from the block, not from the answer — drew all four boxes empty again. The
+     * agent said "could you share your phone number again?" over a form asking
+     * for everything again, which is the two halves of the product disagreeing
+     * in front of the respondent.
+     *
+     * So every field is checked, the ones that pass are kept in `partial`, and
+     * the message names what is actually wrong. `SessionDO` re-asks the question
+     * with `partial` as a prefill; nothing that was already right is retyped.
+     */
     case "contact_info":
     case "address": {
       if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
@@ -409,14 +455,16 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
       }
       const rec = raw as Record<string, unknown>;
       const out: Record<string, string> = {};
+      const missing: string[] = [];
       for (const field of block.fields) {
         const v = rec[field];
         if (v === undefined || v === null || String(v).trim() === "") {
-          if (block.required) return fail("incomplete", `Please provide ${field.replaceAll("_", " ")}.`);
+          if (block.required) missing.push(field);
           continue;
         }
         out[field] = String(v).trim();
       }
+
       /**
        * Email and phone go through the real validators, for the reason
        * `groupFieldBlock` exists: the moment the logic is written twice, one
@@ -425,16 +473,46 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
        * inside a contact block, and a phone was not checked at all. The same
        * address refused by a standalone email question sailed through here.
        */
+      let bad: { field: string; code: ValidationCode; hint: string } | null = null;
       if (block.type === "contact_info") {
         for (const field of ["email", "phone"] as const) {
           const given = out[field];
           if (given === undefined) continue;
           const res = validateAnswer(contactFieldBlock(block, field), given);
-          if (!res.ok) return res;
+          if (!res.ok) {
+            // Dropped from `out` rather than kept: `out` becomes the prefill,
+            // and a box handed back the value that was just refused reads as
+            // though nothing happened.
+            delete out[field];
+            bad ??= {
+              field,
+              code: res.code ?? "type",
+              hint: res.hint ?? `That ${contactFieldPhrase(field)} doesn't look right.`,
+            };
+            continue;
+          }
           // Take the normalised value back — a lowercased address, a phone in
           // E.164 — so what is stored matches what a standalone block stores.
           out[field] = String(res.value);
         }
+      }
+
+      if (bad) {
+        // Both at once, because two round trips to learn two things about one
+        // card is one round trip too many.
+        const also = missing.length
+          ? ` And I still need your ${andList(missing.map(contactFieldPhrase))}.`
+          : "";
+        return { ok: false, code: bad.code, hint: `${bad.hint}${also}`, field: bad.field, partial: out };
+      }
+      if (missing.length) {
+        return {
+          ok: false,
+          code: "incomplete",
+          hint: `I still need your ${andList(missing.map(contactFieldPhrase))}.`,
+          field: missing[0],
+          partial: out,
+        };
       }
       return ok(out);
     }

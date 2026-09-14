@@ -49,6 +49,12 @@ export interface ChatMessage {
 export interface QuestionState {
   block: PublicBlock;
   progress: { answered: number; totalEstimate: number; pct: number };
+  /**
+   * `contact_info` and `address` only: the fields a refused card already got
+   * right, so the composer comes back holding them instead of empty. See
+   * `QuestionPayload.prefill`.
+   */
+  prefill?: Record<string, string>;
 }
 
 export interface EndingState {

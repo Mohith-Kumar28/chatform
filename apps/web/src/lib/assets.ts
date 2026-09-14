@@ -1,4 +1,4 @@
-import { API_ORIGIN } from "@/lib/api/mutator";
+import { API_ORIGIN, apiHeaders } from "@/lib/api/mutator";
 
 /**
  * Public URL for an R2 asset key.
@@ -64,7 +64,9 @@ export async function uploadAsset(file: File, opts: { maxMb?: number | null } = 
   const res = await fetch(`${API_ORIGIN}/api/assets?filename=${encodeURIComponent(file.name)}`, {
     method: "POST",
     credentials: "include",
-    headers: { "content-type": file.type || "application/octet-stream" },
+    // Carries "acting as a customer", so an admin fixing a form's logo uploads
+    // into that form's account rather than their own. See `apiHeaders`.
+    headers: apiHeaders({ "content-type": file.type || "application/octet-stream" }),
     body: file,
   });
   if (!res.ok) {

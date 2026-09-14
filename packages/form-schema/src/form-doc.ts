@@ -117,7 +117,8 @@ export interface PublicBlock {
    */
   verify?: boolean;
   /**
-   * phone: the two-letter country the author expects, where they set one.
+   * phone, and the phone field of a contact_info: the two-letter country the
+   * author expects, where they set one.
    *
    * Where the composer's country picker opens. The validator has always used it
    * to read a bare national number — see `validateAnswer` — so sending it is
@@ -245,6 +246,14 @@ export function toPublicBlock(b: Block): PublicBlock {
       break;
     case "contact_info":
       pub.fields = b.fields;
+      /*
+        The card's phone box is the standalone phone composer, so it wants the
+        same hint the standalone block projects — and for the same reason: the
+        validator has always used `fieldOptions.phone.countryHint` to read a
+        bare national number, and the picker that could have prevented a wrong
+        one never saw it.
+      */
+      pub.countryHint = b.fieldOptions?.phone?.countryHint;
       break;
     case "address":
       pub.fields = b.fields;

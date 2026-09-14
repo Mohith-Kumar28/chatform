@@ -85,3 +85,88 @@ describe("safePattern", () => {
     expect(safePattern("^(a+)+$")).toBeUndefined();
   });
 });
+
+/**
+ * A card refused for one field is not a card refused for all of them.
+ *
+ * This is the behaviour behind the bug a respondent hit in production: they
+ * typed a name, an email and a bare national phone number in one message, the
+ * phone was refused for having no country code, and the client redrew all four
+ * boxes empty because the answer had been thrown away whole.
+ */
+describe("a contact card keeps what it got right", () => {
+  const contact = Block.parse({
+    id: "blk_0004", ref: "q_contact", type: "contact_info", title: "You", required: true,
+    fields: ["first_name", "last_name", "email", "phone"],
+  });
+
+  const bad = () =>
+    validateAnswer(contact, {
+      first_name: "Randhir",
+      last_name: "Kumar",
+      email: "randhir@example.com",
+      phone: "9835126411",
+    });
+
+  it("refuses the bare number, because nothing here knows which country it is", () => {
+    expect(bad().ok).toBe(false);
+    expect(bad().code).toBe("invalid_phone");
+  });
+
+  it("hands back the three fields that were fine", () => {
+    expect(bad().partial).toEqual({
+      first_name: "Randhir",
+      last_name: "Kumar",
+      email: "randhir@example.com",
+    });
+  });
+
+  it("never hands back the value it just refused", () => {
+    expect(bad().partial).not.toHaveProperty("phone");
+  });
+
+  it("names the field, so the retry can ask for that one and not the card", () => {
+    expect(bad().field).toBe("phone");
+  });
+
+  it("gives an example instead of naming the convention", () => {
+    expect(bad().hint).toContain("+91");
+  });
+
+  it("lists every missing field at once rather than one per round trip", () => {
+    const r = validateAnswer(contact, { first_name: "Randhir", email: "randhir@example.com" });
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe("incomplete");
+    expect(r.hint).toBe("I still need your last name and phone number.");
+    expect(r.partial).toEqual({ first_name: "Randhir", email: "randhir@example.com" });
+  });
+
+  it("says both when a field is wrong and another is missing", () => {
+    const r = validateAnswer(contact, { first_name: "Randhir", phone: "9835126411" });
+    expect(r.hint).toContain("+91");
+    expect(r.hint).toContain("last name and email address");
+  });
+
+  it("is unchanged when the card is complete and correct", () => {
+    const r = validateAnswer(contact, {
+      first_name: "Randhir", last_name: "Kumar",
+      email: "Randhir@Example.com", phone: "+91 98351 26411",
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value).toEqual({
+      first_name: "Randhir", last_name: "Kumar",
+      email: "randhir@example.com", phone: "+919835126411",
+    });
+  });
+
+  it("keeps a half-filled address too, where there is no sub-validator at all", () => {
+    const address = Block.parse({
+      id: "blk_0005", ref: "q_addr", type: "address", title: "Where", required: true,
+      fields: ["street", "city", "postal"],
+    });
+    const r = validateAnswer(address, { street: "12 MG Road", city: "Bengaluru" });
+    expect(r.ok).toBe(false);
+    expect(r.partial).toEqual({ street: "12 MG Road", city: "Bengaluru" });
+    expect(r.hint).toBe("I still need your postal code.");
+  });
+});

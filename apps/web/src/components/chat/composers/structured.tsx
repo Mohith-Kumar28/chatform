@@ -19,11 +19,13 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { PublicBlock, PublicGroupField } from "@repo/form-schema";
+import { contactFieldLabel, type PublicBlock, type PublicGroupField } from "@repo/form-schema";
 import { cn } from "@/lib/utils";
 import { KeyHint } from "./primitives";
 import { FIELD_SEMANTICS, inputSemanticsFor } from "./input-semantics";
 import { useChoiceKeys } from "./choice-keys";
+import { PhoneInput } from "./phone";
+import { isSendablePhone } from "./phone-value";
 
 /**
  * Composers for the record-shaped block types.
@@ -35,18 +37,6 @@ import { useChoiceKeys } from "./choice-keys";
  * `field_group` is the same job one level up: an array of those records, added
  * and removed by the respondent.
  */
-
-const CONTACT_LABELS: Record<string, string> = {
-  first_name: "First name",
-  last_name: "Last name",
-  email: "Email",
-  phone: "Phone",
-  street: "Street",
-  city: "City",
-  state: "State / region",
-  postal: "Postal code",
-  country: "Country",
-};
 
 /**
  * Enter finishes one of these composers, and moves on when it cannot.
@@ -90,20 +80,69 @@ function enterSubmits(canSubmit: boolean, submit: () => void) {
   };
 }
 
+/**
+ * The contact card, and the address card.
+ *
+ * Two things here are not obvious. The phone cell is the real `PhoneInput` —
+ * the same picker the standalone phone question uses — rather than a plain box
+ * with `type="tel"`, because the plain box asked the respondent to supply a
+ * country code and then refused the answer when they did not. That refusal is
+ * the single most common way this block was failed, and the field that fixes it
+ * already existed one directory over.
+ *
+ * And `prefill` is what a *refused* card comes back holding. The server keeps
+ * the sub-fields that validated (see `validateAnswer`'s `partial`) and hands
+ * them back with the re-asked question, so a bad phone number costs the phone
+ * number — not the name and the email typed beside it.
+ */
 export function FieldsComposer({
   fields,
   required,
+  countryHint,
+  prefill,
   onSubmit,
 }: {
   fields: readonly string[];
   /** A required record needs every field, which is what the server enforces. */
   required?: boolean;
+  /** Where the phone cell's country picker opens, where the author said. */
+  countryHint?: string;
+  /** The fields an earlier attempt got right, kept rather than asked for twice. */
+  prefill?: Record<string, string>;
   onSubmit: (value: Record<string, string>, display: string) => void;
 }) {
-  const [values, setValues] = useState<Record<string, string>>({});
+  /*
+    Mirrored rather than seeded once.
+
+    The affordance usually unmounts between attempts — `chat.answering` takes
+    the whole row away while the answer is in flight — but "usually" is not a
+    guarantee, and a prefill that arrived into a live component would sit in a
+    prop nothing read. Same pattern as `PhoneInput`'s `mirror`.
+  */
+  const [state, setState] = useState<{ values: Record<string, string>; from?: Record<string, string> }>(
+    () => ({ values: { ...prefill }, from: prefill }),
+  );
+  if (prefill !== state.from) setState({ values: { ...prefill }, from: prefill });
+  const values = state.values;
+  const setValues = useCallback(
+    (next: (v: Record<string, string>) => Record<string, string>) =>
+      setState((s) => ({ ...s, values: next(s.values) })),
+    [],
+  );
+
   const filled = fields.filter((f) => values[f]?.trim());
   const missing = required ? fields.filter((f) => !values[f]?.trim()) : [];
-  const canSubmit = filled.length > 0 && missing.length === 0;
+  /*
+    The number's own plan, checked here rather than by the server.
+
+    `PhoneInput` hands up E.164 as soon as there are any digits at all, so
+    "+9198" is a value — and sending it would spend a round trip to be told it
+    is five digits short of an Indian number. `isSendablePhone` is the same gate
+    the message box uses.
+  */
+  const phone = values.phone?.trim() ?? "";
+  const phoneReady = phone === "" || isSendablePhone(phone);
+  const canSubmit = filled.length > 0 && missing.length === 0 && phoneReady;
 
   const submit = () => {
     const clean = Object.fromEntries(
@@ -116,34 +155,30 @@ export function FieldsComposer({
   return (
     <div className="space-y-2" onKeyDown={onKeyDown}>
       <div className="grid gap-2 sm:grid-cols-2">
-        {fields.map((f) => {
-          /*
-            The autofill token is the whole point of naming these fields. A
-            browser holding somebody's address will fill all five of these in
-            one tap — but only if each one says which part it is, in the
-            vocabulary the spec defines. See `input-semantics.ts`.
-          */
-          const meta = FIELD_SEMANTICS[f];
-          return (
-            <label key={f} className="space-y-1">
-              <span className="block text-xs opacity-60">{CONTACT_LABELS[f] ?? f}</span>
-              <input
+        {fields.map((f) =>
+          f === "phone" ? (
+            <div key={f} className="space-y-1">
+              <span className="block text-xs opacity-60">{contactFieldLabel(f)}</span>
+              <PhoneInput
+                variant="field"
                 value={values[f] ?? ""}
-                name={f}
-                type={meta?.type ?? "text"}
-                inputMode={meta?.inputMode}
-                autoComplete={meta?.autoComplete ?? "off"}
-                autoCapitalize={meta?.autoCapitalize ?? "sentences"}
-                onChange={(e) => setValues((v) => ({ ...v, [f]: e.target.value }))}
-                className="h-11 w-full rounded-xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-3 text-[0.9375rem] outline-none focus:border-[var(--cf-accent)]"
+                countryHint={countryHint}
+                onChange={(v) => setValues((prev) => ({ ...prev, [f]: v }))}
               />
-            </label>
-          );
-        })}
+            </div>
+          ) : (
+            <FieldCell
+              key={f}
+              field={f}
+              value={values[f] ?? ""}
+              onChange={(v) => setValues((prev) => ({ ...prev, [f]: v }))}
+            />
+          ),
+        )}
       </div>
       {missing.length > 0 && filled.length > 0 && (
         <p className="px-1 text-xs opacity-55">
-          Still needed: {missing.map((f) => (CONTACT_LABELS[f] ?? f).toLowerCase()).join(", ")}.
+          Still needed: {missing.map((f) => contactFieldLabel(f).toLowerCase()).join(", ")}.
         </p>
       )}
       <button
@@ -156,6 +191,40 @@ export function FieldsComposer({
         <KeyHint tone="inverse">↵</KeyHint>
       </button>
     </div>
+  );
+}
+
+/** One plain cell of a contact or address card. */
+function FieldCell({
+  field,
+  value,
+  onChange,
+}: {
+  field: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  /*
+    The autofill token is the whole point of naming these fields. A browser
+    holding somebody's address will fill all five of these in one tap — but
+    only if each one says which part it is, in the vocabulary the spec
+    defines. See `input-semantics.ts`.
+  */
+  const meta = FIELD_SEMANTICS[field];
+  return (
+    <label className="space-y-1">
+      <span className="block text-xs opacity-60">{contactFieldLabel(field)}</span>
+      <input
+        value={value}
+        name={field}
+        type={meta?.type ?? "text"}
+        inputMode={meta?.inputMode}
+        autoComplete={meta?.autoComplete ?? "off"}
+        autoCapitalize={meta?.autoCapitalize ?? "sentences"}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-11 w-full rounded-xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-3 text-[0.9375rem] outline-none focus:border-[var(--cf-accent)]"
+      />
+    </label>
   );
 }
 
@@ -507,6 +576,14 @@ export function GroupComposer({
   const filled = (row: Record<string, string>, f: PublicGroupField) => (row[f.key] ?? "").trim() !== "";
   /** Written in, but not in the shape the column asks for. */
   const malformed = (row: Record<string, string>, f: PublicGroupField) => {
+    /*
+      A phone cell is judged by its country's numbering plan, not by a pattern.
+      `PhoneInput` emits E.164 from the first digit typed, so a half-typed
+      number is a value the server would refuse — and refusing a whole roster
+      for one short number, after it has been sent, is the round trip this
+      catches.
+    */
+    if (f.kind === "phone") return filled(row, f) && !isSendablePhone((row[f.key] ?? "").trim());
     const re = patterns.get(f.key);
     return Boolean(re && filled(row, f) && !re.test((row[f.key] ?? "").trim()));
   };
@@ -753,6 +830,27 @@ function GroupFieldInput({
           ))}
         </select>
       </label>
+    );
+  }
+
+  /*
+    The same picker the contact card and the message box use. A roster column
+    asking for phone numbers used to be a plain box, which meant every row had
+    to be typed with its own `+91` — and any row that was not took the whole
+    group down with it.
+  */
+  if (field.kind === "phone") {
+    return (
+      <div className="space-y-1">
+        {label}
+        <PhoneInput
+          variant="field"
+          value={value}
+          name={`${field.key}_${index + 1}`}
+          placeholder={field.placeholder}
+          onChange={onChange}
+        />
+      </div>
     );
   }
 

@@ -5,7 +5,7 @@ import { RefreshCw, TriangleAlert } from "lucide-react";
 import { FormDoc, toPublicConfig } from "@repo/form-schema";
 import { ChatClient } from "@/components/chat/chat-client";
 import { Button } from "@/components/ui/button";
-import { API_ORIGIN } from "@/lib/api/mutator";
+import { API_ORIGIN, apiHeaders } from "@/lib/api/mutator";
 import { useEntitlements } from "@/hooks/use-entitlements";
 
 
@@ -49,8 +49,22 @@ export function PreviewChat({
       const res = await fetch(`${API_ORIGIN}/api/forms/${formId}/preview/sessions`, {
         method: "POST",
         credentials: "include",
+        // Not a bare fetch: `apiHeaders` carries "acting as a customer" when a
+        // platform admin is impersonating. Without it this one request resolved
+        // the admin's own organization, found no such form there, and answered
+        // 404 — so the preview said "Form not found" about the form the builder
+        // behind it had just loaded.
+        headers: apiHeaders(),
       });
-      if (!res.ok) throw new Error(res.status === 404 ? "Form not found" : "Could not start preview");
+      if (!res.ok) {
+        throw new Error(
+          res.status === 404
+            ? "This form isn't in the account you're signed in to."
+            : res.status === 401
+              ? "Your session has expired — sign in again."
+              : "Could not start preview",
+        );
+      }
       const data = (await res.json()) as { sessionId: string; respondentToken: string; sseUrl: string };
       setSession({ sessionId: data.sessionId, token: data.respondentToken, eventsUrl: data.sseUrl });
     } catch (err) {

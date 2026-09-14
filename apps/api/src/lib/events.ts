@@ -12,6 +12,17 @@ export interface QuestionPayload {
   messageId: string;
   block: PublicBlock;
   progress: { answered: number; totalEstimate: number; pct: number };
+  /**
+   * What a refused record-shaped answer already got right.
+   *
+   * Only `contact_info` and `address` ever carry one. A card refused for one
+   * bad field used to come back with all four boxes empty, so the agent asking
+   * "could you share your phone number again?" sat above a form asking for the
+   * name and the email again too. `validateAnswer` returns the fields that
+   * passed as `partial`; the session keeps them against the block ref and
+   * re-states the question holding them.
+   */
+  prefill?: Record<string, string>;
 }
 
 export interface EscalatePayload {

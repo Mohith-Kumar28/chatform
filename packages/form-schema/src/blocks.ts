@@ -254,6 +254,58 @@ export const ContactField = z.enum(["first_name", "last_name", "email", "phone"]
 export const AddressField = z.enum(["street", "city", "state", "postal", "country"]);
 
 /**
+ * What each sub-field of a `contact_info` or `address` block is called.
+ *
+ * Here rather than in the composer, because three places have to agree on it
+ * and only one of them is a browser: the card the respondent fills in, the
+ * validator's "I still need your last name" hint, and the retry the agent
+ * phrases from that hint. They said "phone" and "Please provide phone." for
+ * exactly as long as the labels lived in the client.
+ */
+export const CONTACT_FIELD_LABELS: Record<string, string> = {
+  first_name: "First name",
+  last_name: "Last name",
+  email: "Email",
+  phone: "Phone",
+  street: "Street",
+  city: "City",
+  state: "State / region",
+  postal: "Postal code",
+  country: "Country",
+};
+
+/** The label, or the key made readable — a field added later still reads. */
+export function contactFieldLabel(field: string): string {
+  return CONTACT_FIELD_LABELS[field] ?? field.replaceAll("_", " ");
+}
+
+/**
+ * The same field in the middle of a sentence: "I still need your last name."
+ *
+ * Not the label lowercased. "Please provide email" is the register of a form
+ * that has run out of patience; "I still need your email address" is a person
+ * asking for one more thing. The three that do not survive lowercasing —
+ * `email`, `phone` and `State / region` — are spelled out rather than derived.
+ */
+const CONTACT_FIELD_PHRASES: Record<string, string> = {
+  email: "email address",
+  phone: "phone number",
+  state: "state or region",
+  postal: "postal code",
+  street: "street address",
+};
+
+export function contactFieldPhrase(field: string): string {
+  return CONTACT_FIELD_PHRASES[field] ?? contactFieldLabel(field).toLowerCase();
+}
+
+/** "a, b and c" — the missing half of a contact card, read out. */
+export function andList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/**
  * What one field inside a `field_group` may collect.
  *
  * A subset of `BLOCK_TYPES` on purpose. Everything here validates from a single
