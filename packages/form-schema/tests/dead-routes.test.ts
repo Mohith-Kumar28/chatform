@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { FormDoc, lintFormDoc, hasErrors, buildFlowRules, type DraftBranch, type Block } from "../src/index";
+import { FormDoc, lintFormDoc, hasErrors, buildFlowRules, pruneEndingRules, type DraftBranch, type Block } from "../src/index";
 
 /**
  * Routes that are drawn and never taken.
@@ -298,5 +298,82 @@ describe("an ending nobody is sent to", () => {
       ],
     );
     expect(lintFormDoc(doc).some((i) => i.code === "ending_unreachable")).toBe(false);
+  });
+});
+
+/**
+ * What happens to an ending rule when the thing it named is deleted.
+ *
+ * `endingRules` is not `logic`, which is what keeps it safe from `repairFlow`
+ * and is also why every cleanup path missed it. Deleting the "See you in the
+ * audience" ending on a live form left its rule behind pointing at a ref that
+ * no longer existed — a `dangling_target`, so publishing stopped, and the only
+ * thing saying so was a banner about a node that was no longer on the canvas.
+ */
+describe("pruneEndingRules", () => {
+  const ENDINGS = [{ ref: "end_thanks" }, { ref: "end_audience" }];
+  const BLOCKS = [{ ref: "q_role" }, { ref: "q_notes" }];
+  const rules = [
+    {
+      id: "rl_pr_aud001",
+      action_kind: "goto",
+      when: { op: "and", conditions: [{ left: { kind: "ref", ref: "q_role" }, op: "eq", value: "opt_watch" }], groups: [] },
+      target: "end_audience",
+      targetKind: "ending",
+    },
+  ];
+
+  it("keeps a rule whose ending and question are both still there", () => {
+    expect(pruneEndingRules(rules, { endings: ENDINGS, blocks: BLOCKS })).toEqual(rules);
+  });
+
+  it("drops a rule whose ending was deleted", () => {
+    expect(pruneEndingRules(rules, { endings: [{ ref: "end_thanks" }], blocks: BLOCKS })).toEqual([]);
+  });
+
+  it("drops a rule that reads a question that was deleted", () => {
+    // Not an error, which is what makes it worse: `evalGroup` reads the missing
+    // answer as null, so the rule keeps running and quietly stops meaning what
+    // it said.
+    expect(pruneEndingRules(rules, { endings: ENDINGS, blocks: [{ ref: "q_notes" }] })).toEqual([]);
+  });
+
+  it("leaves a document that deleted nothing exactly as it was", () => {
+    const doc = FormDoc.parse({
+      title: "t",
+      blocks: [choice, notes],
+      endings: [
+        { id: "end_dr_ok001", ref: "end_thanks", title: "Thanks", kind: "success" },
+        { id: "end_dr_out01", ref: "end_audience", title: "Audience", kind: "success" },
+      ],
+      logic: [],
+      endingRules: [
+        {
+          id: "rl_pr_keep01",
+          action_kind: "goto",
+          when: { op: "and", conditions: [{ left: { kind: "ref", ref: "q_role" }, op: "eq", value: "opt_watch" }], groups: [] },
+          target: "end_audience",
+          targetKind: "ending",
+        },
+      ],
+    });
+    expect(pruneEndingRules(doc.endingRules, doc)).toEqual(doc.endingRules);
+    expect(hasErrors(lintFormDoc(doc))).toBe(false);
+  });
+
+  it("is what stops the deleted ending blocking publishing", () => {
+    // The live failure, end to end: delete the ending, keep the rule, and the
+    // form can no longer be published.
+    const orphaned = FormDoc.parse({
+      title: "t",
+      blocks: [choice, notes],
+      endings: [{ id: "end_dr_ok001", ref: "end_thanks", title: "Thanks", kind: "success" }],
+      logic: [],
+      endingRules: rules,
+    });
+    expect(hasErrors(lintFormDoc(orphaned))).toBe(true);
+
+    const cleaned = FormDoc.parse({ ...orphaned, endingRules: pruneEndingRules(orphaned.endingRules, orphaned) });
+    expect(hasErrors(lintFormDoc(cleaned))).toBe(false);
   });
 });

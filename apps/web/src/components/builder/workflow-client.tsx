@@ -44,7 +44,7 @@ import { CanvasMenuProvider, NodeMenu, PaneMenu, type CanvasMenuActions } from "
 import { toast } from "sonner";
 import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
-import { Block as BlockSchema, bridgeDeletedBlocks, lintFormDoc, rulesAreExhaustive } from "@repo/form-schema";
+import { Block as BlockSchema, bridgeDeletedBlocks, lintFormDoc, pruneEndingRules, rulesAreExhaustive } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -87,7 +87,7 @@ export function WorkflowClient({ doc, onChange, focusRef, toolbar, dock }: Workf
 }
 
 function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClientProps) {
-  const { screenToFlowPosition, setViewport } = useReactFlow();
+  const { screenToFlowPosition, setViewport, setCenter, getZoom } = useReactFlow();
 
   /**
    * The minimap earns its place while you are panning, zooming or dragging a
@@ -234,6 +234,51 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
   // an effect here would snap nodes back mid-drag and cascade renders.
   const [syncedGraph, setSyncedGraph] = useState(derived);
   const [nodes, setNodes] = useState<Node[]>(derived.nodes);
+
+  /**
+   * Put a node on screen and select it.
+   *
+   * Selecting it was the whole of "Show me", and the comment above the banner
+   * claimed that panned the canvas. Nothing panned the canvas: `setViewport`
+   * was reached only by Auto arrange, so pressing it opened the inspector for a
+   * node that stayed exactly where it was — off screen on any form big enough
+   * to need the banner in the first place. From the outside, a button that did
+   * nothing.
+   *
+   * `setCenter` rather than `fitView`, and at the zoom already in use: being
+   * shown where a problem is should not also rescale the canvas under someone
+   * who had set it where they wanted it. Centred on the node's middle, so a
+   * wide branch card does not land half off the edge.
+   */
+  const revealNode = useCallback(
+    (id: string) => {
+      setSelectedNodeId(id);
+      const node = nodes.find((n) => n.id === id);
+      if (!node) return;
+      setCenter(
+        node.position.x + (node.measured?.width ?? node.width ?? 180) / 2,
+        node.position.y + (node.measured?.height ?? node.height ?? 60) / 2,
+        { zoom: getZoom(), duration: 320 },
+      );
+    },
+    [nodes, setSelectedNodeId, setCenter, getZoom],
+  );
+
+  /**
+   * What the banner says, and which node it goes to.
+   *
+   * Errors first: a form that cannot be published is a different message from
+   * one that merely does less than it looks like it does, and showing the
+   * milder one while an error is outstanding buries it. Within a level the
+   * first in document order wins, which is the order the canvas draws.
+   */
+  const flowBanner = useMemo(() => {
+    const entries = [...flowProblems.entries()];
+    const errors = entries.filter(([, p]) => p.level === "error");
+    const pick = errors.length > 0 ? errors : entries;
+    if (pick.length === 0) return null;
+    return { level: errors.length > 0 ? ("error" as const) : ("warning" as const), count: pick.length, ref: pick[0]![0] };
+  }, [flowProblems]);
   const [edges, setEdges] = useState<Edge[]>(derived.edges);
   if (syncedGraph !== derived) {
     setSyncedGraph(derived);
@@ -578,7 +623,10 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
       // Wires into a deleted question are carried on to wherever it led, so the
       // chain closes up instead of falling through to the next block in order.
       const bridged = bridgeDeletedBlocks({ blocks: doc.blocks, endings, logic }, questionRefs);
-      onChange({ ...doc, blocks: bridged.blocks, endings, logic: bridged.logic as LogicRule[], layout });
+      // The rules that named a deleted ending, or read a deleted question. See
+      // `pruneEndingRules` — this was the one cleanup path that never had one.
+      const endingRules = pruneEndingRules(doc.endingRules, { endings, blocks: bridged.blocks });
+      onChange({ ...doc, blocks: bridged.blocks, endings, endingRules, logic: bridged.logic as LogicRule[], layout });
       setSelectedNodeId(null);
 
       // Deleting a question takes its wording, its options, and every rule
@@ -848,27 +896,35 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
       <div className="relative flex min-w-0 flex-1 flex-col">
         {toolbar}
         {/*
-          A red node nobody scrolls to is a red node nobody sees. The canvas is
-          bigger than the viewport as soon as a form has a branch or two, so the
-          count lives here and clicking it moves the selection to the first
-          broken node — which is also what pans the canvas to it.
+          A marked node nobody scrolls to is a marked node nobody sees. The
+          canvas is bigger than the viewport as soon as a form has a branch or
+          two, so the count lives here and pressing it goes to the first one.
         */}
-        {flowProblems.size > 0 && (
+        {flowBanner && (
           <div className="px-4 pt-2">
             <button
               type="button"
-              onClick={() => {
-                const first = [...flowProblems.keys()][0];
-                if (first) setSelectedNodeId(first);
-              }}
-              className="text-destructive flex w-full items-center gap-2 rounded-lg bg-[color-mix(in_oklch,var(--destructive)_12%,transparent)] px-3 py-2 text-left text-xs"
+              onClick={() => revealNode(flowBanner.ref)}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs",
+                flowBanner.level === "error"
+                  ? "text-destructive bg-[color-mix(in_oklch,var(--destructive)_12%,transparent)]"
+                  : "bg-[color-mix(in_oklch,var(--warning,oklch(0.75_0.15_75))_14%,transparent)] text-amber-700 dark:text-amber-400",
+              )}
             >
               <AlertTriangle className="size-3.5 shrink-0" strokeWidth={2.5} />
               <span className="min-w-0 flex-1">
-                {flowProblems.size === 1
-                  ? "1 step in this flow cannot be completed"
-                  : `${flowProblems.size} steps in this flow cannot be completed`}
-                . Publishing is blocked until it is fixed.
+                {/*
+                  Errors and warnings are not the same sentence, and saying so
+                  used to be nobody's job: every marked node got "cannot be
+                  completed. Publishing is blocked until it is fixed" in red,
+                  including the warnings — a route that can never run, an exact
+                  match on a free-text box — none of which block anything. A
+                  form that publishes fine, told in red that it cannot.
+                */}
+                {flowBanner.level === "error"
+                  ? `${flowBanner.count === 1 ? "1 step" : `${flowBanner.count} steps`} in this flow cannot be completed. Publishing is blocked until it is fixed.`
+                  : `${flowBanner.count === 1 ? "1 step" : `${flowBanner.count} steps`} in this flow may not do what it says. Publishing still works.`}
               </span>
               <span className="shrink-0 underline">Show me</span>
             </button>

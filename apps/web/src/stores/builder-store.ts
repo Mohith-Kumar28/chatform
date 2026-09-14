@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { Shortcut } from "@/lib/shortcuts";
 import { produce } from "immer";
-import { bridgeDeletedBlocks, repairFlow, type Block, type FormDoc, type Ending, type LogicRuleInput } from "@repo/form-schema";
+import { bridgeDeletedBlocks, pruneEndingRules, repairFlow, type Block, type FormDoc, type Ending, type LogicRuleInput } from "@repo/form-schema";
 
 /**
  * Builder state.
@@ -414,6 +414,13 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       );
       d.blocks = bridged.blocks as never;
       d.logic = bridged.logic as never;
+      // `repairLogic` rebuilds `d.logic` and never looks at `d.endingRules`,
+      // so a rule reading the question just deleted would survive it — and
+      // then quietly stop meaning what it said. See `pruneEndingRules`.
+      d.endingRules = pruneEndingRules(d.endingRules as never, {
+        endings: d.endings as { ref: string }[],
+        blocks: d.blocks as { ref: string }[],
+      }) as never;
       repairLogic(d);
     });
     // Keep something selected: prefer the block that took its place.

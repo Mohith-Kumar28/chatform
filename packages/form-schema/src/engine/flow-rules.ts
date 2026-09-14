@@ -523,6 +523,41 @@ export function repairFlow<T extends { blocks: Block[]; endings: { ref: string }
 }
 
 /**
+ * Drop the ending rules that can no longer decide anything.
+ *
+ * `doc.endingRules` is not `doc.logic`, which is exactly what makes it safe
+ * from `repairFlow` — and exactly what made every cleanup path miss it. Routes
+ * in `logic` have been tidied since the day an ending could be deleted; ending
+ * rules were not, because until they could be authored nothing ever wrote one.
+ *
+ * Two ways a rule dies with the thing it named:
+ *
+ *   - Its target ending is gone. The rule is a `dangling_target`, which is an
+ *     error, so the form stops publishing — over a node that is no longer on
+ *     the canvas to be found and fixed.
+ *   - A question it reads is gone. `evalGroup` resolves the missing answer to
+ *     null, so the rule silently stops meaning what it said: depending on the
+ *     operator it either never fires again or fires for everybody, and nothing
+ *     anywhere says which.
+ *
+ * Both are dropped rather than repaired. There is no honest repair for either:
+ * an ending that does not exist has no replacement, and a condition on an
+ * answer nobody gives is not a condition.
+ */
+export function pruneEndingRules<R extends { action_kind: string; target?: string; targetKind?: string; when?: { conditions?: { left?: { kind?: string; ref?: string } }[] } | null }>(
+  endingRules: R[],
+  survivors: { endings: { ref: string }[]; blocks: { ref: string }[] },
+): R[] {
+  const endingRefs = new Set(survivors.endings.map((e) => e.ref));
+  const blockRefs = new Set(survivors.blocks.map((b) => b.ref));
+  return endingRules.filter((r) => {
+    if (r.action_kind !== "goto") return true;
+    if (r.target !== undefined && !endingRefs.has(r.target)) return false;
+    return !(r.when?.conditions ?? []).some((c) => c.left?.kind === "ref" && !blockRefs.has(c.left.ref ?? ""));
+  });
+}
+
+/**
  * Take questions out of the flow without cutting the chain they sat in.
  *
  * Deleting a question used to delete every route pointing at it, so an answer
