@@ -472,6 +472,11 @@ export type GetApiAdminAi200ByKindItem = {
   value: number;
 };
 
+export type GetApiAdminAi200CostByKindItem = {
+  key: string;
+  value: number;
+};
+
 export type GetApiAdminAi200Totals = {
   costUsd: number;
   unpricedCalls: number;
@@ -480,6 +485,7 @@ export type GetApiAdminAi200Totals = {
   errors: number;
   errorRate: number;
   costPerConversationUsd: number;
+  pricedConversations: number;
   conversations: number;
 };
 
@@ -502,6 +508,7 @@ export type GetApiAdminAi200 = {
   callSeries: number[];
   byModel: GetApiAdminAi200ByModelItem[];
   byKind: GetApiAdminAi200ByKindItem[];
+  costByKind: GetApiAdminAi200CostByKindItem[];
   totals: GetApiAdminAi200Totals;
   latency: GetApiAdminAi200LatencyItem[];
   topSpenders: GetApiAdminAi200TopSpendersItem[];

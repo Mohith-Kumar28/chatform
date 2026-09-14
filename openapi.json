@@ -1743,6 +1743,24 @@
                         ]
                       }
                     },
+                    "costByKind": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ]
+                      }
+                    },
                     "totals": {
                       "type": "object",
                       "properties": {
@@ -1767,6 +1785,9 @@
                         "costPerConversationUsd": {
                           "type": "number"
                         },
+                        "pricedConversations": {
+                          "type": "number"
+                        },
                         "conversations": {
                           "type": "number"
                         }
@@ -1779,6 +1800,7 @@
                         "errors",
                         "errorRate",
                         "costPerConversationUsd",
+                        "pricedConversations",
                         "conversations"
                       ]
                     },
@@ -1840,6 +1862,7 @@
                     "callSeries",
                     "byModel",
                     "byKind",
+                    "costByKind",
                     "totals",
                     "latency",
                     "topSpenders",

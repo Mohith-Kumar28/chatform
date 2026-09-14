@@ -35,6 +35,7 @@ interface Ai {
   callSeries: number[];
   byModel: { key: string; value: number }[];
   byKind: { key: string; value: number }[];
+  costByKind: { key: string; value: number }[];
   totals: {
     costUsd: number;
     unpricedCalls: number;
@@ -43,6 +44,7 @@ interface Ai {
     errors: number;
     errorRate: number;
     costPerConversationUsd: number;
+    pricedConversations: number;
     conversations: number;
   };
   latency: { model: string; calls: number; p50: number; p90: number; errorRate: number }[];
@@ -76,6 +78,8 @@ export function AiClient() {
   const a = apiData<Ai>(data) ?? ({} as Ai);
   const t = a.totals ?? ({} as Ai["totals"]);
   const days = a.days ?? [];
+  // Spend per purpose, keyed for lookup beside the call counts.
+  const costOfKind = new Map((a.costByKind ?? []).map((k) => [k.key, k.value] as const));
 
   return (
     <div className="space-y-4">
@@ -109,7 +113,17 @@ export function AiClient() {
           previous={t.costPerConversationUsd ?? 0}
           format={usd}
           lowerIsBetter
-          hint="the unit economics"
+          /**
+           * Says what it is averaged over, because the denominator is not the
+           * conversation count beside it — it is the conversations whose cost
+           * is actually known. Dividing by all of them reads a hundred times
+           * too low while unpriced history is still in the window.
+           */
+          hint={
+            (t.pricedConversations ?? 0) > 0
+              ? `over ${(t.pricedConversations ?? 0).toLocaleString()} priced conversation${(t.pricedConversations ?? 0) === 1 ? "" : "s"}`
+              : "nothing priced yet"
+          }
         />
         <KpiTile
           label="Tokens"
@@ -163,13 +177,23 @@ export function AiClient() {
           />
         </ChartCard>
 
-        <ChartCard title="Calls by purpose" subtitle="What the platform is asking models to do.">
+        <ChartCard title="Calls by purpose" subtitle="What each one is asking models to do, and what it costs.">
           <BarList
-            items={(a.byKind ?? []).map((k) => ({
-              label: KIND_LABEL[k.key] ?? k.key,
-              value: k.value,
-              display: compact(k.value),
-            }))}
+            /*
+              Bars stay sized by call count — that is what "calls by purpose"
+              means — with the spend carried alongside. The two rarely rank the
+              same way, and the gap is the interesting part: a purpose that is
+              2% of calls and most of the bill is the one worth making cheaper,
+              and a count-only chart hides exactly that.
+            */
+            items={(a.byKind ?? []).map((k) => {
+              const cost = costOfKind.get(k.key) ?? 0;
+              return {
+                label: KIND_LABEL[k.key] ?? k.key,
+                value: k.value,
+                display: cost > 0 ? `${compact(k.value)} · ${usd(cost)}` : compact(k.value),
+              };
+            })}
             total={(a.byKind ?? []).reduce((n, k) => n + k.value, 0)}
             colorBy="series"
             emptyLabel="No model calls in this period."

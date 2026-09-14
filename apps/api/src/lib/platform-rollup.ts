@@ -340,15 +340,39 @@ export async function rollupPlatformDaily(env: Bindings, date = utcDay()): Promi
   let aiCalls = 0;
   let aiErrors = 0;
   let aiUnpriced = 0;
+  /**
+   * Folded by dimension here, before anything is pushed.
+   *
+   * The query groups by `(model, kind)`, so one model spanning three purposes
+   * comes back as three result rows — and `writeMetrics` upserts with
+   * `value = excluded.value`, last write wins, NOT a sum. Pushing straight from
+   * the loop therefore recorded only whichever pair happened to come last:
+   * a model used for conversation turns, generation and edits reported the cost
+   * of one of them and silently dropped the other two.
+   *
+   * Masked while nearly all traffic was one kind on one model, which is exactly
+   * how a breakout chart stays wrong without anyone seeing it.
+   */
+  const costByModel = new Map<string, number>();
+  const callsByKind = new Map<string, number>();
+  const costByKind = new Map<string, number>();
+  const add = (m: Map<string, number>, key: string, v: number) => m.set(key, (m.get(key) ?? 0) + v);
   for (const r of ai.results ?? []) {
     aiTokens += r.tokens;
     aiCost += r.cost;
     aiCalls += r.calls;
     aiErrors += r.errors;
     aiUnpriced += r.unpriced;
-    rows.push({ metric: "ai_cost_usd_by_model", dimension: r.dimension, value: r.cost });
-    rows.push({ metric: "ai_calls_by_kind", dimension: r.kind, value: r.calls });
+    add(costByModel, r.dimension, r.cost);
+    add(callsByKind, r.kind, r.calls);
+    // Cost per purpose, not just per model. Which model ran is an
+    // implementation detail; what the platform was DOING when it spent the
+    // money is the thing worth making cheaper.
+    add(costByKind, r.kind, r.cost);
   }
+  for (const [dimension, value] of costByModel) rows.push({ metric: "ai_cost_usd_by_model", dimension, value });
+  for (const [dimension, value] of callsByKind) rows.push({ metric: "ai_calls_by_kind", dimension, value });
+  for (const [dimension, value] of costByKind) rows.push({ metric: "ai_cost_usd_by_kind", dimension, value });
   total("ai_tokens", aiTokens);
   total("ai_cost_usd", aiCost);
   total("ai_calls", aiCalls);

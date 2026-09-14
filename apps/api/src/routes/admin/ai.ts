@@ -42,6 +42,8 @@ const AiResponse = z.object({
   callSeries: z.array(z.number()),
   byModel: z.array(z.object({ key: z.string(), value: z.number() })),
   byKind: z.array(z.object({ key: z.string(), value: z.number() })),
+  /** Spend per purpose, alongside the call counts in `byKind`. */
+  costByKind: z.array(z.object({ key: z.string(), value: z.number() })),
   totals: z.object({
     /** USD, summed from what OpenRouter reported. Never computed here. */
     costUsd: z.number(),
@@ -52,6 +54,8 @@ const AiResponse = z.object({
     errors: z.number(),
     errorRate: z.number(),
     costPerConversationUsd: z.number(),
+    /** How many conversations that figure is drawn from — see the query. */
+    pricedConversations: z.number(),
     conversations: z.number(),
   }),
   latency: z.array(
@@ -120,7 +124,7 @@ aiRouter.get(
 
     const metrics = await loadMetrics(c.env, window[0]!, window[window.length - 1]!);
 
-    const [totals, conversations, models, topSpenders] = await Promise.all([
+    const [totals, conversations, pricedConversations, models, topSpenders] = await Promise.all([
       c.env.DB.prepare(
         `SELECT COUNT(*) AS calls,
                 COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens,
@@ -133,6 +137,24 @@ aiRouter.get(
         .first<{ calls: number; tokens: number; cost: number; unpriced: number; errors: number }>(),
       c.env.DB.prepare(
         `SELECT COUNT(*) AS n FROM chat_sessions WHERE created_at >= ? AND is_test = 0`,
+      )
+        .bind(since)
+        .first<{ n: number }>(),
+      /**
+       * Conversations that have a priced call, which is not the same as
+       * conversations.
+       *
+       * Unit economics divided by the wrong denominator is worse than no unit
+       * economics. Dividing the priced spend by EVERY conversation in the
+       * window reads $0.00016 when the real figure is a hundred times that —
+       * because most of those conversations predate OpenRouter-reported cost
+       * and contribute a denominator with no numerator. The answer to "what
+       * does one conversation cost" can only be drawn from the conversations we
+       * actually know the cost of.
+       */
+      c.env.DB.prepare(
+        `SELECT COUNT(DISTINCT session_id) AS n FROM ai_generations
+          WHERE created_at >= ? AND cost_usd IS NOT NULL AND session_id IS NOT NULL`,
       )
         .bind(since)
         .first<{ n: number }>(),
@@ -194,6 +216,7 @@ aiRouter.get(
 
     const calls = totals?.calls ?? 0;
     const convos = conversations?.n ?? 0;
+    const pricedConvos = pricedConversations?.n ?? 0;
     const cost = totals?.cost ?? 0;
 
     return c.json({
@@ -203,6 +226,7 @@ aiRouter.get(
       callSeries: seriesOf(metrics, "ai_calls", window),
       byModel: sumByDimension(metrics, "ai_cost_usd_by_model", windowSet),
       byKind: sumByDimension(metrics, "ai_calls_by_kind", windowSet),
+      costByKind: sumByDimension(metrics, "ai_cost_usd_by_kind", windowSet),
       totals: {
         costUsd: cost,
         /**
@@ -218,8 +242,10 @@ aiRouter.get(
         errors: totals?.errors ?? 0,
         errorRate: calls > 0 ? Math.round(((totals?.errors ?? 0) / calls) * 1000) / 10 : 0,
         conversations: convos,
-        // The unit-economics number: what one conversation costs to run.
-        costPerConversationUsd: convos > 0 ? cost / convos : 0,
+        // The unit-economics number: what one conversation costs to run —
+        // over the conversations whose cost is actually known.
+        costPerConversationUsd: pricedConvos > 0 ? cost / pricedConvos : 0,
+        pricedConversations: pricedConvos,
       },
       latency: latency.sort((a, b) => b.calls - a.calls),
       topSpenders,
