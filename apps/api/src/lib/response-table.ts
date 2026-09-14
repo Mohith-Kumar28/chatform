@@ -67,11 +67,22 @@ export async function buildResponseTable(
    */
   const [formRes, subsRes, answersRes] = (await env.DB.batch([
     env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ?`).bind(formId),
+    /**
+     * Newest first, by the same instant the results table calls "Submitted" —
+     * `completed_at` when there is one, else `started_at`. Sorting on
+     * `started_at` alone put a response begun on Monday and finished on
+     * Wednesday under Monday, so the export and the screen disagreed about
+     * which row was newest.
+     *
+     * `id` breaks the tie, which also keeps this window and the answers window
+     * below agreeing on their last row: they ask for the same ordering with
+     * different limits, and SQLite is free to return equal keys in any order.
+     */
     env.DB
       .prepare(
         `SELECT id, status, started_at, completed_at FROM submissions
           WHERE form_id = ?1 AND status != 'spam' AND (?2 = 1 OR status = 'completed')
-          ORDER BY started_at DESC LIMIT ?3`,
+          ORDER BY COALESCE(completed_at, started_at) DESC, id DESC LIMIT ?3`,
       )
       .bind(formId, includePartials ? 1 : 0, limit + 1),
     /**
@@ -91,7 +102,7 @@ export async function buildResponseTable(
           WHERE a.submission_id IN (
                   SELECT id FROM submissions
                    WHERE form_id = ?1 AND status != 'spam' AND (?2 = 1 OR status = 'completed')
-                   ORDER BY started_at DESC LIMIT ?3
+                   ORDER BY COALESCE(completed_at, started_at) DESC, id DESC LIMIT ?3
                 )`,
       )
       .bind(formId, includePartials ? 1 : 0, limit),

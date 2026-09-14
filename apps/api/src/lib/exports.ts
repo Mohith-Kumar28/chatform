@@ -127,6 +127,20 @@ function whereFor(formId: string, orgId: string, filters: ExportFilters): { sql:
   return { sql: where.join(" AND "), binds };
 }
 
+/**
+ * Newest first, by the instant a response was *submitted* — `completed_at`
+ * where there is one, `started_at` for the unfinished rows that never got one.
+ *
+ * The same order the results table shows, and for the same reason: sorting on
+ * `started_at` alone files a response begun on Monday and finished on
+ * Wednesday under Monday, so a file downloaded from a screen would not open in
+ * the order that screen was in. `id` makes it deterministic, which is what
+ * keeps the header's `DISTINCT` pass and the row pass reading the same window.
+ *
+ * Backed by `idx_submissions_form_submitted`.
+ */
+const NEWEST_FIRST = `ORDER BY COALESCE(completed_at, started_at) DESC, id DESC`;
+
 const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
 
 type AnswerRow = { submission_id: string; block_ref: string; value_json: string };
@@ -194,7 +208,7 @@ export async function buildCsv(
 
   const subs = await env.DB.prepare(
     `SELECT id, status, source, started_at, completed_at FROM submissions
-      WHERE ${sql} ORDER BY started_at DESC LIMIT ?`,
+      WHERE ${sql} ${NEWEST_FIRST} LIMIT ?`,
   )
     .bind(...binds, MAX_ROWS)
     .all<{ id: string; status: string; source: string | null; started_at: number; completed_at: number | null }>();
@@ -213,7 +227,7 @@ export async function buildCsv(
   if (rows.length > 0) {
     const refs = await env.DB.prepare(
       `SELECT DISTINCT block_ref, block_type FROM submission_answers
-        WHERE submission_id IN (SELECT id FROM submissions WHERE ${sql} ORDER BY started_at DESC LIMIT ?)`,
+        WHERE submission_id IN (SELECT id FROM submissions WHERE ${sql} ${NEWEST_FIRST} LIMIT ?)`,
     )
       .bind(...binds, MAX_ROWS)
       .all<{ block_ref: string; block_type: string }>();
@@ -284,7 +298,7 @@ export async function buildJsonl(
   const { sql, binds } = whereFor(formId, orgId, filters);
   const subs = await env.DB.prepare(
     `SELECT id, status, source, started_at, completed_at, meta FROM submissions
-      WHERE ${sql} ORDER BY started_at DESC LIMIT ?`,
+      WHERE ${sql} ${NEWEST_FIRST} LIMIT ?`,
   )
     .bind(...binds, MAX_ROWS)
     .all<{

@@ -1,4 +1,5 @@
 import { integer, primaryKey, real, sqliteTable, text, uniqueIndex, index } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
 /** epoch-ms timestamp */
 const ts = (name: string) => integer(name, { mode: "timestamp_ms" });
@@ -386,6 +387,14 @@ export const submissions = sqliteTable(
   },
   (t) => [
     index("idx_submissions_form_status").on(t.formId, t.status, t.startedAt),
+    /**
+     * The results table's own order: newest *submitted* first, where submitted
+     * is `completed_at` when there is one and `started_at` otherwise. An
+     * expression index, matching that ORDER BY term for term — every other
+     * index here stores `started_at`, so without it a page of fifty reads every
+     * response the form has taken. See `0029_submissions_submitted_order.sql`.
+     */
+    index("idx_submissions_form_submitted").on(t.formId, sql`COALESCE(${t.completedAt}, ${t.startedAt})`),
     index("idx_submissions_form_updated").on(t.formId, t.updatedAt),
     index("idx_submissions_form_source").on(t.formId, t.source, t.startedAt),
     index("idx_submissions_expiry").on(t.status, t.expiresAt),

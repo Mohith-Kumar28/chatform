@@ -376,9 +376,28 @@ resultsRouter.get(
     const MATCHES = `(?2 = 'all'
                       OR (?2 = 'partial' AND status IN ('abandoned','in_progress','disqualified'))
                       OR status = ?2)`;
+    /**
+     * Newest response first — by the moment the table calls "Submitted".
+     *
+     * That column renders `completedAt ?? startedAt`, and this used to sort on
+     * `started_at` alone, so the two disagreed about what "newest" meant on
+     * every response that was not answered in one sitting. Someone who opened
+     * the form on Monday and finished it on Wednesday sorted under Monday and
+     * landed halfway down a table whose dates then read as shuffled — the row
+     * with the most recent Submitted date on a live 88-response form sat ninth.
+     *
+     * `id` breaks the tie so a page boundary cannot show one row twice and skip
+     * another: SQLite is free to return equal keys in any order, and offset
+     * pagination asks for the same ordering once per page.
+     *
+     * Backed by `idx_submissions_form_submitted`, an index on this exact
+     * expression — without it the planner reads every response the form has
+     * ever taken to sort fifty of them.
+     */
+    const NEWEST_FIRST = `ORDER BY COALESCE(completed_at, started_at) DESC, id DESC`;
     const WINDOW = `SELECT id, session_id FROM submissions
                      WHERE form_id = ?1 AND ${MATCHES}
-                     ORDER BY started_at DESC LIMIT ?3 OFFSET ?4`;
+                     ${NEWEST_FIRST} LIMIT ?3 OFFSET ?4`;
     const [subs, answerRows, transcriptRows, followUps, formRow, totalRow, countsRow] = (await c.env.DB.batch([
       c.env.DB.prepare(
         `SELECT s.id, s.status, s.started_at, s.completed_at, s.duration_ms, s.session_id,
@@ -388,7 +407,7 @@ resultsRouter.get(
                 -- \`scheduleFollowUps\`, which otherwise makes that decision in silence.
                 json_extract(s.meta, '$.followUpSkip') AS followup_skip
            FROM submissions s WHERE s.form_id = ?1 AND ${MATCHES}
-          ORDER BY s.started_at DESC LIMIT ?3 OFFSET ?4`,
+          ${NEWEST_FIRST} LIMIT ?3 OFFSET ?4`,
       ).bind(id, effectiveStatus, limit, offset),
       c.env.DB.prepare(
         `SELECT a.submission_id, a.block_ref, a.block_type, a.value_json

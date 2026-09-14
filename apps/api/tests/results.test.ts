@@ -121,6 +121,34 @@ describe("submissions list", () => {
   });
 
   /**
+   * Newest submitted first — not newest opened.
+   *
+   * A response begun before every other one and finished after every other one
+   * is the newest submission on the form, and the table's own Submitted column
+   * says so. Ordering on `started_at` filed it under the day it was opened, so
+   * the newest row landed halfway down a list whose dates then read as random.
+   */
+  it("sorts by when a response was submitted, not when it was opened", async () => {
+    await subscribePro(t.orgId);
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT INTO submissions (id, form_id, form_version_id, organization_id, session_id, status, started_at, completed_at)
+       VALUES ('sbm_slow', ?, 'ver_x', ?, 'chs_slow', 'completed', ?, ?)`,
+    )
+      .bind(t.formId, t.orgId, now - 86_400_000, now + 1000)
+      .run();
+
+    const res = await fetchApi(`/api/forms/${t.formId}/submissions?status=all`, { headers: auth() });
+    const { submissions: rows } = await res.json<ListBody>();
+    expect(rows[0]?.id).toBe("sbm_slow");
+    // And the one completed a moment ago still outranks the one merely opened
+    // a moment ago, which is the same rule seen from the other side.
+    expect(rows.findIndex((r) => r.id === "sbm_done")).toBeLessThan(
+      rows.findIndex((r) => r.id === "sbm_partial"),
+    );
+  });
+
+  /**
    * The page, and how much of the table it is.
    *
    * The endpoint used to return the newest fifty rows and say nothing about the
