@@ -82,20 +82,20 @@ describe("the ending node", () => {
     expect(endingNode("end_performer").data.conditions).toEqual([]);
   });
 
-  it("marks the ending that catches everyone else", () => {
-    // The first success ending is where `defaultEnding` sends anyone no rule
-    // matched, which is the half of the picture no rule states.
-    expect(endingNode("end_performer").data.fallback).toBe(true);
-    expect(endingNode("end_audience").data.fallback).toBe(false);
+  it("says nothing at all about the ending everyone else lands on", () => {
+    // It said "everyone else" for a version. That is a label for the normal
+    // case: it turned up on every form, told nobody anything they had not
+    // assumed, and made a working ending look unfinished.
+    expect(endingNode("end_performer").data).not.toHaveProperty("fallback");
+    expect(endingNode("end_performer").data.conditions).toEqual([]);
   });
 
   it("stays quiet on a form that has no ending rules at all", () => {
-    // One outcome and no rules means "everyone else" is every respondent there
-    // is, which is not worth a line on the node.
     const plain = FormDoc.parse({ ...doc, endingRules: [] });
-    const node = deriveGraph(plain, [], new Map()).nodes.find((n) => n.id === "end_performer")!;
-    expect(node.data.fallback).toBe(false);
-    expect(node.data.conditions).toEqual([]);
+    for (const ref of ["end_performer", "end_audience"]) {
+      const node = deriveGraph(plain, [], new Map()).nodes.find((n) => n.id === ref)!;
+      expect(node.data.conditions).toEqual([]);
+    }
   });
 
   it("is not wired from any question", () => {

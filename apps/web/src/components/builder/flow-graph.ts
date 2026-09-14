@@ -291,8 +291,15 @@ export function deriveGraph(
    * could give. Not a wire: these do not come from any one question, they are
    * read once at the end against every answer. A line on the node is the honest
    * shape, and it is the same line the inspector edits.
+   *
+   * Only where there is a rule. The ordinary ending — the one everybody who
+   * matched nothing lands on, which is most endings on most forms — said
+   * "everyone else" under its title for a version, and that is a label for the
+   * normal case: it appeared on every form, explained nothing anybody did not
+   * already assume, and made the panel look like there was something to
+   * configure. A node with nothing extra on it is the right way to draw an
+   * ending that needs nothing.
    */
-  const defaultEndingRef = doc.endings.find((e) => e.kind !== "screen_out")?.ref ?? doc.endings[0]?.ref;
   doc.endings.forEach((e) => {
     const rules = doc.endingRules.filter(
       (r): r is GotoRule => r.action_kind === "goto" && r.target === e.ref,
@@ -306,10 +313,6 @@ export function deriveGraph(
         kind: e.kind,
         problem: problems.get(e.ref),
         conditions: rules.map((r) => caseLabel(null, r.when, doc.blocks)),
-        // Said only when a rule somewhere could send people elsewhere, because
-        // on a form with one outcome "everyone else" is every respondent there
-        // is, which is not worth a line.
-        fallback: e.ref === defaultEndingRef && doc.endingRules.length > 0,
       },
       deletable: doc.endings.length > 1,
     });

@@ -206,7 +206,10 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
         issue.code !== "always_true_route" &&
         issue.code !== "never_true_route" &&
         issue.code !== "value_not_an_option" &&
-        issue.code !== "exact_match_on_free_text"
+        issue.code !== "exact_match_on_free_text" &&
+        // An ending nobody is sent to. The one thing worth saying about an
+        // ending, and it belongs on the ending.
+        issue.code !== "ending_unreachable"
       ) {
         continue;
       }
@@ -1145,14 +1148,12 @@ function shortProblem(message: string): string {
 }
 
 function EndingNode({ id, data, selected, deletable }: NodeProps) {
-  const { title, kind, problem, conditions, fallback } = data as {
+  const { title, kind, problem, conditions } = data as {
     title: string;
     kind?: FormDoc["endings"][number]["kind"];
     problem?: NodeProblem;
     /** The ending rules that send people here — see `deriveGraph`. */
     conditions?: string[];
-    /** True on the ending that catches everyone no rule claimed. */
-    fallback?: boolean;
   };
   /*
    * A refusal has to be findable at a glance.
@@ -1199,16 +1200,16 @@ function EndingNode({ id, data, selected, deletable }: NodeProps) {
 
             No wire says this: an ending rule is not a route out of a question,
             it is a test run once against the whole answer set. So it is read on
-            the node it sends people to, which is also where it is edited.
+            the node it sends people to, which is also where it is edited. An
+            ending with no rule gets no line — see `deriveGraph`.
         */}
-        {(conditions?.length || fallback) && (
+        {conditions && conditions.length > 0 && (
           <div className="mt-1.5 space-y-0.5 border-t border-current/15 pt-1.5">
-            {conditions?.map((c, i) => (
+            {conditions.map((c, i) => (
               <p key={i} className="truncate text-[10px] opacity-85" title={c}>
                 if {c}
               </p>
             ))}
-            {fallback && <p className="text-[10px] italic opacity-60">everyone else</p>}
           </div>
         )}
         {problem && <ProblemNote problem={problem} />}

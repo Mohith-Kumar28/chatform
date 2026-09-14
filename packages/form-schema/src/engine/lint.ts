@@ -288,6 +288,40 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
    * "Registration Submitted Successfully" problem with the words changed: the
    * respondent is stopped and told nothing, so they retry, or they email.
    */
+  /**
+   * An ending nothing can reach.
+   *
+   * The error worth raising about endings, and the one that was missing while
+   * every ending instead carried a panel inviting a rule it did not need. A
+   * form is finished by falling off the last question, which lands on the
+   * default ending — the first that accepts — so that one is always reachable
+   * and needs nothing said about it. Any other ending is reached only because
+   * something points at it: a route off a question, or a rule that picks it at
+   * the end. An ending with neither is a screen somebody wrote and nobody will
+   * ever see, drawn on the canvas exactly like the ones that work.
+   *
+   * A warning, not an error: a half-built form has endings waiting to be wired
+   * up and refusing to publish over one would be wrong. It rings the node in
+   * amber, which is where the author is already looking.
+   */
+  const reachedByRule = new Set<string>();
+  for (const r of [...doc.logic, ...doc.endingRules]) {
+    if (r.action_kind === "goto" && (r.targetKind ?? "block") === "ending") reachedByRule.add(r.target);
+  }
+  const fallbackEnding = doc.endings.find((e) => e.kind !== "screen_out") ?? doc.endings[0];
+  for (const e of doc.endings) {
+    if (e.ref === fallbackEnding?.ref || reachedByRule.has(e.ref)) continue;
+    issues.push({
+      level: "warning",
+      code: "ending_unreachable",
+      message:
+        `Nothing sends anybody to "${e.title}", so no respondent will ever see it. Point a route at it from a ` +
+        `question, or give it a rule of its own.`,
+      path: `endings.${e.id}`,
+      refs: [e.ref],
+    });
+  }
+
   const screenOuts = doc.endings.filter((e) => e.kind === "screen_out");
   if (screenOuts.length > 0 && screenOuts.length === doc.endings.length) {
     issues.push({

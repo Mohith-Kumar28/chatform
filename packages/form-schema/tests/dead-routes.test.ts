@@ -241,3 +241,62 @@ describe("a rule that picks the ending", () => {
     expect(issue?.refs).toEqual(["end_audience"]);
   });
 });
+
+/**
+ * An ending nothing can reach.
+ *
+ * The check that belongs on endings, and the one that was missing while every
+ * ending instead carried a panel offering a rule it did not need.
+ */
+describe("an ending nobody is sent to", () => {
+  const twoEndings = (logic: unknown[] = [], endingRules: unknown[] = []) =>
+    FormDoc.parse({
+      title: "t",
+      blocks: [choice, notes],
+      endings: [
+        { id: "end_dr_ok001", ref: "end_thanks", title: "Thanks", kind: "success" },
+        { id: "end_dr_out01", ref: "end_audience", title: "See you in the audience", kind: "success" },
+      ],
+      logic,
+      endingRules,
+    });
+
+  it("is flagged, on the ending itself", () => {
+    const issue = lintFormDoc(twoEndings()).find((i) => i.code === "ending_unreachable");
+    expect(issue?.level).toBe("warning");
+    expect(issue?.refs).toEqual(["end_audience"]);
+    expect(issue?.message).toContain("See you in the audience");
+  });
+
+  it("does not block publishing, because a half-built form is not broken", () => {
+    expect(hasErrors(lintFormDoc(twoEndings()))).toBe(false);
+  });
+
+  it("says nothing about the ending everyone falls onto", () => {
+    // The form is finished by running out of questions, which lands here. It is
+    // reachable by construction and needs no rule, no route and no panel.
+    const codes = lintFormDoc(twoEndings()).filter((i) => i.code === "ending_unreachable");
+    expect(codes.map((i) => i.refs?.[0])).not.toContain("end_thanks");
+  });
+
+  it("is satisfied by a route off a question", () => {
+    const doc = twoEndings([rule("q_role", "eq", "opt_watch", "end_audience", "ending")]);
+    expect(lintFormDoc(doc).some((i) => i.code === "ending_unreachable")).toBe(false);
+  });
+
+  it("is satisfied by a rule of its own", () => {
+    const doc = twoEndings(
+      [],
+      [
+        {
+          id: "rl_dr_reach1",
+          action_kind: "goto",
+          when: { op: "and", conditions: [{ left: { kind: "ref", ref: "q_role" }, op: "eq", value: "opt_watch" }], groups: [] },
+          target: "end_audience",
+          targetKind: "ending",
+        },
+      ],
+    );
+    expect(lintFormDoc(doc).some((i) => i.code === "ending_unreachable")).toBe(false);
+  });
+});

@@ -230,9 +230,18 @@ export function EndingInspector({
  * not: `repairFlow` only ever rewrites `doc.logic`, so a rule here survives
  * adding, deleting, duplicating and reordering questions.
  *
- * Rules are read top to bottom and the first match wins, across every ending —
- * which is why the order is shown and why an ending with no rules is described
- * rather than left blank.
+ * Rules are read top to bottom and the first match wins, across every ending,
+ * which is why the order is shown.
+ *
+ * Shown only when there is a rule to read, or when the linter says this ending
+ * cannot be reached without one. Every ending carried this section for a
+ * version — header, explanation, an "Add rule" button and the sentence
+ * "Everyone who matches no other ending's rule" — on the ordinary ending that
+ * needs none, which is most endings on most forms. That is a control panel for
+ * the normal case: it made a form that was working look like a form with
+ * something left to configure. The rule an author actually needs to see is the
+ * one that exists, and the message they actually need is that an ending is
+ * stranded, which `ending_unreachable` says on the node itself.
  */
 function SendThemHereWhen({
   ending,
@@ -277,7 +286,22 @@ function SendThemHereWhen({
   const patchRule = (id: string, when: WhenGroup) =>
     setRules(doc.endingRules.map((r) => (r.id === id ? { ...r, when: when as ConditionGroup } : r)));
 
-  const isDefault = doc.endings.find((e) => e.kind !== "screen_out")?.ref === ending.ref;
+  /**
+   * Nothing points at this ending, so a rule here is the way to fix it.
+   *
+   * The same test `ending_unreachable` runs, asked locally rather than read off
+   * the lint pass, so the panel does not need the canvas's problem map to know
+   * whether it has a job to do.
+   */
+  const isDefault = (doc.endings.find((e) => e.kind !== "screen_out") ?? doc.endings[0])?.ref === ending.ref;
+  const pointedAt =
+    isDefault ||
+    [...doc.logic, ...doc.endingRules].some(
+      (r) => r.action_kind === "goto" && (r.targetKind ?? "block") === "ending" && r.target === ending.ref,
+    );
+
+  // Nothing to read and nothing to fix: an ending that works needs no panel.
+  if (mine.length === 0 && pointedAt) return null;
 
   return (
     <Field
@@ -288,21 +312,14 @@ function SendThemHereWhen({
             Checked once every question is answered, so a rule here can read any
             answer in the form — not just the last one.
           </p>
-          <p className="mt-2">
-            Rules across all endings are read in order and the first match wins.
-            {isDefault
-              ? " This ending is also the fallback: anyone matching no rule at all lands here."
-              : ""}
-          </p>
+          <p className="mt-2">Rules across all endings are read in order and the first match wins.</p>
         </InfoHint>
       }
     >
       <div className="space-y-2">
         {mine.length === 0 && (
           <p className="text-muted-foreground text-xs">
-            {isDefault
-              ? "Everyone who matches no other ending's rule."
-              : "No rule yet, so nobody is sent here automatically. A branch can still point at it."}
+            Nothing sends anybody here yet, so no respondent will see this ending.
           </p>
         )}
 
