@@ -112,15 +112,25 @@ const api = (path: string, init: RequestInit = {}) =>
     headers: { "x-api-key": key, "content-type": "application/json", ...(init.headers as Record<string, string>) },
   });
 
+interface Progress {
+  answered: number;
+  totalEstimate: number;
+  pct: number;
+}
+
 interface TurnResult {
   accepted: boolean;
   complete: boolean;
   awaitingSubmit: boolean;
   question: { ref: string } | null;
   ending: { ref: string; kind?: string; title: string } | null;
-  events: { type: string }[];
+  events: { type: string; data?: { block?: { ref: string }; progress?: Progress } }[];
   validation: { ref: string; code: string } | null;
 }
+
+/** The progress the runtime put on the `question` event this turn ended on. */
+const progressOn = (turn: TurnResult): Progress | undefined =>
+  turn.events.filter((e) => e.type === "question").at(-1)?.data?.progress;
 
 const open = async (): Promise<string> => {
   const res = await api(`/v1/forms/${t.formId}/sessions`, { method: "POST", body: "{}" });
@@ -236,6 +246,51 @@ describe("a required question on the path the respondent is actually on", () => 
     expect(
       unsatisfiedRequired(doc, { q_role: "opt_music", q_instrument: "guitar", q_tech: "a mic" } as never),
     ).toEqual([]);
+  });
+});
+
+/**
+ * The bar the respondent watches while they answer.
+ *
+ * Same root cause as the submit refusal, same fix: the denominator was every
+ * answerable block in the document, and a `goto` routes the respondent around
+ * most of them. This form has five questions and a four-question path down
+ * either arm, so the old numbers read "Question 2 of 5" where the respondent
+ * was on question 2 of 4 — and on the live form it was 8 of 14, a bar stuck at
+ * 50% with nothing left to answer.
+ */
+describe("progress, on the path the respondent is on", () => {
+  it("counts the arm they took, not the whole form", async () => {
+    const s = await open();
+    await answer(s, "q_role", "opt_music");
+    const turn = await answer(s, "q_instrument", "a classical guitar");
+
+    // q_role, q_instrument, q_tech, q_notes — never q_set_format.
+    expect(progressOn(turn)).toEqual({ answered: 2, totalEstimate: 4, pct: 50 });
+  });
+
+  it("has nothing left to ask by the time the review card is up", async () => {
+    const s = await throughTheMusicArm();
+    const state = (await (await api(`/v1/sessions/${s}`)).json()) as { answers: Record<string, unknown> };
+    // Three answers and a skip, against a four-question path: the last question
+    // was reached, so there is nothing ahead of them.
+    const { progressOf, readFormDoc } = await import("@repo/form-schema");
+    const p = progressOf(readFormDoc(DOC), state.answers as never);
+    expect(p.totalEstimate).toBe(4);
+    expect(p.answered).toBe(3);
+  });
+
+  it("agrees with what the engine reports for the same answers", async () => {
+    // The runtime and `/v1` used to compute this two different ways. They now
+    // call one function, and this is the assertion that keeps them together.
+    const { progressOf, readFormDoc } = await import("@repo/form-schema");
+    const s = await open();
+    await answer(s, "q_role", "opt_comedy");
+    const turn = await answer(s, "q_set_format", "ten minutes of crowd work");
+
+    expect(progressOn(turn)).toEqual(
+      progressOf(readFormDoc(DOC), { q_role: "opt_comedy", q_set_format: "ten minutes of crowd work" } as never),
+    );
   });
 });
 

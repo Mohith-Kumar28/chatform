@@ -149,12 +149,69 @@ export function answerability(
   return { ok: true, block };
 }
 
-/** Progress, in the terms a client renders: answered, an estimate, a percentage. */
+/**
+ * The questions this respondent has been through, and the ones still ahead.
+ *
+ * `replayState` answers the first half: it walks the real path and stops where
+ * the flow is waiting. The second half is a forecast, and the only honest one
+ * available — nobody can know which arm an unanswered branching question will
+ * open. So the walk simply keeps going the way the flow is already pointed:
+ * `resolveNext` reads an unanswered block the same way it reads any block whose
+ * conditions do not match, and falls through to the next one. Unconditional
+ * rejoin rules — the `goto` that closes an arm back onto the trunk — still fire,
+ * because they match on nothing.
+ *
+ * What that means in practice is that the estimate starts out as the whole form
+ * and narrows as the respondent picks their way through it. It narrows rather
+ * than grows, which is the direction a progress bar should move.
+ *
+ * `seen` spans both halves, so a `goto` pointing back at somewhere the walk has
+ * already been ends the forecast instead of circling. A question is counted
+ * once however many times the flow passes it.
+ */
+export function projectedPath(
+  doc: FormDoc,
+  answers: AnswerMap,
+  hidden: Record<string, string> = {},
+): { walked: string[]; ahead: string[]; state: EvalState } {
+  const { state, path, cursor } = replayState(doc, answers, hidden);
+  const blockOf = (ref: string) => doc.blocks.find((b) => b.ref === ref);
+  const walked = path.filter((ref) => {
+    const b = blockOf(ref);
+    return b !== undefined && !isPassive(b);
+  });
+
+  // `replayState` pushes the block it stops on, so the cursor is already in
+  // `path` and the forecast starts after it.
+  const seen = new Set(path);
+  const ahead: string[] = [];
+  const ceiling = doc.blocks.length * 2 + 2;
+  let next = cursor.kind === "block" ? resolveNext(doc, cursor.block.ref, state) : cursor;
+  for (let guard = 0; guard < ceiling && next.kind === "block"; guard += 1) {
+    const block = next.block;
+    if (seen.has(block.ref)) break;
+    seen.add(block.ref);
+    if (!isPassive(block)) ahead.push(block.ref);
+    next = resolveNext(doc, block.ref, state);
+  }
+
+  return { walked, ahead, state };
+}
+
+/**
+ * Progress, in the terms a client renders: answered, an estimate, a percentage.
+ *
+ * Counted over the respondent's own path, not the whole form. The denominator
+ * used to be every visible block in the document, where "visible" means only
+ * `block.visibility` — so on a form that branches with `goto` rules, which is
+ * how the builder writes branches, it was the entire form every time. Somebody
+ * nine questions into a nine-question path was told they were at "Question 8 of
+ * 14" and a bar a little past halfway, and it never reached the end.
+ */
 export function progressOf(doc: FormDoc, answers: AnswerMap, hidden: Record<string, string> = {}) {
-  const { state } = replayState(doc, answers, hidden);
-  const answerable = doc.blocks.filter((b) => !isPassive(b) && isBlockVisible(b, state));
-  const answered = answerable.filter((b) => answers[b.ref] !== undefined).length;
-  const total = Math.max(answerable.length, answered);
+  const { walked, ahead } = projectedPath(doc, answers, hidden);
+  const answered = walked.filter((ref) => answers[ref] !== undefined).length;
+  const total = Math.max(walked.length + ahead.length, answered);
   return { answered, totalEstimate: total, pct: total === 0 ? 100 : Math.round((answered / total) * 100) };
 }
 

@@ -186,3 +186,108 @@ describe("progressOf", () => {
     expect(designer.pct).toBeGreaterThan(founder.pct);
   });
 });
+
+/**
+ * A form that branches the way the builder writes branches: `goto` rules, and
+ * no `visibility` condition anywhere.
+ *
+ * The denominator used to be every visible block in the document, and
+ * `block.visibility` says nothing about which arm a respondent took — so on a
+ * form shaped like this one the bar was measured against questions that could
+ * never be asked, and someone who had answered everything was stuck short of
+ * the end.
+ */
+const branchy = FormDoc.parse({
+  title: "Open mic",
+  blocks: [
+    {
+      id: "blk_pg_role01",
+      ref: "q_role",
+      type: "single_select",
+      title: "Performing or watching?",
+      required: true,
+      options: [
+        { id: "opt_perform", label: "Performing" },
+        { id: "opt_watch", label: "Watching" },
+      ],
+    },
+    { id: "blk_pg_act001", ref: "q_act", type: "short_text", title: "What is your act?" },
+    { id: "blk_pg_inst01", ref: "q_instrument", type: "short_text", title: "Which instrument?" },
+    { id: "blk_pg_tech01", ref: "q_tech", type: "short_text", title: "What tech do you need?" },
+    { id: "blk_pg_size01", ref: "q_party", type: "number", title: "How many in your party?" },
+  ],
+  endings: [{ id: "end_pg_ok01", ref: "end_thanks", title: "Thanks" }],
+  logic: [
+    {
+      id: "rl_pg_watch1",
+      action_kind: "goto",
+      from: "q_role",
+      when: { op: "and", conditions: [{ left: { kind: "ref", ref: "q_role" }, op: "eq", value: "opt_watch" }], groups: [] },
+      target: "q_party",
+      targetKind: "block",
+    },
+    // The performer arm closes before the attendee question.
+    {
+      id: "rl_pg_join01",
+      action_kind: "goto",
+      from: "q_tech",
+      when: { op: "and", conditions: [], groups: [] },
+      target: "end_thanks",
+      targetKind: "ending",
+    },
+  ],
+});
+
+describe("progress on a form that branches with goto rules", () => {
+  it("measures the attendee against their own two questions, not all five", () => {
+    // q_role + q_party. The three performer questions are not theirs to answer.
+    const p = progressOf(branchy, { q_role: "opt_watch" });
+    expect(p.totalEstimate).toBe(2);
+    expect(p.answered).toBe(1);
+    expect(p.pct).toBe(50);
+  });
+
+  it("reaches 100% when the path the respondent is on is finished", () => {
+    // The whole bug: this used to be 2 of 5 — 40%, and it could not move again.
+    const p = progressOf(branchy, { q_role: "opt_watch", q_party: 3 });
+    expect(p).toEqual({ answered: 2, totalEstimate: 2, pct: 100 });
+  });
+
+  it("measures the performer against theirs", () => {
+    const p = progressOf(branchy, { q_role: "opt_perform", q_act: "guitar", q_instrument: "a classical guitar" });
+    // q_role, q_act, q_instrument, q_tech — and never q_party.
+    expect(p.totalEstimate).toBe(4);
+    expect(p.answered).toBe(3);
+  });
+
+  it("forecasts straight ahead before the branch is taken", () => {
+    // Nothing answered, so no `goto` whose condition names an answer can fire
+    // and the forecast falls through — q_role, q_act, q_instrument, q_tech,
+    // and then out, because the rejoin rule off q_tech is unconditional and
+    // fires for an unanswered block like any other. q_party belongs to the
+    // attendee arm and is reachable no other way, so it is not forecast.
+    const p = progressOf(branchy, {});
+    expect(p.totalEstimate).toBe(4);
+    expect(p.answered).toBe(0);
+    expect(p.pct).toBe(0);
+  });
+
+  it("narrows rather than grows once the branch is taken", () => {
+    // Both arms are at most as long as the straight-ahead forecast, so the
+    // denominator never gets bigger under the respondent — which is what stops
+    // the bar sliding backwards while they answer.
+    const start = progressOf(branchy, {}).totalEstimate;
+    for (const role of ["opt_watch", "opt_perform"]) {
+      expect(progressOf(branchy, { q_role: role }).totalEstimate).toBeLessThanOrEqual(start);
+    }
+  });
+
+  it("does not count an answer the flow has since routed around", () => {
+    // They answered the performer questions, then changed their mind. Those
+    // answers are off the path now, and counting them would report more
+    // progress than the respondent has actually made.
+    const p = progressOf(branchy, { q_role: "opt_watch", q_act: "guitar", q_instrument: "a guitar" });
+    expect(p.answered).toBe(1);
+    expect(p.totalEstimate).toBe(2);
+  });
+});

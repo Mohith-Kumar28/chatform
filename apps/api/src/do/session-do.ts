@@ -15,6 +15,7 @@ import {
   readFormDoc,
   replayState,
   unsatisfiedRequired,
+  progressOf,
   needsExtraction,
   extractionSchema,
   extractionGuidance,
@@ -2584,11 +2585,30 @@ export class SessionDO extends DurableObject<Bindings> {
       .filter((b): b is Block => b !== undefined);
   }
 
+  /**
+   * How far along this respondent is, on their own path.
+   *
+   * `collectedCount` over every answerable block in the document, which is what
+   * this was, counts a denominator the respondent will never reach: a branch
+   * routes them around most of the other arms, and those questions stay in the
+   * total anyway. The Open Mic form has fourteen questions and a nine-question
+   * music path, so somebody who had answered all nine was shown a bar at 64%
+   * that could not move again.
+   *
+   * `progressOf` replays the answers and forecasts the rest of the path — the
+   * same numbers `/v1` and the partial-response email already report, so the
+   * three places that tell a respondent how far along they are now agree.
+   *
+   * `collectedCount` is untouched and stays what it was: the number of answers
+   * collected, which is what the deferred sign-in gate counts down.
+   */
+  private progress(): { answered: number; totalEstimate: number; pct: number } {
+    if (!this.doc) return { answered: 0, totalEstimate: 0, pct: 0 };
+    return progressOf(this.doc, this.state.answers, this.state.hidden);
+  }
+
   private progressPct(): number {
-    if (!this.doc) return 0;
-    const answerable = this.doc.blocks.filter((b) => !["welcome", "statement"].includes(b.type)).length;
-    if (answerable === 0) return 100;
-    return Math.min(100, Math.round((this.collectedCount / answerable) * 100));
+    return this.progress().pct;
   }
 
   /**
@@ -3072,7 +3092,6 @@ export class SessionDO extends DurableObject<Bindings> {
       }
     }
     if (!block) return;
-    const answered = Object.keys(this.state.answers).length;
     const pub = toPublicBlock(block);
     const prefill = this.partials.get(block.ref);
     await this.emit("question", {
@@ -3084,11 +3103,14 @@ export class SessionDO extends DurableObject<Bindings> {
         : pub,
       // What a refused card already got right, so it comes back holding it.
       ...(prefill && Object.keys(prefill).length > 0 ? { prefill } : {}),
-      progress: {
-        answered,
-        totalEstimate: this.doc.blocks.filter((b) => !["welcome", "statement"].includes(b.type)).length,
-        pct: this.progressPct(),
-      },
+      /*
+       * All three numbers from one place. `answered` used to be every key in
+       * the answer map — which counts answers to questions the flow has since
+       * routed around — and `totalEstimate` every answerable block in the
+       * document. The header renders them as "Question 8 of 14" on a form with
+       * nine questions on this path.
+       */
+      progress: this.progress(),
     });
     if (block.type === "file_upload" || block.type === "signature") {
       await this.emit("upload_request", {
