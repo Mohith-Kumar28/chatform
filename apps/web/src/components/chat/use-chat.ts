@@ -715,6 +715,21 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
           total: data.progress?.totalEstimate,
         });
         setQuestion(data);
+        /*
+         * A question means the review step is over.
+         *
+         * The review card used to be cleared by exactly two things: an `ending`
+         * event, and `editAnswer` clearing it locally on the way out. Nothing
+         * cleared it when the *server* took the conversation off the review
+         * step and back to a question — which is what a refused submit does.
+         *
+         * So a refused submit left the old card mounted underneath the new
+         * question, still saying "Submit now", its countdown already spent. The
+         * respondent pressed it, the server refused again, and the screen came
+         * back looking identical: the one report we have of this described it
+         * as the button doing nothing at all.
+         */
+        setReview(null);
         settleTurn();
         // Cleared when the conversation moves on, not when the *same* question
         // is re-stated. Escalation now re-emits its own question so the

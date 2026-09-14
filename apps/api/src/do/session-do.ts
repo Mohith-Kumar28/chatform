@@ -2,7 +2,6 @@ import { DurableObject } from "cloudflare:workers";
 import {
   FormDoc,
   resolveNext,
-  isBlockVisible,
   validateAnswer,
   enforcesUnique,
   DUPLICATE_HINT,
@@ -15,6 +14,7 @@ import {
   migrateFormDoc,
   readFormDoc,
   replayState,
+  unsatisfiedRequired,
   needsExtraction,
   extractionSchema,
   extractionGuidance,
@@ -2554,16 +2554,34 @@ export class SessionDO extends DurableObject<Bindings> {
    *
    * Visibility is checked because a hidden question is not one they declined to
    * answer; it is one the form decided not to ask.
+   *
+   * And so is *reachability*, which is the harder half and which this used to
+   * get wrong. It filtered `doc.blocks` for `required && !answered && visible`,
+   * where "visible" means only `block.visibility` — the author's show/hide
+   * conditions. Branching is not expressed that way. A `goto` rule routes the
+   * flow around a question without touching its visibility, so every required
+   * question in every branch the respondent did not take counted as missing,
+   * and the count only grew with the number of branches.
+   *
+   * What that did to a real respondent: they answered every question the form
+   * asked them, reached the review card, and pressed send — into a refusal over
+   * three questions belonging to branches they were never shown. The refusal
+   * routes the cursor to the first of them, so the next press refuses again,
+   * and the form cannot be submitted at all. A conditional form with a required
+   * question in any branch was unsubmittable by anyone who took another branch.
+   *
+   * `unsatisfiedRequired` is the check the headless `/v1` path has always used:
+   * it replays the stored answers through the same `resolveNext` the
+   * conversation walks and reports only what is required, visible, *on that
+   * path*, and empty. The two contracts now answer "is this response finished?"
+   * with the same code rather than with two readings of the word "required".
    */
   private unansweredRequired(): Block[] {
     if (!this.doc) return [];
-    return this.doc.blocks.filter(
-      (b) =>
-        b.required &&
-        !["welcome", "statement"].includes(b.type) &&
-        this.state.answers[b.ref] === undefined &&
-        isBlockVisible(b, this.state),
-    );
+    const doc = this.doc;
+    return unsatisfiedRequired(doc, this.state.answers, this.state.hidden)
+      .map(({ ref }) => doc.blocks.find((b) => b.ref === ref))
+      .filter((b): b is Block => b !== undefined);
   }
 
   private progressPct(): number {
