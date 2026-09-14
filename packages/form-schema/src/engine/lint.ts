@@ -1,6 +1,12 @@
 import type { FormDoc } from "../form-doc";
 import type { Block } from "../blocks";
-import { opsRequiringValue, type Condition, type ConditionGroup } from "../conditions";
+import {
+  conditionIsAlwaysFalse,
+  conditionIsAlwaysTrue,
+  opsRequiringValue,
+  type Condition,
+  type ConditionGroup,
+} from "../conditions";
 import type { LogicRule } from "../logic";
 import { isValidUpiId, UPI_CURRENCY } from "../payment-link";
 
@@ -35,6 +41,44 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
   const optionIdsByRef = new Map<string, Set<string>>();
   const itemIdsByRef = new Map<string, Set<string>>();
 
+  /**
+   * Every question by ref, and every option label by ref, built before anything
+   * is checked.
+   *
+   * The loop below reaches conditions while it is still halfway through
+   * populating its own maps, which is fine for what it did with them and not
+   * fine for a check that has to know what a question's options are. So these
+   * are gathered up front, in document order, and read from rather than filled
+   * in as we go.
+   */
+  const blockByRef = new Map<string, Block>();
+  const optionLabelsByRef = new Map<string, Map<string, string>>();
+  for (const b of doc.blocks) {
+    if (!blockByRef.has(b.ref)) blockByRef.set(b.ref, b);
+    const opts = "options" in b && Array.isArray(b.options) ? b.options : null;
+    if (!opts) continue;
+    optionIdsByRef.set(b.ref, new Set(opts.map((o) => o.id)));
+    optionLabelsByRef.set(b.ref, new Map(opts.map((o) => [o.label.trim().toLowerCase(), o.id])));
+  }
+
+  /** Ops that compare an answer against one exact option id. */
+  const EXACT_OPTION_OPS = new Set(["eq", "neq", "includes", "not_includes"]);
+
+  /** Blocks whose answer is whatever the respondent typed. */
+  const FREE_TEXT = new Set(["short_text", "long_text"]);
+
+  /**
+   * Does this look like a sentence rather than a token?
+   *
+   * An exact match on a short text field is sometimes deliberate — an access
+   * code, a referral code, an order number — and warning about those would be
+   * noise on a form that is working as intended. A phrase with spaces in it is
+   * a different animal: nobody types "Just coming to watch and support" into a
+   * free-text box on the off-chance, and a form that waits for them to is a
+   * form with an arm that never runs.
+   */
+  const readsLikeAPhrase = (value: string) => value.trim().includes(" ") && value.trim().length > 12;
+
   const targetExists = (ref: string, kind: string, path: string) => {
     if (kind === "ending" ? !endingRefs.has(ref) : !blockRefs.has(ref)) {
       issues.push({ level: "error", code: "dangling_target", message: `Logic target "${ref}" (${kind}) does not exist`, path, refs: [ref] });
@@ -53,8 +97,93 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
     }
   };
 
-  const checkCondition = (c: Condition, path: string) => {
+  /**
+   * A condition that cannot do what it says.
+   *
+   * Three shapes, all warnings, all about a route that is drawn on the canvas
+   * and never taken. None of them stops a form working — the flow falls through
+   * to the next question, which is usually where the author wanted it anyway —
+   * so none of them blocks publishing. What they cost is silent: an arm that
+   * looks live and is not, and an author who believes the form does something
+   * it does not.
+   *
+   * `owner` is the question these routes hang off, so the Flow canvas can put
+   * the amber ring on that node instead of leaving the warning in a list.
+   */
+  const checkConditionIsLive = (c: Condition, path: string, owner?: string) => {
+    if (c.left.kind !== "ref") return;
+    const about = blockByRef.get(c.left.ref);
+    const refs = owner ? [owner] : [c.left.ref];
+    const named = about?.title || c.left.ref;
+
+    // ── 1. `neq ""` / `eq ""`: the emptiness test the generator is not allowed
+    //    to write, spelled the long way round. See `conditionIsAlwaysTrue`.
+    if (conditionIsAlwaysTrue(c, about)) {
+      issues.push({
+        level: "warning",
+        code: "always_true_route",
+        message:
+          `On "${named}", this route's condition is always true, so the route is taken every time and any ` +
+          `route below it can never run. Remove the condition to make it an ordinary "always go here" step.`,
+        path,
+        refs,
+      });
+      return;
+    }
+    if (conditionIsAlwaysFalse(c, about)) {
+      issues.push({
+        level: "warning",
+        code: "never_true_route",
+        message:
+          `On "${named}", this route's condition can never be true, so the route is never taken. ` +
+          `Delete it, or give it a condition that can match.`,
+        path,
+        refs,
+      });
+      return;
+    }
+
+    if (typeof c.value !== "string" || c.value === "") return;
+
+    // ── 2. A value that is not one of the question's own options. The answer
+    //    stored for a choice question is the option *id*, so a condition
+    //    written against anything else — a label, or a value belonging to a
+    //    different question — waits for something that never arrives.
+    const ids = optionIdsByRef.get(c.left.ref);
+    if (ids && EXACT_OPTION_OPS.has(c.op) && !ids.has(c.value)) {
+      const asLabel = optionLabelsByRef.get(c.left.ref)?.get(c.value.trim().toLowerCase());
+      issues.push({
+        level: "warning",
+        code: "value_not_an_option",
+        message: asLabel
+          ? `On "${named}", this route compares against the option's label ("${c.value}") rather than its id ` +
+            `("${asLabel}"), so it can never match. Use "${asLabel}".`
+          : `On "${named}", "${c.value}" is not one of that question's options, so this route can never match.`,
+        path,
+        refs,
+      });
+      return;
+    }
+
+    // ── 3. An exact match on a box the respondent types into freely.
+    if (about && FREE_TEXT.has(about.type) && c.op === "eq") {
+      if (about.type !== "long_text" && !readsLikeAPhrase(c.value)) return;
+      issues.push({
+        level: "warning",
+        code: "exact_match_on_free_text",
+        message:
+          `On "${named}", this route waits for someone to type "${c.value}" exactly — punctuation, capitals ` +
+          `and all — into a free-text answer, which all but never happens. Use "contains", or branch on a ` +
+          `choice question instead.`,
+        path,
+        refs,
+      });
+    }
+  };
+
+  const checkCondition = (c: Condition, path: string, owner?: string) => {
     checkOperand(c.left, path);
+    checkConditionIsLive(c, path, owner);
     if (opsRequiringValue.has(c.op) && c.value === undefined) {
       issues.push({ level: "error", code: "missing_value", message: `Operator "${c.op}" requires a value`, path });
     }
@@ -70,13 +199,15 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
     }
   };
 
-  const checkGroup = (g: ConditionGroup, path: string) => {
-    g.conditions.forEach((c, i) => checkCondition(c, `${path}.conditions[${i}]`));
-    g.groups.forEach((sub, i) => checkGroup(sub, `${path}.groups[${i}]`));
+  const checkGroup = (g: ConditionGroup, path: string, owner?: string) => {
+    g.conditions.forEach((c, i) => checkCondition(c, `${path}.conditions[${i}]`, owner));
+    g.groups.forEach((sub, i) => checkGroup(sub, `${path}.groups[${i}]`, owner));
   };
 
   const checkRule = (r: LogicRule, path: string) => {
-    if (r.when) checkGroup(r.when, `${path}.when`);
+    // A goto's routes belong to the question they hang off, which is where the
+    // author reads them and where the canvas can mark them.
+    if (r.when) checkGroup(r.when, `${path}.when`, r.action_kind === "goto" ? (r.from ?? undefined) : undefined);
     if (r.action_kind === "goto") {
       targetExists(r.target, r.targetKind ?? "block", path);
       if (r.from && !blockRefs.has(r.from)) {
@@ -111,10 +242,8 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
     if (b.type === "welcome" && doc.blocks.indexOf(b) !== 0) {
       issues.push({ level: "warning", code: "welcome_not_first", message: "Welcome block should be the first block", path: `blocks.${b.id}` });
     }
-    const opts = "options" in b && Array.isArray(b.options) ? b.options : null;
-    if (opts) optionIdsByRef.set(b.ref, new Set(opts.map((o) => o.id)));
     if ("items" in b && Array.isArray(b.items)) itemIdsByRef.set(b.ref, new Set(b.items.map((i) => i.id)));
-    if ("visibility" in b && b.visibility) checkGroup(b.visibility, `blocks.${b.id}.visibility`);
+    if ("visibility" in b && b.visibility) checkGroup(b.visibility, `blocks.${b.id}.visibility`, b.ref);
   }
 
   doc.logic.forEach((r, i) => checkRule(r, `logic[${i}]`));

@@ -192,7 +192,21 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
         // A route that can never run is a problem about this question's own
         // list of routes, so it belongs on this question's node and nowhere
         // else — it is the one warning the canvas can point at precisely.
-        issue.code !== "unreachable_route"
+        issue.code !== "unreachable_route" &&
+        /*
+         * And the four that are the same kind of thing: a route drawn on this
+         * node whose condition cannot do what it says. A condition that is
+         * always true, one that can never be true, one comparing a choice
+         * question against something that is not one of its options, and an
+         * exact match on a box the respondent types into freely. None of them
+         * breaks the form, so none is an error — but each is an arm the author
+         * believes in and the flow never takes, and the node is the only place
+         * that can say so.
+         */
+        issue.code !== "always_true_route" &&
+        issue.code !== "never_true_route" &&
+        issue.code !== "value_not_an_option" &&
+        issue.code !== "exact_match_on_free_text"
       ) {
         continue;
       }
