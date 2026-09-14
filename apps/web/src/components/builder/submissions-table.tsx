@@ -1643,6 +1643,27 @@ function SubmissionDialog({
         layout="panel"
         showCloseButton={false}
         className="h-[min(46rem,calc(100dvh-4rem))]"
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          (e.currentTarget as HTMLElement).focus();
+        }}
+        /*
+          Opens focused on itself, not on whatever the header's first button is.
+
+          Radix moves focus into a dialog by focusing its first tabbable
+          element, and the first tabbable element here is a tooltip trigger —
+          the "1/16" counter on the first response, the Previous chevron on any
+          other, since a disabled button is skipped. A tooltip opens on focus as
+          well as on hover, so opening a response greeted the reader with "Type
+          a number to jump straight to it" every single time, pointing at a
+          control they had not gone anywhere near. A hint that shows itself
+          unbidden is not a hint.
+
+          The panel takes the focus instead — Radix gives it `tabIndex={-1}` for
+          exactly this — so the trap and the tab order still start here, Escape
+          still closes, and Tab still walks the header. The hints stay where
+          they belong: on hover, and on a keyboard focus the reader asked for.
+        */
       >
         <div className="flex items-start gap-3 border-b px-5 py-4">
           <div className="min-w-0 flex-1">
