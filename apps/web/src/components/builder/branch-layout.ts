@@ -351,11 +351,23 @@ export function conditionText(cond: { op: string; value?: unknown }): string {
  */
 export function caseLabel(
   block: Block | null,
-  when: { op: "and" | "or"; conditions: { op: string; value?: unknown }[] } | null | undefined,
+  when: { op: "and" | "or"; conditions: { op: string; value?: unknown; left?: { kind?: string; ref?: string } }[] } | null | undefined,
+  /**
+   * Every question, for a rule whose conditions do not all read the same one.
+   *
+   * An ending rule is the case: it is checked against the whole answer set, so
+   * each condition names its own question and there is no single `block` to
+   * resolve an option id against. Supplied, each condition is read against the
+   * question it actually names — which is the difference between "Just coming
+   * to watch and support" and a raw `opt_just_coming_to_watch_and` on the node.
+   */
+  blocks?: Block[],
 ): string {
   const conditions = when?.conditions ?? [];
+  const blockFor = (c: { left?: { kind?: string; ref?: string } }) =>
+    blocks && c.left?.kind === "ref" ? (blocks.find((b) => b.ref === c.left!.ref) ?? null) : block;
   if (conditions.length === 0) return "always";
-  if (conditions.length === 1) return edgeLabel(block, conditions[0]!);
+  if (conditions.length === 1) return edgeLabel(blockFor(conditions[0]!), conditions[0]!);
 
   if (when!.op === "and" && conditions.length === 2) {
     const low = conditions.find((c) => c.op === "gte");
@@ -365,6 +377,6 @@ export function caseLabel(
     }
   }
 
-  const joined = conditions.map((c) => edgeLabel(block, c)).join(when!.op === "and" ? " and " : " or ");
+  const joined = conditions.map((c) => edgeLabel(blockFor(c), c)).join(when!.op === "and" ? " and " : " or ");
   return joined.length > 34 ? `${joined.slice(0, 33)}…` : joined;
 }

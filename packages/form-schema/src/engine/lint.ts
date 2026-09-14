@@ -204,10 +204,11 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
     g.groups.forEach((sub, i) => checkGroup(sub, `${path}.groups[${i}]`, owner));
   };
 
-  const checkRule = (r: LogicRule, path: string) => {
+  const checkRule = (r: LogicRule, path: string, owner?: string) => {
     // A goto's routes belong to the question they hang off, which is where the
-    // author reads them and where the canvas can mark them.
-    if (r.when) checkGroup(r.when, `${path}.when`, r.action_kind === "goto" ? (r.from ?? undefined) : undefined);
+    // author reads them and where the canvas can mark them. An ending rule
+    // hangs off no question at all, so `owner` names the ending instead.
+    if (r.when) checkGroup(r.when, `${path}.when`, owner ?? (r.action_kind === "goto" ? (r.from ?? undefined) : undefined));
     if (r.action_kind === "goto") {
       targetExists(r.target, r.targetKind ?? "block", path);
       if (r.from && !blockRefs.has(r.from)) {
@@ -247,7 +248,31 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
   }
 
   doc.logic.forEach((r, i) => checkRule(r, `logic[${i}]`));
-  doc.endingRules.forEach((r, i) => checkRule(r, `endingRules[${i}]`));
+  doc.endingRules.forEach((r, i) => {
+    const path = `endingRules[${i}]`;
+    checkRule(r, path, r.action_kind === "goto" ? r.target : undefined);
+    /*
+     * An ending rule scoped to a question can never run.
+     *
+     * `applyLogicRules` skips a goto whose `from` does not match the question
+     * just answered, and ending resolution passes no question at all — so a
+     * `from` here is the difference between a rule that decides the outcome and
+     * one that sits in the document doing nothing. Easy to write by hand and
+     * impossible to see, since the rule looks complete either way.
+     */
+    if (r.action_kind === "goto" && r.from !== undefined) {
+      issues.push({
+        level: "warning",
+        code: "ending_rule_scoped",
+        message:
+          `This ending rule is tied to "${blockByRef.get(r.from)?.title || r.from}", but ending rules are ` +
+          `checked once at the end rather than after one question, so it can never run. Remove the question ` +
+          `it is tied to, or make it a route on that question instead.`,
+        path,
+        refs: [r.target],
+      });
+    }
+  });
 
   if (doc.endings.length === 0) {
     issues.push({ level: "error", code: "no_ending", message: "Form needs at least one ending" });

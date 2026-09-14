@@ -24,11 +24,21 @@ import { cn } from "@/lib/utils";
  * of them, or any of them — the two the engine's `ConditionGroup` already
  * supports, which is why nothing downstream had to change to store this.
  *
- * What it deliberately does NOT offer is a second question to test. Every
- * condition here reads the question the branch hangs off, because that is what
- * the canvas draws: one question, its routes, and where each one goes. A test
- * that read some other question would make the node a lie, and the place for
- * that rule is the question's own "only ask this if" instead.
+ * What it deliberately does NOT offer, on a branch, is a second question to
+ * test. Every condition on a branch reads the question that branch hangs off,
+ * because that is what the canvas draws: one question, its routes, and where
+ * each one goes. A test that read some other question would make the node a
+ * lie — and worse than a lie, a trap: `patchAt` rebuilds a row against the
+ * branch's own question, and `repairFlow` reads a rule's condition back as its
+ * `from`, so a cross-question test written into `logic` by hand is silently
+ * rewritten the first time anybody edits or reorders anything.
+ *
+ * `questions` is the exception, and it exists for the one place the rule is
+ * genuinely about an earlier answer: which ending a finished response gets.
+ * Those live in `doc.endingRules`, which the canvas does not route through a
+ * question at all and `repairFlow` never touches, so a per-row question picker
+ * is both honest and safe there. Pass it and each row chooses what it reads;
+ * leave it out and you get the branch behaviour above, unchanged.
  */
 
 /** The shape the rule stores, narrowed to what this editor writes. */
@@ -73,24 +83,40 @@ export function ConditionsEditor({
   onChange,
   /** The branch row is denser than the panel below it. */
   compact = false,
+  questions,
 }: {
   sourceBlock: Block | null;
   when: WhenGroup;
   onChange: (next: WhenGroup) => void;
   compact?: boolean;
+  /**
+   * Every question a row may read. Supplied only where the rule is not about
+   * one question's own answer — see the note at the top of this file.
+   */
+  questions?: Block[];
 }) {
-  const ref = sourceBlock?.ref ?? "";
-  const conditions = when.conditions.length > 0 ? when.conditions : [condition(ref, "is_not_empty")];
+  const baseRef = sourceBlock?.ref ?? questions?.[0]?.ref ?? "";
+  const conditions = when.conditions.length > 0 ? when.conditions : [condition(baseRef, "is_not_empty")];
   const many = conditions.length > 1;
 
+  /** What a row reads: its own choice when there is a picker, else the branch's question. */
+  const refOf = (c: Condition) =>
+    questions ? (c.left.kind === "ref" ? c.left.ref : baseRef) : baseRef;
+  const blockOf = (c: Condition) =>
+    questions ? (questions.find((q) => q.ref === refOf(c)) ?? null) : sourceBlock;
+
   const put = (next: Condition[]) => onChange({ ...when, conditions: next, groups: [] });
-  const patchAt = (index: number, patch: Partial<{ op: Op; value: unknown }>) =>
+  const patchAt = (index: number, patch: Partial<{ op: Op; value: unknown; ref: string }>) =>
     put(
       conditions.map((c, i) => {
         if (i !== index) return c;
         const op = (patch.op ?? c.op) as Op;
-        const value = "value" in patch ? patch.value : c.value;
-        return condition(ref, op, value);
+        // Pointing a row at a different question drops the old value with it:
+        // an option id from the question you just stopped reading is not an
+        // answer the new one can ever give.
+        const changedRef = patch.ref !== undefined && patch.ref !== refOf(c);
+        const value = changedRef ? undefined : "value" in patch ? patch.value : c.value;
+        return condition(patch.ref ?? refOf(c), op, value);
       }),
     );
 
@@ -147,7 +173,29 @@ export function ConditionsEditor({
               </span>
             )}
 
-            <div className="flex min-w-0 flex-1 gap-1.5">
+            <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+              {/*
+                Which question this reads, when the row is allowed to choose.
+
+                First, and on its own line at this width, because it is the
+                subject of the sentence the row spells out: *this answer* is
+                what the operator and the value are about. A branch row has no
+                picker and no ambiguity — the node it sits on is the subject.
+              */}
+              {questions && (
+                <Picker
+                  value={refOf(c)}
+                  onValueChange={(v) => patchAt(i, { ref: v })}
+                  className="min-w-0 basis-full"
+                  ariaLabel="Question to test"
+                >
+                  {questions.map((q, at) => (
+                    <SelectItem key={q.ref} value={q.ref}>
+                      {at + 1}. {q.title || q.ref}
+                    </SelectItem>
+                  ))}
+                </Picker>
+              )}
               <Picker
                 value={op}
                 onValueChange={(v) => patchAt(i, { op: v as Op })}
@@ -164,7 +212,7 @@ export function ConditionsEditor({
                 <div className="min-w-0 flex-1">
                   <ConditionValueInput
                     compact={compact}
-                    block={sourceBlock}
+                    block={blockOf(c)}
                     value={c.value}
                     onChange={(v) => patchAt(i, { value: v })}
                   />
@@ -190,7 +238,7 @@ export function ConditionsEditor({
 
       <button
         type="button"
-        onClick={() => put([...conditions, suggestNext(conditions.at(-1), ref)])}
+        onClick={() => put([...conditions, suggestNext(conditions.at(-1), refOf(conditions.at(-1) ?? ({ left: { kind: "ref", ref: baseRef } } as Condition)))])}
         className="text-muted-foreground hover:text-foreground flex items-center gap-1 pt-0.5 text-[11px] font-medium"
       >
         <Plus className="size-3" />

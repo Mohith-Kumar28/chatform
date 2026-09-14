@@ -1,7 +1,8 @@
 "use client";
 
 import { Flag, Plus, ShieldAlert, X } from "lucide-react";
-import type { FormDoc } from "@repo/form-schema";
+import type { Block, ConditionGroup, FormDoc, LogicRule } from "@repo/form-schema";
+import { ConditionsEditor, type WhenGroup } from "../condition-editor";
 import { Button } from "@/components/ui/button";
 import { InfoHint } from "@/components/ui/info-hint";
 import { Input } from "@/components/ui/input";
@@ -153,6 +154,8 @@ export function EndingInspector({
         </Field>
       )}
 
+      <SendThemHereWhen ending={ending} doc={doc} onChange={onChange} />
+
       {/*
         Per ending, because that is how authors describe it: accepted teams go
         to the WhatsApp group, everyone else back to the site. The form-level
@@ -206,5 +209,141 @@ export function EndingInspector({
         </Field>
       )}
     </div>
+  );
+}
+
+/**
+ * Which finished responses land on this ending.
+ *
+ * The one rule in a form that is genuinely about an answer given earlier, and
+ * until now the one with nowhere to live. A generated open mic form wanted
+ * "audience members get the audience ending" and had only branches to say it
+ * with — so it hung the test on the last question of the form, compared a
+ * long-text answer against a sentence nobody would ever type, and sent every
+ * attendee to "You're on the list to perform!". Nothing in the builder could
+ * have shown the author that, because a branch row cannot say which question it
+ * reads: it is always the question the branch hangs off.
+ *
+ * `doc.endingRules` is where the engine has always looked — `resolveEnding`
+ * runs them against the whole answer set once the flow falls off the end — and
+ * nothing had ever written one. They are safe in a way a hand-written branch is
+ * not: `repairFlow` only ever rewrites `doc.logic`, so a rule here survives
+ * adding, deleting, duplicating and reordering questions.
+ *
+ * Rules are read top to bottom and the first match wins, across every ending —
+ * which is why the order is shown and why an ending with no rules is described
+ * rather than left blank.
+ */
+function SendThemHereWhen({
+  ending,
+  doc,
+  onChange,
+}: {
+  ending: FormDoc["endings"][number];
+  doc: FormDoc;
+  onChange: (d: FormDoc) => void;
+}) {
+  const isGoto = (r: LogicRule): r is Extract<LogicRule, { action_kind: "goto" }> => r.action_kind === "goto";
+  const mine = doc.endingRules.filter((r) => isGoto(r) && r.target === ending.ref);
+  /** Every question that could be tested, in the order they are asked. */
+  const questions = doc.blocks.filter((b) => b.type !== "welcome" && b.type !== "statement") as Block[];
+
+  /** This ending's place in the run-off, counting rules for every ending. */
+  const orderOf = (id: string) => doc.endingRules.findIndex((r) => r.id === id) + 1;
+
+  const setRules = (next: FormDoc["endingRules"]) => onChange({ ...doc, endingRules: next });
+
+  const addRule = () =>
+    setRules([
+      ...doc.endingRules,
+      {
+        id: uid("rl"),
+        action_kind: "goto",
+        /*
+         * No `from`. `applyLogicRules` only fires an unscoped goto when it is
+         * resolving the ending, which is exactly when this should be read; a
+         * `from` would scope it to one question and it would never run.
+         */
+        when: {
+          op: "and",
+          conditions: [{ left: { kind: "ref", ref: questions[0]?.ref ?? "" }, op: "eq" }],
+          groups: [],
+        } as ConditionGroup,
+        target: ending.ref,
+        targetKind: "ending",
+      } as LogicRule,
+    ]);
+
+  const patchRule = (id: string, when: WhenGroup) =>
+    setRules(doc.endingRules.map((r) => (r.id === id ? { ...r, when: when as ConditionGroup } : r)));
+
+  const isDefault = doc.endings.find((e) => e.kind !== "screen_out")?.ref === ending.ref;
+
+  return (
+    <Field
+      label="Send people here when"
+      help={
+        <InfoHint label="About ending rules">
+          <p>
+            Checked once every question is answered, so a rule here can read any
+            answer in the form — not just the last one.
+          </p>
+          <p className="mt-2">
+            Rules across all endings are read in order and the first match wins.
+            {isDefault
+              ? " This ending is also the fallback: anyone matching no rule at all lands here."
+              : ""}
+          </p>
+        </InfoHint>
+      }
+    >
+      <div className="space-y-2">
+        {mine.length === 0 && (
+          <p className="text-muted-foreground text-xs">
+            {isDefault
+              ? "Everyone who matches no other ending's rule."
+              : "No rule yet, so nobody is sent here automatically. A branch can still point at it."}
+          </p>
+        )}
+
+        {mine.map((rule) => (
+          <div key={rule.id} className="bg-muted/40 space-y-2 rounded-xl p-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium tracking-wide uppercase">
+                <span className="bg-background text-muted-foreground tabular flex size-4 items-center justify-center rounded text-[9px] font-semibold">
+                  {orderOf(rule.id)}
+                </span>
+                If
+              </span>
+              <button
+                type="button"
+                onClick={() => setRules(doc.endingRules.filter((r) => r.id !== rule.id))}
+                aria-label="Remove this rule"
+                className="text-muted-foreground hover:text-destructive shrink-0"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+            <ConditionsEditor
+              compact
+              sourceBlock={null}
+              questions={questions}
+              when={{ op: rule.when?.op ?? "and", conditions: rule.when?.conditions ?? [], groups: [] }}
+              onChange={(next) => patchRule(rule.id, next)}
+            />
+          </div>
+        ))}
+
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground hover:text-foreground -ml-2 justify-start"
+          onClick={addRule}
+          disabled={questions.length === 0}
+        >
+          <Plus className="size-3.5" /> Add rule
+        </Button>
+      </div>
+    </Field>
   );
 }

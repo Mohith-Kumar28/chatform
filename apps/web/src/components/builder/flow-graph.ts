@@ -281,12 +281,36 @@ export function deriveGraph(
     }
   });
 
+  /**
+   * The ending rules, said on the ending they send people to.
+   *
+   * `resolveEnding` has always read `doc.endingRules`, and the canvas has never
+   * drawn them — so a rule deciding which ending a finished response gets was
+   * invisible, which is most of why the one form that needed such a rule had it
+   * written as a branch on its last question instead, against an answer nobody
+   * could give. Not a wire: these do not come from any one question, they are
+   * read once at the end against every answer. A line on the node is the honest
+   * shape, and it is the same line the inspector edits.
+   */
+  const defaultEndingRef = doc.endings.find((e) => e.kind !== "screen_out")?.ref ?? doc.endings[0]?.ref;
   doc.endings.forEach((e) => {
+    const rules = doc.endingRules.filter(
+      (r): r is GotoRule => r.action_kind === "goto" && r.target === e.ref,
+    );
     nodes.push({
       id: e.ref,
       type: "ending",
       position: doc.layout[e.ref] ?? { x: 0, y: 0 },
-      data: { title: e.title, kind: e.kind, problem: problems.get(e.ref) },
+      data: {
+        title: e.title,
+        kind: e.kind,
+        problem: problems.get(e.ref),
+        conditions: rules.map((r) => caseLabel(null, r.when, doc.blocks)),
+        // Said only when a rule somewhere could send people elsewhere, because
+        // on a form with one outcome "everyone else" is every respondent there
+        // is, which is not worth a line.
+        fallback: e.ref === defaultEndingRef && doc.endingRules.length > 0,
+      },
       deletable: doc.endings.length > 1,
     });
   });

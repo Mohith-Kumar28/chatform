@@ -926,6 +926,12 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
                 // field and clicking away, say — silently destroys a question and
                 // everything wired to it.
                 deleteKeyCode={["Delete"]}
+                // Two-finger trackpad scroll pans the canvas, and pinch (which
+                // macOS reports as ctrl+wheel) zooms — the way every other canvas
+                // tool behaves. Without this the library's default turns a scroll
+                // into a zoom, so the only way to move around is to grab the pane
+                // and drag it. Dragging still works; Cmd/Ctrl+scroll still zooms.
+                panOnScroll
                 minZoom={0.25}
                 // Framing is done by `frame()`, which anchors the left edge instead
                 // of centring — see the comment there.
@@ -1139,7 +1145,15 @@ function shortProblem(message: string): string {
 }
 
 function EndingNode({ id, data, selected, deletable }: NodeProps) {
-  const { title, kind, problem } = data as { title: string; kind?: FormDoc["endings"][number]["kind"]; problem?: NodeProblem };
+  const { title, kind, problem, conditions, fallback } = data as {
+    title: string;
+    kind?: FormDoc["endings"][number]["kind"];
+    problem?: NodeProblem;
+    /** The ending rules that send people here — see `deriveGraph`. */
+    conditions?: string[];
+    /** True on the ending that catches everyone no rule claimed. */
+    fallback?: boolean;
+  };
   /*
    * A refusal has to be findable at a glance.
    *
@@ -1180,6 +1194,23 @@ function EndingNode({ id, data, selected, deletable }: NodeProps) {
         <p className="mt-0.5 text-[10px] font-medium tracking-wide uppercase opacity-70">
           {screenOut ? "Can't submit" : "Completed"}
         </p>
+        {/*
+            Why anybody lands here, when something decided it.
+
+            No wire says this: an ending rule is not a route out of a question,
+            it is a test run once against the whole answer set. So it is read on
+            the node it sends people to, which is also where it is edited.
+        */}
+        {(conditions?.length || fallback) && (
+          <div className="mt-1.5 space-y-0.5 border-t border-current/15 pt-1.5">
+            {conditions?.map((c, i) => (
+              <p key={i} className="truncate text-[10px] opacity-85" title={c}>
+                if {c}
+              </p>
+            ))}
+            {fallback && <p className="text-[10px] italic opacity-60">everyone else</p>}
+          </div>
+        )}
         {problem && <ProblemNote problem={problem} />}
       </div>
     </NodeMenu>

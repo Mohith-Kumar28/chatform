@@ -188,3 +188,56 @@ describe("a form with none of this wrong", () => {
     }
   });
 });
+
+/**
+ * Ending rules — the one rule in a form that is about an answer given earlier.
+ *
+ * They decide which ending a finished response gets, are evaluated once
+ * against the whole answer set, and had never been written by anything. The
+ * shapes below are the two ways to get one wrong.
+ */
+describe("a rule that picks the ending", () => {
+  const endingRule = (from: string | undefined, ref: string, value: string) => ({
+    id: "rl_dr_end001",
+    action_kind: "goto",
+    ...(from ? { from } : {}),
+    when: { op: "and", conditions: [{ left: { kind: "ref", ref }, op: "eq", value }], groups: [] },
+    target: "end_audience",
+    targetKind: "ending",
+  });
+
+  const withEndingRules = (rules: unknown[]) =>
+    FormDoc.parse({
+      title: "t",
+      blocks: [choice, notes],
+      endings: [
+        { id: "end_dr_ok001", ref: "end_thanks", title: "Thanks", kind: "success" },
+        { id: "end_dr_out01", ref: "end_audience", title: "See you in the audience", kind: "success" },
+      ],
+      logic: [],
+      endingRules: rules,
+    });
+
+  it("is quiet when it reads a real option on a real question", () => {
+    const doc = withEndingRules([endingRule(undefined, "q_role", "opt_watch")]);
+    expect(lintFormDoc(doc)).toEqual([]);
+  });
+
+  it("is flagged when it is tied to a question, because then it never runs", () => {
+    // `applyLogicRules` skips a goto whose `from` does not match the question
+    // just answered, and ending resolution passes none.
+    const doc = withEndingRules([endingRule("q_role", "q_role", "opt_watch")]);
+    const issue = lintFormDoc(doc).find((i) => i.code === "ending_rule_scoped");
+    expect(issue?.level).toBe("warning");
+    expect(issue?.refs).toEqual(["end_audience"]);
+  });
+
+  it("gets the same dead-condition checks as any other rule", () => {
+    const doc = withEndingRules([endingRule(undefined, "q_role", "Just coming to watch and support")]);
+    const issue = lintFormDoc(doc).find((i) => i.code === "value_not_an_option");
+    expect(issue?.message).toContain("opt_watch");
+    // Reported on the ending, which is the only node that can show it — the
+    // rule hangs off no question.
+    expect(issue?.refs).toEqual(["end_audience"]);
+  });
+});
