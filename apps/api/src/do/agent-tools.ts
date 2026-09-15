@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { tool, type ToolSet } from "ai";
-import { resolveNext, validateAnswer, type Block, type EvalState, type FormDoc } from "@repo/form-schema";
+import { answerability, resolveNext, validateAnswer, type Block, type EvalState, type FormDoc } from "@repo/form-schema";
 import type { KnowledgeHit } from "../lib/knowledge/index.js";
 
 /**
@@ -18,7 +18,13 @@ import type { KnowledgeHit } from "../lib/knowledge/index.js";
  */
 
 /** Where the flow goes after the current question is settled. */
-export type NextStep = { kind: "block"; ref: string; title: string } | { kind: "ending" };
+export type NextStep = { kind: "block"; ref: string; title: string } | { kind: "ending"; screenOut?: true };
+
+/** A resolved step as the agent is told about it. */
+function stepOf(next: ReturnType<typeof resolveNext>): NextStep {
+  if (next.kind === "block") return { kind: "block", ref: next.block.ref, title: next.block.title };
+  return next.ending.kind === "screen_out" ? { kind: "ending", screenOut: true } : { kind: "ending" };
+}
 
 /**
  * Where the flow will go if `value` is recorded for `block` — resolved mid-turn,
@@ -42,12 +48,20 @@ export type NextStep = { kind: "block"; ref: string; title: string } | { kind: "
  * Called with no value for a skip. A value the FSM would refuse resolves to
  * null: the turn ends in a retry on this same question, and there is no next
  * one to promise.
+ *
+ * `resume` is for a question that was reopened to be changed. `advanceTo` does
+ * not go to the question after it then, but back to where the respondent was
+ * (`resumeAfterChange`), and the agent has to be told the same. Without it, a
+ * typed answer to a reopened question got a message asking the question listed
+ * after that one, above the controls for the question they had actually
+ * returned to.
  */
 export function nextStepAfter(
   doc: FormDoc,
   block: Block,
   state: EvalState,
   value?: unknown,
+  opts: { resume?: boolean } = {},
 ): NextStep | null {
   const probe: EvalState = {
     answers: { ...state.answers },
@@ -61,13 +75,104 @@ export function nextStepAfter(
     // the branch reads no answer, because there is none.
     if (validated.value !== undefined) probe.answers[block.ref] = validated.value;
   }
-  const next = resolveNext(doc, block.ref, probe);
-  return next.kind === "block" ? { kind: "block", ref: next.block.ref, title: next.block.title } : { kind: "ending" };
+  return stepOf(opts.resume ? resumeAfterChange(doc, probe, block.ref) : resolveNext(doc, block.ref, probe));
+}
+
+/**
+ * Where the conversation resumes once an earlier answer has been changed.
+ *
+ * Walks forward from the changed question the way the flow itself does,
+ * honouring branching at every hop, and does not stop at questions that
+ * already have an answer. Landing back where they were is the common case; a
+ * change that opens a path they have not been down stops at the first
+ * unanswered question on it.
+ *
+ * Mutates `state.variables` the way `resolveNext` always has — pass a copy when
+ * probing.
+ */
+export function resumeAfterChange(
+  doc: FormDoc,
+  state: EvalState,
+  fromRef: string,
+): ReturnType<typeof resolveNext> {
+  let cursor = resolveNext(doc, fromRef, state);
+  for (let hops = 0; cursor.kind === "block" && hops <= doc.blocks.length; hops += 1) {
+    const settled = state.answers[cursor.block.ref] !== undefined || PASSIVE_TYPES.has(cursor.block.type);
+    if (!settled) return cursor;
+    cursor = resolveNext(doc, cursor.block.ref, state);
+  }
+  return cursor;
+}
+
+const PASSIVE_TYPES = new Set(["welcome", "statement"]);
+
+export type Revision =
+  | { ok: true; block: Block; next: NextStep | null }
+  /** `reopenable`: only the value was wrong — the question itself may be reopened. */
+  | { ok: false; reason: string; reopenable?: boolean };
+
+/**
+ * Whether an earlier answer may be changed from inside the conversation, and
+ * where the flow goes if it is.
+ *
+ * The same fence the pencil sits behind — `answerability`, so only a question
+ * already on the walked path — plus the one thing a typed request adds: the new
+ * value, when there is one, is validated here, so a model that heard "change my
+ * age to two hundred" is told no mid-turn rather than promising a change the
+ * FSM will refuse.
+ *
+ * `next` is null for a reopen with no value: the question itself is what gets
+ * asked next.
+ */
+export function revisionOf(
+  doc: FormDoc,
+  state: EvalState,
+  currentRef: string | null,
+  ref: string,
+  value?: unknown,
+): Revision {
+  const block = doc.blocks.find((b) => b.ref === ref);
+  if (!block || PASSIVE_TYPES.has(block.type)) {
+    return { ok: false, reason: `there is no question with ref=${ref}.` };
+  }
+  if (ref === currentRef) {
+    return { ok: false, reason: `ref=${ref} is the question you are asking now — use record_answer for it.` };
+  }
+  if (!answerability(doc, state.answers, ref, state.hidden).ok) {
+    return {
+      ok: false,
+      reason:
+        `they have not been asked "${block.title}" yet, so there is nothing to change and NOTHING was saved. ` +
+        `Never say you noted, saved or updated it. Tell them it comes up later and they can give it then, and carry on with the current question.`,
+    };
+  }
+  if (value === undefined) return { ok: true, block, next: null };
+
+  const validated = validateAnswer(block, value);
+  if (!validated.ok) {
+    return {
+      ok: false,
+      reopenable: true,
+      reason: `that value does not fit "${block.title}"${validated.hint ? `: ${validated.hint}` : ""}.`,
+    };
+  }
+  const probe: EvalState = {
+    answers: { ...state.answers },
+    variables: { ...state.variables },
+    hidden: state.hidden,
+  };
+  if (validated.value !== undefined) probe.answers[ref] = validated.value;
+  return { ok: true, block, next: stepOf(resumeAfterChange(doc, probe, ref)) };
 }
 
 export interface ToolContext {
   doc: FormDoc;
-  currentBlock: Block;
+  /**
+   * The question on screen. Null on the review step, where every answer is in
+   * and the respondent can still ask to change one: only the tools that do not
+   * act on a current question are offered then.
+   */
+  currentBlock: Block | null;
   /**
    * Where the flow will go once `value` is recorded for the current question —
    * or once it is skipped, when called with no value. See `nextStepAfter`.
@@ -77,6 +182,12 @@ export interface ToolContext {
    * had not been given.
    */
   nextAfter: (value?: unknown) => NextStep | null;
+  /**
+   * Whether an earlier answer may be changed, and where the flow goes after.
+   * See `revisionOf`. Absent means the respondent cannot change answers by
+   * asking, and `change_earlier_answer` is not offered.
+   */
+  revise?: (ref: string, value?: unknown) => Revision;
   /**
    * True when the form asks its questions word for word.
    *
@@ -117,6 +228,8 @@ export interface ToolOutcome {
   /** Set when the handler wants the DO to act after the turn completes. */
   effect?:
     | { kind: "record"; ref: string; value: unknown }
+    /** An earlier answer: replaced with `value`, or reopened to be asked again when there is none. */
+    | { kind: "revise"; ref: string; value?: unknown }
     | { kind: "ask"; ref: string }
     | { kind: "clarify"; reason: string }
     | { kind: "skip" }
@@ -149,6 +262,17 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
     if (ctx.verbatimQuestions) return `${settled} Do NOT ask the next question — it follows immediately, word for word.`;
     if (!next) return `${settled} Move on to the next question.`;
     if (next.kind === "ending") {
+      /*
+       * With a review step, nothing has been sent yet: their answers come up
+       * for a last look and a send button. "You're all set — best of luck!"
+       * told people it was done while the form sat waiting for that button.
+       */
+      if (!next.screenOut && ctx.doc.settings.onComplete.requireSubmit) {
+        return (
+          `${settled} That was the last question for them — do NOT ask another. Nothing has been sent yet: ` +
+          `their answers appear right under your message to check and send. Say that in one short line — never that they are done, registered or all set.`
+        );
+      }
       return `${settled} That was the last question for them — do NOT ask another. Close in one short line; the form takes it from here.`;
     }
     return (
@@ -227,6 +351,108 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
       }
     : {};
 
+  /**
+   * Changing an answer by asking for it.
+   *
+   * The pencil beside a bubble has always been able to reopen an earlier
+   * question, but the agent's verbs all named the question on screen — so a
+   * respondent who typed "I want to change my problem statement" had nothing
+   * the agent could do about it except re-ask the current question, and the
+   * conversation stalled on a request it had no way to honour.
+   *
+   * This is the same edit, reached in words: the DO applies it through the path
+   * the pencil uses, so the cursor, the answer controls and the resume-where-
+   * they-were walk all behave identically. One per turn — two reopens in one
+   * message cannot both be the question on screen.
+   */
+  let revised = false;
+  let reopened = false;
+  const revise = ctx.revise;
+  const reviseTools: ToolSet = revise
+    ? {
+        change_earlier_answer: tool({
+          description:
+            "Change an answer the respondent already gave to an EARLIER question, when they ask to correct or update it. " +
+            "Pass `value` only when their message already contains the new answer; leave it out to reopen the question so they can answer it again. " +
+            "Never use this for the question you are asking now — that is record_answer.",
+          inputSchema: z.object({
+            ref: z.string().describe("The ref of the earlier question they want to change."),
+            value: z
+              .union([z.string(), z.number(), z.boolean(), z.array(z.string())])
+              .optional()
+              .describe("The new answer, in the shape that question expects, if they already gave it. Use option ids for choices."),
+          }),
+          execute: async ({ ref, value }) => {
+            if (revised) {
+              return record({
+                name: "change_earlier_answer",
+                ok: false,
+                message: "Rejected: one change per message. Handle this one first, then the next.",
+              });
+            }
+            let revision = revise(ref, value);
+            /*
+             * A new value that does not fit still means "I want to change this".
+             * Refusing outright left the old question's controls on screen while
+             * the agent asked for the new one — an email box under "how many in
+             * your team?" — so the question is reopened instead, and the model
+             * says what is allowed.
+             */
+            let refusedValue: string | null = null;
+            if (!revision.ok && revision.reopenable) {
+              refusedValue = revision.reason;
+              revision = revise(ref);
+              value = undefined;
+            }
+            if (!revision.ok) {
+              return record({ name: "change_earlier_answer", ok: false, message: `Rejected: ${revision.reason}` });
+            }
+            revised = true;
+            const title = revision.block.title;
+            if (refusedValue) {
+              reopened = true;
+              return record({
+                name: "change_earlier_answer",
+                ok: true,
+                effect: { kind: "revise", ref },
+                message: ctx.verbatimQuestions
+                  ? `Not changed: ${refusedValue} Their old answer stands, and the question is reopened. Say plainly what is allowed, in one sentence. Do NOT ask the question — it follows immediately, word for word.`
+                  : `Not changed: ${refusedValue} Their old answer stands, and "${title}" is reopened. In this same message, say plainly what is allowed and ask for it again — nothing else.`,
+              });
+            }
+            if (value !== undefined) {
+              return record({
+                name: "change_earlier_answer",
+                ok: true,
+                effect: { kind: "revise", ref, value },
+                message: route(`Changed their answer to "${title}". Confirm the change in a few words.`, revision.next),
+              });
+            }
+            reopened = true;
+            return record({
+              name: "change_earlier_answer",
+              ok: true,
+              effect: { kind: "revise", ref },
+              message: ctx.verbatimQuestions
+                ? `Reopened "${title}". Say in a few words that they can change it. Do NOT ask the question — it follows immediately, word for word.`
+                : `Reopened "${title}" (ref=${ref}); their current answer stays until they give a new one. ` +
+                  `In this same message, ask them for their new answer to THAT question in one short sentence, and ask nothing else — ` +
+                  `its answer controls replace the current ones under your message. ${
+                    ctx.currentBlock
+                      ? `Do not ask "${ctx.currentBlock.title}" now; the form comes back to it afterwards.`
+                      : "Once they answer, their answers are shown for review again."
+                  }`,
+            });
+          },
+        }),
+      }
+    : {};
+
+  // The review step: nothing is being asked, so nothing can be answered,
+  // skipped, clarified or uploaded — only looked up or changed.
+  const currentBlock = ctx.currentBlock;
+  if (!currentBlock) return { ...knowledgeTools, ...reviseTools };
+
   return {
     ...knowledgeTools,
     record_answer: tool({
@@ -239,11 +465,20 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
           .describe("The answer, in the shape the question expects. Use option ids for choices."),
       }),
       execute: async ({ ref, value }) => {
-        if (ref !== ctx.currentBlock.ref) {
+        if (ref !== currentBlock.ref) {
           return record({
             name: "record_answer",
             ok: false,
-            message: `Rejected: you may only record an answer for ref=${ctx.currentBlock.ref}, not ${ref}.`,
+            message: `Rejected: you may only record an answer for ref=${currentBlock.ref}, not ${ref}.`,
+          });
+        }
+        // The reopened question is the one on screen now; an answer to the
+        // old one would move the cursor off it before they could reply.
+        if (reopened) {
+          return record({
+            name: "record_answer",
+            ok: false,
+            message: "Rejected: you just reopened an earlier question. Ask for that answer and nothing else this turn.",
           });
         }
         return record({
@@ -254,6 +489,8 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
         });
       },
     }),
+
+    ...reviseTools,
 
     clarify: tool({
       description:
@@ -288,7 +525,7 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
             message: "Rejected: this form does not allow skipping. Ask again, more gently.",
           });
         }
-        if (ctx.currentBlock.required) {
+        if (currentBlock.required) {
           return record({
             name: "skip_current",
             ok: false,
@@ -308,7 +545,7 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
       description: "Show the respondent a file picker for the current question.",
       inputSchema: z.object({ ref: z.string() }),
       execute: async ({ ref }) => {
-        if (ref !== ctx.currentBlock.ref || ctx.currentBlock.type !== "file_upload") {
+        if (ref !== currentBlock.ref || currentBlock.type !== "file_upload") {
           return record({
             name: "request_upload",
             ok: false,

@@ -36,13 +36,25 @@ import { cn } from "@/lib/utils";
  */
 export function UpgradeDialog() {
   const gate = usePaywall((s) => s.gate);
+  /*
+   * Nothing is read until a denial opens it, the same split as `PlansDialog`.
+   *
+   * This is mounted by the root provider, so it is on every page — the public
+   * form a respondent opens included. Reading entitlements up here sent a
+   * signed-out `/api/billing/entitlements` from every one of those pages: a 401
+   * and a console error per respondent, for a dialog that was never going to
+   * open for someone with no account.
+   */
+  if (!gate) return null;
+  return <UpgradeDialogBody gate={gate} />;
+}
+
+function UpgradeDialogBody({ gate }: { gate: NonNullable<ReturnType<typeof usePaywall.getState>["gate"]> }) {
   const close = usePaywall((s) => s.close);
   const [cycle, setCycle] = useState<"monthly" | "yearly">("yearly");
   const openPlans = usePlansDialog((s) => s.openPlans);
   const ent = useEntitlements();
   const { busy, error, startCheckout, openPortal } = useBillingActions();
-
-  if (!gate) return null;
 
   const targetId: PlanId = gate.requiredPlan ?? "pro";
   const plan = PLANS[targetId];

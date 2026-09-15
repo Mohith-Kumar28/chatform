@@ -158,6 +158,29 @@ describe("changing one answer mid-conversation", () => {
     expect(back.awaitingSubmit).toBe(true);
   });
 
+  it("accepts a typed message on the review step and stays there", async () => {
+    // It used to be refused as `no_question`: the review had no box to type
+    // in, so nothing expected a message there. Now it has one.
+    const sessionId = await open();
+    for (const [ref, value] of [
+      ["q_platform", "opt_ios"],
+      ["q_role", "PM"],
+      ["q_team", "3"],
+      ["q_email", "typed@example.com"],
+    ] as const) {
+      await answer(sessionId, ref, value);
+    }
+    const res = await api(`/v1/sessions/${sessionId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ type: "text", text: "can I change my role?" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as TurnBody;
+    expect(body.question).toBeNull();
+    expect(body.awaitingSubmit).toBe(true);
+    expect(body.complete).toBe(false);
+  });
+
   it("skipping an edited question resumes too, rather than re-walking the form", async () => {
     const sessionId = await open();
     await answer(sessionId, "q_platform", "opt_ios");

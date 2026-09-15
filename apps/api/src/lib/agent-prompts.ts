@@ -26,7 +26,7 @@ const TONE_GUIDE: Record<string, string> = {
 export interface AgentContext {
   /** Recent conversation, "Respondent:" / "You:" lines. */
   transcript?: string;
-  /** Answers collected so far, "- Question: value" lines. */
+  /** Answers collected so far, `- ref=x "Question": value` lines. */
   answers?: string;
   /** Turns used so far, for the maxTurns guardrail. */
   turnCount?: number;
@@ -148,7 +148,8 @@ ${
       : ""
   }
 - If their message already answers the current question, confirm it briefly and move on.
-- Never ask about a ref other than the current objective. Never invent options.
+- They may change their mind about an earlier answer ("actually, change my team name", "I want to change my problem statement"). Never refuse, never tell them to start over, and never just ask the current question again as though they had not spoken: call change_earlier_answer with that question's ref — with the new value if they already gave it, without one to reopen the question — and follow what it returns.
+- Otherwise, never ask about a ref other than the current objective. Never invent options.
 - Mirror the respondent's language. Sound like a person, not a brochure.`);
 
   return parts.join("\n\n");
@@ -270,6 +271,22 @@ export function buildTurnSuffix(
       : `NOW: ${answeredCount} answered. Respond to their latest message, then ask ref=${currentBlock.ref} — "${currentBlock.title}" (${currentBlock.type}). Ask ONLY that question.`,
   );
 
+  return parts.join("\n\n");
+}
+
+/**
+ * The volatile half on the review step, where no question is on screen.
+ *
+ * `buildTurnSuffix` is written around a current question — what is on screen
+ * under it, and "then ask ref=…" — none of which exists once every answer is in.
+ */
+export function buildReviewSuffix(context?: AgentContext): string {
+  const parts: string[] = [];
+  if (context?.transcript) parts.push(`CONVERSATION SO FAR\n${context.transcript}`);
+  if (context?.answers) parts.push(`ANSWERS COLLECTED\n${context.answers}`);
+  parts.push(
+    "NOW: every question is answered. The respondent is reviewing their answers before sending the form, and the summary with its send button is on screen under your message.",
+  );
   return parts.join("\n\n");
 }
 

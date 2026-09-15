@@ -13,6 +13,19 @@ import { FileCard } from "./file-card";
  */
 const AUTHOR_ELEMENTS = ["p", "br", "strong", "em", "a", "ul", "li", "img"];
 
+/**
+ * Markdown from a model is untrusted input: no raw HTML, no scripts, and — via
+ * `RichText trusted={false}` — no images except the form's own uploads.
+ *
+ * Shared by the live chat and the results transcript, so an agent message reads
+ * the same in both.
+ */
+export const SAFE_ELEMENTS = [
+  "p", "br", "strong", "em", "del", "code", "pre", "blockquote",
+  "ul", "ol", "li", "a", "h1", "h2", "h3", "h4", "hr",
+  "table", "thead", "tbody", "tr", "th", "td",
+];
+
 const ASSET_PREFIX = `${API_ORIGIN}/p/assets/`;
 
 /** The href a recall chip is smuggled through Markdown as; see `withRecallChips`. */

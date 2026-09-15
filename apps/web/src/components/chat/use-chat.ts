@@ -2,6 +2,7 @@
 
 import { emitEmbedEvent } from "./embed-bridge";
 import { stuckTurnStep } from "./stuck-turn";
+import { rememberValue } from "./respondent-profile";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PublicBlock } from "@repo/form-schema";
 import { getRespondentSignal } from "@/lib/respondent-signal";
@@ -348,8 +349,11 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
   const [question, setQuestion] = useState<QuestionState | null>(null);
   /** The question on screen, for callbacks that must stay stable across renders. */
   const currentQuestionRef = useRef<string | null>(null);
+  /** The same question's block, for the one handler that needs more than its ref. */
+  const currentBlockRef = useRef<PublicBlock | null>(null);
   useEffect(() => {
     currentQuestionRef.current = question?.block?.ref ?? null;
+    currentBlockRef.current = question?.block ?? null;
   }, [question]);
   const [ending, setEnding] = useState<EndingState | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
@@ -677,6 +681,21 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
                 return r === -1 ? -1 : prev.length - 1 - r;
               })();
           if (idx === -1) return prev;
+          /*
+           * Remembered for next time only now that it counts as the answer.
+           *
+           * The composer used to store whatever was typed into a name or email
+           * question the moment it was sent. But a message sent while a question
+           * is on screen is not always an answer to it: "hmm I made a mistake
+           * earlier, can I fix it?", typed while "Team Leader's Full Name" was
+           * showing, was saved as a name and offered back as one. Only the
+           * question on screen counts. An earlier answer changed from this
+           * message is a different question, and the sentence was not that value.
+           * Idempotent, so React calling this updater twice does no harm.
+           */
+          const block = currentBlockRef.current;
+          const sent = prev[idx]!;
+          if (block?.ref === ref && sent.role === "user") rememberValue(block.identityField, sent.text);
           const next = [...prev];
           next[idx] = { ...next[idx]!, answeredRef: ref };
           return next;

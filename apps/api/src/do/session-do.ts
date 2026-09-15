@@ -51,8 +51,9 @@ import {
   buildStablePrefix,
   buildTurnSuffix,
   buildRetryObjective,
+  buildReviewSuffix,
 } from "../lib/agent-prompts.js";
-import { buildAgentTools, nextStepAfter, type ToolOutcome } from "./agent-tools.js";
+import { buildAgentTools, nextStepAfter, resumeAfterChange, revisionOf, type ToolOutcome } from "./agent-tools.js";
 import { knowledgeStore, knowledgeAvailable } from "../lib/knowledge/index.js";
 import { getEntitlements } from "../lib/entitlements.js";
 import { clampForRuntime } from "../lib/doc-entitlements.js";
@@ -470,6 +471,8 @@ export class SessionDO extends DurableObject<Bindings> {
   private pendingUserTextPersisted = false;
   /** The transcript row an in-flight answer belongs to, so `answer_recorded` can name it. */
   private pendingUserMessageId: string | null = null;
+  /** The respondent's typed message for the turn in flight, kept after `record` consumes the one above. */
+  private turnUserMessageId: string | null = null;
 
   // ────────────────────────── lifecycle ──────────────────────────
 
@@ -1681,10 +1684,15 @@ export class SessionDO extends DurableObject<Bindings> {
    * Returns false when AI is unavailable or fails, and the caller falls back
    * to deterministic template phrasing.
    */
-  private async aiStreamMessage(objective: string): Promise<boolean> {
-    if (!this.aiEnabled() || !this.doc || !this.meta || !this.meta.currentRef) return false;
-    const block = this.doc.blocks.find((b) => b.ref === this.meta!.currentRef);
-    if (!block) return false;
+  private async aiStreamMessage(objective: string, opts: { review?: boolean } = {}): Promise<boolean> {
+    if (!this.aiEnabled() || !this.doc || !this.meta) return false;
+    /*
+     * The review step has no question on screen. It gets a turn anyway — the
+     * respondent can still type there, to change an answer or to ask something
+     * — with only the tools that need no current question. See `handleReviewText`.
+     */
+    const block = opts.review ? null : this.doc.blocks.find((b) => b.ref === this.meta!.currentRef);
+    if (!opts.review && !block) return false;
 
     const started = Date.now();
     const { model, id: modelId } = interviewModel(this.env, this.doc.settings.agent.model);
@@ -1715,10 +1723,14 @@ export class SessionDO extends DurableObject<Bindings> {
       const tools = buildAgentTools(
         {
           doc: this.doc,
-          currentBlock: block,
-          nextAfter: (value?: unknown) => nextStepAfter(this.doc!, block, this.state, value),
+          currentBlock: block ?? null,
+          nextAfter: (value?: unknown) =>
+            block
+              ? nextStepAfter(this.doc!, block, this.state, value, { resume: this.editingRef === block.ref })
+              : null,
+          revise: (ref: string, value?: unknown) => revisionOf(this.doc!, this.state, block?.ref ?? null, ref, value),
           verbatimQuestions: this.doc.settings.agent.rephraseQuestions === false,
-          clarifications: this.invalidCounts.get(block.ref) ?? 0,
+          clarifications: block ? (this.invalidCounts.get(block.ref) ?? 0) : 0,
           unansweredRequired: this.unansweredRequired().map((b) => ({ ref: b.ref, title: b.title })),
           hasKnowledge,
           searchKnowledge: hasKnowledge
@@ -1750,7 +1762,11 @@ export class SessionDO extends DurableObject<Bindings> {
          * of the document for this to hold — see its own note.
          */
         system: buildStablePrefix(this.doc, { hasKnowledge }),
-        prompt: `${buildTurnSuffix(this.doc, block, answered, { ...context, turnCount: this.turnCount })}\n\n${objective}`,
+        prompt: `${
+          block
+            ? buildTurnSuffix(this.doc, block, answered, { ...context, turnCount: this.turnCount })
+            : buildReviewSuffix(context)
+        }\n\n${objective}`,
         tools,
         // A tool call ends a step. Without this the model looks something up
         // (or records an answer) and the turn ends having said nothing, so the
@@ -1936,7 +1952,16 @@ export class SessionDO extends DurableObject<Bindings> {
    * deterministic.
    */
   private async applyPendingEffects(): Promise<void> {
-    const effects = this.pendingEffects;
+    /*
+     * A change to an earlier answer goes last. It moves the cursor back and
+     * leaves an edit bookmark; anything applied after it that answers or skips
+     * the question the turn started on would walk the cursor off the reopened
+     * one and drop the bookmark with it.
+     */
+    const effects = [
+      ...this.pendingEffects.filter((e) => e.kind !== "revise"),
+      ...this.pendingEffects.filter((e) => e.kind === "revise"),
+    ];
     this.pendingEffects = [];
     if (!this.doc || !this.meta) return;
 
@@ -1946,6 +1971,40 @@ export class SessionDO extends DurableObject<Bindings> {
           const block = this.doc.blocks.find((b) => b.ref === effect.ref);
           // Guarded again here: the tool checked the ref, this checks the value.
           if (block) await this.record(block, effect.value);
+          break;
+        }
+        /*
+         * The respondent asked, in words, to change an earlier answer — the
+         * pencil's edit, reached through the agent. Re-checked against the
+         * state as it is now: an effect applied before this one may have moved
+         * it since the tool said yes.
+         */
+        case "revise": {
+          if (this.meta.status !== "active") break;
+          const check = revisionOf(this.doc, this.state, this.meta.currentRef, effect.ref, effect.value);
+          if (!check.ok) break;
+          this.reopenQuestion(check.block);
+          await this.persistMeta();
+          if (effect.value === undefined) {
+            // The agent has already asked for the new answer — unless the form
+            // asks word for word, in which case the FSM does. Then arm its controls.
+            if (this.doc.settings.agent.rephraseQuestions === false) {
+              await this.emitMessage(questionText(check.block));
+            }
+            await this.emitQuestion();
+          } else {
+            /*
+             * Their message already says it. Without this `record` echoes the
+             * value as a bubble of its own whenever an earlier effect in the same
+             * turn has used up the message — "Byte Force" appearing under the
+             * agent's next question, as though they had sent it again.
+             */
+            if (this.turnUserMessageId) {
+              this.pendingUserTextPersisted = true;
+              this.pendingUserMessageId = this.turnUserMessageId;
+            }
+            await this.record(check.block, effect.value);
+          }
           break;
         }
         case "skip": {
@@ -2049,7 +2108,8 @@ export class SessionDO extends DurableObject<Bindings> {
     const answers = Object.entries(this.state.answers)
       .map(([ref, v]) => {
         const block = this.doc?.blocks.find((b) => b.ref === ref);
-        return `- ${block?.title ?? ref}: ${typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}`;
+        // The ref goes with the title: it is what `change_earlier_answer` takes.
+        return `- ref=${ref} "${block?.title ?? ref}": ${typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}`;
       })
       .join("\n");
     return { transcript, answers };
@@ -2314,10 +2374,13 @@ export class SessionDO extends DurableObject<Bindings> {
       await this.emit("user_message", { messageId: msgId, text: input.text });
       this.pendingUserTextPersisted = true;
       this.pendingUserMessageId = msgId;
+      this.turnUserMessageId = msgId;
+      if (this.pendingEndingRef !== null && this.meta.currentRef === null) return this.handleReviewText(input.text);
       return this.handleFreeText(input.text);
     }
     this.pendingUserTextPersisted = false;
     this.pendingUserMessageId = null;
+    this.turnUserMessageId = null;
     return this.handleStructured(input.ref, input.value);
   }
 
@@ -2379,6 +2442,8 @@ export class SessionDO extends DurableObject<Bindings> {
           `Their message may contain an answer, a question of their own, or both — handle everything in it.\n` +
           `1. If any part of it answers "${block.title}", call record_answer with ref=${block.ref}.${shape}${options}\n` +
           `2. If they also asked something, answer that too, in one or two sentences.\n` +
+          `   If instead they want to change an answer they gave EARLIER, call change_earlier_answer for that ` +
+          `question and follow its result rather than steps 1 and 3.\n` +
           `3. Then, if you recorded an answer, go straight on in the same message to the question ` +
           `record_answer names in its result — not the one that follows in the list, which on a branching ` +
           `form is a different question. ` +
@@ -2429,6 +2494,46 @@ export class SessionDO extends DurableObject<Bindings> {
     );
   }
 
+  /**
+   * Something typed on the review step, where every answer is in.
+   *
+   * There used to be no box to type in there, and a message sent anyway (from
+   * `/v1`, or a stale tab) came back `no_question`. But the review is exactly
+   * when someone notices a wrong answer, and "change my email" is how people
+   * say so. The agent gets a turn with the two tools that need no question on
+   * screen; reopening or changing an answer walks back to the review through
+   * the edit path, and anything else leaves the review where it is.
+   */
+  private async handleReviewText(text: string): Promise<{ accepted: boolean; error?: string }> {
+    if (!this.doc || !this.meta) return { accepted: false, error: "session_not_found" };
+    if (this.aiEnabled()) {
+      const ok = await this.aiStreamMessage(
+        `The respondent is looking at a summary of all their answers, with a button to send the form. They wrote: "${text}"\n\n` +
+          `- If they want to change an answer, call change_earlier_answer for that question and follow its result.\n` +
+          `- If they asked something, answer it briefly.\n` +
+          `- Otherwise, say in one short line that they can tap any answer above to change it, or send the form.\n` +
+          `Never ask any other question from the form — every one is answered.`,
+        { review: true },
+      );
+      if (ok) {
+        await this.applyPendingEffects();
+        // Nothing moved: hand the review back, so the device that sent this
+        // settles its turn and still has the answers in front of it.
+        if (this.pendingEndingRef !== null && this.meta.currentRef === null) {
+          await this.emit("review", { answers: this.answerSummary() });
+        }
+        this.pendingUserTextPersisted = false;
+        this.pendingUserMessageId = null;
+        return { accepted: true };
+      }
+    }
+    this.pendingUserTextPersisted = false;
+    this.pendingUserMessageId = null;
+    await this.emitMessage("Tap any answer above to change it, or send the form when you're ready.");
+    await this.emit("review", { answers: this.answerSummary() });
+    return { accepted: true };
+  }
+
   private async handleStructured(ref: string, value: unknown): Promise<{ accepted: boolean; error?: string }> {
     const block = await this.currentBlock();
     if (!block) return { accepted: false, error: "no_question" };
@@ -2460,8 +2565,12 @@ export class SessionDO extends DurableObject<Bindings> {
       const ok = await this.aiStreamMessage(buildRetryObjective(block, count, hint, this.keptFields(block)));
       if (ok) {
         await this.applyPendingEffects();
-        // Same rule on a retry: the question text is never reworded.
-        if (agent.rephraseQuestions === false) await this.emitMessage(questionText(block));
+        // Same rule on a retry: the question text is never reworded. Only for
+        // the question the retry was about — the agent may have reopened an
+        // earlier one instead, and printing this one would ask the wrong thing.
+        if (agent.rephraseQuestions === false && this.meta?.currentRef === block.ref) {
+          await this.emitMessage(questionText(block));
+        }
         await this.emitQuestion();
         return { accepted: true };
       }
@@ -2692,15 +2801,26 @@ export class SessionDO extends DurableObject<Bindings> {
   private resumeAfterEdit(
     fromRef: string,
   ): { kind: "block"; block: Block } | { kind: "ending"; ending: Ending } {
-    let cursor = resolveNext(this.doc!, fromRef, this.state);
-    for (let hops = 0; cursor.kind === "block" && hops <= this.doc!.blocks.length; hops += 1) {
-      const settled =
-        this.state.answers[cursor.block.ref] !== undefined ||
-        ["welcome", "statement"].includes(cursor.block.type);
-      if (!settled) return cursor;
-      cursor = resolveNext(this.doc!, cursor.block.ref, this.state);
-    }
-    return cursor;
+    return resumeAfterChange(this.doc!, this.state, fromRef);
+  }
+
+  /**
+   * Put the cursor back on an earlier question, to be answered again.
+   *
+   * Shared by the pencil (`edit`) and by the agent's `change_earlier_answer`,
+   * so a change asked for in words lands exactly where a tap would. The old
+   * answer is kept — see the `edit` action.
+   */
+  private reopenQuestion(target: Block): void {
+    if (!this.meta) return;
+    this.invalidCounts.delete(target.ref);
+    this.meta.currentRef = target.ref;
+    this.meta.status = "active";
+    // Remembered so `advanceTo` can put them back where they were instead of
+    // re-asking everything after this question. See `resumeAfterEdit`.
+    this.editingRef = target.ref;
+    // Leaving the review step: the form is no longer finished.
+    this.pendingEndingRef = null;
   }
 
   private async advanceTo(
@@ -2762,6 +2882,18 @@ export class SessionDO extends DurableObject<Bindings> {
       // The agent asked this question already, as part of the turn that
       // recorded the previous answer. Just arm the composer.
       if (this.suppressNextAsk && !verbatim) {
+        await this.emitQuestion();
+        await this.persistMeta();
+        return;
+      }
+      /*
+       * Verbatim, the agent has not asked it — but it has already acknowledged
+       * the answer, in the turn that recorded it. A second model turn here said
+       * the same thing again in other words ("Updated to X! … Got it, updated
+       * to X!") on every typed answer. The question itself is all that is left.
+       */
+      if (this.suppressNextAsk && verbatim) {
+        await this.emitMessage(questionText(next.block));
         await this.emitQuestion();
         await this.persistMeta();
         return;
@@ -3465,14 +3597,7 @@ export class SessionDO extends DurableObject<Bindings> {
         return { accepted: true };
       }
 
-      this.invalidCounts.delete(target.ref);
-      this.meta.currentRef = target.ref;
-      this.meta.status = "active";
-      // Remembered so `advanceTo` can put them back where they were instead of
-      // re-asking everything after this question. See `resumeAfterEdit`.
-      this.editingRef = target.ref;
-      // Leaving the review step: the form is no longer finished.
-      this.pendingEndingRef = null;
+      this.reopenQuestion(target);
       await this.persistMeta();
 
       await this.emitMessage(`Sure — let's redo that one.`);

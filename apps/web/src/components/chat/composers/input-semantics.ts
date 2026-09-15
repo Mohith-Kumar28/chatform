@@ -33,7 +33,7 @@ export type InputSemantics = {
   name: string;
 };
 
-const FREE_TEXT: InputSemantics = {
+export const FREE_TEXT: InputSemantics = {
   type: "text",
   inputMode: "text",
   // The composer is also the "or just tell me" box on a question made of

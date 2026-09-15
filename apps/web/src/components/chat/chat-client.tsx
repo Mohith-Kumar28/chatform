@@ -15,7 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { stripRichText } from "@repo/form-schema";
-import { QuestionDescription, RichText } from "./rich-text";
+import { QuestionDescription, RichText, SAFE_ELEMENTS } from "./rich-text";
 import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { LogoMark } from "@/components/brand/logo";
@@ -27,10 +27,10 @@ import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./emb
 import { useChat, type ChatMessage } from "./use-chat";
 import { DictateButton, KeyHint, SendRow, TextInput, keepFocus, modKeyLabel } from "./composers/primitives";
 import { useDictation } from "@/hooks/use-dictation";
-import { inputSemanticsFor } from "./composers/input-semantics";
+import { FREE_TEXT, inputSemanticsFor } from "./composers/input-semantics";
 import { PhoneInput } from "./composers/phone";
 import { isSendablePhone } from "./composers/phone-value";
-import { forgetValue, rememberValue, suggestionsFor } from "./respondent-profile";
+import { forgetValue, suggestionsFor } from "./respondent-profile";
 import { QuestionAffordance } from "./question-affordance";
 import { QuestionMedia } from "./question-media";
 import { ChatBoot } from "./chat-boot";
@@ -779,7 +779,7 @@ export function ChatSurface({
         </div>
       )}
 
-      {!chat.ending && !chat.review && !chat.auth && !chat.verify && (
+      {!chat.ending && !chat.auth && !chat.verify && (
         <footer className="sticky bottom-0 bg-[var(--cf-bg)]/95 backdrop-blur">
           <div className="mx-auto w-full max-w-2xl px-4 py-3">
             {/*
@@ -798,14 +798,22 @@ export function ChatSurface({
               a phone, bouncing the keyboard. The draft is cleared on a real
               question change inside the component instead.
             */}
-            <Composer
-              block={chat.question?.block}
-              status={chat.status}
-              validationHint={chat.validationHint}
-              send={chat.send}
-              sendAction={chat.sendAction}
-              config={config}
-            />
+            {chat.review ? (
+              <ReviewComposer
+                send={chat.send}
+                disabled={chat.status === "error" || chat.thinking}
+                onTyping={() => setAutoSubmitOff(true)}
+              />
+            ) : (
+              <Composer
+                block={chat.question?.block}
+                status={chat.status}
+                validationHint={chat.validationHint}
+                send={chat.send}
+                sendAction={chat.sendAction}
+                config={config}
+              />
+            )}
           </div>
           {/*
             The footer line: our attribution, and the way to talk to us.
@@ -1149,16 +1157,6 @@ const LiveRegion = memo(function LiveRegion({ messages }: { messages: ChatMessag
     </div>
   );
 });
-
-/**
- * Markdown from a model is untrusted input: no raw HTML, no scripts, and — via
- * `RichText trusted={false}` — no images except the form's own uploads.
- */
-const SAFE_ELEMENTS = [
-  "p", "br", "strong", "em", "del", "code", "pre", "blockquote",
-  "ul", "ol", "li", "a", "h1", "h2", "h3", "h4", "hr",
-  "table", "thead", "tbody", "tr", "th", "td",
-];
 
 function TypingDots() {
   return (
@@ -2003,6 +2001,50 @@ function EndingCard({
  * the keyboard, which is the one place in a form that has to stay perfectly
  * still.
  */
+/**
+ * The message box on the review step.
+ *
+ * The review used to take the composer away, so the one moment somebody reads
+ * all their answers back — and spots the wrong one — was the one moment they
+ * could not just say so. Tapping an answer still works; this is the other way,
+ * in words, which the agent turns into the same edit.
+ *
+ * Typing stops the send countdown, because five seconds is not long enough to
+ * finish a sentence about what to change. Not focused on arrival: on a phone a
+ * keyboard would open over the answers they are meant to be reading.
+ */
+function ReviewComposer({
+  send,
+  disabled,
+  onTyping,
+}: {
+  send: (text: string) => Promise<void>;
+  disabled: boolean;
+  onTyping: () => void;
+}) {
+  const [text, setText] = useState("");
+  function submit() {
+    const value = text.trim();
+    if (!value || disabled) return;
+    setText("");
+    void send(value);
+  }
+  return (
+    <SendRow onSend={submit} disabled={disabled || !text.trim()}>
+      <TextInput
+        value={text}
+        onChange={(v) => {
+          setText(v);
+          if (v.trim()) onTyping();
+        }}
+        onSubmit={submit}
+        placeholder="Want to change something? Just tell me…"
+        semantics={FREE_TEXT}
+      />
+    </SendRow>
+  );
+}
+
 const Composer = memo(function Composer({
   block,
   status,
@@ -2211,16 +2253,8 @@ const Composer = memo(function Composer({
     if (isPhone && !isSendablePhone(value)) return;
     dictation.stop();
     setText("");
-    /*
-      Kept before it is sent, not after it is accepted.
-
-      The composer is the only place that holds the text — `answer_recorded`
-      carries the ref and deliberately not the value — so waiting for the
-      server would mean threading the answer back down to find it again.
-      `rememberValue` earns the trade by refusing anything the wrong shape, so
-      what a rejection would have caught is mostly caught here anyway.
-    */
-    rememberValue(identityField, value);
+    // Remembered once the server records it as this question's answer, not
+    // here — see `answer_recorded` in use-chat.
     void send(value);
   }
 

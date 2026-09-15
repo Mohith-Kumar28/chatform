@@ -50,6 +50,7 @@ import { useClientValue } from "@/hooks/use-client-value";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { blockMeta, TONE_CLASSES } from "./block-library";
 import { cn } from "@/lib/utils";
+import { RichText, SAFE_ELEMENTS } from "@/components/chat/rich-text";
 
 /**
  * The responses table.
@@ -1923,16 +1924,22 @@ function SubmissionDialog({
                       key={i}
                       className={cn("flex items-end gap-2", m.role === "user" && "flex-row-reverse")}
                     >
-                      <p
-                        className={cn(
-                          "peer/msg max-w-[80%] rounded-2xl px-3.5 py-2 text-[0.9375rem] leading-relaxed break-words whitespace-pre-wrap",
-                          m.role === "user"
-                            ? "bg-primary text-primary-foreground rounded-br-md"
-                            : "bg-muted rounded-bl-md",
-                        )}
-                      >
-                        {m.content}
-                      </p>
+                      {/*
+                        The agent's messages are Markdown, and the chat drew them
+                        that way — so printing them raw put "**Team Name**" in
+                        front of the owner where the respondent read Team Name in
+                        bold. Same renderer, same allowlist as the live bubble.
+                        What the respondent typed stays literal.
+                      */}
+                      {m.role === "user" ? (
+                        <p className="peer/msg bg-primary text-primary-foreground max-w-[80%] rounded-2xl rounded-br-md px-3.5 py-2 text-[0.9375rem] leading-relaxed break-words whitespace-pre-wrap">
+                          {m.content}
+                        </p>
+                      ) : (
+                        <div className="peer/msg bg-muted max-w-[80%] rounded-2xl rounded-bl-md px-3.5 py-2 text-[0.9375rem] leading-relaxed break-words">
+                          <RichText markdown={m.content} trusted={false} allowedElements={[...SAFE_ELEMENTS, "img"]} />
+                        </div>
+                      )}
                       {/*
                         When a turn happened, on the *outside* of the bubble —
                         to its right for the agent, to its left for the
