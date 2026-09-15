@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { FEEDBACK_TOPICS, FEEDBACK_TOPIC_KEYS, feedbackLabel } from "@repo/form-schema";
+import { FEEDBACK_NOTE_MAX, FEEDBACK_TOPICS, FEEDBACK_TOPIC_KEYS, feedbackLabel } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { MODELS, chatModel, reportedUsage, tagged } from "./ai.js";
 import { logAiGeneration } from "./ai-usage.js";
@@ -70,7 +70,7 @@ const modelClassifier =
       model: chatModel(env, MODELS.extraction),
       schema: TagResult,
       system: SYSTEM,
-      prompt: `Star rating: ${feedbackLabel(rating)} (${rating}/5)\n\nNote:\n${note.slice(0, 2000)}`,
+      prompt: `Star rating: ${feedbackLabel(rating)} (${rating}/5)\n\nNote:\n${note.slice(0, FEEDBACK_NOTE_MAX)}`,
       providerOptions: tagged({}, "feedback_tag", "platform"),
       abortSignal: AbortSignal.timeout(12_000),
     });

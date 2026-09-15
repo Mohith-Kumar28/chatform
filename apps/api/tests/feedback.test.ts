@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { applySchema, fetchApi, minimalDoc, seedTenant, type Tenant } from "./helpers.js";
 import { FEEDBACK_DAILY_CAP } from "../src/lib/feedback.js";
+import { FEEDBACK_NOTE_MAX } from "@repo/form-schema";
 import { runMailJob } from "../src/lib/mail-jobs.js";
 import { tagFeedback } from "../src/lib/feedback-tags.js";
 import type { Bindings } from "../src/env.js";
@@ -114,6 +115,19 @@ describe("sending a report", () => {
       .bind(s.sessionId)
       .first<{ message: string | null }>();
     expect(row?.message).toBeNull();
+  });
+
+  it("takes a generous note, and refuses one past the limit rather than cutting it", async () => {
+    const s = await openSession("device-long-note");
+    // Exactly at the limit: about 500 words, a full reproduction.
+    expect((await send(s, { rating: 2, message: "a".repeat(FEEDBACK_NOTE_MAX) })).status).toBe(200);
+    // One over is refused outright — never silently truncated into a different report.
+    expect((await send(s, { rating: 2, message: "a".repeat(FEEDBACK_NOTE_MAX + 1) })).status).toBe(400);
+    const stored = await DB()
+      .DB.prepare(`SELECT length(message) AS n FROM respondent_feedback WHERE session_id = ?`)
+      .bind(s.sessionId)
+      .all<{ n: number }>();
+    expect(stored.results.map((r) => r.n)).toEqual([FEEDBACK_NOTE_MAX]);
   });
 
   it("refuses a rating outside the five faces", async () => {
@@ -408,7 +422,8 @@ describe("the snapshot", () => {
     const s = await openSession("device-snap-big");
     const { id } = await (await send(s, { rating: 1, message: "keep me" })).json<{ id: string }>();
 
-    expect((await put(s, id, "x".repeat(1024 * 1024 + 1))).status).toBe(413);
+    // 256 KB is the cap: about five times the largest real snapshot.
+    expect((await put(s, id, "x".repeat(256 * 1024 + 1))).status).toBe(413);
     expect((await put(s, id, "not json at all")).status).toBe(400);
 
     const row = await DB()

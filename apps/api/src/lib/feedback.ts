@@ -115,12 +115,12 @@ export async function recordFeedback(env: Bindings, input: FeedbackInput): Promi
 /**
  * The largest snapshot a respondent's browser may attach.
  *
- * A snapshot is the form's public config plus the conversation so far — a few
- * kilobytes on a short form, tens on a long one with media. A megabyte is far
- * past anything honest and well inside a Worker's request and memory limits, so
- * it is a ceiling against abuse rather than a budget anybody should approach.
+ * A snapshot is the form's public config plus the conversation so far. Measured
+ * ones run 5–50 KB, so 256 KB is about five times the largest real one — room
+ * for a long conversation with media, and a ceiling against anyone using the
+ * endpoint as free storage.
  */
-export const SNAPSHOT_MAX_BYTES = 1024 * 1024;
+export const SNAPSHOT_MAX_BYTES = 256 * 1024;
 
 /**
  * Where a report's snapshot lives in R2.

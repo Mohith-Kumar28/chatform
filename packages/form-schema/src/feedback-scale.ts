@@ -61,3 +61,13 @@ export function feedbackTopicLabel(topic: string | null | undefined): string | n
   if (!topic) return null;
   return FEEDBACK_TOPICS[topic as FeedbackTopic] ?? topic;
 }
+
+/**
+ * The longest note a respondent may send with a bug report.
+ *
+ * Generous on purpose: about 500 words, more than a page — a detailed, numbered
+ * reproduction never reaches it, and a pasted wall of junk does. One number for
+ * the panel's `maxLength`, the API's validator, the admin's internal note and the
+ * classifier's prompt, so the browser can never allow what the server refuses.
+ */
+export const FEEDBACK_NOTE_MAX = 3000;

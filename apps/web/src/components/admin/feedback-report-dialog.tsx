@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, ExternalLink, Link2, Mail, X } from "lucide-react";
-import { feedbackTopicLabel } from "@repo/form-schema";
+import { FEEDBACK_NOTE_MAX, feedbackTopicLabel } from "@repo/form-schema";
 import {
   getGetApiAdminFeedbackReportsByIdQueryKey,
   getGetApiAdminFeedbackReportsByIdSnapshotQueryKey,
@@ -425,7 +425,7 @@ function NoteField({
         value={note}
         onChange={(e) => setNote(e.target.value)}
         rows={3}
-        maxLength={2000}
+        maxLength={FEEDBACK_NOTE_MAX}
         placeholder="What it turned out to be. Only admins see this."
       />
       <div className="mt-2 flex items-center justify-between gap-3">

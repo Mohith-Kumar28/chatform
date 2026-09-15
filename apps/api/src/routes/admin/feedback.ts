@@ -3,6 +3,7 @@ import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import type { Bindings } from "../../env.js";
 import type { PlatformAdminVars } from "../../lib/platform-admin.js";
+import { FEEDBACK_NOTE_MAX } from "@repo/form-schema";
 import { audit, DAY_MS, PLAN_OF_ORG, RANGES, RangeQuery, dayKeys, rows, type RangeKey } from "./shared.js";
 
 /**
@@ -753,7 +754,7 @@ const TriageBody = z
   .object({
     status: z.enum(FEEDBACK_STATUSES).optional(),
     /** `null` clears the note — which is why this cannot be a `COALESCE`. */
-    internalNote: z.string().max(2000).nullable().optional(),
+    internalNote: z.string().max(FEEDBACK_NOTE_MAX).nullable().optional(),
   })
   .refine((v) => v.status !== undefined || v.internalNote !== undefined, {
     message: "Nothing to change",

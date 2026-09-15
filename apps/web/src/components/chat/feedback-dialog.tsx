@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Angry, Check, Frown, Laugh, Meh, Smile, X } from "lucide-react";
-import { FEEDBACK_LABELS } from "@repo/form-schema";
+import { FEEDBACK_LABELS, FEEDBACK_NOTE_MAX } from "@repo/form-schema";
 import { KeyHint, modKeyLabel } from "./composers/primitives";
 import { cn } from "@/lib/utils";
 
@@ -285,13 +285,29 @@ export function FeedbackDialog({
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={4}
-              maxLength={2000}
+              maxLength={FEEDBACK_NOTE_MAX}
               placeholder="What happened? A bug, something confusing, anything missing…"
               className={cn(
                 "mt-3 w-full resize-none rounded-xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-3.5 py-2.5 text-[0.9375rem]",
                 "placeholder:opacity-45 focus:border-[var(--cf-accent)] focus:outline-none",
               )}
             />
+
+            {/*
+              Only near the end. A number ticking under every keystroke nags
+              somebody writing a normal note; the last fifth is where it helps,
+              and at the limit it turns the warning colour so the stop in typing
+              is explained rather than feeling broken.
+            */}
+            {message.length >= FEEDBACK_NOTE_MAX * 0.8 && (
+              <p
+                className="mt-1 text-right text-xs tabular-nums"
+                style={{ color: message.length >= FEEDBACK_NOTE_MAX ? "var(--cf-warning)" : undefined, opacity: message.length >= FEEDBACK_NOTE_MAX ? 1 : 0.5 }}
+                aria-live="polite"
+              >
+                {message.length.toLocaleString()} / {FEEDBACK_NOTE_MAX.toLocaleString()}
+              </p>
+            )}
 
             {/*
               Said, not buried in a policy. The screen is attached so we can see

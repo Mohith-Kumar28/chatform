@@ -12,6 +12,7 @@ import { completedSubmissions, openSession, type FormRow } from "../lib/open-ses
 import { respondentKey } from "../lib/respondent-key.js";
 import { resolveRespondent } from "../lib/respondents.js";
 import { recordFeedback, FEEDBACK_DAILY_CAP, SNAPSHOT_MAX_BYTES, snapshotKeyFor } from "../lib/feedback.js";
+import { FEEDBACK_NOTE_MAX } from "@repo/form-schema";
 import { enqueueMail } from "../lib/mail.js";
 import { canonicalZone } from "../lib/quiet-hours.js";
 import { findDeviceResumable } from "../lib/respondent-history.js";
@@ -630,7 +631,10 @@ const feedbackSchema = z.object({
    * ceiling is generous: somebody who has found a bug worth describing should
    * not be truncated mid-repro.
    */
-  message: z.string().max(2000).optional(),
+  message: z
+    .string()
+    .max(FEEDBACK_NOTE_MAX, `Keep it under ${FEEDBACK_NOTE_MAX.toLocaleString()} characters.`)
+    .optional(),
 });
 
 /**
