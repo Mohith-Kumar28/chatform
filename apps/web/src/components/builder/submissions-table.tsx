@@ -1911,7 +1911,13 @@ function SubmissionDialog({
                       {m.content}
                     </p>
                   ) : (
-                    <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
+                    <div
+                      key={i}
+                      className={cn(
+                        "group/msg flex items-end gap-2",
+                        m.role === "user" ? "justify-end" : "justify-start",
+                      )}
+                    >
                       <p
                         className={cn(
                           "max-w-[80%] rounded-2xl px-3.5 py-2 text-[0.9375rem] leading-relaxed break-words whitespace-pre-wrap",
@@ -1922,6 +1928,24 @@ function SubmissionDialog({
                       >
                         {m.content}
                       </p>
+                      {/*
+                        When a turn happened, on the outside of the bubble and
+                        only while the pointer is on that turn. Reading a
+                        conversation and auditing its timing are different jobs,
+                        and stamping every line permanently would tax the first
+                        to serve the second. It holds its place in the row
+                        rather than being positioned over it, so appearing
+                        shifts nothing — the space it sits in is the gutter the
+                        80% cap already leaves empty.
+                      */}
+                      {m.createdAt > 0 && (
+                        <time
+                          dateTime={new Date(m.createdAt).toISOString()}
+                          className="text-muted-foreground/70 text-caption shrink-0 pb-1.5 tabular-nums whitespace-nowrap opacity-0 transition-opacity group-hover/msg:opacity-100"
+                        >
+                          {formatShortDateTime(m.createdAt)}
+                        </time>
+                      )}
                     </div>
                   ),
                 )}
