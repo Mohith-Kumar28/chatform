@@ -230,14 +230,31 @@ describe("telling the founders", () => {
 
     expect(out.messages).toBe(2);
     expect(sent.map((m) => m.to).sort()).toEqual(["founder@example.com", "second@example.com"]);
-    // What they said, in the subject — so the inbox alone says whether this is
-    // worth opening now.
-    expect(sent[0]?.subject).toContain("The phone field rejects a UK number.");
-    // And the word for the face, not the digit.
-    expect(sent[0]?.subject).toContain("Bad");
-    // Everything needed to reproduce it, in the body.
+
+    /*
+      The subject is the same four words every time, then the form. It is what
+      makes this recognisable in a list of nineteen thousand emails, and it must
+      not drift into looking like one of the notifications a form sends.
+    */
+    expect(sent[0]?.subject).toBe("chatform bug report — Bug report form");
+    // Their words are not lost — they move to the preheader, which is the grey
+    // line an inbox prints beside the subject.
+    expect(sent[0]?.html).toContain("The phone field rejects a UK number.");
+    expect(sent[0]?.html).toContain("Bad ·");
+
+    // Everything needed to reproduce it, without opening anything else.
     expect(sent[0]?.text).toContain("Bug report form");
     expect(sent[0]?.text).toContain("Mozilla/5.0 (Pixel 8)");
+    // The live form, which is where the bug is.
+    expect(sent[0]?.text).toContain("/f/bug-report-form");
+    // And the account it belongs to, straight to its page in the console.
+    expect(sent[0]?.text).toContain(`/admin/accounts/${t.orgId}`);
+
+    /*
+      The footer used to name the environment variable that decides who gets
+      this. An inbox is not where a deploy detail belongs.
+    */
+    expect(sent[0]?.html).not.toContain("PLATFORM_ADMIN_EMAILS");
   });
 
   it("says so when there were no words", async () => {
@@ -247,7 +264,8 @@ describe("telling the founders", () => {
       kind: "respondent_feedback",
       feedbackId: id,
     });
-    expect(sent[0]?.subject).toContain("Great");
+    expect(sent[0]?.subject).toBe("chatform bug report — Bug report form");
+    expect(sent[0]?.html).toContain("Great · no note");
     expect(sent[0]?.text).toContain("(no note)");
   });
 

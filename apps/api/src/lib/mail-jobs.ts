@@ -117,10 +117,28 @@ async function runFeedbackJob(
   env: Bindings,
   job: Extract<MailJob, { kind: "respondent_feedback" }>,
 ): Promise<MailJobOutcome> {
+  /*
+    One read, four left joins, because every one of them is optional and none
+    may take the mail down with it: the form can have been deleted, the session
+    pruned, the organization gone. A report that arrives saying "unknown form"
+    is worth far more than a report that does not arrive.
+  */
   const row = await env.DB.prepare(
-    `SELECT fb.rating, fb.message, fb.form_id, fb.respondent_id, fb.user_agent, f.title AS form_title
+    `SELECT fb.rating, fb.message, fb.form_id, fb.organization_id, fb.respondent_id, fb.user_agent,
+            fb.created_at, fb.source, fb.session_id,
+            f.title AS form_title, f.slug AS form_slug,
+            o.name AS org_name,
+            s.collected_count, s.turn_count, s.country,
+            -- Null rather than a count when nobody was recognised: every
+            -- unattributed report shares one null id, and counting those
+            -- together would report a stranger's first note as their fortieth.
+            CASE WHEN fb.respondent_id IS NULL THEN NULL ELSE
+              (SELECT COUNT(*) FROM respondent_feedback x WHERE x.respondent_id = fb.respondent_id)
+            END AS report_count
        FROM respondent_feedback fb
        LEFT JOIN forms f ON f.id = fb.form_id
+       LEFT JOIN organizations o ON o.id = fb.organization_id
+       LEFT JOIN chat_sessions s ON s.id = fb.session_id
       WHERE fb.id = ?1`,
   )
     .bind(job.feedbackId)
@@ -128,9 +146,19 @@ async function runFeedbackJob(
       rating: number;
       message: string | null;
       form_id: string | null;
+      organization_id: string | null;
       respondent_id: string | null;
       user_agent: string | null;
+      created_at: number;
+      source: string | null;
+      session_id: string | null;
       form_title: string | null;
+      form_slug: string | null;
+      org_name: string | null;
+      collected_count: number | null;
+      turn_count: number | null;
+      country: string | null;
+      report_count: number | null;
     }>();
 
   // The row is written before the job is queued, so a miss means it has been
@@ -140,15 +168,28 @@ async function runFeedbackJob(
   const recipients = platformAdminEmails(env);
   if (recipients.length === 0) return NO_MAIL;
 
+  const origin = webOrigins(env)[0]!;
   const msg = feedbackNotificationEmail({
     rating: Number(row.rating),
     ratingLabel: feedbackLabel(Number(row.rating)),
     message: row.message,
     formTitle: row.form_title,
     formId: row.form_id,
+    // The live form, which is where the bug is. Null once the form is gone —
+    // the email then leads with the console instead of a link to a 404.
+    formUrl: row.form_slug ? `${origin}/f/${row.form_slug}` : null,
+    accountName: row.org_name,
     respondentId: row.respondent_id,
+    reportCount: row.report_count === null ? null : Number(row.report_count),
+    answered: row.collected_count === null ? null : Number(row.collected_count),
+    turns: row.turn_count === null ? null : Number(row.turn_count),
+    source: row.source,
+    country: row.country,
     userAgent: row.user_agent,
-    consoleUrl: `${webOrigins(env)[0]!}/admin`,
+    createdAt: Number(row.created_at),
+    // Straight to the account, not the overview: the console's own search is a
+    // step this email already knows the answer to.
+    consoleUrl: row.organization_id ? `${origin}/admin/accounts/${row.organization_id}` : `${origin}/admin`,
   });
 
   const tally = mailTally();

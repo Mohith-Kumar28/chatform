@@ -101,13 +101,19 @@ ${opts.body}
           </td>
         </tr>
       </table>
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:544px;">
+      ${
+        // An empty string means no footer at all, not an empty one: a bare
+        // padded block under the card reads as something that failed to render.
+        opts.footer === ""
+          ? ""
+          : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:544px;">
         <tr>
           <td style="padding:16px 32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:${MUTED};">
             ${opts.footer ?? "Sent by chatform."}
           </td>
         </tr>
-      </table>
+      </table>`
+      }
     </td>
   </tr>
 </table>
@@ -640,16 +646,18 @@ function estimateMinutes(remaining: number): string {
 /**
  * The one message in this file that goes to us rather than to a customer.
  *
- * It is written to be read on a phone, in a notification shade, by somebody who
- * is not at their desk — because that is where it will be read, and because the
- * whole point of mailing it is to shorten the gap between a respondent hitting
- * a bug and anybody knowing. So the rating and the words are in the subject
- * line, and everything that helps reproduce it — the form, the browser, the
- * respondent — is in the body under them.
+ * Two jobs, in this order. **Be recognisable in a list of nineteen thousand
+ * emails** — so the subject is the same four words every time, followed by the
+ * form it happened on, and the respondent's own words move to the preheader,
+ * which is the grey line Gmail prints beside a subject. Nothing is lost from
+ * the inbox view and the report stops looking like a stray notification.
+ * **Then be enough to act on without opening anything else**: their words, a
+ * button straight to the live form, where in the conversation they were, and
+ * which account's form it is.
  *
- * No "Powered by chatform" footer and no marketing shell: `brand: false`. This
- * is internal mail, and dressing it as a product email makes it look, in an
- * inbox, exactly like the notifications it must not be filed with.
+ * No "Powered by chatform" shell and no footer: `brand: false`, `footer: ""`.
+ * This is internal mail, and dressing it as a product email makes it file
+ * itself, in an inbox, with the notifications it must not be confused with.
  */
 export function feedbackNotificationEmail(a: {
   rating: number;
@@ -657,16 +665,56 @@ export function feedbackNotificationEmail(a: {
   message: string | null;
   formTitle: string | null;
   formId: string | null;
+  /** The live form, exactly as the respondent had it open. */
+  formUrl: string | null;
+  /** Whose form it is — the customer, not the respondent. */
+  accountName: string | null;
   respondentId: string | null;
+  /** How many reports this person has sent, ever. 1 on their first. */
+  reportCount: number | null;
+  /** Answers recorded when they stopped to tell us, and turns taken to get there. */
+  answered: number | null;
+  turns: number | null;
+  /** `chat` | `embed` — where the conversation was running. */
+  source: string | null;
+  country: string | null;
   userAgent: string | null;
+  createdAt: number;
   consoleUrl: string;
 }): Omit<MailMessage, "to"> {
   const facts: [string, string][] = [
     ["Rating", `${a.ratingLabel} (${a.rating}/5)`],
     ["Form", a.formTitle ?? a.formId ?? "unknown"],
-    ["Respondent", a.respondentId ?? "not recognised"],
-    ["Browser", a.userAgent ?? "not reported"],
+    ["Account", a.accountName ?? "unknown"],
+    ["When", stamp(a.createdAt)],
   ];
+
+  /*
+    Where in the conversation they stopped to tell us — the fact that turns a
+    report into a reproduction. "Nothing answered yet" is the interesting case
+    and has to say so out loud rather than print a zero.
+  */
+  if (a.answered !== null) {
+    facts.push([
+      "Progress",
+      a.answered === 0
+        ? `nothing answered yet${a.turns ? `, ${a.turns} turn${a.turns === 1 ? "" : "s"} in` : ""}`
+        : `${a.answered} answer${a.answered === 1 ? "" : "s"} in${a.turns ? `, ${a.turns} turns` : ""}`,
+    ]);
+  }
+
+  const where = [a.source === "embed" ? "embedded" : a.source === "chat" ? "hosted page" : a.source, a.country]
+    .filter(Boolean)
+    .join(" · ");
+  if (where) facts.push(["Where", where]);
+
+  facts.push([
+    "Respondent",
+    a.respondentId
+      ? `${a.respondentId}${a.reportCount && a.reportCount > 1 ? ` — report no. ${a.reportCount} from them` : " — first report from them"}`
+      : "not recognised",
+  ]);
+  facts.push(["Browser", a.userAgent ?? "not reported"]);
 
   const body = [
     h1(`${a.ratingLabel} — a respondent reported something`),
@@ -686,16 +734,26 @@ export function feedbackNotificationEmail(a: {
 </tr>`,
       )
       .join("\n")}</table>`,
-    button(a.consoleUrl, "Open the console"),
-  ].join("\n");
+    /*
+      The form itself is the button, because reproducing the bug means opening
+      the thing it happened on. The console is the second stop, not the first —
+      it says what we already know, and this email is that.
+    */
+    a.formUrl ? button(a.formUrl, "Open the form") : button(a.consoleUrl, "Open the console"),
+    a.formUrl
+      ? `<p style="margin:-8px 0 0 0;font-size:12px;line-height:1.6;color:${MUTED};">Or <a href="${escapeHtml(a.consoleUrl)}" style="color:${MUTED};">open the account in the console</a>.</p>`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   /*
     The first line of the note, not the first sixty characters of it.
 
     Bug reports arrive as a sentence and then numbered steps, and collapsing the
-    newlines to make a subject line puts "1." on the end of the summary — the
-    reader's eye stops on a fragment of the reproduction rather than on what
-    broke. The opening line is the one somebody wrote as a summary anyway.
+    newlines to make a summary puts "1." on the end of it — the reader's eye
+    stops on a fragment of the reproduction rather than on what broke. The
+    opening line is the one somebody wrote as a summary anyway.
   */
   const firstLine = a.message
     ?.split(/\r?\n/)
@@ -704,31 +762,43 @@ export function feedbackNotificationEmail(a: {
 
   return {
     /*
-      The words in the subject, trimmed to what a phone shows.
+      The same four words every time, then the form.
 
-      A subject that only says "New feedback" makes every one of these worth
-      opening, which after the third means none of them get opened. What they
-      actually said is usually the whole report.
+      It used to lead with the rating and their words, which read in a list as
+      an ordinary notification from a form — the one thing this must never look
+      like. Recognisable first: anything starting "chatform bug report" is this,
+      and the form name after it says which one before it is opened. What they
+      said is not lost; it moves to the preheader below, which is what an inbox
+      prints in grey beside the subject.
     */
-    subject: `${a.ratingLabel} — ${
-      firstLine ? trimTo(firstLine, 60) : `no note (${a.formTitle ?? "unknown form"})`
-    }`,
+    subject: a.formTitle ? `chatform bug report — ${a.formTitle}` : "chatform bug report",
     html: layout({
-      preheader: firstLine ? trimTo(firstLine, 100) : `${a.ratingLabel}, no note.`,
+      preheader: `${a.ratingLabel} · ${firstLine ? trimTo(firstLine, 100) : "no note"}`,
       body,
       brand: false,
-      footer: "Sent to everyone on PLATFORM_ADMIN_EMAILS, from the “Report a bug” link in the chat footer.",
+      // Nothing. The line here named an environment variable, which belongs in
+      // a deploy and not in anybody's inbox.
+      footer: "",
     }),
     text: [
-      `${a.ratingLabel} (${a.rating}/5) — a respondent reported something`,
+      `chatform bug report — ${a.formTitle ?? "unknown form"}`,
       ``,
       a.message ?? "(no note)",
       ``,
       ...facts.map(([label, value]) => `${label}: ${value}`),
       ``,
+      ...(a.formUrl ? [`Form: ${a.formUrl}`] : []),
       `Console: ${a.consoleUrl}`,
     ].join("\n"),
   };
+}
+
+/** `15 Sep 2026, 14:19 UTC` — one zone, named, because the readers are in two. */
+function stamp(ms: number): string {
+  const d = new Date(ms);
+  const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+  return `${date}, ${time} UTC`;
 }
 
 /** Cut on a word where there is one, so a trimmed subject does not end mid-syllable. */
