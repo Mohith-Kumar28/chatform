@@ -22,6 +22,7 @@ import type {
 import type {
   DeleteApiAdminAccountsByOrgIdOverridesByKey200,
   DeleteApiAdminAccountsByOrgIdPlan200,
+  DeleteApiAdminFeedbackReportsById200,
   GetApiAdminAccounts200,
   GetApiAdminAccountsByOrgId200,
   GetApiAdminAccountsParams,
@@ -1177,6 +1178,96 @@ export const usePatchApiAdminFeedbackReportsById = <TError = void,
         TContext
       > => {
       return useMutation(getPatchApiAdminFeedbackReportsByIdMutationOptions(options));
+    }
+    export type deleteApiAdminFeedbackReportsByIdResponse200 = {
+  data: DeleteApiAdminFeedbackReportsById200
+  status: 200
+}
+
+export type deleteApiAdminFeedbackReportsByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type deleteApiAdminFeedbackReportsByIdResponseSuccess = (deleteApiAdminFeedbackReportsByIdResponse200) & {
+  headers: Headers;
+};
+export type deleteApiAdminFeedbackReportsByIdResponseError = (deleteApiAdminFeedbackReportsByIdResponse404) & {
+  headers: Headers;
+};
+
+export type deleteApiAdminFeedbackReportsByIdResponse = (deleteApiAdminFeedbackReportsByIdResponseSuccess | deleteApiAdminFeedbackReportsByIdResponseError)
+
+export const getDeleteApiAdminFeedbackReportsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/reports/${id}`
+}
+
+/**
+ * @summary Delete a report, its snapshot and its vector
+ */
+export const deleteApiAdminFeedbackReportsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteApiAdminFeedbackReportsByIdResponse> => {
+
+  return customFetch<deleteApiAdminFeedbackReportsByIdResponse>(getDeleteApiAdminFeedbackReportsByIdUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiAdminFeedbackReportsByIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiAdminFeedbackReportsById>>, TError,DeleteApiAdminFeedbackReportsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiAdminFeedbackReportsById>>, TError,DeleteApiAdminFeedbackReportsByIdMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiAdminFeedbackReportsById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiAdminFeedbackReportsById>>, DeleteApiAdminFeedbackReportsByIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiAdminFeedbackReportsById(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiAdminFeedbackReportsByIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiAdminFeedbackReportsById>>>
+
+    export type DeleteApiAdminFeedbackReportsByIdMutationError = void
+    export type DeleteApiAdminFeedbackReportsByIdMutationVariables = {id: string}
+
+    /**
+ * @summary Delete a report, its snapshot and its vector
+ */
+export const useDeleteApiAdminFeedbackReportsById = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiAdminFeedbackReportsById>>, TError,DeleteApiAdminFeedbackReportsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiAdminFeedbackReportsById>>,
+        TError,
+        DeleteApiAdminFeedbackReportsByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiAdminFeedbackReportsByIdMutationOptions(options));
     }
     export type getApiAdminFeedbackReportsByIdSnapshotResponse200 = {
   data: void

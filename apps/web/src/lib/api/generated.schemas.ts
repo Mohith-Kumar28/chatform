@@ -578,6 +578,10 @@ export type PatchApiAdminFeedbackReportsById200 = {
   ok: boolean;
 };
 
+export type DeleteApiAdminFeedbackReportsById200 = {
+  ok: boolean;
+};
+
 export type GetApiAdminFeedbackIssuesParams = {
 status?: GetApiAdminFeedbackIssuesStatus;
 /**

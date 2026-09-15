@@ -11,6 +11,7 @@ import {
   ISSUE_WINDOW_DAYS,
   issueDecidePrompt,
 } from "./feedback-issue-prompt.js";
+import { bindChunks, holesFor } from "./d1-bindings.js";
 
 /**
  * Bug reports, grouped into the problems they describe.
@@ -345,7 +346,11 @@ export async function recomputeIssue(env: Bindings, issueId: string): Promise<vo
       .bind(issueId)
       .first<{ n: number }>();
     if (Number(members?.n ?? 0) === 0) {
-      await env.DB.prepare(`DELETE FROM feedback_issues WHERE id = ?1 AND merged_into IS NULL`).bind(issueId).run();
+      // The issues merged into it go too: a tombstone pointing at nothing leads nowhere.
+      await env.DB.batch([
+        env.DB.prepare(`DELETE FROM feedback_issues WHERE merged_into = ?1`).bind(issueId),
+        env.DB.prepare(`DELETE FROM feedback_issues WHERE id = ?1 AND merged_into IS NULL`).bind(issueId),
+      ]);
     }
     return;
   }
@@ -433,4 +438,72 @@ export async function nearestIssuesFor(
   if (!row?.vector) return [];
   const found = await nearest(env, decodeVector(row.vector), limit, row.issue_id);
   return found.map((c) => ({ id: c.id, title: c.title, score: Math.round(c.score * 1000) / 1000 }));
+}
+
+/**
+ * Delete bug reports outright — the report, its snapshot, its vector — and any
+ * issue left with nothing in it.
+ *
+ * The vector would cascade with the report anyway; it is deleted by name so the
+ * rule does not hang on a foreign key nobody reading this can see. Snapshots
+ * first, the same ordering `delete-account.ts` explains: the row is the only
+ * record of the key, so it goes last.
+ */
+export async function deleteReports(env: Bindings, ids: readonly string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const found: { id: string; issue_id: string | null; snapshot_key: string | null }[] = [];
+  for (const chunk of bindChunks(ids)) {
+    const page = await env.DB.prepare(
+      `SELECT id, issue_id, snapshot_key FROM respondent_feedback WHERE id IN (${holesFor(chunk)})`,
+    )
+      .bind(...chunk)
+      .all<{ id: string; issue_id: string | null; snapshot_key: string | null }>();
+    found.push(...(page.results ?? []));
+  }
+  if (found.length === 0) return 0;
+
+  const keys = found.flatMap((r) => (r.snapshot_key ? [r.snapshot_key] : []));
+  for (const chunk of bindChunks(keys, 1000)) await env.R2.delete(chunk);
+
+  const chunks = bindChunks(found.map((r) => r.id));
+  await env.DB.batch(
+    chunks.flatMap((chunk) => [
+      env.DB.prepare(`DELETE FROM feedback_embeddings WHERE feedback_id IN (${holesFor(chunk)})`).bind(...chunk),
+      env.DB.prepare(`DELETE FROM respondent_feedback WHERE id IN (${holesFor(chunk)})`).bind(...chunk),
+    ]),
+  );
+
+  const issues = new Set(found.flatMap((r) => (r.issue_id ? [r.issue_id] : [])));
+  for (const issueId of Array.from(issues)) await recomputeIssue(env, issueId);
+  return found.length;
+}
+
+/** Every report filed against one organization's forms — for when the organization goes. */
+export async function deleteOrganizationReports(env: Bindings, orgId: string): Promise<void> {
+  for (;;) {
+    const page = await env.DB.prepare(`SELECT id FROM respondent_feedback WHERE organization_id = ?1 LIMIT 500`)
+      .bind(orgId)
+      .all<{ id: string }>();
+    const ids = (page.results ?? []).map((r) => r.id);
+    if (ids.length === 0) return;
+    await deleteReports(env, ids);
+  }
+}
+
+/**
+ * How long a deleted form's bug reports outlive it — the same week its knowledge
+ * gets, and for the same reason: a form delete is soft and can be a mis-click.
+ */
+export const FEEDBACK_RETENTION_MS = 7 * DAY_MS;
+
+/** Delete the reports of forms deleted longer ago than the retention window. */
+export async function sweepDeletedFormFeedback(env: Bindings, limit = 200): Promise<number> {
+  const cutoff = Date.now() - FEEDBACK_RETENTION_MS;
+  const page = await env.DB.prepare(
+    `SELECT fb.id FROM respondent_feedback fb JOIN forms f ON f.id = fb.form_id
+      WHERE f.deleted_at IS NOT NULL AND f.deleted_at < ?1 LIMIT ?2`,
+  )
+    .bind(cutoff, limit)
+    .all<{ id: string }>();
+  return deleteReports(env, (page.results ?? []).map((r) => r.id));
 }

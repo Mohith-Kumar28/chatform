@@ -1,4 +1,5 @@
 import type { Bindings } from "../env.js";
+import { deleteOrganizationReports } from "./feedback-issues.js";
 
 /**
  * Everything a departing account leaves behind, removed before the account is.
@@ -70,6 +71,9 @@ export async function purgeUserData(env: Bindings, userId: string): Promise<void
       it scales with the size of the workspace.
     */
     await purgeOrgObjects(env, org);
+    // Bug reports name the organization without a foreign key, so nothing
+    // cascades them — nor the vectors and issues built from them.
+    await deleteOrganizationReports(env, org);
     await env.DB.prepare(`DELETE FROM organizations WHERE id = ?`).bind(org).run();
   }
 

@@ -9,6 +9,7 @@ import { runExport, pruneExpiredExports, type ExportMessage } from "./lib/export
 import { runMailJob } from "./lib/mail-jobs.js";
 import { ingestSource } from "./lib/knowledge-service.js";
 import { runFeedbackTriage, type FeedbackTriageMessage } from "./lib/feedback-triage.js";
+import { sweepDeletedFormFeedback } from "./lib/feedback-issues.js";
 import { pruneMailDeliveries, recordMailDelivery, type MailJob } from "./lib/mail.js";
 import {
   sweepExpiredResponses,
@@ -181,6 +182,8 @@ export default {
       });
       if (requeued > 0) console.log(`knowledge_ingest_requeued: ${requeued}`);
       await sweepDeletedFormKnowledge(env).catch((err) => console.error("knowledge_delete_sweep_failed", err));
+      // A deleted form's bug reports, their vectors and any issue they leave empty — the same week later.
+      await sweepDeletedFormFeedback(env).catch((err) => console.error("feedback_delete_sweep_failed", err));
 
       /**
        * The API path's housekeeping.

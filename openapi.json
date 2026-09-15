@@ -2542,6 +2542,52 @@
             "sessionCookie": []
           }
         ]
+      },
+      "delete": {
+        "operationId": "deleteApiAdminFeedbackReportsById",
+        "tags": [
+          "admin"
+        ],
+        "summary": "Delete a report, its snapshot and its vector",
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin, or no such report"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
       }
     },
     "/api/admin/feedback/reports/{id}/snapshot": {

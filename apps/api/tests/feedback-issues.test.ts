@@ -4,6 +4,8 @@ import { applySchema, fetchApi, seedTenant, type Tenant } from "./helpers.js";
 import {
   assignIssue,
   decodeVector,
+  deleteOrganizationReports,
+  sweepDeletedFormFeedback,
   encodeVector,
   normalise,
   type Decider,
@@ -274,5 +276,66 @@ describe("corrections", () => {
     (env as unknown as Record<string, string | undefined>).PLATFORM_ADMIN_EMAILS = "someone-else@example.com";
     expect((await asAdmin("/api/admin/feedback/issues")).status).toBe(404);
     (env as unknown as Record<string, string | undefined>).PLATFORM_ADMIN_EMAILS = "issuesadmin@example.com";
+  });
+});
+
+describe("deleting", () => {
+  const count = async (sql: string, ...binds: unknown[]) =>
+    Number((await DB().DB.prepare(sql).bind(...binds).first<{ n: number }>())?.n ?? 0);
+
+  it("deletes a report with its snapshot and vector, and the issue once nothing is left in it", async () => {
+    const one = await report("UPLOAD button spins forever");
+    const two = await report("cannot UPLOAD my resume");
+    // Its own issue, not one an earlier test opened for the same bug.
+    const { issueId } = (await assignIssue(DB(), one, { embed, decide: async () => ({ match: null, title: "Deletable" }) }))!;
+    expect((await assignIssue(DB(), two, { embed, decide: async () => ({ match: issueId, title: "" }) }))!.issueId).toBe(issueId);
+    // A tombstone merged into it, which must not outlive it.
+    await DB().DB.prepare(`INSERT INTO feedback_issues (id, title, title_edited, centroid, centroid_n, created_at, merged_into) VALUES ('fis_tomb', 'old', 0, '', 0, 0, ?)`).bind(issueId).run();
+    const key = `feedback/${t.orgId}/${one}.json`;
+    await DB().R2.put(key, "{}");
+    await DB().DB.prepare(`UPDATE respondent_feedback SET snapshot_key = ? WHERE id = ?`).bind(key, one).run();
+
+    expect((await asAdmin(`/api/admin/feedback/reports/${one}`, { method: "DELETE" })).status).toBe(200);
+    expect(await count(`SELECT COUNT(*) n FROM respondent_feedback WHERE id = ?`, one)).toBe(0);
+    expect(await count(`SELECT COUNT(*) n FROM feedback_embeddings WHERE feedback_id = ?`, one)).toBe(0);
+    expect(await DB().R2.get(key)).toBeNull();
+    expect(await count(`SELECT COUNT(*) n FROM feedback_issues WHERE id = ?`, issueId)).toBe(1);
+
+    expect((await asAdmin(`/api/admin/feedback/reports/${two}`, { method: "DELETE" })).status).toBe(200);
+    expect(await count(`SELECT COUNT(*) n FROM feedback_issues WHERE id IN (?, 'fis_tomb')`, issueId)).toBe(0);
+    expect((await asAdmin(`/api/admin/feedback/reports/${two}`, { method: "DELETE" })).status).toBe(404);
+  });
+
+  it("clears a deleted form's reports after the retention week, not before", async () => {
+    const gone = await seedTenant("issuesgone");
+    const put = async (id: string) => {
+      await DB().DB.prepare(
+        `INSERT INTO respondent_feedback (id, session_id, form_id, organization_id, rating, message, source, status, created_at)
+         VALUES (?1, ?1, ?2, ?3, 2, 'PHONE rejected', 'chat', 'new', ?4)`,
+      ).bind(id, gone.formId, gone.orgId, Date.now()).run();
+      await assignIssue(DB(), id, deps);
+    };
+    await put("fbk_gone_1");
+
+    await DB().DB.prepare(`UPDATE forms SET deleted_at = ? WHERE id = ?`).bind(Date.now() - 86_400_000, gone.formId).run();
+    await sweepDeletedFormFeedback(DB());
+    expect(await count(`SELECT COUNT(*) n FROM respondent_feedback WHERE id = 'fbk_gone_1'`)).toBe(1);
+
+    await DB().DB.prepare(`UPDATE forms SET deleted_at = ? WHERE id = ?`).bind(Date.now() - 8 * 86_400_000, gone.formId).run();
+    await sweepDeletedFormFeedback(DB());
+    expect(await count(`SELECT COUNT(*) n FROM respondent_feedback WHERE id = 'fbk_gone_1'`)).toBe(0);
+    expect(await count(`SELECT COUNT(*) n FROM feedback_embeddings WHERE feedback_id = 'fbk_gone_1'`)).toBe(0);
+  });
+
+  it("clears every report of an organization that is being deleted", async () => {
+    const leaving = await seedTenant("issuesleaving");
+    for (const id of ["fbk_leave_1", "fbk_leave_2"]) {
+      await DB().DB.prepare(
+        `INSERT INTO respondent_feedback (id, session_id, form_id, organization_id, rating, message, source, status, created_at)
+         VALUES (?1, ?1, ?2, ?3, 2, 'SLOW to load', 'chat', 'new', ?4)`,
+      ).bind(id, leaving.formId, leaving.orgId, Date.now()).run();
+    }
+    await deleteOrganizationReports(DB(), leaving.orgId);
+    expect(await count(`SELECT COUNT(*) n FROM respondent_feedback WHERE organization_id = ?`, leaving.orgId)).toBe(0);
   });
 });

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Link2, Mail, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Link2, Mail, Trash2, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FEEDBACK_NOTE_MAX, feedbackTopicLabel } from "@repo/form-schema";
 import {
+  deleteApiAdminFeedbackReportsById,
   getGetApiAdminFeedbackReportsByIdNearestQueryKey,
   postApiAdminFeedbackReportsByIdMove,
   useGetApiAdminFeedbackReportsByIdNearest,
@@ -25,6 +26,7 @@ import {
 } from "@/lib/api/admin/admin";
 import { Dialog, DialogBody, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -99,6 +101,7 @@ export function FeedbackReportDialog({
 }) {
   const [view, setView] = useState<View>("report");
   const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const index = ids.indexOf(id);
 
   const { data, isPending, isError, refetch } = useGetApiAdminFeedbackReportsById(id, {
@@ -139,6 +142,20 @@ export function FeedbackReportDialog({
       toast.error("That didn't save. Try again.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** Gone for good; the next report opens in its place, as deleting a response does. */
+  const remove = async () => {
+    try {
+      await deleteApiAdminFeedbackReportsById(id);
+      toast.success("Report deleted");
+      const next = ids[index + 1] ?? ids[index - 1];
+      if (next) onOpen(next);
+      else onClose();
+      onChanged();
+    } catch {
+      toast.error("That didn't delete. Try again.");
     }
   };
 
@@ -213,6 +230,18 @@ export function FeedbackReportDialog({
             >
               <Link2 className="size-4" />
             </Button>
+            {report && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Delete this report"
+                title="Delete"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setConfirmingDelete(true)}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            )}
             <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose}>
               <X className="size-4" />
             </Button>
@@ -266,6 +295,14 @@ export function FeedbackReportDialog({
           )}
         </DialogBody>
       </DialogContent>
+      <ConfirmDialog
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        title="Delete this report?"
+        description="Its note, the conversation snapshot and its place in its issue go with it. An issue left with no reports is removed. This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={remove}
+      />
     </Dialog>
   );
 }

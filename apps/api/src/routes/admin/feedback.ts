@@ -5,7 +5,7 @@ import type { Bindings } from "../../env.js";
 import type { PlatformAdminVars } from "../../lib/platform-admin.js";
 import { FEEDBACK_NOTE_MAX } from "@repo/form-schema";
 import { audit, DAY_MS, PLAN_OF_ORG, RANGES, RangeQuery, dayKeys, rows, type RangeKey } from "./shared.js";
-import { mergeIssues, moveReport, nearestIssuesFor } from "../../lib/feedback-issues.js";
+import { deleteReports, mergeIssues, moveReport, nearestIssuesFor } from "../../lib/feedback-issues.js";
 import type { FeedbackTriageMessage } from "../../lib/feedback-triage.js";
 
 /**
@@ -1158,6 +1158,29 @@ feedbackRouter.post(
     if (!moved) return c.json({ error: { code: "not_found", message: "Cannot move that report there" } }, 404);
     await audit(c, "_platform", "admin.feedback.report_moved", { resourceType: "feedback", resourceId: id, issueId: moved });
     return c.json({ issueId: moved });
+  },
+);
+
+/**
+ * Delete a report for good — spam, a test, or something that should never have
+ * been kept. Its snapshot and vector go with it, and an issue it leaves empty.
+ */
+feedbackRouter.delete(
+  "/admin/feedback/reports/:id",
+  describeRoute({
+    tags: ["admin"],
+    summary: "Delete a report, its snapshot and its vector",
+    responses: {
+      200: { description: "Deleted", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } },
+      404: { description: "Not an admin, or no such report" },
+    },
+  }),
+  async (c) => {
+    const id = c.req.param("id");
+    const deleted = await deleteReports(c.env, [id]);
+    if (deleted === 0) return c.json({ error: { code: "not_found", message: "No such report" } }, 404);
+    await audit(c, "_platform", "admin.feedback.report_deleted", { resourceType: "feedback", resourceId: id });
+    return c.json({ ok: true });
   },
 );
 
