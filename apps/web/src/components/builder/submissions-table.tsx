@@ -1921,11 +1921,11 @@ function SubmissionDialog({
                   ) : (
                     <div
                       key={i}
-                      className={cn("group/msg flex items-end gap-2", m.role === "user" && "flex-row-reverse")}
+                      className={cn("flex items-end gap-2", m.role === "user" && "flex-row-reverse")}
                     >
                       <p
                         className={cn(
-                          "max-w-[80%] rounded-2xl px-3.5 py-2 text-[0.9375rem] leading-relaxed break-words whitespace-pre-wrap",
+                          "peer/msg max-w-[80%] rounded-2xl px-3.5 py-2 text-[0.9375rem] leading-relaxed break-words whitespace-pre-wrap",
                           m.role === "user"
                             ? "bg-primary text-primary-foreground rounded-br-md"
                             : "bg-muted rounded-bl-md",
@@ -1936,7 +1936,7 @@ function SubmissionDialog({
                       {/*
                         When a turn happened, on the *outside* of the bubble —
                         to its right for the agent, to its left for the
-                        respondent — and only while the pointer is on that turn.
+                        respondent — and only while the pointer is on the bubble itself.
                         Reading a conversation and auditing its timing are
                         different jobs, and stamping every line permanently
                         would tax the first to serve the second.
@@ -1955,7 +1955,7 @@ function SubmissionDialog({
                       {m.createdAt > 0 && (
                         <time
                           dateTime={new Date(m.createdAt).toISOString()}
-                          className="text-muted-foreground/70 text-caption shrink-0 pb-1.5 tabular-nums whitespace-nowrap opacity-0 transition-opacity group-hover/msg:opacity-100"
+                          className="text-muted-foreground/70 text-caption shrink-0 pb-1.5 tabular-nums whitespace-nowrap opacity-0 transition-opacity peer-hover/msg:opacity-100"
                         >
                           {formatShortDateTime(m.createdAt)}
                         </time>
