@@ -130,7 +130,13 @@ async function runFeedbackJob(
             fb.created_at, fb.source, fb.session_id,
             f.title AS form_title, f.slug AS form_slug,
             o.name AS org_name,
-            fb.answered, fb.turns, s.country, s.respondent_identity,
+            fb.answered, fb.turns, s.country, s.respondent_identity, fb.issue_id, fb.status,
+            iss.title AS issue_title,
+            -- Derived, never stored: how many reports the issue holds, and whether
+            -- somebody had already resolved it before this one arrived.
+            (SELECT COUNT(*) FROM respondent_feedback x WHERE x.issue_id = fb.issue_id AND x.status != 'spam') AS issue_reports,
+            (SELECT COUNT(*) FROM respondent_feedback x
+              WHERE x.issue_id = fb.issue_id AND x.id != fb.id AND x.status = 'resolved') AS issue_resolved_before,
             r.display_name AS respondent_name, r.email AS respondent_email, r.phone AS respondent_phone,
             -- Null rather than a count when nobody was recognised: every
             -- unattributed report shares one null id, and counting those
@@ -143,6 +149,7 @@ async function runFeedbackJob(
        LEFT JOIN organizations o ON o.id = fb.organization_id
        LEFT JOIN chat_sessions s ON s.id = fb.session_id
        LEFT JOIN respondents r ON r.id = fb.respondent_id
+       LEFT JOIN feedback_issues iss ON iss.id = fb.issue_id
       WHERE fb.id = ?1`,
   )
     .bind(job.feedbackId)
@@ -163,6 +170,11 @@ async function runFeedbackJob(
       turns: number | null;
       country: string | null;
       respondent_identity: string | null;
+      issue_id: string | null;
+      status: string;
+      issue_title: string | null;
+      issue_reports: number | null;
+      issue_resolved_before: number | null;
       respondent_name: string | null;
       respondent_email: string | null;
       respondent_phone: string | null;
@@ -209,6 +221,14 @@ async function runFeedbackJob(
     respondentEmail: contact.email,
     respondentPhone: contact.phone,
     topic: feedbackTopicLabel(tags?.topic),
+    issue: row.issue_id
+      ? {
+          title: row.issue_title ?? "Untitled issue",
+          reports: Number(row.issue_reports ?? 1),
+          // A new report on an issue somebody already resolved: it came back.
+          reopened: row.status !== "resolved" && Number(row.issue_resolved_before ?? 0) > 0,
+        }
+      : null,
     reportUrl: `${origin}/admin/feedback?report=${encodeURIComponent(job.feedbackId)}`,
     reportCount: row.report_count === null ? null : Number(row.report_count),
     answered: row.answered === null ? null : Number(row.answered),

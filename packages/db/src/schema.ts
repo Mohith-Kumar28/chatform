@@ -1503,6 +1503,10 @@ export const respondentFeedback = sqliteTable(
      */
     answered: integer("answered"),
     turns: integer("turns"),
+    /** The issue this report was matched to. Null for a wordless report, or one not yet matched. */
+    issueId: text("issue_id"),
+    /** Similarity to the issue's centroid when it joined. */
+    issueSimilarity: real("issue_similarity"),
     /**
      * The browser string, verbatim.
      *
@@ -1526,8 +1530,42 @@ export const respondentFeedback = sqliteTable(
     index("idx_respondent_feedback_status_created").on(t.status, t.createdAt),
     index("idx_respondent_feedback_org_created").on(t.organizationId, t.createdAt),
     index("idx_respondent_feedback_form_created").on(t.formId, t.createdAt),
+    // Every number an issue shows is a GROUP BY over this.
+    index("idx_respondent_feedback_issue").on(t.issueId, t.createdAt),
     // The daily cap, both halves of it: one lookup rather than a scan of the table.
     index("idx_respondent_feedback_respondent").on(t.respondentId, t.createdAt),
     index("idx_respondent_feedback_session").on(t.sessionId, t.createdAt),
   ],
 );
+
+/**
+ * One underlying problem, reported by however many respondents.
+ *
+ * Holds only what cannot be derived: the title, where it came from, and the
+ * centroid the matcher compares incoming reports against. Everything shown about
+ * an issue — how many reports, people and forms, when last seen, resolved or
+ * reopened — is read from its reports, so a merge or a move cannot leave a stale
+ * number behind. See `0033_feedback_issues.sql`.
+ */
+export const feedbackIssues = sqliteTable("feedback_issues", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  /** An admin renamed it; a rebuild must not overwrite their words. */
+  titleEdited: bool("title_edited").notNull().default(false),
+  topic: text("topic"),
+  /** Mean of member embeddings, L2-normalised, little-endian Float32 as base64. A cache. */
+  centroid: text("centroid").notNull(),
+  centroidN: integer("centroid_n").notNull().default(1),
+  /** Set when merged away. Never matched against again. */
+  mergedInto: text("merged_into"),
+  createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+});
+
+/** A report's embedding, kept so merges and moves recompute centroids without calling the model again. */
+export const feedbackEmbeddings = sqliteTable("feedback_embeddings", {
+  feedbackId: text("feedback_id")
+    .primaryKey()
+    .references(() => respondentFeedback.id, { onDelete: "cascade" }),
+  vector: text("vector").notNull(),
+  createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+});

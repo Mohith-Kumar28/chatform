@@ -1685,6 +1685,14 @@
           },
           {
             "in": "query",
+            "name": "issue",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "in": "query",
             "name": "sort",
             "schema": {
               "default": "newest",
@@ -1901,6 +1909,26 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "issueId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "issueTitle": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -1924,7 +1952,9 @@
                           "organizationId",
                           "organizationName",
                           "respondentId",
-                          "respondentLabel"
+                          "respondentLabel",
+                          "issueId",
+                          "issueTitle"
                         ]
                       }
                     },
@@ -2197,6 +2227,26 @@
                         }
                       ]
                     },
+                    "issueId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "issueTitle": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "organizationPlan": {
                       "anyOf": [
                         {
@@ -2385,6 +2435,8 @@
                     "organizationName",
                     "respondentId",
                     "respondentLabel",
+                    "issueId",
+                    "issueTitle",
                     "organizationPlan",
                     "formVersionId",
                     "respondent",
@@ -2435,7 +2487,7 @@
                     "anyOf": [
                       {
                         "type": "string",
-                        "maxLength": 2000
+                        "maxLength": 3000
                       },
                       {
                         "type": "null"
@@ -2517,6 +2569,598 @@
             "required": true
           }
         ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/feedback/issues": {
+      "get": {
+        "operationId": "getApiAdminFeedbackIssues",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "default": "new",
+              "type": "string",
+              "enum": [
+                "new",
+                "resolved",
+                "all"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "rating",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            }
+          },
+          {
+            "in": "query",
+            "name": "topic",
+            "schema": {
+              "type": "string",
+              "maxLength": 40
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "default": "recent",
+              "type": "string",
+              "enum": [
+                "recent",
+                "reports"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "tags": [
+          "admin"
+        ],
+        "summary": "Bug reports grouped into issues, with counts derived from their reports",
+        "responses": {
+          "200": {
+            "description": "Issues",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "topic": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reports": {
+                            "type": "number"
+                          },
+                          "people": {
+                            "type": "number"
+                          },
+                          "forms": {
+                            "type": "number"
+                          },
+                          "lastSeenAt": {
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "new",
+                              "resolved"
+                            ]
+                          },
+                          "reopened": {
+                            "type": "boolean"
+                          },
+                          "worstRating": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "topic",
+                          "reports",
+                          "people",
+                          "forms",
+                          "lastSeenAt",
+                          "status",
+                          "reopened",
+                          "worstRating"
+                        ]
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "limit": {
+                      "type": "number"
+                    },
+                    "offset": {
+                      "type": "number"
+                    },
+                    "counts": {
+                      "type": "object",
+                      "properties": {
+                        "new": {
+                          "type": "number"
+                        },
+                        "resolved": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "new",
+                        "resolved"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "issues",
+                    "total",
+                    "limit",
+                    "offset",
+                    "counts"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/feedback/issues/{id}": {
+      "get": {
+        "operationId": "getApiAdminFeedbackIssuesById",
+        "tags": [
+          "admin"
+        ],
+        "summary": "One issue, with counts derived from its reports",
+        "responses": {
+          "200": {
+            "description": "Issue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reports": {
+                      "type": "number"
+                    },
+                    "people": {
+                      "type": "number"
+                    },
+                    "forms": {
+                      "type": "number"
+                    },
+                    "lastSeenAt": {
+                      "type": "number"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "new",
+                        "resolved"
+                      ]
+                    },
+                    "reopened": {
+                      "type": "boolean"
+                    },
+                    "worstRating": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "topic",
+                    "reports",
+                    "people",
+                    "forms",
+                    "lastSeenAt",
+                    "status",
+                    "reopened",
+                    "worstRating"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin, or no such issue"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patchApiAdminFeedbackIssuesById",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "new",
+                      "resolved"
+                    ]
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "summary": "Resolve, reopen or rename an issue",
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin, or no such issue"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/feedback/issues/{id}/merge": {
+      "post": {
+        "operationId": "postApiAdminFeedbackIssuesByIdMerge",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "into": {
+                    "type": "string",
+                    "maxLength": 64
+                  }
+                },
+                "required": [
+                  "into"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "summary": "Merge an issue into another — two groups that are the same bug",
+        "responses": {
+          "200": {
+            "description": "Merged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin, or either issue is missing or already merged"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/feedback/reports/{id}/nearest": {
+      "get": {
+        "operationId": "getApiAdminFeedbackReportsByIdNearest",
+        "tags": [
+          "admin"
+        ],
+        "summary": "The issues a report could be moved to, nearest first",
+        "responses": {
+          "200": {
+            "description": "Nearest issues",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "score": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "score"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "issues"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/feedback/reports/{id}/move": {
+      "post": {
+        "operationId": "postApiAdminFeedbackReportsByIdMove",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "issueId": {
+                    "type": "string",
+                    "maxLength": 64
+                  }
+                },
+                "required": [
+                  "issueId"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "summary": "Move a report to another issue, or to a new one of its own (`issueId: \"new\"`)",
+        "responses": {
+          "200": {
+            "description": "Moved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "issueId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "issueId"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin, no such report, or no such issue"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/feedback/issues/rebuild": {
+      "post": {
+        "operationId": "postApiAdminFeedbackIssuesRebuild",
+        "tags": [
+          "admin"
+        ],
+        "summary": "Discard all issues and re-match every report",
+        "responses": {
+          "200": {
+            "description": "Queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "queued": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "queued"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
         "x-internal": true,
         "security": [
           {

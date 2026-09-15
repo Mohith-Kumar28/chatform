@@ -13,7 +13,7 @@ import { respondentKey } from "../lib/respondent-key.js";
 import { resolveRespondent } from "../lib/respondents.js";
 import { recordFeedback, FEEDBACK_DAILY_CAP, SNAPSHOT_MAX_BYTES, snapshotKeyFor } from "../lib/feedback.js";
 import { FEEDBACK_NOTE_MAX } from "@repo/form-schema";
-import { enqueueMail } from "../lib/mail.js";
+import { enqueueFeedbackTriage } from "../lib/feedback-triage.js";
 import { canonicalZone } from "../lib/quiet-hours.js";
 import { findDeviceResumable } from "../lib/respondent-history.js";
 import { reopenAbandonedResponse } from "../lib/submissions.js";
@@ -707,11 +707,12 @@ sessionsRouter.post("/sessions/:id/feedback", zValidator("json", feedbackSchema)
     the last one — and a queue of them read on Friday is a queue of forms that
     were broken all week.
 
-    Queued, never sent inline: `enqueueMail` swallows its own failures, so a
-    respondent's "thank you, that reached us" never waits on, or is retracted
-    by, an SMTP hop. It did reach us — the row is already written.
+    Queued, never sent inline, so a respondent's "thank you, that reached us"
+    never waits on — or is retracted by — a model call or an SMTP hop. It did
+    reach us: the row is already written. Triage classifies it and matches it to
+    its issue first, then queues the mail, so the mail can name both.
   */
-  await enqueueMail(c.env, { kind: "respondent_feedback", feedbackId: result.id });
+  await enqueueFeedbackTriage(c.env, result.id);
 
   // The id, so the browser can attach what was on screen to this report next.
   return c.json({ ok: true, id: result.id });

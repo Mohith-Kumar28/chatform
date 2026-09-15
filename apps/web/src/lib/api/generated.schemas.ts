@@ -405,6 +405,10 @@ orgId?: string;
  * @maxLength 64
  */
 respondentId?: string;
+/**
+ * @maxLength 64
+ */
+issue?: string;
 sort?: GetApiAdminFeedbackReportsSort;
 /**
  * @minimum 1
@@ -475,6 +479,8 @@ export type GetApiAdminFeedbackReports200ReportsItem = {
   organizationName: string | null;
   respondentId: string | null;
   respondentLabel: string | null;
+  issueId: string | null;
+  issueTitle: string | null;
 };
 
 export type GetApiAdminFeedbackReports200Counts = {
@@ -547,6 +553,8 @@ export type GetApiAdminFeedbackReportsById200 = {
   organizationName: string | null;
   respondentId: string | null;
   respondentLabel: string | null;
+  issueId: string | null;
+  issueTitle: string | null;
   organizationPlan: string | null;
   formVersionId: string | null;
   respondent: GetApiAdminFeedbackReportsById200Respondent;
@@ -568,6 +576,155 @@ export type PatchApiAdminFeedbackReportsByIdBody = {
 
 export type PatchApiAdminFeedbackReportsById200 = {
   ok: boolean;
+};
+
+export type GetApiAdminFeedbackIssuesParams = {
+status?: GetApiAdminFeedbackIssuesStatus;
+/**
+ * @minimum 1
+ * @maximum 5
+ */
+rating?: number;
+/**
+ * @maxLength 40
+ */
+topic?: string;
+sort?: GetApiAdminFeedbackIssuesSort;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minimum 0
+ * @maximum 9007199254740991
+ */
+offset?: number;
+};
+
+export type GetApiAdminFeedbackIssuesStatus = typeof GetApiAdminFeedbackIssuesStatus[keyof typeof GetApiAdminFeedbackIssuesStatus];
+
+
+export const GetApiAdminFeedbackIssuesStatus = {
+  new: 'new',
+  resolved: 'resolved',
+  all: 'all',
+} as const;
+
+export type GetApiAdminFeedbackIssuesSort = typeof GetApiAdminFeedbackIssuesSort[keyof typeof GetApiAdminFeedbackIssuesSort];
+
+
+export const GetApiAdminFeedbackIssuesSort = {
+  recent: 'recent',
+  reports: 'reports',
+} as const;
+
+export type GetApiAdminFeedbackIssues200IssuesItemStatus = typeof GetApiAdminFeedbackIssues200IssuesItemStatus[keyof typeof GetApiAdminFeedbackIssues200IssuesItemStatus];
+
+
+export const GetApiAdminFeedbackIssues200IssuesItemStatus = {
+  new: 'new',
+  resolved: 'resolved',
+} as const;
+
+export type GetApiAdminFeedbackIssues200IssuesItem = {
+  id: string;
+  title: string;
+  topic: string | null;
+  reports: number;
+  people: number;
+  forms: number;
+  lastSeenAt: number;
+  status: GetApiAdminFeedbackIssues200IssuesItemStatus;
+  reopened: boolean;
+  worstRating: number;
+};
+
+export type GetApiAdminFeedbackIssues200Counts = {
+  new: number;
+  resolved: number;
+};
+
+export type GetApiAdminFeedbackIssues200 = {
+  issues: GetApiAdminFeedbackIssues200IssuesItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  counts: GetApiAdminFeedbackIssues200Counts;
+};
+
+export type GetApiAdminFeedbackIssuesById200Status = typeof GetApiAdminFeedbackIssuesById200Status[keyof typeof GetApiAdminFeedbackIssuesById200Status];
+
+
+export const GetApiAdminFeedbackIssuesById200Status = {
+  new: 'new',
+  resolved: 'resolved',
+} as const;
+
+export type GetApiAdminFeedbackIssuesById200 = {
+  id: string;
+  title: string;
+  topic: string | null;
+  reports: number;
+  people: number;
+  forms: number;
+  lastSeenAt: number;
+  status: GetApiAdminFeedbackIssuesById200Status;
+  reopened: boolean;
+  worstRating: number;
+};
+
+export type PatchApiAdminFeedbackIssuesByIdBodyStatus = typeof PatchApiAdminFeedbackIssuesByIdBodyStatus[keyof typeof PatchApiAdminFeedbackIssuesByIdBodyStatus];
+
+
+export const PatchApiAdminFeedbackIssuesByIdBodyStatus = {
+  new: 'new',
+  resolved: 'resolved',
+} as const;
+
+export type PatchApiAdminFeedbackIssuesByIdBody = {
+  status?: PatchApiAdminFeedbackIssuesByIdBodyStatus;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  title?: string;
+};
+
+export type PatchApiAdminFeedbackIssuesById200 = {
+  ok: boolean;
+};
+
+export type PostApiAdminFeedbackIssuesByIdMergeBody = {
+  /** @maxLength 64 */
+  into: string;
+};
+
+export type PostApiAdminFeedbackIssuesByIdMerge200 = {
+  ok: boolean;
+};
+
+export type GetApiAdminFeedbackReportsByIdNearest200IssuesItem = {
+  id: string;
+  title: string;
+  score: number;
+};
+
+export type GetApiAdminFeedbackReportsByIdNearest200 = {
+  issues: GetApiAdminFeedbackReportsByIdNearest200IssuesItem[];
+};
+
+export type PostApiAdminFeedbackReportsByIdMoveBody = {
+  /** @maxLength 64 */
+  issueId: string;
+};
+
+export type PostApiAdminFeedbackReportsByIdMove200 = {
+  issueId: string;
+};
+
+export type PostApiAdminFeedbackIssuesRebuild200 = {
+  queued: number;
 };
 
 export type GetApiAdminProductParams = {

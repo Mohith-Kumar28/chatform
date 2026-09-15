@@ -676,6 +676,8 @@ export function feedbackNotificationEmail(a: {
   respondentPhone: string | null;
   /** What the note turned out to be about, already a label. Null when untagged. */
   topic: string | null;
+  /** The issue it was grouped into, and how big that issue now is. */
+  issue: { title: string; reports: number; reopened: boolean } | null;
   /** This report, opened in the console. */
   reportUrl: string;
   /** How many reports this person has sent, ever. 1 on their first. */
@@ -692,6 +694,14 @@ export function feedbackNotificationEmail(a: {
 }): Omit<MailMessage, "to"> {
   const facts: [string, string][] = [
     ["Rating", `${a.ratingLabel} (${a.rating}/5)`],
+    ...(a.issue
+      ? ([
+          [
+            "Issue",
+            `${a.issue.title} · ${a.issue.reports === 1 ? "first report" : `${a.issue.reports} reports`}${a.issue.reopened ? " · reopened" : ""}`,
+          ],
+        ] as [string, string][])
+      : []),
     ...(a.topic ? ([["Topic", a.topic]] as [string, string][]) : []),
     ["Form", a.formTitle ?? a.formId ?? "unknown"],
     ["Account", a.accountName ?? "unknown"],
@@ -795,7 +805,11 @@ export function feedbackNotificationEmail(a: {
       said is not lost; it moves to the preheader below, which is what an inbox
       prints in grey beside the subject.
     */
-    subject: a.formTitle ? `chatform bug report — ${a.formTitle}` : "chatform bug report",
+    /*
+      A reopened issue says so first: a bug somebody marked fixed coming back is
+      the one report in the inbox that should not wait.
+    */
+    subject: `chatform bug report${a.issue?.reopened ? " (reopened)" : ""}${a.formTitle ? ` — ${a.formTitle}` : ""}`,
     html: layout({
       preheader: `${a.ratingLabel} · ${firstLine ? trimTo(firstLine, 100) : "no note"}`,
       body,

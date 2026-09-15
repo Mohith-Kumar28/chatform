@@ -5,6 +5,8 @@ import type { Bindings } from "../../env.js";
 import type { PlatformAdminVars } from "../../lib/platform-admin.js";
 import { FEEDBACK_NOTE_MAX } from "@repo/form-schema";
 import { audit, DAY_MS, PLAN_OF_ORG, RANGES, RangeQuery, dayKeys, rows, type RangeKey } from "./shared.js";
+import { mergeIssues, moveReport, nearestIssuesFor } from "../../lib/feedback-issues.js";
+import type { FeedbackTriageMessage } from "../../lib/feedback-triage.js";
 
 /**
  * What respondents said about the product, and what was done about it.
@@ -391,6 +393,8 @@ const ReportsQuery = z.object({
   formId: z.string().max(64).optional(),
   orgId: z.string().max(64).optional(),
   respondentId: z.string().max(64).optional(),
+  /** Only the reports grouped into this issue. */
+  issue: z.string().max(64).optional(),
   sort: z.enum(["newest", "oldest", "worst"]).default("newest"),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).default(0),
@@ -420,6 +424,8 @@ const Report = z.object({
   respondentId: z.string().nullable(),
   /** Their name, address or number — whichever a verified sign-in gave us. */
   respondentLabel: z.string().nullable(),
+  issueId: z.string().nullable(),
+  issueTitle: z.string().nullable(),
 });
 
 const ReportsResponse = z.object({
@@ -445,12 +451,14 @@ const REPORT_COLUMNS = `fb.id, fb.rating, fb.message, fb.created_at, fb.status, 
        fb.internal_note, fb.topic, fb.sentiment, fb.source, fb.user_agent, fb.session_id, fb.snapshot_key,
        fb.form_id, fb.organization_id, fb.respondent_id,
        f.title AS form_title, f.slug AS form_slug, o.name AS org_name,
-       COALESCE(r.display_name, r.email, r.phone) AS respondent_label`;
+       COALESCE(r.display_name, r.email, r.phone) AS respondent_label,
+       fb.issue_id, iss.title AS issue_title`;
 
 const REPORT_JOINS = `FROM respondent_feedback fb
        LEFT JOIN forms f ON f.id = fb.form_id
        LEFT JOIN organizations o ON o.id = fb.organization_id
-       LEFT JOIN respondents r ON r.id = fb.respondent_id`;
+       LEFT JOIN respondents r ON r.id = fb.respondent_id
+       LEFT JOIN feedback_issues iss ON iss.id = fb.issue_id`;
 
 interface ReportRow {
   id: string;
@@ -474,6 +482,8 @@ interface ReportRow {
   form_slug: string | null;
   org_name: string | null;
   respondent_label: string | null;
+  issue_id: string | null;
+  issue_title: string | null;
 }
 
 const toReport = (r: ReportRow) => ({
@@ -498,6 +508,8 @@ const toReport = (r: ReportRow) => ({
   organizationName: r.org_name,
   respondentId: r.respondent_id,
   respondentLabel: r.respondent_label,
+  issueId: r.issue_id,
+  issueTitle: r.issue_title,
 });
 
 /**
@@ -543,6 +555,7 @@ feedbackRouter.get(
       if (q.formId) where.push("fb.form_id = ?"), binds.push(q.formId);
       if (q.orgId) where.push("fb.organization_id = ?"), binds.push(q.orgId);
       if (q.respondentId) where.push("fb.respondent_id = ?"), binds.push(q.respondentId);
+      if (q.issue) where.push("fb.issue_id = ?"), binds.push(q.issue);
       if (q.q) {
         const like = `%${q.q}%`;
         where.push("(f.title LIKE ? OR f.slug LIKE ? OR o.name LIKE ? OR fb.message LIKE ?)");
@@ -856,5 +869,327 @@ feedbackRouter.get(
       organizationId: row.organization_id,
     });
     return new Response(object.body, { headers: { "content-type": "application/json" } });
+  },
+);
+
+// ─────────────────────────────── issues ───────────────────────────────
+
+const IssuesQuery = z.object({
+  status: z.enum(["new", "resolved", "all"]).default("new"),
+  rating: z.coerce.number().int().min(1).max(5).optional(),
+  topic: z.string().max(40).optional(),
+  sort: z.enum(["recent", "reports"]).default("recent"),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+const Issue = z.object({
+  id: z.string(),
+  title: z.string(),
+  topic: z.string().nullable(),
+  reports: z.number(),
+  people: z.number(),
+  forms: z.number(),
+  lastSeenAt: z.number(),
+  /** Unresolved while any report in it is. */
+  status: z.enum(["new", "resolved"]),
+  /** Unresolved again after somebody resolved it: a report arrived after the fix. */
+  reopened: z.boolean(),
+  /** The lowest face any report in it picked — the most upset person it touched. */
+  worstRating: z.number(),
+});
+
+const IssuesResponse = z.object({
+  issues: z.array(Issue),
+  total: z.number(),
+  limit: z.number(),
+  offset: z.number(),
+  /** Unfiltered, like the reports inbox: the badges do not move as the list narrows. */
+  counts: z.object({ new: z.number(), resolved: z.number() }),
+});
+
+/**
+ * Everything an issue shows, derived from its reports.
+ *
+ * Nothing here is stored on the issue, so there is nothing to drift: a merge, a
+ * move or a deleted report changes the numbers the moment it happens.
+ */
+const ISSUE_ROLLUP = `SELECT i.id, i.title, i.topic,
+         COUNT(fb.id) AS reports,
+         COUNT(DISTINCT COALESCE(fb.respondent_id, fb.session_id)) AS people,
+         COUNT(DISTINCT fb.form_id) AS forms,
+         MAX(fb.created_at) AS last_seen_at,
+         MIN(fb.rating) AS worst_rating,
+         SUM(CASE WHEN fb.status = 'new' THEN 1 ELSE 0 END) AS unresolved,
+         MAX(CASE WHEN fb.status = 'resolved' THEN fb.status_at END) AS last_resolved_at,
+         MAX(CASE WHEN fb.status = 'new' THEN fb.created_at END) AS last_new_at
+    FROM feedback_issues i
+    JOIN respondent_feedback fb ON fb.issue_id = i.id AND fb.${LIVE}
+   WHERE i.merged_into IS NULL`;
+
+interface IssueRow {
+  id: string;
+  title: string;
+  topic: string | null;
+  reports: number;
+  people: number;
+  forms: number;
+  last_seen_at: number;
+  worst_rating: number;
+  unresolved: number;
+  last_resolved_at: number | null;
+  last_new_at: number | null;
+}
+
+const toIssue = (r: IssueRow) => {
+  const unresolved = Number(r.unresolved) > 0;
+  return {
+    id: r.id,
+    title: r.title,
+    topic: r.topic,
+    reports: Number(r.reports),
+    people: Number(r.people),
+    forms: Number(r.forms),
+    lastSeenAt: Number(r.last_seen_at),
+    status: (unresolved ? "new" : "resolved") as "new" | "resolved",
+    reopened:
+      unresolved && r.last_resolved_at !== null && r.last_new_at !== null && Number(r.last_new_at) > Number(r.last_resolved_at),
+    worstRating: Number(r.worst_rating),
+  };
+};
+
+/**
+ * The issues inbox — the default view of the Feedback page.
+ *
+ * Status is read off the reports: an issue is unresolved while any report in it
+ * is, so a single new report of a resolved problem puts it back in the queue.
+ */
+feedbackRouter.get(
+  "/admin/feedback/issues",
+  validator("query", IssuesQuery),
+  describeRoute({
+    tags: ["admin"],
+    summary: "Bug reports grouped into issues, with counts derived from their reports",
+    responses: {
+      200: { description: "Issues", content: { "application/json": { schema: resolver(IssuesResponse) } } },
+      404: { description: "Not an admin" },
+    },
+  }),
+  async (c) => {
+    const q = c.req.valid("query");
+    const where: string[] = [];
+    const binds: unknown[] = [];
+    if (q.topic) where.push("i.topic = ?"), binds.push(q.topic);
+    if (q.rating !== undefined) {
+      where.push(`EXISTS (SELECT 1 FROM respondent_feedback x WHERE x.issue_id = i.id AND x.rating = ? AND x.${LIVE})`);
+      binds.push(q.rating);
+    }
+    const filtered = `${ISSUE_ROLLUP}${where.length ? ` AND ${where.join(" AND ")}` : ""} GROUP BY i.id`;
+    const having = q.status === "new" ? " HAVING unresolved > 0" : q.status === "resolved" ? " HAVING unresolved = 0" : "";
+    const order = q.sort === "reports" ? "reports DESC, last_seen_at DESC" : "last_seen_at DESC";
+
+    const [issues, totalRow, countRow] = await Promise.all([
+      rows<IssueRow>(
+        c.env.DB.prepare(`${filtered}${having} ORDER BY ${order} LIMIT ? OFFSET ?`).bind(...binds, q.limit, q.offset),
+      ),
+      c.env.DB.prepare(`SELECT COUNT(*) AS n FROM (${filtered}${having})`)
+        .bind(...binds)
+        .first<{ n: number }>(),
+      c.env.DB.prepare(
+        `SELECT SUM(CASE WHEN unresolved > 0 THEN 1 ELSE 0 END) AS open, SUM(CASE WHEN unresolved = 0 THEN 1 ELSE 0 END) AS done
+           FROM (${ISSUE_ROLLUP} GROUP BY i.id)`,
+      ).first<{ open: number | null; done: number | null }>(),
+    ]);
+
+    return c.json({
+      issues: issues.map(toIssue),
+      total: Number(totalRow?.n ?? 0),
+      limit: q.limit,
+      offset: q.offset,
+      counts: { new: Number(countRow?.open ?? 0), resolved: Number(countRow?.done ?? 0) },
+    });
+  },
+);
+
+feedbackRouter.get(
+  "/admin/feedback/issues/:id",
+  describeRoute({
+    tags: ["admin"],
+    summary: "One issue, with counts derived from its reports",
+    responses: {
+      200: { description: "Issue", content: { "application/json": { schema: resolver(Issue) } } },
+      404: { description: "Not an admin, or no such issue" },
+    },
+  }),
+  async (c) => {
+    // A merged-away issue answers with its survivor, so an old link still lands somewhere.
+    let id = c.req.param("id");
+    const merged = await c.env.DB.prepare(`SELECT merged_into FROM feedback_issues WHERE id = ?1`)
+      .bind(id)
+      .first<{ merged_into: string | null }>();
+    if (merged?.merged_into) id = merged.merged_into;
+    const row = await c.env.DB.prepare(`${ISSUE_ROLLUP} AND i.id = ? GROUP BY i.id`).bind(id).first<IssueRow>();
+    if (!row) return c.json({ error: { code: "not_found", message: "No such issue" } }, 404);
+    return c.json(toIssue(row));
+  },
+);
+
+/**
+ * Resolve or reopen an issue, or rename it.
+ *
+ * Status is a bulk update of its reports — the issue has no status of its own
+ * to disagree with them — audited once against the platform.
+ */
+feedbackRouter.patch(
+  "/admin/feedback/issues/:id",
+  validator(
+    "json",
+    z
+      .object({
+        status: z.enum(FEEDBACK_STATUSES).optional(),
+        title: z.string().trim().min(1).max(120).optional(),
+      })
+      .refine((v) => v.status !== undefined || v.title !== undefined, { message: "Nothing to change" }),
+  ),
+  describeRoute({
+    tags: ["admin"],
+    summary: "Resolve, reopen or rename an issue",
+    responses: {
+      200: { description: "Updated", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } },
+      404: { description: "Not an admin, or no such issue" },
+    },
+  }),
+  async (c) => {
+    const id = c.req.param("id");
+    const body = c.req.valid("json");
+    const exists = await c.env.DB.prepare(`SELECT id FROM feedback_issues WHERE id = ?1 AND merged_into IS NULL`)
+      .bind(id)
+      .first<{ id: string }>();
+    if (!exists) return c.json({ error: { code: "not_found", message: "No such issue" } }, 404);
+
+    const writes: D1PreparedStatement[] = [];
+    if (body.status !== undefined) {
+      writes.push(
+        c.env.DB.prepare(
+          `UPDATE respondent_feedback SET status = ?1, status_at = ?2, status_by = ?3
+            WHERE issue_id = ?4 AND ${LIVE} AND status != ?1`,
+        ).bind(body.status, Date.now(), c.get("platformAdminEmail") ?? null, id),
+      );
+    }
+    if (body.title !== undefined) {
+      writes.push(c.env.DB.prepare(`UPDATE feedback_issues SET title = ?1, title_edited = 1 WHERE id = ?2`).bind(body.title, id));
+    }
+    await c.env.DB.batch(writes);
+    await audit(c, "_platform", "admin.feedback.issue_triaged", {
+      resourceType: "feedback_issue",
+      resourceId: id,
+      status: body.status ?? null,
+      renamed: body.title !== undefined,
+    });
+    return c.json({ ok: true });
+  },
+);
+
+feedbackRouter.post(
+  "/admin/feedback/issues/:id/merge",
+  validator("json", z.object({ into: z.string().max(64) })),
+  describeRoute({
+    tags: ["admin"],
+    summary: "Merge an issue into another — two groups that are the same bug",
+    responses: {
+      200: { description: "Merged", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } },
+      404: { description: "Not an admin, or either issue is missing or already merged" },
+    },
+  }),
+  async (c) => {
+    const id = c.req.param("id");
+    const { into } = c.req.valid("json");
+    const done = await mergeIssues(c.env, id, into);
+    if (!done) return c.json({ error: { code: "not_found", message: "Cannot merge those two" } }, 404);
+    await audit(c, "_platform", "admin.feedback.issue_merged", { resourceType: "feedback_issue", resourceId: id, into });
+    return c.json({ ok: true });
+  },
+);
+
+feedbackRouter.get(
+  "/admin/feedback/reports/:id/nearest",
+  describeRoute({
+    tags: ["admin"],
+    summary: "The issues a report could be moved to, nearest first",
+    responses: {
+      200: {
+        description: "Nearest issues",
+        content: {
+          "application/json": {
+            schema: resolver(z.object({ issues: z.array(z.object({ id: z.string(), title: z.string(), score: z.number() })) })),
+          },
+        },
+      },
+      404: { description: "Not an admin" },
+    },
+  }),
+  async (c) => c.json({ issues: await nearestIssuesFor(c.env, c.req.param("id")) }),
+);
+
+feedbackRouter.post(
+  "/admin/feedback/reports/:id/move",
+  validator("json", z.object({ issueId: z.string().max(64) })),
+  describeRoute({
+    tags: ["admin"],
+    summary: "Move a report to another issue, or to a new one of its own (`issueId: \"new\"`)",
+    responses: {
+      200: { description: "Moved", content: { "application/json": { schema: resolver(z.object({ issueId: z.string() })) } } },
+      404: { description: "Not an admin, no such report, or no such issue" },
+    },
+  }),
+  async (c) => {
+    const id = c.req.param("id");
+    const moved = await moveReport(c.env, id, c.req.valid("json").issueId);
+    if (!moved) return c.json({ error: { code: "not_found", message: "Cannot move that report there" } }, 404);
+    await audit(c, "_platform", "admin.feedback.report_moved", { resourceType: "feedback", resourceId: id, issueId: moved });
+    return c.json({ issueId: moved });
+  },
+);
+
+/**
+ * Re-match every report from scratch.
+ *
+ * For after a change to the matching prompt, and once when issues first ship.
+ * Drops every issue — renamed titles and merges included; the grouping they
+ * corrected is being recomputed — and replays each noted report, oldest first,
+ * through the same serial queue as live reports, so it cannot interleave with
+ * one. Stored embeddings are kept, so only the grouping model is called again.
+ * The founders are not mailed.
+ */
+feedbackRouter.post(
+  "/admin/feedback/issues/rebuild",
+  describeRoute({
+    tags: ["admin"],
+    summary: "Discard all issues and re-match every report",
+    responses: {
+      200: { description: "Queued", content: { "application/json": { schema: resolver(z.object({ queued: z.number() })) } } },
+      404: { description: "Not an admin" },
+    },
+  }),
+  async (c) => {
+    const reports = await rows<{ id: string }>(
+      c.env.DB.prepare(
+        `SELECT id FROM respondent_feedback WHERE message IS NOT NULL AND message != '' ORDER BY created_at ASC`,
+      ),
+    );
+    await c.env.DB.batch([
+      c.env.DB.prepare(`UPDATE respondent_feedback SET issue_id = NULL, issue_similarity = NULL WHERE issue_id IS NOT NULL`),
+      c.env.DB.prepare(`DELETE FROM feedback_issues`),
+    ]);
+    // `sendBatch` takes 100 at a time; the queue keeps their order.
+    for (let i = 0; i < reports.length; i += 100) {
+      await c.env.Q_FEEDBACK.sendBatch(
+        reports.slice(i, i + 100).map((r) => ({
+          body: { kind: "feedback_triage", feedbackId: r.id, mail: false } satisfies FeedbackTriageMessage,
+        })),
+      );
+    }
+    await audit(c, "_platform", "admin.feedback.issues_rebuilt", { resourceType: "feedback_issue", queued: reports.length });
+    return c.json({ queued: reports.length });
   },
 );

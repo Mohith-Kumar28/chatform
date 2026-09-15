@@ -29,9 +29,13 @@ import type {
   GetApiAdminAi200,
   GetApiAdminAiParams,
   GetApiAdminFeedback200,
+  GetApiAdminFeedbackIssues200,
+  GetApiAdminFeedbackIssuesById200,
+  GetApiAdminFeedbackIssuesParams,
   GetApiAdminFeedbackParams,
   GetApiAdminFeedbackReports200,
   GetApiAdminFeedbackReportsById200,
+  GetApiAdminFeedbackReportsByIdNearest200,
   GetApiAdminFeedbackReportsParams,
   GetApiAdminFeedbackStats200,
   GetApiAdminFeedbackStatsParams,
@@ -49,6 +53,8 @@ import type {
   GetApiAdminRevenueParams,
   GetApiAdminUsers200,
   GetApiAdminUsersParams,
+  PatchApiAdminFeedbackIssuesById200,
+  PatchApiAdminFeedbackIssuesByIdBody,
   PatchApiAdminFeedbackReportsById200,
   PatchApiAdminFeedbackReportsByIdBody,
   PostApiAdminAccountsByOrgIdOverrides200,
@@ -57,6 +63,11 @@ import type {
   PostApiAdminAccountsByOrgIdPlanBody,
   PostApiAdminAccountsByOrgIdRefreshEntitlements200,
   PostApiAdminBillingEventsByIdReprocess200,
+  PostApiAdminFeedbackIssuesByIdMerge200,
+  PostApiAdminFeedbackIssuesByIdMergeBody,
+  PostApiAdminFeedbackIssuesRebuild200,
+  PostApiAdminFeedbackReportsByIdMove200,
+  PostApiAdminFeedbackReportsByIdMoveBody,
   PostApiAdminImpersonate200,
   PostApiAdminImpersonateBody,
   PostApiAdminSubscriptionsByIdGrace200,
@@ -1262,7 +1273,680 @@ export function useGetApiAdminFeedbackReportsByIdSnapshot<TData = Awaited<Return
 
 
 
-export type getApiAdminProductResponse200 = {
+export type getApiAdminFeedbackIssuesResponse200 = {
+  data: GetApiAdminFeedbackIssues200
+  status: 200
+}
+
+export type getApiAdminFeedbackIssuesResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackIssuesResponseSuccess = (getApiAdminFeedbackIssuesResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackIssuesResponseError = (getApiAdminFeedbackIssuesResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackIssuesResponse = (getApiAdminFeedbackIssuesResponseSuccess | getApiAdminFeedbackIssuesResponseError)
+
+export const getGetApiAdminFeedbackIssuesUrl = (params?: GetApiAdminFeedbackIssuesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/feedback/issues?${stringifiedParams}` : `/api/admin/feedback/issues`
+}
+
+/**
+ * @summary Bug reports grouped into issues, with counts derived from their reports
+ */
+export const getApiAdminFeedbackIssues = async (params?: GetApiAdminFeedbackIssuesParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackIssuesResponse> => {
+
+  return customFetch<getApiAdminFeedbackIssuesResponse>(getGetApiAdminFeedbackIssuesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackIssuesQueryKey = (params?: GetApiAdminFeedbackIssuesParams,) => {
+    return [
+    `/api/admin/feedback/issues`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackIssuesQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedbackIssues>>, TError = void>(params?: GetApiAdminFeedbackIssuesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackIssues>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackIssuesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedbackIssues>>> = ({ signal }) => getApiAdminFeedbackIssues(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackIssues>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackIssuesQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedbackIssues>>>
+export type GetApiAdminFeedbackIssuesQueryError = void
+
+
+/**
+ * @summary Bug reports grouped into issues, with counts derived from their reports
+ */
+
+export function useGetApiAdminFeedbackIssues<TData = Awaited<ReturnType<typeof getApiAdminFeedbackIssues>>, TError = void>(
+ params?: GetApiAdminFeedbackIssuesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackIssues>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackIssuesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAdminFeedbackIssuesByIdResponse200 = {
+  data: GetApiAdminFeedbackIssuesById200
+  status: 200
+}
+
+export type getApiAdminFeedbackIssuesByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackIssuesByIdResponseSuccess = (getApiAdminFeedbackIssuesByIdResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackIssuesByIdResponseError = (getApiAdminFeedbackIssuesByIdResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackIssuesByIdResponse = (getApiAdminFeedbackIssuesByIdResponseSuccess | getApiAdminFeedbackIssuesByIdResponseError)
+
+export const getGetApiAdminFeedbackIssuesByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/issues/${id}`
+}
+
+/**
+ * @summary One issue, with counts derived from its reports
+ */
+export const getApiAdminFeedbackIssuesById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackIssuesByIdResponse> => {
+
+  return customFetch<getApiAdminFeedbackIssuesByIdResponse>(getGetApiAdminFeedbackIssuesByIdUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackIssuesByIdQueryKey = (id: string,) => {
+    return [
+    `/api/admin/feedback/issues/${id}`
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackIssuesByIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedbackIssuesById>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackIssuesById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackIssuesByIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedbackIssuesById>>> = ({ signal }) => getApiAdminFeedbackIssuesById(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackIssuesById>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackIssuesByIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedbackIssuesById>>>
+export type GetApiAdminFeedbackIssuesByIdQueryError = void
+
+
+/**
+ * @summary One issue, with counts derived from its reports
+ */
+
+export function useGetApiAdminFeedbackIssuesById<TData = Awaited<ReturnType<typeof getApiAdminFeedbackIssuesById>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackIssuesById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackIssuesByIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type patchApiAdminFeedbackIssuesByIdResponse200 = {
+  data: PatchApiAdminFeedbackIssuesById200
+  status: 200
+}
+
+export type patchApiAdminFeedbackIssuesByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type patchApiAdminFeedbackIssuesByIdResponseSuccess = (patchApiAdminFeedbackIssuesByIdResponse200) & {
+  headers: Headers;
+};
+export type patchApiAdminFeedbackIssuesByIdResponseError = (patchApiAdminFeedbackIssuesByIdResponse404) & {
+  headers: Headers;
+};
+
+export type patchApiAdminFeedbackIssuesByIdResponse = (patchApiAdminFeedbackIssuesByIdResponseSuccess | patchApiAdminFeedbackIssuesByIdResponseError)
+
+export const getPatchApiAdminFeedbackIssuesByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/issues/${id}`
+}
+
+/**
+ * @summary Resolve, reopen or rename an issue
+ */
+export const patchApiAdminFeedbackIssuesById = async (id: string,
+    patchApiAdminFeedbackIssuesByIdBody: PatchApiAdminFeedbackIssuesByIdBody, options?: Parameters<typeof customFetch>[1]): Promise<patchApiAdminFeedbackIssuesByIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<patchApiAdminFeedbackIssuesByIdResponse>(getPatchApiAdminFeedbackIssuesByIdUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(patchApiAdminFeedbackIssuesByIdBody)
+  }
+);}
+
+
+
+
+
+export const getPatchApiAdminFeedbackIssuesByIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminFeedbackIssuesById>>, TError,PatchApiAdminFeedbackIssuesByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminFeedbackIssuesById>>, TError,PatchApiAdminFeedbackIssuesByIdMutationVariables, TContext> => {
+
+const mutationKey = ['patchApiAdminFeedbackIssuesById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiAdminFeedbackIssuesById>>, PatchApiAdminFeedbackIssuesByIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  patchApiAdminFeedbackIssuesById(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchApiAdminFeedbackIssuesByIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiAdminFeedbackIssuesById>>>
+    export type PatchApiAdminFeedbackIssuesByIdMutationBody = PatchApiAdminFeedbackIssuesByIdBody
+    export type PatchApiAdminFeedbackIssuesByIdMutationError = void
+    export type PatchApiAdminFeedbackIssuesByIdMutationVariables = {id: string;data: PatchApiAdminFeedbackIssuesByIdBody}
+
+    /**
+ * @summary Resolve, reopen or rename an issue
+ */
+export const usePatchApiAdminFeedbackIssuesById = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminFeedbackIssuesById>>, TError,PatchApiAdminFeedbackIssuesByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchApiAdminFeedbackIssuesById>>,
+        TError,
+        PatchApiAdminFeedbackIssuesByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchApiAdminFeedbackIssuesByIdMutationOptions(options));
+    }
+    export type postApiAdminFeedbackIssuesByIdMergeResponse200 = {
+  data: PostApiAdminFeedbackIssuesByIdMerge200
+  status: 200
+}
+
+export type postApiAdminFeedbackIssuesByIdMergeResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiAdminFeedbackIssuesByIdMergeResponseSuccess = (postApiAdminFeedbackIssuesByIdMergeResponse200) & {
+  headers: Headers;
+};
+export type postApiAdminFeedbackIssuesByIdMergeResponseError = (postApiAdminFeedbackIssuesByIdMergeResponse404) & {
+  headers: Headers;
+};
+
+export type postApiAdminFeedbackIssuesByIdMergeResponse = (postApiAdminFeedbackIssuesByIdMergeResponseSuccess | postApiAdminFeedbackIssuesByIdMergeResponseError)
+
+export const getPostApiAdminFeedbackIssuesByIdMergeUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/issues/${id}/merge`
+}
+
+/**
+ * @summary Merge an issue into another — two groups that are the same bug
+ */
+export const postApiAdminFeedbackIssuesByIdMerge = async (id: string,
+    postApiAdminFeedbackIssuesByIdMergeBody: PostApiAdminFeedbackIssuesByIdMergeBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAdminFeedbackIssuesByIdMergeResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiAdminFeedbackIssuesByIdMergeResponse>(getPostApiAdminFeedbackIssuesByIdMergeUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiAdminFeedbackIssuesByIdMergeBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiAdminFeedbackIssuesByIdMergeMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackIssuesByIdMerge>>, TError,PostApiAdminFeedbackIssuesByIdMergeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackIssuesByIdMerge>>, TError,PostApiAdminFeedbackIssuesByIdMergeMutationVariables, TContext> => {
+
+const mutationKey = ['postApiAdminFeedbackIssuesByIdMerge'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAdminFeedbackIssuesByIdMerge>>, PostApiAdminFeedbackIssuesByIdMergeMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postApiAdminFeedbackIssuesByIdMerge(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiAdminFeedbackIssuesByIdMergeMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAdminFeedbackIssuesByIdMerge>>>
+    export type PostApiAdminFeedbackIssuesByIdMergeMutationBody = PostApiAdminFeedbackIssuesByIdMergeBody
+    export type PostApiAdminFeedbackIssuesByIdMergeMutationError = void
+    export type PostApiAdminFeedbackIssuesByIdMergeMutationVariables = {id: string;data: PostApiAdminFeedbackIssuesByIdMergeBody}
+
+    /**
+ * @summary Merge an issue into another — two groups that are the same bug
+ */
+export const usePostApiAdminFeedbackIssuesByIdMerge = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackIssuesByIdMerge>>, TError,PostApiAdminFeedbackIssuesByIdMergeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiAdminFeedbackIssuesByIdMerge>>,
+        TError,
+        PostApiAdminFeedbackIssuesByIdMergeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiAdminFeedbackIssuesByIdMergeMutationOptions(options));
+    }
+    export type getApiAdminFeedbackReportsByIdNearestResponse200 = {
+  data: GetApiAdminFeedbackReportsByIdNearest200
+  status: 200
+}
+
+export type getApiAdminFeedbackReportsByIdNearestResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackReportsByIdNearestResponseSuccess = (getApiAdminFeedbackReportsByIdNearestResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackReportsByIdNearestResponseError = (getApiAdminFeedbackReportsByIdNearestResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackReportsByIdNearestResponse = (getApiAdminFeedbackReportsByIdNearestResponseSuccess | getApiAdminFeedbackReportsByIdNearestResponseError)
+
+export const getGetApiAdminFeedbackReportsByIdNearestUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/reports/${id}/nearest`
+}
+
+/**
+ * @summary The issues a report could be moved to, nearest first
+ */
+export const getApiAdminFeedbackReportsByIdNearest = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackReportsByIdNearestResponse> => {
+
+  return customFetch<getApiAdminFeedbackReportsByIdNearestResponse>(getGetApiAdminFeedbackReportsByIdNearestUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackReportsByIdNearestQueryKey = (id: string,) => {
+    return [
+    `/api/admin/feedback/reports/${id}/nearest`
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackReportsByIdNearestQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedbackReportsByIdNearest>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackReportsByIdNearest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackReportsByIdNearestQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedbackReportsByIdNearest>>> = ({ signal }) => getApiAdminFeedbackReportsByIdNearest(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackReportsByIdNearest>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackReportsByIdNearestQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedbackReportsByIdNearest>>>
+export type GetApiAdminFeedbackReportsByIdNearestQueryError = void
+
+
+/**
+ * @summary The issues a report could be moved to, nearest first
+ */
+
+export function useGetApiAdminFeedbackReportsByIdNearest<TData = Awaited<ReturnType<typeof getApiAdminFeedbackReportsByIdNearest>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackReportsByIdNearest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackReportsByIdNearestQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postApiAdminFeedbackReportsByIdMoveResponse200 = {
+  data: PostApiAdminFeedbackReportsByIdMove200
+  status: 200
+}
+
+export type postApiAdminFeedbackReportsByIdMoveResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiAdminFeedbackReportsByIdMoveResponseSuccess = (postApiAdminFeedbackReportsByIdMoveResponse200) & {
+  headers: Headers;
+};
+export type postApiAdminFeedbackReportsByIdMoveResponseError = (postApiAdminFeedbackReportsByIdMoveResponse404) & {
+  headers: Headers;
+};
+
+export type postApiAdminFeedbackReportsByIdMoveResponse = (postApiAdminFeedbackReportsByIdMoveResponseSuccess | postApiAdminFeedbackReportsByIdMoveResponseError)
+
+export const getPostApiAdminFeedbackReportsByIdMoveUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/reports/${id}/move`
+}
+
+/**
+ * @summary Move a report to another issue, or to a new one of its own (`issueId: "new"`)
+ */
+export const postApiAdminFeedbackReportsByIdMove = async (id: string,
+    postApiAdminFeedbackReportsByIdMoveBody: PostApiAdminFeedbackReportsByIdMoveBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAdminFeedbackReportsByIdMoveResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiAdminFeedbackReportsByIdMoveResponse>(getPostApiAdminFeedbackReportsByIdMoveUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiAdminFeedbackReportsByIdMoveBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiAdminFeedbackReportsByIdMoveMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackReportsByIdMove>>, TError,PostApiAdminFeedbackReportsByIdMoveMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackReportsByIdMove>>, TError,PostApiAdminFeedbackReportsByIdMoveMutationVariables, TContext> => {
+
+const mutationKey = ['postApiAdminFeedbackReportsByIdMove'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAdminFeedbackReportsByIdMove>>, PostApiAdminFeedbackReportsByIdMoveMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postApiAdminFeedbackReportsByIdMove(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiAdminFeedbackReportsByIdMoveMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAdminFeedbackReportsByIdMove>>>
+    export type PostApiAdminFeedbackReportsByIdMoveMutationBody = PostApiAdminFeedbackReportsByIdMoveBody
+    export type PostApiAdminFeedbackReportsByIdMoveMutationError = void
+    export type PostApiAdminFeedbackReportsByIdMoveMutationVariables = {id: string;data: PostApiAdminFeedbackReportsByIdMoveBody}
+
+    /**
+ * @summary Move a report to another issue, or to a new one of its own (`issueId: "new"`)
+ */
+export const usePostApiAdminFeedbackReportsByIdMove = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackReportsByIdMove>>, TError,PostApiAdminFeedbackReportsByIdMoveMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiAdminFeedbackReportsByIdMove>>,
+        TError,
+        PostApiAdminFeedbackReportsByIdMoveMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiAdminFeedbackReportsByIdMoveMutationOptions(options));
+    }
+    export type postApiAdminFeedbackIssuesRebuildResponse200 = {
+  data: PostApiAdminFeedbackIssuesRebuild200
+  status: 200
+}
+
+export type postApiAdminFeedbackIssuesRebuildResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiAdminFeedbackIssuesRebuildResponseSuccess = (postApiAdminFeedbackIssuesRebuildResponse200) & {
+  headers: Headers;
+};
+export type postApiAdminFeedbackIssuesRebuildResponseError = (postApiAdminFeedbackIssuesRebuildResponse404) & {
+  headers: Headers;
+};
+
+export type postApiAdminFeedbackIssuesRebuildResponse = (postApiAdminFeedbackIssuesRebuildResponseSuccess | postApiAdminFeedbackIssuesRebuildResponseError)
+
+export const getPostApiAdminFeedbackIssuesRebuildUrl = () => {
+
+
+
+
+  return `/api/admin/feedback/issues/rebuild`
+}
+
+/**
+ * @summary Discard all issues and re-match every report
+ */
+export const postApiAdminFeedbackIssuesRebuild = async ( options?: Parameters<typeof customFetch>[1]): Promise<postApiAdminFeedbackIssuesRebuildResponse> => {
+
+  return customFetch<postApiAdminFeedbackIssuesRebuildResponse>(getPostApiAdminFeedbackIssuesRebuildUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiAdminFeedbackIssuesRebuildMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackIssuesRebuild>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackIssuesRebuild>>, TError,void, TContext> => {
+
+const mutationKey = ['postApiAdminFeedbackIssuesRebuild'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAdminFeedbackIssuesRebuild>>, void> = () => {
+
+
+          return  postApiAdminFeedbackIssuesRebuild(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiAdminFeedbackIssuesRebuildMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAdminFeedbackIssuesRebuild>>>
+
+    export type PostApiAdminFeedbackIssuesRebuildMutationError = void
+
+
+    /**
+ * @summary Discard all issues and re-match every report
+ */
+export const usePostApiAdminFeedbackIssuesRebuild = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackIssuesRebuild>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiAdminFeedbackIssuesRebuild>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getPostApiAdminFeedbackIssuesRebuildMutationOptions(options));
+    }
+    export type getApiAdminProductResponse200 = {
   data: GetApiAdminProduct200
   status: 200
 }

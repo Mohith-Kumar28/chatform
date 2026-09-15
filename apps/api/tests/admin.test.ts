@@ -155,6 +155,7 @@ const EVERY_ADMIN_ROUTE = [
   "/api/admin/feedback",
   "/api/admin/feedback/stats",
   "/api/admin/feedback/reports",
+  "/api/admin/feedback/issues",
 ];
 
 describe("every route is behind the one guard", () => {

@@ -80,9 +80,23 @@
       { "binding": "Q_WEBHOOKS", "queue": "q-webhooks" },
       { "binding": "Q_EXPORTS", "queue": "q-exports" },
       { "binding": "Q_EMAIL", "queue": "q-emails" },
-      { "binding": "Q_KNOWLEDGE", "queue": "q-knowledge" }
+      { "binding": "Q_KNOWLEDGE", "queue": "q-knowledge" },
+      { "binding": "Q_FEEDBACK", "queue": "q-feedback" }
     ],
     "consumers": [
+      {
+        // Bug reports, matched to issues one at a time. `max_concurrency: 1` is the
+        // whole point: matching reads the open issues and then writes one, and two
+        // reports of the same new bug handled in parallel would each find no issue
+        // and open two — the duplication this queue exists to prevent. Serial, D1
+        // reads its own writes and the race cannot happen. Its own queue so the
+        // email queue keeps its parallelism for every other notification.
+        "queue": "q-feedback",
+        "max_batch_size": 10,
+        "max_batch_timeout": 2,
+        "max_concurrency": 1,
+        "max_retries": 3
+      },
       {
         "queue": "q-webhooks",
         "max_batch_size": 10,

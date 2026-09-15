@@ -8,6 +8,7 @@ import { pruneFormActivity } from "./lib/form-activity.js";
 import { runExport, pruneExpiredExports, type ExportMessage } from "./lib/exports.js";
 import { runMailJob } from "./lib/mail-jobs.js";
 import { ingestSource } from "./lib/knowledge-service.js";
+import { runFeedbackTriage, type FeedbackTriageMessage } from "./lib/feedback-triage.js";
 import { pruneMailDeliveries, recordMailDelivery, type MailJob } from "./lib/mail.js";
 import {
   sweepExpiredResponses,
@@ -62,6 +63,21 @@ export default {
           // retrying is for a transient D1 or R2 error.
           msg.retry();
         }
+      } else if (batch.queue === "q-feedback") {
+        /*
+          Bug-report triage, strictly one at a time — `max_concurrency: 1` in
+          wrangler.jsonc, and messages within a batch in order, here. Every step
+          degrades on its own and never throws, so a message is acked once it has
+          run: retrying a report whose model call failed would pay for the same
+          failure again, and an unmatched report is still mailed.
+        */
+        const body = msg.body as Partial<FeedbackTriageMessage>;
+        if (body.kind === "feedback_triage" && body.feedbackId) {
+          await runFeedbackTriage(env, body as FeedbackTriageMessage).catch((err: unknown) =>
+            console.error("feedback_triage_failed", { feedbackId: body.feedbackId, err: String(err) }),
+          );
+        }
+        msg.ack();
       } else if (batch.queue === "q-knowledge") {
         /**
          * One source per message, and `ingestSource` swallows the failures that

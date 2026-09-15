@@ -8,6 +8,8 @@ export interface Bindings {
   Q_WEBHOOKS: Queue;
   Q_EXPORTS: Queue;
   Q_EMAIL: Queue;
+  /** Bug-report triage — topic, then issue. Strictly serial; see `wrangler.jsonc`. */
+  Q_FEEDBACK: Queue;
   /**
    * Knowledge ingestion. Extraction, chunking and embedding all take far longer
    * than a request can wait — a single PDF is a `toMarkdown` call, an OCR
