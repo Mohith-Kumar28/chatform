@@ -1497,6 +1497,13 @@ export const respondentFeedback = sqliteTable(
     snapshotKey: text("snapshot_key"),
     snapshotBytes: integer("snapshot_bytes"),
     /**
+     * Answers recorded and turns taken when the report was filed — asked of the
+     * live session object, because `chat_sessions` only learns these when a
+     * response finalises and reads zero for every conversation still going.
+     */
+    answered: integer("answered"),
+    turns: integer("turns"),
+    /**
      * The browser string, verbatim.
      *
      * The single most useful line in a bug report and the one nobody thinks to

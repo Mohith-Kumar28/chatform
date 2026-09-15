@@ -336,7 +336,7 @@ function ReportView({
                 {report.session.collectedCount === 0
                   ? "nothing answered yet"
                   : `${report.session.collectedCount} answered`}
-                {` · ${report.session.turnCount} turns`}
+                {` · ${report.session.turnCount} ${report.session.turnCount === 1 ? "turn" : "turns"}`}
               </Fact>
               <Fact label="State">
                 {report.session.status}

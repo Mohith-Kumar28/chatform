@@ -967,6 +967,23 @@ export class SessionDO extends DurableObject<Bindings> {
     return ok ? (this.meta?.respondentId ?? null) : null;
   }
 
+  /**
+   * What a bug report needs to know about the conversation it came out of.
+   *
+   * The counts are asked of this object because it is the only place they are
+   * true while the conversation is still going: `chat_sessions` is written with
+   * them when a response finalises, and reads zero until then.
+   */
+  async getReportContext(): Promise<{ respondentId: string | null; answered: number; turns: number } | null> {
+    const ok = await this.ensureLoaded();
+    if (!ok) return null;
+    return {
+      respondentId: this.meta?.respondentId ?? null,
+      answered: this.collectedCount,
+      turns: this.turnCount,
+    };
+  }
+
   // ─────────────────────── verifying one answer ───────────────────────
 
   /**

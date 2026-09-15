@@ -661,9 +661,10 @@ sessionsRouter.post("/sessions/:id/feedback", zValidator("json", feedbackSchema)
     row to be attributed from. The object is already awake — they are looking
     at a conversation it is running.
   */
-  const respondentId = await stub(c.env, sessionId)
-    .getRespondentId()
+  const context = await stub(c.env, sessionId)
+    .getReportContext()
     .catch(() => null);
+  const respondentId = context?.respondentId ?? null;
 
   const message = body.message?.trim();
   const result = await recordFeedback(c.env, {
@@ -674,6 +675,8 @@ sessionsRouter.post("/sessions/:id/feedback", zValidator("json", feedbackSchema)
     organizationId: row?.organization_id ?? null,
     rating: body.rating,
     message: message ? message : null,
+    answered: context?.answered ?? null,
+    turns: context?.turns ?? null,
     source: row?.source ?? "chat",
     userAgent: c.req.header("user-agent") ?? null,
   });

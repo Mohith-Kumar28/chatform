@@ -191,13 +191,19 @@ export function FeedbackStats() {
 
         <ChartCard
           title="Average rating over time"
-          subtitle="Days with no reports are gaps, not zeros."
+          subtitle="One bar per day with reports. A day with none has no bar, not a zero."
         >
+          {/*
+            Bars, not a line. A line with gaps cannot draw a day that has no
+            neighbours — and reports arrive a few a day at best, so most days
+            with data are exactly that. It rendered as an empty frame over a
+            period that had reports in it.
+          */}
           <TrendChart
             days={days}
             series={[{ key: "average", label: "Average rating", color: "var(--rating-4)" }]}
             data={{ average: s.series?.average ?? [] }}
-            shape="area"
+            shape="bar"
             height={220}
           />
         </ChartCard>

@@ -46,6 +46,9 @@ export interface FeedbackInput {
   organizationId: string | null;
   rating: number;
   message: string | null;
+  /** From the live session at the moment of filing; null when it could not be asked. */
+  answered: number | null;
+  turns: number | null;
   source: string;
   userAgent: string | null;
 }
@@ -87,8 +90,8 @@ export async function recordFeedback(env: Bindings, input: FeedbackInput): Promi
   const id = newFeedbackId();
   await env.DB.prepare(
     `INSERT INTO respondent_feedback
-       (id, respondent_id, session_id, form_id, form_version_id, organization_id, rating, message, source, user_agent, created_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
+       (id, respondent_id, session_id, form_id, form_version_id, organization_id, rating, message, answered, turns, source, user_agent, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
   )
     .bind(
       id,
@@ -99,6 +102,8 @@ export async function recordFeedback(env: Bindings, input: FeedbackInput): Promi
       input.organizationId,
       input.rating,
       input.message,
+      input.answered,
+      input.turns,
       input.source,
       input.userAgent,
       now,

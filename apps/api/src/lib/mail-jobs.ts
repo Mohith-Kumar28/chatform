@@ -130,7 +130,7 @@ async function runFeedbackJob(
             fb.created_at, fb.source, fb.session_id,
             f.title AS form_title, f.slug AS form_slug,
             o.name AS org_name,
-            s.collected_count, s.turn_count, s.country, s.respondent_identity,
+            fb.answered, fb.turns, s.country, s.respondent_identity,
             r.display_name AS respondent_name, r.email AS respondent_email, r.phone AS respondent_phone,
             -- Null rather than a count when nobody was recognised: every
             -- unattributed report shares one null id, and counting those
@@ -159,8 +159,8 @@ async function runFeedbackJob(
       form_title: string | null;
       form_slug: string | null;
       org_name: string | null;
-      collected_count: number | null;
-      turn_count: number | null;
+      answered: number | null;
+      turns: number | null;
       country: string | null;
       respondent_identity: string | null;
       respondent_name: string | null;
@@ -211,8 +211,8 @@ async function runFeedbackJob(
     topic: feedbackTopicLabel(tags?.topic),
     reportUrl: `${origin}/admin/feedback?report=${encodeURIComponent(job.feedbackId)}`,
     reportCount: row.report_count === null ? null : Number(row.report_count),
-    answered: row.collected_count === null ? null : Number(row.collected_count),
-    turns: row.turn_count === null ? null : Number(row.turn_count),
+    answered: row.answered === null ? null : Number(row.answered),
+    turns: row.turns === null ? null : Number(row.turns),
     source: row.source,
     country: row.country,
     userAgent: row.user_agent,

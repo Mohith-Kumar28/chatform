@@ -94,6 +94,18 @@ describe("sending a report", () => {
     expect(row?.respondent_id).toBeTruthy();
   });
 
+  it("records how far in they were, from the live session rather than the stale columns", async () => {
+    const s = await openSession("device-progress");
+    const { id } = await (await send(s, { rating: 3, message: "stuck" })).json<{ id: string }>();
+    const row = await DB()
+      .DB.prepare(`SELECT answered, turns FROM respondent_feedback WHERE id = ?`)
+      .bind(id)
+      .first<{ answered: number | null; turns: number | null }>();
+    // Asked of the session object, so a real zero — not the null of "never asked".
+    expect(row?.answered).toBe(0);
+    expect(row?.turns).not.toBeNull();
+  });
+
   it("takes a face with no words", async () => {
     const s = await openSession("device-wordless");
     expect((await send(s, { rating: 2 })).status).toBe(200);
@@ -283,6 +295,17 @@ describe("telling the founders", () => {
     expect((sent[0] as unknown as { replyTo?: string }).replyTo).toBe("priya@example.com");
     // And straight to this report in the console.
     expect(sent[0]?.text).toContain(`/admin/feedback?report=${id}`);
+  });
+
+  it("reports progress from the report, not from a session that has not finalised", async () => {
+    const id = await seedReport("fbk_mail_progress", 2, "Broke on question four.");
+    await DB().DB.prepare(`UPDATE respondent_feedback SET answered = 3, turns = 7 WHERE id = ?`).bind(id).run();
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding, PLATFORM_ADMIN_EMAILS: "founder@example.com" }), {
+      kind: "respondent_feedback",
+      feedbackId: id,
+    });
+    expect(sent[0]?.text).toContain("Progress: 3 answers in, 7 turns");
   });
 
   it("says there is no way to reply when they never signed in", async () => {

@@ -624,7 +624,7 @@ feedbackRouter.get(
   async (c) => {
     const id = c.req.param("id");
     const row = await c.env.DB.prepare(
-      `SELECT ${REPORT_COLUMNS}, fb.form_version_id,
+      `SELECT ${REPORT_COLUMNS}, fb.form_version_id, fb.answered, fb.turns,
               COALESCE((${PLAN_OF_ORG}), 'free') AS plan,
               r.email AS respondent_email, r.phone AS respondent_phone,
               r.first_seen_at, r.last_seen_at
@@ -635,6 +635,8 @@ feedbackRouter.get(
       .first<
         ReportRow & {
           form_version_id: string | null;
+          answered: number | null;
+          turns: number | null;
           plan: string;
           respondent_email: string | null;
           respondent_phone: string | null;
@@ -693,8 +695,14 @@ feedbackRouter.get(
             status: session.status,
             country: session.country,
             source: session.source,
-            collectedCount: Number(session.collected_count),
-            turnCount: Number(session.turn_count),
+            /*
+              The counts written on the report at the moment it was filed. The
+              session's own columns are only written when a response finalises,
+              so for a conversation still in progress they read zero; they are
+              the fallback for a report filed before the counts were recorded.
+            */
+            collectedCount: Number(row.answered ?? session.collected_count),
+            turnCount: Number(row.turns ?? session.turn_count),
             isTest: Boolean(session.is_test),
             createdAt: Number(session.created_at),
             lastActivityAt: Number(session.last_activity_at),
