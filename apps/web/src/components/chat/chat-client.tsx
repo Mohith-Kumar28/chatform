@@ -79,6 +79,40 @@ export function ChatClient({
     onRestart,
   });
 
+  return <ChatSurface chat={chat} config={config} previewMode={previewMode} />;
+}
+
+/** Everything the chat screen reads, whether it came from a live session or a snapshot. */
+export type ChatState = ReturnType<typeof useChat>;
+
+/**
+ * The chat screen itself, drawn from a `chat` state rather than owning one.
+ *
+ * Split out of `ChatClient` so there is exactly one implementation of this
+ * screen. `ChatClient` feeds it a live session; the console's bug-report replay
+ * feeds it the state a respondent's browser captured when they pressed "Report a
+ * bug" — so the founders see the same bubbles, cards, composer and chips the
+ * respondent saw, not a lookalike that drifts from them.
+ *
+ * `replay` makes it a picture: the whole surface is `inert` (nothing can be
+ * clicked, typed into or focused), side effects that talk to the world — warming
+ * Google sign-in, the review card's auto-submit countdown, a completion redirect,
+ * confetti — stay off, and the footer's own links are withheld.
+ */
+export function ChatSurface({
+  chat,
+  config,
+  previewMode: previewModeProp,
+  replay = false,
+}: {
+  chat: ChatState;
+  config: PublicFormConfig;
+  previewMode?: boolean;
+  replay?: boolean;
+}) {
+  // A replay is contained like the builder preview: no viewport lock, no redirect.
+  const previewMode = previewModeProp || replay;
+
   /**
    * Fetch Google's sign-in script while the boot screen is still up.
    *
@@ -102,9 +136,9 @@ export function ChatClient({
       ? asEmail(chat.respondentHint.label)
       : undefined;
   useEffect(() => {
-    if (!googleGated) return;
+    if (!googleGated || replay) return;
     warmGoogleSignIn(googleHintEmail);
-  }, [googleGated, googleHintEmail]);
+  }, [googleGated, googleHintEmail, replay]);
 
   /**
    * Whether this respondent has told the review card to stop sending itself.
@@ -113,7 +147,8 @@ export function ChatClient({
    * wait for them, and re-arming the countdown every time the review comes
    * back — after an edit, after a reconnect — would be arguing with them.
    */
-  const [autoSubmitOff, setAutoSubmitOff] = useState(false);
+  // A replay is a still picture: the review card's countdown must never run in it.
+  const [autoSubmitOff, setAutoSubmitOff] = useState(replay);
 
   /**
    * The "Report a bug" panel, opened from the footer.
@@ -386,6 +421,7 @@ export function ChatClient({
           previewMode ? "h-full min-h-0" : "cf-chat-viewport",
         )}
         style={themeVars}
+        inert={replay}
       >
         <ChatBoot title={config.agentName || config.title} logoUrl={config.theme.logoUrl} />
       </div>
@@ -416,6 +452,8 @@ export function ChatClient({
         previewMode ? "h-full min-h-0" : "cf-chat-viewport",
       )}
       style={themeVars}
+      // Nothing in a replay can be clicked, typed into or focused.
+      inert={replay}
     >
       <ChatHeader
         title={agentName}
@@ -655,6 +693,8 @@ export function ChatClient({
                 is going to happen at the end of the count.
               */
               redirectArmed={Boolean(chat.ending.redirectUrl) && !previewMode}
+              // No confetti for an ending that happened days ago.
+              replay={replay}
             />
           )}
 
@@ -788,7 +828,7 @@ export function ChatClient({
             draft, and a bug report filed from a form that has no respondents
             yet is a report about nothing.
           */}
-          {(!config.brandingHidden || !previewMode) && (
+          {!replay && (!config.brandingHidden || !previewMode) && (
             /*
               Centred under the message box, not under the row.
 
@@ -863,26 +903,7 @@ export function ChatClient({
             panel opened: a respondent who opens it, goes back to try the broken
             thing once more, and then sends, should attach what they saw last.
           */
-          onSubmit={(rating, message) =>
-            chat.sendFeedback(
-              rating,
-              message,
-              captureSnapshot({
-                config,
-                messages: chat.messages,
-                question: chat.question,
-                review: chat.review,
-                ending: chat.ending,
-                submitted: chat.submitted,
-                auth: chat.auth,
-                verify: chat.verify,
-                status: chat.status,
-                error: chat.error,
-                thinking: chat.thinking,
-                validationHint: chat.validationHint,
-              }),
-            )
-          }
+          onSubmit={(rating, message) => chat.sendFeedback(rating, message, captureSnapshot(config, chat))}
           // On a white-labelled form the panel explains who reads this without
           // naming us — see the footer comment above.
           named={!config.brandingHidden}
@@ -892,12 +913,7 @@ export function ChatClient({
   );
 }
 
-/**
- * Exported for the console's bug-report replay, which draws the header a
- * respondent saw from their snapshot. One component, two callers — a second copy
- * drawn for the console is how the replay would drift from the page it replays.
- */
-export function ChatHeader({
+function ChatHeader({
   title,
   brandName,
   logoUrl,
@@ -1013,8 +1029,7 @@ export function ChatHeader({
  * object for the message that changed, so identity comparison is enough to
  * leave every other bubble alone.
  */
-/** Exported for the console's bug-report replay — see `ChatHeader`. */
-export const Bubble = memo(function Bubble({
+const Bubble = memo(function Bubble({
   message,
   canEdit,
   onEdit,

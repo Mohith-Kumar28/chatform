@@ -11,14 +11,13 @@ import { apiData } from "@/lib/api/payload";
 import { DataTable, type Column } from "./data-table";
 import { KpiTile } from "./kpi-tile";
 import { COMPARED_TO, useRange } from "./range-picker";
-import { FACES, faceFor } from "./feedback-faces";
+import { faceFor } from "./feedback-faces";
 
 /**
  * The numbers above the inbox: is anything wrong, which way is it going, where.
  *
- * Three questions, three rows. The tiles say how much. The two trend charts say
- * which direction — volume answers "is it getting worse", the average answers
- * "worse in what way". The distribution and the three cluster tables say where,
+ * Three questions, three rows. The tiles say how much. The chart says when, and
+ * its colours say how it felt. The distribution and the three cluster tables say where,
  * and every cluster row links into the inbox filtered to it, because the only
  * question a cluster raises is "show me those reports".
  */
@@ -62,7 +61,7 @@ type VolumeView = "total" | "rating";
 
 export function FeedbackStats() {
   const range = useRange();
-  const [view, setView] = useState<VolumeView>("total");
+  const [view, setView] = useState<VolumeView>("rating");
   const { data, isPending } = useGetApiAdminFeedbackStats({ range });
 
   if (isPending) {
@@ -144,21 +143,29 @@ export function FeedbackStats() {
         />
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      {/*
+        One chart for "when", coloured by rating — so volume and sentiment are
+        read off the same bars. A second chart of the daily average sat beside
+        it and said the same thing worse: the colours of a stacked bar already
+        show whether a day went red or green.
+      */}
+      <div className="grid gap-3 lg:grid-cols-3">
         <ChartCard
+          className="lg:col-span-2"
           title="Reports over time"
+          subtitle="Each day's reports, coloured by how they rated it."
           aside={
             <div className="flex items-center gap-3">
               {view === "rating" && (
-                <Legend items={[5, 4, 3, 2, 1].map((r) => ({ label: FACES[r as 1].label, color: faceFor(r).color }))} />
+                <Legend items={[5, 4, 3, 2, 1].map((r) => ({ label: faceFor(r).label, color: faceFor(r).color }))} />
               )}
               <SegmentedControl
                 size="sm"
                 value={view}
                 onChange={setView}
                 options={[
-                  { value: "total", label: "Total" },
                   { value: "rating", label: "By rating" },
+                  { value: "total", label: "Total" },
                 ]}
                 ariaLabel="How to split the reports"
               />
@@ -168,13 +175,10 @@ export function FeedbackStats() {
           {view === "total" ? (
             <TrendChart
               days={days}
-              series={[
-                { key: "volume", label: "Reports" },
-                { key: "withNote", label: "With a note" },
-              ]}
-              data={{ volume: s.series?.volume ?? [], withNote: s.series?.withNote ?? [] }}
+              series={[{ key: "volume", label: "Reports" }]}
+              data={{ volume: s.series?.volume ?? [] }}
               averageOf="volume"
-              height={220}
+              height={240}
             />
           ) : (
             <TrendChart
@@ -184,35 +188,19 @@ export function FeedbackStats() {
               series={[1, 2, 3, 4, 5].map((r) => ({ key: `r${r}`, label: faceFor(r).label, color: faceFor(r).color }))}
               data={Object.fromEntries((s.series?.byRating ?? []).map((b) => [`r${b.rating}`, b.counts]))}
               stacked
-              height={220}
+              shape="bar"
+              height={240}
             />
           )}
         </ChartCard>
 
         <ChartCard
-          title="Average rating over time"
-          subtitle="One bar per day with reports. A day with none has no bar, not a zero."
-        >
-          {/*
-            Bars, not a line. A line with gaps cannot draw a day that has no
-            neighbours — and reports arrive a few a day at best, so most days
-            with data are exactly that. It rendered as an empty frame over a
-            period that had reports in it.
-          */}
-          <TrendChart
-            days={days}
-            series={[{ key: "average", label: "Average rating", color: "var(--rating-4)" }]}
-            data={{ average: s.series?.average ?? [] }}
-            shape="bar"
-            height={220}
-          />
-        </ChartCard>
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
-        <ChartCard
           title="How they rated it"
-          subtitle={(s.bySource ?? []).map((b) => `${b.value.toLocaleString()} ${b.key === "embed" ? "from embeds" : "from the hosted page"}`).join(" · ") || undefined}
+          subtitle={
+            (s.bySource ?? [])
+              .map((b) => `${b.value.toLocaleString()} ${b.key === "embed" ? "from embeds" : "from the hosted page"}`)
+              .join(" · ") || undefined
+          }
         >
           <ColumnChart
             bars={(s.distribution ?? []).map((d) => ({
@@ -223,7 +211,9 @@ export function FeedbackStats() {
             colorFor={(_label, i) => faceFor(i + 1).color}
           />
         </ChartCard>
+      </div>
 
+      <div className="grid gap-3 lg:grid-cols-3">
         <ChartCard title="Forms it happens on" subtitle="Each links to its reports.">
           <DataTable
             rows={s.topForms ?? []}

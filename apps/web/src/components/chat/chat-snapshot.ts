@@ -1,46 +1,73 @@
 import type { PublicFormConfig } from "@repo/form-schema";
-import type {
-  ChatMessage,
-  ConnectionStatus,
-  EndingState,
-  QuestionState,
-  ReviewState,
-  SubmittedState,
-} from "./use-chat";
+import type { ChatState } from "./chat-client";
 
 /**
  * What a respondent was looking at when they pressed "Report a bug".
  *
- * Not a screenshot and not a DOM dump. This screen is a pure function of a small
- * amount of state the browser already holds — the form's public config, the
- * messages, and whichever card is up — so that state *is* the snapshot. It is a
- * few kilobytes, it needs no library in the respondent's bundle, and the console
- * replays it through the same components the respondent saw.
+ * Not a screenshot and not a DOM dump. The chat screen is `ChatSurface`, a pure
+ * function of the form's public config and one `ChatState` object, so that
+ * state *is* the snapshot: a few kilobytes, no library in the respondent's
+ * bundle, and the console replays it through `ChatSurface` itself — the same
+ * bubbles, cards, chips and composer the respondent saw, not a lookalike.
  *
- * It is taken here rather than reconstructed on the server for three reasons,
- * each of which was checked: `chat_sessions.state_snapshot_json` is a dead
- * column; `chat_messages` is not written until a response finalises, which never
- * happens for somebody who stopped at question three to tell us it broke; and
- * re-reading the published form later re-applies *today's* plan clamps, so it
- * would not show what was actually on screen if the account's plan had changed.
+ * It is taken in the browser rather than reconstructed on the server because
+ * nothing on the server knows it while a conversation is still going:
+ * `chat_sessions.state_snapshot_json` is a dead column, `chat_messages` is only
+ * written when a response finalises, and re-reading the published form later
+ * re-applies *today's* plan clamps rather than the ones that were on screen.
  *
- * `v` is the shape's version. The replay reads it; a future change to this type
- * bumps it rather than quietly reinterpreting old reports.
+ * `v` is the shape's version. Version 1 held a narrower slice; `toChatState`
+ * still replays it, so reports filed before this changed keep their screen.
  */
-export interface ChatSnapshot {
-  v: 1;
+
+/** The data half of `ChatState` — every field that is a value rather than a callback. */
+export type ScreenState = Pick<
+  ChatState,
+  | "messages"
+  | "question"
+  | "review"
+  | "submitted"
+  | "ending"
+  | "status"
+  | "error"
+  | "thinking"
+  | "answering"
+  | "resolving"
+  | "rateLimited"
+  | "resumed"
+  | "auth"
+  | "verify"
+  | "identity"
+  | "respondentHint"
+  | "escalatedRef"
+  | "validationHint"
+  | "uploadSpec"
+>;
+
+export interface ChatSnapshotV2 {
+  v: 2;
   capturedAt: number;
   /** Already plan-clamped by the server — the exact config the page rendered. */
   config: PublicFormConfig;
-  messages: Pick<ChatMessage, "id" | "role" | "text" | "answeredRef">[];
-  question: QuestionState | null;
-  review: ReviewState | null;
-  ending: EndingState | null;
-  submitted: Pick<SubmittedState, "at" | "outcome"> | null;
-  /** Which gate was up, if any — never the code or the token behind it. */
+  state: ScreenState;
+  viewport: { width: number; height: number; dpr: number };
+  timezone: string | null;
+  path: string | null;
+}
+
+/** The first shape, kept only so reports filed under it still replay. */
+export interface ChatSnapshotV1 {
+  v: 1;
+  capturedAt: number;
+  config: PublicFormConfig;
+  messages: ScreenState["messages"];
+  question: ScreenState["question"];
+  review: ScreenState["review"];
+  ending: ScreenState["ending"];
+  submitted: { at: number; outcome?: unknown } | null;
   auth: { method: string; message: string; error: string | null } | null;
   verify: { channel: string; sentTo: string | null } | null;
-  status: ConnectionStatus;
+  status: ScreenState["status"];
   error: string | null;
   thinking: boolean;
   validationHint: string | null;
@@ -49,52 +76,42 @@ export interface ChatSnapshot {
   path: string | null;
 }
 
-/** Everything `captureSnapshot` reads, named so a caller cannot pass the wrong half. */
-export interface SnapshotSource {
-  config: PublicFormConfig;
-  messages: ChatMessage[];
-  question: QuestionState | null;
-  review: ReviewState | null;
-  ending: EndingState | null;
-  submitted: SubmittedState | null;
-  auth: { method: string; message: string; error: string | null } | null;
-  verify: { channel: string; sentTo: string } | null;
-  status: ConnectionStatus;
-  error: string | null;
-  thinking: boolean;
-  validationHint: string | null;
-}
+export type ChatSnapshot = ChatSnapshotV1 | ChatSnapshotV2;
 
 /**
  * Freeze the screen.
  *
- * Deliberately narrow about what it keeps. A verification code shown in dev, a
- * resume token in the URL's query, and streaming flags on half-written messages
- * all describe *this device's* session rather than what was on screen, and a
- * snapshot is evidence that gets read by other people — so only the path goes in,
- * never the query string, and messages keep their words and their role.
+ * Deliberately narrow about what it keeps beyond the screen itself: a
+ * verification code shown in dev, a half-streamed message's flags and the
+ * query string all describe *this device's* session rather than what was on
+ * screen, and a snapshot is evidence other people read.
  */
-export function captureSnapshot(src: SnapshotSource): ChatSnapshot {
+export function captureSnapshot(config: PublicFormConfig, chat: ChatState): ChatSnapshotV2 {
   return {
-    v: 1,
+    v: 2,
     capturedAt: Date.now(),
-    config: src.config,
-    messages: src.messages.map((m) => ({
-      id: m.id,
-      role: m.role,
-      text: m.text,
-      ...(m.answeredRef ? { answeredRef: m.answeredRef } : {}),
-    })),
-    question: src.question,
-    review: src.review,
-    ending: src.ending,
-    submitted: src.submitted ? { at: src.submitted.at, outcome: src.submitted.outcome } : null,
-    auth: src.auth ? { method: src.auth.method, message: src.auth.message, error: src.auth.error } : null,
-    verify: src.verify ? { channel: src.verify.channel, sentTo: src.verify.sentTo } : null,
-    status: src.status,
-    error: src.error,
-    thinking: src.thinking,
-    validationHint: src.validationHint,
+    config,
+    state: {
+      messages: chat.messages.map((m) => ({ ...m, streaming: false, optimistic: false })),
+      question: chat.question,
+      review: chat.review,
+      submitted: chat.submitted,
+      ending: chat.ending,
+      status: chat.status,
+      error: chat.error,
+      thinking: chat.thinking,
+      answering: chat.answering,
+      resolving: false,
+      rateLimited: chat.rateLimited,
+      resumed: chat.resumed,
+      auth: chat.auth,
+      verify: chat.verify ? { ...chat.verify, devCode: undefined } : null,
+      identity: chat.identity,
+      respondentHint: chat.respondentHint,
+      escalatedRef: chat.escalatedRef,
+      validationHint: chat.validationHint,
+      uploadSpec: chat.uploadSpec,
+    },
     viewport:
       typeof window === "undefined"
         ? { width: 0, height: 0, dpr: 1 }
@@ -102,6 +119,75 @@ export function captureSnapshot(src: SnapshotSource): ChatSnapshot {
     timezone: safeTimezone(),
     path: typeof window === "undefined" ? null : window.location.pathname,
   };
+}
+
+const noop = () => {};
+const noopAsync = async () => {};
+
+/**
+ * A snapshot, turned back into something `ChatSurface` can draw.
+ *
+ * Every action is a no-op: the surface is `inert` in a replay anyway, and a
+ * no-op is the belt to that brace — a replay must never be able to answer a
+ * question, sign anybody in or send a report on a stranger's behalf.
+ */
+export function toChatState(snapshot: ChatSnapshot): ChatState {
+  const state: ScreenState =
+    snapshot.v === 2
+      ? snapshot.state
+      : {
+          messages: snapshot.messages,
+          question: snapshot.question,
+          review: snapshot.review,
+          ending: snapshot.ending,
+          // v1 kept only the timestamp; the thread still shows, the receipt does not.
+          submitted: null,
+          status: snapshot.status,
+          error: snapshot.error,
+          thinking: snapshot.thinking,
+          answering: false,
+          resolving: false,
+          rateLimited: null,
+          resumed: false,
+          auth: snapshot.auth
+            ? {
+                method: snapshot.auth.method === "phone" ? "phone" : "google",
+                message: snapshot.auth.message,
+                pending: false,
+                error: snapshot.auth.error,
+              }
+            : null,
+          verify: null,
+          identity: null,
+          respondentHint: null,
+          escalatedRef: null,
+          validationHint: snapshot.validationHint,
+          uploadSpec: null,
+        };
+
+  const chat: ChatState = {
+    ...state,
+    forgetRespondentHint: noop,
+    switchAccount: noopAsync,
+    signInWithGoogle: noopAsync,
+    signInWithPhoneToken: noopAsync,
+    submitVerifyCode: noopAsync,
+    submitVerifyPhoneToken: noopAsync,
+    resendVerifyCode: noopAsync,
+    changeVerifyAnswer: noopAsync,
+    getUploadBase: () => null,
+    getRespondentToken: () => null,
+    sendFeedback: async () => ({ ok: false }),
+    send: noopAsync,
+    sendStructured: noopAsync,
+    sendAction: noopAsync,
+    undoScreenOut: noopAsync,
+    editAnswer: noopAsync,
+    startOver: noopAsync,
+    retry: noop,
+    dismissRateLimit: noop,
+  };
+  return chat;
 }
 
 function safeTimezone(): string | null {

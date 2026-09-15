@@ -1606,7 +1606,6 @@
               "enum": [
                 "new",
                 "resolved",
-                "spam",
                 "all"
               ]
             }
@@ -1946,16 +1945,48 @@
                         },
                         "resolved": {
                           "type": "number"
-                        },
-                        "spam": {
-                          "type": "number"
                         }
                       },
                       "required": [
                         "new",
-                        "resolved",
-                        "spam"
+                        "resolved"
                       ]
+                    },
+                    "ratingCounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "rating": {
+                            "type": "number"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "rating",
+                          "count"
+                        ]
+                      }
+                    },
+                    "topicCounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "topic": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "topic",
+                          "count"
+                        ]
+                      }
                     }
                   },
                   "required": [
@@ -1963,7 +1994,9 @@
                     "total",
                     "limit",
                     "offset",
-                    "counts"
+                    "counts",
+                    "ratingCounts",
+                    "topicCounts"
                   ]
                 }
               }
@@ -2395,8 +2428,7 @@
                     "type": "string",
                     "enum": [
                       "new",
-                      "resolved",
-                      "spam"
+                      "resolved"
                     ]
                   },
                   "internalNote": {
@@ -2418,7 +2450,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Resolve a report, mark it spam, or attach an internal note",
+        "summary": "Resolve or reopen a report, or attach an internal note",
         "responses": {
           "200": {
             "description": "Updated",

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, ExternalLink, Mail, MessageSquare, Monitor, Phone, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Link2, Mail, X } from "lucide-react";
 import { feedbackTopicLabel } from "@repo/form-schema";
 import {
   getGetApiAdminFeedbackReportsByIdQueryKey,
@@ -14,30 +14,32 @@ import {
 } from "@/lib/api/admin/admin";
 import { Dialog, DialogBody, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { CopyButton } from "@/components/ui/copy-button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipHint } from "@/components/ui/kbd";
 import { apiData } from "@/lib/api/payload";
 import { relativeTime } from "@/components/forms/form-card";
 import { ChatReplay } from "@/components/chat/chat-replay";
 import type { ChatSnapshot } from "@/components/chat/chat-snapshot";
 import { faceFor } from "./feedback-faces";
-import { STATUS_BADGE, type InboxReport } from "./feedback-inbox";
+import { ResolveButton } from "./feedback-status";
+import type { InboxReport } from "./feedback-inbox";
 
 /**
  * One bug report, and everything it is attached to.
  *
- * Modelled on the responses dialog, down to the parts that took it three
- * revisions: a fixed height so stepping does not resize the panel under the
- * cursor, the open id in the URL so a link lands on it, focus on the panel
- * rather than on a tooltip trigger, and ← / → to walk the loaded page.
+ * Built on the responses dialog's frame on purpose, so the console has one way
+ * of opening a record: a fixed-height panel, ← / → through the loaded page, the
+ * open id in the URL, an icon to copy the link, and one switch between two
+ * views — **Report** (what they said and everything it is attached to) and
+ * **Conversation** (the real chat screen, replayed from the moment they pressed
+ * the button).
  *
- * Two tabs, because the two halves are read at different moments. **Report** is
- * triage: what they said, who they are, whether they can be answered, and every
- * link out. **Screen** is reproduction: the conversation as it stood when they
- * pressed the button, drawn by the same components the respondent saw.
+ * Nothing on the report view is an unlabelled pill. Every fact is a labelled
+ * row, and the one thing you do — resolve it — is a button in the header that
+ * says so.
  */
 
 interface Detail extends InboxReport {
@@ -66,7 +68,7 @@ interface Detail extends InboxReport {
   } | null;
 }
 
-type View = "report" | "screen";
+type View = "report" | "conversation";
 
 export function FeedbackReportDialog({
   id,
@@ -81,11 +83,11 @@ export function FeedbackReportDialog({
   ids: string[];
   onOpen: (id: string) => void;
   onClose: () => void;
-  /** Something about this report changed; refresh the list behind the dialog. */
   onChanged: () => void;
   onShowRespondent: (respondentId: string) => void;
 }) {
   const [view, setView] = useState<View>("report");
+  const [saving, setSaving] = useState(false);
   const index = ids.indexOf(id);
 
   const { data, isPending, isError, refetch } = useGetApiAdminFeedbackReportsById(id, {
@@ -101,10 +103,7 @@ export function FeedbackReportDialog({
     [ids, index, onOpen],
   );
 
-  /*
-    ← and →, and never while typing. This dialog holds a real note field, so a
-    left arrow inside it must move the caret, not the report.
-  */
+  // ← and →, never while typing: the note field is right there.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
@@ -117,7 +116,23 @@ export function FeedbackReportDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [step]);
 
-  const shareUrl = typeof window === "undefined" ? "" : window.location.href;
+  const save = async (body: { status?: "new" | "resolved"; internalNote?: string | null }, done: string) => {
+    if (!report) return;
+    setSaving(true);
+    try {
+      await patchApiAdminFeedbackReportsById(report.id, body);
+      toast.success(done);
+      await refetch();
+      onChanged();
+    } catch {
+      toast.error("That didn't save. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // A name only comes from a verified sign-in; without one, the reader has nobody to address.
+  const who = report?.respondent?.label ?? "an anonymous respondent";
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -133,54 +148,91 @@ export function FeedbackReportDialog({
       >
         <div className="flex items-start gap-3 border-b px-5 py-4">
           <div className="min-w-0 flex-1">
-            <DialogTitle className="text-h3">Bug report</DialogTitle>
+            <DialogTitle className="text-h3 truncate">{report ? `Report from ${who}` : "Bug report"}</DialogTitle>
             <p className="text-muted-foreground text-caption mt-0.5 truncate">
               {report ? (
                 <>
-                  {new Date(report.createdAt).toLocaleString()} · {relativeTime(report.createdAt)} ·{" "}
-                  <span className="font-mono">{report.id}</span>
+                  {report.formTitle ?? "Form since deleted"} · {relativeTime(report.createdAt)}
                 </>
               ) : (
-                <span className="font-mono">{id}</span>
+                "Loading…"
               )}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
-            {ids.length > 1 && index >= 0 && (
-              <>
-                <Button variant="ghost" size="icon-sm" aria-label="Previous report (←)" title="Previous report (←)" disabled={index <= 0} onClick={() => step(-1)}>
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <span className="text-muted-foreground text-caption tabular px-1">
-                  {index + 1}/{ids.length}
-                </span>
-                <Button variant="ghost" size="icon-sm" aria-label="Next report (→)" title="Next report (→)" disabled={index >= ids.length - 1} onClick={() => step(1)}>
-                  <ChevronRight className="size-4" />
-                </Button>
-                <span className="bg-border mx-1 h-5 w-px" />
-              </>
-            )}
-            <CopyButton value={shareUrl} label="Copy link to this report" toastMessage="Link copied" />
+            <TooltipProvider delayDuration={150}>
+              {ids.length > 1 && index >= 0 && (
+                <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon-sm" aria-label="Previous report" disabled={index <= 0} onClick={() => step(-1)}>
+                        <ChevronLeft className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <TooltipHint label="Previous report" keys="←" />
+                    </TooltipContent>
+                  </Tooltip>
+                  <span className="text-muted-foreground text-caption tabular px-1">
+                    {index + 1}/{ids.length}
+                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon-sm" aria-label="Next report" disabled={index >= ids.length - 1} onClick={() => step(1)}>
+                        <ChevronRight className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <TooltipHint label="Next report" keys="→" />
+                    </TooltipContent>
+                  </Tooltip>
+                  <span className="bg-border mx-1 h-5 w-px" />
+                </>
+              )}
+            </TooltipProvider>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Copy link to this report"
+              title="Copy link"
+              onClick={() => {
+                void navigator.clipboard.writeText(window.location.href);
+                toast.success("Link copied");
+              }}
+            >
+              <Link2 className="size-4" />
+            </Button>
             <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose}>
               <X className="size-4" />
             </Button>
           </div>
         </div>
 
-        <div className="border-b px-5 py-2.5">
+        {/* The view switch on its own row; the status — a property, not a view — on the right of it. */}
+        <div className="flex items-center gap-2 border-b px-5 py-2.5">
           <SegmentedControl
             size="sm"
             value={view}
             onChange={setView}
             options={[
-              { value: "report", label: "Report", icon: MessageSquare },
-              { value: "screen", label: "Screen", icon: Monitor, badge: report?.hasSnapshot ? "1" : undefined },
+              { value: "report", label: "Report" },
+              { value: "conversation", label: "Conversation" },
             ]}
             ariaLabel="What to show"
           />
+          {report && (
+            <div className="ml-auto flex items-center gap-2">
+              {report.respondent?.email && <ReplyButton report={report} />}
+              <ResolveButton
+                status={report.status}
+                disabled={saving}
+                onChange={(status) => void save({ status }, status === "resolved" ? "Marked resolved" : "Reopened")}
+              />
+            </div>
+          )}
         </div>
 
-        <DialogBody className="px-5 py-4">
+        <DialogBody className="px-5 py-5">
           {isPending ? (
             <Skeleton className="h-80 rounded-xl" />
           ) : isError || !report ? (
@@ -188,16 +240,9 @@ export function FeedbackReportDialog({
               This report is gone — it may have been deleted since the link was made.
             </p>
           ) : view === "report" ? (
-            <ReportView
-              report={report}
-              onChanged={() => {
-                void refetch();
-                onChanged();
-              }}
-              onShowRespondent={onShowRespondent}
-            />
+            <ReportView report={report} saving={saving} onSave={save} onShowRespondent={onShowRespondent} />
           ) : (
-            <ScreenView report={report} />
+            <ConversationView report={report} />
           )}
         </DialogBody>
       </DialogContent>
@@ -209,284 +254,274 @@ export function FeedbackReportDialog({
 
 function ReportView({
   report,
-  onChanged,
+  saving,
+  onSave,
   onShowRespondent,
 }: {
   report: Detail;
-  onChanged: () => void;
+  saving: boolean;
+  onSave: (body: { internalNote?: string | null }, done: string) => Promise<void>;
   onShowRespondent: (respondentId: string) => void;
 }) {
   const face = faceFor(report.rating);
-  const badge = STATUS_BADGE[report.status] ?? STATUS_BADGE.new!;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-5">
-      <div className="space-y-5 lg:col-span-3">
-        {/* Their words first and largest — everything else on this panel is context for them. */}
-        <div>
-          <div className="text-caption mb-2 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 font-medium" style={{ color: face.color }}>
-              <face.Icon className="size-4" /> <span className="text-foreground">{face.label}</span>
-            </span>
-            <Badge className={badge.className}>{badge.label}</Badge>
-            {report.topic && <Badge variant="secondary">{feedbackTopicLabel(report.topic)}</Badge>}
-            {report.sentiment !== null && (
-              <span className="text-muted-foreground" title="Tone of the words, −1 furious to 1 delighted">
-                tone {report.sentiment > 0 ? "+" : ""}
-                {report.sentiment.toFixed(2)}
-              </span>
-            )}
-          </div>
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="min-w-0 space-y-6">
+        <section>
+          <SectionTitle>What they said</SectionTitle>
           {report.message ? (
-            <p className="bg-muted/40 rounded-xl border px-4 py-3 text-base leading-relaxed whitespace-pre-wrap">
-              {report.message}
-            </p>
+            <blockquote className="border-l-2 pl-4 text-base leading-relaxed whitespace-pre-wrap">{report.message}</blockquote>
           ) : (
-            <p className="text-muted-foreground rounded-xl border border-dashed px-4 py-3 text-sm italic">
-              Rating only, no note.
-            </p>
+            <p className="text-muted-foreground text-sm">Nothing — they only picked a rating.</p>
           )}
-        </div>
+        </section>
 
-        <Reply report={report} />
-        <Triage report={report} onChanged={onChanged} />
-      </div>
+        <NoteField report={report} saving={saving} onSave={onSave} />
 
-      <div className="space-y-5 lg:col-span-2">
-        <Facts title="Where">
-          <Fact label="Account">
-            {report.organizationId ? (
-              <Link href={`/admin/accounts/${report.organizationId}`} className="hover:underline">
-                {report.organizationName ?? report.organizationId}
-              </Link>
-            ) : (
-              "—"
-            )}
-            {report.organizationPlan && (
-              <Badge variant="secondary" className="ml-2 capitalize">
-                {report.organizationPlan}
-              </Badge>
-            )}
-          </Fact>
-          <Fact label="Form">
-            {report.formSlug ? (
-              <a href={`/f/${report.formSlug}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline">
-                {report.formTitle ?? report.formSlug} <ExternalLink className="size-3" />
-              </a>
-            ) : (
-              <span className="text-muted-foreground">form since deleted</span>
-            )}
-          </Fact>
-          {report.formVersionId && (
-            <Fact label="Version">
-              <span className="font-mono text-xs">{report.formVersionId}</span>
-            </Fact>
-          )}
-          <Fact label="From">{report.source === "embed" ? "an embed" : "the hosted page"}</Fact>
-        </Facts>
-
-        <Facts title="Who">
-          {report.respondent ? (
-            <>
-              {report.respondent.label && <Fact label="Name">{report.respondent.label}</Fact>}
-              <Fact label="Email">
-                {report.respondent.email ? (
-                  <a href={`mailto:${report.respondent.email}`} className="hover:underline">
-                    {report.respondent.email}
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground">never signed in</span>
-                )}
-              </Fact>
-              {report.respondent.phone && (
-                <Fact label="Phone">
-                  <a href={`tel:${report.respondent.phone}`} className="hover:underline">
-                    {report.respondent.phone}
-                  </a>
-                </Fact>
-              )}
-              <Fact label="Seen">
-                {report.respondent.firstSeenAt ? `first ${relativeTime(report.respondent.firstSeenAt)}` : "—"}
-                {report.respondent.lastSeenAt ? ` · last ${relativeTime(report.respondent.lastSeenAt)}` : ""}
-              </Fact>
-              <Fact label="Reports">
-                {report.respondent.reportCount > 1 ? (
-                  <button type="button" className="hover:underline" onClick={() => onShowRespondent(report.respondent!.id)}>
-                    {report.respondent.reportCount} from them — see all
-                  </button>
-                ) : (
-                  "their first"
-                )}
-              </Fact>
-              <Fact label="Id">
-                <span className="font-mono text-xs">{report.respondent.id}</span>
-              </Fact>
-            </>
-          ) : (
-            <p className="text-muted-foreground text-sm">
-              Not recognised — their browser gave us nothing to know them by.
-            </p>
-          )}
-        </Facts>
-
-        <Facts title="Session">
-          {report.session ? (
-            <>
-              <Fact label="Progress">
-                {report.session.collectedCount === 0
-                  ? "nothing answered yet"
-                  : `${report.session.collectedCount} answered`}
-                {` · ${report.session.turnCount} ${report.session.turnCount === 1 ? "turn" : "turns"}`}
-              </Fact>
-              <Fact label="State">
-                {report.session.status}
-                {report.session.isTest && " · test"}
-                {report.session.country && ` · ${report.session.country}`}
-              </Fact>
-              <Fact label="Started">{relativeTime(report.session.createdAt)}</Fact>
-            </>
-          ) : (
-            <p className="text-muted-foreground text-sm">The session is no longer on record.</p>
-          )}
-          <Fact label="Browser">
-            <span className="font-mono text-xs break-all">{report.userAgent ?? "not reported"}</span>
-          </Fact>
-        </Facts>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Write back, prepared.
- *
- * A mailto rather than a send box: the thread lives in the founder's own mailbox
- * like any other conversation, and there is no second sending path to build,
- * log or keep off a suppression list. The subject names the form and their note
- * is quoted, so the reply is typing the answer and nothing else.
- */
-function Reply({ report }: { report: Detail }) {
-  const email = report.respondent?.email ?? null;
-  if (!email) {
-    return (
-      <p className="text-muted-foreground text-sm">
-        No way to reply — they never signed in on a form, so we have no address for them.
-      </p>
-    );
-  }
-  const subject = `Re: your report about ${report.formTitle ?? "the form"}`;
-  const body = report.message ? `\n\n> ${report.message.split(/\r?\n/).join("\n> ")}` : "";
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button asChild size="sm">
-        <a href={`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`}>
-          <Mail className="size-4" /> Reply to {report.respondent?.label ?? email}
-        </a>
-      </Button>
-      {report.respondent?.phone && (
-        <Button asChild size="sm" variant="secondary">
-          <a href={`tel:${report.respondent.phone}`}>
-            <Phone className="size-4" /> Call
-          </a>
-        </Button>
-      )}
-    </div>
-  );
-}
-
-/**
- * Move it, and write down what it was.
- *
- * The note saves on an explicit press, never on blur: a triage note is the one
- * thing on this panel that takes thought to write, and blur is how thought gets
- * lost to a stray click on the backdrop.
- */
-function Triage({ report, onChanged }: { report: Detail; onChanged: () => void }) {
-  const [note, setNote] = useState(report.internalNote ?? "");
-  const [saving, setSaving] = useState(false);
-  const dirty = note.trim() !== (report.internalNote ?? "");
-
-  const patch = async (body: { status?: "new" | "resolved" | "spam"; internalNote?: string | null }, done: string) => {
-    setSaving(true);
-    try {
-      await patchApiAdminFeedbackReportsById(report.id, body);
-      toast.success(done);
-      onChanged();
-    } catch {
-      toast.error("That didn't save. Try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="space-y-3 rounded-xl border p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <SegmentedControl
-          size="sm"
-          value={report.status as "new"}
-          onChange={(status) => void patch({ status }, status === "resolved" ? "Resolved" : status === "spam" ? "Marked as spam" : "Moved back to new")}
-          options={[
-            { value: "new", label: "New" },
-            { value: "resolved", label: "Resolved" },
-            { value: "spam", label: "Spam" },
-          ]}
-          ariaLabel="Status"
-        />
-        {report.statusAt && (
-          <p className="text-muted-foreground text-caption">
-            {report.status} by {report.statusBy ?? "someone"} · {relativeTime(report.statusAt)}
+        {!report.respondent?.email && (
+          <p className="text-muted-foreground text-sm">
+            No reply possible: they never signed in on a form, so there is no address for them.
           </p>
         )}
       </div>
+
+      <dl className="space-y-3 text-sm lg:border-l lg:pl-6">
+        <Prop label="Rating">
+          <span className="inline-flex items-center gap-1.5">
+            <face.Icon className="size-4" style={{ color: face.color }} aria-hidden />
+            {face.label}
+          </span>
+        </Prop>
+        <Prop label="Topic" hint="Read from their note when it arrived, into a fixed list.">
+          {feedbackTopicLabel(report.topic) ?? <Muted>{report.message ? "Not classified" : "No note to read"}</Muted>}
+        </Prop>
+
+        <Divider />
+
+        <Prop label="Form">
+          {report.formSlug ? (
+            <a href={`/f/${report.formSlug}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline">
+              <span className="line-clamp-2">{report.formTitle ?? report.formSlug}</span>
+              <ExternalLink className="size-3 shrink-0" />
+            </a>
+          ) : (
+            <Muted>Deleted</Muted>
+          )}
+        </Prop>
+        <Prop label="Account">
+          {report.organizationId ? (
+            <Link href={`/admin/accounts/${report.organizationId}`} className="hover:underline">
+              {report.organizationName ?? report.organizationId}
+            </Link>
+          ) : (
+            <Muted>Unknown</Muted>
+          )}
+          {report.organizationPlan && <Muted> · {capitalise(report.organizationPlan)}</Muted>}
+        </Prop>
+
+        <Divider />
+
+        <Prop label="Respondent">
+          {report.respondent ? (
+            <span className="block min-w-0">
+              <span className="block">{report.respondent.label ?? <Muted>No name</Muted>}</span>
+              {report.respondent.email && (
+                <a href={`mailto:${report.respondent.email}`} className="text-muted-foreground block truncate hover:underline">
+                  {report.respondent.email}
+                </a>
+              )}
+              {report.respondent.phone && <span className="text-muted-foreground block">{report.respondent.phone}</span>}
+            </span>
+          ) : (
+            <Muted>Not recognised</Muted>
+          )}
+        </Prop>
+        {report.respondent && (
+          <Prop label="Reports">
+            {report.respondent.reportCount > 1 ? (
+              <button type="button" className="hover:underline" onClick={() => onShowRespondent(report.respondent!.id)}>
+                {report.respondent.reportCount} from them
+              </button>
+            ) : (
+              "Their first"
+            )}
+          </Prop>
+        )}
+        <Prop label="Answered">
+          {report.session ? (
+            report.session.collectedCount === 0 ? (
+              <Muted>Not started</Muted>
+            ) : (
+              `${report.session.collectedCount} ${report.session.collectedCount === 1 ? "question" : "questions"}`
+            )
+          ) : (
+            <Muted>Unknown</Muted>
+          )}
+        </Prop>
+        <Prop label="Device">{deviceOf(report.userAgent)}</Prop>
+        <Prop label="Filed">
+          <span title={new Date(report.createdAt).toLocaleString()}>
+            {relativeTime(report.createdAt)}
+            {report.session?.country && <Muted> · {report.session.country}</Muted>}
+            <Muted> · {report.source === "embed" ? "embed" : "hosted page"}</Muted>
+          </span>
+        </Prop>
+
+        {/* The identifiers and the raw browser string: needed when debugging, noise the rest of the time. */}
+        <details className="group pt-1">
+          <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-xs select-none">
+            Technical details
+          </summary>
+          <div className="mt-2 space-y-2 text-xs">
+            <Tech label="Report" value={report.id} />
+            {report.respondent && <Tech label="Respondent" value={report.respondent.id} />}
+            {report.sessionId && <Tech label="Session" value={report.sessionId} />}
+            {report.formVersionId && <Tech label="Form version" value={report.formVersionId} />}
+            {report.userAgent && <Tech label="User agent" value={report.userAgent} />}
+          </div>
+        </details>
+      </dl>
+    </div>
+  );
+}
+
+/** Reply, prepared: their address, the form in the subject, their note quoted. */
+function ReplyButton({ report }: { report: Detail }) {
+  const email = report.respondent!.email!;
+  const subject = `Re: your report about ${report.formTitle ?? "the form"}`;
+  const body = report.message ? `\n\n> ${report.message.split(/\r?\n/).join("\n> ")}` : "";
+  return (
+    <Button asChild variant="outline" size="sm" shape="pill">
+      <a href={`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`}>
+        <Mail className="size-3.5" />
+        Reply
+      </a>
+    </Button>
+  );
+}
+
+/**
+ * A note for the next admin who opens this.
+ *
+ * Saved on an explicit press, never on blur — a triage note takes thought, and
+ * blur is how thought gets lost to a stray click on the backdrop.
+ */
+function NoteField({
+  report,
+  saving,
+  onSave,
+}: {
+  report: Detail;
+  saving: boolean;
+  onSave: (body: { internalNote?: string | null }, done: string) => Promise<void>;
+}) {
+  const [note, setNote] = useState(report.internalNote ?? "");
+  const dirty = note.trim() !== (report.internalNote ?? "");
+  return (
+    <section>
+      <SectionTitle>Internal note</SectionTitle>
       <Textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
         rows={3}
         maxLength={2000}
-        placeholder="What was it? Only other admins see this."
+        placeholder="What it turned out to be. Only admins see this."
       />
-      <div className="flex justify-end">
-        <Button size="sm" variant="secondary" disabled={!dirty || saving} onClick={() => void patch({ internalNote: note.trim() || null }, "Note saved")}>
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <p className="text-muted-foreground text-caption">
+          {report.statusAt && report.status === "resolved"
+            ? `Resolved by ${report.statusBy ?? "an admin"} · ${relativeTime(report.statusAt)}`
+            : ""}
+        </p>
+        <Button size="sm" variant="secondary" shape="pill" disabled={!dirty || saving} onClick={() => void onSave({ internalNote: note.trim() || null }, "Note saved")}>
           Save note
         </Button>
       </div>
-    </div>
-  );
-}
-
-function Facts({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section>
-      <h3 className="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">{title}</h3>
-      <dl className="space-y-1.5">{children}</dl>
     </section>
   );
 }
 
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">{children}</h3>;
+}
+
+function Prop({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[5.5rem_1fr] gap-2 text-sm">
-      <dt className="text-muted-foreground">{label}</dt>
+    <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-3">
+      <dt className="text-muted-foreground" title={hint}>
+        {label}
+      </dt>
       <dd className="min-w-0">{children}</dd>
     </div>
   );
 }
 
-// ─────────────────────────────── the screen ───────────────────────────────
+function Divider() {
+  return <div className="border-t" role="separator" />;
+}
+
+function Muted({ children }: { children: React.ReactNode }) {
+  return <span className="text-muted-foreground">{children}</span>;
+}
+
+function Tech({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-muted-foreground">{label}</p>
+      <p className="font-mono break-all">{value}</p>
+    </div>
+  );
+}
+
+const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
- * Fetched only when this tab is opened: reading it is audited, and a founder
- * triaging twenty reports by their words should not leave twenty reads of
- * respondents' conversations in the log.
+ * "Chrome on macOS", from the browser string, for reading at a glance.
+ *
+ * Display only, and deliberately crude — the full string is one click away in
+ * the technical details, and that is the one to trust.
  */
-function ScreenView({ report }: { report: Detail }) {
+function deviceOf(ua: string | null): React.ReactNode {
+  if (!ua) return <Muted>Not reported</Muted>;
+  const browser = /Edg\//.test(ua)
+    ? "Edge"
+    : /OPR\//.test(ua)
+      ? "Opera"
+      : /Firefox\//.test(ua)
+        ? "Firefox"
+        : /CriOS|Chrome\//.test(ua)
+          ? "Chrome"
+          : /Safari\//.test(ua)
+            ? "Safari"
+            : "A browser";
+  const os = /iPhone|iPad|iPod/.test(ua)
+    ? "iOS"
+    : /Android/.test(ua)
+      ? "Android"
+      : /Mac OS X/.test(ua)
+        ? "macOS"
+        : /Windows/.test(ua)
+          ? "Windows"
+          : /Linux/.test(ua)
+            ? "Linux"
+            : null;
+  return os ? `${browser} on ${os}` : browser;
+}
+
+// ─────────────────────────────── the conversation ───────────────────────────────
+
+/**
+ * Fetched only when this view is opened: reading it is audited, and triaging
+ * twenty reports by their words should not leave twenty reads of respondents'
+ * conversations in the log.
+ */
+function ConversationView({ report }: { report: Detail }) {
   const { data, isPending, isError } = useGetApiAdminFeedbackReportsByIdSnapshot(report.id, {
     query: {
       queryKey: getGetApiAdminFeedbackReportsByIdSnapshotQueryKey(report.id),
       enabled: report.hasSnapshot,
       retry: false,
-      // Evidence does not change; never refetch it behind the reader's back.
       staleTime: Infinity,
     },
   });
@@ -494,20 +529,24 @@ function ScreenView({ report }: { report: Detail }) {
   if (!report.hasSnapshot) {
     return (
       <p className="text-muted-foreground mx-auto max-w-md py-16 text-center text-sm">
-        No screen was attached. Either this report was filed before snapshots existed, or the respondent&apos;s browser
-        did not send one — an extension, a dropped connection, or leaving the page straight away.
+        No conversation was attached. The report was filed before this was captured, or their browser did not send it.
       </p>
     );
   }
   if (isPending) return <Skeleton className="h-[34rem] rounded-xl" />;
 
   const snapshot = apiData<ChatSnapshot | null>(data);
-  if (isError || !snapshot || snapshot.v !== 1) {
-    return (
-      <p className="text-muted-foreground py-16 text-center text-sm">
-        The screen could not be loaded{snapshot && snapshot.v !== 1 ? " — it was captured in a newer format" : ""}.
-      </p>
-    );
+  if (isError || !snapshot || (snapshot.v !== 1 && snapshot.v !== 2)) {
+    return <p className="text-muted-foreground py-16 text-center text-sm">The conversation could not be loaded.</p>;
   }
-  return <ChatReplay snapshot={snapshot} height={520} />;
+  return (
+    <div className="space-y-2">
+      <p className="text-muted-foreground text-caption">
+        Exactly as it was on their screen at {new Date(snapshot.capturedAt).toLocaleString()}
+        {snapshot.viewport.width > 0 && ` · ${snapshot.viewport.width}×${snapshot.viewport.height}`}
+      </p>
+      {/* The dialog's height minus its header, switch row, padding and this caption — so the composer is in view. */}
+      <ChatReplay snapshot={snapshot} height="calc(min(48rem, 100dvh - 4rem) - 13rem)" />
+    </div>
+  );
 }

@@ -1098,7 +1098,7 @@ export const getPatchApiAdminFeedbackReportsByIdUrl = (id: string,) => {
 }
 
 /**
- * @summary Resolve a report, mark it spam, or attach an internal note
+ * @summary Resolve or reopen a report, or attach an internal note
  */
 export const patchApiAdminFeedbackReportsById = async (id: string,
     patchApiAdminFeedbackReportsByIdBody: PatchApiAdminFeedbackReportsByIdBody, options?: Parameters<typeof customFetch>[1]): Promise<patchApiAdminFeedbackReportsByIdResponse> => {
@@ -1155,7 +1155,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PatchApiAdminFeedbackReportsByIdMutationVariables = {id: string;data: PatchApiAdminFeedbackReportsByIdBody}
 
     /**
- * @summary Resolve a report, mark it spam, or attach an internal note
+ * @summary Resolve or reopen a report, or attach an internal note
  */
 export const usePatchApiAdminFeedbackReportsById = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminFeedbackReportsById>>, TError,PatchApiAdminFeedbackReportsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}

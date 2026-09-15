@@ -424,7 +424,6 @@ export type GetApiAdminFeedbackReportsStatus = typeof GetApiAdminFeedbackReports
 export const GetApiAdminFeedbackReportsStatus = {
   new: 'new',
   resolved: 'resolved',
-  spam: 'spam',
   all: 'all',
 } as const;
 
@@ -481,7 +480,16 @@ export type GetApiAdminFeedbackReports200ReportsItem = {
 export type GetApiAdminFeedbackReports200Counts = {
   new: number;
   resolved: number;
-  spam: number;
+};
+
+export type GetApiAdminFeedbackReports200RatingCountsItem = {
+  rating: number;
+  count: number;
+};
+
+export type GetApiAdminFeedbackReports200TopicCountsItem = {
+  topic: string;
+  count: number;
 };
 
 export type GetApiAdminFeedbackReports200 = {
@@ -490,6 +498,8 @@ export type GetApiAdminFeedbackReports200 = {
   limit: number;
   offset: number;
   counts: GetApiAdminFeedbackReports200Counts;
+  ratingCounts: GetApiAdminFeedbackReports200RatingCountsItem[];
+  topicCounts: GetApiAdminFeedbackReports200TopicCountsItem[];
 };
 
 export type GetApiAdminFeedbackReportsById200Respondent = {
@@ -549,7 +559,6 @@ export type PatchApiAdminFeedbackReportsByIdBodyStatus = typeof PatchApiAdminFee
 export const PatchApiAdminFeedbackReportsByIdBodyStatus = {
   new: 'new',
   resolved: 'resolved',
-  spam: 'spam',
 } as const;
 
 export type PatchApiAdminFeedbackReportsByIdBody = {

@@ -15,13 +15,13 @@ import { audit, DAY_MS, PLAN_OF_ORG, RANGES, RangeQuery, dayKeys, rows, type Ran
  *
  * Guarded by `requirePlatformAdmin` at the mount in `./index.ts`, not here.
  *
- * `spam` is excluded from every count and every list by default. A report
- * somebody has already judged to be junk must stop moving the average, or
- * marking it as junk achieves nothing.
+ * Triage is two states, `new` (unresolved) and `resolved`. The `status != 'spam'`
+ * guard below outlived a third state that was cut before anyone used it; it
+ * costs nothing and keeps any such row out of the numbers.
  */
 export const feedbackRouter = new Hono<{ Bindings: Bindings; Variables: Partial<PlatformAdminVars> }>();
 
-export const FEEDBACK_STATUSES = ["new", "resolved", "spam"] as const;
+export const FEEDBACK_STATUSES = ["new", "resolved"] as const;
 
 /** Everything a reader should see unless they went looking for the bin. */
 const LIVE = `status != 'spam'`;
@@ -380,7 +380,7 @@ feedbackRouter.get(
 // ───────────────────────────────── the inbox ─────────────────────────────────
 
 const ReportsQuery = z.object({
-  status: z.enum(["new", "resolved", "spam", "all"]).default("new"),
+  status: z.enum(["new", "resolved", "all"]).default("new"),
   rating: z.coerce.number().int().min(1).max(5).optional(),
   noted: z.enum(["any", "yes", "no"]).default("any"),
   source: z.enum(["chat", "embed"]).optional(),
@@ -427,7 +427,11 @@ const ReportsResponse = z.object({
   limit: z.number(),
   offset: z.number(),
   /** Unfiltered on purpose: the tab badges must not move as the list narrows. */
-  counts: z.object({ new: z.number(), resolved: z.number(), spam: z.number() }),
+  counts: z.object({ new: z.number(), resolved: z.number() }),
+  /** Per face, under every filter except rating — what the rating menu shows beside each option. */
+  ratingCounts: z.array(z.object({ rating: z.number(), count: z.number() })),
+  /** Per topic, under every filter except topic, largest first. */
+  topicCounts: z.array(z.object({ topic: z.string(), count: z.number() })),
 });
 
 const SORTS: Record<string, string> = {
@@ -516,27 +520,40 @@ feedbackRouter.get(
   }),
   async (c) => {
     const q = c.req.valid("query");
-    const where: string[] = [];
-    const binds: unknown[] = [];
 
-    if (q.status === "all") where.push(`fb.${LIVE}`);
-    else where.push("fb.status = ?"), binds.push(q.status);
-    if (q.rating !== undefined) where.push("fb.rating = ?"), binds.push(q.rating);
-    if (q.noted === "yes") where.push("fb.message IS NOT NULL AND fb.message != ''");
-    if (q.noted === "no") where.push("(fb.message IS NULL OR fb.message = '')");
-    if (q.source) where.push("fb.source = ?"), binds.push(q.source);
-    if (q.topic) where.push("fb.topic = ?"), binds.push(q.topic);
-    if (q.formId) where.push("fb.form_id = ?"), binds.push(q.formId);
-    if (q.orgId) where.push("fb.organization_id = ?"), binds.push(q.orgId);
-    if (q.respondentId) where.push("fb.respondent_id = ?"), binds.push(q.respondentId);
-    if (q.q) {
-      const like = `%${q.q}%`;
-      where.push("(f.title LIKE ? OR f.slug LIKE ? OR o.name LIKE ? OR fb.message LIKE ?)");
-      binds.push(like, like, like, like);
-    }
-    const clause = where.join(" AND ");
+    /*
+      The WHERE, built with one filter optionally left out.
 
-    const [reports, totalRow, counted] = await Promise.all([
+      The rating and topic menus show how many reports each option would give —
+      and that count has to respect every *other* filter while ignoring its own,
+      or picking "Bad" would make every other face read zero. So the clause is a
+      function of what to skip, and the list itself skips nothing.
+    */
+    const build = (skip?: "rating" | "topic") => {
+      const where: string[] = [];
+      const binds: unknown[] = [];
+      if (q.status === "all") where.push(`fb.${LIVE}`);
+      else where.push("fb.status = ?"), binds.push(q.status);
+      if (q.rating !== undefined && skip !== "rating") where.push("fb.rating = ?"), binds.push(q.rating);
+      if (q.noted === "yes") where.push("fb.message IS NOT NULL AND fb.message != ''");
+      if (q.noted === "no") where.push("(fb.message IS NULL OR fb.message = '')");
+      if (q.source) where.push("fb.source = ?"), binds.push(q.source);
+      if (q.topic && skip !== "topic") where.push("fb.topic = ?"), binds.push(q.topic);
+      if (q.formId) where.push("fb.form_id = ?"), binds.push(q.formId);
+      if (q.orgId) where.push("fb.organization_id = ?"), binds.push(q.orgId);
+      if (q.respondentId) where.push("fb.respondent_id = ?"), binds.push(q.respondentId);
+      if (q.q) {
+        const like = `%${q.q}%`;
+        where.push("(f.title LIKE ? OR f.slug LIKE ? OR o.name LIKE ? OR fb.message LIKE ?)");
+        binds.push(like, like, like, like);
+      }
+      return { clause: where.join(" AND "), binds };
+    };
+    const { clause, binds } = build();
+    const byRating = build("rating");
+    const byTopic = build("topic");
+
+    const [reports, totalRow, counted, ratingRows, topicRows] = await Promise.all([
       rows<ReportRow>(
         c.env.DB.prepare(
           `SELECT ${REPORT_COLUMNS} ${REPORT_JOINS} WHERE ${clause}
@@ -554,6 +571,16 @@ feedbackRouter.get(
       rows<{ status: string; n: number }>(
         c.env.DB.prepare(`SELECT status, COUNT(*) AS n FROM respondent_feedback GROUP BY status`),
       ),
+      rows<{ rating: number; n: number }>(
+        c.env.DB.prepare(`SELECT fb.rating, COUNT(*) AS n ${REPORT_JOINS} WHERE ${byRating.clause} GROUP BY fb.rating`).bind(
+          ...byRating.binds,
+        ),
+      ),
+      rows<{ topic: string | null; n: number }>(
+        c.env.DB.prepare(`SELECT fb.topic, COUNT(*) AS n ${REPORT_JOINS} WHERE ${byTopic.clause} GROUP BY fb.topic`).bind(
+          ...byTopic.binds,
+        ),
+      ),
     ]);
 
     const byStatus = new Map(counted.map((r) => [r.status, Number(r.n)]));
@@ -565,8 +592,15 @@ feedbackRouter.get(
       counts: {
         new: byStatus.get("new") ?? 0,
         resolved: byStatus.get("resolved") ?? 0,
-        spam: byStatus.get("spam") ?? 0,
       },
+      ratingCounts: [1, 2, 3, 4, 5].map((rating) => ({
+        rating,
+        count: Number(ratingRows.find((r) => Number(r.rating) === rating)?.n ?? 0),
+      })),
+      topicCounts: topicRows
+        .filter((r) => r.topic)
+        .map((r) => ({ topic: r.topic as string, count: Number(r.n) }))
+        .sort((x, y) => y.count - x.count),
     });
   },
 );
@@ -738,7 +772,7 @@ feedbackRouter.patch(
   validator("json", TriageBody),
   describeRoute({
     tags: ["admin"],
-    summary: "Resolve a report, mark it spam, or attach an internal note",
+    summary: "Resolve or reopen a report, or attach an internal note",
     responses: {
       200: { description: "Updated", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } },
       404: { description: "Not an admin, or no such report" },

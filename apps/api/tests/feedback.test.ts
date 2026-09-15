@@ -466,18 +466,17 @@ describe("the feedback page", () => {
     expect(bad.counts.new).toBeGreaterThanOrEqual(all.total);
   });
 
-  it("resolves, marks spam, and stops spam counting", async () => {
+  it("resolves and reopens, and audits it against the platform", async () => {
     const list = await (await asAdmin("/api/admin/feedback/reports?status=new&limit=1")).json<{
       reports: { id: string }[];
+      counts: { new: number; resolved: number };
     }>();
     const id = list.reports[0]!.id;
-
-    const before = await (await asAdmin("/api/admin/feedback/stats?range=30d")).json<{ total: number }>();
 
     const patched = await asAdmin(`/api/admin/feedback/reports/${id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ status: "spam", internalNote: "  test junk  " }),
+      body: JSON.stringify({ status: "resolved", internalNote: "  picker bug, fixed in 7c2d  " }),
     });
     expect(patched.status).toBe(200);
 
@@ -486,13 +485,25 @@ describe("the feedback page", () => {
       statusBy: string;
       internalNote: string;
     }>();
-    expect(detail.status).toBe("spam");
+    expect(detail.status).toBe("resolved");
     expect(detail.statusBy).toBe("fbpage@example.com");
-    expect(detail.internalNote).toBe("test junk");
+    expect(detail.internalNote).toBe("picker bug, fixed in 7c2d");
 
-    // Binned means it stops moving the numbers.
-    const after = await (await asAdmin("/api/admin/feedback/stats?range=30d")).json<{ total: number }>();
-    expect(after.total).toBe(before.total - 1);
+    // It leaves the unresolved list, and the badges follow.
+    const after = await (await asAdmin("/api/admin/feedback/reports?status=new&limit=100")).json<{
+      reports: { id: string }[];
+      counts: { new: number; resolved: number };
+    }>();
+    expect(after.reports.some((r) => r.id === id)).toBe(false);
+    expect(after.counts.resolved).toBe(list.counts.resolved + 1);
+
+    // Two states only: anything else is refused rather than stored.
+    const bogus = await asAdmin(`/api/admin/feedback/reports/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status: "spam" }),
+    });
+    expect(bogus.status).toBe(400);
 
     // Audited against the platform, never against the customer's log.
     const audited = await DB()
@@ -501,14 +512,18 @@ describe("the feedback page", () => {
       .first<{ organization_id: string }>();
     expect(audited?.organization_id).toBe("_platform");
 
-    // A null note clears it, rather than being ignored.
+    // Reopening, and a null note clears it rather than being ignored.
     await asAdmin(`/api/admin/feedback/reports/${id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ internalNote: null }),
+      body: JSON.stringify({ status: "new", internalNote: null }),
     });
-    const cleared = await (await asAdmin(`/api/admin/feedback/reports/${id}`)).json<{ internalNote: string | null }>();
-    expect(cleared.internalNote).toBeNull();
+    const reopened = await (await asAdmin(`/api/admin/feedback/reports/${id}`)).json<{
+      status: string;
+      internalNote: string | null;
+    }>();
+    expect(reopened.status).toBe("new");
+    expect(reopened.internalNote).toBeNull();
   });
 
   it("returns the snapshot a respondent attached", async () => {
