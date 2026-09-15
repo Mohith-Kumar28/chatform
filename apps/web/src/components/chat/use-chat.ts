@@ -74,6 +74,11 @@ export interface EndingState {
   kind?: "success" | "screen_out";
   /** On a screen-out, the requirements this response missed. Already narrowed server-side. */
   requirements?: string[];
+  /**
+   * On a screen-out, whether "I answered that by mistake" is still on offer.
+   * Absent from servers that predate the undo allowance, which read as yes.
+   */
+  canUndo?: boolean;
 }
 
 export type ConnectionStatus = "connecting" | "ready" | "reconnecting" | "ended" | "error";
@@ -341,6 +346,11 @@ async function refusalCode(res: Response): Promise<string | null> {
 export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId, existingSession, onRestart }: UseChatOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState<QuestionState | null>(null);
+  /** The question on screen, for callbacks that must stay stable across renders. */
+  const currentQuestionRef = useRef<string | null>(null);
+  useEffect(() => {
+    currentQuestionRef.current = question?.block?.ref ?? null;
+  }, [question]);
   const [ending, setEnding] = useState<EndingState | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
@@ -361,8 +371,11 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
    * touches it.
    */
   const [answering, setAnswering] = useState(false);
-  /** An edit is on its way to the server. A ref, not state: two taps can land before a render. */
-  const editingRef = useRef(false);
+  /**
+   * An edit, skip or submit is on its way to the server. A ref, not state: two
+   * taps can land before a render. `settleTurn` releases it.
+   */
+  const actionInFlightRef = useRef(false);
   const [rateLimited, setRateLimited] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewState | null>(null);
   const [submitted, setSubmitted] = useState<SubmittedState | null>(null);
@@ -495,7 +508,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
    * and "the controls are live again" can never disagree.
    */
   const settleTurn = useCallback(() => {
-    editingRef.current = false;
+    actionInFlightRef.current = false;
     setThinking(false);
     setAnswering(false);
   }, []);
@@ -839,8 +852,11 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
       });
 
       on("ending", (e) => {
-        const { ending } = JSON.parse((e as MessageEvent).data) as { ending: EndingState };
-        setEnding(ending);
+        const { ending, canUndo } = JSON.parse((e as MessageEvent).data) as {
+          ending: EndingState;
+          canUndo?: boolean;
+        };
+        setEnding(canUndo === undefined ? ending : { ...ending, canUndo });
         setQuestion(null);
         setReview(null);
         settleTurn();
@@ -1280,9 +1296,20 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
 
   const sendAction = useCallback(
     async (action: "skip" | "restart" | "stop" | "submit") => {
+      // Skip and submit move the flow, so a second tap before the first has
+      // resolved acts on whatever comes next — a double-tapped Skip skipped
+      // two questions. Stop and restart are the ways out and always go.
+      const movesFlow = action === "skip" || action === "submit";
+      if (movesFlow) {
+        if (actionInFlightRef.current) return;
+        actionInFlightRef.current = true;
+      }
       setThinking(true);
       setAnswering(true);
-      await post("actions", { action });
+      // The skip names its question, so one that arrives late is refused
+      // rather than applied to the question after it.
+      const ref = action === "skip" ? currentQuestionRef.current : null;
+      await post("actions", ref ? { action, ref } : { action });
     },
     [post],
   );
@@ -1323,11 +1350,11 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
   /** Go back and change a previous answer. */
   const editAnswer = useCallback(
     async (ref: string) => {
-      // One edit at a time. The pencil stays tappable while the first one is
-      // resolving, and a slow phone gets tapped again — each repeat used to be
-      // a whole new "let's redo that one". `settleTurn` releases it.
-      if (editingRef.current) return;
-      editingRef.current = true;
+      // One at a time. The pencil stays tappable while an edit is resolving,
+      // and a slow phone gets tapped again — each repeat used to be a whole
+      // new "let's redo that one".
+      if (actionInFlightRef.current) return;
+      actionInFlightRef.current = true;
       setThinking(true);
       setAnswering(true);
       setEnding(null);

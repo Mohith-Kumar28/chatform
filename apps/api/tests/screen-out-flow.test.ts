@@ -447,6 +447,32 @@ describe("a respondent who was screened out by mistake", () => {
     expect(await rowFor(s)).toMatchObject({ status: "completed" });
   });
 
+  /*
+   * Each undo that lands on the refusal again re-finalizes the response and
+   * re-sends the owner's `response.disqualified` webhook, so a respondent
+   * looping "No → undo → No" is capped. Two is enough for a genuine mis-tap.
+   */
+  it("allows two undos, then lets the refusal stand", async () => {
+    const s = await open();
+    const endingEvent = (turn: TurnResult) =>
+      (turn.events as { type: string; data?: { canUndo?: boolean } }[]).find((e) => e.type === "ending");
+
+    const first = await answer(s, "q_size", 9);
+    expect(endingEvent(first)?.data?.canUndo).toBe(true);
+    expect((await act(s, "undo_screen_out")).status).toBe(200);
+
+    const second = await answer(s, "q_size", 9);
+    expect(endingEvent(second)?.data?.canUndo).toBe(true);
+    expect((await act(s, "undo_screen_out")).status).toBe(200);
+
+    const third = await answer(s, "q_size", 9);
+    expect(endingEvent(third)?.data?.canUndo).toBe(false);
+    const refused = await act(s, "undo_screen_out");
+    expect(refused.status).toBe(400);
+    expect(((await refused.json()) as { error: { code: string } }).error.code).toBe("undo_limit");
+    expect(await rowFor(s)).toMatchObject({ status: "disqualified" });
+  });
+
   it("is refused twice over — the second undo has nothing to undo", async () => {
     const s = await open();
     await answer(s, "q_size", 9);
@@ -529,5 +555,91 @@ describe("a screen-out on a response that had been abandoned", () => {
     const row = await rowFor(s);
     expect(row?.status).toBe("completed");
     expect(row?.ending).toBe("end_thanks");
+  });
+});
+
+/**
+ * Actions that name a question, and the ones that repeat.
+ *
+ * `edit` took a bare ref and never checked it, so one request could jump to a
+ * question further down, and `resumeAfterEdit` walked on from there — past the
+ * screen-out in between. A double-tapped Skip skipped the question after it,
+ * and seventeen taps on the pencil left thirty-four messages in a transcript.
+ */
+describe("respondent actions that could be repeated or aimed elsewhere", () => {
+  const act = (sessionId: string, body: Record<string, unknown>) =>
+    api(`/v1/sessions/${sessionId}/actions`, { method: "POST", body: JSON.stringify(body) });
+  const code = async (res: Response) => ((await res.json()) as { error: { code: string } }).error.code;
+
+  // A fresh key: the file's earlier describes have used up the first one's burst allowance.
+  beforeAll(async () => {
+    key = (
+      await seedKey(t, "screenoutkey2", {
+        scopes: { form: ["read"], response: ["read", "write"], session: ["create", "write", "read"] },
+      })
+    ).raw;
+  });
+
+  it("refuses an edit to a question they have not reached", async () => {
+    const s = await open();
+    await answer(s, "q_size", 3);
+
+    // q_project sits below the consent that screens people out.
+    const res = await act(s, { action: "edit", ref: "q_project" });
+    expect(res.status).toBe(400);
+    expect(await code(res)).toBe("stale_ref");
+
+    // Still waiting on the consent, not past it.
+    const next = await answer(s, "q_conduct", false);
+    expect(next.ending?.ref).toBe("end_ineligible");
+  });
+
+  it("still lets them edit an answer they gave", async () => {
+    const s = await open();
+    await answer(s, "q_size", 3);
+    const res = await act(s, { action: "edit", ref: "q_size" });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as TurnResult).question?.ref).toBe("q_size");
+  });
+
+  it("says 'let's redo that one' once, however often the pencil is tapped", async () => {
+    const s = await open();
+    await answer(s, "q_size", 3);
+    const first = (await (await act(s, { action: "edit", ref: "q_size" })).json()) as { assistantMessages: string[] };
+    const again = (await (await act(s, { action: "edit", ref: "q_size" })).json()) as {
+      assistantMessages: string[];
+      question: { ref: string } | null;
+    };
+    expect(first.assistantMessages.some((m) => m.includes("redo"))).toBe(true);
+    expect(again.assistantMessages).toEqual([]);
+    expect(again.question?.ref).toBe("q_size");
+  });
+
+  it("refuses a skip aimed at a question that is not the current one", async () => {
+    const s = await open();
+    await answer(s, "q_size", 3);
+    await answer(s, "q_conduct", true);
+
+    // The late second tap of a double-tapped Skip, after the flow moved on.
+    const stale = await act(s, { action: "skip", ref: "q_conduct" });
+    expect(stale.status).toBe(400);
+    expect(await code(stale)).toBe("stale_ref");
+
+    const ok = await act(s, { action: "skip", ref: "q_project" });
+    expect(ok.status).toBe(200);
+    expect(((await ok.json()) as TurnResult).awaitingSubmit).toBe(true);
+  });
+
+  it("does not let a restart carry a pending review into an empty submit", async () => {
+    const s = await open();
+    await answer(s, "q_size", 3);
+    await answer(s, "q_conduct", true);
+    const parked = await answer(s, "q_project", "A better kettle");
+    expect(parked.awaitingSubmit).toBe(true);
+
+    await act(s, { action: "restart" });
+    const submit = (await (await act(s, { action: "submit" })).json()) as TurnResult;
+    expect(submit.ending).toBeNull();
+    expect(submit.question?.ref).toBe("q_size");
   });
 });

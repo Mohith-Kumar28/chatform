@@ -115,7 +115,11 @@ export type ServerEvent =
       type: "verify_settled";
       data: { ref: string; verified: boolean };
     }
-  | { type: "ending"; data: { ending: PublicEnding } }
+  | {
+      type: "ending";
+      /** `canUndo`: on a screen-out, whether "I answered that by mistake" is still on offer. */
+      data: { ending: PublicEnding; canUndo?: boolean };
+    }
   | { type: "complete"; data: { submissionId: string; durationMs: number } }
   | {
       /**

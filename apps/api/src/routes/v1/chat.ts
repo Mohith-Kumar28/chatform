@@ -317,7 +317,11 @@ const actionsRoute = (base: string) =>
         "change_answer",
         "undo_screen_out",
       ]),
-      /** For `edit`: the question to go back to. */
+      /**
+       * For `edit`: the question to go back to — one already answered, or the
+       * one the flow is waiting on. For `skip`, optional: the question meant, so
+       * a skip that arrives after the flow has moved on is refused.
+       */
       ref: z.string().optional(),
     }),
   ),

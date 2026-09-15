@@ -1874,7 +1874,7 @@ function EndingCard({
           because they are not the same offer: this one costs nothing, and
           starting over costs the whole form.
         */}
-        {screenedOut && onUndoScreenOut && (
+        {screenedOut && onUndoScreenOut && ending.canUndo !== false && (
           <>
             <button
               type="button"

@@ -134,7 +134,10 @@ const actionSchema = z.object({
     "change_answer",
     "undo_screen_out",
   ]),
-  /** Required for `edit`: which question to go back to. */
+  /**
+   * Required for `edit`: which question to go back to. Optional for `skip`: the
+   * question meant, so a double-tapped Skip cannot skip the one after it.
+   */
   ref: z.string().optional(),
 });
 

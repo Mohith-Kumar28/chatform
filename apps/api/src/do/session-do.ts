@@ -20,6 +20,7 @@ import {
   extractionSchema,
   extractionGuidance,
   resolveEnding,
+  answerability,
   displayAnswer as summarizeAnswer,
   isRequirementUnmet,
   defaultEnding,
@@ -177,6 +178,15 @@ interface DoSessionMeta {
    * Null on a completion, and cleared the moment the undo is taken.
    */
   screenedOutFrom?: string | null;
+  /**
+   * How many screen-outs this session has taken back.
+   *
+   * Every undo re-finalizes the response when the refusal lands again, and each
+   * finalize sends the owner another `response.disqualified`. Unbounded, one
+   * respondent looping "No → undo → No" is a webhook firehose. See
+   * `MAX_SCREEN_OUT_UNDOS`.
+   */
+  undoCount?: number;
 }
 
 /**
@@ -224,6 +234,8 @@ interface StoredSession {
   /** Per block ref: the sub-fields of a refused contact/address card that were good. */
   partials?: Record<string, Record<string, string>>;
   sessionTokensUsed?: number;
+  /** How much of `sessionTokensUsed` has already been metered to the org. */
+  meteredTokens?: number;
   /** Retired: merged into `sessionTokensUsed`. Still read when resuming an old session. */
   phrasingTokensUsed?: number;
   extractionCalls?: number;
@@ -261,6 +273,14 @@ function errorInfo(err: unknown): { errName: string; errMessage: string; errStac
 
 const IDLE_ALARM_MS = 30 * 60 * 1000;
 const MAX_REPLAY = 200;
+/**
+ * Screen-outs one session may take back.
+ *
+ * Enough for a genuine mis-tap or two. Past it the refusal stands: each undo
+ * that lands on the screen-out again re-finalizes the response and re-sends the
+ * owner's `response.disqualified` webhook.
+ */
+const MAX_SCREEN_OUT_UNDOS = 2;
 /**
  * How long a single SSE frame may take to reach one connection before that
  * connection is treated as gone.
@@ -408,6 +428,14 @@ export class SessionDO extends DurableObject<Bindings> {
    * One number, counted raw.
    */
   private sessionTokensUsed = 0;
+  /**
+   * The part of `sessionTokensUsed` already charged to the org.
+   *
+   * A session can finalize more than once — a screen-out that is undone and
+   * then lands again — and metering the running total each time billed the
+   * same tokens twice. Only the difference is metered.
+   */
+  private meteredTokens = 0;
   /** Extraction calls made, against MAX_EXTRACTION_CALLS. */
   private extractionCalls = 0;
   /** Consecutive guard rejections; 3 drops the session to template mode. */
@@ -1307,6 +1335,7 @@ export class SessionDO extends DurableObject<Bindings> {
     // session written before they merged carries its spend across rather than
     // being handed a fresh allowance mid-conversation.
     this.sessionTokensUsed = Math.max(stored.sessionTokensUsed ?? 0, stored.phrasingTokensUsed ?? 0);
+    this.meteredTokens = stored.meteredTokens ?? 0;
     this.extractionCalls = stored.extractionCalls ?? 0;
     this.editingRef = stored.editingRef ?? null;
     this.degraded = stored.degraded ?? false;
@@ -1330,6 +1359,7 @@ export class SessionDO extends DurableObject<Bindings> {
       invalidCounts: Object.fromEntries(this.invalidCounts),
       partials: Object.fromEntries(this.partials),
       sessionTokensUsed: this.sessionTokensUsed,
+      meteredTokens: this.meteredTokens,
       extractionCalls: this.extractionCalls,
       editingRef: this.editingRef,
       degraded: this.degraded,
@@ -2848,6 +2878,22 @@ export class SessionDO extends DurableObject<Bindings> {
   private async completeWith(ending: Ending, fromRef?: string): Promise<void> {
     if (!this.meta || !this.doc) return;
     const screenedOut = ending.kind === "screen_out";
+    /*
+     * Never file a response with a required answer missing.
+     *
+     * `submit` has always checked this, but a form with `requireSubmit` off
+     * reaches here straight from `advanceTo` — and a respondent who got to an
+     * ending without walking the questions in between (anything that moves
+     * the cursor forward out of order) would have been completed with them
+     * blank. A screen-out is exempt: a refusal is not waiting on anything.
+     */
+    if (!screenedOut) {
+      const missing = this.unansweredRequired();
+      if (missing.length > 0) {
+        await this.askForMissing(missing);
+        return;
+      }
+    }
     this.meta.currentRef = null;
     this.meta.screenedOutFrom = screenedOut ? (fromRef ?? this.lastAnsweredRef()) : null;
     this.meta.status = screenedOut ? "disqualified" : "completed";
@@ -2860,7 +2906,7 @@ export class SessionDO extends DurableObject<Bindings> {
     // Project rather than emitting the stored ending: the raw object carries
     // internal ids, and only the projection applies the form-level redirect
     // default that `settings.onComplete` is supposed to provide.
-    await this.emit("ending", { ending: this.projectEnding(ending) });
+    await this.emit("ending", { ending: this.projectEnding(ending), canUndo: this.canUndoScreenOut() });
     const submissionId = await this.finalize(screenedOut ? "disqualified" : "completed", ending.ref);
     /**
      * `complete` fires either way, because the conversation is over either way
@@ -2870,6 +2916,28 @@ export class SessionDO extends DurableObject<Bindings> {
      */
     await this.emit("complete", { submissionId, durationMs: Date.now() - this.meta.startedAt });
     await this.persistMeta();
+  }
+
+  /** Take them to the first required question still blank, instead of finishing. */
+  private async askForMissing(missing: Block[]): Promise<void> {
+    if (!this.meta) return;
+    const target = missing[0]!;
+    this.pendingEndingRef = null;
+    this.meta.currentRef = target.ref;
+    this.editingRef = null;
+    await this.persistMeta();
+    await this.emitMessage(
+      missing.length === 1
+        ? `Almost — I still need one answer before I can send this.`
+        : `Almost — there are ${missing.length} answers still missing before I can send this.`,
+    );
+    await this.emitMessage(questionText(target));
+    await this.emitQuestion();
+  }
+
+  /** Whether a screen-out on this session can still be taken back. */
+  private canUndoScreenOut(): boolean {
+    return (this.meta?.undoCount ?? 0) < MAX_SCREEN_OUT_UNDOS;
   }
 
   /**
@@ -3179,7 +3247,7 @@ export class SessionDO extends DurableObject<Bindings> {
         (this.meta.endingRef && this.doc.endings.find((e) => e.ref === this.meta!.endingRef)) ||
         defaultEnding(this.doc);
       if (ending) {
-        await this.emit("ending", { ending: this.projectEnding(ending) });
+        await this.emit("ending", { ending: this.projectEnding(ending), canUndo: this.canUndoScreenOut() });
       }
       return { ok: true };
     }
@@ -3299,6 +3367,10 @@ export class SessionDO extends DurableObject<Bindings> {
     if (input.action === "skip") {
       const block = await this.currentBlock();
       if (!block) return { accepted: false, error: "no_question" };
+      // A skip names the question it meant, when the caller knows it. Without
+      // that, a double-tapped Skip skipped the question after it too — the
+      // second tap arriving after the first had already moved the cursor.
+      if (input.ref !== undefined && input.ref !== block.ref) return { accepted: false, error: "stale_ref" };
       if (block.required) {
         return this.recordInvalid(block, "required", "This question is required.");
       }
@@ -3319,18 +3391,7 @@ export class SessionDO extends DurableObject<Bindings> {
        */
       const missing = this.unansweredRequired();
       if (missing.length > 0) {
-        const target = missing[0]!;
-        this.pendingEndingRef = null;
-        this.meta.currentRef = target.ref;
-        this.editingRef = null;
-        await this.persistMeta();
-        await this.emitMessage(
-          missing.length === 1
-            ? `Almost — I still need one answer before I can send this.`
-            : `Almost — there are ${missing.length} answers still missing before I can send this.`,
-        );
-        await this.emitMessage(questionText(target));
-        await this.emitQuestion();
+        await this.askForMissing(missing);
         return { accepted: true };
       }
       const ending =
@@ -3371,6 +3432,22 @@ export class SessionDO extends DurableObject<Bindings> {
       if (!target) return { accepted: false, error: "unknown_ref" };
       if (["welcome", "statement"].includes(target.type)) {
         return { accepted: false, error: "not_answerable" };
+      }
+      /*
+       * Only somewhere they have already been.
+       *
+       * The pencil is only ever drawn beside an answer, but the action takes a
+       * bare ref, and nothing checked it. Editing a question further down the
+       * form put the cursor there, and `resumeAfterEdit` then walked forward
+       * from it — so one request jumped past every question in between: their
+       * screen-out rules, a deferred sign-in gate, and (with `requireSubmit`
+       * off) their required answers. `answerability` is the same test `/v1`
+       * applies to an answer: on the path already walked, or the question the
+       * flow is waiting on — which is also what an undone screen-out is, its
+       * answer having just been removed.
+       */
+      if (!answerability(this.doc, this.state.answers, target.ref, this.state.hidden).ok) {
+        return { accepted: false, error: "stale_ref" };
       }
 
       /*
@@ -3420,6 +3497,13 @@ export class SessionDO extends DurableObject<Bindings> {
       // Starting over puts the deferred gate back in front of them too: the
       // answers that had bought their way past it are gone.
       this.gatedAtRef = null;
+      // And nothing from the old attempt may steer the new one: a review step
+      // left pending let a `submit` straight after this finish an empty form,
+      // and a stale edit bookmark would resume past questions not yet asked.
+      this.pendingEndingRef = null;
+      this.editingRef = null;
+      this.invalidCounts.clear();
+      this.partials.clear();
       const next = resolveNext(this.doc, null, this.state);
       await this.advanceTo(next);
       return { accepted: true };
@@ -3453,6 +3537,8 @@ export class SessionDO extends DurableObject<Bindings> {
   private async undoScreenOut(): Promise<{ accepted: boolean; error?: string }> {
     if (!this.meta || !this.doc) return { accepted: false, error: "session_not_found" };
     if (this.meta.status !== "disqualified") return { accepted: false, error: "not_screened_out" };
+    // Past the allowance the refusal stands — see `MAX_SCREEN_OUT_UNDOS`.
+    if (!this.canUndoScreenOut()) return { accepted: false, error: "undo_limit" };
 
     const ref = this.meta.screenedOutFrom ?? this.lastAnsweredRef();
     const target = ref ? this.doc.blocks.find((b) => b.ref === ref) : undefined;
@@ -3469,6 +3555,7 @@ export class SessionDO extends DurableObject<Bindings> {
     this.meta.completedAt = null;
     this.meta.endingRef = null;
     this.meta.screenedOutFrom = null;
+    this.meta.undoCount = (this.meta.undoCount ?? 0) + 1;
     // Reopened, so it can go idle again — and must, or a conversation walked
     // away from here would never be swept up as abandoned.
     await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
@@ -4096,8 +4183,11 @@ export class SessionDO extends DurableObject<Bindings> {
      * customer's budget.
      */
     try {
-      if (this.sessionTokensUsed > 0 && this.meta.isTest !== true) {
-        await meter(this.env, this.meta.organizationId, "ai_tokens", this.sessionTokensUsed);
+      const unmetered = this.sessionTokensUsed - this.meteredTokens;
+      if (unmetered > 0 && this.meta.isTest !== true) {
+        await meter(this.env, this.meta.organizationId, "ai_tokens", unmetered);
+        this.meteredTokens = this.sessionTokensUsed;
+        await this.persistMeta();
       }
     } catch (err) {
       console.error("usage_increment_failed", err);
