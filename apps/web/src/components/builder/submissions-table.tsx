@@ -1244,8 +1244,16 @@ export function SubmissionsTable({
       </div>
 
       <div className={cn("bg-card min-h-0 overflow-hidden rounded-xl border", full && "flex-1")}>
-        {/* The table scrolls inside its own box, so the page never does. */}
-        <div className={cn("overflow-auto", full ? "h-full" : "max-h-[32rem]")}>
+        {/*
+          The table scrolls inside its own box, so the page never does. The cap
+          is whatever the viewport leaves after the chrome around it — builder
+          header, page padding, the view tabs, the status switcher and the
+          pager below, about 17rem together — rather than a fixed 32rem, which
+          left the bottom third of a large screen empty under a table that was
+          still scrolling. `dvh` so a mobile browser's collapsing toolbar is
+          counted, and a 20rem floor so a short window still shows rows.
+        */}
+        <div className={cn("overflow-auto", full ? "h-full" : "max-h-[max(20rem,calc(100dvh-17rem))]")}>
           <table className="w-full border-separate border-spacing-0 text-sm">
             {/* Sticky lives on the cells, not on `thead`: a sticky `thead` is
                 the one browsers disagree about, and the corner cells need to
@@ -1913,10 +1921,7 @@ function SubmissionDialog({
                   ) : (
                     <div
                       key={i}
-                      className={cn(
-                        "group/msg flex items-end gap-2",
-                        m.role === "user" ? "justify-end" : "justify-start",
-                      )}
+                      className={cn("group/msg flex items-end gap-2", m.role === "user" && "flex-row-reverse")}
                     >
                       <p
                         className={cn(
@@ -1929,14 +1934,23 @@ function SubmissionDialog({
                         {m.content}
                       </p>
                       {/*
-                        When a turn happened, on the outside of the bubble and
-                        only while the pointer is on that turn. Reading a
-                        conversation and auditing its timing are different jobs,
-                        and stamping every line permanently would tax the first
-                        to serve the second. It holds its place in the row
-                        rather than being positioned over it, so appearing
-                        shifts nothing — the space it sits in is the gutter the
-                        80% cap already leaves empty.
+                        When a turn happened, on the *outside* of the bubble —
+                        to its right for the agent, to its left for the
+                        respondent — and only while the pointer is on that turn.
+                        Reading a conversation and auditing its timing are
+                        different jobs, and stamping every line permanently
+                        would tax the first to serve the second.
+
+                        Outside, rather than "always to the right", is what
+                        keeps the row's shape: it holds its place in the layout
+                        so nothing shifts when it fades in, and the place it
+                        holds is the empty gutter the 80% cap already leaves.
+                        On the right of a right-aligned bubble that gutter is on
+                        the wrong side, and every respondent message ends up
+                        hanging an inch short of the edge it is supposed to
+                        touch. Reversing the row instead of the justification is
+                        the whole fix — the bubble is still the item packed
+                        against the wall.
                       */}
                       {m.createdAt > 0 && (
                         <time
