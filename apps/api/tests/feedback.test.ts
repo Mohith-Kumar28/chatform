@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { applySchema, fetchApi, minimalDoc, seedTenant, type Tenant } from "./helpers.js";
 import { FEEDBACK_DAILY_CAP } from "../src/lib/feedback.js";
+import { runMailJob } from "../src/lib/mail-jobs.js";
 import type { Bindings } from "../src/env.js";
 
 /**
@@ -173,5 +174,106 @@ describe("the console", () => {
     // Newest first, and joined back to the form so a report can be reproduced.
     expect(body.notes[0]?.formTitle).toBe("Bug report form");
     expect(body.notes.some((n) => n.message === "The date picker is lovely.")).toBe(true);
+  });
+});
+
+/**
+ * The report has to leave the building.
+ *
+ * A console nobody opens is where bug reports went to die before this — the
+ * whole value of the feature is the minutes between a respondent hitting
+ * something and a person knowing about it, so the mail is not a nicety on top
+ * of the table, it is the point of writing the row.
+ */
+describe("telling the founders", () => {
+  interface Captured {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+  }
+
+  /** A `SendEmail` binding that records instead of sending — Miniflare has none. */
+  function captureBinding(): { sent: Captured[]; binding: SendEmail } {
+    const sent: Captured[] = [];
+    const binding = {
+      send: async (msg: unknown) => {
+        sent.push(msg as Captured);
+        return { messageId: `msg_${sent.length}` } as unknown as EmailSendResult;
+      },
+    } as unknown as SendEmail;
+    return { sent, binding };
+  }
+
+  const withMail = (overrides: Partial<Bindings>): Bindings => ({ ...DB(), ...overrides });
+
+  /** One stored report, written straight to the table — the route is covered above. */
+  async function seedReport(id: string, rating: number, message: string | null): Promise<string> {
+    await DB()
+      .DB.prepare(
+        `INSERT INTO respondent_feedback (id, respondent_id, session_id, form_id, organization_id, rating, message, source, user_agent, created_at)
+         VALUES (?1, NULL, 'chs_mail', 'frm_bugreport', ?2, ?3, ?4, 'chat', 'Mozilla/5.0 (Pixel 8)', ?5)`,
+      )
+      .bind(id, t.orgId, rating, message, Date.now())
+      .run();
+    return id;
+  }
+
+  it("mails every address on the platform allowlist", async () => {
+    const id = await seedReport("fbk_mail_all", 2, "The phone field rejects a UK number.");
+    const { sent, binding } = captureBinding();
+
+    const out = await runMailJob(
+      withMail({ EMAIL: binding, PLATFORM_ADMIN_EMAILS: "founder@example.com, second@example.com" }),
+      { kind: "respondent_feedback", feedbackId: id },
+    );
+
+    expect(out.messages).toBe(2);
+    expect(sent.map((m) => m.to).sort()).toEqual(["founder@example.com", "second@example.com"]);
+    // What they said, in the subject — so the inbox alone says whether this is
+    // worth opening now.
+    expect(sent[0]?.subject).toContain("The phone field rejects a UK number.");
+    // And the word for the face, not the digit.
+    expect(sent[0]?.subject).toContain("Bad");
+    // Everything needed to reproduce it, in the body.
+    expect(sent[0]?.text).toContain("Bug report form");
+    expect(sent[0]?.text).toContain("Mozilla/5.0 (Pixel 8)");
+  });
+
+  it("says so when there were no words", async () => {
+    const id = await seedReport("fbk_mail_silent", 5, null);
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding, PLATFORM_ADMIN_EMAILS: "founder@example.com" }), {
+      kind: "respondent_feedback",
+      feedbackId: id,
+    });
+    expect(sent[0]?.subject).toContain("Great");
+    expect(sent[0]?.text).toContain("(no note)");
+  });
+
+  /*
+    A deployment with no console has nobody to tell, and a report whose row has
+    been deleted has nothing to say. Both are "skipped", not "failed" — the
+    difference decides whether the queue spends five retries on them.
+  */
+  it("mails nobody when the allowlist is empty", async () => {
+    const id = await seedReport("fbk_mail_nolist", 3, "nobody is listening");
+    const { sent, binding } = captureBinding();
+    const out = await runMailJob(withMail({ EMAIL: binding, PLATFORM_ADMIN_EMAILS: "" }), {
+      kind: "respondent_feedback",
+      feedbackId: id,
+    });
+    expect(out.messages).toBe(0);
+    expect(sent).toHaveLength(0);
+  });
+
+  it("mails nobody when the report has been deleted", async () => {
+    const { sent, binding } = captureBinding();
+    const out = await runMailJob(
+      withMail({ EMAIL: binding, PLATFORM_ADMIN_EMAILS: "founder@example.com" }),
+      { kind: "respondent_feedback", feedbackId: "fbk_never_existed" },
+    );
+    expect(out.messages).toBe(0);
+    expect(sent).toHaveLength(0);
   });
 });

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Angry, Check, Frown, Laugh, Meh, Smile, X } from "lucide-react";
+import { FEEDBACK_LABELS } from "@repo/form-schema";
 import { cn } from "@/lib/utils";
 
 /**
@@ -36,13 +37,18 @@ import { cn } from "@/lib/utils";
  * same five characters are a different set of faces — sometimes a different
  * *sentiment* — on a phone, a Mac and a Windows machine, and none of them take
  * the form's colour.
+ *
+ * The words come from `@repo/form-schema`, because the API says them back: the
+ * mail the founders get names the face that was picked, and a second list here
+ * would let a report filed as "Bad" arrive in an inbox labelled "Okay". Only
+ * the icons are local — they are the one part nothing else reads.
  */
 const FACES = [
-  { rating: 1, label: "Terrible", Icon: Angry },
-  { rating: 2, label: "Bad", Icon: Frown },
-  { rating: 3, label: "Okay", Icon: Meh },
-  { rating: 4, label: "Good", Icon: Smile },
-  { rating: 5, label: "Great", Icon: Laugh },
+  { rating: 1, label: FEEDBACK_LABELS[1], Icon: Angry },
+  { rating: 2, label: FEEDBACK_LABELS[2], Icon: Frown },
+  { rating: 3, label: FEEDBACK_LABELS[3], Icon: Meh },
+  { rating: 4, label: FEEDBACK_LABELS[4], Icon: Smile },
+  { rating: 5, label: FEEDBACK_LABELS[5], Icon: Laugh },
 ] as const;
 
 /** How long the receipt stays up before the panel closes itself. */
@@ -198,8 +204,8 @@ export function FeedbackDialog({
             */}
             <p className="mt-1 text-sm opacity-60">
               {named
-                ? "This goes to chatform, the software running this form — not to the people who made it."
-                : "This goes to the team who build the software running this form — not to the people who made it."}
+                ? "This goes to chatform, the software running this form — not to the people who made this form."
+                : "This goes to the team who build the software running this form — not to the people who made this form."}
             </p>
 
             <div className="mt-5 flex items-end justify-between gap-1.5">

@@ -12,6 +12,7 @@ import { completedSubmissions, openSession, type FormRow } from "../lib/open-ses
 import { respondentKey } from "../lib/respondent-key.js";
 import { resolveRespondent } from "../lib/respondents.js";
 import { recordFeedback, FEEDBACK_DAILY_CAP } from "../lib/feedback.js";
+import { enqueueMail } from "../lib/mail.js";
 import { canonicalZone } from "../lib/quiet-hours.js";
 import { findDeviceResumable } from "../lib/respondent-history.js";
 import { reopenAbandonedResponse } from "../lib/submissions.js";
@@ -687,6 +688,20 @@ sessionsRouter.post("/sessions/:id/feedback", zValidator("json", feedbackSchema)
       429,
     );
   }
+
+  /*
+    Mailed to the founders rather than left for whenever somebody next opens the
+    console. A bug report is worth most in the minutes after it is filed — while
+    the respondent is still on the form and the release that broke it is still
+    the last one — and a queue of them read on Friday is a queue of forms that
+    were broken all week.
+
+    Queued, never sent inline: `enqueueMail` swallows its own failures, so a
+    respondent's "thank you, that reached us" never waits on, or is retracted
+    by, an SMTP hop. It did reach us — the row is already written.
+  */
+  await enqueueMail(c.env, { kind: "respondent_feedback", feedbackId: result.id });
+
   return c.json({ ok: true });
 });
 

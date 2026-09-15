@@ -5,6 +5,7 @@ export * from "./blocks";
 export * from "./catalog";
 export * from "./logic";
 export * from "./respondent";
+export * from "./feedback-scale";
 export * from "./settings";
 export * from "./answers";
 export * from "./answer-catalog";

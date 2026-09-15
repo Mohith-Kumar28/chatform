@@ -1,6 +1,7 @@
 "use client";
 
 import { Angry, Frown, Laugh, Meh, Smile, type LucideIcon } from "lucide-react";
+import { FEEDBACK_LABELS } from "@repo/form-schema";
 import { useGetApiAdminFeedback } from "@/lib/api/admin/admin";
 import { ChartCard, Empty } from "@/components/charts/chart-kit";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,11 +51,11 @@ interface Feedback {
  * object, and a number needs its own legend before it means anything.
  */
 const FACES: Record<number, { label: string; Icon: LucideIcon; color: string }> = {
-  1: { label: "Terrible", Icon: Angry, color: "var(--destructive)" },
-  2: { label: "Bad", Icon: Frown, color: "var(--destructive)" },
-  3: { label: "Okay", Icon: Meh, color: "var(--warning)" },
-  4: { label: "Good", Icon: Smile, color: "var(--success)" },
-  5: { label: "Great", Icon: Laugh, color: "var(--success)" },
+  1: { label: FEEDBACK_LABELS[1], Icon: Angry, color: "var(--destructive)" },
+  2: { label: FEEDBACK_LABELS[2], Icon: Frown, color: "var(--destructive)" },
+  3: { label: FEEDBACK_LABELS[3], Icon: Meh, color: "var(--warning)" },
+  4: { label: FEEDBACK_LABELS[4], Icon: Smile, color: "var(--success)" },
+  5: { label: FEEDBACK_LABELS[5], Icon: Laugh, color: "var(--success)" },
 };
 
 export function FeedbackCard({ range }: { range: Range }) {

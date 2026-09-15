@@ -634,3 +634,107 @@ function estimateMinutes(remaining: number): string {
   const mins = Math.max(1, Math.round((remaining * 15) / 60));
   return mins === 1 ? "a minute" : `${mins} minutes`;
 }
+
+// ──────────────── a respondent's bug report, to the founders ────────────────
+
+/**
+ * The one message in this file that goes to us rather than to a customer.
+ *
+ * It is written to be read on a phone, in a notification shade, by somebody who
+ * is not at their desk — because that is where it will be read, and because the
+ * whole point of mailing it is to shorten the gap between a respondent hitting
+ * a bug and anybody knowing. So the rating and the words are in the subject
+ * line, and everything that helps reproduce it — the form, the browser, the
+ * respondent — is in the body under them.
+ *
+ * No "Powered by chatform" footer and no marketing shell: `brand: false`. This
+ * is internal mail, and dressing it as a product email makes it look, in an
+ * inbox, exactly like the notifications it must not be filed with.
+ */
+export function feedbackNotificationEmail(a: {
+  rating: number;
+  ratingLabel: string;
+  message: string | null;
+  formTitle: string | null;
+  formId: string | null;
+  respondentId: string | null;
+  userAgent: string | null;
+  consoleUrl: string;
+}): Omit<MailMessage, "to"> {
+  const facts: [string, string][] = [
+    ["Rating", `${a.ratingLabel} (${a.rating}/5)`],
+    ["Form", a.formTitle ?? a.formId ?? "unknown"],
+    ["Respondent", a.respondentId ?? "not recognised"],
+    ["Browser", a.userAgent ?? "not reported"],
+  ];
+
+  const body = [
+    h1(`${a.ratingLabel} — a respondent reported something`),
+    /*
+      Their words, first and whole. `white-space:pre-wrap` keeps the line breaks
+      somebody typed: a bug report is often three numbered steps, and reflowing
+      it into a paragraph destroys the only structure it had.
+    */
+    a.message
+      ? `<div style="margin:0 0 18px 0;padding:14px 16px;border-radius:10px;background-color:${GROUND};border:1px solid ${BORDER};font-size:15px;line-height:1.6;color:${INK};white-space:pre-wrap;">${escapeHtml(a.message)}</div>`
+      : p(`<span style="color:${MUTED};">No note — they rated it and left.</span>`),
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 4px 0;">${facts
+      .map(
+        ([label, value]) => `<tr>
+  <td style="padding:8px 12px 8px 0;font-size:12px;line-height:1.5;color:${MUTED};border-top:1px solid ${BORDER};white-space:nowrap;vertical-align:top;">${escapeHtml(label)}</td>
+  <td style="padding:8px 0;font-size:13px;line-height:1.5;color:${INK};border-top:1px solid ${BORDER};word-break:break-word;">${escapeHtml(value)}</td>
+</tr>`,
+      )
+      .join("\n")}</table>`,
+    button(a.consoleUrl, "Open the console"),
+  ].join("\n");
+
+  /*
+    The first line of the note, not the first sixty characters of it.
+
+    Bug reports arrive as a sentence and then numbered steps, and collapsing the
+    newlines to make a subject line puts "1." on the end of the summary — the
+    reader's eye stops on a fragment of the reproduction rather than on what
+    broke. The opening line is the one somebody wrote as a summary anyway.
+  */
+  const firstLine = a.message
+    ?.split(/\r?\n/)
+    .map((l) => l.trim())
+    .find(Boolean);
+
+  return {
+    /*
+      The words in the subject, trimmed to what a phone shows.
+
+      A subject that only says "New feedback" makes every one of these worth
+      opening, which after the third means none of them get opened. What they
+      actually said is usually the whole report.
+    */
+    subject: `${a.ratingLabel} — ${
+      firstLine ? trimTo(firstLine, 60) : `no note (${a.formTitle ?? "unknown form"})`
+    }`,
+    html: layout({
+      preheader: firstLine ? trimTo(firstLine, 100) : `${a.ratingLabel}, no note.`,
+      body,
+      brand: false,
+      footer: "Sent to everyone on PLATFORM_ADMIN_EMAILS, from the “Report a bug” link in the chat footer.",
+    }),
+    text: [
+      `${a.ratingLabel} (${a.rating}/5) — a respondent reported something`,
+      ``,
+      a.message ?? "(no note)",
+      ``,
+      ...facts.map(([label, value]) => `${label}: ${value}`),
+      ``,
+      `Console: ${a.consoleUrl}`,
+    ].join("\n"),
+  };
+}
+
+/** Cut on a word where there is one, so a trimmed subject does not end mid-syllable. */
+function trimTo(s: string, max: number): string {
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}

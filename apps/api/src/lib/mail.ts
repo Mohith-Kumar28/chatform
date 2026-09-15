@@ -379,6 +379,20 @@ export type MailJob =
     }
   | {
       /**
+       * A respondent told us something is broken, and the founders should know
+       * before they next happen to open the console.
+       *
+       * Carries the row id alone, like `submission` and `followup` below: the
+       * consumer reads the report, the form it came from and the allowlist it
+       * goes to, which is the only place those three are guaranteed to agree.
+       * It also keeps the respondent's words out of the queue body, where they
+       * would sit in plaintext for as long as a retry takes.
+       */
+      kind: "respondent_feedback";
+      feedbackId: string;
+    }
+  | {
+      /**
        * One nudge for a response somebody abandoned.
        *
        * Carries only the row id, for the same reason `submission` carries only

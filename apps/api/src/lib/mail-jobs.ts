@@ -4,6 +4,7 @@ import {
   progressOf,
   DEFAULT_CONFIRMATION_BODY,
   DEFAULT_CONFIRMATION_SUBJECT,
+  feedbackLabel,
   type AnswerMap,
   type Block,
   type FormDoc,
@@ -22,6 +23,7 @@ import {
 import {
   autoReplyEmail,
   escapeHtml,
+  feedbackNotificationEmail,
   followUpEmail,
   invitationEmail,
   otpEmail,
@@ -30,6 +32,7 @@ import {
   type AnswerLine,
 } from "./mail-templates.js";
 import { webOrigins } from "./origins.js";
+import { platformAdminEmails } from "./platform-admin.js";
 import { resolveRespondentAddress } from "./respondent-address.js";
 import { mintEmailToken } from "./signed-url.js";
 import { RESUME_TTL_DAYS, UNSUB_TTL_DAYS } from "./followups.js";
@@ -91,7 +94,80 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOu
 
     case "followup":
       return runFollowUpJob(env, job);
+
+    case "respondent_feedback":
+      return runFeedbackJob(env, job);
   }
+}
+
+/**
+ * A respondent's bug report, to everyone who can do something about it.
+ *
+ * The recipients are `PLATFORM_ADMIN_EMAILS` — the same secret the console is
+ * gated on, read through the same parser, so "who is a founder" cannot come to
+ * mean two things. An empty list is a deployment with no console and therefore
+ * nobody to tell: it returns `NO_MAIL` and is recorded as skipped, which is the
+ * honest answer and not a failure to retry.
+ *
+ * Read fresh from D1 rather than carried in the job, and joined to `forms` for
+ * the title — a report is reproduced on the form it came from, and the form may
+ * have been renamed between the tap and the send.
+ */
+async function runFeedbackJob(
+  env: Bindings,
+  job: Extract<MailJob, { kind: "respondent_feedback" }>,
+): Promise<MailJobOutcome> {
+  const row = await env.DB.prepare(
+    `SELECT fb.rating, fb.message, fb.form_id, fb.respondent_id, fb.user_agent, f.title AS form_title
+       FROM respondent_feedback fb
+       LEFT JOIN forms f ON f.id = fb.form_id
+      WHERE fb.id = ?1`,
+  )
+    .bind(job.feedbackId)
+    .first<{
+      rating: number;
+      message: string | null;
+      form_id: string | null;
+      respondent_id: string | null;
+      user_agent: string | null;
+      form_title: string | null;
+    }>();
+
+  // The row is written before the job is queued, so a miss means it has been
+  // deleted since. Nothing to send, and nothing a retry would find.
+  if (!row) return NO_MAIL;
+
+  const recipients = platformAdminEmails(env);
+  if (recipients.length === 0) return NO_MAIL;
+
+  const msg = feedbackNotificationEmail({
+    rating: Number(row.rating),
+    ratingLabel: feedbackLabel(Number(row.rating)),
+    message: row.message,
+    formTitle: row.form_title,
+    formId: row.form_id,
+    respondentId: row.respondent_id,
+    userAgent: row.user_agent,
+    consoleUrl: `${webOrigins(env)[0]!}/admin`,
+  });
+
+  const tally = mailTally();
+  const errors: unknown[] = [];
+  for (const to of recipients) {
+    try {
+      tally.record(to, await sendMail(env, { to, ...msg }));
+    } catch (err) {
+      console.error("feedback_mail_failed", { feedbackId: job.feedbackId, err: String(err) });
+      errors.push(err);
+    }
+  }
+  /*
+    Throwing after trying everyone is how the queue retries, and it matches what
+    `runSubmissionJob` does: a duplicate copy of a bug report in a founder's
+    inbox is noise, and a silently dropped one is the whole feature failing.
+  */
+  if (errors.length > 0 && tally.outcome().messages === 0) throw errors[0];
+  return tally.outcome();
 }
 
 /** The single-recipient jobs, which are every job except the two below. */

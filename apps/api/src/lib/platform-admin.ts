@@ -32,8 +32,13 @@ import { getAuth } from "./auth-instance.js";
  *
  * The failure is silent and total, and the value it depends on is invisible
  * once deployed. A secret's meaning should not turn on quoting style.
+ *
+ * Exported because the guard is no longer the only thing that needs the list:
+ * a respondent's bug report is mailed to the same people, and "who are the
+ * founders" must have exactly one answer — a second copy of this parsing would
+ * be a second place for the quoting bug above to come back.
  */
-function allowlist(env: Bindings): string[] {
+export function platformAdminEmails(env: Bindings): string[] {
   return (env.PLATFORM_ADMIN_EMAILS ?? "")
     .split(",")
     .map((entry) => entry.trim().replace(/^['"]|['"]$/g, "").trim().toLowerCase())
@@ -42,7 +47,7 @@ function allowlist(env: Bindings): string[] {
 
 export function isPlatformAdmin(env: Bindings, email: string | null | undefined): boolean {
   if (!email) return false;
-  const list = allowlist(env);
+  const list = platformAdminEmails(env);
   // An unset secret means the console does not exist, not that everybody is in it.
   if (list.length === 0) return false;
   return list.includes(email.trim().toLowerCase());
