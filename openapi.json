@@ -1929,6 +1929,171 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "organizationPlan": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "formVersionId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "respondent": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "email": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "phone": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "firstSeenAt": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "lastSeenAt": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "reportCount": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label",
+                                  "email",
+                                  "phone",
+                                  "firstSeenAt",
+                                  "lastSeenAt",
+                                  "reportCount"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "session": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "type": "string"
+                                  },
+                                  "country": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  },
+                                  "collectedCount": {
+                                    "type": "number"
+                                  },
+                                  "turnCount": {
+                                    "type": "number"
+                                  },
+                                  "isTest": {
+                                    "type": "boolean"
+                                  },
+                                  "createdAt": {
+                                    "type": "number"
+                                  },
+                                  "lastActivityAt": {
+                                    "type": "number"
+                                  },
+                                  "submissionId": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "status",
+                                  "country",
+                                  "source",
+                                  "collectedCount",
+                                  "turnCount",
+                                  "isTest",
+                                  "createdAt",
+                                  "lastActivityAt",
+                                  "submissionId"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -1954,7 +2119,11 @@
                           "respondentId",
                           "respondentLabel",
                           "issueId",
-                          "issueTitle"
+                          "issueTitle",
+                          "organizationPlan",
+                          "formVersionId",
+                          "respondent",
+                          "session"
                         ]
                       }
                     },
@@ -2661,9 +2830,10 @@
             "in": "query",
             "name": "sort",
             "schema": {
-              "default": "recent",
+              "default": "priority",
               "type": "string",
               "enum": [
+                "priority",
                 "recent",
                 "reports"
               ]

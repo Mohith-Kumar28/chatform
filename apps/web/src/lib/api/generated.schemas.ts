@@ -457,6 +457,29 @@ export const GetApiAdminFeedbackReportsSort = {
   worst: 'worst',
 } as const;
 
+export type GetApiAdminFeedbackReports200ReportsItemRespondent = {
+  id: string;
+  label: string | null;
+  email: string | null;
+  phone: string | null;
+  firstSeenAt: number | null;
+  lastSeenAt: number | null;
+  reportCount: number;
+} | null;
+
+export type GetApiAdminFeedbackReports200ReportsItemSession = {
+  id: string;
+  status: string;
+  country: string | null;
+  source: string;
+  collectedCount: number;
+  turnCount: number;
+  isTest: boolean;
+  createdAt: number;
+  lastActivityAt: number;
+  submissionId: string | null;
+} | null;
+
 export type GetApiAdminFeedbackReports200ReportsItem = {
   id: string;
   rating: number;
@@ -481,6 +504,10 @@ export type GetApiAdminFeedbackReports200ReportsItem = {
   respondentLabel: string | null;
   issueId: string | null;
   issueTitle: string | null;
+  organizationPlan: string | null;
+  formVersionId: string | null;
+  respondent: GetApiAdminFeedbackReports200ReportsItemRespondent;
+  session: GetApiAdminFeedbackReports200ReportsItemSession;
 };
 
 export type GetApiAdminFeedbackReports200Counts = {
@@ -619,6 +646,7 @@ export type GetApiAdminFeedbackIssuesSort = typeof GetApiAdminFeedbackIssuesSort
 
 
 export const GetApiAdminFeedbackIssuesSort = {
+  priority: 'priority',
   recent: 'recent',
   reports: 'reports',
 } as const;

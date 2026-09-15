@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Link2, Mail, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Link2, Mail, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,7 +55,7 @@ import type { InboxReport } from "./feedback-inbox";
  * says so.
  */
 
-interface Detail extends InboxReport {
+export interface Detail extends InboxReport {
   organizationPlan: string | null;
   formVersionId: string | null;
   respondent: {
@@ -85,15 +85,19 @@ type View = "report" | "conversation";
 
 export function FeedbackReportDialog({
   id,
-  ids,
+  rows,
   onOpen,
   onClose,
   onChanged,
   onShowRespondent,
 }: {
   id: string;
-  /** The loaded page, in order — what ← and → walk. */
-  ids: string[];
+  /**
+   * The loaded page, in order — what ← and → walk. Each row is the whole report,
+   * so opening or stepping to one on the page is instant; only a link to a report
+   * that is not on it asks the server.
+   */
+  rows: Detail[];
   onOpen: (id: string) => void;
   onClose: () => void;
   onChanged: () => void;
@@ -102,12 +106,17 @@ export function FeedbackReportDialog({
   const [view, setView] = useState<View>("report");
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const ids = rows.map((r) => r.id);
   const index = ids.indexOf(id);
+  const fromList = rows.find((r) => r.id === id);
 
-  const { data, isPending, isError, refetch } = useGetApiAdminFeedbackReportsById(id, {
-    query: { queryKey: getGetApiAdminFeedbackReportsByIdQueryKey(id), retry: false },
+  const fetched = useGetApiAdminFeedbackReportsById(id, {
+    query: { queryKey: getGetApiAdminFeedbackReportsByIdQueryKey(id), retry: false, enabled: !fromList },
   });
-  const report = apiData<Detail>(data);
+  const report = fromList ?? apiData<Detail>(fetched.data);
+  const isPending = !fromList && fetched.isPending;
+  const isError = !fromList && fetched.isError;
+  const refetch = () => (fromList ? Promise.resolve() : fetched.refetch());
 
   const step = useCallback(
     (by: -1 | 1) => {
@@ -132,12 +141,15 @@ export function FeedbackReportDialog({
 
   const save = async (body: { status?: "new" | "resolved"; internalNote?: string | null }, done: string) => {
     if (!report) return;
+    // Resolving is the end of a report: the next one opens, so a queue is worked through without a click between.
+    const next = body.status === "resolved" ? (ids[index + 1] ?? null) : null;
     setSaving(true);
     try {
       await patchApiAdminFeedbackReportsById(report.id, body);
       toast.success(done);
       await refetch();
       onChanged();
+      if (next) onOpen(next);
     } catch {
       toast.error("That didn't save. Try again.");
     } finally {
@@ -165,10 +177,10 @@ export function FeedbackReportDialog({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        size="4xl"
+        size="full"
         layout="panel"
         showCloseButton={false}
-        className="h-[min(48rem,calc(100dvh-4rem))]"
+        className="h-[92dvh] max-h-[92dvh]"
         onOpenAutoFocus={(e) => {
           e.preventDefault();
           (e.currentTarget as HTMLElement).focus();
@@ -281,6 +293,7 @@ export function FeedbackReportDialog({
             </p>
           ) : view === "report" ? (
             <ReportView
+              key={report.id}
               report={report}
               saving={saving}
               onSave={save}
@@ -291,7 +304,7 @@ export function FeedbackReportDialog({
               }}
             />
           ) : (
-            <ConversationView report={report} />
+            <ConversationView key={report.id} report={report} />
           )}
         </DialogBody>
       </DialogContent>
@@ -325,7 +338,7 @@ function ReportView({
   const face = faceFor(report.rating);
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_26rem]">
       <div className="min-w-0 space-y-6">
         <section>
           <SectionTitle>What they said</SectionTitle>
@@ -540,8 +553,39 @@ function NoteField({
   saving: boolean;
   onSave: (body: { internalNote?: string | null }, done: string) => Promise<void>;
 }) {
-  const [note, setNote] = useState(report.internalNote ?? "");
-  const dirty = note.trim() !== (report.internalNote ?? "");
+  const saved = report.internalNote ?? "";
+  const [note, setNote] = useState(saved);
+  // Closed until asked for: most reports never get a note, so the box is not worth the space.
+  const [editing, setEditing] = useState(false);
+  const dirty = note.trim() !== saved;
+  const resolvedBy =
+    report.statusAt && report.status === "resolved" ? `Resolved by ${report.statusBy ?? "an admin"} · ${relativeTime(report.statusAt)}` : "";
+
+  if (!editing) {
+    return (
+      <section className="space-y-2">
+        {saved ? (
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <SectionTitle>Internal note</SectionTitle>
+              <Button size="sm" variant="ghost" shape="pill" onClick={() => setEditing(true)}>
+                <Pencil className="size-3.5" />
+                Edit
+              </Button>
+            </div>
+            <p className="text-sm whitespace-pre-wrap">{saved}</p>
+          </>
+        ) : (
+          <Button size="sm" variant="ghost" shape="pill" className="-ml-2.5" onClick={() => setEditing(true)}>
+            <Plus className="size-3.5" />
+            Add internal note
+          </Button>
+        )}
+        {resolvedBy && <p className="text-muted-foreground text-caption">{resolvedBy}</p>}
+      </section>
+    );
+  }
+
   return (
     <section>
       <SectionTitle>Internal note</SectionTitle>
@@ -549,18 +593,38 @@ function NoteField({
         value={note}
         onChange={(e) => setNote(e.target.value)}
         rows={3}
+        autoFocus
         maxLength={FEEDBACK_NOTE_MAX}
         placeholder="What it turned out to be. Only admins see this."
       />
       <div className="mt-2 flex items-center justify-between gap-3">
-        <p className="text-muted-foreground text-caption">
-          {report.statusAt && report.status === "resolved"
-            ? `Resolved by ${report.statusBy ?? "an admin"} · ${relativeTime(report.statusAt)}`
-            : ""}
-        </p>
-        <Button size="sm" variant="secondary" shape="pill" disabled={!dirty || saving} onClick={() => void onSave({ internalNote: note.trim() || null }, "Note saved")}>
-          Save note
-        </Button>
+        <p className="text-muted-foreground text-caption">{resolvedBy}</p>
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="ghost"
+            shape="pill"
+            disabled={saving}
+            onClick={() => {
+              setNote(saved);
+              setEditing(false);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            shape="pill"
+            disabled={!dirty || saving}
+            onClick={async () => {
+              await onSave({ internalNote: note.trim() || null }, "Note saved");
+              setEditing(false);
+            }}
+          >
+            Save note
+          </Button>
+        </div>
       </div>
     </section>
   );
@@ -669,8 +733,8 @@ function ConversationView({ report }: { report: Detail }) {
         Exactly as it was on their screen at {new Date(snapshot.capturedAt).toLocaleString()}
         {snapshot.viewport.width > 0 && ` · ${snapshot.viewport.width}×${snapshot.viewport.height}`}
       </p>
-      {/* The dialog's height minus its header, switch row, padding and this caption — so the composer is in view. */}
-      <ChatReplay snapshot={snapshot} height="calc(min(48rem, 100dvh - 4rem) - 13rem)" />
+      {/* The dialog's height (92dvh) minus its header, switch row, padding and this caption — so the composer is in view without an inner scroll. */}
+      <ChatReplay snapshot={snapshot} height="calc(92dvh - 12.5rem)" />
     </div>
   );
 }

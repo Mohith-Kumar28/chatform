@@ -428,8 +428,42 @@ const Report = z.object({
   issueTitle: z.string().nullable(),
 });
 
+const ReportDetail = Report.extend({
+  organizationPlan: z.string().nullable(),
+  formVersionId: z.string().nullable(),
+  respondent: z
+    .object({
+      id: z.string(),
+      label: z.string().nullable(),
+      email: z.string().nullable(),
+      phone: z.string().nullable(),
+      firstSeenAt: z.number().nullable(),
+      lastSeenAt: z.number().nullable(),
+      reportCount: z.number(),
+    })
+    .nullable(),
+  session: z
+    .object({
+      id: z.string(),
+      status: z.string(),
+      country: z.string().nullable(),
+      source: z.string(),
+      collectedCount: z.number(),
+      turnCount: z.number(),
+      isTest: z.boolean(),
+      createdAt: z.number(),
+      lastActivityAt: z.number(),
+      submissionId: z.string().nullable(),
+    })
+    .nullable(),
+});
+
+/**
+ * Every row carries the whole report, so opening one — and stepping through the
+ * page with ← and → — needs no request of its own. Fifty rows of it is a few KB.
+ */
 const ReportsResponse = z.object({
-  reports: z.array(Report),
+  reports: z.array(ReportDetail),
   total: z.number(),
   limit: z.number(),
   offset: z.number(),
@@ -512,6 +546,78 @@ const toReport = (r: ReportRow) => ({
   issueTitle: r.issue_title,
 });
 
+const DETAIL_COLUMNS = `${REPORT_COLUMNS}, fb.form_version_id, fb.answered, fb.turns,
+       COALESCE((${PLAN_OF_ORG}), 'free') AS plan,
+       r.email AS respondent_email, r.phone AS respondent_phone,
+       r.first_seen_at, r.last_seen_at,
+       CASE WHEN fb.respondent_id IS NULL THEN NULL
+            ELSE (SELECT COUNT(*) FROM respondent_feedback x WHERE x.respondent_id = fb.respondent_id) END AS respondent_reports,
+       s.id AS s_id, s.status AS s_status, s.country AS s_country, s.source AS s_source,
+       s.collected_count AS s_collected, s.turn_count AS s_turns, s.is_test AS s_is_test,
+       s.created_at AS s_created_at, s.last_activity_at AS s_last_activity_at, s.submission_id AS s_submission_id`;
+
+const DETAIL_JOINS = `${REPORT_JOINS}
+       LEFT JOIN chat_sessions s ON s.id = fb.session_id`;
+
+interface DetailRow extends ReportRow {
+  form_version_id: string | null;
+  answered: number | null;
+  turns: number | null;
+  plan: string;
+  respondent_email: string | null;
+  respondent_phone: string | null;
+  first_seen_at: number | null;
+  last_seen_at: number | null;
+  respondent_reports: number | null;
+  s_id: string | null;
+  s_status: string;
+  s_country: string | null;
+  s_source: string;
+  s_collected: number;
+  s_turns: number;
+  s_is_test: number;
+  s_created_at: number;
+  s_last_activity_at: number;
+  s_submission_id: string | null;
+}
+
+const toDetail = (row: DetailRow) => ({
+  ...toReport(row),
+  organizationPlan: row.plan,
+  formVersionId: row.form_version_id,
+  respondent: row.respondent_id
+    ? {
+        id: row.respondent_id,
+        label: row.respondent_label,
+        email: row.respondent_email,
+        phone: row.respondent_phone,
+        firstSeenAt: row.first_seen_at === null ? null : Number(row.first_seen_at),
+        lastSeenAt: row.last_seen_at === null ? null : Number(row.last_seen_at),
+        reportCount: Number(row.respondent_reports ?? 1),
+      }
+    : null,
+  session: row.s_id
+    ? {
+        id: row.s_id,
+        status: row.s_status,
+        country: row.s_country,
+        source: row.s_source,
+        /*
+          The counts written on the report at the moment it was filed. The
+          session's own columns are only written when a response finalises,
+          so for a conversation still in progress they read zero; they are
+          the fallback for a report filed before the counts were recorded.
+        */
+        collectedCount: Number(row.answered ?? row.s_collected),
+        turnCount: Number(row.turns ?? row.s_turns),
+        isTest: Boolean(row.s_is_test),
+        createdAt: Number(row.s_created_at),
+        lastActivityAt: Number(row.s_last_activity_at),
+        submissionId: row.s_submission_id,
+      }
+    : null,
+});
+
 /**
  * The queue itself — and the one read on this page that ignores the date range.
  *
@@ -568,9 +674,9 @@ feedbackRouter.get(
     const byTopic = build("topic");
 
     const [reports, totalRow, counted, ratingRows, topicRows] = await Promise.all([
-      rows<ReportRow>(
+      rows<DetailRow>(
         c.env.DB.prepare(
-          `SELECT ${REPORT_COLUMNS} ${REPORT_JOINS} WHERE ${clause}
+          `SELECT ${DETAIL_COLUMNS} ${DETAIL_JOINS} WHERE ${clause}
             ORDER BY ${SORTS[q.sort]} LIMIT ? OFFSET ?`,
         ).bind(...binds, q.limit, q.offset),
       ),
@@ -599,7 +705,7 @@ feedbackRouter.get(
 
     const byStatus = new Map(counted.map((r) => [r.status, Number(r.n)]));
     return c.json({
-      reports: reports.map(toReport),
+      reports: reports.map(toDetail),
       total: Number(totalRow?.n ?? 0),
       limit: q.limit,
       offset: q.offset,
@@ -621,35 +727,6 @@ feedbackRouter.get(
 
 // ──────────────────────────── one report, in full ────────────────────────────
 
-const ReportDetail = Report.extend({
-  organizationPlan: z.string().nullable(),
-  formVersionId: z.string().nullable(),
-  respondent: z
-    .object({
-      id: z.string(),
-      label: z.string().nullable(),
-      email: z.string().nullable(),
-      phone: z.string().nullable(),
-      firstSeenAt: z.number().nullable(),
-      lastSeenAt: z.number().nullable(),
-      reportCount: z.number(),
-    })
-    .nullable(),
-  session: z
-    .object({
-      id: z.string(),
-      status: z.string(),
-      country: z.string().nullable(),
-      source: z.string(),
-      collectedCount: z.number(),
-      turnCount: z.number(),
-      isTest: z.boolean(),
-      createdAt: z.number(),
-      lastActivityAt: z.number(),
-      submissionId: z.string().nullable(),
-    })
-    .nullable(),
-});
 
 /**
  * Everything about one report, so the dialog is one request rather than five.
@@ -670,94 +747,11 @@ feedbackRouter.get(
     },
   }),
   async (c) => {
-    const id = c.req.param("id");
-    const row = await c.env.DB.prepare(
-      `SELECT ${REPORT_COLUMNS}, fb.form_version_id, fb.answered, fb.turns,
-              COALESCE((${PLAN_OF_ORG}), 'free') AS plan,
-              r.email AS respondent_email, r.phone AS respondent_phone,
-              r.first_seen_at, r.last_seen_at
-         ${REPORT_JOINS}
-        WHERE fb.id = ?1`,
-    )
-      .bind(id)
-      .first<
-        ReportRow & {
-          form_version_id: string | null;
-          answered: number | null;
-          turns: number | null;
-          plan: string;
-          respondent_email: string | null;
-          respondent_phone: string | null;
-          first_seen_at: number | null;
-          last_seen_at: number | null;
-        }
-      >();
+    const row = await c.env.DB.prepare(`SELECT ${DETAIL_COLUMNS} ${DETAIL_JOINS} WHERE fb.id = ?1`)
+      .bind(c.req.param("id"))
+      .first<DetailRow>();
     if (!row) return c.json({ error: { code: "not_found", message: "No such report" } }, 404);
-
-    const [reportCount, session] = await Promise.all([
-      row.respondent_id
-        ? c.env.DB.prepare(`SELECT COUNT(*) AS n FROM respondent_feedback WHERE respondent_id = ?1`)
-            .bind(row.respondent_id)
-            .first<{ n: number }>()
-        : Promise.resolve(null),
-      row.session_id
-        ? c.env.DB.prepare(
-            `SELECT id, status, country, source, collected_count, turn_count, is_test, created_at,
-                    last_activity_at, submission_id
-               FROM chat_sessions WHERE id = ?1`,
-          )
-            .bind(row.session_id)
-            .first<{
-              id: string;
-              status: string;
-              country: string | null;
-              source: string;
-              collected_count: number;
-              turn_count: number;
-              is_test: number;
-              created_at: number;
-              last_activity_at: number;
-              submission_id: string | null;
-            }>()
-        : Promise.resolve(null),
-    ]);
-
-    return c.json({
-      ...toReport(row),
-      organizationPlan: row.plan,
-      formVersionId: row.form_version_id,
-      respondent: row.respondent_id
-        ? {
-            id: row.respondent_id,
-            label: row.respondent_label,
-            email: row.respondent_email,
-            phone: row.respondent_phone,
-            firstSeenAt: row.first_seen_at === null ? null : Number(row.first_seen_at),
-            lastSeenAt: row.last_seen_at === null ? null : Number(row.last_seen_at),
-            reportCount: Number(reportCount?.n ?? 1),
-          }
-        : null,
-      session: session
-        ? {
-            id: session.id,
-            status: session.status,
-            country: session.country,
-            source: session.source,
-            /*
-              The counts written on the report at the moment it was filed. The
-              session's own columns are only written when a response finalises,
-              so for a conversation still in progress they read zero; they are
-              the fallback for a report filed before the counts were recorded.
-            */
-            collectedCount: Number(row.answered ?? session.collected_count),
-            turnCount: Number(row.turns ?? session.turn_count),
-            isTest: Boolean(session.is_test),
-            createdAt: Number(session.created_at),
-            lastActivityAt: Number(session.last_activity_at),
-            submissionId: session.submission_id,
-          }
-        : null,
-    });
+    return c.json(toDetail(row));
   },
 );
 
@@ -878,7 +872,7 @@ const IssuesQuery = z.object({
   status: z.enum(["new", "resolved", "all"]).default("new"),
   rating: z.coerce.number().int().min(1).max(5).optional(),
   topic: z.string().max(40).optional(),
-  sort: z.enum(["recent", "reports"]).default("recent"),
+  sort: z.enum(["priority", "recent", "reports"]).default("priority"),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -925,6 +919,7 @@ const ISSUE_ROLLUP = `SELECT i.id, i.title, i.topic,
          COUNT(DISTINCT fb.form_id) AS forms,
          MAX(fb.created_at) AS last_seen_at,
          MIN(fb.rating) AS worst_rating,
+         AVG(fb.rating) AS avg_rating,
          SUM(CASE WHEN fb.status = 'new' THEN 1 ELSE 0 END) AS unresolved,
          MAX(CASE WHEN fb.status = 'resolved' THEN fb.status_at END) AS last_resolved_at,
          MAX(CASE WHEN fb.status = 'new' THEN fb.created_at END) AS last_new_at
@@ -991,7 +986,17 @@ feedbackRouter.get(
     }
     const filtered = `${ISSUE_ROLLUP}${where.length ? ` AND ${where.join(" AND ")}` : ""} GROUP BY i.id`;
     const having = q.status === "new" ? " HAVING unresolved > 0" : q.status === "resolved" ? " HAVING unresolved = 0" : "";
-    const order = q.sort === "reports" ? "reports DESC, last_seen_at DESC" : "last_seen_at DESC";
+    /*
+      Priority: how many people it hit, how badly they rated it (a 1 counts five
+      times a 5), and how recently — a week without a report halves it. So a bug
+      three people hit today outranks one five people hit two months ago.
+    */
+    const order =
+      q.sort === "reports"
+        ? "reports DESC, last_seen_at DESC"
+        : q.sort === "recent"
+          ? "last_seen_at DESC"
+          : `people * (6 - avg_rating) / (1 + (${Date.now()} - last_seen_at) / ${7 * DAY_MS}.0) DESC, last_seen_at DESC`;
 
     const [issues, totalRow, countRow, ungroupedRow] = await Promise.all([
       rows<IssueRow>(

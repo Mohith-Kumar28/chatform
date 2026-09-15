@@ -68,7 +68,7 @@ export function useIssues(params: {
   status: "new" | "resolved" | "all";
   rating?: number;
   topic?: string;
-  sort: "recent" | "reports";
+  sort: "priority" | "recent" | "reports";
   offset: number;
   enabled: boolean;
 }) {

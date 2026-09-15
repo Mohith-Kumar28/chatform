@@ -84,8 +84,9 @@ export function FeedbackClient() {
 
       {tab === "respondents" ? (
         <>
-          <FeedbackStats />
+          {/* The work first; the charts about it after. */}
           <FeedbackInbox />
+          <FeedbackStats />
         </>
       ) : (
         <AdminFeedbackEmpty />

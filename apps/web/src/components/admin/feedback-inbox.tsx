@@ -24,7 +24,7 @@ import { relativeTime } from "@/components/forms/form-card";
 import { cn } from "@/lib/utils";
 import { FACES, faceFor } from "./feedback-faces";
 import { StatusLabel } from "./feedback-status";
-import { FeedbackReportDialog } from "./feedback-report-dialog";
+import { FeedbackReportDialog, type Detail } from "./feedback-report-dialog";
 import { IssueHeader, IssuesTable, UngroupedNotice, useIssues } from "./feedback-issues-table";
 
 /**
@@ -65,7 +65,7 @@ export interface InboxReport {
 }
 
 interface ReportsBody {
-  reports: InboxReport[];
+  reports: Detail[];
   total: number;
   counts: { new: number; resolved: number };
   ratingCounts: { rating: number; count: number }[];
@@ -77,8 +77,8 @@ type Sort = "newest" | "oldest" | "worst";
 
 const SORT_LABEL: Record<Sort, string> = { newest: "Newest first", oldest: "Oldest first", worst: "Lowest rating first" };
 
-type IssueSort = "recent" | "reports";
-const ISSUE_SORT_LABEL: Record<IssueSort, string> = { recent: "Recently seen", reports: "Most reports" };
+type IssueSort = "priority" | "recent" | "reports";
+const ISSUE_SORT_LABEL: Record<IssueSort, string> = { priority: "Priority", recent: "Recently seen", reports: "Most reports" };
 
 const PAGE = 50;
 
@@ -100,7 +100,7 @@ export function FeedbackInbox() {
   const rating = Number(params.get("rating") ?? 0) || undefined;
   const sortParam = params.get("sort");
   const sort: Sort = sortParam === "oldest" || sortParam === "worst" ? sortParam : "newest";
-  const issueSort: IssueSort = sortParam === "reports" ? "reports" : "recent";
+  const issueSort: IssueSort = sortParam === "reports" || sortParam === "recent" ? sortParam : "priority";
   const formId = params.get("formId") ?? undefined;
   const orgId = params.get("orgId") ?? undefined;
   const topic = params.get("topic") ?? undefined;
@@ -180,7 +180,8 @@ export function FeedbackInbox() {
           <h2 className="text-h3">Inbox</h2>
           <InfoHint label="About the inbox">
             Every report, whatever the period picked above — that narrows the charts, not this list. Issues group reports that
-            describe the same problem; an issue is resolved when every report in it is.
+            describe the same problem; an issue is resolved when every report in it is. Priority ranks issues by how many people
+            hit them, how badly they rated them and how recently.
           </InfoHint>
         </div>
         {/* The one view switch: the same reports, grouped or one per row. */}
@@ -229,7 +230,7 @@ export function FeedbackInbox() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
               {view === "issues" ? (
-                <DropdownMenuRadioGroup value={issueSort} onValueChange={(v) => setParam({ sort: v === "recent" ? undefined : v })}>
+                <DropdownMenuRadioGroup value={issueSort} onValueChange={(v) => setParam({ sort: v === "priority" ? undefined : v })}>
                   {(Object.keys(ISSUE_SORT_LABEL) as IssueSort[]).map((key) => (
                     <DropdownMenuRadioItem key={key} value={key}>
                       {ISSUE_SORT_LABEL[key]}
@@ -408,7 +409,7 @@ export function FeedbackInbox() {
       {openId && (
         <FeedbackReportDialog
           id={openId}
-          ids={reports.map((r) => r.id)}
+          rows={reports}
           onOpen={setOpenId}
           onClose={() => setOpenId(null)}
           onChanged={refreshAll}
