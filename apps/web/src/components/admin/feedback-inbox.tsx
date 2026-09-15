@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, MessageSquareText, Monitor, Tag, X } from "lucide-react";
+import { ArrowUpDown, Check, ChevronDown, MessageSquareText, Monitor, Tag, X } from "lucide-react";
 import { feedbackTopicLabel } from "@repo/form-schema";
-import { useGetApiAdminFeedbackReports } from "@/lib/api/admin/admin";
+import { getGetApiAdminFeedbackReportsQueryOptions, useGetApiAdminFeedbackReports } from "@/lib/api/admin/admin";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { FACES, faceFor } from "./feedback-faces";
 import { StatusLabel } from "./feedback-status";
 import { FeedbackReportDialog, type Detail } from "./feedback-report-dialog";
+import { FEEDBACK_PAGE, FeedbackPager, useFeedbackPages } from "./feedback-pager";
 import { IssueHeader, IssuesTable, UngroupedNotice, useIssues } from "./feedback-issues-table";
 
 /**
@@ -80,7 +81,6 @@ const SORT_LABEL: Record<Sort, string> = { newest: "Newest first", oldest: "Olde
 type IssueSort = "priority" | "recent" | "reports";
 const ISSUE_SORT_LABEL: Record<IssueSort, string> = { priority: "Priority", recent: "Recently seen", reports: "Most reports" };
 
-const PAGE = 50;
 
 export function FeedbackInbox() {
   const router = useRouter();
@@ -118,11 +118,11 @@ export function FeedbackInbox() {
     router.replace(`${pathname}?${next.toString()}`, { scroll: false });
   };
 
-  const { data, isPending, isFetching } = useGetApiAdminFeedbackReports({
+  const pageParams = (at: number) => ({
     status,
     sort,
-    limit: PAGE,
-    offset,
+    limit: FEEDBACK_PAGE,
+    offset: at,
     ...(rating ? { rating } : {}),
     ...(formId ? { formId } : {}),
     ...(orgId ? { orgId } : {}),
@@ -130,6 +130,7 @@ export function FeedbackInbox() {
     ...(respondentId ? { respondentId } : {}),
     ...(issue ? { issue } : {}),
   });
+  const { data, isPending, isFetching } = useGetApiAdminFeedbackReports(pageParams(offset));
   const body = apiData<ReportsBody>(data);
   /*
     Any change — resolve, rename, move, merge — can move numbers in every list on
@@ -155,12 +156,11 @@ export function FeedbackInbox() {
 
   // The open report lives in the URL, so a refresh — or the founders' mail — lands on it.
   const [openId, setOpenId] = useState<string | null>(() => params.get("report"));
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    if (openId) url.searchParams.set("report", openId);
-    else url.searchParams.delete("report");
-    window.history.replaceState(null, "", url);
-  }, [openId]);
+  /**
+   * The page a step just loaded, held until the URL's offset catches up — so the
+   * window reads the report it opened from rows it already has, not the server.
+   */
+  const [carried, setCarried] = useState<{ offset: number; rows: Detail[] } | null>(null);
 
   // What the list is narrowed to, each with a way out.
   const first = reports[0];
@@ -170,8 +170,68 @@ export function FeedbackInbox() {
     respondentId && { key: "respondentId", label: first?.respondentId === respondentId ? (first.respondentLabel ?? "One respondent") : "One respondent" },
   ].filter(Boolean) as { key: string; label: string }[];
 
-  const from = total === 0 ? 0 : offset + 1;
-  const to = Math.min(offset + PAGE, total);
+  const pages = useFeedbackPages({ total, offset, onOffset: (next) => setParam({ offset: String(next) }) });
+
+  /** A page of reports, from the cache when it is there — so the report window can walk off the end of this one. */
+  const loadPage = async (at: number, fresh = false) =>
+    apiData<ReportsBody>(
+      await queryClient.fetchQuery({ ...getGetApiAdminFeedbackReportsQueryOptions(pageParams(at)), ...(fresh ? { staleTime: 0 } : {}) }),
+    )?.reports ?? [];
+
+  const live =
+    carried && carried.rows.some((r) => r.id === openId) && (carried.offset !== offset || !reports.some((r) => r.id === openId))
+      ? carried
+      : { offset, rows: reports };
+  const openIndex = openId ? live.rows.findIndex((r) => r.id === openId) : -1;
+  const position = openIndex >= 0 ? live.offset + openIndex : -1;
+
+  /**
+   * Open a report, and put it in the URL so a refresh — or the founders' mail —
+   * lands on it. A report on another page moves the page in the same URL write;
+   * two writes raced, and the second put the old page back.
+   */
+  const openReport = (id: string | null, page?: { offset: number; rows: Detail[] }) => {
+    setOpenId(id);
+    if (page) setCarried(page);
+    if (page && page.offset !== offset) {
+      setParam({ offset: String(page.offset), report: id ?? undefined });
+      return;
+    }
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set("report", id);
+    else url.searchParams.delete("report");
+    window.history.replaceState(window.history.state, "", url);
+  };
+
+  /** ← and → through every report, not just this page: past either end, the neighbouring page opens with it. */
+  const stepReport = async (by: -1 | 1) => {
+    if (openIndex < 0) return;
+    const onPage = live.rows[openIndex + by];
+    if (onPage) return openReport(onPage.id);
+    const at = live.offset + by * FEEDBACK_PAGE;
+    if (at < 0 || at >= total) return;
+    const rows = await loadPage(at);
+    const target = by === 1 ? rows[0] : rows[rows.length - 1];
+    if (target) openReport(target.id, { offset: at, rows });
+  };
+
+  /**
+   * After a resolve, the next report. Where the list hides resolved reports the
+   * resolved one has gone and the next has slid into its place — so read the
+   * page again and take the same slot; otherwise it is simply the one after.
+   */
+  const advance = async (gone: boolean) => {
+    if (openIndex < 0) return;
+    if (!gone) return stepReport(1);
+    const rows = await loadPage(live.offset, true);
+    const target = rows[openIndex] ?? rows[rows.length - 1];
+    if (target) return openReport(target.id, { offset: live.offset, rows });
+    // The page emptied: step back to the one before, if there is one.
+    if (live.offset === 0) return openReport(null);
+    const before = await loadPage(live.offset - FEEDBACK_PAGE, true);
+    const last = before[before.length - 1];
+    openReport(last?.id ?? null, { offset: live.offset - FEEDBACK_PAGE, rows: before });
+  };
 
   return (
     <section className="space-y-3">
@@ -335,11 +395,11 @@ export function FeedbackInbox() {
                     return (
                       <tr
                         key={r.id}
-                        onClick={() => setOpenId(r.id)}
+                        onClick={() => openReport(r.id)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
-                            setOpenId(r.id);
+                            openReport(r.id);
                           }
                         }}
                         tabIndex={0}
@@ -386,36 +446,24 @@ export function FeedbackInbox() {
             )}
           </div>
 
-          {total > 0 && (
-            <div className="flex items-center justify-end gap-2">
-              <span className={cn("text-muted-foreground text-caption tabular", isFetching && "opacity-60")}>
-                {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}
-              </span>
-              {total > PAGE && (
-                <div className="flex items-center gap-0.5">
-                  <Button variant="ghost" size="icon-sm" shape="pill" aria-label="Previous page" disabled={offset === 0} onClick={() => setParam({ offset: String(Math.max(0, offset - PAGE)) })}>
-                    <ChevronLeft className="size-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon-sm" shape="pill" aria-label="Next page" disabled={offset + PAGE >= total} onClick={() => setParam({ offset: String(offset + PAGE) })}>
-                    <ChevronRight className="size-3.5" />
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
+          <FeedbackPager pages={pages} total={total} offset={offset} isFetching={isFetching} />
         </>
       )}
 
       {openId && (
         <FeedbackReportDialog
           id={openId}
-          rows={reports}
-          onOpen={setOpenId}
-          onClose={() => setOpenId(null)}
+          rows={live.rows}
+          position={position}
+          total={total}
+          onStep={(by) => void stepReport(by)}
+          onResolved={() => void advance(status === "new")}
+          onRemoved={() => void advance(true)}
+          onClose={() => openReport(null)}
           onChanged={refreshAll}
           onShowRespondent={(rid) => {
             setOpenId(null);
-            setParam({ respondentId: rid, status: "all" });
+            setParam({ respondentId: rid, status: "all", report: undefined });
           }}
         />
       )}

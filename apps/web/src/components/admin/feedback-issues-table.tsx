@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronLeft, ChevronRight, GitMerge, Layers, Pencil } from "lucide-react";
+import { ArrowLeft, GitMerge, Layers, Pencil } from "lucide-react";
 import { feedbackTopicLabel } from "@repo/form-schema";
 import {
   postApiAdminFeedbackIssuesRebuild,
@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FEEDBACK_PAGE, FeedbackPager, useFeedbackPages } from "./feedback-pager";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
@@ -25,7 +26,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { apiData } from "@/lib/api/payload";
 import { relativeTime } from "@/components/forms/form-card";
-import { cn } from "@/lib/utils";
 import { faceFor } from "./feedback-faces";
 import { ResolveButton, StatusLabel } from "./feedback-status";
 
@@ -62,7 +62,6 @@ interface IssuesBody {
   ungrouped: number;
 }
 
-const PAGE = 50;
 
 export function useIssues(params: {
   status: "new" | "resolved" | "all";
@@ -76,7 +75,7 @@ export function useIssues(params: {
     {
       status: params.status,
       sort: params.sort,
-      limit: PAGE,
+      limit: FEEDBACK_PAGE,
       offset: params.offset,
       ...(params.rating ? { rating: params.rating } : {}),
       ...(params.topic ? { topic: params.topic } : {}),
@@ -124,8 +123,7 @@ export function IssuesTable({
   onOpen: (issueId: string) => void;
   onOffset: (offset: number) => void;
 }) {
-  const from = total === 0 ? 0 : offset + 1;
-  const to = Math.min(offset + PAGE, total);
+  const pages = useFeedbackPages({ total, offset, onOffset });
   return (
     <>
       <div className="bg-card overflow-hidden rounded-xl border">
@@ -191,23 +189,7 @@ export function IssuesTable({
           </table>
         )}
       </div>
-      {total > 0 && (
-        <div className="flex items-center justify-end gap-2">
-          <span className={cn("text-muted-foreground text-caption tabular", isFetching && "opacity-60")}>
-            {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}
-          </span>
-          {total > PAGE && (
-            <div className="flex items-center gap-0.5">
-              <Button variant="ghost" size="icon-sm" shape="pill" aria-label="Previous page" disabled={offset === 0} onClick={() => onOffset(Math.max(0, offset - PAGE))}>
-                <ChevronLeft className="size-3.5" />
-              </Button>
-              <Button variant="ghost" size="icon-sm" shape="pill" aria-label="Next page" disabled={offset + PAGE >= total} onClick={() => onOffset(offset + PAGE)}>
-                <ChevronRight className="size-3.5" />
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
+      <FeedbackPager pages={pages} total={total} offset={offset} isFetching={isFetching} />
     </>
   );
 }

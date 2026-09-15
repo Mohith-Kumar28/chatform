@@ -86,7 +86,11 @@ type View = "report" | "conversation";
 export function FeedbackReportDialog({
   id,
   rows,
-  onOpen,
+  position,
+  total,
+  onStep,
+  onResolved,
+  onRemoved,
   onClose,
   onChanged,
   onShowRespondent,
@@ -98,7 +102,15 @@ export function FeedbackReportDialog({
    * that is not on it asks the server.
    */
   rows: Detail[];
-  onOpen: (id: string) => void;
+  /** Where the open report sits across every page, 0-based; -1 when it is not in the list. */
+  position: number;
+  total: number;
+  /** ← and →, handled by the list, which can load the neighbouring page. */
+  onStep: (by: -1 | 1) => void;
+  /** Resolving opens the next report — the list decides which one that is. */
+  onResolved: () => void;
+  /** After a delete: the report in its place, or the window closes when none is left. */
+  onRemoved: () => void;
   onClose: () => void;
   onChanged: () => void;
   onShowRespondent: (respondentId: string) => void;
@@ -106,8 +118,6 @@ export function FeedbackReportDialog({
   const [view, setView] = useState<View>("report");
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const ids = rows.map((r) => r.id);
-  const index = ids.indexOf(id);
   const fromList = rows.find((r) => r.id === id);
 
   const fetched = useGetApiAdminFeedbackReportsById(id, {
@@ -118,12 +128,13 @@ export function FeedbackReportDialog({
   const isError = !fromList && fetched.isError;
   const refetch = () => (fromList ? Promise.resolve() : fetched.refetch());
 
+  const canPrev = position > 0;
+  const canNext = position >= 0 && position < total - 1;
   const step = useCallback(
     (by: -1 | 1) => {
-      const next = ids[index + by];
-      if (next) onOpen(next);
+      if (by === -1 ? canPrev : canNext) onStep(by);
     },
-    [ids, index, onOpen],
+    [canPrev, canNext, onStep],
   );
 
   // ← and →, never while typing: the note field is right there.
@@ -141,15 +152,14 @@ export function FeedbackReportDialog({
 
   const save = async (body: { status?: "new" | "resolved"; internalNote?: string | null }, done: string) => {
     if (!report) return;
-    // Resolving is the end of a report: the next one opens, so a queue is worked through without a click between.
-    const next = body.status === "resolved" ? (ids[index + 1] ?? null) : null;
     setSaving(true);
     try {
       await patchApiAdminFeedbackReportsById(report.id, body);
       toast.success(done);
       await refetch();
       onChanged();
-      if (next) onOpen(next);
+      // Resolving is the end of a report: the next one opens, so a queue is worked through without a click between.
+      if (body.status === "resolved") onResolved();
     } catch {
       toast.error("That didn't save. Try again.");
     } finally {
@@ -162,9 +172,7 @@ export function FeedbackReportDialog({
     try {
       await deleteApiAdminFeedbackReportsById(id);
       toast.success("Report deleted");
-      const next = ids[index + 1] ?? ids[index - 1];
-      if (next) onOpen(next);
-      else onClose();
+      onRemoved();
       onChanged();
     } catch {
       toast.error("That didn't delete. Try again.");
@@ -180,7 +188,7 @@ export function FeedbackReportDialog({
         size="full"
         layout="panel"
         showCloseButton={false}
-        className="h-[92dvh] max-h-[92dvh]"
+        className="h-[88dvh] max-h-[88dvh]"
         onOpenAutoFocus={(e) => {
           e.preventDefault();
           (e.currentTarget as HTMLElement).focus();
@@ -201,11 +209,11 @@ export function FeedbackReportDialog({
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
             <TooltipProvider delayDuration={150}>
-              {ids.length > 1 && index >= 0 && (
+              {total > 1 && position >= 0 && (
                 <>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon-sm" aria-label="Previous report" disabled={index <= 0} onClick={() => step(-1)}>
+                      <Button variant="ghost" size="icon-sm" aria-label="Previous report" disabled={!canPrev} onClick={() => step(-1)}>
                         <ChevronLeft className="size-4" />
                       </Button>
                     </TooltipTrigger>
@@ -214,11 +222,11 @@ export function FeedbackReportDialog({
                     </TooltipContent>
                   </Tooltip>
                   <span className="text-muted-foreground text-caption tabular px-1">
-                    {index + 1}/{ids.length}
+                    {(position + 1).toLocaleString()}/{total.toLocaleString()}
                   </span>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon-sm" aria-label="Next report" disabled={index >= ids.length - 1} onClick={() => step(1)}>
+                      <Button variant="ghost" size="icon-sm" aria-label="Next report" disabled={!canNext} onClick={() => step(1)}>
                         <ChevronRight className="size-4" />
                       </Button>
                     </TooltipTrigger>
@@ -733,8 +741,8 @@ function ConversationView({ report }: { report: Detail }) {
         Exactly as it was on their screen at {new Date(snapshot.capturedAt).toLocaleString()}
         {snapshot.viewport.width > 0 && ` · ${snapshot.viewport.width}×${snapshot.viewport.height}`}
       </p>
-      {/* The dialog's height (92dvh) minus its header, switch row, padding and this caption — so the composer is in view without an inner scroll. */}
-      <ChatReplay snapshot={snapshot} height="calc(92dvh - 12.5rem)" />
+      {/* The dialog's height (88dvh) minus its header, switch row, padding and this caption — so the composer is in view without an inner scroll. */}
+      <ChatReplay snapshot={snapshot} height="calc(88dvh - 12.5rem)" />
     </div>
   );
 }
