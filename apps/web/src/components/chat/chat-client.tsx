@@ -767,45 +767,65 @@ export function ChatClient({
             />
           </div>
           {/*
-            The only line on this page that is ours, now carrying the only
-            control that is ours.
+            The footer line: our attribution, and the way to talk to us.
 
             A respondent who hits a bug in the software — a picker that will not
-            open, a chip that does nothing — has until now had exactly one place
-            to report it: the customer whose form it is, who cannot fix it and
-            mostly cannot forward it. This sits where the attribution already
+            open, a chip that does nothing — has exactly one other place to
+            report it: the customer whose form it is, who cannot fix it and
+            mostly cannot forward it. So the report sits where the attribution
             sits, at the same weight, because it is the same fact: this page is
             running somebody else's software, and here is how to tell them.
 
-            It rides on `brandingHidden` deliberately. An account that pays to
-            take our name off their form has taken our name off their form;
-            leaving a link that says "chatform" underneath would put it back.
+            The two halves are gated separately, and that is the point. Hiding
+            the branding is a paid promise about *whose product this looks
+            like*; it was never a promise that the software has no authors and
+            no bugs. So a white-labelled form keeps the report link and loses
+            the name — the panel it opens says who reads it without naming us,
+            which is the same trade the footer just made.
+
+            Never in the builder preview. The author is looking at their own
+            draft, and a bug report filed from a form that has no respondents
+            yet is a report about nothing.
           */}
-          {!config.brandingHidden && (
+          {(!config.brandingHidden || !previewMode) && (
             <p className="flex flex-wrap items-center justify-center gap-x-2 pb-2 text-center text-[0.6875rem]">
-              <span className="opacity-40">
-                Powered by{" "}
-                <a href="https://chatform.in" target="_blank" rel="noreferrer" className="underline">
-                  chatform
-                </a>
-              </span>
-              <span className="opacity-25" aria-hidden>
-                ·
-              </span>
-              <button
-                type="button"
-                onClick={() => setFeedbackOpen(true)}
-                className="underline opacity-40 transition-opacity hover:opacity-90"
-              >
-                Report a bug
-              </button>
+              {!config.brandingHidden && (
+                <>
+                  <span className="opacity-40">
+                    Powered by{" "}
+                    <a href="https://chatform.in" target="_blank" rel="noreferrer" className="underline">
+                      chatform
+                    </a>
+                  </span>
+                  {!previewMode && (
+                    <span className="opacity-25" aria-hidden>
+                      ·
+                    </span>
+                  )}
+                </>
+              )}
+              {!previewMode && (
+                <button
+                  type="button"
+                  onClick={() => setFeedbackOpen(true)}
+                  className="underline opacity-40 transition-opacity hover:opacity-90"
+                >
+                  Report a bug
+                </button>
+              )}
             </p>
           )}
         </footer>
       )}
 
       {feedbackOpen && (
-        <FeedbackDialog onClose={() => setFeedbackOpen(false)} onSubmit={chat.sendFeedback} />
+        <FeedbackDialog
+          onClose={() => setFeedbackOpen(false)}
+          onSubmit={chat.sendFeedback}
+          // On a white-labelled form the panel explains who reads this without
+          // naming us — see the footer comment above.
+          named={!config.brandingHidden}
+        />
       )}
     </div>
   );

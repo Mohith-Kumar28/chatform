@@ -9,12 +9,13 @@ import { cn } from "@/lib/utils";
  *
  * Everything else on this page belongs to the customer whose form it is: their
  * questions, their branding, their thank-you screen. This panel is opened from
- * the only mark we leave on it — the "Powered by chatform" footer — and what it
- * collects goes to the people who built the software, not to the people who
- * built the form. That distinction is the whole design brief, and it is why the
- * copy names us out loud rather than saying a bare "Feedback": a respondent who
- * thinks they are writing to the company running the survey will write about
- * the survey, and we would be collecting somebody else's support queue.
+ * the footer, and what it collects goes to the people who built the software,
+ * not to the people who built the form. That distinction is the whole design
+ * brief, and it is why the copy spells the audience out rather than saying a
+ * bare "Feedback": a respondent who thinks they are writing to the company
+ * running the survey will write about the survey, and we would be collecting
+ * somebody else's support queue. `named` decides whether the sentence that does
+ * that work is allowed to use our name.
  *
  * Themed from the runtime `--cf-*` variables like every other piece of the chat
  * surface, so it arrives in the form's own palette rather than as a white box
@@ -59,9 +60,22 @@ const SENT_MS = 1400;
 export function FeedbackDialog({
   onClose,
   onSubmit,
+  named = true,
 }: {
   onClose: () => void;
   onSubmit: (rating: number, message: string) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Whether this panel may say "chatform" out loud.
+   *
+   * False on a form whose owner pays to have our name off it. The panel still
+   * has to answer the question every respondent has — *who am I writing to* —
+   * because a note meant for the form's author landing in our console helps
+   * nobody, and the author is the one person who cannot act on it. So the
+   * unnamed copy says the same thing about the audience and leaves out the
+   * one word that was bought back: "the team who builds the software running
+   * this form" is true, useful and not a logo.
+   */
+  named?: boolean;
 }) {
   const [rating, setRating] = useState<number | null>(null);
   const [message, setMessage] = useState("");
@@ -130,7 +144,7 @@ export function FeedbackDialog({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Report a problem with chatform"
+        aria-label={named ? "Report a problem with chatform" : "Report a problem with this form\u2019s software"}
         tabIndex={-1}
         className={cn(
           "animate-message-in relative m-0 w-full max-w-md outline-none sm:m-4",
@@ -168,7 +182,8 @@ export function FeedbackDialog({
             </div>
             <p className="text-base font-medium">Thank you — that reached us.</p>
             <p className="max-w-xs text-sm opacity-60">
-              A real person reads these. It goes to the chatform team, not to whoever made this form.
+              A real person reads these. It goes to the team who build the software, not to whoever
+              made this form.
             </p>
           </div>
         ) : (
@@ -182,7 +197,9 @@ export function FeedbackDialog({
               are writing to whoever sent them the link.
             */}
             <p className="mt-1 text-sm opacity-60">
-              This goes to chatform, the software running this form — not to the people who made it.
+              {named
+                ? "This goes to chatform, the software running this form — not to the people who made it."
+                : "This goes to the team who build the software running this form — not to the people who made it."}
             </p>
 
             <div className="mt-5 flex items-end justify-between gap-1.5">
