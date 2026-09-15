@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Angry, Check, Frown, Laugh, Meh, Smile, X } from "lucide-react";
 import { FEEDBACK_LABELS } from "@repo/form-schema";
+import { KeyHint, modKeyLabel } from "./composers/primitives";
 import { cn } from "@/lib/utils";
 
 /**
@@ -102,14 +103,6 @@ export function FeedbackDialog({
     panelRef.current?.focus();
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const submit = useCallback(async () => {
     if (rating === null || sending) return;
     setSending(true);
@@ -122,6 +115,40 @@ export function FeedbackDialog({
     }
     setSent(true);
   }, [rating, message, sending, onSubmit]);
+
+  /**
+   * The panel's two keys, taken before anything else sees them.
+   *
+   * ⌘↵ sends and Escape closes — the same pair the review card binds, which is
+   * exactly the problem: that card can arrive underneath while this is open,
+   * and then one ⌘↵ would file the report *and* submit the form. So this
+   * listens in the capture phase and stops the event dead. A modal that lets
+   * keys through to the screen behind it is not modal.
+   *
+   * Enter on its own is deliberately left alone: the box below is where
+   * somebody types three numbered steps, and a bug report that sends itself on
+   * the first line is a bug report nobody can read.
+   *
+   * Rebound whenever `submit` changes, which is every keystroke in the note.
+   * That is two cheap calls per character and the honest way to write it; a ref
+   * to dodge them would be a moving part in exchange for nothing measurable.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      void submit();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose, submit]);
 
   /* The receipt is the last thing that happens, so it closes the panel. */
   useEffect(() => {
@@ -279,6 +306,17 @@ export function FeedbackDialog({
               style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
             >
               {sending ? "Sending…" : "Send"}
+              {/*
+                The same key chip the composer draws under this panel, so the
+                shortcut is taught in the one vocabulary the form already uses.
+                `kbd-hint` is what keeps it off a phone — it is a
+                `(hover: hover) and (pointer: fine)` question, not a width one —
+                and `w-auto` because two glyphs do not fit the square a single
+                one gets.
+              */}
+              {!sending && (
+                <KeyHint tone="inverse" className="ml-2 w-auto px-1.5">{`${modKeyLabel()}↵`}</KeyHint>
+              )}
             </button>
           </div>
         )}

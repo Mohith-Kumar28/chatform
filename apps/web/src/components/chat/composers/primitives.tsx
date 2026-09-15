@@ -52,6 +52,19 @@ export function KeyHint({
 }
 
 /**
+ * The platform's own name for the modifier, so the hint matches the keyboard.
+ *
+ * Beside `KeyHint` rather than inside the one screen that first needed it: the
+ * review card, and now the feedback panel, both print `⌘↵` on their action, and
+ * a second copy of this test is how one of them ends up teaching a Windows
+ * respondent a key their keyboard does not have.
+ */
+export function modKeyLabel(): string {
+  if (typeof navigator === "undefined") return "⌘";
+  return /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl+";
+}
+
+/**
  * A button that must not take the caret off the message box.
  *
  * Send and Skip both finish the current question and hand straight back to the

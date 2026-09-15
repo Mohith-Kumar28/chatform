@@ -25,7 +25,7 @@ import { asEmail } from "./respondent-hint";
 import { VerifyCard } from "./verify-card";
 import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
 import { useChat, type ChatMessage } from "./use-chat";
-import { DictateButton, KeyHint, SendRow, TextInput, keepFocus } from "./composers/primitives";
+import { DictateButton, KeyHint, SendRow, TextInput, keepFocus, modKeyLabel } from "./composers/primitives";
 import { useDictation } from "@/hooks/use-dictation";
 import { inputSemanticsFor } from "./composers/input-semantics";
 import { PhoneInput } from "./composers/phone";
@@ -1551,12 +1551,6 @@ function ReviewCard({
       </div>
     </div>
   );
-}
-
-/** The platform's own name for the modifier, so the hint matches the keyboard. */
-function modKeyLabel(): string {
-  if (typeof navigator === "undefined") return "⌘";
-  return /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl+";
 }
 
 /**
