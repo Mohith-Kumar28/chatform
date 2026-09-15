@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, MessageSquareText, Monitor, Tag, X } from "lucide-react";
 import { feedbackTopicLabel } from "@repo/form-schema";
 import { useGetApiAdminFeedbackReports } from "@/lib/api/admin/admin";
@@ -24,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { FACES, faceFor } from "./feedback-faces";
 import { StatusLabel } from "./feedback-status";
 import { FeedbackReportDialog } from "./feedback-report-dialog";
+import { IssueHeader, IssuesTable, useIssues } from "./feedback-issues-table";
 
 /**
  * The queue of reports.
@@ -58,6 +60,8 @@ export interface InboxReport {
   organizationName: string | null;
   respondentId: string | null;
   respondentLabel: string | null;
+  issueId: string | null;
+  issueTitle: string | null;
 }
 
 interface ReportsBody {
@@ -73,6 +77,9 @@ type Sort = "newest" | "oldest" | "worst";
 
 const SORT_LABEL: Record<Sort, string> = { newest: "Newest first", oldest: "Oldest first", worst: "Lowest rating first" };
 
+type IssueSort = "recent" | "reports";
+const ISSUE_SORT_LABEL: Record<IssueSort, string> = { recent: "Recently seen", reports: "Most reports" };
+
 const PAGE = 50;
 
 export function FeedbackInbox() {
@@ -80,11 +87,20 @@ export function FeedbackInbox() {
   const pathname = usePathname();
   const params = useSearchParams();
 
+  /*
+    Issues by default: the problems, not the rows. Reports is the view to fall
+    back to, and the one an issue opens into — narrowed by `?issue=`.
+  */
+  const issue = params.get("issue") ?? undefined;
+  const view: "issues" | "reports" = issue || params.get("list") === "reports" ? "reports" : "issues";
   const statusParam = params.get("status");
-  const status: StatusFilter = statusParam === "resolved" || statusParam === "all" ? statusParam : "new";
+  // Inside one issue every report shows by default — resolving it must not empty the list you are reading.
+  const status: StatusFilter =
+    statusParam === "resolved" || statusParam === "all" || statusParam === "new" ? statusParam : issue ? "all" : "new";
   const rating = Number(params.get("rating") ?? 0) || undefined;
   const sortParam = params.get("sort");
   const sort: Sort = sortParam === "oldest" || sortParam === "worst" ? sortParam : "newest";
+  const issueSort: IssueSort = sortParam === "reports" ? "reports" : "recent";
   const formId = params.get("formId") ?? undefined;
   const orgId = params.get("orgId") ?? undefined;
   const topic = params.get("topic") ?? undefined;
@@ -102,7 +118,7 @@ export function FeedbackInbox() {
     router.replace(`${pathname}?${next.toString()}`, { scroll: false });
   };
 
-  const { data, isPending, isFetching, refetch } = useGetApiAdminFeedbackReports({
+  const { data, isPending, isFetching } = useGetApiAdminFeedbackReports({
     status,
     sort,
     limit: PAGE,
@@ -112,11 +128,24 @@ export function FeedbackInbox() {
     ...(orgId ? { orgId } : {}),
     ...(topic ? { topic } : {}),
     ...(respondentId ? { respondentId } : {}),
+    ...(issue ? { issue } : {}),
   });
   const body = apiData<ReportsBody>(data);
+  /*
+    Any change — resolve, rename, move, merge — can move numbers in every list on
+    this page: an issue's counts, the reports under it, the status badges, the
+    charts. Refreshing only the list that made the change is how the issues
+    table kept showing two issues after a move had made three.
+  */
+  const queryClient = useQueryClient();
+  const refreshAll = () =>
+    void queryClient.invalidateQueries({
+      predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/admin/feedback"),
+    });
+  const issuesQuery = useIssues({ status, rating, topic, sort: issueSort, offset, enabled: view === "issues" });
   const reports = useMemo(() => body?.reports ?? [], [body?.reports]);
   const total = body?.total ?? 0;
-  const counts = body?.counts ?? { new: 0, resolved: 0 };
+  const counts = view === "issues" ? issuesQuery.counts : (body?.counts ?? { new: 0, resolved: 0 });
   const ratingCounts = body?.ratingCounts ?? [];
   const topicCounts = body?.topicCounts ?? [];
 
@@ -142,25 +171,40 @@ export function FeedbackInbox() {
 
   return (
     <section className="space-y-3">
-      <div className="flex items-center gap-1.5 pt-2">
-        <h2 className="text-h3">Inbox</h2>
-        <InfoHint label="About the inbox">
-          Every report, whatever the period picked above — that narrows the charts, not this list. An unresolved report from last
-          month is still unresolved.
-        </InfoHint>
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+        <div className="flex items-center gap-1.5">
+          <h2 className="text-h3">Inbox</h2>
+          <InfoHint label="About the inbox">
+            Every report, whatever the period picked above — that narrows the charts, not this list. Issues group reports that
+            describe the same problem; an issue is resolved when every report in it is.
+          </InfoHint>
+        </div>
+        {/* The one view switch: the same reports, grouped or one per row. */}
+        <SegmentedControl
+          size="sm"
+          value={view}
+          onChange={(next) =>
+            setParam({ list: next === "reports" ? "reports" : undefined, issue: undefined, sort: undefined, report: undefined })
+          }
+          options={[
+            { value: "issues", label: "Issues" },
+            { value: "reports", label: "Reports" },
+          ]}
+          ariaLabel="Group reports into issues or list every report"
+        />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SegmentedControl
           size="sm"
           value={status}
-          onChange={(next) => setParam({ status: next === "new" ? undefined : next })}
+          onChange={(next) => setParam({ status: next === (issue ? "all" : "new") ? undefined : next })}
           options={[
             { value: "new", label: "Unresolved", badge: counts.new },
             { value: "resolved", label: "Resolved", badge: counts.resolved },
             { value: "all", label: "All" },
           ]}
-          ariaLabel="Which reports"
+          ariaLabel={view === "issues" ? "Which issues" : "Which reports"}
         />
 
         <div className="flex flex-wrap items-center gap-2">
@@ -169,144 +213,190 @@ export function FeedbackInbox() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" shape="pill" aria-label={`Sort: ${SORT_LABEL[sort]}`}>
+              <Button
+                variant="outline"
+                size="sm"
+                shape="pill"
+                aria-label={`Sort: ${view === "issues" ? ISSUE_SORT_LABEL[issueSort] : SORT_LABEL[sort]}`}
+              >
                 <ArrowUpDown className="size-3.5" />
-                {SORT_LABEL[sort]}
+                {view === "issues" ? ISSUE_SORT_LABEL[issueSort] : SORT_LABEL[sort]}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuRadioGroup value={sort} onValueChange={(v) => setParam({ sort: v === "newest" ? undefined : v })}>
-                {(Object.keys(SORT_LABEL) as Sort[]).map((key) => (
-                  <DropdownMenuRadioItem key={key} value={key}>
-                    {SORT_LABEL[key]}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
+              {view === "issues" ? (
+                <DropdownMenuRadioGroup value={issueSort} onValueChange={(v) => setParam({ sort: v === "recent" ? undefined : v })}>
+                  {(Object.keys(ISSUE_SORT_LABEL) as IssueSort[]).map((key) => (
+                    <DropdownMenuRadioItem key={key} value={key}>
+                      {ISSUE_SORT_LABEL[key]}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              ) : (
+                <DropdownMenuRadioGroup value={sort} onValueChange={(v) => setParam({ sort: v === "newest" ? undefined : v })}>
+                  {(Object.keys(SORT_LABEL) as Sort[]).map((key) => (
+                    <DropdownMenuRadioItem key={key} value={key}>
+                      {SORT_LABEL[key]}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
 
-      {chips.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {chips.map((c) => (
-            <span key={c.key} className="bg-muted inline-flex items-center gap-1 rounded-full py-0.5 pr-1 pl-2.5 text-xs">
-              {c.label}
+      {view === "issues" ? (
+        <IssuesTable
+          issues={issuesQuery.issues}
+          total={issuesQuery.total}
+          offset={offset}
+          isPending={issuesQuery.isPending}
+          isFetching={issuesQuery.isFetching}
+          emptyText={
+            status === "new" && !rating && !topic
+              ? "Nothing unresolved. Every issue has been dealt with."
+              : "No issues match."
+          }
+          onOpen={(issueId) => setParam({ issue: issueId, list: undefined, sort: undefined })}
+          onOffset={(next) => setParam({ offset: String(next) })}
+        />
+      ) : (
+        <>
+          {issue && (
+            <IssueHeader
+              issueId={issue}
+              onBack={() => setParam({ issue: undefined })}
+              onChanged={refreshAll}
+              onMerged={(intoId) => {
+                // The survivor's counts changed; its cached header must not show the old ones.
+                refreshAll();
+                setParam({ issue: intoId });
+              }}
+            />
+          )}
+          {chips.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {chips.map((c) => (
+                <span key={c.key} className="bg-muted inline-flex items-center gap-1 rounded-full py-0.5 pr-1 pl-2.5 text-xs">
+                  {c.label}
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground grid size-4 place-items-center rounded-full"
+                    aria-label={`Remove filter: ${c.label}`}
+                    onClick={() => setParam({ [c.key]: undefined })}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ))}
               <button
                 type="button"
-                className="text-muted-foreground hover:text-foreground grid size-4 place-items-center rounded-full"
-                aria-label={`Remove filter: ${c.label}`}
-                onClick={() => setParam({ [c.key]: undefined })}
+                className="text-muted-foreground hover:text-foreground ml-1 text-xs"
+                onClick={() => setParam(Object.fromEntries(chips.map((c) => [c.key, undefined])))}
               >
-                <X className="size-3" />
+                Clear all
               </button>
-            </span>
-          ))}
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-foreground ml-1 text-xs"
-            onClick={() => setParam(Object.fromEntries(chips.map((c) => [c.key, undefined])))}
-          >
-            Clear all
-          </button>
-        </div>
-      )}
-
-      <div className="bg-card overflow-hidden rounded-xl border">
-        {isPending ? (
-          <div className="space-y-2 p-4">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 rounded-md" />
-            ))}
-          </div>
-        ) : reports.length === 0 ? (
-          <p className="text-muted-foreground px-4 py-12 text-center text-sm">
-            {status === "new" && chips.length === 0 && !rating && !topic ? "Nothing unresolved. Every report has been dealt with." : "No reports match."}
-          </p>
-        ) : (
-          <table className="w-full table-fixed text-sm">
-            <thead>
-              <tr className="text-muted-foreground border-b text-left text-xs">
-                <th className="px-4 py-2.5 font-medium">Report</th>
-                <th className="hidden w-[22%] px-3 py-2.5 font-medium lg:table-cell">Form</th>
-                <th className="hidden w-[14%] px-3 py-2.5 font-medium md:table-cell">From</th>
-                <th className="w-28 px-3 py-2.5 font-medium">Status</th>
-                <th className="w-24 px-4 py-2.5 text-right font-medium">When</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reports.map((r) => {
-                const face = faceFor(r.rating);
-                return (
-                  <tr
-                    key={r.id}
-                    onClick={() => setOpenId(r.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setOpenId(r.id);
-                      }
-                    }}
-                    tabIndex={0}
-                    className={cn(
-                      "hover:bg-muted/50 focus-visible:bg-muted/50 cursor-pointer border-b outline-none last:border-b-0",
-                      openId === r.id && "bg-muted/50",
-                    )}
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <face.Icon className="size-4 shrink-0" style={{ color: face.color }} aria-label={face.label} />
-                        <span className="min-w-0 flex-1">
-                          <span className={cn("block truncate", !r.message && "text-muted-foreground")}>
-                            {r.message ?? `${face.label}, no note`}
-                          </span>
-                          {r.topic && <span className="text-muted-foreground block truncate text-xs">{feedbackTopicLabel(r.topic)}</span>}
-                        </span>
-                        {r.hasSnapshot && (
-                          <Monitor className="text-muted-foreground size-3.5 shrink-0" aria-label="Conversation attached" />
-                        )}
-                        {r.internalNote && (
-                          <MessageSquareText className="text-muted-foreground size-3.5 shrink-0" aria-label="Has an internal note" />
-                        )}
-                      </div>
-                    </td>
-                    <td className="hidden px-3 py-3 lg:table-cell">
-                      <span className="block truncate">{r.formTitle ?? "Deleted form"}</span>
-                      <span className="text-muted-foreground block truncate text-xs">{r.organizationName ?? "—"}</span>
-                    </td>
-                    <td className="text-muted-foreground hidden truncate px-3 py-3 md:table-cell">
-                      {r.respondentLabel ?? "Anonymous"}
-                    </td>
-                    <td className="px-3 py-3">
-                      <StatusLabel status={r.status} />
-                    </td>
-                    <td className="text-muted-foreground px-4 py-3 text-right whitespace-nowrap" title={new Date(r.createdAt).toLocaleString()}>
-                      {relativeTime(r.createdAt)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {total > 0 && (
-        <div className="flex items-center justify-end gap-2">
-          <span className={cn("text-muted-foreground text-caption tabular", isFetching && "opacity-60")}>
-            {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}
-          </span>
-          {total > PAGE && (
-            <div className="flex items-center gap-0.5">
-              <Button variant="ghost" size="icon-sm" shape="pill" aria-label="Previous page" disabled={offset === 0} onClick={() => setParam({ offset: String(Math.max(0, offset - PAGE)) })}>
-                <ChevronLeft className="size-3.5" />
-              </Button>
-              <Button variant="ghost" size="icon-sm" shape="pill" aria-label="Next page" disabled={offset + PAGE >= total} onClick={() => setParam({ offset: String(offset + PAGE) })}>
-                <ChevronRight className="size-3.5" />
-              </Button>
             </div>
           )}
-        </div>
+
+          <div className="bg-card overflow-hidden rounded-xl border">
+            {isPending ? (
+              <div className="space-y-2 p-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 rounded-md" />
+                ))}
+              </div>
+            ) : reports.length === 0 ? (
+              <p className="text-muted-foreground px-4 py-12 text-center text-sm">
+                {status === "new" && chips.length === 0 && !rating && !topic ? "Nothing unresolved. Every report has been dealt with." : "No reports match."}
+              </p>
+            ) : (
+              <table className="w-full table-fixed text-sm">
+                <thead>
+                  <tr className="text-muted-foreground border-b text-left text-xs">
+                    <th className="px-4 py-2.5 font-medium">Report</th>
+                    <th className="hidden w-[22%] px-3 py-2.5 font-medium lg:table-cell">Form</th>
+                    <th className="hidden w-[14%] px-3 py-2.5 font-medium md:table-cell">From</th>
+                    <th className="w-28 px-3 py-2.5 font-medium">Status</th>
+                    <th className="w-24 px-4 py-2.5 text-right font-medium">When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reports.map((r) => {
+                    const face = faceFor(r.rating);
+                    return (
+                      <tr
+                        key={r.id}
+                        onClick={() => setOpenId(r.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setOpenId(r.id);
+                          }
+                        }}
+                        tabIndex={0}
+                        className={cn(
+                          "hover:bg-muted/50 focus-visible:bg-muted/50 cursor-pointer border-b outline-none last:border-b-0",
+                          openId === r.id && "bg-muted/50",
+                        )}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <face.Icon className="size-4 shrink-0" style={{ color: face.color }} aria-label={face.label} />
+                            <span className="min-w-0 flex-1">
+                              <span className={cn("block truncate", !r.message && "text-muted-foreground")}>
+                                {r.message ?? `${face.label}, no note`}
+                              </span>
+                              {r.topic && <span className="text-muted-foreground block truncate text-xs">{feedbackTopicLabel(r.topic)}</span>}
+                            </span>
+                            {r.hasSnapshot && (
+                              <Monitor className="text-muted-foreground size-3.5 shrink-0" aria-label="Conversation attached" />
+                            )}
+                            {r.internalNote && (
+                              <MessageSquareText className="text-muted-foreground size-3.5 shrink-0" aria-label="Has an internal note" />
+                            )}
+                          </div>
+                        </td>
+                        <td className="hidden px-3 py-3 lg:table-cell">
+                          <span className="block truncate">{r.formTitle ?? "Deleted form"}</span>
+                          <span className="text-muted-foreground block truncate text-xs">{r.organizationName ?? "—"}</span>
+                        </td>
+                        <td className="text-muted-foreground hidden truncate px-3 py-3 md:table-cell">
+                          {r.respondentLabel ?? "Anonymous"}
+                        </td>
+                        <td className="px-3 py-3">
+                          <StatusLabel status={r.status} />
+                        </td>
+                        <td className="text-muted-foreground px-4 py-3 text-right whitespace-nowrap" title={new Date(r.createdAt).toLocaleString()}>
+                          {relativeTime(r.createdAt)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {total > 0 && (
+            <div className="flex items-center justify-end gap-2">
+              <span className={cn("text-muted-foreground text-caption tabular", isFetching && "opacity-60")}>
+                {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}
+              </span>
+              {total > PAGE && (
+                <div className="flex items-center gap-0.5">
+                  <Button variant="ghost" size="icon-sm" shape="pill" aria-label="Previous page" disabled={offset === 0} onClick={() => setParam({ offset: String(Math.max(0, offset - PAGE)) })}>
+                    <ChevronLeft className="size-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon-sm" shape="pill" aria-label="Next page" disabled={offset + PAGE >= total} onClick={() => setParam({ offset: String(offset + PAGE) })}>
+                    <ChevronRight className="size-3.5" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {openId && (
@@ -315,7 +405,7 @@ export function FeedbackInbox() {
           ids={reports.map((r) => r.id)}
           onOpen={setOpenId}
           onClose={() => setOpenId(null)}
-          onChanged={() => void refetch()}
+          onChanged={refreshAll}
           onShowRespondent={(rid) => {
             setOpenId(null);
             setParam({ respondentId: rid, status: "all" });

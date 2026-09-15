@@ -3,9 +3,20 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, ExternalLink, Link2, Mail, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Link2, Mail, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { FEEDBACK_NOTE_MAX, feedbackTopicLabel } from "@repo/form-schema";
 import {
+  getGetApiAdminFeedbackReportsByIdNearestQueryKey,
+  postApiAdminFeedbackReportsByIdMove,
+  useGetApiAdminFeedbackReportsByIdNearest,
   getGetApiAdminFeedbackReportsByIdQueryKey,
   getGetApiAdminFeedbackReportsByIdSnapshotQueryKey,
   patchApiAdminFeedbackReportsById,
@@ -240,7 +251,16 @@ export function FeedbackReportDialog({
               This report is gone — it may have been deleted since the link was made.
             </p>
           ) : view === "report" ? (
-            <ReportView report={report} saving={saving} onSave={save} onShowRespondent={onShowRespondent} />
+            <ReportView
+              report={report}
+              saving={saving}
+              onSave={save}
+              onShowRespondent={onShowRespondent}
+              onMoved={() => {
+                void refetch();
+                onChanged();
+              }}
+            />
           ) : (
             <ConversationView report={report} />
           )}
@@ -257,11 +277,13 @@ function ReportView({
   saving,
   onSave,
   onShowRespondent,
+  onMoved,
 }: {
   report: Detail;
   saving: boolean;
   onSave: (body: { internalNote?: string | null }, done: string) => Promise<void>;
   onShowRespondent: (respondentId: string) => void;
+  onMoved: () => void;
 }) {
   const face = faceFor(report.rating);
 
@@ -292,6 +314,9 @@ function ReportView({
             <face.Icon className="size-4" style={{ color: face.color }} aria-hidden />
             {face.label}
           </span>
+        </Prop>
+        <Prop label="Issue" hint="The problem this report was grouped into, with others describing the same thing.">
+          <IssueField report={report} onChanged={onMoved} />
         </Prop>
         <Prop label="Topic" hint="Read from their note when it arrived, into a fixed list.">
           {feedbackTopicLabel(report.topic) ?? <Muted>{report.message ? "Not classified" : "No note to read"}</Muted>}
@@ -383,6 +408,68 @@ function ReportView({
         </details>
       </dl>
     </div>
+  );
+}
+
+/**
+ * Which issue this report belongs to — and the way to say it belongs elsewhere.
+ *
+ * The title links to the issue's view of the inbox. The menu beside it moves the
+ * report: to one of the five nearest issues (no search box — the nearest are
+ * where a wrong grouping almost always belongs), or out to an issue of its own.
+ * The nearest list is only fetched when the menu opens.
+ */
+function IssueField({ report, onChanged }: { report: Detail; onChanged: () => void }) {
+  const [open, setOpen] = useState(false);
+  const { data, isPending } = useGetApiAdminFeedbackReportsByIdNearest(report.id, {
+    query: { queryKey: getGetApiAdminFeedbackReportsByIdNearestQueryKey(report.id), enabled: open },
+  });
+  const nearest = apiData<{ issues: { id: string; title: string }[] } | null>(data)?.issues ?? [];
+
+  const move = async (issueId: string, label: string) => {
+    try {
+      await postApiAdminFeedbackReportsByIdMove(report.id, { issueId });
+      toast.success(label);
+      onChanged();
+    } catch {
+      toast.error("That report could not be moved.");
+    }
+  };
+
+  if (!report.message) return <Muted>Not grouped — no note to read</Muted>;
+  if (!report.issueId) return <Muted>Not grouped yet</Muted>;
+
+  return (
+    <span className="flex min-w-0 items-start gap-1">
+      <a href={`/admin/feedback?issue=${encodeURIComponent(report.issueId)}`} className="min-w-0 hover:underline">
+        <span className="line-clamp-2">{report.issueTitle ?? "Untitled issue"}</span>
+      </a>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon-sm" className="-mt-1 size-6 shrink-0" aria-label="Move to another issue">
+            <ChevronDown className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-72">
+          <DropdownMenuLabel className="text-muted-foreground text-micro font-medium tracking-wide uppercase">
+            Move to
+          </DropdownMenuLabel>
+          {isPending ? (
+            <p className="text-muted-foreground px-2 py-1.5 text-xs">Finding the nearest issues…</p>
+          ) : nearest.length === 0 ? (
+            <p className="text-muted-foreground px-2 py-1.5 text-xs">No other open issue is close.</p>
+          ) : (
+            nearest.map((issue) => (
+              <DropdownMenuItem key={issue.id} onSelect={() => void move(issue.id, `Moved to "${issue.title}"`)}>
+                <span className="truncate">{issue.title}</span>
+              </DropdownMenuItem>
+            ))
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => void move("new", "Moved to a new issue")}>A new issue of its own</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </span>
   );
 }
 
