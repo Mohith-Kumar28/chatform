@@ -788,32 +788,68 @@ export function ChatClient({
             yet is a report about nothing.
           */}
           {(!config.brandingHidden || !previewMode) && (
-            <p className="flex flex-wrap items-center justify-center gap-x-2 pb-2 text-center text-[0.6875rem]">
-              {!config.brandingHidden && (
-                <>
-                  <span className="opacity-40">
-                    Powered by{" "}
-                    <a href="https://chatform.in" target="_blank" rel="noreferrer" className="underline">
-                      chatform
-                    </a>
-                  </span>
-                  {!previewMode && (
-                    <span className="opacity-25" aria-hidden>
-                      ·
+            /*
+              Centred under the message box, not under the row.
+
+              The line used to be centred on the footer, which is centred on the
+              screen — arithmetically right and visibly wrong, because the object
+              the eye measures against is the box, and the box sits half a Send
+              button left of centre. One item there and nobody noticed; two made
+              the caption wide enough to read as pushed to the right.
+
+              The offset is an invisible twin of the Send button rather than a
+              number, so it is exactly right by construction: same classes, same
+              label, same key chip — which means it also narrows itself on a
+              phone, where `kbd-hint` draws no ↵ and the real button is smaller.
+              A hardcoded 48px would have been 11px wrong on every phone and
+              wrong again the day the button's label changes.
+
+              Skip is deliberately not counted. It comes and goes question to
+              question, and following it would slide this line sideways
+              mid-conversation — a caption that moves while you read is worse
+              than one that is a few pixels off on optional questions.
+            */
+            <div className="mx-auto flex w-full max-w-2xl items-center px-4 pb-2">
+              <p className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-x-2 text-center text-[0.6875rem]">
+                {!config.brandingHidden && (
+                  <>
+                    <span className="opacity-40">
+                      Powered by{" "}
+                      <a href="https://chatform.in" target="_blank" rel="noreferrer" className="underline">
+                        chatform
+                      </a>
                     </span>
-                  )}
-                </>
-              )}
-              {!previewMode && (
-                <button
-                  type="button"
-                  onClick={() => setFeedbackOpen(true)}
-                  className="underline opacity-40 transition-opacity hover:opacity-90"
-                >
-                  Report a bug
-                </button>
-              )}
-            </p>
+                    {!previewMode && (
+                      <span className="opacity-25" aria-hidden>
+                        ·
+                      </span>
+                    )}
+                  </>
+                )}
+                {!previewMode && (
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackOpen(true)}
+                    className="underline opacity-40 transition-opacity hover:opacity-90"
+                  >
+                    Report a bug
+                  </button>
+                )}
+              </p>
+              {/*
+                The twin. `h-0 overflow-hidden` keeps its width and gives back
+                its height, so it reserves the horizontal space and adds no
+                vertical space; `aria-hidden` and no text node of its own that
+                a screen reader could read as a second Send.
+              */}
+              <span
+                aria-hidden
+                className="ml-2 inline-flex h-0 shrink-0 items-center gap-1.5 overflow-hidden px-4 text-sm font-medium"
+              >
+                Send
+                <KeyHint tone="inverse">↵</KeyHint>
+              </span>
+            </div>
           )}
         </footer>
       )}
