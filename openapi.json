@@ -2740,6 +2740,9 @@
                         "new",
                         "resolved"
                       ]
+                    },
+                    "ungrouped": {
+                      "type": "number"
                     }
                   },
                   "required": [
@@ -2747,7 +2750,8 @@
                     "total",
                     "limit",
                     "offset",
-                    "counts"
+                    "counts",
+                    "ungrouped"
                   ]
                 }
               }

@@ -651,6 +651,7 @@ export type GetApiAdminFeedbackIssues200 = {
   limit: number;
   offset: number;
   counts: GetApiAdminFeedbackIssues200Counts;
+  ungrouped: number;
 };
 
 export type GetApiAdminFeedbackIssuesById200Status = typeof GetApiAdminFeedbackIssuesById200Status[keyof typeof GetApiAdminFeedbackIssuesById200Status];

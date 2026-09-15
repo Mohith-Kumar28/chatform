@@ -906,6 +906,11 @@ const IssuesResponse = z.object({
   offset: z.number(),
   /** Unfiltered, like the reports inbox: the badges do not move as the list narrows. */
   counts: z.object({ new: z.number(), resolved: z.number() }),
+  /**
+   * Reports with a note that belong to no issue — filed before grouping existed,
+   * or while the model was unavailable. The inbox offers to group them.
+   */
+  ungrouped: z.number(),
 });
 
 /**
@@ -988,7 +993,7 @@ feedbackRouter.get(
     const having = q.status === "new" ? " HAVING unresolved > 0" : q.status === "resolved" ? " HAVING unresolved = 0" : "";
     const order = q.sort === "reports" ? "reports DESC, last_seen_at DESC" : "last_seen_at DESC";
 
-    const [issues, totalRow, countRow] = await Promise.all([
+    const [issues, totalRow, countRow, ungroupedRow] = await Promise.all([
       rows<IssueRow>(
         c.env.DB.prepare(`${filtered}${having} ORDER BY ${order} LIMIT ? OFFSET ?`).bind(...binds, q.limit, q.offset),
       ),
@@ -999,6 +1004,10 @@ feedbackRouter.get(
         `SELECT SUM(CASE WHEN unresolved > 0 THEN 1 ELSE 0 END) AS open, SUM(CASE WHEN unresolved = 0 THEN 1 ELSE 0 END) AS done
            FROM (${ISSUE_ROLLUP} GROUP BY i.id)`,
       ).first<{ open: number | null; done: number | null }>(),
+      c.env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM respondent_feedback
+          WHERE issue_id IS NULL AND message IS NOT NULL AND message != '' AND ${LIVE}`,
+      ).first<{ n: number }>(),
     ]);
 
     return c.json({
@@ -1007,6 +1016,7 @@ feedbackRouter.get(
       limit: q.limit,
       offset: q.offset,
       counts: { new: Number(countRow?.open ?? 0), resolved: Number(countRow?.done ?? 0) },
+      ungrouped: Number(ungroupedRow?.n ?? 0),
     });
   },
 );

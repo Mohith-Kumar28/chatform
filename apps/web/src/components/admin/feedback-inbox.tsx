@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, MessageSquareText, Monitor, Tag, X } from "lucide-react";
@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { FACES, faceFor } from "./feedback-faces";
 import { StatusLabel } from "./feedback-status";
 import { FeedbackReportDialog } from "./feedback-report-dialog";
-import { IssueHeader, IssuesTable, useIssues } from "./feedback-issues-table";
+import { IssueHeader, IssuesTable, UngroupedNotice, useIssues } from "./feedback-issues-table";
 
 /**
  * The queue of reports.
@@ -138,10 +138,14 @@ export function FeedbackInbox() {
     table kept showing two issues after a move had made three.
   */
   const queryClient = useQueryClient();
-  const refreshAll = () =>
-    void queryClient.invalidateQueries({
-      predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/admin/feedback"),
-    });
+  // Stable, so the grouping notice's polling interval is not restarted on every render.
+  const refreshAll = useCallback(
+    () =>
+      void queryClient.invalidateQueries({
+        predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/admin/feedback"),
+      }),
+    [queryClient],
+  );
   const issuesQuery = useIssues({ status, rating, topic, sort: issueSort, offset, enabled: view === "issues" });
   const reports = useMemo(() => body?.reports ?? [], [body?.reports]);
   const total = body?.total ?? 0;
@@ -245,6 +249,8 @@ export function FeedbackInbox() {
           </DropdownMenu>
         </div>
       </div>
+
+      {view === "issues" && <UngroupedNotice count={issuesQuery.ungrouped} onDone={refreshAll} />}
 
       {view === "issues" ? (
         <IssuesTable

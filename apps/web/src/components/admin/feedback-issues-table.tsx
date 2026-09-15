@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronLeft, ChevronRight, GitMerge, Pencil } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, GitMerge, Layers, Pencil } from "lucide-react";
 import { feedbackTopicLabel } from "@repo/form-schema";
 import {
+  postApiAdminFeedbackIssuesRebuild,
   getGetApiAdminFeedbackIssuesByIdQueryKey,
   patchApiAdminFeedbackIssuesById,
   postApiAdminFeedbackIssuesByIdMerge,
@@ -14,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,6 +59,7 @@ interface IssuesBody {
   issues: IssueRow[];
   total: number;
   counts: { new: number; resolved: number };
+  ungrouped: number;
 }
 
 const PAGE = 50;
@@ -85,6 +88,7 @@ export function useIssues(params: {
     issues: body?.issues ?? [],
     total: body?.total ?? 0,
     counts: body?.counts ?? { new: 0, resolved: 0 },
+    ungrouped: body?.ungrouped ?? 0,
     isPending,
     isFetching,
     refetch,
@@ -205,6 +209,78 @@ export function IssuesTable({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Reports that belong to no issue yet, and the one button that groups them.
+ *
+ * Shows only when there are some: reports filed before grouping existed, or
+ * while the model was unavailable. Grouping re-matches every report from
+ * scratch through the same serial queue live reports use, so it takes a moment
+ * and then the list refreshes itself. Renamed titles and merges are recomputed
+ * with everything else, which the confirmation says.
+ */
+export function UngroupedNotice({ count, onDone }: { count: number; onDone: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [grouping, setGrouping] = useState(false);
+
+  /*
+    Look again every few seconds until nothing is left ungrouped. The queue works
+    one report at a time with two model calls each, so how long it takes depends
+    on how many there are — fixed "check again in 30s" timers refreshed a
+    half-finished list and then stopped. Capped, so a stuck queue does not poll
+    forever.
+  */
+  // Grouping is under way until nothing is left to group — derived, not stored twice.
+  const active = grouping && count > 0;
+  useEffect(() => {
+    if (!active) return;
+    const started = Date.now();
+    const id = setInterval(() => {
+      if (Date.now() - started > 5 * 60_000) clearInterval(id);
+      else onDone();
+    }, 4000);
+    return () => clearInterval(id);
+  }, [active, onDone]);
+
+  if (count === 0) return null;
+  if (active) {
+    return (
+      <div className="bg-muted/40 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm">
+        <Layers className="text-muted-foreground size-4 animate-pulse" aria-hidden />
+        Grouping reports into issues — {count} still to go.
+      </div>
+    );
+  }
+  return (
+    <div className="bg-muted/40 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-sm">
+      <span className="flex items-center gap-2">
+        <Layers className="text-muted-foreground size-4" aria-hidden />
+        {count} {count === 1 ? "report with a note isn't" : "reports with a note aren't"} grouped into an issue yet.
+      </span>
+      <Button variant="outline" size="sm" shape="pill" onClick={() => setConfirming(true)}>
+        Group them
+      </Button>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Group every report into issues?"
+        description="Every report with a note is matched again from scratch, so titles you renamed and issues you merged are recomputed too. It runs in the background and takes a moment."
+        confirmLabel="Group them"
+        destructive={false}
+        onConfirm={async () => {
+          try {
+            const res = (await postApiAdminFeedbackIssuesRebuild()) as unknown as { queued?: number };
+            toast.success(`Grouping ${res?.queued ?? count} reports — this takes a moment.`);
+            setGrouping(true);
+            onDone();
+          } catch {
+            toast.error("Grouping could not start. Try again.");
+          }
+        }}
+      />
+    </div>
   );
 }
 
