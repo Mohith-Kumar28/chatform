@@ -361,6 +361,8 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
    * touches it.
    */
   const [answering, setAnswering] = useState(false);
+  /** An edit is on its way to the server. A ref, not state: two taps can land before a render. */
+  const editingRef = useRef(false);
   const [rateLimited, setRateLimited] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewState | null>(null);
   const [submitted, setSubmitted] = useState<SubmittedState | null>(null);
@@ -493,6 +495,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
    * and "the controls are live again" can never disagree.
    */
   const settleTurn = useCallback(() => {
+    editingRef.current = false;
     setThinking(false);
     setAnswering(false);
   }, []);
@@ -1320,6 +1323,11 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
   /** Go back and change a previous answer. */
   const editAnswer = useCallback(
     async (ref: string) => {
+      // One edit at a time. The pencil stays tappable while the first one is
+      // resolving, and a slow phone gets tapped again — each repeat used to be
+      // a whole new "let's redo that one". `settleTurn` releases it.
+      if (editingRef.current) return;
+      editingRef.current = true;
       setThinking(true);
       setAnswering(true);
       setEnding(null);

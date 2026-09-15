@@ -3373,6 +3373,21 @@ export class SessionDO extends DurableObject<Bindings> {
         return { accepted: false, error: "not_answerable" };
       }
 
+      /*
+       * Already reopened: put the question back and say nothing more.
+       *
+       * The pencil stays on screen while an edit is in flight, and on a slow
+       * phone a tap that has not visibly done anything yet gets tapped again.
+       * Each repeat used to post its own "let's redo that one" and pay for its
+       * own rephrase — one respondent's seventeen taps in twelve seconds left
+       * thirty-four near-identical messages in the transcript. The question
+       * event still goes out so the device that sent it settles its turn.
+       */
+      if (this.editingRef === target.ref && this.meta.currentRef === target.ref && this.meta.status === "active") {
+        await this.emitQuestion();
+        return { accepted: true };
+      }
+
       this.invalidCounts.delete(target.ref);
       this.meta.currentRef = target.ref;
       this.meta.status = "active";
