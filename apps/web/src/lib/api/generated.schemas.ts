@@ -118,45 +118,6 @@ export type GetApiAdminLive200 = {
   events: GetApiAdminLive200EventsItem[];
 };
 
-export type GetApiAdminFeedbackParams = {
-range?: GetApiAdminFeedbackRange;
-};
-
-export type GetApiAdminFeedbackRange = typeof GetApiAdminFeedbackRange[keyof typeof GetApiAdminFeedbackRange];
-
-
-export const GetApiAdminFeedbackRange = {
-  '1d': '1d',
-  '7d': '7d',
-  '30d': '30d',
-  '90d': '90d',
-  '365d': '365d',
-} as const;
-
-export type GetApiAdminFeedback200DistributionItem = {
-  rating: number;
-  count: number;
-};
-
-export type GetApiAdminFeedback200NotesItem = {
-  id: string;
-  rating: number;
-  message: string | null;
-  createdAt: number;
-  formId: string | null;
-  formTitle: string | null;
-  respondentId: string | null;
-  userAgent: string | null;
-};
-
-export type GetApiAdminFeedback200 = {
-  range: string;
-  total: number;
-  average: number | null;
-  distribution: GetApiAdminFeedback200DistributionItem[];
-  notes: GetApiAdminFeedback200NotesItem[];
-};
-
 export type GetApiAdminActions200DunningItem = {[key: string]: unknown};
 
 export type GetApiAdminActions200FailedPaymentsItem = {[key: string]: unknown};
@@ -292,6 +253,312 @@ export type GetApiAdminAccountsByOrgId200 = {
   overrides: GetApiAdminAccountsByOrgId200OverridesItem[];
   audit: GetApiAdminAccountsByOrgId200AuditItem[];
   denials: GetApiAdminAccountsByOrgId200DenialsItem[];
+};
+
+export type GetApiAdminFeedbackParams = {
+range?: GetApiAdminFeedbackRange;
+};
+
+export type GetApiAdminFeedbackRange = typeof GetApiAdminFeedbackRange[keyof typeof GetApiAdminFeedbackRange];
+
+
+export const GetApiAdminFeedbackRange = {
+  '1d': '1d',
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+  '365d': '365d',
+} as const;
+
+export type GetApiAdminFeedback200DistributionItem = {
+  rating: number;
+  count: number;
+};
+
+export type GetApiAdminFeedback200NotesItem = {
+  id: string;
+  rating: number;
+  message: string | null;
+  createdAt: number;
+  formId: string | null;
+  formTitle: string | null;
+  respondentId: string | null;
+  userAgent: string | null;
+};
+
+export type GetApiAdminFeedback200 = {
+  range: string;
+  total: number;
+  average: number | null;
+  distribution: GetApiAdminFeedback200DistributionItem[];
+  notes: GetApiAdminFeedback200NotesItem[];
+};
+
+export type GetApiAdminFeedbackStatsParams = {
+range?: GetApiAdminFeedbackStatsRange;
+};
+
+export type GetApiAdminFeedbackStatsRange = typeof GetApiAdminFeedbackStatsRange[keyof typeof GetApiAdminFeedbackStatsRange];
+
+
+export const GetApiAdminFeedbackStatsRange = {
+  '1d': '1d',
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+  '365d': '365d',
+} as const;
+
+export type GetApiAdminFeedbackStats200DistributionItem = {
+  rating: number;
+  count: number;
+};
+
+export type GetApiAdminFeedbackStats200SeriesByRatingItem = {
+  rating: number;
+  counts: number[];
+};
+
+export type GetApiAdminFeedbackStats200Series = {
+  volume: number[];
+  withNote: number[];
+  average: (number | null)[];
+  byRating: GetApiAdminFeedbackStats200SeriesByRatingItem[];
+};
+
+export type GetApiAdminFeedbackStats200BySourceItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminFeedbackStats200TopFormsItem = {
+  key: string | null;
+  label: string | null;
+  slug: string | null;
+  orgId: string | null;
+  count: number;
+  average: number | null;
+};
+
+export type GetApiAdminFeedbackStats200TopAccountsItem = {
+  key: string | null;
+  label: string | null;
+  slug: string | null;
+  orgId: string | null;
+  count: number;
+  average: number | null;
+};
+
+export type GetApiAdminFeedbackStats200TopTopicsItem = {
+  key: string;
+  value: number;
+};
+
+export type GetApiAdminFeedbackStats200 = {
+  range: string;
+  days: string[];
+  total: number;
+  previousTotal: number;
+  average: number | null;
+  previousAverage: number | null;
+  withNote: number;
+  previousWithNote: number;
+  respondents: number;
+  previousRespondents: number;
+  bad: number;
+  previousBad: number;
+  unresolved: number;
+  distribution: GetApiAdminFeedbackStats200DistributionItem[];
+  series: GetApiAdminFeedbackStats200Series;
+  bySource: GetApiAdminFeedbackStats200BySourceItem[];
+  topForms: GetApiAdminFeedbackStats200TopFormsItem[];
+  topAccounts: GetApiAdminFeedbackStats200TopAccountsItem[];
+  topTopics: GetApiAdminFeedbackStats200TopTopicsItem[];
+};
+
+export type GetApiAdminFeedbackReportsParams = {
+status?: GetApiAdminFeedbackReportsStatus;
+/**
+ * @minimum 1
+ * @maximum 5
+ */
+rating?: number;
+noted?: GetApiAdminFeedbackReportsNoted;
+source?: GetApiAdminFeedbackReportsSource;
+/**
+ * @maxLength 40
+ */
+topic?: string;
+/**
+ * @maxLength 120
+ */
+q?: string;
+/**
+ * @maxLength 64
+ */
+formId?: string;
+/**
+ * @maxLength 64
+ */
+orgId?: string;
+/**
+ * @maxLength 64
+ */
+respondentId?: string;
+sort?: GetApiAdminFeedbackReportsSort;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minimum 0
+ * @maximum 9007199254740991
+ */
+offset?: number;
+};
+
+export type GetApiAdminFeedbackReportsStatus = typeof GetApiAdminFeedbackReportsStatus[keyof typeof GetApiAdminFeedbackReportsStatus];
+
+
+export const GetApiAdminFeedbackReportsStatus = {
+  new: 'new',
+  resolved: 'resolved',
+  spam: 'spam',
+  all: 'all',
+} as const;
+
+export type GetApiAdminFeedbackReportsNoted = typeof GetApiAdminFeedbackReportsNoted[keyof typeof GetApiAdminFeedbackReportsNoted];
+
+
+export const GetApiAdminFeedbackReportsNoted = {
+  any: 'any',
+  yes: 'yes',
+  no: 'no',
+} as const;
+
+export type GetApiAdminFeedbackReportsSource = typeof GetApiAdminFeedbackReportsSource[keyof typeof GetApiAdminFeedbackReportsSource];
+
+
+export const GetApiAdminFeedbackReportsSource = {
+  chat: 'chat',
+  embed: 'embed',
+} as const;
+
+export type GetApiAdminFeedbackReportsSort = typeof GetApiAdminFeedbackReportsSort[keyof typeof GetApiAdminFeedbackReportsSort];
+
+
+export const GetApiAdminFeedbackReportsSort = {
+  newest: 'newest',
+  oldest: 'oldest',
+  worst: 'worst',
+} as const;
+
+export type GetApiAdminFeedbackReports200ReportsItem = {
+  id: string;
+  rating: number;
+  message: string | null;
+  createdAt: number;
+  status: string;
+  statusAt: number | null;
+  statusBy: string | null;
+  internalNote: string | null;
+  topic: string | null;
+  sentiment: number | null;
+  source: string;
+  userAgent: string | null;
+  sessionId: string | null;
+  hasSnapshot: boolean;
+  formId: string | null;
+  formTitle: string | null;
+  formSlug: string | null;
+  organizationId: string | null;
+  organizationName: string | null;
+  respondentId: string | null;
+  respondentLabel: string | null;
+};
+
+export type GetApiAdminFeedbackReports200Counts = {
+  new: number;
+  resolved: number;
+  spam: number;
+};
+
+export type GetApiAdminFeedbackReports200 = {
+  reports: GetApiAdminFeedbackReports200ReportsItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  counts: GetApiAdminFeedbackReports200Counts;
+};
+
+export type GetApiAdminFeedbackReportsById200Respondent = {
+  id: string;
+  label: string | null;
+  email: string | null;
+  phone: string | null;
+  firstSeenAt: number | null;
+  lastSeenAt: number | null;
+  reportCount: number;
+} | null;
+
+export type GetApiAdminFeedbackReportsById200Session = {
+  id: string;
+  status: string;
+  country: string | null;
+  source: string;
+  collectedCount: number;
+  turnCount: number;
+  isTest: boolean;
+  createdAt: number;
+  lastActivityAt: number;
+  submissionId: string | null;
+} | null;
+
+export type GetApiAdminFeedbackReportsById200 = {
+  id: string;
+  rating: number;
+  message: string | null;
+  createdAt: number;
+  status: string;
+  statusAt: number | null;
+  statusBy: string | null;
+  internalNote: string | null;
+  topic: string | null;
+  sentiment: number | null;
+  source: string;
+  userAgent: string | null;
+  sessionId: string | null;
+  hasSnapshot: boolean;
+  formId: string | null;
+  formTitle: string | null;
+  formSlug: string | null;
+  organizationId: string | null;
+  organizationName: string | null;
+  respondentId: string | null;
+  respondentLabel: string | null;
+  organizationPlan: string | null;
+  formVersionId: string | null;
+  respondent: GetApiAdminFeedbackReportsById200Respondent;
+  session: GetApiAdminFeedbackReportsById200Session;
+};
+
+export type PatchApiAdminFeedbackReportsByIdBodyStatus = typeof PatchApiAdminFeedbackReportsByIdBodyStatus[keyof typeof PatchApiAdminFeedbackReportsByIdBodyStatus];
+
+
+export const PatchApiAdminFeedbackReportsByIdBodyStatus = {
+  new: 'new',
+  resolved: 'resolved',
+  spam: 'spam',
+} as const;
+
+export type PatchApiAdminFeedbackReportsByIdBody = {
+  status?: PatchApiAdminFeedbackReportsByIdBodyStatus;
+  internalNote?: string | null;
+};
+
+export type PatchApiAdminFeedbackReportsById200 = {
+  ok: boolean;
 };
 
 export type GetApiAdminProductParams = {

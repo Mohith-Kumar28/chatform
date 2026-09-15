@@ -582,173 +582,6 @@
         ]
       }
     },
-    "/api/admin/feedback": {
-      "get": {
-        "operationId": "getApiAdminFeedback",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "range",
-            "schema": {
-              "default": "30d",
-              "type": "string",
-              "enum": [
-                "1d",
-                "7d",
-                "30d",
-                "90d",
-                "365d"
-              ]
-            }
-          }
-        ],
-        "tags": [
-          "admin"
-        ],
-        "summary": "What respondents said about the product, and how they rated it",
-        "responses": {
-          "200": {
-            "description": "Respondent feedback",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "range": {
-                      "type": "string"
-                    },
-                    "total": {
-                      "type": "number"
-                    },
-                    "average": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "distribution": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "rating": {
-                            "type": "number"
-                          },
-                          "count": {
-                            "type": "number"
-                          }
-                        },
-                        "required": [
-                          "rating",
-                          "count"
-                        ]
-                      }
-                    },
-                    "notes": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "rating": {
-                            "type": "number"
-                          },
-                          "message": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "createdAt": {
-                            "type": "number"
-                          },
-                          "formId": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "formTitle": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "respondentId": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "userAgent": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "rating",
-                          "message",
-                          "createdAt",
-                          "formId",
-                          "formTitle",
-                          "respondentId",
-                          "userAgent"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "range",
-                    "total",
-                    "average",
-                    "distribution",
-                    "notes"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not an admin"
-          }
-        },
-        "x-internal": true,
-        "security": [
-          {
-            "sessionCookie": []
-          }
-        ]
-      }
-    },
     "/api/admin/actions": {
       "get": {
         "operationId": "getApiAdminActions",
@@ -1207,6 +1040,1448 @@
             },
             "in": "path",
             "name": "orgId",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/feedback": {
+      "get": {
+        "operationId": "getApiAdminFeedback",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "schema": {
+              "default": "30d",
+              "type": "string",
+              "enum": [
+                "1d",
+                "7d",
+                "30d",
+                "90d",
+                "365d"
+              ]
+            }
+          }
+        ],
+        "tags": [
+          "admin"
+        ],
+        "summary": "What respondents said about the product, and how they rated it",
+        "responses": {
+          "200": {
+            "description": "Respondent feedback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "range": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "average": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "distribution": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "rating": {
+                            "type": "number"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "rating",
+                          "count"
+                        ]
+                      }
+                    },
+                    "notes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "rating": {
+                            "type": "number"
+                          },
+                          "message": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "number"
+                          },
+                          "formId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "formTitle": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "respondentId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "userAgent": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "rating",
+                          "message",
+                          "createdAt",
+                          "formId",
+                          "formTitle",
+                          "respondentId",
+                          "userAgent"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "range",
+                    "total",
+                    "average",
+                    "distribution",
+                    "notes"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/feedback/stats": {
+      "get": {
+        "operationId": "getApiAdminFeedbackStats",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "schema": {
+              "default": "30d",
+              "type": "string",
+              "enum": [
+                "1d",
+                "7d",
+                "30d",
+                "90d",
+                "365d"
+              ]
+            }
+          }
+        ],
+        "tags": [
+          "admin"
+        ],
+        "summary": "Volume, rating and clustering of respondent feedback over a period",
+        "responses": {
+          "200": {
+            "description": "Feedback statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "range": {
+                      "type": "string"
+                    },
+                    "days": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "previousTotal": {
+                      "type": "number"
+                    },
+                    "average": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "previousAverage": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "withNote": {
+                      "type": "number"
+                    },
+                    "previousWithNote": {
+                      "type": "number"
+                    },
+                    "respondents": {
+                      "type": "number"
+                    },
+                    "previousRespondents": {
+                      "type": "number"
+                    },
+                    "bad": {
+                      "type": "number"
+                    },
+                    "previousBad": {
+                      "type": "number"
+                    },
+                    "unresolved": {
+                      "type": "number"
+                    },
+                    "distribution": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "rating": {
+                            "type": "number"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "rating",
+                          "count"
+                        ]
+                      }
+                    },
+                    "series": {
+                      "type": "object",
+                      "properties": {
+                        "volume": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "withNote": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "average": {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "byRating": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "rating": {
+                                "type": "number"
+                              },
+                              "counts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                }
+                              }
+                            },
+                            "required": [
+                              "rating",
+                              "counts"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "volume",
+                        "withNote",
+                        "average",
+                        "byRating"
+                      ]
+                    },
+                    "bySource": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ]
+                      }
+                    },
+                    "topForms": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "label": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "slug": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "orgId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "average": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "label",
+                          "slug",
+                          "orgId",
+                          "count",
+                          "average"
+                        ]
+                      }
+                    },
+                    "topAccounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "label": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "slug": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "orgId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "average": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "label",
+                          "slug",
+                          "orgId",
+                          "count",
+                          "average"
+                        ]
+                      }
+                    },
+                    "topTopics": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "range",
+                    "days",
+                    "total",
+                    "previousTotal",
+                    "average",
+                    "previousAverage",
+                    "withNote",
+                    "previousWithNote",
+                    "respondents",
+                    "previousRespondents",
+                    "bad",
+                    "previousBad",
+                    "unresolved",
+                    "distribution",
+                    "series",
+                    "bySource",
+                    "topForms",
+                    "topAccounts",
+                    "topTopics"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/feedback/reports": {
+      "get": {
+        "operationId": "getApiAdminFeedbackReports",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "default": "new",
+              "type": "string",
+              "enum": [
+                "new",
+                "resolved",
+                "spam",
+                "all"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "rating",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            }
+          },
+          {
+            "in": "query",
+            "name": "noted",
+            "schema": {
+              "default": "any",
+              "type": "string",
+              "enum": [
+                "any",
+                "yes",
+                "no"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "chat",
+                "embed"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "topic",
+            "schema": {
+              "type": "string",
+              "maxLength": 40
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string",
+              "maxLength": 120
+            }
+          },
+          {
+            "in": "query",
+            "name": "formId",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "in": "query",
+            "name": "orgId",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "in": "query",
+            "name": "respondentId",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "default": "newest",
+              "type": "string",
+              "enum": [
+                "newest",
+                "oldest",
+                "worst"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "tags": [
+          "admin"
+        ],
+        "summary": "The bug-report inbox, filtered and paged",
+        "responses": {
+          "200": {
+            "description": "Reports",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reports": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "rating": {
+                            "type": "number"
+                          },
+                          "message": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "statusAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "statusBy": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "internalNote": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "topic": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "sentiment": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "userAgent": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "sessionId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "hasSnapshot": {
+                            "type": "boolean"
+                          },
+                          "formId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "formTitle": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "formSlug": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "organizationId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "organizationName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "respondentId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "respondentLabel": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "rating",
+                          "message",
+                          "createdAt",
+                          "status",
+                          "statusAt",
+                          "statusBy",
+                          "internalNote",
+                          "topic",
+                          "sentiment",
+                          "source",
+                          "userAgent",
+                          "sessionId",
+                          "hasSnapshot",
+                          "formId",
+                          "formTitle",
+                          "formSlug",
+                          "organizationId",
+                          "organizationName",
+                          "respondentId",
+                          "respondentLabel"
+                        ]
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "limit": {
+                      "type": "number"
+                    },
+                    "offset": {
+                      "type": "number"
+                    },
+                    "counts": {
+                      "type": "object",
+                      "properties": {
+                        "new": {
+                          "type": "number"
+                        },
+                        "resolved": {
+                          "type": "number"
+                        },
+                        "spam": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "new",
+                        "resolved",
+                        "spam"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "reports",
+                    "total",
+                    "limit",
+                    "offset",
+                    "counts"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/feedback/reports/{id}": {
+      "get": {
+        "operationId": "getApiAdminFeedbackReportsById",
+        "tags": [
+          "admin"
+        ],
+        "summary": "One bug report, with its account, form, respondent and session",
+        "responses": {
+          "200": {
+            "description": "Report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "rating": {
+                      "type": "number"
+                    },
+                    "message": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "statusAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "statusBy": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "internalNote": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "topic": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sentiment": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "userAgent": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sessionId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "hasSnapshot": {
+                      "type": "boolean"
+                    },
+                    "formId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "formTitle": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "formSlug": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "organizationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "organizationName": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "respondentId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "respondentLabel": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "organizationPlan": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "formVersionId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "respondent": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "email": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "phone": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "firstSeenAt": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "lastSeenAt": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reportCount": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "label",
+                            "email",
+                            "phone",
+                            "firstSeenAt",
+                            "lastSeenAt",
+                            "reportCount"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "session": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string"
+                            },
+                            "country": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "source": {
+                              "type": "string"
+                            },
+                            "collectedCount": {
+                              "type": "number"
+                            },
+                            "turnCount": {
+                              "type": "number"
+                            },
+                            "isTest": {
+                              "type": "boolean"
+                            },
+                            "createdAt": {
+                              "type": "number"
+                            },
+                            "lastActivityAt": {
+                              "type": "number"
+                            },
+                            "submissionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "status",
+                            "country",
+                            "source",
+                            "collectedCount",
+                            "turnCount",
+                            "isTest",
+                            "createdAt",
+                            "lastActivityAt",
+                            "submissionId"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "rating",
+                    "message",
+                    "createdAt",
+                    "status",
+                    "statusAt",
+                    "statusBy",
+                    "internalNote",
+                    "topic",
+                    "sentiment",
+                    "source",
+                    "userAgent",
+                    "sessionId",
+                    "hasSnapshot",
+                    "formId",
+                    "formTitle",
+                    "formSlug",
+                    "organizationId",
+                    "organizationName",
+                    "respondentId",
+                    "respondentLabel",
+                    "organizationPlan",
+                    "formVersionId",
+                    "respondent",
+                    "session"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin, or no such report"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patchApiAdminFeedbackReportsById",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "new",
+                      "resolved",
+                      "spam"
+                    ]
+                  },
+                  "internalNote": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "summary": "Resolve a report, mark it spam, or attach an internal note",
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin, or no such report"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/feedback/reports/{id}/snapshot": {
+      "get": {
+        "operationId": "getApiAdminFeedbackReportsByIdSnapshot",
+        "tags": [
+          "admin"
+        ],
+        "summary": "The conversation as it stood when the report was filed",
+        "responses": {
+          "200": {
+            "description": "Snapshot JSON"
+          },
+          "404": {
+            "description": "Not an admin, no such report, or nothing was captured"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
             "required": true
           }
         ],

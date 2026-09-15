@@ -27,3 +27,37 @@ export const FEEDBACK_LABELS: Record<FeedbackRating, string> = {
 export function feedbackLabel(rating: number): string {
   return FEEDBACK_LABELS[rating as FeedbackRating] ?? `${rating}/5`;
 }
+
+/**
+ * What a bug report turned out to be about.
+ *
+ * Fixed and short, because the point of a topic is to be counted: "the phone
+ * input" eleven times is a signal, and eleven differently-worded free-text tags
+ * are eleven ones. The model is asked to choose from this list and nothing else,
+ * and the console charts it. The keys are stored, so they must never be renamed;
+ * the labels are copy.
+ */
+export const FEEDBACK_TOPICS = {
+  input: "An input or picker",
+  validation: "Rejected a valid answer",
+  wording: "Confusing wording",
+  flow: "Wrong question or path",
+  speed: "Slow or stuck",
+  sign_in: "Sign-in or verification",
+  upload: "File upload",
+  layout: "Layout or display",
+  praise: "Praise",
+  request: "Feature request",
+  spam: "Spam or nonsense",
+  other: "Something else",
+} as const;
+
+export type FeedbackTopic = keyof typeof FEEDBACK_TOPICS;
+
+export const FEEDBACK_TOPIC_KEYS = Object.keys(FEEDBACK_TOPICS) as [FeedbackTopic, ...FeedbackTopic[]];
+
+/** The label for a stored topic, tolerating one this build does not know. */
+export function feedbackTopicLabel(topic: string | null | undefined): string | null {
+  if (!topic) return null;
+  return FEEDBACK_TOPICS[topic as FeedbackTopic] ?? topic;
+}

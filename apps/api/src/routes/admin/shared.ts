@@ -279,3 +279,45 @@ export async function rows<T = Record<string, unknown>>(stmt: D1PreparedStatemen
   const res = await stmt.all<T>();
   return (res.results ?? []) as T[];
 }
+
+/**
+ * Write down that a platform admin did something.
+ *
+ * Every privileged write in this console lands here with
+ * `actor_type = 'platform_admin'` and the admin's own email as the label — a
+ * privileged action nobody can reconstruct afterwards is worse than the manual
+ * `wrangler d1 execute` it replaced, because at least the shell command left a
+ * trace in somebody's history.
+ *
+ * `orgId` is usually the organization the action touched, and the customer sees
+ * the row in their own activity log: if we change what an account is entitled
+ * to, its owner is entitled to know. The exception is `"_platform"`, for actions
+ * about a platform-owned row — triaging a bug report changes nothing a customer
+ * owns, and filing it in their log would be noise about us in a record of them.
+ *
+ * Lived in `ops.ts` while that was the only writer. It is not any more.
+ */
+export async function audit(
+
+  c: { env: Bindings; get: (k: "platformAdminEmail" | "userId") => string | undefined },
+  orgId: string,
+  action: string,
+  meta: Record<string, unknown>,
+): Promise<void> {
+  await c.env.DB.prepare(
+    `INSERT INTO audit_logs (id, organization_id, actor_type, actor_id, actor_label, action, resource_type, resource_id, meta, created_at)
+     VALUES (?, ?, 'platform_admin', ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      `aud_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+      orgId,
+      c.get("userId") ?? null,
+      c.get("platformAdminEmail") ?? "platform admin",
+      action,
+      (meta.resourceType as string) ?? null,
+      (meta.resourceId as string) ?? null,
+      JSON.stringify(meta),
+      Date.now(),
+    )
+    .run();
+}

@@ -670,6 +670,14 @@ export function feedbackNotificationEmail(a: {
   /** Whose form it is — the customer, not the respondent. */
   accountName: string | null;
   respondentId: string | null;
+  /** From a verified sign-in, when there was one — the only source that writes these. */
+  respondentName: string | null;
+  respondentEmail: string | null;
+  respondentPhone: string | null;
+  /** What the note turned out to be about, already a label. Null when untagged. */
+  topic: string | null;
+  /** This report, opened in the console. */
+  reportUrl: string;
   /** How many reports this person has sent, ever. 1 on their first. */
   reportCount: number | null;
   /** Answers recorded when they stopped to tell us, and turns taken to get there. */
@@ -684,6 +692,7 @@ export function feedbackNotificationEmail(a: {
 }): Omit<MailMessage, "to"> {
   const facts: [string, string][] = [
     ["Rating", `${a.ratingLabel} (${a.rating}/5)`],
+    ...(a.topic ? ([["Topic", a.topic]] as [string, string][]) : []),
     ["Form", a.formTitle ?? a.formId ?? "unknown"],
     ["Account", a.accountName ?? "unknown"],
     ["When", stamp(a.createdAt)],
@@ -726,6 +735,13 @@ export function feedbackNotificationEmail(a: {
     a.message
       ? `<div style="margin:0 0 18px 0;padding:14px 16px;border-radius:10px;background-color:${GROUND};border:1px solid ${BORDER};font-size:15px;line-height:1.6;color:${INK};white-space:pre-wrap;">${escapeHtml(a.message)}</div>`
       : p(`<span style="color:${MUTED};">No note — they rated it and left.</span>`),
+    /*
+      Who sent it, and whether they can be answered — the first decision the
+      reader makes, so it sits straight under their words. The address is a
+      mailto with the form named and their note quoted, so a reply is one tap
+      from the phone that showed the notification.
+    */
+    whoBlock(a),
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 4px 0;">${facts
       .map(
         ([label, value]) => `<tr>
@@ -739,10 +755,18 @@ export function feedbackNotificationEmail(a: {
       the thing it happened on. The console is the second stop, not the first —
       it says what we already know, and this email is that.
     */
-    a.formUrl ? button(a.formUrl, "Open the form") : button(a.consoleUrl, "Open the console"),
-    a.formUrl
-      ? `<p style="margin:-8px 0 0 0;font-size:12px;line-height:1.6;color:${MUTED};">Or <a href="${escapeHtml(a.consoleUrl)}" style="color:${MUTED};">open the account in the console</a>.</p>`
-      : "",
+    /*
+      The report first: it holds the replay of what they were looking at, the
+      triage controls and every link below in one place. The live form and the
+      account are the quieter second stops.
+    */
+    button(a.reportUrl, "Open the report"),
+    `<p style="margin:-8px 0 0 0;font-size:12px;line-height:1.6;color:${MUTED};">${[
+      a.formUrl ? `<a href="${escapeHtml(a.formUrl)}" style="color:${MUTED};">Open the form</a>` : "",
+      `<a href="${escapeHtml(a.consoleUrl)}" style="color:${MUTED};">the account</a>`,
+    ]
+      .filter(Boolean)
+      .join(" · ")}</p>`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -785,12 +809,56 @@ export function feedbackNotificationEmail(a: {
       ``,
       a.message ?? "(no note)",
       ``,
+      `From: ${whoLine(a)}`,
       ...facts.map(([label, value]) => `${label}: ${value}`),
       ``,
+      `Report: ${a.reportUrl}`,
       ...(a.formUrl ? [`Form: ${a.formUrl}`] : []),
       `Console: ${a.consoleUrl}`,
     ].join("\n"),
   };
+}
+
+type WhoArgs = {
+  respondentName: string | null;
+  respondentEmail: string | null;
+  respondentPhone: string | null;
+  formTitle: string | null;
+  message: string | null;
+};
+
+/** One line naming the person, for the plain-text part. */
+function whoLine(a: WhoArgs): string {
+  const parts = [a.respondentName, a.respondentEmail, a.respondentPhone].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : "never signed in — no way to reply";
+}
+
+/**
+ * The reply, prepared.
+ *
+ * Subject names the form, body quotes their note — so the founder types the
+ * answer and nothing else, and the respondent recognises what it is a reply to.
+ */
+function replyHref(a: WhoArgs): string {
+  const subject = `Re: your report about ${a.formTitle ?? "the form"}`;
+  const quoted = a.message ? `\n\n> ${a.message.split(/\r?\n/).join("\n> ")}` : "";
+  return `mailto:${a.respondentEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(quoted)}`;
+}
+
+function whoBlock(a: WhoArgs): string {
+  if (!a.respondentEmail && !a.respondentPhone && !a.respondentName) {
+    return p(`<span style="color:${MUTED};">From someone who never signed in — there is no way to reply.</span>`);
+  }
+  const lines = [
+    a.respondentName ? `<strong style="color:${INK};">${escapeHtml(a.respondentName)}</strong>` : "",
+    a.respondentEmail
+      ? `<a href="${escapeHtml(replyHref(a))}" style="color:${INK};">${escapeHtml(a.respondentEmail)}</a>`
+      : "",
+    a.respondentPhone
+      ? `<a href="tel:${escapeHtml(a.respondentPhone)}" style="color:${INK};">${escapeHtml(a.respondentPhone)}</a>`
+      : "",
+  ].filter(Boolean);
+  return `<p style="margin:0 0 18px 0;font-size:14px;line-height:1.6;color:${INK};">From ${lines.join(" · ")}</p>`;
 }
 
 /** `15 Sep 2026, 14:19 UTC` — one zone, named, because the readers are in two. */

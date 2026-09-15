@@ -1451,6 +1451,52 @@ export const respondentFeedback = sqliteTable(
     /** `chat` | `embed` — mirrors `chat_sessions.source`. */
     source: text("source").notNull().default("chat"),
     /**
+     * `new` | `resolved` | `spam` — the whole of the workflow.
+     *
+     * One or two people read these, so triage is three columns rather than a
+     * status-history table nobody would join. `statusBy` is an **email address,
+     * not a user id**: platform admins are an allowlist in a worker secret, not
+     * rows in `users`, so there is no id to point at.
+     */
+    status: text("status").notNull().default("new"),
+    statusAt: ts("status_at"),
+    statusBy: text("status_by"),
+    /** What we worked out, for whoever opens it next. Never shown to the respondent. */
+    internalNote: text("internal_note"),
+    /**
+     * Which published version was on screen.
+     *
+     * `chat_sessions` carries it too, and this is the copy that outlives the
+     * session — a report has to stay self-describing.
+     */
+    formVersionId: text("form_version_id"),
+    /**
+     * What the note turned out to be about, from a fixed taxonomy.
+     *
+     * Fixed, because the point of a tag here is to be counted: "the phone input"
+     * appearing eleven times is the signal, and eleven differently-worded free
+     * text tags are eleven ones. Null when there was no note to read.
+     */
+    topic: text("topic"),
+    /** Secondary tags, JSON `string[]`. */
+    tags: text("tags"),
+    /** -1 (furious) to 1 (delighted) — finer than the five faces, and null without a note. */
+    sentiment: real("sentiment"),
+    taggedAt: ts("tagged_at"),
+    /**
+     * The R2 key of what they were looking at when they filed this.
+     *
+     * Captured in the browser, because the state that describes the screen only
+     * exists there: `chat_sessions.state_snapshot_json` is a dead column, and
+     * `chat_messages` is not written until a response finalises — which is never,
+     * for somebody who stopped at question three to tell us it was broken.
+     *
+     * Deliberately not a row in `files`: that table meters storage against the
+     * customer's plan, and this object is ours.
+     */
+    snapshotKey: text("snapshot_key"),
+    snapshotBytes: integer("snapshot_bytes"),
+    /**
      * The browser string, verbatim.
      *
      * The single most useful line in a bug report and the one nobody thinks to
@@ -1462,6 +1508,17 @@ export const respondentFeedback = sqliteTable(
   (t) => [
     // The console reads newest-first over a window, and nothing else.
     index("idx_respondent_feedback_created").on(t.createdAt),
+    /*
+      The inbox's default read, and the two cluster drill-downs.
+
+      No index on `rating` or on "has a note", deliberately: SQLite uses one
+      index per table per query, rating is one value in five and a note is
+      present on about half the rows, so neither earns one while every read is
+      already anchored by a status equality or a date range.
+    */
+    index("idx_respondent_feedback_status_created").on(t.status, t.createdAt),
+    index("idx_respondent_feedback_org_created").on(t.organizationId, t.createdAt),
+    index("idx_respondent_feedback_form_created").on(t.formId, t.createdAt),
     // The daily cap, both halves of it: one lookup rather than a scan of the table.
     index("idx_respondent_feedback_respondent").on(t.respondentId, t.createdAt),
     index("idx_respondent_feedback_session").on(t.sessionId, t.createdAt),

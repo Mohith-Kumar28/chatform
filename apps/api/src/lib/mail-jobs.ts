@@ -5,6 +5,7 @@ import {
   DEFAULT_CONFIRMATION_BODY,
   DEFAULT_CONFIRMATION_SUBJECT,
   feedbackLabel,
+  feedbackTopicLabel,
   type AnswerMap,
   type Block,
   type FormDoc,
@@ -33,6 +34,7 @@ import {
 } from "./mail-templates.js";
 import { webOrigins } from "./origins.js";
 import { platformAdminEmails } from "./platform-admin.js";
+import { tagFeedback } from "./feedback-tags.js";
 import { resolveRespondentAddress } from "./respondent-address.js";
 import { mintEmailToken } from "./signed-url.js";
 import { RESUME_TTL_DAYS, UNSUB_TTL_DAYS } from "./followups.js";
@@ -128,7 +130,8 @@ async function runFeedbackJob(
             fb.created_at, fb.source, fb.session_id,
             f.title AS form_title, f.slug AS form_slug,
             o.name AS org_name,
-            s.collected_count, s.turn_count, s.country,
+            s.collected_count, s.turn_count, s.country, s.respondent_identity,
+            r.display_name AS respondent_name, r.email AS respondent_email, r.phone AS respondent_phone,
             -- Null rather than a count when nobody was recognised: every
             -- unattributed report shares one null id, and counting those
             -- together would report a stranger's first note as their fortieth.
@@ -139,6 +142,7 @@ async function runFeedbackJob(
        LEFT JOIN forms f ON f.id = fb.form_id
        LEFT JOIN organizations o ON o.id = fb.organization_id
        LEFT JOIN chat_sessions s ON s.id = fb.session_id
+       LEFT JOIN respondents r ON r.id = fb.respondent_id
       WHERE fb.id = ?1`,
   )
     .bind(job.feedbackId)
@@ -158,6 +162,10 @@ async function runFeedbackJob(
       collected_count: number | null;
       turn_count: number | null;
       country: string | null;
+      respondent_identity: string | null;
+      respondent_name: string | null;
+      respondent_email: string | null;
+      respondent_phone: string | null;
       report_count: number | null;
     }>();
 
@@ -167,6 +175,23 @@ async function runFeedbackJob(
 
   const recipients = platformAdminEmails(env);
   if (recipients.length === 0) return NO_MAIL;
+
+  // Classified before the mail is written, so the subject line can name it.
+  // Never throws: a model that is down costs the topic, not the mail.
+  const tags = await tagFeedback(env, job.feedbackId);
+
+  /*
+    Who they are, from a verified sign-in — the only thing that ever writes an
+    address onto the platform-wide respondent record. The session's own copy of
+    the identity is the fallback for a report filed before the respondent row
+    caught up with a sign-in that happened seconds earlier.
+  */
+  const identity = parseIdentity(row.respondent_identity);
+  const contact = {
+    name: row.respondent_name ?? identity?.name ?? null,
+    email: row.respondent_email ?? identity?.email ?? null,
+    phone: row.respondent_phone ?? identity?.phone ?? null,
+  };
 
   const origin = webOrigins(env)[0]!;
   const msg = feedbackNotificationEmail({
@@ -180,6 +205,11 @@ async function runFeedbackJob(
     formUrl: row.form_slug ? `${origin}/f/${row.form_slug}` : null,
     accountName: row.org_name,
     respondentId: row.respondent_id,
+    respondentName: contact.name,
+    respondentEmail: contact.email,
+    respondentPhone: contact.phone,
+    topic: feedbackTopicLabel(tags?.topic),
+    reportUrl: `${origin}/admin/feedback?report=${encodeURIComponent(job.feedbackId)}`,
     reportCount: row.report_count === null ? null : Number(row.report_count),
     answered: row.collected_count === null ? null : Number(row.collected_count),
     turns: row.turn_count === null ? null : Number(row.turn_count),
@@ -196,7 +226,8 @@ async function runFeedbackJob(
   const errors: unknown[] = [];
   for (const to of recipients) {
     try {
-      tally.record(to, await sendMail(env, { to, ...msg }));
+      // Reply-To the respondent when we know them: answering the mail answers the person.
+      tally.record(to, await sendMail(env, { to, ...msg, ...(contact.email ? { replyTo: contact.email } : {}) }));
     } catch (err) {
       console.error("feedback_mail_failed", { feedbackId: job.feedbackId, err: String(err) });
       errors.push(err);
@@ -778,3 +809,15 @@ function markdownToHtml(md: string): string {
 
 /** Re-exported so the queue consumer imports one module, not three. */
 export type { MailJob, MailMessage };
+
+/** The verified identity a session carries, tolerating a malformed or absent blob. */
+function parseIdentity(raw: string | null): { name: string | null; email: string | null; phone: string | null } | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw) as { name?: unknown; email?: unknown; phone?: unknown };
+    const str = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : null);
+    return { name: str(v.name), email: str(v.email), phone: str(v.phone) };
+  } catch {
+    return null;
+  }
+}

@@ -41,6 +41,8 @@ export interface FeedbackInput {
   respondentId: string | null;
   sessionId: string;
   formId: string | null;
+  /** The published version that was on screen, so the report stays self-describing. */
+  formVersionId: string | null;
   organizationId: string | null;
   rating: number;
   message: string | null;
@@ -85,14 +87,15 @@ export async function recordFeedback(env: Bindings, input: FeedbackInput): Promi
   const id = newFeedbackId();
   await env.DB.prepare(
     `INSERT INTO respondent_feedback
-       (id, respondent_id, session_id, form_id, organization_id, rating, message, source, user_agent, created_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
+       (id, respondent_id, session_id, form_id, form_version_id, organization_id, rating, message, source, user_agent, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
   )
     .bind(
       id,
       input.respondentId,
       input.sessionId,
       input.formId,
+      input.formVersionId,
       input.organizationId,
       input.rating,
       input.message,
@@ -102,4 +105,25 @@ export async function recordFeedback(env: Bindings, input: FeedbackInput): Promi
     )
     .run();
   return { ok: true, id };
+}
+
+/**
+ * The largest snapshot a respondent's browser may attach.
+ *
+ * A snapshot is the form's public config plus the conversation so far — a few
+ * kilobytes on a short form, tens on a long one with media. A megabyte is far
+ * past anything honest and well inside a Worker's request and memory limits, so
+ * it is a ceiling against abuse rather than a budget anybody should approach.
+ */
+export const SNAPSHOT_MAX_BYTES = 1024 * 1024;
+
+/**
+ * Where a report's snapshot lives in R2.
+ *
+ * Under the organization, like `exports/`, so deleting an account can sweep
+ * everything of theirs by prefix — the conversation belongs to their form even
+ * though the report about it belongs to us.
+ */
+export function snapshotKeyFor(orgId: string | null, feedbackId: string): string {
+  return `feedback/${orgId ?? "_none"}/${feedbackId}.json`;
 }

@@ -130,4 +130,18 @@ async function purgeOrgObjects(env: Bindings, orgId: string): Promise<void> {
   }
 
   await env.DB.prepare(`DELETE FROM files WHERE organization_id = ?`).bind(orgId).run();
+
+  /*
+    Bug-report snapshots are the one kind of object `files` does not index — they
+    are ours, not the customer's, so they are deliberately not metered against
+    their plan. But the conversation inside one is still their form and their
+    respondent's answers, so it goes when they do. Listed by prefix, which is
+    why `snapshotKeyFor` files them under the organization.
+  */
+  let cursor: string | undefined;
+  do {
+    const listed = await env.R2.list({ prefix: `feedback/${orgId}/`, limit: PAGE, cursor });
+    if (listed.objects.length > 0) await env.R2.delete(listed.objects.map((o) => o.key));
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
 }

@@ -5,7 +5,7 @@ import type { Bindings } from "../../env.js";
 import type { PlatformAdminVars } from "../../lib/platform-admin.js";
 import { invalidateEntitlements } from "../../lib/entitlements.js";
 import { signImpersonation } from "../../lib/impersonation.js";
-import { rows } from "./shared.js";
+import { audit, rows } from "./shared.js";
 
 /**
  * The console's write side — the four things that were runbook steps.
@@ -23,30 +23,6 @@ import { rows } from "./shared.js";
  */
 
 export const opsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<PlatformAdminVars> }>();
-
-async function audit(
-  c: { env: Bindings; get: (k: "platformAdminEmail" | "userId") => string | undefined },
-  orgId: string,
-  action: string,
-  meta: Record<string, unknown>,
-): Promise<void> {
-  await c.env.DB.prepare(
-    `INSERT INTO audit_logs (id, organization_id, actor_type, actor_id, actor_label, action, resource_type, resource_id, meta, created_at)
-     VALUES (?, ?, 'platform_admin', ?, ?, ?, ?, ?, ?, ?)`,
-  )
-    .bind(
-      `aud_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
-      orgId,
-      c.get("userId") ?? null,
-      c.get("platformAdminEmail") ?? "platform admin",
-      action,
-      (meta.resourceType as string) ?? null,
-      (meta.resourceId as string) ?? null,
-      JSON.stringify(meta),
-      Date.now(),
-    )
-    .run();
-}
 
 // ───────────────────────── billing repair ─────────────────────────
 

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../../env.js";
 import { requirePlatformAdmin, type PlatformAdminVars } from "../../lib/platform-admin.js";
 import { coreRouter } from "./core.js";
+import { feedbackRouter } from "./feedback.js";
 import { productRouter } from "./product.js";
 import { revenueRouter } from "./revenue.js";
 import { aiRouter } from "./ai.js";
@@ -38,6 +39,7 @@ export const adminRouter = new Hono<{ Bindings: Bindings; Variables: Partial<Pla
 adminRouter.use("/admin/*", requirePlatformAdmin);
 
 adminRouter.route("/", coreRouter);
+adminRouter.route("/", feedbackRouter);
 adminRouter.route("/", productRouter);
 adminRouter.route("/", revenueRouter);
 adminRouter.route("/", aiRouter);

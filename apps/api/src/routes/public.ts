@@ -11,7 +11,7 @@ import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
 import { completedSubmissions, openSession, type FormRow } from "../lib/open-session.js";
 import { respondentKey } from "../lib/respondent-key.js";
 import { resolveRespondent } from "../lib/respondents.js";
-import { recordFeedback, FEEDBACK_DAILY_CAP } from "../lib/feedback.js";
+import { recordFeedback, FEEDBACK_DAILY_CAP, SNAPSHOT_MAX_BYTES, snapshotKeyFor } from "../lib/feedback.js";
 import { enqueueMail } from "../lib/mail.js";
 import { canonicalZone } from "../lib/quiet-hours.js";
 import { findDeviceResumable } from "../lib/respondent-history.js";
@@ -649,10 +649,10 @@ sessionsRouter.post("/sessions/:id/feedback", zValidator("json", feedbackSchema)
 
   const body = c.req.valid("json");
   const row = await c.env.DB.prepare(
-    `SELECT form_id, organization_id, source FROM chat_sessions WHERE id = ?`,
+    `SELECT form_id, form_version_id, organization_id, source FROM chat_sessions WHERE id = ?`,
   )
     .bind(sessionId)
-    .first<{ form_id: string; organization_id: string; source: string }>();
+    .first<{ form_id: string; form_version_id: string | null; organization_id: string; source: string }>();
 
   /*
     The session object is asked rather than `submissions`, which carries the
@@ -670,6 +670,7 @@ sessionsRouter.post("/sessions/:id/feedback", zValidator("json", feedbackSchema)
     respondentId,
     sessionId,
     formId: row?.form_id ?? null,
+    formVersionId: row?.form_version_id ?? null,
     organizationId: row?.organization_id ?? null,
     rating: body.rating,
     message: message ? message : null,
@@ -702,6 +703,62 @@ sessionsRouter.post("/sessions/:id/feedback", zValidator("json", feedbackSchema)
   */
   await enqueueMail(c.env, { kind: "respondent_feedback", feedbackId: result.id });
 
+  // The id, so the browser can attach what was on screen to this report next.
+  return c.json({ ok: true, id: result.id });
+});
+
+/**
+ * What the respondent was looking at, attached to the report they just filed.
+ *
+ * A second request on purpose. The report itself is small, validated and already
+ * written by the time this runs, and the respondent has already been told it
+ * reached us. The snapshot is the part that can be large, can be blocked by an
+ * extension, can time out on a train — and none of those may cost us the words.
+ * So it arrives separately, and failing here changes nothing about the report.
+ *
+ * Only the session that filed the report may attach to it, and only once: a
+ * snapshot is evidence, and evidence that can be replaced afterwards is not.
+ *
+ * Stored as opaque JSON. It is rendered in the console through the same chat
+ * components the respondent saw — with untrusted markdown — and never parsed
+ * for meaning here, so there is nothing to validate beyond its size.
+ */
+sessionsRouter.put("/sessions/:id/feedback/:feedbackId/snapshot", async (c) => {
+  const sessionId = await requireRespondent(c);
+  if (!sessionId) return c.json({ error: { code: "unauthorized", message: "Invalid token" } }, 401);
+
+  const declared = Number(c.req.header("content-length") ?? 0);
+  if (declared > SNAPSHOT_MAX_BYTES) {
+    return c.json({ error: { code: "too_large", message: "Snapshot too large" } }, 413);
+  }
+
+  const feedbackId = c.req.param("feedbackId");
+  const report = await c.env.DB.prepare(
+    `SELECT organization_id, snapshot_key FROM respondent_feedback WHERE id = ?1 AND session_id = ?2`,
+  )
+    .bind(feedbackId, sessionId)
+    .first<{ organization_id: string | null; snapshot_key: string | null }>();
+  if (!report) return c.json({ error: { code: "not_found", message: "No such report" } }, 404);
+  if (report.snapshot_key) return c.json({ error: { code: "conflict", message: "Already attached" } }, 409);
+
+  // Content-Length is a claim, not a measurement; the body is measured too.
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  if (bytes.byteLength === 0 || bytes.byteLength > SNAPSHOT_MAX_BYTES) {
+    return c.json({ error: { code: "too_large", message: "Snapshot empty or too large" } }, 413);
+  }
+  try {
+    JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return c.json({ error: { code: "invalid", message: "Snapshot is not JSON" } }, 400);
+  }
+
+  const key = snapshotKeyFor(report.organization_id, feedbackId);
+  await c.env.R2.put(key, bytes, { httpMetadata: { contentType: "application/json" } });
+  await c.env.DB.prepare(
+    `UPDATE respondent_feedback SET snapshot_key = ?1, snapshot_bytes = ?2 WHERE id = ?3 AND snapshot_key IS NULL`,
+  )
+    .bind(key, bytes.byteLength, feedbackId)
+    .run();
   return c.json({ ok: true });
 });
 

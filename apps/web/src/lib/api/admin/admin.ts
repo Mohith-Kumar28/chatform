@@ -30,6 +30,11 @@ import type {
   GetApiAdminAiParams,
   GetApiAdminFeedback200,
   GetApiAdminFeedbackParams,
+  GetApiAdminFeedbackReports200,
+  GetApiAdminFeedbackReportsById200,
+  GetApiAdminFeedbackReportsParams,
+  GetApiAdminFeedbackStats200,
+  GetApiAdminFeedbackStatsParams,
   GetApiAdminForms200,
   GetApiAdminFormsParams,
   GetApiAdminHealth200,
@@ -44,6 +49,8 @@ import type {
   GetApiAdminRevenueParams,
   GetApiAdminUsers200,
   GetApiAdminUsersParams,
+  PatchApiAdminFeedbackReportsById200,
+  PatchApiAdminFeedbackReportsByIdBody,
   PostApiAdminAccountsByOrgIdOverrides200,
   PostApiAdminAccountsByOrgIdOverridesBody,
   PostApiAdminAccountsByOrgIdPlan200,
@@ -370,108 +377,6 @@ export function useGetApiAdminLive<TData = Awaited<ReturnType<typeof getApiAdmin
 
 
 
-export type getApiAdminFeedbackResponse200 = {
-  data: GetApiAdminFeedback200
-  status: 200
-}
-
-export type getApiAdminFeedbackResponse404 = {
-  data: void
-  status: 404
-}
-
-export type getApiAdminFeedbackResponseSuccess = (getApiAdminFeedbackResponse200) & {
-  headers: Headers;
-};
-export type getApiAdminFeedbackResponseError = (getApiAdminFeedbackResponse404) & {
-  headers: Headers;
-};
-
-export type getApiAdminFeedbackResponse = (getApiAdminFeedbackResponseSuccess | getApiAdminFeedbackResponseError)
-
-export const getGetApiAdminFeedbackUrl = (params?: GetApiAdminFeedbackParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : String(value))
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/admin/feedback?${stringifiedParams}` : `/api/admin/feedback`
-}
-
-/**
- * @summary What respondents said about the product, and how they rated it
- */
-export const getApiAdminFeedback = async (params?: GetApiAdminFeedbackParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackResponse> => {
-
-  return customFetch<getApiAdminFeedbackResponse>(getGetApiAdminFeedbackUrl(params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetApiAdminFeedbackQueryKey = (params?: GetApiAdminFeedbackParams,) => {
-    return [
-    `/api/admin/feedback`, ...(params ? [params] : [])
-    ] as const;
-    }
-
-
-export const getGetApiAdminFeedbackQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedback>>, TError = void>(params?: GetApiAdminFeedbackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedback>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackQueryKey(params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedback>>> = ({ signal }) => getApiAdminFeedback(params, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedback>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetApiAdminFeedbackQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedback>>>
-export type GetApiAdminFeedbackQueryError = void
-
-
-/**
- * @summary What respondents said about the product, and how they rated it
- */
-
-export function useGetApiAdminFeedback<TData = Awaited<ReturnType<typeof getApiAdminFeedback>>, TError = void>(
- params?: GetApiAdminFeedbackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedback>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetApiAdminFeedbackQueryOptions(params,options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
 export type getApiAdminActionsResponse200 = {
   data: GetApiAdminActions200
   status: 200
@@ -753,6 +658,599 @@ export function useGetApiAdminAccountsByOrgId<TData = Awaited<ReturnType<typeof 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetApiAdminAccountsByOrgIdQueryOptions(orgId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAdminFeedbackResponse200 = {
+  data: GetApiAdminFeedback200
+  status: 200
+}
+
+export type getApiAdminFeedbackResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackResponseSuccess = (getApiAdminFeedbackResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackResponseError = (getApiAdminFeedbackResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackResponse = (getApiAdminFeedbackResponseSuccess | getApiAdminFeedbackResponseError)
+
+export const getGetApiAdminFeedbackUrl = (params?: GetApiAdminFeedbackParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/feedback?${stringifiedParams}` : `/api/admin/feedback`
+}
+
+/**
+ * @summary What respondents said about the product, and how they rated it
+ */
+export const getApiAdminFeedback = async (params?: GetApiAdminFeedbackParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackResponse> => {
+
+  return customFetch<getApiAdminFeedbackResponse>(getGetApiAdminFeedbackUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackQueryKey = (params?: GetApiAdminFeedbackParams,) => {
+    return [
+    `/api/admin/feedback`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedback>>, TError = void>(params?: GetApiAdminFeedbackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedback>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedback>>> = ({ signal }) => getApiAdminFeedback(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedback>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedback>>>
+export type GetApiAdminFeedbackQueryError = void
+
+
+/**
+ * @summary What respondents said about the product, and how they rated it
+ */
+
+export function useGetApiAdminFeedback<TData = Awaited<ReturnType<typeof getApiAdminFeedback>>, TError = void>(
+ params?: GetApiAdminFeedbackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedback>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAdminFeedbackStatsResponse200 = {
+  data: GetApiAdminFeedbackStats200
+  status: 200
+}
+
+export type getApiAdminFeedbackStatsResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackStatsResponseSuccess = (getApiAdminFeedbackStatsResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackStatsResponseError = (getApiAdminFeedbackStatsResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackStatsResponse = (getApiAdminFeedbackStatsResponseSuccess | getApiAdminFeedbackStatsResponseError)
+
+export const getGetApiAdminFeedbackStatsUrl = (params?: GetApiAdminFeedbackStatsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/feedback/stats?${stringifiedParams}` : `/api/admin/feedback/stats`
+}
+
+/**
+ * @summary Volume, rating and clustering of respondent feedback over a period
+ */
+export const getApiAdminFeedbackStats = async (params?: GetApiAdminFeedbackStatsParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackStatsResponse> => {
+
+  return customFetch<getApiAdminFeedbackStatsResponse>(getGetApiAdminFeedbackStatsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackStatsQueryKey = (params?: GetApiAdminFeedbackStatsParams,) => {
+    return [
+    `/api/admin/feedback/stats`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackStatsQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedbackStats>>, TError = void>(params?: GetApiAdminFeedbackStatsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackStatsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedbackStats>>> = ({ signal }) => getApiAdminFeedbackStats(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedbackStats>>>
+export type GetApiAdminFeedbackStatsQueryError = void
+
+
+/**
+ * @summary Volume, rating and clustering of respondent feedback over a period
+ */
+
+export function useGetApiAdminFeedbackStats<TData = Awaited<ReturnType<typeof getApiAdminFeedbackStats>>, TError = void>(
+ params?: GetApiAdminFeedbackStatsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackStatsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAdminFeedbackReportsResponse200 = {
+  data: GetApiAdminFeedbackReports200
+  status: 200
+}
+
+export type getApiAdminFeedbackReportsResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackReportsResponseSuccess = (getApiAdminFeedbackReportsResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackReportsResponseError = (getApiAdminFeedbackReportsResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackReportsResponse = (getApiAdminFeedbackReportsResponseSuccess | getApiAdminFeedbackReportsResponseError)
+
+export const getGetApiAdminFeedbackReportsUrl = (params?: GetApiAdminFeedbackReportsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/feedback/reports?${stringifiedParams}` : `/api/admin/feedback/reports`
+}
+
+/**
+ * @summary The bug-report inbox, filtered and paged
+ */
+export const getApiAdminFeedbackReports = async (params?: GetApiAdminFeedbackReportsParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackReportsResponse> => {
+
+  return customFetch<getApiAdminFeedbackReportsResponse>(getGetApiAdminFeedbackReportsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackReportsQueryKey = (params?: GetApiAdminFeedbackReportsParams,) => {
+    return [
+    `/api/admin/feedback/reports`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackReportsQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedbackReports>>, TError = void>(params?: GetApiAdminFeedbackReportsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackReports>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackReportsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedbackReports>>> = ({ signal }) => getApiAdminFeedbackReports(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackReports>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackReportsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedbackReports>>>
+export type GetApiAdminFeedbackReportsQueryError = void
+
+
+/**
+ * @summary The bug-report inbox, filtered and paged
+ */
+
+export function useGetApiAdminFeedbackReports<TData = Awaited<ReturnType<typeof getApiAdminFeedbackReports>>, TError = void>(
+ params?: GetApiAdminFeedbackReportsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackReports>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackReportsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAdminFeedbackReportsByIdResponse200 = {
+  data: GetApiAdminFeedbackReportsById200
+  status: 200
+}
+
+export type getApiAdminFeedbackReportsByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackReportsByIdResponseSuccess = (getApiAdminFeedbackReportsByIdResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackReportsByIdResponseError = (getApiAdminFeedbackReportsByIdResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackReportsByIdResponse = (getApiAdminFeedbackReportsByIdResponseSuccess | getApiAdminFeedbackReportsByIdResponseError)
+
+export const getGetApiAdminFeedbackReportsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/reports/${id}`
+}
+
+/**
+ * @summary One bug report, with its account, form, respondent and session
+ */
+export const getApiAdminFeedbackReportsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackReportsByIdResponse> => {
+
+  return customFetch<getApiAdminFeedbackReportsByIdResponse>(getGetApiAdminFeedbackReportsByIdUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackReportsByIdQueryKey = (id: string,) => {
+    return [
+    `/api/admin/feedback/reports/${id}`
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackReportsByIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedbackReportsById>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackReportsById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackReportsByIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedbackReportsById>>> = ({ signal }) => getApiAdminFeedbackReportsById(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackReportsById>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackReportsByIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedbackReportsById>>>
+export type GetApiAdminFeedbackReportsByIdQueryError = void
+
+
+/**
+ * @summary One bug report, with its account, form, respondent and session
+ */
+
+export function useGetApiAdminFeedbackReportsById<TData = Awaited<ReturnType<typeof getApiAdminFeedbackReportsById>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackReportsById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackReportsByIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type patchApiAdminFeedbackReportsByIdResponse200 = {
+  data: PatchApiAdminFeedbackReportsById200
+  status: 200
+}
+
+export type patchApiAdminFeedbackReportsByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type patchApiAdminFeedbackReportsByIdResponseSuccess = (patchApiAdminFeedbackReportsByIdResponse200) & {
+  headers: Headers;
+};
+export type patchApiAdminFeedbackReportsByIdResponseError = (patchApiAdminFeedbackReportsByIdResponse404) & {
+  headers: Headers;
+};
+
+export type patchApiAdminFeedbackReportsByIdResponse = (patchApiAdminFeedbackReportsByIdResponseSuccess | patchApiAdminFeedbackReportsByIdResponseError)
+
+export const getPatchApiAdminFeedbackReportsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/reports/${id}`
+}
+
+/**
+ * @summary Resolve a report, mark it spam, or attach an internal note
+ */
+export const patchApiAdminFeedbackReportsById = async (id: string,
+    patchApiAdminFeedbackReportsByIdBody: PatchApiAdminFeedbackReportsByIdBody, options?: Parameters<typeof customFetch>[1]): Promise<patchApiAdminFeedbackReportsByIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<patchApiAdminFeedbackReportsByIdResponse>(getPatchApiAdminFeedbackReportsByIdUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(patchApiAdminFeedbackReportsByIdBody)
+  }
+);}
+
+
+
+
+
+export const getPatchApiAdminFeedbackReportsByIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminFeedbackReportsById>>, TError,PatchApiAdminFeedbackReportsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminFeedbackReportsById>>, TError,PatchApiAdminFeedbackReportsByIdMutationVariables, TContext> => {
+
+const mutationKey = ['patchApiAdminFeedbackReportsById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiAdminFeedbackReportsById>>, PatchApiAdminFeedbackReportsByIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  patchApiAdminFeedbackReportsById(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchApiAdminFeedbackReportsByIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiAdminFeedbackReportsById>>>
+    export type PatchApiAdminFeedbackReportsByIdMutationBody = PatchApiAdminFeedbackReportsByIdBody
+    export type PatchApiAdminFeedbackReportsByIdMutationError = void
+    export type PatchApiAdminFeedbackReportsByIdMutationVariables = {id: string;data: PatchApiAdminFeedbackReportsByIdBody}
+
+    /**
+ * @summary Resolve a report, mark it spam, or attach an internal note
+ */
+export const usePatchApiAdminFeedbackReportsById = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminFeedbackReportsById>>, TError,PatchApiAdminFeedbackReportsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchApiAdminFeedbackReportsById>>,
+        TError,
+        PatchApiAdminFeedbackReportsByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchApiAdminFeedbackReportsByIdMutationOptions(options));
+    }
+    export type getApiAdminFeedbackReportsByIdSnapshotResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getApiAdminFeedbackReportsByIdSnapshotResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackReportsByIdSnapshotResponseSuccess = (getApiAdminFeedbackReportsByIdSnapshotResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackReportsByIdSnapshotResponseError = (getApiAdminFeedbackReportsByIdSnapshotResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackReportsByIdSnapshotResponse = (getApiAdminFeedbackReportsByIdSnapshotResponseSuccess | getApiAdminFeedbackReportsByIdSnapshotResponseError)
+
+export const getGetApiAdminFeedbackReportsByIdSnapshotUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/reports/${id}/snapshot`
+}
+
+/**
+ * @summary The conversation as it stood when the report was filed
+ */
+export const getApiAdminFeedbackReportsByIdSnapshot = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackReportsByIdSnapshotResponse> => {
+
+  return customFetch<getApiAdminFeedbackReportsByIdSnapshotResponse>(getGetApiAdminFeedbackReportsByIdSnapshotUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackReportsByIdSnapshotQueryKey = (id: string,) => {
+    return [
+    `/api/admin/feedback/reports/${id}/snapshot`
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackReportsByIdSnapshotQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedbackReportsByIdSnapshot>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackReportsByIdSnapshot>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackReportsByIdSnapshotQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedbackReportsByIdSnapshot>>> = ({ signal }) => getApiAdminFeedbackReportsByIdSnapshot(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackReportsByIdSnapshot>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackReportsByIdSnapshotQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedbackReportsByIdSnapshot>>>
+export type GetApiAdminFeedbackReportsByIdSnapshotQueryError = void
+
+
+/**
+ * @summary The conversation as it stood when the report was filed
+ */
+
+export function useGetApiAdminFeedbackReportsByIdSnapshot<TData = Awaited<ReturnType<typeof getApiAdminFeedbackReportsByIdSnapshot>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackReportsByIdSnapshot>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackReportsByIdSnapshotQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
