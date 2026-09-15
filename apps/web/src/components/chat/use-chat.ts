@@ -1660,6 +1660,29 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
   const getRespondentToken = useCallback(() => sessionRef.current?.token ?? null, []);
 
   /**
+   * Tell us — not the customer whose form this is — that something is wrong.
+   *
+   * Posted on the session because the respondent has nothing else to identify
+   * themselves with, and because that is what lets the server attribute the
+   * report to the person rather than to a browser. The answer is wanted inline:
+   * the dialog has to distinguish "sent" from "you have already sent three
+   * today", and the second of those is a sentence, not a failure.
+   */
+  const sendFeedback = useCallback(
+    async (rating: number, message: string): Promise<{ ok: boolean; error?: string }> => {
+      const text = message.trim();
+      const { ok, data } = await sessionPost("feedback", {
+        rating,
+        ...(text ? { message: text } : {}),
+      });
+      if (ok) return { ok: true };
+      const err = data.error as { message?: string } | undefined;
+      return { ok: false, error: err?.message ?? "That didn't send. Check your connection and try again." };
+    },
+    [sessionPost],
+  );
+
+  /**
    * The boot screen is a decision, not a wait. See BOOT_MAX_MS.
    */
   useEffect(() => {
@@ -1822,6 +1845,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     uploadSpec,
     getUploadBase,
     getRespondentToken,
+    sendFeedback,
     send,
     sendStructured,
     sendAction,

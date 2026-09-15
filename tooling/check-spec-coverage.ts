@@ -218,6 +218,7 @@ const DASHBOARD_ONLY: Record<string, string> = {
   "/api/admin/ai": "see /api/admin/me",
   "/api/admin/health": "see /api/admin/me",
   "/api/admin/users": "see /api/admin/me",
+  "/api/admin/feedback": "see /api/admin/me — and doubly so: it is respondent-written text addressed to us",
   "/api/admin/billing-events/{id}/reprocess": "see /api/admin/me",
   "/api/admin/subscriptions/{id}/grace": "see /api/admin/me",
   "/api/admin/accounts/{orgId}/overrides": "see /api/admin/me",

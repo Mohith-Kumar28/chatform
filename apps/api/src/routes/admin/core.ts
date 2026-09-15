@@ -333,6 +333,123 @@ coreRouter.get(
   },
 );
 
+// ─────────────────────────────── feedback ───────────────────────────────
+
+const FeedbackNote = z.object({
+  id: z.string(),
+  rating: z.number(),
+  message: z.string().nullable(),
+  createdAt: z.number(),
+  /** Where it happened. Null once the form has been deleted out from under it. */
+  formId: z.string().nullable(),
+  formTitle: z.string().nullable(),
+  /** The platform-wide person, so two notes from one respondent read as one voice. */
+  respondentId: z.string().nullable(),
+  userAgent: z.string().nullable(),
+});
+
+const FeedbackResponse = z.object({
+  range: z.string(),
+  total: z.number(),
+  /** Null when nobody rated anything in the window — not zero, which is a score. */
+  average: z.number().nullable(),
+  /** Five entries, 1 to 5, including the ratings nobody picked. */
+  distribution: z.array(z.object({ rating: z.number(), count: z.number() })),
+  notes: z.array(FeedbackNote),
+});
+
+/** How many notes the card lists. Past this it stops being a read and starts being a queue. */
+const FEEDBACK_NOTES = 30;
+
+/**
+ * What respondents said about the product.
+ *
+ * The exception to the boundary the rest of this console keeps: it reads text a
+ * respondent typed. That is allowed here and nowhere else because of who the
+ * text was addressed to — this comes from the "Report a bug" link beside our
+ * own footer, which is a message to us, not an answer to somebody's question.
+ *
+ * The ratings and the notes are two different reads of the same window and both
+ * are wanted: the distribution says whether anything is wrong, the notes say
+ * what. Neither is cached — a bug report that shows up five minutes late is the
+ * one number on this console where the delay is felt.
+ */
+coreRouter.get(
+  "/admin/feedback",
+  validator("query", RangeQuery),
+  describeRoute({
+    tags: ["admin"],
+    summary: "What respondents said about the product, and how they rated it",
+    responses: {
+      200: { description: "Respondent feedback", content: { "application/json": { schema: resolver(FeedbackResponse) } } },
+      404: { description: "Not an admin" },
+    },
+  }),
+  async (c) => {
+    const range = c.req.valid("query").range as RangeKey;
+    const since = Date.now() - RANGES[range] * DAY_MS;
+
+    const [spread, recent] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT rating, COUNT(*) AS n FROM respondent_feedback WHERE created_at >= ?1 GROUP BY rating`,
+      )
+        .bind(since)
+        .all<{ rating: number; n: number }>(),
+      /*
+        Left-joined to `forms` rather than storing the title on the row: a form
+        gets renamed, and a report filed under its old name sends whoever is
+        reproducing it looking for a form that no longer goes by that. Null
+        titles are expected and rendered as such — the report outlives the form.
+      */
+      c.env.DB.prepare(
+        `SELECT fb.id, fb.rating, fb.message, fb.created_at, fb.form_id, fb.respondent_id, fb.user_agent,
+                f.title AS form_title
+           FROM respondent_feedback fb
+           LEFT JOIN forms f ON f.id = fb.form_id
+          WHERE fb.created_at >= ?1
+          ORDER BY fb.created_at DESC
+          LIMIT ${FEEDBACK_NOTES}`,
+      )
+        .bind(since)
+        .all<{
+          id: string;
+          rating: number;
+          message: string | null;
+          created_at: number;
+          form_id: string | null;
+          respondent_id: string | null;
+          user_agent: string | null;
+          form_title: string | null;
+        }>(),
+    ]);
+
+    const counts = new Map((spread.results ?? []).map((r) => [Number(r.rating), Number(r.n)]));
+    const distribution = [1, 2, 3, 4, 5].map((rating) => ({ rating, count: counts.get(rating) ?? 0 }));
+    const total = distribution.reduce((n, d) => n + d.count, 0);
+    const average =
+      total === 0
+        ? null
+        : Math.round((distribution.reduce((sum, d) => sum + d.rating * d.count, 0) / total) * 10) / 10;
+
+    return c.json({
+      range,
+      total,
+      average,
+      distribution,
+      notes: (recent.results ?? []).map((r) => ({
+        id: r.id,
+        rating: Number(r.rating),
+        message: r.message,
+        createdAt: Number(r.created_at),
+        formId: r.form_id,
+        formTitle: r.form_title,
+        respondentId: r.respondent_id,
+        userAgent: r.user_agent,
+      })),
+    });
+  },
+);
+
 /**
  * Signed up → built → published → opened → collected → kept collecting → paid.
  *

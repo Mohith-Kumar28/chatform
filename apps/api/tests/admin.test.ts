@@ -152,6 +152,7 @@ const EVERY_ADMIN_ROUTE = [
   "/api/admin/ai",
   "/api/admin/health",
   "/api/admin/users",
+  "/api/admin/feedback",
 ];
 
 describe("every route is behind the one guard", () => {

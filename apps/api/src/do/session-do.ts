@@ -954,6 +954,19 @@ export class SessionDO extends DurableObject<Bindings> {
     return ok ? (this.meta?.identity ?? null) : null;
   }
 
+  /**
+   * Who this conversation belongs to, platform-wide.
+   *
+   * Resolved once when the session opened and carried on the meta, so the
+   * feedback route can attribute a report without re-deriving a device key it
+   * was never sent. Null is a normal answer — see `lib/respondents.ts` — and
+   * the caller falls back to the session.
+   */
+  async getRespondentId(): Promise<string | null> {
+    const ok = await this.ensureLoaded();
+    return ok ? (this.meta?.respondentId ?? null) : null;
+  }
+
   // ─────────────────────── verifying one answer ───────────────────────
 
   /**

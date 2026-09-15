@@ -118,6 +118,45 @@ export type GetApiAdminLive200 = {
   events: GetApiAdminLive200EventsItem[];
 };
 
+export type GetApiAdminFeedbackParams = {
+range?: GetApiAdminFeedbackRange;
+};
+
+export type GetApiAdminFeedbackRange = typeof GetApiAdminFeedbackRange[keyof typeof GetApiAdminFeedbackRange];
+
+
+export const GetApiAdminFeedbackRange = {
+  '1d': '1d',
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+  '365d': '365d',
+} as const;
+
+export type GetApiAdminFeedback200DistributionItem = {
+  rating: number;
+  count: number;
+};
+
+export type GetApiAdminFeedback200NotesItem = {
+  id: string;
+  rating: number;
+  message: string | null;
+  createdAt: number;
+  formId: string | null;
+  formTitle: string | null;
+  respondentId: string | null;
+  userAgent: string | null;
+};
+
+export type GetApiAdminFeedback200 = {
+  range: string;
+  total: number;
+  average: number | null;
+  distribution: GetApiAdminFeedback200DistributionItem[];
+  notes: GetApiAdminFeedback200NotesItem[];
+};
+
 export type GetApiAdminActions200DunningItem = {[key: string]: unknown};
 
 export type GetApiAdminActions200FailedPaymentsItem = {[key: string]: unknown};

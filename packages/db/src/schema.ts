@@ -1408,3 +1408,62 @@ export const respondentKeys = sqliteTable(
     index("idx_respondent_keys_respondent").on(t.respondentId),
   ],
 );
+
+/**
+ * What a respondent thought of the *product*, not of the form.
+ *
+ * Every other row in this database belongs to a customer: their forms, their
+ * questions, the answers their respondents gave them. This one belongs to us.
+ * It is opened from the "Report a bug" link beside the "Powered by chatform"
+ * footer, so the person filling in somebody else's form has a way to tell the
+ * people who built the thing it is running on that a widget did not work on
+ * their phone — a report that reached nobody before this table, because the
+ * only channel pointing at us was the customer's own support inbox.
+ *
+ * Which is also why it is not scoped to an organization the way `submissions`
+ * is, and why the console may read it while it may not read an answer: this
+ * text was addressed to the platform. `form_id` rides along for triage — a bug
+ * is reproduced on the form it happened on — not to make this a customer's
+ * feed of complaints about their own questions.
+ */
+export const respondentFeedback = sqliteTable(
+  "respondent_feedback",
+  {
+    id: text("id").primaryKey(),
+    /**
+     * The person, platform-wide, as the session resolved them.
+     *
+     * Nullable, and the daily cap is keyed on the session when it is null: a
+     * browser that blocks fingerprinting hands us nothing to recognise it by,
+     * and refusing the report would silence exactly the respondents whose
+     * setup is most likely to have broken something.
+     */
+    respondentId: text("respondent_id").references(() => respondents.id, { onDelete: "set null" }),
+    /** The conversation it was sent from — the cap's fallback key, and the trail back to a transcript. */
+    sessionId: text("session_id"),
+    /** Where it happened, for reproducing it. Kept when the form is deleted, which is why it is not a foreign key. */
+    formId: text("form_id"),
+    organizationId: text("organization_id"),
+    /** 1 (unhappy) to 5 (delighted) — the face they picked, stored as the number it stands for. */
+    rating: integer("rating").notNull(),
+    /** What they typed. Optional: a face alone is still a signal. */
+    message: text("message"),
+    /** `chat` | `embed` — mirrors `chat_sessions.source`. */
+    source: text("source").notNull().default("chat"),
+    /**
+     * The browser string, verbatim.
+     *
+     * The single most useful line in a bug report and the one nobody thinks to
+     * include. Never parsed here; the console prints it as it arrived.
+     */
+    userAgent: text("user_agent"),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [
+    // The console reads newest-first over a window, and nothing else.
+    index("idx_respondent_feedback_created").on(t.createdAt),
+    // The daily cap, both halves of it: one lookup rather than a scan of the table.
+    index("idx_respondent_feedback_respondent").on(t.respondentId, t.createdAt),
+    index("idx_respondent_feedback_session").on(t.sessionId, t.createdAt),
+  ],
+);

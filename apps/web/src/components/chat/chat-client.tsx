@@ -34,6 +34,7 @@ import { forgetValue, rememberValue, suggestionsFor } from "./respondent-profile
 import { QuestionAffordance } from "./question-affordance";
 import { QuestionMedia } from "./question-media";
 import { ChatBoot } from "./chat-boot";
+import { FeedbackDialog } from "./feedback-dialog";
 import { ClosingNotice } from "./closing-notice";
 import {
   autoSubmitTick,
@@ -112,6 +113,15 @@ export function ChatClient({
    * back — after an edit, after a reconnect — would be arguing with them.
    */
   const [autoSubmitOff, setAutoSubmitOff] = useState(false);
+
+  /**
+   * The "Report a bug" panel, opened from the footer.
+   *
+   * State here rather than inside the footer line: the panel is fixed to the
+   * viewport and outlives the footer, which is unmounted the moment the
+   * conversation reaches its ending.
+   */
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -756,15 +766,46 @@ export function ChatClient({
               config={config}
             />
           </div>
+          {/*
+            The only line on this page that is ours, now carrying the only
+            control that is ours.
+
+            A respondent who hits a bug in the software — a picker that will not
+            open, a chip that does nothing — has until now had exactly one place
+            to report it: the customer whose form it is, who cannot fix it and
+            mostly cannot forward it. This sits where the attribution already
+            sits, at the same weight, because it is the same fact: this page is
+            running somebody else's software, and here is how to tell them.
+
+            It rides on `brandingHidden` deliberately. An account that pays to
+            take our name off their form has taken our name off their form;
+            leaving a link that says "chatform" underneath would put it back.
+          */}
           {!config.brandingHidden && (
-            <p className="pb-2 text-center text-[0.6875rem] opacity-40">
-              Powered by{" "}
-              <a href="https://chatform.in" target="_blank" rel="noreferrer" className="underline">
-                chatform
-              </a>
+            <p className="flex flex-wrap items-center justify-center gap-x-2 pb-2 text-center text-[0.6875rem]">
+              <span className="opacity-40">
+                Powered by{" "}
+                <a href="https://chatform.in" target="_blank" rel="noreferrer" className="underline">
+                  chatform
+                </a>
+              </span>
+              <span className="opacity-25" aria-hidden>
+                ·
+              </span>
+              <button
+                type="button"
+                onClick={() => setFeedbackOpen(true)}
+                className="underline opacity-40 transition-opacity hover:opacity-90"
+              >
+                Report a bug
+              </button>
             </p>
           )}
         </footer>
+      )}
+
+      {feedbackOpen && (
+        <FeedbackDialog onClose={() => setFeedbackOpen(false)} onSubmit={chat.sendFeedback} />
       )}
     </div>
   );

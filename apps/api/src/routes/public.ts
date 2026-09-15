@@ -11,6 +11,7 @@ import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
 import { completedSubmissions, openSession, type FormRow } from "../lib/open-session.js";
 import { respondentKey } from "../lib/respondent-key.js";
 import { resolveRespondent } from "../lib/respondents.js";
+import { recordFeedback, FEEDBACK_DAILY_CAP } from "../lib/feedback.js";
 import { canonicalZone } from "../lib/quiet-hours.js";
 import { findDeviceResumable } from "../lib/respondent-history.js";
 import { reopenAbandonedResponse } from "../lib/submissions.js";
@@ -611,6 +612,81 @@ sessionsRouter.post("/sessions/:id/followup-optout", async (c) => {
   await c.env.DB.prepare(`UPDATE chat_sessions SET followup_opt_out = 1 WHERE id = ?`)
     .bind(sessionId)
     .run();
+  return c.json({ ok: true });
+});
+
+const feedbackSchema = z.object({
+  /** The face they picked: 1 is unhappy, 5 is delighted. */
+  rating: z.number().int().min(1).max(5),
+  /**
+   * What they typed, if anything.
+   *
+   * Optional, because a face on its own is already a signal and asking for a
+   * sentence before the form will accept the tap is how you get no taps. The
+   * ceiling is generous: somebody who has found a bug worth describing should
+   * not be truncated mid-repro.
+   */
+  message: z.string().max(2000).optional(),
+});
+
+/**
+ * "Report a bug" — the respondent talking to us, not to the customer.
+ *
+ * The one write in this file that is not about the form. It hangs off the
+ * session for the same reason every other route here does: the respondent has
+ * no account and never will, and the respondent token is the only thing on that
+ * page that proves anything. That also gives the report its attribution for
+ * free — the session knows who this is, platform-wide, from the moment it
+ * opened.
+ *
+ * `429` when they have had their three for the day. See `FEEDBACK_DAILY_CAP`
+ * for why the cap exists and why it is a cap rather than a rate limit.
+ */
+sessionsRouter.post("/sessions/:id/feedback", zValidator("json", feedbackSchema), async (c) => {
+  const sessionId = await requireRespondent(c);
+  if (!sessionId) return c.json({ error: { code: "unauthorized", message: "Invalid token" } }, 401);
+
+  const body = c.req.valid("json");
+  const row = await c.env.DB.prepare(
+    `SELECT form_id, organization_id, source FROM chat_sessions WHERE id = ?`,
+  )
+    .bind(sessionId)
+    .first<{ form_id: string; organization_id: string; source: string }>();
+
+  /*
+    The session object is asked rather than `submissions`, which carries the
+    same id: the response row is created lazily by the first answer, and
+    somebody who opens a form, hits a bug on question one and reports it has no
+    row to be attributed from. The object is already awake — they are looking
+    at a conversation it is running.
+  */
+  const respondentId = await stub(c.env, sessionId)
+    .getRespondentId()
+    .catch(() => null);
+
+  const message = body.message?.trim();
+  const result = await recordFeedback(c.env, {
+    respondentId,
+    sessionId,
+    formId: row?.form_id ?? null,
+    organizationId: row?.organization_id ?? null,
+    rating: body.rating,
+    message: message ? message : null,
+    source: row?.source ?? "chat",
+    userAgent: c.req.header("user-agent") ?? null,
+  });
+
+  if (!result.ok) {
+    return c.json(
+      {
+        error: {
+          code: "feedback_capped",
+          message: `Thanks — you've already sent ${FEEDBACK_DAILY_CAP} notes today. Try again tomorrow.`,
+        },
+      },
+      429,
+    );
+  }
   return c.json({ ok: true });
 });
 

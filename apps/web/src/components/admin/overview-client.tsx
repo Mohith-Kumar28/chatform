@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { KpiTile } from "./kpi-tile";
 import { ActionQueue } from "./action-queue";
 import { LiveActivity } from "./live-activity";
+import { FeedbackCard } from "./feedback-card";
 import { COMPARED_TO, RANGE_DAYS, RangePicker, useRange } from "./range-picker";
 import { apiData } from "@/lib/api/payload";
 import { money, usd, relativeDay } from "./format";
@@ -270,6 +271,16 @@ export function OverviewClient() {
           />
         </ChartCard>
       </div>
+
+      {/*
+        The only words on this page, placed where the numbers stop.
+
+        Above it is everything the product measured about itself; this is the
+        one panel where somebody outside the company says something. It sits
+        directly before the action queue on purpose — a bug report is work, and
+        it should be read in the same scroll as the rest of the work.
+      */}
+      <FeedbackCard range={range} />
 
       <div>
         <div className="mb-3 flex items-baseline justify-between gap-3">
