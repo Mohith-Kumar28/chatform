@@ -1,13 +1,14 @@
 "use client";
 
-import { Angry, Frown, Laugh, Meh, Smile, type LucideIcon } from "lucide-react";
-import { FEEDBACK_LABELS } from "@repo/form-schema";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { useGetApiAdminFeedback } from "@/lib/api/admin/admin";
 import { ChartCard, Empty } from "@/components/charts/chart-kit";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiData } from "@/lib/api/payload";
 import { relativeTime } from "@/components/forms/form-card";
 import type { Range } from "./range-picker";
+import { faceFor } from "./feedback-faces";
 
 /**
  * What the people filling in the forms think of the thing running them.
@@ -43,21 +44,6 @@ interface Feedback {
   notes: Note[];
 }
 
-/**
- * The same five faces the respondent picked from, drawn the same way.
- *
- * Reusing the sentiment scale rather than printing "4/5": the person reading
- * this console and the person who tapped the face should be looking at the same
- * object, and a number needs its own legend before it means anything.
- */
-const FACES: Record<number, { label: string; Icon: LucideIcon; color: string }> = {
-  1: { label: FEEDBACK_LABELS[1], Icon: Angry, color: "var(--destructive)" },
-  2: { label: FEEDBACK_LABELS[2], Icon: Frown, color: "var(--destructive)" },
-  3: { label: FEEDBACK_LABELS[3], Icon: Meh, color: "var(--warning)" },
-  4: { label: FEEDBACK_LABELS[4], Icon: Smile, color: "var(--success)" },
-  5: { label: FEEDBACK_LABELS[5], Icon: Laugh, color: "var(--success)" },
-};
-
 export function FeedbackCard({ range }: { range: Range }) {
   const { data, isPending } = useGetApiAdminFeedback({ range });
   const fb = apiData<Feedback>(data);
@@ -76,11 +62,21 @@ export function FeedbackCard({ range }: { range: Range }) {
       subtitle="Sent from the “Report a bug” link under the chat footer — about chatform, not about the form."
       hint="Only forms still showing our footer carry the link, so this is the free and starter surface. The rating is the face they picked; a note is optional, so a report with no words is still counted in the bars."
       aside={
-        isPending || total === 0 ? null : (
-          <span className="text-caption text-muted-foreground">
-            {fb?.average?.toFixed(1)} avg · {total.toLocaleString()} {total === 1 ? "report" : "reports"}
-          </span>
-        )
+        /*
+          The way into the page where the work happens. This card stays a summary
+          — a week at a glance — and everything it cannot do (open one, filter,
+          resolve, answer) is one click away rather than missing.
+        */
+        <span className="text-caption text-muted-foreground flex items-center gap-3">
+          {!isPending && total > 0 && (
+            <span>
+              {fb?.average?.toFixed(1)} avg · {total.toLocaleString()} {total === 1 ? "report" : "reports"}
+            </span>
+          )}
+          <Link href="/admin/feedback" className="text-foreground inline-flex items-center gap-1 hover:underline">
+            Open the inbox <ArrowRight className="size-3" />
+          </Link>
+        </span>
       }
     >
       {isPending ? (
@@ -92,7 +88,7 @@ export function FeedbackCard({ range }: { range: Range }) {
           {/* The shape of the week, highest rating first — good news reads top-down. */}
           <ul className="space-y-2 lg:col-span-2">
             {[...distribution].reverse().map((d) => {
-              const face = FACES[d.rating]!;
+              const face = faceFor(d.rating);
               return (
                 <li key={d.rating} className="flex items-center gap-2.5">
                   <face.Icon className="size-4 shrink-0" style={{ color: face.color }} aria-hidden />
@@ -120,9 +116,13 @@ export function FeedbackCard({ range }: { range: Range }) {
           */}
           <ul className="max-h-80 space-y-2 overflow-y-auto lg:col-span-3">
             {notes.map((n) => {
-              const face = FACES[n.rating] ?? FACES[3]!;
+              const face = faceFor(n.rating);
               return (
-                <li key={n.id} className="border-border rounded-lg border p-3">
+                <li key={n.id}>
+                  <Link
+                    href={`/admin/feedback?report=${encodeURIComponent(n.id)}`}
+                    className="border-border hover:bg-muted/50 block rounded-lg border p-3 transition-colors"
+                  >
                   <div className="flex items-center gap-2">
                     <face.Icon className="size-4 shrink-0" style={{ color: face.color }} aria-label={face.label} />
                     <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs">
@@ -139,6 +139,7 @@ export function FeedbackCard({ range }: { range: Range }) {
                   ) : (
                     <p className="text-muted-foreground mt-1.5 text-sm italic">Rating only, no note.</p>
                   )}
+                  </Link>
                 </li>
               );
             })}

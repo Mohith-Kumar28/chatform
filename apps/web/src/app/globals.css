@@ -117,6 +117,26 @@
   --warning-foreground: oklch(0.24 0.03 60);
   --warning-soft: oklch(0.965 0.045 85);
   --warning-soft-foreground: oklch(0.4 0.1 65);
+
+  /*
+    The five faces of a bug report: terrible, bad, okay, good, great.
+
+    Red → orange → yellow → green → bright green, by request — and those four hues
+    are close to indistinguishable for a protanope when they differ by hue alone.
+    So neighbours alternate in lightness as well (L .48 / .64 / .77 / .56 / .72),
+    which is what carries them apart: validated with the dataviz palette checker
+    against the card surface — lightness band, chroma floor, adjacent-pair CVD ΔE
+    ≥ 12.9 and a normal-vision floor ≥ 16, all passing.
+
+    Amber and bright green sit under 3:1 on white. That is a WARN, and it obliges
+    what every use already does: the colour never appears without its face and
+    its word. Never text colour — values and labels stay in ink.
+  */
+  --rating-1: #b00c15;
+  --rating-2: #d66919;
+  --rating-3: #e0ab22;
+  --rating-4: #2b8a36;
+  --rating-5: #00c47f;
   --info: oklch(0.62 0.135 250);
   --info-foreground: oklch(0.995 0 0);
   --info-soft: oklch(0.955 0.03 250);
@@ -412,6 +432,19 @@
   --warning-foreground: oklch(0.22 0.03 60);
   --warning-soft: oklch(0.32 0.05 78);
   --warning-soft-foreground: oklch(0.9 0.09 82);
+
+  /*
+    Re-stepped for the dark card, not flipped. Passes CVD separation, the
+    normal-vision floor, the chroma floor and full 3:1 contrast; it sits above the
+    checker's dark lightness band (L .48–.67) on three steps, knowingly. That band
+    keeps categorical series at equal weight, which is not this scale's job — and
+    the only in-band yellows are browns that no longer read as yellow at all.
+  */
+  --rating-1: #db423c;
+  --rating-2: #f98942;
+  --rating-3: #ffcf53;
+  --rating-4: #4ea954;
+  --rating-5: #45eca4;
   --info: oklch(0.7 0.13 245);
   --info-foreground: oklch(0.19 0.02 60);
   --info-soft: oklch(0.29 0.05 245);

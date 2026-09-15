@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { RATING_RAMP } from "./rating-ramp";
 import { THEME_DEFAULT_INK, type ThemeDoc } from "@repo/form-schema";
 import {
   PatternDef,
@@ -179,6 +180,15 @@ export function chatThemeVars(theme: ThemeDoc, seed?: string | null): CSSPropert
      */
     "--cf-success": darkSurface ? "oklch(0.8 0.15 155)" : "oklch(0.52 0.13 152)",
     "--cf-warning": darkSurface ? "oklch(0.84 0.14 80)" : "oklch(0.56 0.13 62)",
+    /*
+      The rating faces in the bug-report panel. Fixed hues for the same reason
+      as the two above — a sentiment scale borrowed from the author's accent
+      would make "terrible" the brand colour on half the forms — stepped for the
+      form's own background rather than the viewer's system theme.
+    */
+    ...Object.fromEntries(
+      (darkSurface ? RATING_RAMP.dark : RATING_RAMP.light).map((c, i) => [`--cf-rating-${i + 1}`, c]),
+    ),
     "--cf-chip-bg": theme.surface,
     "--cf-chip-border": shift(theme.text, 0.82, darkSurface ? "dark" : "light"),
     /*

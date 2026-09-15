@@ -1669,17 +1669,35 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
    * today", and the second of those is a sentence, not a failure.
    */
   const sendFeedback = useCallback(
-    async (rating: number, message: string): Promise<{ ok: boolean; error?: string }> => {
+    async (rating: number, message: string, snapshot?: unknown): Promise<{ ok: boolean; error?: string }> => {
       const text = message.trim();
       const { ok, data } = await sessionPost("feedback", {
         rating,
         ...(text ? { message: text } : {}),
       });
-      if (ok) return { ok: true };
+      if (ok) {
+        /*
+          What was on screen follows the report, never ahead of it and never
+          instead of it. Not awaited: the respondent has already been told it
+          reached us, and a snapshot that is slow, blocked by an extension or
+          refused for size must not hold that sentence hostage. A failure here is
+          silence — the report is already written and the founders already mailed.
+        */
+        const session = sessionRef.current;
+        const id = typeof data.id === "string" ? data.id : null;
+        if (snapshot && session && id) {
+          void fetch(`${apiOrigin}/p/sessions/${session.sessionId}/feedback/${id}/snapshot`, {
+            method: "PUT",
+            headers: { "content-type": "application/json", "x-respondent-token": session.token },
+            body: JSON.stringify(snapshot),
+          }).catch(() => {});
+        }
+        return { ok: true };
+      }
       const err = data.error as { message?: string } | undefined;
       return { ok: false, error: err?.message ?? "That didn't send. Check your connection and try again." };
     },
-    [sessionPost],
+    [sessionPost, apiOrigin],
   );
 
   /**

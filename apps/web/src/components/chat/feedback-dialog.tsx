@@ -245,20 +245,31 @@ export function FeedbackDialog({
                     onClick={() => setRating(value)}
                     aria-label={label}
                     aria-pressed={on}
+                    /*
+                      Each face wears its own step of the rating ramp — red for
+                      terrible through bright green for great — so the scale reads
+                      as a scale before a word is read. Muted until hovered, full
+                      once picked, and the picked one gets a wash and an edge of
+                      the same colour rather than the form's accent: the accent is
+                      the author's brand, and "terrible" in the brand colour says
+                      something nobody meant.
+                    */
+                    style={
+                      {
+                        "--face": `var(--cf-rating-${value})`,
+                        color: "var(--face)",
+                      } as React.CSSProperties
+                    }
                     className={cn(
                       "flex flex-1 flex-col items-center gap-1 rounded-xl border px-1 py-2.5",
                       "transition-[background-color,border-color,transform,opacity] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
                       "active:scale-[0.96] motion-reduce:active:scale-100",
                       on
-                        ? "border-[var(--cf-accent)] bg-[color-mix(in_oklch,var(--cf-accent)_12%,var(--cf-chip-bg))]"
-                        : "border-transparent opacity-45 hover:opacity-100",
+                        ? "border-[var(--face)] bg-[color-mix(in_oklch,var(--face)_14%,var(--cf-chip-bg))]"
+                        : "border-transparent opacity-50 hover:opacity-100",
                     )}
                   >
-                    <Icon
-                      className="size-7"
-                      strokeWidth={1.75}
-                      style={on ? { color: "var(--cf-accent)" } : undefined}
-                    />
+                    <Icon className="size-7" strokeWidth={on ? 2 : 1.75} />
                   </button>
                 );
               })}
@@ -281,6 +292,16 @@ export function FeedbackDialog({
                 "placeholder:opacity-45 focus:border-[var(--cf-accent)] focus:outline-none",
               )}
             />
+
+            {/*
+              Said, not buried in a policy. The screen is attached so we can see
+              what went wrong, and the respondent — who is using somebody else's
+              form, and never agreed to anything of ours — should not find that
+              out later.
+            */}
+            <p className="mt-2 text-xs opacity-50">
+              A copy of this conversation is attached so we can see what you saw.
+            </p>
 
             {error && (
               <p className="mt-2 text-sm" style={{ color: "var(--cf-warning)" }}>

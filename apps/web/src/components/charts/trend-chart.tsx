@@ -69,7 +69,12 @@ export function TrendChart({
   /** `YYYY-MM-DD`, oldest first. */
   days: string[];
   series: TrendSeries[];
-  data: Record<string, number[]>;
+  /**
+   * One value per day. `null` is a day with nothing to measure — drawn as a gap,
+   * never as zero. That matters for a series that is an average: a quiet Tuesday
+   * with no bug reports did not have an average rating of 0, it had none.
+   */
+  data: Record<string, (number | null)[]>;
   height?: number;
   /** Draw a 7-day moving average for this series key. Ignored under 7 points. */
   averageOf?: string;
@@ -83,17 +88,21 @@ export function TrendChart({
   const withAverage = averageOf && days.length >= 7 ? averageOf : undefined;
 
   const rows = useMemo(() => {
-    const avg = withAverage ? movingAverage(data[withAverage] ?? [], 7) : null;
+    const avg = withAverage ? movingAverage((data[withAverage] ?? []).map((v) => v ?? 0), 7) : null;
     return days.map((date, i) => {
       const row: Record<string, string | number | null> = { date };
-      for (const s of series) row[s.key] = data[s.key]?.[i] ?? 0;
+      // `undefined` is a short array and reads as zero; `null` is a real gap and stays one.
+      for (const s of series) {
+        const v = data[s.key]?.[i];
+        row[s.key] = v === undefined ? 0 : v;
+      }
       if (avg) row.__avg = avg[i] ?? null;
       return row;
     });
   }, [days, series, data, withAverage]);
 
-  const empty = series.every((s) => (data[s.key] ?? []).every((v) => v === 0));
-  const peak = Math.max(...series.flatMap((s) => data[s.key] ?? [0]), 0);
+  const empty = series.every((s) => (data[s.key] ?? []).every((v) => v === 0 || v === null));
+  const peak = Math.max(...series.flatMap((s) => (data[s.key] ?? [0]).map((v) => v ?? 0)), 0);
   const fractional = peak < 10;
 
   /**

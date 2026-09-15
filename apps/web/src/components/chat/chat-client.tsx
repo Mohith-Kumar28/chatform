@@ -35,6 +35,7 @@ import { QuestionAffordance } from "./question-affordance";
 import { QuestionMedia } from "./question-media";
 import { ChatBoot } from "./chat-boot";
 import { FeedbackDialog } from "./feedback-dialog";
+import { captureSnapshot } from "./chat-snapshot";
 import { ClosingNotice } from "./closing-notice";
 import {
   autoSubmitTick,
@@ -857,7 +858,31 @@ export function ChatClient({
       {feedbackOpen && (
         <FeedbackDialog
           onClose={() => setFeedbackOpen(false)}
-          onSubmit={chat.sendFeedback}
+          /*
+            The screen is frozen at the moment of sending, not the moment the
+            panel opened: a respondent who opens it, goes back to try the broken
+            thing once more, and then sends, should attach what they saw last.
+          */
+          onSubmit={(rating, message) =>
+            chat.sendFeedback(
+              rating,
+              message,
+              captureSnapshot({
+                config,
+                messages: chat.messages,
+                question: chat.question,
+                review: chat.review,
+                ending: chat.ending,
+                submitted: chat.submitted,
+                auth: chat.auth,
+                verify: chat.verify,
+                status: chat.status,
+                error: chat.error,
+                thinking: chat.thinking,
+                validationHint: chat.validationHint,
+              }),
+            )
+          }
           // On a white-labelled form the panel explains who reads this without
           // naming us — see the footer comment above.
           named={!config.brandingHidden}
@@ -867,7 +892,12 @@ export function ChatClient({
   );
 }
 
-function ChatHeader({
+/**
+ * Exported for the console's bug-report replay, which draws the header a
+ * respondent saw from their snapshot. One component, two callers — a second copy
+ * drawn for the console is how the replay would drift from the page it replays.
+ */
+export function ChatHeader({
   title,
   brandName,
   logoUrl,
@@ -983,7 +1013,8 @@ function ChatHeader({
  * object for the message that changed, so identity comparison is enough to
  * leave every other bubble alone.
  */
-const Bubble = memo(function Bubble({
+/** Exported for the console's bug-report replay — see `ChatHeader`. */
+export const Bubble = memo(function Bubble({
   message,
   canEdit,
   onEdit,
