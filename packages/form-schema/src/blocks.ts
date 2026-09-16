@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { boundedString, safeUrl, storedUrl, storedUrlOptional } from "@repo/guard";
 import { ConditionGroup } from "./conditions";
 import { NanoId, RefString, HiddenFieldName } from "./ids";
 import { IdentityFieldSetting } from "./identity-fields";
@@ -42,12 +43,12 @@ export type BlockType = (typeof BLOCK_TYPES)[number];
  */
 export const AgentHints = z.object({
   /** "casual, mention it's optional" */
-  askStyle: z.string().max(500).optional(),
+  askStyle: boundedString(500).optional(),
   /** What to say when the respondent refuses or gives something unusable. */
-  retryHint: z.string().max(500).optional(),
+  retryHint: boundedString(500).optional(),
   /** The answer to "why do you need this?" */
-  whyWeAsk: z.string().max(500).optional(),
-  examples: z.array(z.string().max(200)).max(5).default([]),
+  whyWeAsk: boundedString(500).optional(),
+  examples: z.array(boundedString(200)).max(5).default([]),
 });
 export type AgentHints = z.output<typeof AgentHints>;
 
@@ -63,22 +64,27 @@ export const BlockMedia = z.object({
   kind: z.enum(["image", "video", "file"]),
   /** R2 object key, when the asset was uploaded here. */
   key: z.string().max(500).nullable().default(null),
-  /** Direct URL, when the builder pasted one. */
-  url: z.string().max(1000).nullable().default(null),
-  filename: z.string().max(300).optional(),
-  mime: z.string().max(120).optional(),
+  /**
+   * Direct URL, when the builder pasted one.
+   *
+   * This was `z.string().max(1000)` — a plain string, no `.url()` at all — and
+   * it is rendered as an `<img src>`, a `<video src>` and a download `href`.
+   */
+  url: storedUrl(1000).default(null),
+  filename: boundedString(300).optional(),
+  mime: boundedString(120).optional(),
   sizeBytes: z.number().int().min(0).optional(),
   /** Alt text for images — required for the question to be accessible. */
-  alt: z.string().max(300).optional(),
-  caption: z.string().max(300).optional(),
+  alt: boundedString(300).optional(),
+  caption: boundedString(300).optional(),
 });
 export type BlockMedia = z.output<typeof BlockMedia>;
 
 const BlockBase = {
   id: NanoId,
   ref: RefString,
-  title: z.string().max(2000),
-  description: z.string().max(5000).optional(),
+  title: boundedString(2000),
+  description: boundedString(5000).optional(),
   required: z.boolean().default(false),
   /** When defined and evaluates false, block is skipped deterministically. */
   visibility: ConditionGroup.nullable().default(null),
@@ -104,20 +110,20 @@ const BlockBase = {
   identityField: IdentityFieldSetting.optional(),
 
   /** Label on the advance control in non-conversational renderings and widgets. */
-  buttonLabel: z.string().max(60).optional(),
+  buttonLabel: boundedString(60).optional(),
 };
 
 const Option = z.object({
   id: NanoId,
-  label: z.string().min(1).max(500),
-  description: z.string().max(1000).optional(),
+  label: boundedString(500).min(1),
+  description: boundedString(1000).optional(),
   image_key: z.string().nullable().default(null),
   score: z.number().optional(),
 });
 export type Option = z.infer<typeof Option>;
 
-const MatrixColumn = z.object({ id: NanoId, label: z.string().min(1).max(300) });
-const MatrixRow = z.object({ id: NanoId, label: z.string().min(1).max(300) });
+const MatrixColumn = z.object({ id: NanoId, label: boundedString(300).min(1) });
+const MatrixRow = z.object({ id: NanoId, label: boundedString(300).min(1) });
 
 /**
  * Refuse an answer another respondent has already given.
@@ -340,18 +346,18 @@ export type GroupFieldKind = (typeof GROUP_FIELD_KINDS)[number];
 export const GroupField = z.object({
   id: NanoId,
   key: z.string().regex(/^[a-z][a-z0-9_]{0,30}$/, "key must be lowercase snake_case"),
-  label: z.string().min(1).max(200),
+  label: boundedString(200).min(1),
   kind: GroupFieldKind,
   /** Required *within an entry* — an entry that exists must fill it in. */
   required: z.boolean().default(false),
-  placeholder: z.string().max(200).optional(),
+  placeholder: boundedString(200).optional(),
   /**
    * `short_text` only — the same regular expression a standalone short text
    * block takes, applied per cell by `groupFieldBlock`. A column of USNs or
    * order numbers has a shape, and stating it here is the difference between
    * catching a typo in the box and catching it in the export.
    */
-  pattern: z.string().max(500).optional(),
+  pattern: boundedString(500).optional(),
   /** `single_select` only; ignored by every other kind. */
   options: z.array(Option).max(50).default([]),
   /** `number` only. */
@@ -369,16 +375,16 @@ export const GroupField = z.object({
 export type GroupField = z.output<typeof GroupField>;
 
 export const Block = z.discriminatedUnion("type", [
-  z.object({ ...BlockBase, type: z.literal("welcome"), buttonLabel: z.string().max(60).default("Start") }),
-  z.object({ ...BlockBase, type: z.literal("statement"), buttonLabel: z.string().max(60).default("Continue") }),
+  z.object({ ...BlockBase, type: z.literal("welcome"), buttonLabel: boundedString(60).default("Start") }),
+  z.object({ ...BlockBase, type: z.literal("statement"), buttonLabel: boundedString(60).default("Continue") }),
   z.object({
     ...BlockBase,
     type: z.literal("short_text"),
     unique: Unique,
     minLength: z.number().int().min(0).max(500).default(0),
     maxLength: z.number().int().min(1).max(500).default(500),
-    pattern: z.string().max(500).optional(),
-    placeholder: z.string().max(200).optional(),
+    pattern: boundedString(500).optional(),
+    placeholder: boundedString(200).optional(),
   }),
   z.object({
     ...BlockBase,
@@ -386,7 +392,7 @@ export const Block = z.discriminatedUnion("type", [
     minLength: z.number().int().min(0).max(5000).default(0),
     maxLength: z.number().int().min(1).max(5000).default(2000),
     aiQualityCheck: z.boolean().default(false),
-    placeholder: z.string().max(200).optional(),
+    placeholder: boundedString(200).optional(),
   }),
   z.object({
     ...BlockBase,
@@ -436,8 +442,8 @@ export const Block = z.discriminatedUnion("type", [
   z.object({
     ...BlockBase,
     type: z.literal("yes_no"),
-    yesLabel: z.string().max(60).default("Yes"),
-    noLabel: z.string().max(60).default("No"),
+    yesLabel: boundedString(60).default("Yes"),
+    noLabel: boundedString(60).default("No"),
   }),
   z.object({
     ...BlockBase,
@@ -473,16 +479,16 @@ export const Block = z.discriminatedUnion("type", [
   z.object({
     ...BlockBase,
     type: z.literal("nps"),
-    labelLow: z.string().max(100).default("Not likely"),
-    labelHigh: z.string().max(100).default("Extremely likely"),
+    labelLow: boundedString(100).default("Not likely"),
+    labelHigh: boundedString(100).default("Extremely likely"),
   }),
   z.object({
     ...BlockBase,
     type: z.literal("opinion_scale"),
     steps: z.number().int().min(2).max(11).default(10),
     startAt: z.union([z.literal(0), z.literal(1)]).default(1),
-    labelLow: z.string().max(100).optional(),
-    labelHigh: z.string().max(100).optional(),
+    labelLow: boundedString(100).optional(),
+    labelHigh: boundedString(100).optional(),
   }),
   z.object({
     ...BlockBase,
@@ -520,18 +526,31 @@ export const Block = z.discriminatedUnion("type", [
   z.object({
     ...BlockBase,
     type: z.literal("payment"),
-    method: z.enum(["link", "upi"]).default("link"),
+    /**
+     * `.catch("link")` because there are stored documents this enum refuses.
+     *
+     * An earlier version of this field allowed `"gateway"`, and documents
+     * written then are still in the database — six of them in the local one.
+     * Nothing in the codebase writes that value any more and no migration maps
+     * it, so `readFormDoc` threw on every one of them: not a form with a
+     * wrong payment method, a form that could not be served at all. Found by
+     * parsing every stored document against this schema.
+     *
+     * Falling back is the same rule the theme colours and the stored URLs
+     * follow — a document already published must keep loading.
+     */
+    method: z.enum(["link", "upi"]).default("link").catch("link"),
     amountMode: z.enum(["fixed", "variable"]).default("fixed"),
     amount: z.number().min(0).optional(),
     amountVariable: z.string().optional(),
     currency: z.string().length(3).default("USD"),
     /** `link`: the checkout page. Optional in the schema so a half-built block still saves; lint requires it to publish. */
-    url: z.string().url().max(500).optional(),
+    url: storedUrlOptional(500),
     /** `upi`: the payee VPA, e.g. "acme@okhdfcbank". */
-    upiId: z.string().max(120).optional(),
+    upiId: boundedString(120).optional(),
     /** `upi`: the name UPI apps show the payer. Falls back to the form's name. */
-    upiPayeeName: z.string().max(120).optional(),
-    description: z.string().max(500).optional(),
+    upiPayeeName: boundedString(120).optional(),
+    description: boundedString(500).optional(),
   }),
   /**
    * Booking happens on whatever the builder already uses — Cal.com, Calendly,
@@ -542,7 +561,9 @@ export const Block = z.discriminatedUnion("type", [
     ...BlockBase,
     type: z.literal("scheduling"),
     provider: z.literal("external").default("external"),
-    url: z.string().url().max(500),
+    // Required, so a refused URL becomes an empty string rather than a
+    // missing field: the runtime already treats a falsy url as "no link".
+    url: safeUrl(500).catch(""),
   }),
   z.object({
     ...BlockBase,
@@ -600,7 +621,7 @@ export const Block = z.discriminatedUnion("type", [
     type: z.literal("field_group"),
     fields: z.array(GroupField).min(1).max(10),
     /** What one entry is called, in the singular: "Team member", "Guest". */
-    itemLabel: z.string().min(1).max(60).default("Entry"),
+    itemLabel: boundedString(60).min(1).default("Entry"),
     /** How many rows are offered before they add any. Never fewer than one. */
     minEntries: z.number().int().min(1).max(20).default(1),
     maxEntries: z.number().int().min(1).max(20).default(5),
@@ -623,11 +644,11 @@ export const Block = z.discriminatedUnion("type", [
   z.object({
     ...BlockBase,
     type: z.literal("legal_consent"),
-    consentText: z.string().min(1).max(10000),
+    consentText: boundedString(10000).min(1),
     /** Offer an explicit refusal, so declining is an answer and not a dead end. */
     allowDecline: z.boolean().default(false),
-    agreeLabel: z.string().max(60).default("I agree"),
-    declineLabel: z.string().max(60).default("I do not agree"),
+    agreeLabel: boundedString(60).default("I agree"),
+    declineLabel: boundedString(60).default("I do not agree"),
   }),
 ]);
 

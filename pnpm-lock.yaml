@@ -398,6 +398,9 @@ importers:
 
   packages/form-schema:
     dependencies:
+      '@repo/guard':
+        specifier: workspace:*
+        version: link:../guard
       zod:
         specifier: 4.4.3
         version: 4.4.3

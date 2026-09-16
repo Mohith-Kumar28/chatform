@@ -149,7 +149,7 @@ function noUserinfo(raw: string): boolean {
  * which is exactly how a stored XSS gets into a form — and the hostname must
  * be a real domain, so an IP literal and `localhost` are both out.
  */
-export function safeUrl(max = 2000): z.ZodType<string> {
+export function safeUrl(max = 2000) {
   return z
     .string()
     .max(max)
@@ -167,7 +167,7 @@ export function safeWebhookUrl({
   max = 2000,
   allowInsecure = false,
   allowLoopback = false,
-}: { max?: number; allowInsecure?: boolean; allowLoopback?: boolean } = {}): z.ZodType<string> {
+}: { max?: number; allowInsecure?: boolean; allowLoopback?: boolean } = {}) {
   const hostname = allowLoopback ? /^[^\s/?#@]+$/ : RELAXED_HOSTNAME;
   return z
     .string()
@@ -396,4 +396,35 @@ export async function readTruncatedText(response: Response, maxBytes: number): P
     await reader.cancel().catch(() => {});
   }
   return out;
+}
+
+/**
+ * A stored URL that is cleaned on read rather than rejected.
+ *
+ * The distinction matters more here than anywhere else in this package. A
+ * form document is re-parsed on **every** read — `readFormDoc` sits on the
+ * public form config, the session open, the export writer and the mail jobs —
+ * so a rejecting schema does not stop a bad URL being written, it stops a
+ * document that already contains one from being served at all. One stored
+ * `javascript:` link would become a 500 for every respondent mid-answer.
+ *
+ * So inside a document: a URL that fails becomes `null`, and the button it
+ * was attached to simply does not render. A bug report, not an outage. Route
+ * inputs use the rejecting `safeUrl` instead, where a 422 on a new write is
+ * exactly right.
+ */
+export function storedUrl(max = 2000) {
+  return safeUrl(max).nullable().catch(null);
+}
+
+/**
+ * `storedUrl` for a field that is absent rather than null when unset.
+ *
+ * Two functions rather than one with a fallback argument because the *type*
+ * differs, and these schemas feed a generated OpenAPI document and a generated
+ * client: a field that was `string | undefined` must not silently become
+ * `string | null | undefined`.
+ */
+export function storedUrlOptional(max = 2000) {
+  return safeUrl(max).optional().catch(undefined);
 }

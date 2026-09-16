@@ -1,4 +1,5 @@
-import { andList, contactFieldBlock, contactFieldPhrase, groupFieldBlock, type Block } from "../blocks";
+import { andList, contactFieldBlock, contactFieldPhrase, groupFieldBlock, safePattern, type Block } from "../blocks";
+import { cleanLine, cleanText, safeHref } from "@repo/guard";
 import type { AnswerValue } from "../answers";
 
 /**
@@ -131,6 +132,15 @@ function orList(items: string[]): string {
   return `${items.slice(0, -1).join(", ")} or ${items[items.length - 1]}`;
 }
 
+/**
+ * The ceiling on a sub-field of a contact card or an address.
+ *
+ * Wide enough for a real address line with a landmark, narrow enough to be a
+ * limit. Applied per field, and the card itself is bounded by how many fields
+ * the block declares.
+ */
+const CONTACT_FIELD_MAX = 500;
+
 const FREEMAIL = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com", "proton.me", "aol.com", "live.com"];
 const URL_RE = /^https?:\/\/[^\s]+\.[^\s]+$/i;
 const E164_RE = /^\+[1-9]\d{6,14}$/;
@@ -182,11 +192,31 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
       const v = raw.trim();
       if (v.length < block.minLength) return fail("too_short", `Answer must be at least ${block.minLength} characters.`);
       if (v.length > block.maxLength) return fail("too_long", `Answer must be at most ${block.maxLength} characters.`);
-      if (block.pattern) {
+      /**
+       * The author's regex, run against a stranger's text — through
+       * `safePattern` first.
+       *
+       * That guard already existed and was only ever called on the AI
+       * generation path, so a document written straight through
+       * `PUT /api/forms/:id/doc` stored whatever pattern it liked and this
+       * line executed it: a nested quantifier like `(a+)+$` against a long
+       * answer is a CPU burn inside the request, and the respondent's request
+       * is the one that pays for it.
+       *
+       * Checked here rather than in the schema deliberately. A refusal in the
+       * `pattern` field would reject a document that already contains one, and
+       * `readFormDoc` re-parses stored documents on this same path — so a form
+       * published a month ago would stop loading rather than stop enforcing a
+       * regex nobody should have written. Skipping the pattern is what the
+       * existing `catch` already did for an uncompilable one.
+       */
+      const pattern = safePattern(block.pattern ?? undefined);
+      if (pattern) {
         try {
-          if (!new RegExp(block.pattern).test(v)) return fail("pattern", "That doesn't match the expected format.");
+          if (!new RegExp(pattern).test(v)) return fail("pattern", "That doesn't match the expected format.");
         } catch {
-          // invalid pattern in schema — skip
+          // Unreachable: `safePattern` compiled it. Kept so a future change to
+          // either side cannot turn a bad pattern into a 500.
         }
       }
       return ok(v);
@@ -387,7 +417,16 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
       if (block.drawnNameRequired && typeof sig.signedName !== "string") {
         return fail("name_required", "Please type your name to sign.");
       }
-      return ok(raw as AnswerValue);
+      // The typed name is free text and had no cap. Cleaned and bounded like a
+      // name anywhere else; the two ids are checked against the `files` table
+      // by the caller, which is the only place that can.
+      return ok({
+        fileId: sig.fileId,
+        r2Key: sig.r2Key,
+        ...(typeof sig.signedName === "string"
+          ? { signedName: cleanLine(sig.signedName).slice(0, 200) }
+          : {}),
+      } as AnswerValue);
     }
 
     case "payment": {
@@ -412,7 +451,8 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
         // gateway, so nothing here can be verified.
         verified: false,
         reference: typeof p.reference === "string" ? p.reference.slice(0, 40) : undefined,
-        paymentId: typeof p.paymentId === "string" ? p.paymentId : undefined,
+        // `reference` beside it is already sliced to 40; this one was not.
+        paymentId: typeof p.paymentId === "string" ? cleanLine(p.paymentId).slice(0, 120) : undefined,
         amount: typeof p.amount === "number" ? p.amount : undefined,
         currency: block.currency,
       });
@@ -424,9 +464,15 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
       if (typeof s.provider !== "string" || typeof s.url !== "string") {
         return fail("type", "Please book a time slot.");
       }
+      /**
+       * The provider and the booking URL come back from the respondent's side
+       * of the integration, so they are as untrusted as any other answer and
+       * were bounded by nothing. The URL is stored and shown to the author in
+       * the results table, so a scheme that executes has no business in it.
+       */
       return ok({
-        provider: s.provider,
-        url: s.url,
+        provider: cleanLine(s.provider).slice(0, 60),
+        url: safeHref(s.url) ?? "",
         slotIso: s.slotIso as string | undefined,
         confirmedAt: s.confirmedAt as number | undefined,
       });
@@ -462,7 +508,17 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
           if (block.required) missing.push(field);
           continue;
         }
-        out[field] = String(v).trim();
+        /**
+         * Bounded and cleaned, like every other free-text answer.
+         *
+         * These were the one family of respondent strings with no length limit
+         * at all: `short_text` has `maxLength`, `long_text` has its own, and a
+         * street or a last name typed into a contact card had neither. The cap
+         * is generous — a long Indian address with a landmark line fits inside
+         * it — and it is a cap, which 64 KB of text pasted into a name box was
+         * not.
+         */
+        out[field] = cleanLine(String(v)).slice(0, CONTACT_FIELD_MAX);
       }
 
       /**

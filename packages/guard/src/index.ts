@@ -34,6 +34,8 @@ export {
   safeMediaSrc,
   safeUrl,
   safeWebhookUrl,
+  storedUrl,
+  storedUrlOptional,
 } from "./url";
 export type { GuardErrorCode, GuardedFetchOptions, HostClass, SafeUrlOptions } from "./url";
 

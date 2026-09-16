@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { boundedString } from "@repo/guard";
 import type { RespondentAuthMethod } from "./respondent";
 import { AnswerMap } from "./answers";
 import { Block, type BlockMedia, type GroupFieldKind } from "./blocks";
@@ -12,8 +13,8 @@ export const SCHEMA_VERSION = 9;
 
 export const FormDoc = z.object({
   schemaVersion: z.number().int().positive().default(SCHEMA_VERSION),
-  title: z.string().min(1).max(200),
-  description: z.string().max(2000).optional(),
+  title: boundedString(200).min(1),
+  description: boundedString(2000).optional(),
   blocks: z.array(Block).min(1).max(200),
   endings: z.array(Ending).min(1).max(20),
   /** Rules evaluated after the last completed block; first matching goto(ending) wins. */

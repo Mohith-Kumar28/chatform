@@ -1,3 +1,4 @@
+import { cleanLine } from "@repo/guard";
 import {
   readFormDoc,
   displayAnswer,
@@ -513,7 +514,17 @@ async function runFollowUpJob(
     */
     answered: byRef.size,
     ...(resolved?.firstName ? { firstName: resolved.firstName } : {}),
-    ...(org?.postal_address ? { postalAddress: org.postal_address } : {}),
+    /**
+     * Bounded on the way out, because it cannot be bounded on the way in.
+     *
+     * `postalAddress` is a Better Auth `additionalFields` entry with
+     * `input: true` and no length rule — writable straight through
+     * `authClient.organization.update()`, with no repo schema in the path — and
+     * it goes into the footer of every commercial message. Escaped already;
+     * this is about a footer that is a paragraph long. Bounding the read also
+     * covers whatever is in the column today.
+     */
+    ...(org?.postal_address ? { postalAddress: cleanLine(org.postal_address).slice(0, 300) } : {}),
     showPoweredBy: !doc.settings.branding?.hidePoweredBy,
   });
 
