@@ -35,6 +35,7 @@ import { forgetValue, suggestionsFor } from "./respondent-profile";
 import { QuestionAffordance } from "./question-affordance";
 import { QuestionMedia } from "./question-media";
 import { ChatBoot } from "./chat-boot";
+import { FormClosed } from "./form-closed";
 import { FeedbackDialog } from "./feedback-dialog";
 import { captureSnapshot } from "./chat-snapshot";
 import { ClosingNotice } from "./closing-notice";
@@ -417,6 +418,22 @@ export function ChatSurface({
   );
   const uploadBase = chat.getUploadBase();
   const respondentToken = chat.getRespondentToken();
+
+  /**
+   * The form shut while this tab was open.
+   *
+   * Before the resolving check, not after: `start()` clears `resolving` in the
+   * same commit that sets this, but the ordering here is the one that says
+   * which screen wins, and a refusal must never be able to show up behind a
+   * spinner.
+   *
+   * `!= null` rather than a truthiness test. The message is the author's and
+   * may be empty — a form whose closed message was deliberately cleared is
+   * still a closed form, and `""` is a real value here.
+   */
+  if (chat.closed != null) {
+    return <FormClosed config={config} message={chat.closed} contained={previewMode} />;
+  }
 
   /**
    * Hold the frame until we know which screen this is.

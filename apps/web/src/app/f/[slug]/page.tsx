@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { PublicFormConfig } from "@repo/form-schema";
 import { ChatClient } from "@/components/chat/chat-client";
+import { FormClosed } from "@/components/chat/form-closed";
 import { ViewPing } from "@/components/chat/view-ping";
 import { EmbedBridge } from "@/components/chat/embed-bridge";
 // Absolute, because a crawler resolves `og:image` against nothing.
@@ -25,7 +26,8 @@ async function getConfig(slug: string): Promise<PublicFormConfig | null> {
 export async function generateMetadata({ params }: PageProps<"/f/[slug]">): Promise<Metadata> {
   const { slug } = await params;
   const config = await getConfig(slug);
-  if (!config) return { title: "Form not found", robots: { index: false } };
+  // The same words the screen says, so a tab title and the page under it agree.
+  if (!config) return { title: "This link doesn't work", robots: { index: false } };
 
   const title = config.meta?.ogTitle ?? config.title;
   const description = config.meta?.ogDescription ?? `Answer a few questions — it only takes a minute.`;
@@ -83,6 +85,28 @@ export default async function PublicFormPage({ params, searchParams }: PageProps
   // built from a hardcoded fallback config. A respondent could sit in a form
   // that would never ask anything. 404 instead.
   if (!config) notFound();
+
+  /**
+   * A closed form never boots the chat.
+   *
+   * The config already carries the verdict, so this is decided on the server,
+   * before anything ships: no boot screen, no session POST that exists only to
+   * be refused, and no frame of a progress bar reading "0% complete" over a
+   * conversation that is not going to happen. See `FormClosed` for what was
+   * there before and why none of it belonged.
+   *
+   * The view is still pinged. Somebody arriving after the deadline is a real
+   * visit and one an author very much wants counted — it is the number that
+   * says the link is still going round and the form should reopen.
+   */
+  if (config.closed) {
+    return (
+      <div className={query.embed === "1" ? "cf-embedded" : undefined}>
+        <ViewPing slug={slug} apiOrigin={PUBLIC_API_ORIGIN} />
+        <FormClosed config={config} />
+      </div>
+    );
+  }
 
   // Hidden fields and per-block prefills arrive as query parameters.
   const hiddenFields: Record<string, string> = {};

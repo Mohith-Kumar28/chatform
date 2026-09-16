@@ -381,6 +381,21 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
    */
   const actionInFlightRef = useRef(false);
   const [rateLimited, setRateLimited] = useState<string | null>(null);
+  /**
+   * The form shut between this page loading and this person tapping into it.
+   *
+   * The server-rendered page already turns a closed form into its own screen,
+   * so this is the narrow case that page cannot catch: a deadline that passes
+   * while the tab sits open, or a capped intake that fills in the seconds
+   * before somebody starts. `openSession` refuses with `form_closed` and the
+   * author's own message, and that message is what this holds.
+   *
+   * It is a state rather than an error because it is not one. It used to fall
+   * through to `setError`, which drew it in red at the bottom of an empty
+   * thread next to a Retry button — a refusal the respondent was invited to
+   * argue with once a second.
+   */
+  const [closed, setClosed] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewState | null>(null);
   const [submitted, setSubmitted] = useState<SubmittedState | null>(null);
   /**
@@ -1106,6 +1121,21 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
             return;
           }
           /*
+           * So is "this form is closed" — the other outcome that is the form
+           * working. Same shape as the branch above and for the same reason:
+           * an outcome gets a screen, not the failure rail and a retry.
+           *
+           * The message is the author's, straight off the refusal, because
+           * this client's config was fetched while the form was still open and
+           * therefore carries no closed message of its own.
+           */
+          if (body?.error?.code === "form_closed") {
+            setClosed(body.error.message ?? "");
+            setStatus("ended");
+            setResolving(false);
+            return;
+          }
+          /*
            * A limit is a wait, not a breakdown — and it is very often not this
            * person's fault. The window is keyed by address, so an office, a
            * campus or a phone network can spend it between them, and the
@@ -1469,6 +1499,11 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     setVerify(null);
     setIdentity(null);
     setError(null);
+    // Reset with the rest of it. Unreachable today — the closed screen renders
+    // no header, so there is no "Start over" to press from it — but this
+    // function's contract is that it clears every piece of screen state, and a
+    // field left out of it is the next stale screen.
+    setClosed(null);
     setStatus("connecting");
     await start();
   }, [ephemeral, onRestart, slug, start]);
@@ -1899,6 +1934,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     answering,
     resolving,
     rateLimited,
+    closed,
     resumed,
     auth,
     verify,

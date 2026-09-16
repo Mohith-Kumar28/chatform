@@ -19,6 +19,18 @@ export const DEFAULT_CONFIRMATION_SUBJECT = "Thanks for your response";
 export const DEFAULT_CONFIRMATION_BODY =
   "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.";
 
+/**
+ * What a closed form says when the author has not written anything else.
+ *
+ * Exported because the respondent-facing screen has to be able to tell the
+ * author's own words apart from this stand-in: the screen already says "This
+ * form is closed" in heading type, and printing this sentence underneath it
+ * is the same fact twice in two sizes. An author who wrote a real message —
+ * where else to register, when it reopens, who to email — gets that message
+ * under the heading; an author who left this alone gets the heading alone.
+ */
+export const CLOSED_MESSAGE_DEFAULT = "This form is no longer accepting responses.";
+
 export const SettingsDoc = z.object({
   language: z.string().length(2).default("en"),
   rtl: z.boolean().default(false),
@@ -45,7 +57,7 @@ export const SettingsDoc = z.object({
     .object({
       closeAt: z.string().optional(),
       maxSubmissions: z.number().int().min(1).optional(),
-      closedMessageMd: boundedString(5000).default("This form is no longer accepting responses."),
+      closedMessageMd: boundedString(5000).default(CLOSED_MESSAGE_DEFAULT),
       /**
        * Show the respondent a live countdown to `closeAt`.
        *

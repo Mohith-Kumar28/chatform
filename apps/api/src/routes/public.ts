@@ -218,18 +218,35 @@ sessionsRouter.get(
   // the watermark back and drops a verification step the plan no longer includes — without
   // anyone republishing. See `clampForRuntime`.
   const doc = clampForRuntime(stored, ent);
-  const closed = isClosed(doc, formRow.close_at) || (await ceilingReached(c.env, formRow.organization_id, ent));
   /**
-   * Counted only when the author asked for the number to be shown.
+   * Counted when the author asked for the number to be shown, and — new — when
+   * there is a cap at all.
    *
-   * The cap gate in `openSession` counts on every session either way; this is
-   * the extra read that puts the figure in front of the respondent, and a form
-   * that has not turned the pill on should not pay for it. Same helper as the
-   * gate, so the count shown and the count enforced cannot disagree.
+   * The second reason is what lets a full form say so on the page instead of
+   * over a failed session. `openSession` enforces the cap, so a respondent
+   * arriving at a full intake used to get the whole chat booted, a POST, a 403
+   * and an error rail; now the config that renders the page already knows. One
+   * COUNT either way — the same query the gate runs, deliberately, so the count
+   * shown and the count enforced cannot disagree — and still none at all on the
+   * forms that have no cap, which is nearly all of them.
    */
   const { showRemaining, maxSubmissions } = doc.settings.closeRules;
-  const submissionsTaken =
-    showRemaining && maxSubmissions ? await completedSubmissions(c.env, formRow.id) : undefined;
+  const taken = maxSubmissions ? await completedSubmissions(c.env, formRow.id) : undefined;
+  const submissionsTaken = showRemaining && maxSubmissions ? taken : undefined;
+
+  /**
+   * Why this form is shut, in the order a respondent would want to hear it.
+   *
+   * The ceiling is checked last and names nothing. It closes the form like the
+   * other two and must read like an ordinary close: a respondent is never told
+   * that the owner's plan ran out. See `openSession`, which refuses on the same
+   * rule and with the same silence.
+   */
+  const scheduleClosed = isClosed(doc, formRow.close_at);
+  const capacityClosed = !!maxSubmissions && (taken ?? 0) >= maxSubmissions;
+  const closedReason = scheduleClosed ? ("schedule" as const) : capacityClosed ? ("capacity" as const) : undefined;
+  const closed =
+    scheduleClosed || capacityClosed || (await ceilingReached(c.env, formRow.organization_id, ent));
   const config = toPublicConfig(doc, {
     slug: formRow.slug,
     submissionsTaken,
@@ -245,6 +262,7 @@ sessionsRouter.get(
     brandingHidden: brandingHiddenFor(doc, ent),
     closed,
     closedMessage: closed ? doc.settings.closeRules.closedMessageMd : undefined,
+    closedReason: closed ? closedReason : undefined,
     // Without this the social preview image was parsed, stored, and never
     // turned into a URL, so every share card came out blank.
     assetUrl: (key) => `${new URL(c.req.url).origin}/p/assets/${assetIdFromKey(key)}`,
