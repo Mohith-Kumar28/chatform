@@ -1,3 +1,4 @@
+import { FENCE_RULE, fence, fenceNonce } from "@repo/guard";
 import { mediaUrls } from "./research.js";
 import { ADDABLE_BLOCK_TYPES, andList, enforcesUnique, renderBlockCatalog, type Block, type FormDoc } from "@repo/form-schema";
 
@@ -112,6 +113,14 @@ export function buildStablePrefix(doc: FormDoc, opts: { hasKnowledge?: boolean }
       `Never discuss: ${guards.forbiddenTopics.join(", ")}. If asked, decline briefly and return to the form.`,
     );
   }
+  /**
+   * The rule that makes a fence mean something.
+   *
+   * It belongs here, in the prefix, because it never changes — the nonced
+   * tags themselves are minted per turn and live in the suffix, so prompt
+   * caching is unaffected either way.
+   */
+  guardLines.push(FENCE_RULE);
   parts.push(`BOUNDARIES\n${guardLines.map((l) => `- ${l}`).join("\n")}`);
 
   const remaining = doc.blocks
@@ -250,8 +259,17 @@ export function buildTurnSuffix(
   if (hint?.examples.length) lines.push(`Example answers: ${hint.examples.join(", ")}`);
   if (lines.length > 0) parts.push(`ABOUT THIS QUESTION\n${lines.map((l) => `- ${l}`).join("\n")}`);
 
-  if (context?.transcript) parts.push(`CONVERSATION SO FAR\n${context.transcript}`);
-  if (context?.answers) parts.push(`ANSWERS COLLECTED\n${context.answers}`);
+  /**
+   * The respondent's own words, fenced.
+   *
+   * Section headers were the only boundary here, so nothing stopped an answer
+   * from containing a line reading `ANSWERS COLLECTED` or `NOW:` and being
+   * read as the next instruction. One nonce per turn, so the fence a payload
+   * would have to close cannot be guessed from a previous conversation.
+   */
+  const nonce = fenceNonce();
+  if (context?.transcript) parts.push(`CONVERSATION SO FAR\n${fence("transcript", context.transcript, nonce)}`);
+  if (context?.answers) parts.push(`ANSWERS COLLECTED\n${fence("answers", context.answers, nonce)}`);
 
   // Absent on a document that has not been through `clampForRuntime`; there is
   // then no limit to pace against, so the line is simply not said.
@@ -282,8 +300,9 @@ export function buildTurnSuffix(
  */
 export function buildReviewSuffix(context?: AgentContext): string {
   const parts: string[] = [];
-  if (context?.transcript) parts.push(`CONVERSATION SO FAR\n${context.transcript}`);
-  if (context?.answers) parts.push(`ANSWERS COLLECTED\n${context.answers}`);
+  const nonce = fenceNonce();
+  if (context?.transcript) parts.push(`CONVERSATION SO FAR\n${fence("transcript", context.transcript, nonce)}`);
+  if (context?.answers) parts.push(`ANSWERS COLLECTED\n${fence("answers", context.answers, nonce)}`);
   parts.push(
     "NOW: every question is answered. The respondent is reviewing their answers before sending the form, and the summary with its send button is on screen under your message.",
   );
