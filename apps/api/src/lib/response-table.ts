@@ -150,10 +150,12 @@ export async function buildResponseTable(
     "started_at",
     "completed_at",
     ...answerable.map((b) => `${b.title} (${b.ref})`),
-    // Marked, because a column the form no longer has needs to explain itself
-    // to whoever opens the file — and because the same question re-added later
-    // gets a new ref, so both columns can be present and neither is a mistake.
-    ...retired.map((b) => `${b.title} (${b.ref}) [removed]`),
+    // "archived", not "removed": the question is gone from the form, but these
+    // answers are very much still here, and `[removed]` next to a column full
+    // of data reads as though the data was what went. It also matters that the
+    // same question re-added later gets a new ref, so both columns can be
+    // present at once and neither is a mistake.
+    ...retired.map((b) => `${b.title} (${b.ref}) [archived]`),
   ];
 
   const rows = kept.map((s) => {
@@ -220,4 +222,55 @@ export function splitByCompletion(table: ResponseTable): {
     truncated: table.truncated,
   });
   return { completed: half(completed), partial: half(partial) };
+}
+
+/**
+ * What the file is called once it lands in someone's Downloads folder.
+ *
+ * `responses-frm_9f3a2b1c8d.xlsx` told whoever downloaded it nothing: not which
+ * form, not when, and not which of the three exports they took that afternoon
+ * it was. The form's own title and a timestamp answer all three, and they sort
+ * sensibly in a folder because the date leads the stamp.
+ *
+ * `offsetMinutes` is the caller's `getTimezoneOffset()` — minutes to add to
+ * local time to reach UTC, so IST arrives as -330. Without it the stamp is UTC,
+ * which near midnight names the wrong day for most of the world.
+ */
+export function exportFilename(title: string, ext: string, offsetMinutes = 0): string {
+  /**
+   * Windows refuses `\/:*?"<>|` in a name and every platform refuses control
+   * characters, so a form titled `Q3: sales / marketing` has to be rewritten
+   * rather than escaped. Length is capped because some filesystems stop at 255
+   * bytes, and a 200-character form title is not a better name than its first
+   * eighty characters.
+   */
+  const clean =
+    title
+      // eslint-disable-next-line no-control-regex
+      .replace(/[ -]/g, "")
+      .replace(/[\\/:*?"<>|]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80)
+      .trim() || "Responses";
+
+  // Shifted into the caller's day before it is read, then formatted off the ISO
+  // string so the result is identical in every runtime and locale.
+  const iso = new Date(Date.now() - offsetMinutes * 60_000).toISOString();
+  const stamp = `${iso.slice(0, 10)} ${iso.slice(11, 13)}${iso.slice(14, 16)}`;
+
+  return `${clean} ${stamp}.${ext}`;
+}
+
+/**
+ * The header that carries it, in both spellings.
+ *
+ * A form named in Hindi, or with an emoji in it, cannot go in `filename=` —
+ * that one is ASCII, and the bytes either get mangled or the header gets
+ * rejected outright. RFC 5987's `filename*` carries the real name; the plain
+ * `filename` stays as the fallback for anything that does not read it.
+ */
+export function contentDisposition(filename: string): string {
+  const ascii = filename.replace(/[^\x20-\x7E]/g, "_").replaceAll('"', "'");
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }

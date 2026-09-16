@@ -5,7 +5,13 @@ import { displayAnswer, safeReadFormDoc, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 import { requirePermission, assertPermission, assertFeature, hasFeature, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
-import { buildResponseTable, splitByCompletion, toCsv } from "../lib/response-table.js";
+import {
+  buildResponseTable,
+  contentDisposition,
+  exportFilename,
+  splitByCompletion,
+  toCsv,
+} from "../lib/response-table.js";
 import { resolveRetiredBlocks } from "../lib/retired-columns.js";
 import { computeAnalytics } from "../lib/analytics-service.js";
 import { computeFollowUpStats } from "../lib/followup-analytics.js";
@@ -760,9 +766,22 @@ resultsRouter.delete(
 type ExportCtx = Context<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>;
 
 async function exportSubmissions(c: ExportCtx, format: "csv" | "xlsx") {
-  const id = c.get("form")!.id;
+  const form = c.get("form")!;
+  const id = form.id;
   const roleDenied = await assertPermission(c, "submission", "export");
   if (roleDenied) return roleDenied;
+
+  /**
+   * The downloader's clock, for the stamp in the filename.
+   *
+   * `getTimezoneOffset()`, sent by the browser, because "these are the
+   * responses as of 16:18" is only useful if 16:18 is the time it was where
+   * they were standing. Clamped and integer-checked before it goes anywhere
+   * near a response header — this is the one part of the filename a caller
+   * gets to influence.
+   */
+  const rawTz = Number(new URL(c.req.url).searchParams.get("tz"));
+  const tzOffset = Number.isInteger(rawTz) && Math.abs(rawTz) <= 840 ? rawTz : 0;
 
   /**
    * Exporting what you finished collecting is free — taking your own data with you must
@@ -795,23 +814,27 @@ async function exportSubmissions(c: ExportCtx, format: "csv" | "xlsx") {
      * Only when partials were asked for and allowed: without them there is one
      * kind of row, and a lone "Completed" tab beside an empty one would be
      * ceremony.
+     *
+     * The tabs are named for the switch above the results table — Completed and
+     * Partial — so the file uses the same two words the screen it came from
+     * does, rather than introducing a third vocabulary in the download.
      */
     const sheets = includePartials
       ? (() => {
           const { completed, partial } = splitByCompletion(table);
           return [
             { name: "Completed", header: completed.header, rows: completed.rows },
-            { name: "Unfinished", header: partial.header, rows: partial.rows },
+            { name: "Partial", header: partial.header, rows: partial.rows },
           ];
         })()
-      : [{ name: "Responses", header: table.header, rows: table.rows }];
+      : [{ name: "Completed", header: table.header, rows: table.rows }];
 
     const bytes = await buildXlsx(sheets);
     return new Response(bytes as unknown as BodyInit, {
       headers: {
         "content-type":
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "content-disposition": `attachment; filename="responses-${id}.xlsx"`,
+        "content-disposition": contentDisposition(exportFilename(form.title, "xlsx", tzOffset)),
         "cache-control": "private, no-store",
       },
     });
@@ -834,7 +857,7 @@ async function exportSubmissions(c: ExportCtx, format: "csv" | "xlsx") {
   return new Response(toCsv(ordered), {
     headers: {
       "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="submissions-${id}.csv"`,
+      "content-disposition": contentDisposition(exportFilename(form.title, "csv", tzOffset)),
       "cache-control": "private, no-store",
     },
   });

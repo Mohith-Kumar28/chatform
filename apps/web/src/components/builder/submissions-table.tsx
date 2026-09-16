@@ -766,13 +766,20 @@ function Pager({
  * data under it — it answers the one question the column raises: "why is this
  * here when I deleted it?"
  */
-function RemovedTag() {
+/**
+ * "Archived", not "Removed".
+ *
+ * The question is gone from the form; the answers under this column are not,
+ * and they are the reason the column is on screen at all. "Removed" sitting
+ * over a column of data reads as though the data was what went.
+ */
+function ArchivedTag() {
   return (
     <span
       className="bg-muted text-muted-foreground/80 shrink-0 rounded px-1 py-px text-[0.625rem] font-medium tracking-wide uppercase"
       title="This question was removed from the form. Its answers are kept."
     >
-      Removed
+      Archived
     </span>
   );
 }
@@ -1280,7 +1287,7 @@ export function SubmissionsTable({
                           <meta.icon className="size-2.5" strokeWidth={2} />
                         </span>
                         <span className="block max-w-[13rem] truncate">{b.title}</span>
-                        {b.retired && <RemovedTag />}
+                        {b.retired && <ArchivedTag />}
                       </span>
                     </th>
                   );
@@ -2056,7 +2063,7 @@ function AnswerList({
         <div className="min-w-0 flex-1">
           <dt className="text-muted-foreground text-caption flex items-center gap-1.5 leading-snug">
             <span className="min-w-0 break-words">{b.title}</span>
-            {b.retired && <RemovedTag />}
+            {b.retired && <ArchivedTag />}
           </dt>
           <dd
             className={cn(
@@ -2113,7 +2120,7 @@ function downloadCsv(rows: SubmissionRecord[], columns: ResultColumn[], withResp
     // Marked here as well as in the server-side export: a file outlives the
     // screen it was downloaded from, and by then "Team member 3" being a
     // question the form no longer asks is not recoverable from the header.
-    ...columns.map((c) => (c.retired ? `${c.title} (removed)` : c.title)),
+    ...columns.map((c) => (c.retired ? `${c.title} (archived)` : c.title)),
     // Last, like its column: the thing you sort by after opening the file, not
     // the thing you read first.
     ...(withRespondentId ? ["Respondent ID"] : []),

@@ -2,7 +2,12 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
 import { applySchema, seedTenant, fetchApi, minimalDoc, type Tenant } from "./helpers.js";
 import { buildXlsx } from "../src/lib/xlsx.js";
-import { splitByCompletion, type ResponseTable } from "../src/lib/response-table.js";
+import {
+  contentDisposition,
+  exportFilename,
+  splitByCompletion,
+  type ResponseTable,
+} from "../src/lib/response-table.js";
 
 /**
  * The spreadsheet feed and the XLSX export.
@@ -276,12 +281,12 @@ describe("completed and unfinished, split", () => {
     const { completed, partial } = splitByCompletion(table);
     const zip = await buildXlsx([
       { name: "Completed", header: completed.header, rows: completed.rows },
-      { name: "Unfinished", header: partial.header, rows: partial.rows },
+      { name: "Partial", header: partial.header, rows: partial.rows },
     ]);
 
     const workbook = await readEntry(zip, "xl/workbook.xml");
     expect(workbook).toContain('name="Completed" sheetId="1" r:id="rId1"');
-    expect(workbook).toContain('name="Unfinished" sheetId="2" r:id="rId2"');
+    expect(workbook).toContain('name="Partial" sheetId="2" r:id="rId2"');
 
     // Every sheet needs its own part, its own relationship and its own
     // content-type override; styles moves to the id after the last sheet.
@@ -316,5 +321,70 @@ describe("completed and unfinished, split", () => {
     const names = [...workbook.matchAll(/name="([^"]+)"/g)].map((m) => m[1]!);
     expect(new Set(names).size).toBe(2);
     for (const name of names) expect(name.length).toBeLessThanOrEqual(31);
+  });
+});
+
+/**
+ * What the download is called.
+ *
+ * `responses-frm_9f3a2b1c8d.xlsx` named neither the form nor the moment, so
+ * three pulls of a live form in one afternoon were three files nobody could
+ * tell apart. The rules worth pinning here are the ones that break quietly: a
+ * title with a slash in it produces a filename no filesystem accepts, and a
+ * title in a non-Latin script produces a header some clients reject outright.
+ */
+describe("the filename", () => {
+  it("names the form and the moment it was taken", () => {
+    const name = exportFilename("SIH 2026 Registration", "xlsx");
+    expect(name).toMatch(/^SIH 2026 Registration \d{4}-\d{2}-\d{2} \d{4}\.xlsx$/);
+  });
+
+  it("stamps the downloader's clock, not the server's", () => {
+    // IST is UTC+5:30, which `getTimezoneOffset()` reports as -330.
+    const utc = exportFilename("Form", "xlsx", 0);
+    const ist = exportFilename("Form", "xlsx", -330);
+    expect(ist).not.toBe(utc);
+    // Same instant, five and a half hours apart on the clock — and near
+    // midnight that is a different date, which is the whole point.
+    const minutes = (n: string) => {
+      const [, date, hhmm] = /(\d{4}-\d{2}-\d{2}) (\d{4})/.exec(n)!;
+      return Date.parse(`${date}T${hhmm!.slice(0, 2)}:${hhmm!.slice(2)}:00Z`) / 60_000;
+    };
+    expect(minutes(ist) - minutes(utc)).toBe(330);
+  });
+
+  it("rewrites the characters a filesystem refuses", () => {
+    const name = exportFilename('Q3: sales / marketing <draft>', "csv");
+    expect(name).not.toMatch(/[\\/:*?"<>|]/);
+    expect(name).toContain("Q3 sales marketing");
+    expect(name.endsWith(".csv")).toBe(true);
+  });
+
+  it("falls back rather than producing a nameless file", () => {
+    expect(exportFilename("   ", "xlsx")).toMatch(/^Responses /);
+    expect(exportFilename(":::", "xlsx")).toMatch(/^Responses /);
+  });
+
+  it("keeps the name short enough to write to disk", () => {
+    const name = exportFilename("x".repeat(400), "xlsx");
+    expect(name.length).toBeLessThan(110);
+  });
+
+  it("carries a non-Latin title in the header both ways", () => {
+    const header = contentDisposition(exportFilename("पंजीकरण फॉर्म", "xlsx"));
+    // The ASCII half must survive a byte-oriented parser untouched...
+    const ascii = /filename="([^"]+)"/.exec(header)![1]!;
+    expect(ascii).toMatch(/^[\x20-\x7E]+$/);
+    // ...and the real name rides in the RFC 5987 half.
+    expect(header).toContain("filename*=UTF-8''");
+    expect(decodeURIComponent(/filename\*=UTF-8''(\S+)/.exec(header)![1]!)).toContain("पंजीकरण");
+  });
+
+  it("cannot be used to inject a second header directive", () => {
+    // A quote or a newline in a title is the only part of this header a user
+    // controls; neither may end the quoted string early.
+    const header = contentDisposition(exportFilename('a" ; attachment; filename="b', "csv"));
+    expect(/filename="([^"]*)"/.exec(header)![1]).not.toContain('"');
+    expect(header).not.toMatch(/[\r\n]/);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import {
   CheckCircle2,
   Download,
@@ -584,6 +584,23 @@ function DownloadButton({
   /** Set while rows are ticked in the table below — see `SubmissionsTable`. */
   selection?: { count: number; download: () => void } | null;
 }) {
+  /**
+   * This browser's clock, for the timestamp the server puts in the filename.
+   *
+   * A client-only value, so it is read through `useSyncExternalStore` rather
+   * than inline: the server has no timezone to agree with, and rendering the
+   * browser's during hydration is exactly the mismatch the server snapshot
+   * (`null`) exists to avoid. The offset never changes while the page is open,
+   * so the subscribe callback has nothing to listen for.
+   *
+   * Before the early returns below, because hooks cannot run conditionally.
+   */
+  const tzOffset = useSyncExternalStore(
+    () => () => {},
+    () => new Date().getTimezoneOffset(),
+    () => null,
+  );
+
   /*
     Ticked rows retarget this button rather than growing a second one. The rows
     are already on screen and already fetched, so this download is written here
@@ -617,9 +634,10 @@ function DownloadButton({
    *
    * Straight browser navigation, so the session cookie rides along.
    */
-  const href = `${API_ORIGIN}/api/forms/${formId}/submissions/export.xlsx${
-    canPartials ? "?includePartials=true" : ""
-  }`;
+  const href =
+    `${API_ORIGIN}/api/forms/${formId}/submissions/export.xlsx` +
+    `?includePartials=${canPartials}` +
+    (tzOffset === null ? "" : `&tz=${tzOffset}`);
 
   return (
     <Button asChild variant="outline" size="sm" shape="pill">

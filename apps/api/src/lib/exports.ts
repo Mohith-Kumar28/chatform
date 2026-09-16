@@ -245,9 +245,10 @@ export async function buildCsv(
     "started_at",
     "completed_at",
     ...answerable.map((b) => `${b.title} (${b.ref})`),
-    // Marked: a column the form no longer has must explain itself to whoever
-    // opens the file a year from now.
-    ...retired.map((b) => `${b.title} (${b.ref}) [removed]`),
+    // "archived", not "removed": the question is gone from the form, but these
+    // answers are still here, and `[removed]` over a column full of data reads
+    // as though the data was what went.
+    ...retired.map((b) => `${b.title} (${b.ref}) [archived]`),
   ];
   const out: string[] = [header.map(esc).join(",")];
 
