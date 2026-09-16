@@ -105,17 +105,24 @@ export function ChatformEmbed({
    * strings from a customer's private admin page. `strict-origin-when-cross-origin`
    * sends the origin only.
    *
-   * A `sandbox` attribute is deliberately NOT set here. The runtime inside
-   * this frame opens the ending's redirect with `window.open`, signs
-   * respondents in with a Google popup, submits real forms and hands back file
-   * downloads — so the token list would have to be
-   * `allow-scripts allow-same-origin allow-forms allow-popups
-   * allow-popups-to-escape-sandbox allow-downloads` at minimum, and with
-   * `allow-scripts allow-same-origin` together a sandbox buys very little
-   * against the framed document itself. What it would genuinely buy is
-   * `allow-top-navigation` staying off, which stops a compromised frame
-   * navigating the embedder's page away. Worth doing, and worth doing behind a
-   * real browser pass on a live embed rather than on reasoning.
+   * A `sandbox` attribute is deliberately NOT set here, and this is what the
+   * browser pass established rather than a guess.
+   *
+   * With `allow-scripts allow-same-origin allow-forms allow-popups
+   * allow-popups-to-escape-sandbox allow-downloads` applied to a real embed of
+   * a real form, the runtime **worked**: it rendered, the SSE stream
+   * connected, an answer was accepted and recorded, the postMessage resize
+   * bridge sized the frame, and the console was clean. Two paths could not be
+   * reached from that harness, because the accessibility tree does not
+   * traverse into a cross-document frame: picking a file through the uploader,
+   * and the Google sign-in popup on a gated form. Their tokens are granted in
+   * that list, which is reasoning, not evidence.
+   *
+   * What a sandbox buys here is `allow-top-navigation` staying off, so a
+   * compromised frame cannot navigate the embedder's page away. That is worth
+   * having and it is not worth betting an embedded live form's file upload or
+   * sign-in on two untested paths. Ship it after driving those two by hand on
+   * a real embed; everything else about it is already known to work.
    */
     <iframe
       ref={frame}
