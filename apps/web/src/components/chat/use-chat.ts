@@ -251,7 +251,6 @@ function paymentRefusalMessage(
   code: StartPaymentErrorCode | string | null,
   status: number,
   serverMessage?: string,
-  preview = false,
 ): string {
   switch (code) {
     case "too_many_attempts":
@@ -266,14 +265,6 @@ function paymentRefusalMessage(
       // whether this is the owner's plan or the author's own preview, and saying
       // something different here left two explanations for one refusal.
       return serverMessage || "Payment isn't available on this form right now. Please try again later.";
-    case "sign_in_required":
-      /*
-       * Only reachable in the preview: a live respondent meets the sign-in card
-       * instead, and never this. So say what the author is actually looking at
-       * — "Sign in to pay", the respondent's sentence, would read as an
-       * instruction to an author who cannot sign into their own preview.
-       */
-      return "Respondents sign in before paying. Simulate the payment to carry on here.";
     case "preview_live_account":
       return "This form takes payments on a live account, which a preview never charges. Simulate the payment instead, or connect a test account to try real checkout.";
     case "live_account_in_test_mode":
@@ -1805,10 +1796,9 @@ export function useChat({
    * and is refused. The same request serves a retry: the server hands back the
    * checkout that is still open, or makes a new one if the last attempt failed.
    *
-   * Refusals that are not about payment go where they belong. `sign_in_required`
-   * means the gate comes first (the server raises the sign-in card, and a
-   * resync makes sure this device sees it), and a stale ref means the
-   * conversation has moved on without us.
+   * Refusals that are not about payment go where they belong: a stale ref means
+   * the conversation has moved on without us, and `already_paid` means the
+   * server put the answer back rather than opening anything.
    */
   const startPayment = useCallback(
     async (ref: string, opts: { phone?: string } = {}) => {
@@ -1866,7 +1856,7 @@ export function useChat({
           // `already_paid`: the server has re-recorded the payment this
           // question already holds and moved on, so what is missing here is
           // only the stream catching up.
-          if (code === "sign_in_required" || code === "stale_ref" || code === "already_paid") {
+          if (code === "stale_ref" || code === "already_paid") {
             preopened?.close();
             setPendingPayment(null);
             void resyncRef.current?.();
@@ -1898,7 +1888,7 @@ export function useChat({
           // not by paying. The server says which refusals those are.
           const previewRefusal = body?.error?.preview === true || code === "preview_live_account";
           fail(
-            paymentRefusalMessage(code, res.status, body?.error?.message, previewRefusal),
+            paymentRefusalMessage(code, res.status, body?.error?.message),
             previewRefusal ? { preview: true } : {},
           );
           return;

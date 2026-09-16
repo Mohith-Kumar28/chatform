@@ -11,7 +11,7 @@ different promises.
 | Where the money goes | Your own gateway account | Wherever the link or UPI ID points |
 | What the answer means | The gateway confirmed the payment | The respondent pressed "I've paid" |
 | `verified` on the answer | `true` | always `false` |
-| Needs | Pro plan, sign-in on the form, a connected account | Nothing |
+| Needs | Pro plan and a connected account | Nothing |
 
 The rest of this page is about verified checkout. A link or UPI payment still
 has to be matched against your own statement by hand.
@@ -71,12 +71,14 @@ and set the amount:
 Every amount is worked out on the server from the respondent's own answers.
 Nothing a browser sends can change what is charged.
 
-**Sign-in is required.** A form with a verified payment question must ask
-respondents to sign in with Google or a phone number, so every payment belongs
-to a real person you can refund. The builder offers a one-click **Turn on
-sign-in**, and publishing refuses a form without it.
+**Sign-in is optional.** A respondent can pay without signing in, which is what
+a donation or a tip jar wants. If you would rather every payment came with a
+verified name — a ticket, a booking, anything you may need to refund by
+person — turn on sign-in in **Settings → Access**, and it applies to the whole
+form rather than to this question alone. Either way the gateway keeps the
+payer's own email and card details.
 
-Publishing also checks that the account is still connected, and that a Razorpay
+Publishing checks that the account is still connected, and that a Razorpay
 or Cashfree question charges in INR. A failed check names the question.
 
 ## What respondents see
@@ -91,9 +93,9 @@ If they close the tab straight after paying, the payment is still recorded when
 the gateway tells chatform about it, even if the conversation has already ended.
 If a payment fails or they cancel, the question stays open with **Try again**.
 
-Cashfree needs a phone number for its receipt. When the respondent signed in with
-Google and the form has not asked for a number before the payment, the Pay card
-asks for one first.
+Cashfree needs a phone number for its receipt. When nothing before the payment
+has given one — no phone sign-in, no phone question — the Pay card asks for one
+first.
 
 A variable amount follows the answers it is worked out from. If a respondent
 changes one of those answers after paying, the earlier payment no longer counts

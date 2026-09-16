@@ -25,23 +25,3 @@ export function gatewayEnabled(
     .filter(Boolean)
     .includes(orgId);
 }
-
-/**
- * Local escape hatch: take a payment from a respondent nobody has identified.
- *
- * Sign-in is a rule about the money, not a UI preference — a payment that is
- * not tied to a verified person cannot be matched to the human who says they
- * paid, and refunds and duplicate-detection both work from that identity. So
- * the product requires it, `lint` refuses to publish a gateway block without
- * it, and `startPayment` refuses to open a checkout without one.
- *
- * That same rule makes the flow untestable outside a browser that can complete
- * a real Google or Firebase sign-in, which is the one thing a local stack
- * cannot do. This exists for exactly that: `wrangler dev --var
- * PAYMENTS_DEV_SKIP_SIGNIN:on`, never set on a deployed worker (it is absent
- * from `.prod.vars.example` and `push-secrets.py` on purpose), and every call
- * site logs when it takes the bypass so it cannot go unnoticed in a log.
- */
-export function signInBypassed(env: Pick<Bindings, "PAYMENTS_DEV_SKIP_SIGNIN">): boolean {
-  return env.PAYMENTS_DEV_SKIP_SIGNIN?.trim().toLowerCase() === "on";
-}

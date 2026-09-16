@@ -78,7 +78,6 @@ export interface StartPaymentResponse {
 
 /** Error codes `POST /p/sessions/:id/payments` answers with, in `{ error: { code } }`. */
 export type StartPaymentErrorCode =
-  | "sign_in_required"
   | "plan_required"
   | "payment_unavailable"
   | "stale_ref"

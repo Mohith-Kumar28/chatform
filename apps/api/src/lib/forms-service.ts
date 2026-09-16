@@ -1,7 +1,6 @@
 import { FormDoc, lintFormDoc, hasErrors, migrateFormDoc, type FormDoc as FormDocT } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { stripForPublish, checkDocLimits, checkGatewayPayments } from "./doc-entitlements.js";
-import { signInBypassed } from "./payments/flag.js";
 import { backfillFollowUps } from "./followups.js";
 import { limitReached, type Entitlements } from "@repo/entitlements";
 import { describeSchemaError, type ApiIssue } from "./api-error.js";
@@ -88,15 +87,7 @@ export async function publishForm(
       body: { error: { code: "invalid_doc", message: "Working document is invalid" } },
     };
   }
-  /*
-   * The local sign-in bypass has to reach publish as well as the session: a
-   * gateway block cannot be published on a form without sign-in, so without
-   * this there is nothing for the bypassed session to run. Same switch, same
-   * never-in-production rule — see `signInBypassed`.
-   */
-  const issues = signInBypassed(env)
-    ? parsed.issues.filter((i) => i.code !== "payment_requires_sign_in")
-    : parsed.issues;
+  const issues = parsed.issues;
   if (hasErrors(issues as never)) {
     return {
       ok: false,

@@ -40,7 +40,7 @@ import {
   type ValidateOptions,
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
-import { gatewayEnabled, signInBypassed } from "../lib/payments/flag.js";
+import { gatewayEnabled } from "../lib/payments/flag.js";
 import { loadAccountForOrg } from "../lib/payments/accounts.js";
 import {
   CheckoutUnavailableError,
@@ -1561,16 +1561,18 @@ export class SessionDO extends DurableObject<Bindings> {
     if (!can(ent, "collect_payments")) {
       return refuse("plan_required", "This form can't take payments right now. Let its owner know.");
     }
-    if (!meta.identity && !signInBypassed(this.env)) {
-      // `gatedAtRef` is what brings this question back after they sign in.
-      await this.rememberGatedCursor();
-      await this.emitAuthRequired();
-      return refuse("sign_in_required", "Sign in to pay.");
-    }
-    if (!meta.identity) {
-      console.warn("payment_signin_bypassed", { sessionId: meta.sessionId, blockRef: ref });
-    }
-
+    /*
+     * Paying does not require a signed-in respondent, deliberately.
+     *
+     * An earlier version refused a checkout without `meta.identity`, on the
+     * reasoning that a payment nobody can attribute to a person is a refund
+     * nobody can resolve. That is a real cost, and it is the author's to weigh
+     * — a conference form wants sign-in, a tip jar does not — so it belongs in
+     * `settings.requireAuth` next to every other question, not welded to this
+     * block type. Attribution does not depend on it either: a payment is tied
+     * to the session and the response, and the gateway holds the payer's own
+     * email and card details for a refund.
+     */
     if (!amount.ok) {
       console.warn("payment_amount_unresolved", { sessionId: meta.sessionId, blockRef: ref, code: amount.code });
       /*
@@ -1654,10 +1656,9 @@ export class SessionDO extends DurableObject<Bindings> {
     }
 
     /*
-     * Null only under the local sign-in bypass, which is the one path that
-     * reaches here unidentified. The gateway still needs *something* to put on
-     * the receipt, so the session id stands in for the person — see
-     * `signInBypassed`.
+     * Null whenever the form does not ask who they are, which is most of them.
+     * The gateway still needs something to hang the receipt on, so the session
+     * id stands in for the person — see `customerIdFor`.
      */
     const identity = meta.identity ?? null;
     /*
@@ -5813,17 +5814,6 @@ const SIMULATABLE_REFUSALS = new Set<StartPaymentErrorCode>([
   "plan_required",
   "preview_live_account",
   "too_many_attempts",
-  /*
-   * Sign-in included, and only here.
-   *
-   * The gate is real for a respondent and the session still refuses to open a
-   * checkout without an identity. But the preview is the author walking their
-   * own form, and nobody signs into their own preview: lint forces sign-in on
-   * for a gateway block, so without this every author who presses Pay in the
-   * preview meets the sign-in card and can never see the payment step they
-   * just built. Simulating needs no identity, so offer that instead.
-   */
-  "sign_in_required",
 ]);
 
 function refuse(code: StartPaymentErrorCode, message: string): StartPaymentResult {

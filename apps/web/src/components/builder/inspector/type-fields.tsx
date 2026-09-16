@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, ShieldCheck, TriangleAlert } from "lucide-react";
-import { toast } from "sonner";
+import { ArrowUpRight } from "lucide-react";
 import {
   isValidUpiId,
   parseEmailDomains,
@@ -773,7 +772,6 @@ function PaymentFields({
       {gateway ? (
         <LockedControl feature="collect_payments">
           <div className="space-y-6">
-            <SignInNotice />
             <AccountPicker
               accounts={accounts}
               account={account}
@@ -822,46 +820,6 @@ function PaymentFields({
         </>
       )}
     </>
-  );
-}
-
-/**
- * Verified payments need to know who paid, so the form needs sign-in — and
- * publishing refuses a gateway block on a form without it. Said here, where the
- * block is being set up, with the one click that fixes it, rather than as a
- * publish error an author meets later and has to trace back.
- *
- * The switch goes through the builder store like any other edit, so it lands
- * in undo history and autosaves with everything else. The method stays
- * whatever the form had (Google unless changed), which Settings → Access can
- * change.
- */
-function SignInNotice() {
-  const signInOn = useBuilderStore((s) => s.doc?.settings.requireAuth.enabled ?? true);
-  const edit = useBuilderStore((s) => s.edit);
-  if (signInOn) return null;
-  return (
-    <div className="flex gap-2 rounded-lg bg-[var(--warning-soft)] px-3 py-2.5 text-[var(--warning-soft-foreground)]">
-      <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
-      <div className="min-w-0 flex-1 space-y-2 text-xs leading-relaxed">
-        <p>Payments need respondents to sign in (Google or phone) so every payment is tied to a real person.</p>
-        <LockedControl feature="respondent_auth_google" chip="inline">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              edit((d) => {
-                d.settings.requireAuth.enabled = true;
-              });
-              toast.success("Sign-in is on. Choose Google or phone in Settings → Access.");
-            }}
-          >
-            <ShieldCheck className="size-3.5" />
-            Turn on sign-in
-          </Button>
-        </LockedControl>
-      </div>
-    </div>
   );
 }
 

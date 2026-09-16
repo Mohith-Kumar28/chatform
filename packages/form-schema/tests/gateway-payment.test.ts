@@ -285,7 +285,7 @@ describe("lint for gateway payment blocks", () => {
   const errors = (doc: ReturnType<typeof docWith>) =>
     lintFormDoc(doc).filter((i) => i.level === "error").map((i) => i.code);
 
-  it("passes a fully configured block on a form with sign-in", () => {
+  it("passes a fully configured block", () => {
     expect(errors(docWith())).toEqual([]);
   });
 
@@ -295,22 +295,15 @@ describe("lint for gateway payment blocks", () => {
     expect(codes).not.toContain("payment_no_upi_id");
   });
 
-  it("requires sign-in", () => {
-    const issues = lintFormDoc(docWith({}, false));
-    const issue = issues.find((i) => i.code === "payment_requires_sign_in");
-    expect(issue?.level).toBe("error");
-    expect(issue?.refs).toEqual(["pay"]);
-    expect(issue?.message).toMatch(/sign-in/i);
-  });
-
-  it("does not require sign-in for manual payments", () => {
-    const doc = FormDoc.parse(leadFormFixture);
-    doc.blocks.push(
-      BlockSchema.parse({
-        id: "blk_link0003", ref: "pay", title: "Pay", type: "payment", method: "link", url: "https://rzp.io/l/x",
-      }) as never,
-    );
-    expect(lintFormDoc(doc).map((i) => i.code)).not.toContain("payment_requires_sign_in");
+  it("does not ask for sign-in", () => {
+    /*
+     * Taking a payment and knowing who paid are separate decisions: a form that
+     * sells a named seat should turn sign-in on, a tip jar should not, and lint
+     * has no way to tell which this is. It used to refuse to publish without
+     * it, which made every donation form a sign-in form.
+     */
+    expect(errors(docWith({}, false))).toEqual([]);
+    expect(lintFormDoc(docWith({}, false)).map((i) => i.code)).not.toContain("payment_requires_sign_in");
   });
 
   it("requires a connected account", () => {

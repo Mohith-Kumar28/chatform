@@ -21,7 +21,7 @@ const gw = vi.hoisted(() => ({
   orders: new Map<string, { amountMinor: number; currency: string; status: string }>(),
 }));
 
-vi.mock("../src/lib/payments/flag.js", () => ({ gatewayEnabled: () => true, signInBypassed: () => false }));
+vi.mock("../src/lib/payments/flag.js", () => ({ gatewayEnabled: () => true }));
 
 vi.mock("../src/lib/payments/accounts.js", async (importOriginal) => {
   const real = (await importOriginal()) as Record<string, unknown>;

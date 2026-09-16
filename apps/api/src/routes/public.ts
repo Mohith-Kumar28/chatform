@@ -620,7 +620,6 @@ const startPaymentSchema = z.object({
 const PaymentError = z.object({
   error: z.object({
     code: z.enum([
-      "sign_in_required",
       "plan_required",
       "payment_unavailable",
       "stale_ref",

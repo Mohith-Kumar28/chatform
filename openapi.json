@@ -5823,7 +5823,6 @@
                         "code": {
                           "type": "string",
                           "enum": [
-                            "sign_in_required",
                             "plan_required",
                             "payment_unavailable",
                             "stale_ref",
@@ -5869,7 +5868,6 @@
                         "code": {
                           "type": "string",
                           "enum": [
-                            "sign_in_required",
                             "plan_required",
                             "payment_unavailable",
                             "stale_ref",
@@ -5915,7 +5913,6 @@
                         "code": {
                           "type": "string",
                           "enum": [
-                            "sign_in_required",
                             "plan_required",
                             "payment_unavailable",
                             "stale_ref",
@@ -5961,7 +5958,6 @@
                         "code": {
                           "type": "string",
                           "enum": [
-                            "sign_in_required",
                             "plan_required",
                             "payment_unavailable",
                             "stale_ref",
@@ -6007,7 +6003,6 @@
                         "code": {
                           "type": "string",
                           "enum": [
-                            "sign_in_required",
                             "plan_required",
                             "payment_unavailable",
                             "stale_ref",
@@ -17281,9 +17276,6 @@
           "402": {
             "description": "The organization's plan does not include payments"
           },
-          "403": {
-            "description": "The respondent has to sign in first (`sign_in_required`)"
-          },
           "409": {
             "description": "Not payable right now: `stale_ref`, `payment_unavailable`, `preview_live_account`, `live_account_in_test_mode` (a `*_test_` key on a live account), `already_paid`"
           },
@@ -17805,9 +17797,6 @@
           },
           "402": {
             "description": "The organization's plan does not include payments"
-          },
-          "403": {
-            "description": "The respondent has to sign in first (`sign_in_required`)"
           },
           "409": {
             "description": "Not payable right now: `stale_ref`, `payment_unavailable`, `preview_live_account`, `live_account_in_test_mode` (a `*_test_` key on a live account), `already_paid`"

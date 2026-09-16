@@ -614,27 +614,16 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
   }
 
   /*
-   * A verified payment needs to know who paid.
+   * Sign-in is not required to take a payment, and lint does not ask for it.
    *
-   * The gateway is told a customer, the record is tied to a person rather than
-   * a device, and a refund or a duplicate is resolved by asking who it was.
-   * Without sign-in the form has none of that, and the payment step would be
-   * a checkout anyone can open for anybody. The session refuses to start a
-   * payment without an identity too; this is what tells the author before
-   * publishing rather than their respondents after.
+   * It used to be an error here, on the reasoning that a refund or a duplicate
+   * is resolved by knowing who paid. True, and still worth doing on a form that
+   * sells a seat to a named person — but it is the author's call, the way it is
+   * for every other question. A tip jar or a donation that made everyone sign
+   * in first would collect less and prove nothing: the gateway already holds
+   * the payer's email and card, and the record is tied to the session and the
+   * response either way.
    */
-  if (gatewayRefs.length > 0 && !doc.settings.requireAuth.enabled) {
-    issues.push({
-      level: "error",
-      code: "payment_requires_sign_in",
-      message:
-        gatewayRefs.length === 1
-          ? "Verified payments need respondents to sign in. Turn on sign-in (Google or phone) in Settings."
-          : `${gatewayRefs.length} questions take verified payments, which need respondents to sign in. Turn on sign-in (Google or phone) in Settings.`,
-      refs: gatewayRefs,
-    });
-  }
-
   return issues;
 }
 

@@ -21,8 +21,6 @@ import type { SessionDO } from "../src/do/session-do.js";
 
 const gw = vi.hoisted(() => ({
   flagOn: true,
-  /** The local-only escape hatch. Off for every test but the one that names it. */
-  signInBypass: false,
   creates: 0,
   fetches: 0,
   failCreate: false,
@@ -46,10 +44,7 @@ const gw = vi.hoisted(() => ({
   onFetch: null as null | (() => Promise<void>),
 }));
 
-vi.mock("../src/lib/payments/flag.js", () => ({
-  gatewayEnabled: () => gw.flagOn,
-  signInBypassed: () => gw.signInBypass,
-}));
+vi.mock("../src/lib/payments/flag.js", () => ({ gatewayEnabled: () => gw.flagOn }));
 
 vi.mock("../src/lib/payments/accounts.js", async (importOriginal) => {
   const real = (await importOriginal()) as Record<string, unknown>;
@@ -306,7 +301,6 @@ beforeAll(async () => {
 
 beforeEach(() => {
   gw.flagOn = true;
-  gw.signInBypass = false;
   gw.failCreate = false;
   gw.onCreate = null;
   gw.onFetch = null;
@@ -501,46 +495,41 @@ describe("an answer the browser sends", () => {
 // ───────────────────────────── starting ─────────────────────────────
 
 describe("pressing Pay", () => {
-  it("asks an anonymous respondent to sign in first", async () => {
+  it("takes a payment from a respondent nobody has identified", async () => {
+    /*
+     * Paying does not require signing in. The form's own `requireAuth` decides
+     * that, the way it does for every other question — this used to be a 403
+     * with an `auth_required` card, which made every donation and tip-jar form
+     * a sign-in form.
+     */
     const s = await openHosted(open.slug);
     await answerName(s);
     const seq = await latestSeq(s.sid);
 
     const started = await startPay(s);
-    expect(started.status).toBe(403);
-    expect(started.body.error.code).toBe("sign_in_required");
-    const events = await eventsAfter(s.sid, seq);
-    expect(events.map((e) => e.type)).toContain("auth_required");
-    const rows = await env.DB.prepare(`SELECT COUNT(*) AS n FROM respondent_payments WHERE session_id = ?1`)
-      .bind(s.sid)
-      .first<{ n: number }>();
-    expect(rows?.n).toBe(0);
-
-    // Signing in brings the payment question straight back.
-    const afterAuth = await latestSeq(s.sid);
-    await signIn(s.sid);
-    const back = await eventsAfter(s.sid, afterAuth);
-    expect(back.find((e) => e.type === "question")?.data.block.ref).toBe("q_pay");
-  });
-
-  it("takes a payment from an unidentified respondent only when the local bypass is on", async () => {
-    /*
-     * The switch a local stack runs with, because no local browser can complete
-     * a real Google or Firebase sign-in. Production never sets it, so this is
-     * the only test that turns it on — and it exists so that a change which
-     * quietly made the bypass the default would fail here rather than in
-     * someone's account.
-     */
-    const s = await openHosted(open.slug);
-    await answerName(s);
-    gw.signInBypass = true;
-    const started = await startPay(s);
     expect(started.status).toBe(200);
     expect(started.body.launch).toBeTruthy();
-    const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM respondent_payments WHERE session_id = ?1`)
+    const events = await eventsAfter(s.sid, seq);
+    expect(events.map((e) => e.type)).not.toContain("auth_required");
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM respondent_payments WHERE session_id = ?1 AND status = 'created'`,
+    )
       .bind(s.sid)
       .first<{ n: number }>();
     expect(row?.n).toBe(1);
+  });
+
+  it("still gates the conversation when the form asks respondents to sign in", async () => {
+    /*
+     * The gate belongs to the form, not to the payment block. Removing the
+     * payment step's own identity check must not have loosened it: this form
+     * asks before the first question, and still does.
+     */
+    const s = await openHosted(main.slug);
+    const events = await eventsAfter(s.sid, 0);
+    expect(events.map((e) => e.type)).toContain("auth_required");
+    const answered = await post(`/p/sessions/${s.sid}/messages`, s.token, { type: "text", text: "Byte Force" });
+    expect(answered.status).toBe(400);
   });
 
   it("opens one checkout, however many times it is pressed", async () => {
@@ -1450,25 +1439,14 @@ describe("a builder preview", () => {
     expect(live.status).toBe(200);
   });
 
-  it("offers Simulate rather than a sign-in card the author cannot use", async () => {
-    /*
-     * Lint forces sign-in on for a gateway block, and nobody signs into their
-     * own preview, so without `sign_in_required` being simulatable the author
-     * met the sign-in card and could never reach the payment step they built.
-     */
+  it("opens a real test checkout for an author who never signed into their own preview", async () => {
+    // Nobody signs into their own preview, and nothing about paying asks them to.
     const { readFormDoc } = await import("@repo/form-schema");
     const sid = await preview(readFormDoc(paymentDoc({ requireAuth: false })), {
       identified: false,
       form: open,
     });
-    const started = await stubFor(sid).startPayment("q_pay");
-    expect(started).toMatchObject({ ok: false, code: "sign_in_required", preview: true });
-    // A published form tells the respondent to sign in instead, with no Simulate anywhere.
-    const s = await openHosted(open.slug);
-    await answerName(s);
-    const live = await startPay(s);
-    expect(live.status).toBe(403);
-    expect(live.body.error.preview).toBeUndefined();
+    expect(await stubFor(sid).startPayment("q_pay")).toMatchObject({ ok: true });
   });
 
   it("simulates a payment without touching the gateway or D1", async () => {

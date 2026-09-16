@@ -131,7 +131,7 @@ SELECT 'kbs_demo0007', f.organization_id, 'frm_demo00001', 'text', 'What this de
 
 Things chatform does not do, which are worth knowing before anyone builds on it:
 
-Payments are only verified on your own gateway account. A payment question can open checkout on a Razorpay, Cashfree or Stripe account you connect, and the conversation moves on only once that gateway confirms the money arrived. The money goes straight to you and chatform takes no cut. It needs the Pro plan and sign-in on the form, and it is being switched on for accounts gradually. A payment link or UPI QR is not verified: the question hands the respondent to the link or their UPI app and only records that they said they paid, so those you still reconcile against your own statement.
+Payments are only verified on your own gateway account. A payment question can open checkout on a Razorpay, Cashfree or Stripe account you connect, and the conversation moves on only once that gateway confirms the money arrived. The money goes straight to you and chatform takes no cut. It needs the Pro plan and is being switched on for accounts gradually. Respondents do not have to sign in to pay, though you can turn sign-in on if you want every payment to carry a verified name. A payment link or UPI QR is not verified: the question hands the respondent to the link or their UPI app and only records that they said they paid, so those you still reconcile against your own statement.
 
 Scheduling is a hand-off. A scheduling question records a booking link and the slot if you pass one; it does not hold a calendar.
 

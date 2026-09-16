@@ -473,7 +473,6 @@ const startPaymentRoute = (base: string) =>
     responses: {
       200: { description: "Checkout opened, or the one already open" },
       402: { description: "The organization's plan does not include payments" },
-      403: { description: "The respondent has to sign in first (`sign_in_required`)" },
       409: {
         description:
           "Not payable right now: `stale_ref`, `payment_unavailable`, `preview_live_account`, `live_account_in_test_mode` (a `*_test_` key on a live account), `already_paid`",

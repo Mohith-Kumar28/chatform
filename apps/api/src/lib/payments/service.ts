@@ -60,7 +60,6 @@ export const PAYMENT_GRACE_MS = 15 * 60 * 1000;
 export const MAX_PAYMENT_ATTEMPTS = 5;
 
 export type StartPaymentErrorCode =
-  | "sign_in_required"
   | "plan_required"
   | "payment_unavailable"
   | "stale_ref"
@@ -71,8 +70,8 @@ export type StartPaymentErrorCode =
   /** The question already holds a verified payment; the answer was put back instead. */
   | "already_paid"
   /**
-   * The gateway needs a phone number for the receipt (Cashfree) and the session has none — the
-   * sign-in was Google and no earlier answer gave one. Send `phone` with the next start.
+   * The gateway needs a phone number for the receipt (Cashfree) and the session has none — no
+   * sign-in gave one and no earlier answer did either. Send `phone` with the next start.
    */
   | "phone_required"
   /** A test-mode session (a `*_test_` API key) never charges a live account. */
@@ -1099,7 +1098,6 @@ async function notifyFailed(env: Bindings, record: RespondentPaymentRow, code?: 
 // ─────────────────────────── the respondent's routes ───────────────────────────
 
 const START_STATUS: Record<StartPaymentErrorCode, 400 | 402 | 403 | 404 | 409 | 422 | 429> = {
-  sign_in_required: 403,
   plan_required: 402,
   payment_unavailable: 409,
   stale_ref: 409,

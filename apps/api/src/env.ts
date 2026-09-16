@@ -226,14 +226,6 @@ export interface Bindings {
   PAYMENTS_GATEWAY_ENABLED?: string;
   PAYMENTS_GATEWAY_ORGS?: string;
   /**
-   * `"on"` lets a payment start without a signed-in respondent, and lets a
-   * form with a gateway block publish without sign-in turned on. It exists so
-   * the flow can be driven on a local stack, which cannot complete a real
-   * Google or Firebase sign-in. Never set it on a deployed worker: it is
-   * deliberately absent from `.prod.vars.example` and `push-secrets.py`.
-   */
-  PAYMENTS_DEV_SKIP_SIGNIN?: string;
-  /**
    * Cashfree partner (OAuth) credentials. `CASHFREE_PARTNER_API_KEY` signs the
    * partner-level webhooks. `CASHFREE_ENVIRONMENT` is `"sandbox"` or
    * `"production"`; absent means sandbox, so a missing variable never moves
