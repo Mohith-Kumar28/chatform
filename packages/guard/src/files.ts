@@ -128,13 +128,13 @@ export function looksTextual(bytes: Uint8Array): boolean {
   const head = bytes.length > SNIFF_BYTES ? bytes.subarray(0, SNIFF_BYTES) : bytes;
   if (head.includes(0)) return false;
   try {
-    new TextDecoder("utf-8", { fatal: true }).decode(head);
+    new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(head);
     return true;
   } catch {
     // A truncated multi-byte sequence at the cut is not a binary file, so retry
     // without the last three bytes before calling it.
     try {
-      new TextDecoder("utf-8", { fatal: true }).decode(head.subarray(0, Math.max(0, head.length - 3)));
+      new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(head.subarray(0, Math.max(0, head.length - 3)));
       return true;
     } catch {
       return false;

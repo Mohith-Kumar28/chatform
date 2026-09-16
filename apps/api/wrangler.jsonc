@@ -211,6 +211,17 @@
       }
     },
     {
+      // Asset uploads, keyed by author. Generous, because a builder session
+      // legitimately adds a handful of images in a row and each one is a
+      // separate request; low enough that a loop cannot fill a bucket.
+      "name": "RATE_LIMIT_ASSET",
+      "namespace_id": "1007",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    },
+    {
       "name": "RATE_LIMIT_SAVE",
       "namespace_id": "1006",
       // The builder's autosave, keyed by author. The editor checkpoints at most

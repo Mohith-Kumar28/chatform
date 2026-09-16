@@ -1,6 +1,8 @@
 import { Hono, type Context } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
+import { readFormDoc } from "@repo/form-schema";
+import { ALLOWED_UPLOAD_MIME, SNIFF_BYTES, checkFileBytes, safeFilename, sniffMime } from "@repo/guard/files";
 import type { Bindings } from "../env.js";
 import {
   requireSession,
@@ -9,7 +11,9 @@ import {
   assertChatSessionAccess,
   type GuardVars,
 } from "../lib/guards.js";
-import { requireScope, type AuthzVars } from "../lib/authorize.js";
+import { requirePermission, requireScope, type AuthzVars } from "../lib/authorize.js";
+import { assetLimit } from "../lib/ratelimit.js";
+import { contentLength } from "../lib/inputs.js";
 import { getEntitlements, storageBytes } from "../lib/entitlements.js";
 import { PLAN_LIST } from "@repo/entitlements";
 
@@ -46,11 +50,6 @@ function formatMb(bytes: number): string {
 function sizedBody(req: Request, length: number): ReadableStream | null {
   if (!req.body) return null;
   return req.body.pipeThrough(new FixedLengthStream(length));
-}
-
-function contentLength(c: { req: { header: (name: string) => string | undefined } }): number | null {
-  const n = Number(c.req.header("content-length"));
-  return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
 /**
@@ -101,14 +100,12 @@ function denied(c: UploadCtx, mode: UploadMode) {
     : c.json({ error: { code: "not_found", message: "Session not found" } }, 404);
 }
 
-const ALLOWED_MIME = new Set([
-  "image/png", "image/jpeg", "image/gif", "image/webp",
-  "application/pdf", "text/plain", "text/csv",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "audio/mpeg", "audio/wav", "video/mp4", "video/webm",
-]);
+/**
+ * The respondent-upload allowlist now lives in `@repo/guard/files`, beside the
+ * byte sniffer that has to agree with it. Re-exported under the old name so
+ * the call sites below read as they did.
+ */
+const ALLOWED_MIME = ALLOWED_UPLOAD_MIME;
 
 /**
  * One implementation, mounted twice.
@@ -161,9 +158,43 @@ uploadsRouter.post(
       return c.json({ error: { code: "too_large", message: `Max ${MAX_FILE_MB}MB` } }, 413);
     }
 
-    const sess = await c.env.DB.prepare(`SELECT form_id, organization_id FROM chat_sessions WHERE id = ?`)
+    const sess = await c.env.DB.prepare(
+      `SELECT cs.form_id, cs.organization_id, fv.schema_json
+         FROM chat_sessions cs
+         LEFT JOIN form_versions fv ON fv.id = cs.form_version_id
+        WHERE cs.id = ?`,
+    )
       .bind(sessionId)
-      .first<{ form_id: string; organization_id: string }>();
+      .first<{ form_id: string; organization_id: string; schema_json: string | null }>();
+
+    /**
+     * The block's own rules, enforced here rather than only in the browser.
+     *
+     * `accept` and `maxSizeMB` were sent to the client in the `upload_request`
+     * event and checked there — which is to say checked by whoever was holding
+     * the client. An author who limits a question to a 2 MB PDF means it, and
+     * the only place that can be true is the server.
+     *
+     * Skipped when the session has no published version to read (a preview
+     * session), where the global allowlist and the plan limits still apply.
+     */
+    if (sess?.schema_json) {
+      const block = readFormDoc(JSON.parse(sess.schema_json)).blocks.find((b) => b.ref === ref);
+      if (block?.type === "file_upload") {
+        if (!block.accept.includes(mime)) {
+          return c.json(
+            { error: { code: "unsupported_type", message: `This question accepts ${block.accept.join(", ")}` } },
+            415,
+          );
+        }
+        if (size > block.maxSizeMB * MB) {
+          return c.json(
+            { error: { code: "too_large", message: `This question accepts files up to ${block.maxSizeMB}MB` } },
+            413,
+          );
+        }
+      }
+    }
     if (sess?.organization_id) {
       /**
        * Two plan limits, checked before the R2 key is handed out rather than after the
@@ -193,7 +224,7 @@ uploadsRouter.post(
     if (!sess) return c.json({ error: { code: "not_found", message: "Session not found" } }, 404);
 
     const fileId = `file_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
-    const r2Key = `uploads/${sess.organization_id}/${sess.form_id}/${sessionId}/${fileId}-${filename.replace(/[^\w.-]/g, "_").slice(0, 80)}`;
+    const r2Key = `uploads/${sess.organization_id}/${sess.form_id}/${sessionId}/${fileId}-${safeFilename(filename)}`;
 
     await c.env.DB.prepare(
       `INSERT INTO files (id, organization_id, form_id, session_id, uploaded_by, r2_key, filename, mime, size_bytes, status, created_at)
@@ -230,16 +261,27 @@ uploadsRouter.put(
     if (!sessionId) return denied(c, mode);
     const fileId = c.req.param("fileId");
 
-    const file = await c.env.DB.prepare(`SELECT r2_key, size_bytes, status FROM files WHERE id = ? AND session_id = ?`)
+    const file = await c.env.DB.prepare(`SELECT r2_key, mime, size_bytes, status FROM files WHERE id = ? AND session_id = ?`)
       .bind(fileId, sessionId)
-      .first<{ r2_key: string; size_bytes: number; status: string }>();
+      .first<{ r2_key: string; mime: string; size_bytes: number; status: string }>();
     if (!file || file.status !== "pending") return c.json({ error: { code: "not_found", message: "Upload intent not found" } }, 404);
 
     // The intent already checked `size_bytes` against the plan, so holding the
     // body to the declared size holds it to the plan.
     const mismatch = () =>
       c.json({ error: { code: "size_mismatch", message: "Uploaded size differs from declared" } }, 400);
-    const httpMetadata = { contentType: c.req.header("content-type") ?? "application/octet-stream" };
+    /**
+     * The type the intent allowlisted, not the one this request claims.
+     *
+     * These two were never compared: the intent checked a `mime` field in a
+     * JSON body against the allowlist, and then the PUT stored whatever its
+     * own `Content-Type` header said — so `text/html` could be registered as
+     * `image/png` and stored as `text/html`. The stored value is what the
+     * serving routes read when deciding whether something may be rendered
+     * inline, so it has to be the checked one. `confirm` then verifies it
+     * against the bytes.
+     */
+    const httpMetadata = { contentType: file.mime };
     const length = contentLength(c);
 
     if (length !== null) {
@@ -291,6 +333,48 @@ uploadsRouter.post(
       return c.json({ error: { code: "too_large", message: `Max ${MAX_FILE_MB}MB` } }, 413);
     }
 
+    /**
+     * The bytes decide what this file is.
+     *
+     * Every type decision before this one came from something the client said
+     * — a JSON field at intent, a header on the PUT — and both are free text.
+     * Read back the head of the stored object and ask the format itself. A
+     * disagreement means the object is deleted rather than marked confirmed:
+     * nothing has referenced it yet, because `confirm` is what makes it
+     * visible to the form.
+     *
+     * Checked here rather than mid-PUT so the upload stays a stream. A 100 MB
+     * file does not fit in a 128 MB worker, and the object is not reachable by
+     * anything until this call returns.
+     */
+    const head = await c.env.R2.get(file.r2_key, { range: { offset: 0, length: SNIFF_BYTES } });
+    if (head) {
+      const verdict = await checkFileBytes({
+        declared: file.mime,
+        bytes: new Uint8Array(await head.arrayBuffer()),
+        allowed: ALLOWED_MIME,
+      });
+      if (!verdict.ok) {
+        await c.env.R2.delete(file.r2_key);
+        await c.env.DB.prepare(`UPDATE files SET status = 'rejected' WHERE id = ?`).bind(fileId).run();
+        console.warn("upload_bytes_rejected", {
+          fileId,
+          declared: file.mime,
+          sniffed: verdict.sniffed,
+          reason: verdict.reason,
+        });
+        return c.json(
+          {
+            error: {
+              code: "unsupported_type",
+              message: "That file's contents do not match the type it was registered as.",
+            },
+          },
+          415,
+        );
+      }
+    }
+
     await c.env.DB.prepare(`UPDATE files SET status = 'confirmed', confirmed_at = ? WHERE id = ?`).bind(Date.now(), fileId).run();
 
     // notify the session DO so it can emit upload_received + proceed
@@ -317,6 +401,17 @@ export const filesAdminRouter = new Hono<{ Bindings: Bindings; Variables: Partia
 
 filesAdminRouter.use("*", requireSession);
 filesAdminRouter.use("*", requireOrg);
+/**
+ * Uploading an asset is editing the form it will appear in.
+ *
+ * The router had `requireSession` and `requireOrg` and stopped there, so every
+ * member of an organization could upload — a `viewer`, whose whole role is
+ * `form: ["read"]`, included. The rate limit is beside it because this is a
+ * streaming write to R2 that a client can call in a loop, and the only thing
+ * bounding it was the plan's storage quota.
+ */
+filesAdminRouter.use("/assets", assetLimit);
+filesAdminRouter.use("/assets", requirePermission("form", "update"));
 
 /**
  * Builder-owned assets: question media, cover images, favicons, and files an
@@ -389,6 +484,28 @@ filesAdminRouter.post("/assets", async (c) => {
   // The browser leaves `type` empty for anything it has no name for — a .dmg,
   // a .tsx. Stored as bytes, which is what it is.
   if (!/^[\w.+-]+\/[\w.+-]+$/.test(mime) || mime.length > 120) mime = "application/octet-stream";
+
+  /**
+   * For a buffered body, let the bytes correct the label before it is stored.
+   *
+   * Any type is accepted here on purpose — an author hands out a .dmg in a
+   * File Drop — so this is not a gate. It matters because `GET /p/assets/:id`
+   * reads the *stored* type to decide what may be rendered inline, and that
+   * type came from the client. An HTML file announced as `image/png` was
+   * served as `image/png`; now it is stored as what it is and served as a
+   * sandboxed download like every other non-renderable type.
+   *
+   * Only for the multipart path, which is already fully in memory. The raw
+   * path streams straight to R2 — the only way a 100 MB file fits through a
+   * 128 MB worker — and is not worth buffering to relabel.
+   */
+  if (body instanceof ArrayBuffer) {
+    const sniffed = await sniffMime(new Uint8Array(body.slice(0, SNIFF_BYTES)));
+    if (sniffed && sniffed !== mime) {
+      console.warn("asset_mime_relabelled", { declared: mime, sniffed, orgId });
+      mime = sniffed;
+    }
+  }
 
   const quota = ent.limits.file_storage_mb;
   if (quota != null) {

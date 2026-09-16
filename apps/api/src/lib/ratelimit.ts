@@ -173,6 +173,26 @@ export const saveLimit: MiddlewareHandler<{
 };
 
 /**
+ * Asset uploads, keyed by the author rather than by address.
+ *
+ * Same reasoning as `saveLimit`: an office behind one address is many authors
+ * who must not exhaust each other. Sixty a minute is far above adding images
+ * to a form by hand and far below anything that could fill a bucket, and like
+ * every binding here it is per-colo and eventually consistent — a bound on a
+ * loop, not a quota to state.
+ */
+export const assetLimit: MiddlewareHandler<{
+  Bindings: Bindings;
+  Variables: Partial<GuardVars>;
+}> = async (c, next) => {
+  const userId = c.get("userId");
+  if (userId && (await limited(c, c.env.RATE_LIMIT_ASSET, [`asset:${userId}`]))) {
+    return tooMany(c, { seconds: 60, scope: "user", policy: "60;w=60" });
+  }
+  await next();
+};
+
+/**
  * Blunt key guessing.
  *
  * Called from the 401 path rather than up front, so a caller with a valid key is

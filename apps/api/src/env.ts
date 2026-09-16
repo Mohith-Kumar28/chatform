@@ -51,6 +51,15 @@ export interface Bindings {
    * client rather than a person: nobody editing a form reaches it.
    */
   RATE_LIMIT_SAVE?: RateLimit;
+  /**
+   * Asset uploads, keyed by the author.
+   *
+   * `POST /api/assets` was the one write on the dashboard with no ceiling of
+   * any kind: it streams to R2, it is reachable by every member of an
+   * organization, and the only thing bounding it was the plan's storage quota
+   * — which is to say, nothing until the bill arrived.
+   */
+  RATE_LIMIT_ASSET?: RateLimit;
   WORKERS_AI?: Ai;
   /**
    * The knowledge base's vector index, one namespace per form.

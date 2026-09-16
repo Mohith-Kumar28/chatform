@@ -37,3 +37,16 @@ export const HiddenFieldsInput = z
 
 /** The embed's parent origin, checked against the form's allowlist later. */
 export const EmbedInput = z.object({ origin: z.string().max(200).optional() });
+
+/**
+ * The declared body size, or null when there is not a usable one.
+ *
+ * Every route that buffers or streams a body refuses on this before reading a
+ * byte, which is the only check that costs nothing. A lying value cannot slip
+ * bytes past it: `FixedLengthStream` errors when the client sends more or
+ * fewer than it promised.
+ */
+export function contentLength(c: { req: { header: (name: string) => string | undefined } }): number | null {
+  const n = Number(c.req.header("content-length"));
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}

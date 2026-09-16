@@ -76,7 +76,8 @@ import {
 import { startEmailChallenge, verifyEmailChallenge } from "../lib/respondent-auth.js";
 import { findOpenResponseId } from "../lib/respondent-history.js";
 import type { RespondentKeySource } from "../lib/respondent-key.js";
-import type { RespondentIdentity, RespondentAuthMethod } from "@repo/form-schema";
+import type { RespondentIdentity, RespondentAuthMethod, FileDescriptor } from "@repo/form-schema";
+import { holesFor } from "../lib/d1-bindings.js";
 import { streamText, stepCountIs } from "ai";
 
 interface DoSessionMeta {
@@ -274,6 +275,11 @@ function errorInfo(err: unknown): { errName: string; errMessage: string; errStac
 
 const IDLE_ALARM_MS = 30 * 60 * 1000;
 const MAX_REPLAY = 200;
+/**
+ * Descriptors a single file answer may carry, matching the ceiling on the
+ * block schema's own `maxFiles` (`z.number().int().min(1).max(10)`).
+ */
+const MAX_FILES_PER_ANSWER = 10;
 /**
  * Screen-outs one session may take back.
  *
@@ -2612,8 +2618,71 @@ export class SessionDO extends DurableObject<Bindings> {
     return Object.keys(held).map(contactFieldPhrase);
   }
 
+  /**
+   * File answers, re-read from the database rather than taken on trust.
+   *
+   * The client posts an array of descriptors — `fileId`, `filename`, `mime`,
+   * `size`, `r2Key` — and `validateAnswer` could only ever check their shape:
+   * it is a pure function in a package with no database. So every field was
+   * whatever was posted. A respondent could name another session's `fileId`,
+   * claim a 2 KB file was 40 MB, or label an executable `image/png`, and the
+   * answer would be stored saying so — and it is the stored `mime` the
+   * download route reads when deciding what to serve.
+   *
+   * The same shape as the uniqueness check below: a second, database-backed
+   * gate for the one rule that cannot be decided from the block and the value.
+   * Returns the rows as they really are, in the order the respondent sent
+   * them, or null if any id is not a confirmed upload of this session.
+   */
+  private async authenticFiles(value: unknown): Promise<FileDescriptor[] | null> {
+    if (!this.meta || !Array.isArray(value) || value.length === 0) return null;
+    const ids = value.map((v) => (v as { fileId?: unknown }).fileId);
+    if (!ids.every((id): id is string => typeof id === "string" && id.length > 0)) return null;
+    /**
+     * One bound parameter per id, and D1 takes a hundred per statement.
+     *
+     * `maxFiles` caps a block at ten and `validateAnswer` has already enforced
+     * it before this runs — but the bound is restated here rather than
+     * inherited, because a statement whose length depends on a caller's array
+     * is exactly the shape that produced `too many SQL variables` in
+     * production once already.
+     */
+    if (ids.length > MAX_FILES_PER_ANSWER) return null;
+
+    const rows = await this.env.DB.prepare(
+      `SELECT id, r2_key, filename, mime, size_bytes FROM files
+        WHERE session_id = ? AND status = 'confirmed' AND id IN (${holesFor(ids)})`,
+    )
+      .bind(this.meta.sessionId, ...ids)
+      .all<{ id: string; r2_key: string; filename: string; mime: string; size_bytes: number }>();
+
+    const byId = new Map((rows.results ?? []).map((r) => [r.id, r]));
+    // Every id has to resolve. A partial match is a forged answer, not a
+    // partially valid one.
+    if (byId.size !== new Set(ids).size) return null;
+    return ids.map((id) => {
+      const row = byId.get(id)!;
+      return {
+        fileId: row.id,
+        filename: row.filename,
+        mime: row.mime,
+        size: row.size_bytes,
+        r2Key: row.r2_key,
+      };
+    });
+  }
+
   private async record(block: Block, raw: unknown): Promise<{ accepted: boolean; error?: string }> {
-    const result = validateAnswer(block, raw);
+    let result = validateAnswer(block, raw);
+
+    if (result.ok && block.type === "file_upload") {
+      const authentic = await this.authenticFiles(result.value);
+      if (!authentic) {
+        return this.recordInvalid(block, "invalid", "We could not find those uploads — try attaching the file again.");
+      }
+      // The stored rows replace what the client sent, field for field.
+      result = { ...result, value: authentic };
+    }
 
     /**
      * Uniqueness, checked here rather than inside `validateAnswer`.
