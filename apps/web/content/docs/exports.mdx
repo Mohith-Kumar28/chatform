@@ -106,9 +106,10 @@ rather than quietly narrowed to completed. An export that silently contains
 something other than what you asked for is worse than one that says no.
 
 Finished and unfinished responses are not the same kind of row, so the
-dashboard's download keeps them apart: the `.xlsx` gets a **Completed** tab and
-an **Unfinished** tab over the same columns, and the `.csv` — which has no tabs
-— puts every completed response first and the unfinished ones after. The API's
+dashboard's Download keeps them apart: it hands you an `.xlsx` with a
+**Completed** tab and an **Unfinished** tab over the same columns. Its `.csv`
+route — which has no tabs, and which the spreadsheet feed still uses — puts
+every completed response first and the unfinished ones after instead. The API's
 `csv` is one flat table with a `status` column, unchanged.
 
 ## Retention
