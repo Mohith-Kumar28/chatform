@@ -24,6 +24,37 @@ export const RESUME_TTL_DAYS = 30;
 /** Unsubscribe outlives every sequence, because an opt-out that expires is not an opt-out. */
 export const UNSUB_TTL_DAYS = 365;
 
+/**
+ * How long a reminder keeps the credit for a completion that follows it.
+ *
+ * Attribution used to require a click: unless we had seen the resume link
+ * opened, a completion was nobody's doing. That is the strictest rule available
+ * and it is wrong in the common case, because almost nobody finishes a form in
+ * the tab they opened from an inbox. They read the mail on a phone at lunch,
+ * open the link, put the phone down, and come back that evening from a laptop —
+ * a completion the click-only rule credited to nothing at all, because the
+ * click it needed happened in a session that never finished anything.
+ *
+ * So the window is the unit of attribution instead, the way every affiliate and
+ * ad platform does it: a reminder went out, and if the response was finished
+ * within a day of it, that reminder gets the credit. A click is no longer
+ * required — it is reported on its own, as the separate thing it is.
+ *
+ * Twenty-four hours, and measured from the *later* of the send and the click.
+ * From the send, because that is the moment the reminder existed for them and
+ * the only one we know for certain. The click extends it because a click is
+ * stronger evidence than a send, not weaker: somebody who opened the link at
+ * hour thirty and finished at hour thirty-one demonstrably came back through
+ * our mail, and a window anchored only to the send would throw that away.
+ *
+ * A day rather than a week because the claim has to stay defensible. Over a
+ * week, most of what the window catches is people who were coming back anyway,
+ * and this figure is one an author quotes. The holdout arm is what keeps even
+ * this honest — see `computeFollowUpStats`, which measures the control side
+ * through exactly the same window so the two are comparable.
+ */
+export const RECOVERY_GRACE_MS = 24 * 3_600_000;
+
 export interface ScheduleInput {
   env: Bindings;
   submissionId: string;
@@ -1093,43 +1124,71 @@ export async function recordFollowUpClick(
 /**
  * A response that a nudge brought back has been completed. Credit it.
  *
- * Exactly one row is credited — the latest step they actually clicked — because
- * the question this answers is "how many responses did follow-ups recover",
- * and a sequence of three messages to one person recovered one response, not
- * three. Which step gets the credit is the last one they acted on, which is the
- * one that did the work.
+ * Exactly one row is credited — the last reminder that could plausibly have
+ * done it — because the question this answers is "how many responses did
+ * follow-ups recover", and a sequence of three messages to one person recovered
+ * one response, not three.
  *
- * Silent when nothing was clicked. Somebody who was going to finish anyway,
- * and happened to have a scheduled nudge that never landed, is not a recovery,
- * and counting them as one is precisely the self-flattering measurement the
- * holdout exists to protect against.
+ * Which row wins is the one whose *last touch* is most recent, where a touch is
+ * the send or, if there was one, the click. Reminder 1 sent Monday and reminder
+ * 2 sent Tuesday: Tuesday's gets it, because it is the message that was in
+ * front of them when they came back. Reminder 1 clicked Tuesday afternoon and
+ * reminder 2 merely sent Tuesday morning: reminder 1 gets it, because a click is
+ * evidence and a send is only an opportunity.
+ *
+ * Silent when nothing was sent inside `RECOVERY_GRACE_MS`. Somebody who was
+ * reminded a fortnight ago and finished today is not a recovery — the reminder
+ * had stopped being the reason by then, and counting them is precisely the
+ * self-flattering measurement the holdout exists to protect against. The
+ * response still shows in the results table as having finished; it just does
+ * not claim a reminder brought it back.
+ *
+ * `status = 'sent'` is load-bearing now that a click is not required. It is what
+ * keeps a `holdout` row — written for a person we deliberately mailed nothing —
+ * out of the treated arm's numerator, and a `scheduled` or `queued` row that has
+ * not actually been delivered from taking credit for a completion that beat it
+ * out of the mail queue.
  */
 export async function creditFollowUpRecovery(
   env: Bindings,
   submissionId: string,
+  /** When they finished. Defaults to now, which is the only caller's answer. */
+  completedAt: number = Date.now(),
 ): Promise<void> {
   try {
     await env.DB.prepare(
       `UPDATE followups SET recovered_at = ?2
         WHERE id = (
           SELECT id FROM followups
-           WHERE submission_id = ?1 AND clicked_at IS NOT NULL AND recovered_at IS NULL
-           ORDER BY clicked_at DESC LIMIT 1
+           WHERE submission_id = ?1
+             AND status = 'sent'
+             AND recovered_at IS NULL
+             /*
+               Inside the window, and not after the completion: a reminder that
+               went out *later* than the moment they finished cannot be why they
+               finished. That ordering is not hypothetical — the sweep and a
+               respondent's last answer race routinely, and the credit has to
+               fall on the message that preceded them.
+             */
+             AND max(coalesce(clicked_at, 0), coalesce(sent_at, 0)) >= ?3
+             AND max(coalesce(clicked_at, 0), coalesce(sent_at, 0)) <= ?2
+           ORDER BY max(coalesce(clicked_at, 0), coalesce(sent_at, 0)) DESC, step DESC
+           LIMIT 1
         )
           /*
             And only if this response has not already been credited.
             \`finalizeResponse\` runs this once per completion behind its own
             \`changed\` guard, so a second call should be impossible — but the
-            subquery alone would happily credit the *next* unrecovered clicked
-            step if one ever arrived here twice, turning one person into two
-            recoveries in the number this feature is judged by. Cheap insurance
-            on a figure that gets quoted.
+            subquery alone would happily credit the *next* uncredited step if one
+            ever arrived here twice, turning one person into two recoveries in
+            the number this feature is judged by. Cheap insurance on a figure
+            that gets quoted.
           */
           AND NOT EXISTS (
             SELECT 1 FROM followups WHERE submission_id = ?1 AND recovered_at IS NOT NULL
           )`,
     )
-      .bind(submissionId, Date.now())
+      .bind(submissionId, completedAt, completedAt - RECOVERY_GRACE_MS)
       .run();
   } catch (err) {
     console.error("followup_recovery_credit_failed", submissionId, err);

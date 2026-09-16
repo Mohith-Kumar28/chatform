@@ -817,10 +817,17 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
      *
      * Only on `completed`: a screen-out is not a recovery, and neither is a
      * response that came back through the link and was abandoned a second time.
-     * `creditFollowUpRecovery` credits nothing unless a link was actually
-     * clicked, so this is a no-op for the overwhelming majority of completions.
+     * `creditFollowUpRecovery` credits nothing unless a reminder went out inside
+     * its grace window, so this is a no-op for most completions — every form
+     * with follow-ups off, and everyone who finished in one sitting.
+     *
+     * `now` rather than the function's own clock, so `recovered_at` is the same
+     * instant as the `completed_at` written above. The results table subtracts
+     * the two to say how long after the reminder they came back, and a few
+     * milliseconds of drift between the row and its own completion would show
+     * up there as the only number on the card that cannot be checked.
      */
-    if (a.status === "completed") await creditFollowUpRecovery(o.env, a.responseId);
+    if (a.status === "completed") await creditFollowUpRecovery(o.env, a.responseId, now);
   }
 
   o.env.ANALYTICS.writeDataPoint({

@@ -14,17 +14,23 @@ import {
 import { JumpField } from "./jump-field";
 import {
   Check,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock,
   Download,
   Fingerprint,
+  Hourglass,
   Link2,
   ListChecks,
   Maximize2,
   MessageSquare,
   Minimize2,
   MailCheck,
+  MailX,
+  MousePointerClick,
+  PauseCircle,
+  Send,
   ShieldAlert,
   ShieldCheck,
   Trash2,
@@ -149,7 +155,33 @@ export interface SubmissionRecord {
     scheduled: number;
     queued: number;
     holdout: boolean;
+    /**
+     * How many of the sent reminders had their resume link opened, and when the
+     * last of those was.
+     *
+     * Its own fact about the mail, not a stage on the way to `recovered`: a
+     * click says they read it, which is what tells an author whether the subject
+     * line works. It is no longer what earns the credit, so a response can be
+     * recovered with no clicks and clicked with no recovery.
+     */
+    clicked: number;
+    lastClickedAt: number | null;
+    /**
+     * Whether a reminder was credited with this response.
+     *
+     * Read from the credited row, not inferred from the status — "they were
+     * reminded and they finished" is a different and much weaker claim, and it
+     * is the one this used to make.
+     */
     recovered: boolean;
+    /** When they finished, on the credited row. */
+    recoveredAt: number | null;
+    /** Which message in the sequence earned it, 1-based. */
+    recoveredStep: number | null;
+    /** When that message went out — the other end of "they came back in 6h". */
+    recoveredSentAt: number | null;
+    /** Whether they had opened that message's link first. */
+    recoveredClickedAt: number | null;
     /** Epoch ms of the next step still waiting to go out. */
     nextScheduledAt: number | null;
     lastSentAt: number | null;
@@ -210,23 +242,89 @@ function shortIn(at: number): string {
 }
 
 /**
+ * How long between two moments, for a sentence about a gap rather than a clock.
+ *
+ * `formatDuration` is built for how long a response took and tops out at hours,
+ * which reads fine for "6h 20m later" and absurdly for the fortnight between a
+ * reminder and a completion it had nothing to do with — "381h 12m later" is a
+ * number nobody converts. Days once there are days, and never seconds: nothing
+ * measured here is worth a second's precision.
+ */
+function gapLabel(from: number, to: number): string {
+  const ms = Math.max(0, to - from);
+  if (ms < 3_600_000) return `${Math.max(1, Math.round(ms / 60_000))}m`;
+  if (ms < 86_400_000) {
+    const h = Math.floor(ms / 3_600_000);
+    const m = Math.round((ms % 3_600_000) / 60_000);
+    return m === 0 ? `${h}h` : `${h}h ${m}m`;
+  }
+  const d = Math.round(ms / 86_400_000);
+  return d === 1 ? "a day" : `${d} days`;
+}
+
+/**
+ * The colour a follow-up pill carries, and what each one is allowed to mean.
+ *
+ * Every state used to be `muted` except "Recovered" and "Not sent", which made
+ * the column a strip of identical grey chips whose words had to be read one at
+ * a time — and made switching from the Completed tab to the Partial one look
+ * like a different feature, because on one side almost everything was green and
+ * on the other almost nothing was. The colours are not decoration; they answer
+ * "is there anything here for me" before any word is read:
+ *
+ * - `success` — it worked. A reminder was credited with this response. This is
+ *   the only state that claims the feature did something, and it is the only
+ *   green one for that reason.
+ * - `info` — the respondent did something. They opened the link. Not a result
+ *   yet, but the one state that is about *them* rather than about our sending.
+ * - `warn` — something needs the author. No reminder went, or one failed, and
+ *   the cause is usually theirs to fix: a missing postal address, an unpublished
+ *   change, a spent quota.
+ * - `pending` — the sequence is mid-flight and nothing is owed. Drawn as an
+ *   outline rather than a fill, so a column of scheduled steps recedes: these
+ *   are the rows where the honest answer is "wait".
+ * - `muted` — over, with nothing to show. Sent and ignored, held back on
+ *   purpose, or finished too late to credit. Filled grey, because unlike
+ *   `pending` these will not change on their own.
+ */
+type FollowUpTone = "success" | "info" | "warn" | "pending" | "muted";
+
+type FollowUpLabel = {
+  text: string;
+  detail: string;
+  tone: FollowUpTone;
+  /** One per state. The column had a single mail icon on all eleven of them. */
+  icon: typeof MailCheck;
+};
+
+/**
  * What happened after they left, in a word.
  *
  * This used to spell the reason out in the cell — "Not sent — nothing answered
  * yet", "Not sent — reminders off when they left" — and no width could hold it:
  * every cell ended in an ellipsis, and the half that got cut was the half that
  * carried the meaning. A column that has to truncate to fit is a column saying
- * the wrong thing. So the cell now says only *which* of the five things
- * happened, in one word; the reason rides on the `title`, and the dialog below
- * still gives it in full with real times on it.
+ * the wrong thing. So the cell says only *which* of the states below it is in,
+ * in one word; the reason rides on the hover card, which gives it in full with
+ * real times on it.
+ *
+ * The order of these branches is the priority of the answers, and two of them
+ * are worth stating. `Recovered` is first because it is the one conclusion that
+ * cannot be superseded. `Finished later` comes before everything about sending,
+ * because a response that is already finished has no interesting future and an
+ * author looking at the Completed tab is asking one question — did a reminder do
+ * this — to which "Sent ×2" is not an answer either way.
  */
-function followUpLabel(
-  row: SubmissionRecord,
-): { text: string; detail: string; tone: "good" | "muted" | "warn" } | null {
+function followUpLabel(row: SubmissionRecord): FollowUpLabel | null {
   const f = row.followUp;
   if (!f) {
     if (row.followUpSkip) {
-      return { text: "Not sent", detail: `Not sent — ${skipCopy(row.followUpSkip)}`, tone: "warn" };
+      return {
+        text: "Not sent",
+        detail: `Not sent — ${skipCopy(row.followUpSkip)}`,
+        tone: "warn",
+        icon: MailX,
+      };
     }
     /*
      * The decision has not been made yet, which is not the same as "nothing
@@ -243,23 +341,84 @@ function followUpLabel(
           text: "Still open",
           detail:
             "No reminder decided yet — they may still be answering. Reminders are arranged 30 minutes after their last message.",
-          tone: "muted",
+          tone: "pending",
+          icon: Hourglass,
         }
       : null;
   }
+
   if (f.recovered) {
-    return { text: "Recovered", detail: "They came back and finished after a reminder", tone: "good" };
+    const which = f.recoveredStep ? `Reminder ${f.recoveredStep}` : "A reminder";
+    return {
+      text: "Recovered",
+      detail:
+        f.recoveredSentAt && f.recoveredAt
+          ? `${which} brought them back — they finished ${gapLabel(f.recoveredSentAt, f.recoveredAt)} after it was sent`
+          : `${which} brought them back`,
+      tone: "success",
+      icon: CheckCircle2,
+    };
   }
+
+  /*
+   * Finished, but not because of us — or not provably.
+   *
+   * This state is new, and it is the whole reason the green one can be trusted.
+   * Before it, the column called every reminded completion a recovery, so an
+   * author had no way to tell the response that came back an hour after the
+   * nudge from the one that wandered back a month later; both were green, and
+   * the analytics page — which had always counted only the credited ones —
+   * looked broken by comparison. Grey, and it says how late they were.
+   */
+  if (row.status === "completed" && f.sent > 0) {
+    const gap = f.lastSentAt && row.completedAt ? gapLabel(f.lastSentAt, row.completedAt) : null;
+    return {
+      text: "Finished later",
+      detail: gap
+        ? `They finished ${gap} after the last reminder — too long after to credit it. Reminders keep the credit for 24 hours.`
+        : "They finished, but too long after the last reminder to credit it. Reminders keep the credit for 24 hours.",
+      tone: "muted",
+      icon: MailCheck,
+    };
+  }
+
+  /*
+   * They opened the link and have not finished. The one state in the column
+   * that is about the respondent doing something, which is why it outranks
+   * every remaining fact about our own sending: "reminder 3 goes out Friday" is
+   * true and much less interesting than "they are in the form right now".
+   */
+  if (f.clicked > 0) {
+    return {
+      text: "Opened",
+      detail: f.lastClickedAt
+        ? `They opened the reminder ${formatRelative(f.lastClickedAt)} and have not finished yet`
+        : "They opened the reminder and have not finished yet",
+      tone: "info",
+      icon: MousePointerClick,
+    };
+  }
+
   if (f.holdout) {
     return {
       text: "Held back",
-      detail: "Held back from the reminder sequence, to keep the recovery figure honest",
+      detail:
+        "Held back from the reminder sequence, to keep the recovery figure honest. Nothing was sent to this person.",
       tone: "muted",
+      icon: PauseCircle,
     };
   }
+
   // In flight beats the count: "sending" is the more useful thing to know while
   // it is true, and it is true for seconds.
-  if (f.queued > 0) return { text: "Sending", detail: "A reminder is with the mail queue now", tone: "muted" };
+  if (f.queued > 0) {
+    return {
+      text: "Sending",
+      detail: "A reminder is with the mail queue now",
+      tone: "pending",
+      icon: Send,
+    };
+  }
   if (f.scheduled > 0 && f.nextScheduledAt) {
     /*
      * A due time in the past is normal, not late: the sweep runs every five
@@ -271,26 +430,42 @@ function followUpLabel(
       ? {
           text: "Due",
           detail: `Reminder was due ${formatDateTime(f.nextScheduledAt)} and goes out on the next sweep`,
-          tone: "muted",
+          tone: "pending",
+          icon: Clock,
         }
       : {
           text: shortIn(f.nextScheduledAt),
           detail: `Reminder goes out ${formatDateTime(f.nextScheduledAt)}`,
-          tone: "muted",
+          tone: "pending",
+          icon: Clock,
         };
   }
-  if (f.scheduled > 0) return { text: "Queued", detail: "A reminder is scheduled", tone: "muted" };
+  if (f.scheduled > 0) {
+    return { text: "Queued", detail: "A reminder is scheduled", tone: "pending", icon: Clock };
+  }
   if (f.sent > 0) {
+    /*
+     * Sent, and the sequence has nothing left to send. They did not open it and
+     * they have not come back — the dead end, and the state most rows on a
+     * healthy form eventually reach. Muted, because there is nothing to do and
+     * nothing further will happen on its own.
+     */
     return {
       text: f.sent === 1 ? "Sent" : `Sent ×${f.sent}`,
       detail: f.lastSentAt
-        ? `${f.sent === 1 ? "Reminder sent" : `Last of ${f.sent} reminders sent`} ${formatRelative(f.lastSentAt)}`
-        : "Reminder sent",
+        ? `${f.sent === 1 ? "Reminder sent" : `Last of ${f.sent} reminders sent`} ${formatRelative(f.lastSentAt)}, and not opened`
+        : "Reminder sent, and not opened",
       tone: "muted",
+      icon: MailCheck,
     };
   }
   if (f.stoppedReason) {
-    return { text: "Not sent", detail: `Not sent — ${skipCopy(f.stoppedReason)}`, tone: "warn" };
+    return {
+      text: f.stoppedStatus === "failed" ? "Failed" : "Not sent",
+      detail: `${f.stoppedStatus === "failed" ? "Delivery failed" : "Not sent"} — ${skipCopy(f.stoppedReason)}`,
+      tone: "warn",
+      icon: MailX,
+    };
   }
   return null;
 }
@@ -330,20 +505,31 @@ function FollowUpCell({ row, empty = "dash" }: { row: SubmissionRecord; empty?: 
   if (!label) {
     return empty === "dash" ? <span className="text-muted-foreground/60">—</span> : null;
   }
+  /*
+    Every tone is a `-soft` background with its own `-soft-foreground`, never a
+    `-soft` background with the full-strength colour on top: that pairing is the
+    one that reads in both themes, and the green chip was the exception — it
+    drew `--success` on `--success-soft`, which is legible in the light theme
+    and thin in the dark one.
+
+    `pending` is the only outlined chip. A scheduled step is the state an author
+    should be able to skim past, and a border does that where a fill cannot:
+    fifty filled grey chips and fifty outlined ones carry the same words, but
+    only the second reads as a queue rather than as a result.
+  */
   const chip = cn(
     "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
-    // `--warning-soft` pairs with `--warning-soft-foreground`, never with
-    // `--warning` — that pairing is the one that reads in both themes.
-    label.tone === "good"
-      ? "bg-[var(--success-soft,var(--primary-soft))] text-[var(--success)]"
-      : label.tone === "warn"
-        ? "bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)]"
-        : "bg-muted text-muted-foreground",
+    label.tone === "success" && "bg-[var(--success-soft)] text-[var(--success-soft-foreground)]",
+    label.tone === "info" && "bg-[var(--info-soft)] text-[var(--info-soft-foreground)]",
+    label.tone === "warn" && "bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)]",
+    label.tone === "pending" && "text-muted-foreground border border-dashed bg-transparent",
+    label.tone === "muted" && "bg-muted text-muted-foreground",
   );
 
+  const Icon = label.icon;
   const face = (
     <>
-      <MailCheck className="size-3 shrink-0" />
+      <Icon className="size-3 shrink-0" />
       {/*
         A dotted underline is the one convention that reads as "there is more
         here" without spending a second icon on a badge that already has one.
@@ -436,21 +622,37 @@ type FollowUpStepModel = {
   state: "sent" | "sending" | "next" | "later";
   /** Absolute, and null when this particular step's time is not known. */
   at: number | null;
+  /**
+   * This is the message that was credited with bringing them back.
+   *
+   * The one thing on the ladder the counts cannot tell us, and the thing the
+   * author is actually hovering to find out — "which reminder worked". It comes
+   * from `recoveredStep` on the response, which is the step number on the row
+   * `creditFollowUpRecovery` wrote.
+   */
+  credited?: boolean;
 };
 
 function followUpSteps(f: NonNullable<SubmissionRecord["followUp"]>): FollowUpStepModel[] {
   const total = f.sent + f.queued + f.scheduled;
   const steps: FollowUpStepModel[] = [];
   for (let n = 1; n <= total; n += 1) {
+    const credited = f.recoveredStep === n ? { credited: true } : {};
     if (n <= f.sent) {
-      // `lastSentAt` belongs to the most recent one that went, and to no other.
-      steps.push({ n, state: "sent", at: n === f.sent ? f.lastSentAt : null });
+      /*
+       * `lastSentAt` belongs to the most recent one that went, and to no other
+       * — except the credited step, whose own send time we have exactly. That
+       * is the step the card is being read for, so it gets its real time even
+       * when it is not the last one to have gone out.
+       */
+      const at = f.recoveredStep === n ? f.recoveredSentAt : n === f.sent ? f.lastSentAt : null;
+      steps.push({ n, state: "sent", at, ...credited });
     } else if (n <= f.sent + f.queued) {
-      steps.push({ n, state: "sending", at: null });
+      steps.push({ n, state: "sending", at: null, ...credited });
     } else if (n === f.sent + f.queued + 1) {
-      steps.push({ n, state: "next", at: f.nextScheduledAt });
+      steps.push({ n, state: "next", at: f.nextScheduledAt, ...credited });
     } else {
-      steps.push({ n, state: "later", at: null });
+      steps.push({ n, state: "later", at: null, ...credited });
     }
   }
   return steps;
@@ -481,6 +683,10 @@ function FollowUpTimeline({ steps }: { steps: FollowUpStepModel[] }) {
             className={cn(
               "z-10 mt-px grid size-4 shrink-0 place-items-center rounded-full",
               s.state === "sent" && "bg-[var(--success)]",
+              // A ring on the credited rung, so the eye lands on it before any
+              // of the labels are read. `ring-offset` against the card, not the
+              // rail, or it draws a halo over the line between the dots.
+              s.credited && "ring-2 ring-[var(--success)]/35 ring-offset-1 ring-offset-[var(--card)]",
               s.state === "sending" && "bg-[var(--primary)]",
               // Hollow, and dashed for the one that is actually next: it has a
               // time against it, so it needs to read as pending rather than as
@@ -498,6 +704,18 @@ function FollowUpTimeline({ steps }: { steps: FollowUpStepModel[] }) {
             <span className={cn(s.state === "later" ? "text-muted-foreground" : "text-foreground")}>
               Reminder {s.n}
             </span>
+            {/*
+              The answer to "which one worked", on the rung it happened to.
+              A sequence of three sent messages is three identical ticks, and
+              the sentence under the ladder can say the step number — but a
+              reader matching "reminder 2" in prose against a column of dots is
+              doing the work the drawing is for.
+            */}
+            {s.credited && (
+              <span className="rounded-full bg-[var(--success-soft)] px-1.5 py-px text-[0.625rem] leading-4 font-medium text-[var(--success-soft-foreground)]">
+                brought them back
+              </span>
+            )}
             <span className="text-muted-foreground ml-auto shrink-0 tabular">
               {s.state === "sent" && (s.at ? formatDateTime(s.at) : "sent")}
               {s.state === "sending" && "sending now"}
@@ -587,7 +805,9 @@ function FollowUpDetail({ row, className }: { row: SubmissionRecord; className?:
     return (
       <FollowUpBlock count="held back" className={className}>
         <p className="text-muted-foreground text-xs">
-          Held back from the reminder sequence, to keep the recovery figure honest.
+          Held back from the reminder sequence, to keep the recovery figure honest. Nothing was sent
+          to this person, and whether they came back on their own is what the lift on the analytics
+          page is measured against.
         </p>
       </FollowUpBlock>
     );
@@ -595,28 +815,79 @@ function FollowUpDetail({ row, className }: { row: SubmissionRecord; className?:
 
   const total = f.sent + f.queued + f.scheduled;
   const steps = followUpSteps(f);
-  if (steps.length === 0 && !f.stoppedReason && !f.recovered) return null;
+  /**
+   * Finished, and no reminder could claim it. See the matching branch in
+   * `followUpLabel`: the pill says "Finished later" and this is where the
+   * arithmetic behind that word goes, because "too long after" is a claim an
+   * author is entitled to check.
+   */
+  const lateFinish =
+    !f.recovered && row.status === "completed" && f.sent > 0 && f.lastSentAt && row.completedAt
+      ? gapLabel(f.lastSentAt, row.completedAt)
+      : null;
+  const hasNote = Boolean(f.stoppedReason) || f.recovered || Boolean(lateFinish) || f.clicked > 0;
+  if (steps.length === 0 && !hasNote) return null;
 
   return (
     <FollowUpBlock count={total > 0 ? `${f.sent} of ${total} sent` : undefined} className={className}>
       {steps.length > 0 && <FollowUpTimeline steps={steps} />}
       {/*
-        The two things that are about the sequence as a whole rather than about
-        any one step in it, so they sit under the ladder with a rule above them
+        The things that are about the sequence as a whole rather than about any
+        one step in it, so they sit under the ladder with a rule above them
         instead of pretending to be another rung.
       */}
-      {(f.stoppedReason || f.recovered) && (
-        <div className={cn("space-y-1 text-xs", steps.length > 0 && "mt-2.5 border-t pt-2.5")}>
+      {hasNote && (
+        <div className={cn("space-y-1.5 text-xs", steps.length > 0 && "mt-2.5 border-t pt-2.5")}>
           {f.stoppedReason && (
             <p className="text-[var(--warning-soft-foreground)]">
               {f.stoppedStatus === "failed" ? "Delivery failed" : "Sequence stopped"} —{" "}
               {skipCopy(f.stoppedReason)}.
             </p>
           )}
+          {/*
+            The whole account of the recovery, in the order the author asks it:
+            which message, how long they took, and whether we know they read it.
+
+            It used to be one sentence — "They came back and finished after a
+            reminder" — which is the claim without any of its evidence, on a
+            figure the author is deciding whether to trust.
+          */}
           {f.recovered && (
-            <p className="flex items-center gap-1.5 text-[var(--success)]">
-              <Check className="size-3 shrink-0" />
-              They came back and finished after a reminder.
+            <div className="space-y-1 text-[var(--success-soft-foreground)]">
+              <p className="flex items-center gap-1.5 font-medium">
+                <Check className="size-3 shrink-0" />
+                {f.recoveredStep ? `Reminder ${f.recoveredStep} brought them back` : "A reminder brought them back"}
+              </p>
+              {f.recoveredSentAt && f.recoveredAt && (
+                <p className="text-muted-foreground">
+                  Sent {formatDateTime(f.recoveredSentAt)}, finished {formatDateTime(f.recoveredAt)}
+                  {" — "}
+                  {gapLabel(f.recoveredSentAt, f.recoveredAt)} later, inside the 24-hour window a
+                  reminder keeps the credit for.
+                </p>
+              )}
+              <p className="text-muted-foreground">
+                {f.recoveredClickedAt
+                  ? `They opened the link in it ${formatRelative(f.recoveredClickedAt)}.`
+                  : "The link was never opened, so this is credited on timing alone — they came back within the window."}
+              </p>
+            </div>
+          )}
+          {lateFinish && (
+            <p className="text-muted-foreground">
+              They finished {lateFinish} after the last reminder. A reminder keeps the credit for 24
+              hours, so this completion is not counted as recovered.
+            </p>
+          )}
+          {/*
+            Opens, said once and only where they are not already part of the
+            story above. This is the click-through of the mail — whether the
+            subject line worked — and it stopped being what earns the credit.
+          */}
+          {f.clicked > 0 && !f.recovered && (
+            <p className="text-muted-foreground">
+              {f.clicked === 1 ? "The link was opened" : `${f.clicked} of the reminders had their link opened`}
+              {f.lastClickedAt ? ` ${formatRelative(f.lastClickedAt)}` : ""}.
             </p>
           )}
         </div>
@@ -792,11 +1063,13 @@ export function SubmissionsTable({
   /** The status switcher, rendered on the left of the table's own toolbar. */
   filters,
   /**
-   * Whether there is a follow-up story to tell at all — see the caller. The
-   * column is Partial-only (on a completed response the answer is always "they
-   * finished", which the row already says) and it is also off whenever nobody
-   * has turned reminders on, because a column of "not sent" is a column's worth
-   * of width spent saying that a feature is switched off.
+   * Whether there is a follow-up story to tell at all — see the caller.
+   *
+   * Off whenever nobody has turned reminders on, because a column of "not sent"
+   * is a column's worth of width, pinned where width is most expensive, spent
+   * saying that a feature is switched off. On for every status filter otherwise:
+   * a recovered response is a *finished* one, so a column that appeared only on
+   * the Partial tab was the one place that state could never be seen.
    */
   showFollowUp = false,
   /**

@@ -519,20 +519,27 @@ export function ResultsClient({ formId }: ResultsClientProps) {
               filters={statusSwitcher}
               onSelection={setSelection}
               /*
-                Partial only: on a finished response the follow-up story is
-                always "they finished", which the status pill already says.
+                On every tab, not just Partial.
 
-                And only when there is a story. With reminders switched off,
+                It used to be Partial-only, on the reasoning that a finished
+                response's follow-up story is always "they finished". That was
+                true while the column could only say so — and it is why the
+                column appeared and vanished as the author switched tabs, which
+                reads as a glitch rather than as a rule. It is also backwards
+                now: "a reminder brought this one back, and here is which one"
+                is a fact about a *finished* response, and the Completed tab was
+                the one place it could never be shown. The states either side of
+                that — recovered, or finished too late to credit — are the whole
+                question an author opens this screen to answer.
+
+                Still only when there is a story. With reminders switched off,
                 every cell in the column reads "not sent" — a whole column,
                 pinned next to the timestamp where the width is most expensive,
                 to report that a feature the author never enabled did nothing.
                 A sequence still in flight from before it was switched off does
                 count, because that one is a thing the product is about to do.
               */
-              showFollowUp={
-                statusFilter === "abandoned" &&
-                (Boolean(doc?.settings.followUp?.enabled) || rows.some((r) => r.followUp))
-              }
+              showFollowUp={Boolean(doc?.settings.followUp?.enabled) || rows.some((r) => r.followUp)}
               page={page}
             />
           )}

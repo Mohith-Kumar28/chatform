@@ -70,6 +70,14 @@ interface Row {
   status: string;
   answers: { blockRef: string; value: unknown }[];
   transcript: unknown[];
+  followUp: {
+    sent: number;
+    clicked: number;
+    recovered: boolean;
+    recoveredAt: number | null;
+    recoveredStep: number | null;
+    recoveredSentAt: number | null;
+  } | null;
 }
 
 interface ListBody {
@@ -199,6 +207,84 @@ describe("submissions list", () => {
     expect(body.submissions.every((r) => r.status !== "completed")).toBe(true);
     expect(body.submissions.some((r) => r.id === "sbm_partial")).toBe(true);
     expect(body.total).toBe(body.counts.partial);
+  });
+
+  /**
+   * The reminder pill, which is the only place an author sees attribution
+   * per response.
+   *
+   * It used to be computed in the handler as "was reminded, and is completed",
+   * so every completion that had ever had a reminder scheduled came back green
+   * — including one that finished a month after the last message — while the
+   * analytics page counted only what `creditFollowUpRecovery` had credited. The
+   * two screens disagreed about the same form. These assert that the row now
+   * reports what the table has, and nothing more.
+   */
+  describe("reminder attribution on a row", () => {
+    /** One sent reminder against `sbm_done`, credited or not as asked. */
+    async function reminder(opts: { recoveredAt: number | null; sentAgoMs: number }): Promise<void> {
+      const now = Date.now();
+      await env.DB.prepare(`DELETE FROM followups WHERE submission_id = 'sbm_done'`).run();
+      await env.DB.prepare(
+        `INSERT INTO followups (id, submission_id, form_id, organization_id, channel, address,
+                                address_source, step, status, scheduled_at, sent_at, recovered_at, created_at)
+         VALUES ('flw_res_1', 'sbm_done', ?, ?, 'email', 'grace@hopper.dev', 'answer', 2, 'sent',
+                 ?, ?, ?, ?)`,
+      )
+        .bind(t.formId, t.orgId, now - opts.sentAgoMs, now - opts.sentAgoMs, opts.recoveredAt, now)
+        .run();
+    }
+
+    async function rowFor(id: string): Promise<Row | undefined> {
+      const res = await fetchApi(`/api/forms/${t.formId}/submissions?status=completed`, {
+        headers: auth(),
+      });
+      const body = await res.json<ListBody>();
+      return body.submissions.find((r) => r.id === id);
+    }
+
+    it("reports the credited step and when the message that earned it went out", async () => {
+      const at = Date.now();
+      await reminder({ recoveredAt: at, sentAgoMs: 6 * 3_600_000 });
+      const row = await rowFor("sbm_done");
+      expect(row?.followUp?.recovered).toBe(true);
+      expect(row?.followUp?.recoveredAt).toBe(at);
+      // Which of the author's messages, so the column can name it rather than
+      // saying "a reminder" about a sequence of three.
+      expect(row?.followUp?.recoveredStep).toBe(2);
+      expect(row?.followUp?.recoveredSentAt).toBe(at - 6 * 3_600_000);
+    });
+
+    it("does not call a completion a recovery just because a reminder went out", async () => {
+      // Sent, completed, and never credited — a response that finished long
+      // after the reminder had stopped being the reason. The pill must say they
+      // were reminded and must not claim the reminder did it.
+      await reminder({ recoveredAt: null, sentAgoMs: 40 * 86_400_000 });
+      const row = await rowFor("sbm_done");
+      expect(row?.followUp?.sent).toBe(1);
+      expect(row?.followUp?.recovered).toBe(false);
+      expect(row?.followUp?.recoveredAt).toBeNull();
+      expect(row?.followUp?.recoveredStep).toBeNull();
+    });
+
+    it("reports opens separately from credit", async () => {
+      await reminder({ recoveredAt: null, sentAgoMs: 3_600_000 });
+      const clickedAt = Date.now() - 1_800_000;
+      await env.DB.prepare(`UPDATE followups SET clicked_at = ? WHERE id = 'flw_res_1'`)
+        .bind(clickedAt)
+        .run();
+      const row = await rowFor("sbm_done");
+      // They opened the link. That is its own fact about the mail — the
+      // click-through rate — and it is no longer what earns the credit.
+      expect(row?.followUp?.clicked).toBe(1);
+      expect(row?.followUp?.recovered).toBe(false);
+    });
+
+    it("leaves a response that was never in a sequence alone", async () => {
+      await env.DB.prepare(`DELETE FROM followups WHERE submission_id = 'sbm_done'`).run();
+      const row = await rowFor("sbm_done");
+      expect(row?.followUp).toBeNull();
+    });
   });
 
   it("analytics responds", async () => {

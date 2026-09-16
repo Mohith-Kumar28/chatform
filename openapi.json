@@ -9113,8 +9113,61 @@
                                   "holdout": {
                                     "type": "boolean"
                                   },
+                                  "clicked": {
+                                    "type": "number"
+                                  },
+                                  "lastClickedAt": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
                                   "recovered": {
                                     "type": "boolean"
+                                  },
+                                  "recoveredAt": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "recoveredStep": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "recoveredSentAt": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "recoveredClickedAt": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
                                   },
                                   "nextScheduledAt": {
                                     "anyOf": [
@@ -9162,7 +9215,13 @@
                                   "scheduled",
                                   "queued",
                                   "holdout",
+                                  "clicked",
+                                  "lastClickedAt",
                                   "recovered",
+                                  "recoveredAt",
+                                  "recoveredStep",
+                                  "recoveredSentAt",
+                                  "recoveredClickedAt",
                                   "nextScheduledAt",
                                   "lastSentAt",
                                   "stoppedStatus",

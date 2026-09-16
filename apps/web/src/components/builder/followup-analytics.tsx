@@ -21,11 +21,19 @@ import { TOOLTIP_STYLE, longDate, shortDate } from "./results-analytics";
  * The hard part of this screen is not drawing it — it is refusing to draw the
  * flattering version. "We mailed 400 people and 60 finished" is a sentence this
  * data can support and it means almost nothing, because some share of those 60
- * were coming back regardless and the mail merely arrived first. So the funnel
- * across the top is stated in the narrowest terms the data actually licenses
- * (a click is a click; a recovery is a completion that *followed* a click), and
- * the lift figure — the only number here that claims a causal effect — is shown
- * only when there is a control arm big enough to carry it.
+ * were coming back regardless and the mail merely arrived first. So the numbers
+ * across the top are stated in the narrowest terms the data licenses, the two
+ * of them are kept apart, and the lift figure — the only one here that claims a
+ * causal effect — is shown only when there is a control arm big enough to carry
+ * it.
+ *
+ * The two are kept apart because they answer different questions. An *open* is
+ * about the mail: did the subject line earn a click. A *recovery* is about the
+ * form: was the response finished within a day of the reminder going out, which
+ * is the window `creditFollowUpRecovery` credits and the same window the
+ * holdout arm is measured through. Neither contains the other — most people who
+ * come back never register a click, because they read the reminder on a phone
+ * and answer on a laptop — so nothing here may be drawn as a funnel.
  *
  * The two charts answer the two questions an author asks in order: *which
  * reminder is doing the work*, so they can cut the ones that are not, and *is
@@ -37,7 +45,9 @@ export interface FollowUpPayload {
   everScheduled: boolean;
   sent: number;
   pending: number;
+  /** Reminders whose resume link was opened. Not a stage of `recovered`. */
   clicked: number;
+  /** Responses finished inside a reminder's 24-hour window, and credited to it. */
   recovered: number;
   clickRate: number;
   recoveryRate: number;
@@ -81,17 +91,23 @@ export function FollowUpAnalytics({ stats }: { stats: FollowUpPayload }) {
           icon={MailCheck}
           {...(stats.pending > 0 ? { hint: `${stats.pending} still queued` } : {})}
         />
+        {/*
+          Two cards, not two stages. This one used to be labelled "Came back",
+          which is the recovery card's job and a claim a click cannot make — and
+          it read as the first half of a funnel whose second half is not a subset
+          of it.
+        */}
         <StatCard
-          label="Came back"
+          label="Opened the link"
           value={stats.clicked}
-          hint={hasSends ? `${stats.clickRate}% of reminders` : undefined}
+          hint={hasSends ? `${stats.clickRate}% click-through` : undefined}
           icon={MousePointerClick}
           tone="primary"
         />
         <StatCard
           label="Finished after a reminder"
           value={stats.recovered}
-          hint={hasSends ? `${stats.recoveryRate}% of reminders` : undefined}
+          hint={hasSends ? `${stats.recoveryRate}% of reminders, within 24h` : undefined}
           icon={CheckCircle2}
           tone="success"
         />
@@ -128,12 +144,13 @@ export function FollowUpAnalytics({ stats }: { stats: FollowUpPayload }) {
             /*
               Grouped horizontal bars rather than a funnel graphic.
 
-              The three measures are nested — every recovery is a click and
-              every click is a send — so drawn against a shared baseline the
-              bars *are* the funnel, and unlike a funnel shape they stay
-              readable when the second step sends a tenth of what the first did.
-              Each row carries its own numbers, so nothing depends on estimating
-              a length.
+              Two of the three measures are nested — every open and every
+              recovery is a send — but opens and recoveries are not nested in
+              each other, and a funnel shape would assert that they were. Drawn
+              against a shared baseline the bars make no such claim: they are
+              three counts of the same step, and a step that recovered more
+              responses than it had opens draws exactly that. Each row carries
+              its own numbers, so nothing depends on estimating a length.
             */
             <ol className="space-y-4">
               {stats.byStep.map((s) => {
@@ -144,7 +161,7 @@ export function FollowUpAnalytics({ stats }: { stats: FollowUpPayload }) {
                     <div className="mb-1.5 flex items-baseline justify-between gap-3">
                       <span className="text-sm">{stepName(s.step)}</span>
                       <span className="tabular text-muted-foreground text-xs">
-                        {s.recovered} of {s.sent} finished
+                        {s.recovered} of {s.sent} recovered
                         {s.sent > 0 && (
                           <span className="ml-1.5 opacity-70">
                             ({Math.round((s.recovered / s.sent) * 1000) / 10}%)
@@ -155,7 +172,7 @@ export function FollowUpAnalytics({ stats }: { stats: FollowUpPayload }) {
                     <div className="space-y-1">
                       {[
                         { label: "Sent", value: s.sent, color: "var(--muted-foreground)" },
-                        { label: "Came back", value: s.clicked, color: "var(--chart-2)" },
+                        { label: "Opened", value: s.clicked, color: "var(--chart-2)" },
                         { label: "Finished", value: s.recovered, color: "var(--chart-1)" },
                       ].map((m) => (
                         <div key={m.label} className="flex items-center gap-2">

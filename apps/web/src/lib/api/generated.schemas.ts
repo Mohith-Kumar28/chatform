@@ -2194,7 +2194,13 @@ export type GetApiFormsByIdSubmissions200SubmissionsItemFollowUp = {
   scheduled: number;
   queued: number;
   holdout: boolean;
+  clicked: number;
+  lastClickedAt: number | null;
   recovered: boolean;
+  recoveredAt: number | null;
+  recoveredStep: number | null;
+  recoveredSentAt: number | null;
+  recoveredClickedAt: number | null;
   nextScheduledAt: number | null;
   lastSentAt: number | null;
   stoppedStatus: string | null;

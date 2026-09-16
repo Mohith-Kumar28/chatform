@@ -1,4 +1,5 @@
 import type { Bindings } from "../env.js";
+import { RECOVERY_GRACE_MS } from "./followups.js";
 
 /**
  * Did the nudges work?
@@ -19,7 +20,16 @@ export interface FollowUpStep {
   sent: number;
   /** Of those, how many had their resume link opened. */
   clicked: number;
-  /** Of those, how many led to a completed response. */
+  /**
+   * Of those, how many were followed by a completed response inside the grace
+   * window.
+   *
+   * Not a subset of `clicked`, and the caller must not draw it as one. Credit
+   * is a question of timing rather than of clicks now — see
+   * `creditFollowUpRecovery` — so a step can legitimately recover more
+   * responses than it had links opened, and on a form whose respondents read
+   * their mail on one device and answer on another it usually will.
+   */
   recovered: number;
 }
 
@@ -29,7 +39,16 @@ export interface FollowUpStats {
   sent: number;
   /** Queued and not yet due. Reassures an author who turned it on an hour ago. */
   pending: number;
+  /**
+   * Reminders whose resume link was opened.
+   *
+   * Reported for its own sake, not as a stage of the recovery funnel: it is the
+   * click-through rate of the mail, which is the number that tells an author
+   * whether the *subject line and copy* are working, separately from whether
+   * the reminder recovered anything.
+   */
   clicked: number;
+  /** Responses credited to a reminder — completions inside its grace window. */
   recovered: number;
   /** 0–100, of messages sent. */
   clickRate: number;
@@ -42,8 +61,9 @@ export interface FollowUpStats {
    * The control arm, when the author asked for one.
    *
    * `people` is how many abandoners were deliberately left alone; `recovered`
-   * is how many of them came back anyway. That second number is the baseline —
-   * without it, every return gets credited to the mail.
+   * is how many of them finished within a day of the reminder they were never
+   * sent — the same window the treated arm is judged on. That second number is
+   * the baseline: without it, every return gets credited to the mail.
    */
   holdout: { people: number; recovered: number; rate: number } | null;
   /**
@@ -130,20 +150,35 @@ export async function computeFollowUpStats(
       .bind(formId, Date.now() - days * DAY_MS),
 
     /**
-     * The control arm.
+     * The control arm, measured through the same window as the treated one.
      *
      * `holdout` rows are written one per step, exactly like sent ones, so the
      * count of rows is not the count of people — hence `DISTINCT submission_id`.
      * Getting this wrong would divide by three and treble the baseline.
+     *
+     * The window is what makes the comparison a comparison. A treated response
+     * counts as recovered only if it was finished within `RECOVERY_GRACE_MS` of
+     * a reminder (see `creditFollowUpRecovery`); this side used to count a
+     * held-back person who finished at *any* point afterwards, which is a
+     * strictly easier bar and therefore an inflated baseline — understating the
+     * lift by however long the form has been collecting. A held-out person has
+     * no send to measure from, so the clock starts at `scheduled_at`: the moment
+     * the reminder they were denied would have gone out. Same question on both
+     * sides — "did they finish within a day of the reminder moment" — which is
+     * the only way the difference between the two means anything.
      */
     env.DB.prepare(
       `SELECT COUNT(DISTINCT fu.submission_id) AS people,
-              COUNT(DISTINCT CASE WHEN s.status = 'completed' THEN fu.submission_id END) AS recovered
+              COUNT(DISTINCT CASE
+                     WHEN s.status = 'completed' AND s.completed_at IS NOT NULL
+                      AND s.completed_at >= fu.scheduled_at
+                      AND s.completed_at <= fu.scheduled_at + ?2
+                     THEN fu.submission_id END) AS recovered
          FROM followups fu
          JOIN submissions s ON s.id = fu.submission_id
-        WHERE fu.form_id = ? AND fu.status = 'holdout'`,
+        WHERE fu.form_id = ?1 AND fu.status = 'holdout'`,
     )
-      .bind(formId),
+      .bind(formId, RECOVERY_GRACE_MS),
 
     /**
      * Lift, measured per *person* on both sides.

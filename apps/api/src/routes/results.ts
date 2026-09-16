@@ -92,7 +92,26 @@ const SubmissionRow = z.object({
       scheduled: z.number(),
       queued: z.number(),
       holdout: z.boolean(),
+      /** How many of the sent reminders had their resume link opened. */
+      clicked: z.number(),
+      lastClickedAt: z.number().nullable(),
+      /**
+       * True when a reminder was credited with this response — a completion
+       * inside the grace window, per `creditFollowUpRecovery`.
+       *
+       * Not "was reminded and finished": a response that finished a fortnight
+       * after the last reminder is a completion that reminder cannot claim, and
+       * it reports `recoveredAt: null` with `completedAt` set.
+       */
       recovered: z.boolean(),
+      /** When they finished, on the row that was credited. Null when none was. */
+      recoveredAt: z.number().nullable(),
+      /** Which message in the sequence earned the credit, 1-based. */
+      recoveredStep: z.number().nullable(),
+      /** When that message went out, so the gap between the two is knowable. */
+      recoveredSentAt: z.number().nullable(),
+      /** Whether they had opened that message's link, and when. Null if never. */
+      recoveredClickedAt: z.number().nullable(),
       /** Epoch ms of the next step still waiting to go out. */
       nextScheduledAt: z.number().nullable(),
       lastSentAt: z.number().nullable(),
@@ -346,6 +365,12 @@ resultsRouter.get(
       scheduled: number;
       queued: number;
       holdout: number;
+      clicked: number;
+      last_clicked_at: number | null;
+      recovered_at: number | null;
+      recovered_step: number | null;
+      recovered_sent_at: number | null;
+      recovered_clicked_at: number | null;
       next_scheduled_at: number | null;
       last_sent_at: number | null;
       stopped_reason: string | null;
@@ -470,6 +495,40 @@ resultsRouter.get(
                 SUM(CASE WHEN status = 'scheduled' THEN 1 ELSE 0 END) AS scheduled,
                 SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
                 MAX(CASE WHEN status = 'holdout' THEN 1 ELSE 0 END) AS holdout,
+                -- How many of the sent ones had their resume link opened, and when
+                -- the most recent of those was. A click is not what earns the
+                -- credit any more, but it is the one thing in the row that says
+                -- they definitely read the mail, so the column shows it.
+                SUM(CASE WHEN clicked_at IS NOT NULL THEN 1 ELSE 0 END) AS clicked,
+                MAX(clicked_at) AS last_clicked_at,
+                /*
+                  Attribution, as recorded rather than as guessed.
+
+                  This column used to be derived in the handler below, as "sent
+                  at least one and the response is completed" — which called
+                  every completion that had ever been reminded a recovery,
+                  including one that finished three weeks later, while the
+                  analytics page counted only the rows creditFollowUpRecovery
+                  had actually credited. Two different answers to one question,
+                  on two screens of the same form, and the table's was the
+                  flattering one. recovered_at is the single source now: written
+                  once per response, by the rule in creditFollowUpRecovery, or
+                  not written at all.
+                */
+                MAX(recovered_at) AS recovered_at,
+                -- Which of the author's messages earned it, and when that one went
+                -- out — so the column can say "reminder 2, and they came back 19
+                -- hours later" rather than just "recovered". At most one row per
+                -- response carries a recovered_at, which is what makes these exact.
+                (SELECT step FROM followups x
+                  WHERE x.submission_id = followups.submission_id
+                    AND x.recovered_at IS NOT NULL LIMIT 1) AS recovered_step,
+                (SELECT sent_at FROM followups x
+                  WHERE x.submission_id = followups.submission_id
+                    AND x.recovered_at IS NOT NULL LIMIT 1) AS recovered_sent_at,
+                (SELECT clicked_at FROM followups x
+                  WHERE x.submission_id = followups.submission_id
+                    AND x.recovered_at IS NOT NULL LIMIT 1) AS recovered_clicked_at,
                 -- When the next one is due. Only the steps still waiting count:
                 -- this is the number the results table renders as "Reminder in 1h",
                 -- and it has to be a time in the future or nothing at all.
@@ -587,8 +646,10 @@ resultsRouter.get(
          * Null when this response was never in a sequence at all, which is the
          * common case and reads differently from "nudged nobody yet".
          *
-         * `recovered` is the number the feature is sold on: they were nudged,
-         * and then they finished.
+         * `recovered` is the number the feature is sold on, and it is read
+         * straight off `recovered_at` rather than inferred from the response's
+         * status — the one claim on this screen that has to agree with the
+         * analytics page, because they are the same claim.
          */
         followUp: byId.has(s.id)
           ? {
@@ -596,7 +657,13 @@ resultsRouter.get(
               scheduled: byId.get(s.id)!.scheduled,
               queued: byId.get(s.id)!.queued,
               holdout: byId.get(s.id)!.holdout === 1,
-              recovered: byId.get(s.id)!.sent > 0 && s.status === "completed",
+              clicked: byId.get(s.id)!.clicked,
+              lastClickedAt: byId.get(s.id)!.last_clicked_at,
+              recovered: byId.get(s.id)!.recovered_at !== null,
+              recoveredAt: byId.get(s.id)!.recovered_at,
+              recoveredStep: byId.get(s.id)!.recovered_step,
+              recoveredSentAt: byId.get(s.id)!.recovered_sent_at,
+              recoveredClickedAt: byId.get(s.id)!.recovered_clicked_at,
               nextScheduledAt: byId.get(s.id)!.next_scheduled_at,
               lastSentAt: byId.get(s.id)!.last_sent_at,
               /**

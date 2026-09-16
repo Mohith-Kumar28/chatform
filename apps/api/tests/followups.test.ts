@@ -724,18 +724,30 @@ describe("marketing mail never uses the transactional pipe", () => {
  * Attribution: what a nudge actually did.
  *
  * These numbers get quoted. The recovery figure is the one an author reads to
- * decide whether the feature is worth paying for, and every test here is about
- * a way of inflating it that the implementation must refuse — crediting a
- * completion nobody was nudged into, counting one person three times because
- * they got three messages, or letting a repeat visit move the click.
+ * decide whether the feature is worth paying for, so most of these tests are
+ * about a way of inflating it that the implementation must refuse — counting
+ * one person three times because they got three messages, crediting a reminder
+ * that went out after they had already finished, or letting a repeat visit move
+ * the click.
+ *
+ * The rule itself is a window rather than a click: a reminder earns a
+ * completion that lands within `RECOVERY_GRACE_MS` of it going out. The two
+ * tests either side of that boundary are the ones that pin the feature's actual
+ * claim down, because the boundary is the whole claim.
  */
 describe("follow-up attribution", () => {
-  /** Mark scheduled rows as sent, the way the sweep would. */
-  async function markSent(submissionId: string): Promise<string[]> {
+  /**
+   * Mark scheduled rows as sent, the way the sweep would.
+   *
+   * `sentAgoMs` is what makes the grace window testable: attribution now turns
+   * on how long ago the reminder went out, so a test that cannot age a send
+   * cannot tell the two sides of the boundary apart.
+   */
+  async function markSent(submissionId: string, sentAgoMs = 0): Promise<string[]> {
     await env.DB.prepare(
       `UPDATE followups SET status = 'sent', sent_at = ? WHERE submission_id = ? AND status = 'scheduled'`,
     )
-      .bind(Date.now(), submissionId)
+      .bind(Date.now() - sentAgoMs, submissionId)
       .run();
     const rows = await env.DB.prepare(
       `SELECT id FROM followups WHERE submission_id = ? ORDER BY step`,
@@ -829,8 +841,51 @@ describe("follow-up attribution", () => {
     expect(credited.results?.[0]?.id).toBe(ids[1]);
   });
 
-  it("credits nothing when the link was never opened", async () => {
+  it("credits a reminder sent inside the window with no click at all", async () => {
+    const id = await seedAbandoned("sub_grace");
+    await scheduleFollowUps({
+      env: env as unknown as Bindings,
+      submissionId: id,
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt: Date.now() - 5 * 3_600_000,
+    });
+    await markSent(id, 6 * 3_600_000);
+
+    /*
+      The case the click-only rule threw away, and the reason this changed: they
+      read the reminder on a phone six hours ago and finished on a laptop just
+      now. No click was ever recorded against the link — the resume token was
+      opened in a session that finished nothing, or they typed the address in
+      from the mail — and the response is still one this reminder brought back.
+    */
+    await creditFollowUpRecovery(env as unknown as Bindings, id);
+    const stats = await computeFollowUpStats(env as unknown as Bindings, t.formId);
+    expect(stats.recovered).toBe(1);
+    expect(stats.clicked).toBe(0);
+  });
+
+  it("credits nothing once the window has passed", async () => {
     const id = await seedAbandoned("sub_selfstarter");
+    await scheduleFollowUps({
+      env: env as unknown as Bindings,
+      submissionId: id,
+      formId: t.formId,
+      organizationId: t.orgId,
+      abandonedAt: Date.now() - 5 * 3_600_000,
+    });
+    await markSent(id, 30 * 3_600_000);
+
+    // Somebody who came back on their own a day and a half after the last
+    // reminder is not a recovery. Counting them is exactly the self-flattery
+    // the holdout exists to catch, and the window is where the line is drawn.
+    await creditFollowUpRecovery(env as unknown as Bindings, id);
+    const stats = await computeFollowUpStats(env as unknown as Bindings, t.formId);
+    expect(stats.recovered).toBe(0);
+  });
+
+  it("credits nothing to a reminder that went out after they finished", async () => {
+    const id = await seedAbandoned("sub_afterthefact");
     await scheduleFollowUps({
       env: env as unknown as Bindings,
       submissionId: id,
@@ -840,9 +895,32 @@ describe("follow-up attribution", () => {
     });
     await markSent(id);
 
-    // Somebody who came back on their own while a nudge happened to be in their
-    // inbox is not a recovery. Counting them is exactly the self-flattery the
-    // holdout exists to catch.
+    /*
+      The sweep and a respondent's last answer race routinely — a reminder goes
+      out at the same minute somebody is typing their final answer into the tab
+      they already had open. Ordering the window from both ends is what stops
+      that mail claiming a completion it could not have caused.
+    */
+    await creditFollowUpRecovery(env as unknown as Bindings, id, Date.now() - 60_000);
+    const stats = await computeFollowUpStats(env as unknown as Bindings, t.formId);
+    expect(stats.recovered).toBe(0);
+  });
+
+  it("never credits a held-back response, which has nothing to credit", async () => {
+    const id = await seedAbandoned("sub_heldback_credit");
+    const now = Date.now();
+    // The control arm, mailed nothing. Before the window, a click was the thing
+    // standing between a holdout row and the treated arm's numerator — a
+    // held-out person cannot click a link they were never sent. Timing alone
+    // cannot tell them apart, so the status filter has to.
+    await env.DB.prepare(
+      `INSERT INTO followups (id, submission_id, form_id, organization_id, channel, address,
+                              address_source, step, status, reason, scheduled_at, created_at)
+       VALUES (?, ?, ?, ?, 'email', 'held@example.com', 'answer', 1, 'holdout', 'holdout', ?, ?)`,
+    )
+      .bind("flw_hold_credit", id, t.formId, t.orgId, now - 3_600_000, now)
+      .run();
+
     await creditFollowUpRecovery(env as unknown as Bindings, id);
     const stats = await computeFollowUpStats(env as unknown as Bindings, t.formId);
     expect(stats.recovered).toBe(0);
@@ -869,6 +947,53 @@ describe("follow-up attribution", () => {
     // computed from a handful of people is worse than none, because it is the
     // one that gets repeated.
     expect(stats.liftPoints).toBeNull();
+  });
+
+  it("holds the control arm to the same window as the treated one", async () => {
+    const now = Date.now();
+    /**
+     * Two held-back people, both of whom finished. One came back the same day
+     * the reminder would have gone out; the other a week later.
+     *
+     * Only the first belongs in the baseline. The treated arm is measured
+     * through a 24-hour window, so a control arm that counts a completion at any
+     * distance is answering an easier question — and the lift, which is one side
+     * minus the other, would be understated by however long the form has been
+     * collecting.
+     */
+    // Both were left alone at the same moment, eight days ago.
+    const wouldHaveGone = now - 8 * 86_400_000;
+    for (const [n, finishedAfter] of [
+      ["prompt", 2 * 3_600_000],
+      ["slow", 7 * 86_400_000],
+    ] as const) {
+      const id = `sub_hold_${n}`;
+      await seedAbandoned(id, { q_name: n, q_email: `${n}@northwind.example` });
+      await env.DB.prepare(
+        `UPDATE submissions SET status = 'completed', completed_at = ? WHERE id = ?`,
+      )
+        .bind(wouldHaveGone + finishedAfter, id)
+        .run();
+      await env.DB.prepare(
+        `INSERT INTO followups (id, submission_id, form_id, organization_id, channel, address,
+                                address_source, step, status, reason, scheduled_at, created_at)
+         VALUES (?, ?, ?, ?, 'email', ?, 'answer', 1, 'holdout', 'holdout', ?, ?)`,
+      )
+        .bind(
+          `flw_hold_w_${n}`,
+          id,
+          t.formId,
+          t.orgId,
+          `${n}@northwind.example`,
+          wouldHaveGone,
+          now,
+        )
+        .run();
+    }
+
+    const stats = await computeFollowUpStats(env as unknown as Bindings, t.formId);
+    expect(stats.holdout?.people).toBe(2);
+    expect(stats.holdout?.recovered).toBe(1);
   });
 
   it("reports nothing for a form that never scheduled one", async () => {
