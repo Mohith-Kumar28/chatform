@@ -189,3 +189,35 @@ export function toCsv({ header, rows }: ResponseTable): string {
   const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
   return [header, ...rows].map((row) => row.map(esc).join(",")).join("\n");
 }
+
+/**
+ * The same table, cut in two by whether the response was finished.
+ *
+ * Both halves keep the whole table's header — including any retired column
+ * only an unfinished response ever answered — so the two sheets line up column
+ * for column and a formula written against one works on the other.
+ *
+ * The cut is made on the `status` column already in the table rather than by
+ * asking D1 twice: the rows are in memory, the window and its column list were
+ * settled by one query, and a second pass would be free to disagree with the
+ * first about which responses are the newest.
+ */
+export function splitByCompletion(table: ResponseTable): {
+  completed: ResponseTable;
+  partial: ResponseTable;
+} {
+  const at = table.header.indexOf("status");
+  const completed: string[][] = [];
+  const partial: string[][] = [];
+  for (const row of table.rows) (row[at] === "completed" ? completed : partial).push(row);
+
+  const half = (rows: string[][]): ResponseTable => ({
+    header: table.header,
+    rows,
+    count: rows.length,
+    // Truncation is a property of the window, not of either half: the cap cut
+    // rows off the end of both.
+    truncated: table.truncated,
+  });
+  return { completed: half(completed), partial: half(partial) };
+}

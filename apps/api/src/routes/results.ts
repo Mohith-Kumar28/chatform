@@ -5,7 +5,7 @@ import { displayAnswer, safeReadFormDoc, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 import { requirePermission, assertPermission, assertFeature, hasFeature, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
-import { buildResponseTable, toCsv } from "../lib/response-table.js";
+import { buildResponseTable, splitByCompletion, toCsv } from "../lib/response-table.js";
 import { resolveRetiredBlocks } from "../lib/retired-columns.js";
 import { computeAnalytics } from "../lib/analytics-service.js";
 import { computeFollowUpStats } from "../lib/followup-analytics.js";
@@ -782,7 +782,31 @@ async function exportSubmissions(c: ExportCtx, format: "csv" | "xlsx") {
   if (!table) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
 
   if (format === "xlsx") {
-    const bytes = await buildXlsx(table.header, table.rows);
+    /**
+     * Finished and unfinished responses get a tab each.
+     *
+     * They are not the same kind of row. A partial is a conversation someone
+     * walked away from mid-way; read down one sheet with both in it and the
+     * blank cells mean two different things depending on a `status` column
+     * four columns to the left. Whoever opens this is counting replies, and
+     * two tabs is the answer a spreadsheet already has for "these are separate
+     * tables with the same columns".
+     *
+     * Only when partials were asked for and allowed: without them there is one
+     * kind of row, and a lone "Completed" tab beside an empty one would be
+     * ceremony.
+     */
+    const sheets = includePartials
+      ? (() => {
+          const { completed, partial } = splitByCompletion(table);
+          return [
+            { name: "Completed", header: completed.header, rows: completed.rows },
+            { name: "Unfinished", header: partial.header, rows: partial.rows },
+          ];
+        })()
+      : [{ name: "Responses", header: table.header, rows: table.rows }];
+
+    const bytes = await buildXlsx(sheets);
     return new Response(bytes as unknown as BodyInit, {
       headers: {
         "content-type":
@@ -793,7 +817,21 @@ async function exportSubmissions(c: ExportCtx, format: "csv" | "xlsx") {
     });
   }
 
-  return new Response(toCsv(table), {
+  /**
+   * A CSV is one table by definition, so the split shows up as order instead:
+   * every completed response, then every unfinished one, newest first within
+   * each. Not as good as the workbook's two tabs, but it beats interleaving
+   * them — the reader scrolls to the boundary once rather than reading the
+   * `status` column on every row.
+   */
+  const ordered = includePartials
+    ? (() => {
+        const { completed, partial } = splitByCompletion(table);
+        return { ...table, rows: [...completed.rows, ...partial.rows] };
+      })()
+    : table;
+
+  return new Response(toCsv(ordered), {
     headers: {
       "content-type": "text/csv; charset=utf-8",
       "content-disposition": `attachment; filename="submissions-${id}.csv"`,

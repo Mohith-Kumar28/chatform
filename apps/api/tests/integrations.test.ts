@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
 import { applySchema, seedTenant, fetchApi, minimalDoc, type Tenant } from "./helpers.js";
 import { buildXlsx } from "../src/lib/xlsx.js";
+import { splitByCompletion, type ResponseTable } from "../src/lib/response-table.js";
 
 /**
  * The spreadsheet feed and the XLSX export.
@@ -184,7 +185,7 @@ async function readEntry(zip: Uint8Array, name: string): Promise<string> {
 
 describe("the workbook itself", () => {
   it("contains the parts Excel requires", async () => {
-    const zip = await buildXlsx(["A"], [["1"]]);
+    const zip = await buildXlsx([{ name: "Responses", header: ["A"], rows: [["1"]] }]);
     for (const part of [
       "[Content_Types].xml",
       "_rels/.rels",
@@ -201,7 +202,7 @@ describe("the workbook itself", () => {
     // A single 0x0B in an answer was enough to make the whole file unopenable,
     // with an error blaming the file rather than the byte.
     const sheet = await readEntry(
-      await buildXlsx(["A"], [["ok\u000Bthen"]]),
+      await buildXlsx([{ name: "Responses", header: ["A"], rows: [["ok\u000Bthen"]] }]),
       "xl/worksheets/sheet1.xml",
     );
     expect(sheet).toContain("okthen");
@@ -210,7 +211,7 @@ describe("the workbook itself", () => {
 
   it("escapes markup in an answer rather than emitting it", async () => {
     const sheet = await readEntry(
-      await buildXlsx(["A"], [["<script>&</script>"]]),
+      await buildXlsx([{ name: "Responses", header: ["A"], rows: [["<script>&</script>"]] }]),
       "xl/worksheets/sheet1.xml",
     );
     expect(sheet).toContain("&lt;script&gt;&amp;&lt;/script&gt;");
@@ -218,7 +219,9 @@ describe("the workbook itself", () => {
 
   it("writes numbers as numbers and near-numbers as text", async () => {
     const sheet = await readEntry(
-      await buildXlsx(["N", "Phone", "Zero"], [["42", "0044 7700 900123", "007"]]),
+      await buildXlsx([
+        { name: "Responses", header: ["N", "Phone", "Zero"], rows: [["42", "0044 7700 900123", "007"]] },
+      ]),
       "xl/worksheets/sheet1.xml",
     );
     // 42 is a value; the other two keep their shape, leading zeros and all.
@@ -228,8 +231,90 @@ describe("the workbook itself", () => {
   });
 
   it("bolds and freezes the header row", async () => {
-    const sheet = await readEntry(await buildXlsx(["Title"], [["x"]]), "xl/worksheets/sheet1.xml");
+    const sheet = await readEntry(await buildXlsx([{ name: "Responses", header: ["Title"], rows: [["x"]] }]), "xl/worksheets/sheet1.xml");
     expect(sheet).toContain('s="1"');
     expect(sheet).toContain('state="frozen"');
+  });
+});
+
+/**
+ * Two kinds of row, two tabs.
+ *
+ * The workbook a partials export writes is the one place the ZIP framing is
+ * genuinely different — a second worksheet part, a second relationship, a
+ * second content-type override — and getting any of the three wrong produces a
+ * file that opens to "unreadable content" rather than to a missing tab.
+ */
+describe("completed and unfinished, split", () => {
+  const table: ResponseTable = {
+    header: ["submission_id", "status", "started_at", "completed_at", "Email (q_email)"],
+    rows: [
+      ["sbm_a", "completed", "t0", "t1", "ada@lovelace.dev"],
+      ["sbm_b", "in_progress", "t2", "", "half@typed.dev"],
+      ["sbm_c", "abandoned", "t3", "", ""],
+    ],
+    count: 3,
+    truncated: false,
+  };
+
+  it("files each response under whether it was finished", () => {
+    const { completed, partial } = splitByCompletion(table);
+    expect(completed.rows.map((r) => r[0])).toEqual(["sbm_a"]);
+    // Everything that is not `completed` is unfinished — abandoned included.
+    expect(partial.rows.map((r) => r[0])).toEqual(["sbm_b", "sbm_c"]);
+    expect(completed.count).toBe(1);
+    expect(partial.count).toBe(2);
+  });
+
+  it("gives both halves the same columns, so a formula written on one works on the other", () => {
+    const { completed, partial } = splitByCompletion(table);
+    expect(completed.header).toEqual(table.header);
+    expect(partial.header).toEqual(table.header);
+  });
+
+  it("writes both sheets, wired up the way Excel expects", async () => {
+    const { completed, partial } = splitByCompletion(table);
+    const zip = await buildXlsx([
+      { name: "Completed", header: completed.header, rows: completed.rows },
+      { name: "Unfinished", header: partial.header, rows: partial.rows },
+    ]);
+
+    const workbook = await readEntry(zip, "xl/workbook.xml");
+    expect(workbook).toContain('name="Completed" sheetId="1" r:id="rId1"');
+    expect(workbook).toContain('name="Unfinished" sheetId="2" r:id="rId2"');
+
+    // Every sheet needs its own part, its own relationship and its own
+    // content-type override; styles moves to the id after the last sheet.
+    const rels = await readEntry(zip, "xl/_rels/workbook.xml.rels");
+    expect(rels).toContain('Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"');
+    expect(rels).toContain('Id="rId3"');
+    expect(rels).toContain('Target="styles.xml"');
+    expect(await readEntry(zip, "[Content_Types].xml")).toContain("/xl/worksheets/sheet2.xml");
+
+    const first = await readEntry(zip, "xl/worksheets/sheet1.xml");
+    const second = await readEntry(zip, "xl/worksheets/sheet2.xml");
+    expect(first).toContain("ada@lovelace.dev");
+    expect(first).not.toContain("half@typed.dev");
+    expect(second).toContain("half@typed.dev");
+    expect(second).not.toContain("ada@lovelace.dev");
+  });
+
+  it("keeps one sheet when there are no partials to separate", async () => {
+    const zip = await buildXlsx([{ name: "Responses", header: table.header, rows: table.rows }]);
+    expect(await readEntry(zip, "xl/workbook.xml")).toContain('name="Responses" sheetId="1"');
+    await expect(readEntry(zip, "xl/worksheets/sheet2.xml")).rejects.toThrow();
+  });
+
+  it("makes a tab name Excel will accept", async () => {
+    // 31 characters, no `[]:*?/\\`, and no two tabs sharing a name.
+    const zip = await buildXlsx([
+      { name: "Q1: results [2026]/final", header: ["A"], rows: [["1"]] },
+      { name: "Q1: results [2026]/final", header: ["A"], rows: [["2"]] },
+    ]);
+    const workbook = await readEntry(zip, "xl/workbook.xml");
+    expect(workbook).not.toMatch(/name="[^"]*[[\]:*?/\\]/);
+    const names = [...workbook.matchAll(/name="([^"]+)"/g)].map((m) => m[1]!);
+    expect(new Set(names).size).toBe(2);
+    for (const name of names) expect(name.length).toBeLessThanOrEqual(31);
   });
 });

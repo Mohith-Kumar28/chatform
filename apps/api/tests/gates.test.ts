@@ -241,6 +241,22 @@ describe("CSV export", () => {
     expect(await res.text()).toContain("abandoned");
   });
 
+  /**
+   * A CSV has no tabs, so the workbook's split shows up here as order: the
+   * finished responses in a block, then the unfinished ones. Interleaved, the
+   * only thing telling them apart was the `status` column on every row.
+   */
+  it("groups the unfinished ones after the finished ones rather than interleaving", async () => {
+    await setPlan(org.orgId, "pro");
+    const res = await fetchApi(`/api/forms/${org.formId}/submissions/export?includePartials=true`, { headers: auth(org) });
+    const lines = (await res.text()).split("\n").slice(1);
+    const statuses = lines.map((line) => line.split(",")[1]!.replaceAll('"', ""));
+    const firstPartial = statuses.findIndex((s) => s !== "completed");
+    expect(firstPartial).toBeGreaterThan(-1);
+    expect(statuses.slice(0, firstPartial).every((s) => s === "completed")).toBe(true);
+    expect(statuses.slice(firstPartial).every((s) => s !== "completed")).toBe(true);
+  });
+
   it("refuses a viewer entirely", async () => {
     await setRole(org.orgId, "viewer");
     const res = await fetchApi(`/api/forms/${org.formId}/submissions/export`, { headers: auth(org) });

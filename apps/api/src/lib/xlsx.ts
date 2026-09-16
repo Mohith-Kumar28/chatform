@@ -6,7 +6,7 @@
  * double-clicks it — which is how a column of `+91…` phone numbers becomes a
  * column of arithmetic. This produces a real workbook.
  *
- * It ships no dependency. A `.xlsx` is a ZIP of six small XML parts, and a ZIP
+ * It ships no dependency. A `.xlsx` is a ZIP of a handful of small XML parts, and a ZIP
  * is a header, some bytes and a directory; `CompressionStream` (in workerd
  * since 2022) does the only hard part. Adding a packager to a Worker bundle to
  * write 200 lines of XML would be the more expensive choice.
@@ -121,36 +121,74 @@ const STYLES_XML =
   `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
   `</styleSheet>`;
 
-function workbookXml(sheetName: string): string {
+function workbookXml(sheetNames: string[]): string {
+  const sheets = sheetNames
+    .map((name, i) => `<sheet name="${xmlText(name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`)
+    .join("");
   return (
     `${XML_HEAD}<workbook xmlns="${NS_MAIN}" xmlns:r="${NS_REL_DOC}">` +
-    `<sheets><sheet name="${xmlText(sheetName)}" sheetId="1" r:id="rId1"/></sheets>` +
+    `<sheets>${sheets}</sheets>` +
     `</workbook>`
   );
 }
 
-const CONTENT_TYPES =
-  `${XML_HEAD}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
-  `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
-  `<Default Extension="xml" ContentType="application/xml"/>` +
-  `<Override PartName="/xl/workbook.xml" ` +
-  `ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
-  `<Override PartName="/xl/worksheets/sheet1.xml" ` +
-  `ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
-  `<Override PartName="/xl/styles.xml" ` +
-  `ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
-  `</Types>`;
+/**
+ * A tab name Excel will accept.
+ *
+ * The rules are Excel's, not ours: 31 characters, none of `[]:*?/\`, not
+ * empty, and unique in the workbook. A name that breaks one of them is not an
+ * error anyone sees — it is a file that refuses to open.
+ */
+function sheetName(raw: string, taken: Set<string>): string {
+  const cleaned = raw.replace(/[[\]:*?/\\]/g, " ").trim().slice(0, 31) || "Sheet";
+  let name = cleaned;
+  let n = 2;
+  while (taken.has(name.toLowerCase())) name = `${cleaned.slice(0, 28)} ${n++}`;
+  taken.add(name.toLowerCase());
+  return name;
+}
+
+function contentTypes(sheetCount: number): string {
+  const sheets = Array.from(
+    { length: sheetCount },
+    (_, i) =>
+      `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ` +
+      `ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`,
+  ).join("");
+  return (
+    `${XML_HEAD}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+    `<Default Extension="xml" ContentType="application/xml"/>` +
+    `<Override PartName="/xl/workbook.xml" ` +
+    `ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+    sheets +
+    `<Override PartName="/xl/styles.xml" ` +
+    `ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+    `</Types>`
+  );
+}
 
 const ROOT_RELS =
   `${XML_HEAD}<Relationships xmlns="${NS_PKG_REL}">` +
   `<Relationship Id="rId1" Type="${NS_REL_DOC}/officeDocument" Target="xl/workbook.xml"/>` +
   `</Relationships>`;
 
-const WORKBOOK_RELS =
-  `${XML_HEAD}<Relationships xmlns="${NS_PKG_REL}">` +
-  `<Relationship Id="rId1" Type="${NS_REL_DOC}/worksheet" Target="worksheets/sheet1.xml"/>` +
-  `<Relationship Id="rId2" Type="${NS_REL_DOC}/styles" Target="styles.xml"/>` +
-  `</Relationships>`;
+function workbookRels(sheetCount: number): string {
+  const sheets = Array.from(
+    { length: sheetCount },
+    (_, i) =>
+      `<Relationship Id="rId${i + 1}" Type="${NS_REL_DOC}/worksheet" ` +
+      `Target="worksheets/sheet${i + 1}.xml"/>`,
+  ).join("");
+  // Styles takes the id after the last sheet's; the sheet ids must stay 1..n
+  // because `workbookXml` above numbers them the same way.
+  return (
+    `${XML_HEAD}<Relationships xmlns="${NS_PKG_REL}">` +
+    sheets +
+    `<Relationship Id="rId${sheetCount + 1}" Type="${NS_REL_DOC}/styles" Target="styles.xml"/>` +
+    `</Relationships>`
+  );
+}
 
 // ── ZIP ──────────────────────────────────────────────────────────────────────
 
@@ -263,20 +301,39 @@ async function zip(entries: ZipEntry[]): Promise<Uint8Array> {
   return out;
 }
 
-/** One worksheet of `rows` under `header`, as `.xlsx` bytes. */
-export async function buildXlsx(
-  header: string[],
-  rows: string[][],
-  sheetName = "Responses",
-): Promise<Uint8Array> {
+/** One tab of the workbook: a name, a header row, and the rows under it. */
+export interface XlsxSheet {
+  name: string;
+  header: string[];
+  rows: string[][];
+}
+
+/**
+ * A workbook of one or more sheets, as `.xlsx` bytes.
+ *
+ * Plural because completed and unfinished responses go in the same download
+ * but not the same table: interleaved in one sheet, the only thing telling
+ * them apart is a `status` column halfway along, and every filter and total
+ * whoever opens the file writes has to account for it.
+ */
+export async function buildXlsx(sheets: XlsxSheet[]): Promise<Uint8Array> {
+  // A workbook with no sheets does not open. An empty one still tells the
+  // truth — the header is there, and there were no rows.
+  const parts = sheets.length > 0 ? sheets : [{ name: "Responses", header: [], rows: [] }];
+  const taken = new Set<string>();
+  const names = parts.map((sheet) => sheetName(sheet.name, taken));
+
   const encoder = new TextEncoder();
   const text = (value: string) => encoder.encode(value);
   return zip([
-    { name: "[Content_Types].xml", data: text(CONTENT_TYPES) },
+    { name: "[Content_Types].xml", data: text(contentTypes(parts.length)) },
     { name: "_rels/.rels", data: text(ROOT_RELS) },
-    { name: "xl/workbook.xml", data: text(workbookXml(sheetName)) },
-    { name: "xl/_rels/workbook.xml.rels", data: text(WORKBOOK_RELS) },
+    { name: "xl/workbook.xml", data: text(workbookXml(names)) },
+    { name: "xl/_rels/workbook.xml.rels", data: text(workbookRels(parts.length)) },
     { name: "xl/styles.xml", data: text(STYLES_XML) },
-    { name: "xl/worksheets/sheet1.xml", data: text(sheetXml(header, rows)) },
+    ...parts.map((sheet, i) => ({
+      name: `xl/worksheets/sheet${i + 1}.xml`,
+      data: text(sheetXml(sheet.header, sheet.rows)),
+    })),
   ]);
 }

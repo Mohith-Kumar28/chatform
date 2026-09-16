@@ -656,10 +656,17 @@ function DownloadMenu({
                     CSV
                   </a>
                 </DropdownMenuItem>
+                {/*
+                  Worth saying on the item rather than leaving it to be
+                  discovered: the reason to take the workbook over the CSV here
+                  is that it keeps the two kinds of row on separate tabs, and a
+                  CSV cannot.
+                */}
                 <DropdownMenuItem asChild>
                   <a href={href({ partials: true, xlsx: true })} download>
                     <Sheet />
-                    Excel workbook
+                    <span className="flex-1">Excel workbook</span>
+                    <span className="text-muted-foreground text-micro">2 tabs</span>
                   </a>
                 </DropdownMenuItem>
               </>
