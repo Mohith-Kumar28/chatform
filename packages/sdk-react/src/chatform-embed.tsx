@@ -97,6 +97,26 @@ export function ChatformEmbed({
   for (const [key, value] of Object.entries(hidden ?? {})) url.searchParams.set(key, value);
 
   return (
+  /**
+   * The embedder's URL is not ours to collect.
+   *
+   * Without this the iframe sends the full page URL of whatever site the form
+   * is embedded on as a `Referer` on every request — including paths and query
+   * strings from a customer's private admin page. `strict-origin-when-cross-origin`
+   * sends the origin only.
+   *
+   * A `sandbox` attribute is deliberately NOT set here. The runtime inside
+   * this frame opens the ending's redirect with `window.open`, signs
+   * respondents in with a Google popup, submits real forms and hands back file
+   * downloads — so the token list would have to be
+   * `allow-scripts allow-same-origin allow-forms allow-popups
+   * allow-popups-to-escape-sandbox allow-downloads` at minimum, and with
+   * `allow-scripts allow-same-origin` together a sandbox buys very little
+   * against the framed document itself. What it would genuinely buy is
+   * `allow-top-navigation` staying off, which stops a compromised frame
+   * navigating the embedder's page away. Worth doing, and worth doing behind a
+   * real browser pass on a live embed rather than on reasoning.
+   */
     <iframe
       ref={frame}
       src={url.toString()}
@@ -104,6 +124,7 @@ export function ChatformEmbed({
       className={className}
       style={{ width: "100%", border: 0, height: measured, ...style }}
       allow="clipboard-write; camera; microphone"
+      referrerPolicy="strict-origin-when-cross-origin"
     />
   );
 }

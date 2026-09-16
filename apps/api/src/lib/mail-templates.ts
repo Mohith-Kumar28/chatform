@@ -39,14 +39,13 @@ const ON_PRIMARY = "#201a16";
  */
 const MARK_URL = "https://chatform.in/brand/email-mark.png";
 
-export function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+/**
+ * Re-exported rather than defined: this was one of two identical copies, the
+ * other in the web app's printable-form builder, and a third would have been
+ * written the next time somebody assembled markup from data.
+ */
+export { escapeHtml } from "@repo/guard";
+import { escapeHtml } from "@repo/guard";
 
 /**
  * The shell every message is poured into.

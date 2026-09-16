@@ -1,4 +1,4 @@
-import { cleanText } from "./text.js";
+import { cleanText } from "./text";
 
 /**
  * A random tag per fence, so the text inside cannot close its own fence.

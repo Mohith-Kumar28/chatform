@@ -466,7 +466,20 @@ async function runFollowUpJob(
   if (progress) {
     vars.set("remaining", String(Math.max(progress.totalEstimate - progress.answered, 0)));
   }
+  /**
+   * Two interpolations of the same template, for the two parts of the message.
+   *
+   * `interpolate` escapes only the values it substitutes, never the author's
+   * own markdown — so the HTML part gets respondent answers with their
+   * markdown metacharacters escaped, and the author's `**bold**` still bolds.
+   * Without that, an answer of `[see here](https://elsewhere.example)` became a
+   * real link in a message the form's owner is signing.
+   *
+   * The plain-text part takes the unescaped pass: a backslash in front of
+   * every asterisk is not an improvement in a message nobody renders.
+   */
   const bodyMd = interpolate(step.bodyMd ?? "", vars);
+  const bodyMdHtml = interpolate(step.bodyMd ?? "", vars, { escapeMarkdown: true });
 
   const org = await env.DB.prepare(`SELECT postal_address FROM organizations WHERE id = ?`)
     .bind(row.organization_id)
@@ -475,7 +488,7 @@ async function runFollowUpJob(
 
   const msg = followUpEmail({
     subject: interpolate(step.subject, vars),
-    bodyHtml: bodyMd ? markdownToHtml(bodyMd) : "",
+    bodyHtml: bodyMdHtml ? markdownToHtml(bodyMdHtml) : "",
     bodyText: bodyMd,
     formTitle: row.form_title,
     /**
@@ -726,10 +739,15 @@ async function runSubmissionJob(
     const to = resolveRespondentAddress(doc, { respondentEmail: sub.respondent_email, byRef })?.address;
     if (to) {
       const vars = interpolationVars(doc, byRef, form.form_title, sub);
+      // Escaped for the markdown pass, raw for the text part — see the note
+      // on the follow-up body above.
       const bodyMd = interpolate(autoReply.bodyMd || DEFAULT_CONFIRMATION_BODY, vars);
+      const bodyMdHtml = interpolate(autoReply.bodyMd || DEFAULT_CONFIRMATION_BODY, vars, {
+        escapeMarkdown: true,
+      });
       const msg = autoReplyEmail({
         subject: interpolate(autoReply.subject || DEFAULT_CONFIRMATION_SUBJECT, vars),
-        bodyHtml: markdownToHtml(bodyMd),
+        bodyHtml: markdownToHtml(bodyMdHtml),
         bodyText: bodyMd,
         formTitle: form.form_title,
         /**

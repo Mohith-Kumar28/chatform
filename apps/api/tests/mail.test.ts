@@ -107,7 +107,7 @@ async function publish(doc: unknown): Promise<void> {
 /** A completed response with three answers on it. */
 async function seedResponse(
   id: string,
-  opts: { respondentEmail?: string | null; status?: string } = {},
+  opts: { respondentEmail?: string | null; status?: string; name?: string } = {},
 ): Promise<void> {
   const now = Date.now();
   await env.DB.prepare(
@@ -127,7 +127,7 @@ async function seedResponse(
     .run();
 
   const answers: [string, string, unknown][] = [
-    ["q_name", "short_text", "Ada"],
+    ["q_name", "short_text", opts.name ?? "Ada"],
     ["q_email", "email", "ada@example.com"],
     ["q_pick", "single_select", "opt_coffee"],
   ];
@@ -500,6 +500,46 @@ describe("auto-reply", () => {
     const html = sent[0]!.html;
     expect(html).not.toContain("brand/email-mark.png");
     expect(html).not.toContain("Powered by chatform");
+  });
+
+  /**
+   * An answer is data in the owner's message, not markup.
+   *
+   * `interpolate` has always been able to escape markdown in what it
+   * substitutes, and the chat runtime asks it to — but these two email paths
+   * did not, so a respondent typing `[see here](https://elsewhere.example)`
+   * into a name field got a real link in a message the form's owner signs.
+   * The plain-text part keeps the unescaped pass: a backslash before every
+   * asterisk is not an improvement in a body nobody renders.
+   */
+  it("does not let a respondent's answer become markup", async () => {
+    await publish({
+      ...DOC,
+      settings: {
+        onComplete: {
+          autoReplyEmail: { enabled: true, subject: "Thanks", bodyMd: "Hi {{q_name}}, thanks!" },
+        },
+      },
+    });
+    await seedResponse("sbm_mail_md", {
+      respondentEmail: "ada@example.com",
+      name: "[click me](https://elsewhere.example)",
+    });
+
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_md",
+      isTest: false,
+    });
+
+    const html = sent[0]!.html;
+    expect(html).not.toContain('href="https://elsewhere.example"');
+    expect(html).toContain("click me");
+    // The author's own markdown in the same template still renders.
+    expect(sent[0]!.text).toContain("[click me](https://elsewhere.example)");
   });
 
   it("goes to the respondent and interpolates their answers", async () => {

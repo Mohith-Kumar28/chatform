@@ -1,3 +1,6 @@
+// The shared escaper — this was the second of two identical copies, and it
+// also escapes the single quote the local one forgot.
+import { escapeHtml } from "@repo/guard";
 import { stripRichText } from "@repo/form-schema";
 import type { Block, FormDoc } from "@repo/form-schema";
 
@@ -32,13 +35,7 @@ const ANSWER_HINT: Partial<Record<Block["type"], string>> = {
   nps: "Score from 0 to 10",
 };
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+
 
 /** The choices, scale or blank line a respondent would be answering into. */
 function answerArea(block: Block): string {

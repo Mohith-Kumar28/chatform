@@ -1,3 +1,5 @@
+import { escapeAttr } from "@repo/guard";
+
 /**
  * The embed snippets, in one place.
  *
@@ -97,7 +99,17 @@ function resolve(options: SnippetOptions): EmbedConfig & { slug: string; origin:
 
 function attributes(config: EmbedConfig, hidden: Record<string, string> | undefined): string[] {
   const out: string[] = [];
-  const add = (name: string, value: string | number) => out.push(`${name}="${value}"`);
+  /**
+   * Escaped, because this is markup we hand somebody else to paste.
+   *
+   * The values are the author's own — a button label, a colour, arbitrary
+   * hidden-field pairs from the studio — so the snippet is not an injection
+   * into our page. It is a string that gets pasted into an unknown page, and a
+   * label containing a quote closed its own attribute there and silently
+   * changed the tag. That is our bug rather than theirs.
+   */
+  const add = (name: string, value: string | number) =>
+    out.push(`${name}="${escapeAttr(String(value))}"`);
 
   if (config.mode !== EMBED_DEFAULTS.mode) add("data-mode", config.mode);
   if (isOverlay(config.mode)) {

@@ -1,5 +1,5 @@
 import { fileTypeFromBuffer } from "file-type";
-import { cleanLine } from "./text.js";
+import { cleanLine } from "./text";
 
 /**
  * The respondent-upload allowlist: what a person may attach as an answer.

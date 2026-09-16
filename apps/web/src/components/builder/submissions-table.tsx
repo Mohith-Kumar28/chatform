@@ -1,5 +1,6 @@
 "use client";
 
+import { csvCell } from "@repo/guard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   pageCount,
@@ -2111,7 +2112,18 @@ function AnswerList({
 
 /** Selected rows, as the spreadsheet the export endpoint would have given. */
 function downloadCsv(rows: SubmissionRecord[], columns: ResultColumn[], withRespondent: boolean) {
-  const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  /**
+   * Quote when quoting is needed, and always neutralise a formula.
+   *
+   * This is the third of three CSV writers in the product and the second that
+   * had no de-fanging: a respondent's answer beginning `=` opened as a live
+   * formula in the spreadsheet of whoever downloaded the selection. `csvCell`
+   * is the same rule the server-side exports now apply.
+   */
+  const esc = (v: string) => {
+    const cell = csvCell(v);
+    return /[",\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell;
+  };
   const withRespondentId = rows.some((r) => r.respondentId);
   const header = [
     "Submitted",

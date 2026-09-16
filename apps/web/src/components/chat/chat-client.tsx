@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { stripRichText } from "@repo/form-schema";
+import { safeHref, safeMediaSrc } from "@repo/guard";
 import { QuestionDescription, RichText, SAFE_ELEMENTS } from "./rich-text";
 import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
@@ -284,7 +285,19 @@ export function ChatSurface({
    * to and then sat there. A URL and a delay are values, so a replay of the same
    * ending is now a no-op.
    */
-  const redirectTarget = chat.ending?.redirectUrl;
+  /**
+   * The ending's redirect, refused unless it is a link a browser should follow.
+   *
+   * `z.string().url()` accepts `javascript:` — it is `new URL()` with no
+   * scheme constraint — so an author, or the AI generator handed a poisoned
+   * page to read, could store `javascript:…` here and it would run in a
+   * respondent's browser on our origin, through `window.open`, through
+   * `location.assign`, and through the two anchors below. Guarded here rather
+   * than in the schema because the documents already stored are the ones that
+   * matter, and they are re-parsed on every read: a rejecting schema would
+   * turn a live form into a 500 instead of a form with one dead button.
+   */
+  const redirectTarget = safeHref(chat.ending?.redirectUrl);
   const redirectDelaySec = chat.ending?.redirectDelaySec ?? 5;
   useEffect(() => {
     const target = redirectTarget;
@@ -423,7 +436,7 @@ export function ChatSurface({
         style={themeVars}
         inert={replay}
       >
-        <ChatBoot title={config.agentName || config.title} logoUrl={config.theme.logoUrl} />
+        <ChatBoot title={config.agentName || config.title} logoUrl={safeMediaSrc(config.theme.logoUrl)} />
       </div>
     );
   }
@@ -458,7 +471,13 @@ export function ChatSurface({
       <ChatHeader
         title={agentName}
         brandName={config.theme.brandName}
-        logoUrl={config.theme.logoUrl}
+        /*
+          `theme.logoUrl` is an author-supplied string with no URL validation
+          in the schema at all — not even `.url()` — and it lands in an `src`.
+          `data:` and `javascript:` are both refused here; a remote host is
+          allowed, because an author hosting their own logo is ordinary.
+        */
+        logoUrl={safeMediaSrc(config.theme.logoUrl)}
         pct={pct}
         mode={config.progressBar}
         answered={chat.question?.progress.answered ?? 0}
@@ -1783,6 +1802,12 @@ function EndingCard({
     return () => clearInterval(id);
   }, [counting, delaySec]);
   const secondsToRedirect = secondsLeft ?? delaySec;
+  /**
+   * The same guard the effect that fires the redirect applies, applied to the
+   * anchors that stand in for it. A `javascript:` URL stored on an ending runs
+   * on our origin whether a timer navigates to it or a respondent clicks it.
+   */
+  const endingRedirect = safeHref(ending.redirectUrl);
 
   return (
     <>
@@ -1802,9 +1827,9 @@ function EndingCard({
           that stands in for it changes, because a party popper over "you can't
           submit this" is the tonal failure this whole ending kind exists to fix.
         */}
-        {theme.logoUrl ? (
+        {safeMediaSrc(theme.logoUrl) ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={theme.logoUrl} alt={theme.brandName ?? ""} className="mb-5 h-12 object-contain" />
+          <img src={safeMediaSrc(theme.logoUrl)!} alt={theme.brandName ?? ""} className="mb-5 h-12 object-contain" />
         ) : screenedOut ? (
           <div className="mb-5 grid size-16 place-items-center rounded-full border border-current/15 bg-current/8 opacity-70">
             <ShieldAlert className="size-8" strokeWidth={1.75} />
@@ -1889,9 +1914,17 @@ function EndingCard({
           </>
         )}
 
-        {ending.ctaLabel && ending.ctaUrl && (
+        {ending.ctaLabel && safeHref(ending.ctaUrl) && (
           <a
-            href={ending.ctaUrl}
+            href={safeHref(ending.ctaUrl)!}
+            /*
+              `rel` was missing here and present on the twin below. A
+              call-to-action leaving in a new tab hands the opened page a live
+              `window.opener` unless it is said, and this one goes to whatever
+              the author typed.
+            */
+            target="_blank"
+            rel="noopener noreferrer"
             className="mt-6 inline-flex h-11 items-center rounded-full px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
             style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
           >
@@ -1899,7 +1932,7 @@ function EndingCard({
           </a>
         )}
 
-        {ending.redirectUrl &&
+        {endingRedirect &&
           !replay &&
           (redirectBlocked ? (
             /*
@@ -1908,7 +1941,7 @@ function EndingCard({
               step, offered as the button it should have been.
             */
             <a
-              href={ending.redirectUrl}
+              href={endingRedirect}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-6 inline-flex h-11 items-center gap-2 rounded-full px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"

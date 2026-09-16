@@ -228,6 +228,10 @@
     frame.src = frameUrl();
     frame.title = "Form";
     frame.setAttribute("allow", "clipboard-write; camera; microphone");
+    // See the note in packages/sdk-react/src/chatform-embed.tsx: the origin,
+    // never the embedder's full URL. A `sandbox` attribute is deliberately not
+    // set — that needs a browser pass, not reasoning.
+    frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
     frame.style.border = "0";
     frame.style.width = "100%";
     frame.style.height = "100%";

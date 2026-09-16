@@ -19,7 +19,7 @@ export {
   cleanText,
   hasSuspiciousCharacters,
   stripInvisible,
-} from "./text.js";
+} from "./text";
 
 export {
   GuardError,
@@ -34,8 +34,8 @@ export {
   safeMediaSrc,
   safeUrl,
   safeWebhookUrl,
-} from "./url.js";
-export type { GuardErrorCode, GuardedFetchOptions, HostClass, SafeUrlOptions } from "./url.js";
+} from "./url";
+export type { GuardErrorCode, GuardedFetchOptions, HostClass, SafeUrlOptions } from "./url";
 
 /**
  * File sniffing is deliberately **not** re-exported here. It is the one module
@@ -44,6 +44,6 @@ export type { GuardErrorCode, GuardedFetchOptions, HostClass, SafeUrlOptions } f
  * so a page that only needs `safeHref` does not ship a format parser.
  */
 
-export { csvCell, csvField, csvRow } from "./csv.js";
-export { escapeAttr, escapeHtml } from "./html.js";
-export { FENCE_RULE, fence, fenceNonce } from "./prompt.js";
+export { csvCell, csvField, csvRow } from "./csv";
+export { escapeAttr, escapeHtml } from "./html";
+export { FENCE_RULE, fence, fenceNonce } from "./prompt";

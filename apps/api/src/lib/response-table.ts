@@ -1,4 +1,5 @@
 import { displayAnswer, readFormDoc, type Block } from "@repo/form-schema";
+import { csvCell, csvRow } from "@repo/guard";
 import type { Bindings } from "../env.js";
 import { resolveRetiredBlocks } from "./retired-columns.js";
 
@@ -32,26 +33,13 @@ export interface TableOptions {
 }
 
 /**
- * Cells that a spreadsheet would execute rather than display.
- *
- * These rows are typed by strangers, and this data now goes somewhere that
- * treats a leading `=` as a program. Prefixing with an apostrophe is the
- * conventional neutralisation: Excel and Sheets both render the rest verbatim
- * and drop the quote.
- *
- * A leading `-` is left alone when the cell is an ordinary negative number,
- * because mangling `-40` to protect against `-1+cmd|…` would corrupt far more
- * data than it saves.
+ * `csvCell` from `@repo/guard` is the de-fanger that used to live here as
+ * `deFang`. Moved rather than copied: two of the three export paths did not
+ * have it, so the same answer came out safe through this one and live through
+ * the others. The `-40` carve-out went with it — mangling an ordinary negative
+ * number to defend against `-1+cmd|…` costs more data than it saves.
  */
-function deFang(value: string): string {
-  if (!value) return value;
-  const head = value[0]!;
-  if (head === "=" || head === "+" || head === "@" || head === "\t" || head === "\r") {
-    return `'${value}`;
-  }
-  if (head === "-" && !Number.isFinite(Number(value))) return `'${value}`;
-  return value;
-}
+const deFang = csvCell;
 
 export async function buildResponseTable(
   env: Bindings,
@@ -186,10 +174,9 @@ export async function buildResponseTable(
   return { header, rows, count: rows.length, truncated };
 }
 
-/** RFC 4180: every field quoted, embedded quotes doubled. */
+/** RFC 4180: every field quoted, embedded quotes doubled, formulas de-fanged. */
 export function toCsv({ header, rows }: ResponseTable): string {
-  const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
-  return [header, ...rows].map((row) => row.map(esc).join(",")).join("\n");
+  return [header, ...rows].map((row) => csvRow(row)).join("\n");
 }
 
 /**

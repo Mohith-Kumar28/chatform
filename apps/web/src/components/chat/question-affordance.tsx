@@ -1,5 +1,6 @@
 "use client";
 
+import { safeHref } from "@repo/guard";
 import { memo, useCallback, useMemo, useState } from "react";
 import { CornerDownLeft } from "lucide-react";
 import { isMeetingRoom, schedulingLabel, type PublicBlock } from "@repo/form-schema";
@@ -477,7 +478,9 @@ function AffordanceControls({
       ) : null;
 
     case "scheduling": {
-      const url = block.url ?? "";
+      // `scheduling.url` is `z.string().url()`, and zod's `.url()` accepts
+      // `javascript:` — it is `new URL()` with no scheme constraint.
+      const url = safeHref(block.url) ?? "";
       // Whatever the builder pasted decides the copy: "I've booked" is wrong
       // under a bare Zoom room, where there was never a slot to pick.
       const room = url ? isMeetingRoom(url) : false;

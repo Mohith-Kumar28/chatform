@@ -157,6 +157,9 @@ importers:
       '@repo/form-schema':
         specifier: workspace:*
         version: link:../../packages/form-schema
+      '@repo/guard':
+        specifier: workspace:*
+        version: link:../../packages/guard
       '@tanstack/query-async-storage-persister':
         specifier: ^5.102.8
         version: 5.102.8
