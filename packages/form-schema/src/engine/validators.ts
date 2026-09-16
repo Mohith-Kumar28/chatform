@@ -166,7 +166,7 @@ function isFileDescriptorArray(v: unknown): v is { fileId: string; filename: str
  * `raw` comes from structured client actions (already typed) or from
  * LLM-extracted values for free text. Returns canonical value on success.
  */
-export function validateAnswer(block: Block, raw: unknown): ValidationResult {
+export function validateAnswer(block: Block, input: unknown): ValidationResult {
   /*
    * Whitespace is not an answer.
    *
@@ -177,6 +177,23 @@ export function validateAnswer(block: Block, raw: unknown): ValidationResult {
    * makes the two agree: what counts as empty here is what the stored value
    * would have been.
    */
+  /*
+   * And a character nobody can see is not part of an answer either.
+   *
+   * `cleanText` rather than `trim`, because trimming the ends is only half of
+   * it. A zero-width space inside `ada<U+200B>@example.com` passed the email
+   * regex and was stored, so the address on file was not the address the
+   * person typed: mail to it bounces, two visually identical answers count as
+   * different for the duplicate check, and a domain allowlist is comparing
+   * against a string with an invisible character in it. Found by posting one
+   * through a running worker — every unit test on this function used clean
+   * input, which is exactly the blind spot.
+   *
+   * Cleaning here rather than per branch means every type's rules — the email
+   * regex, the phone parser, the pattern, the length caps — run on what will
+   * actually be stored.
+   */
+  const raw = typeof input === "string" ? cleanText(input) : input;
   const given = typeof raw === "string" ? raw.trim() : raw;
   if (given === undefined || given === null || given === "") {
     return block.required ? fail("required", "This question needs an answer.") : ok(undefined);
