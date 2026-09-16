@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
+import { BAD_WEBHOOK_URL, deliverableUrl } from "../../lib/webhook-url.js";
 import type { Bindings } from "../../env.js";
 import { keyOwnsForm, type GuardVars } from "../../lib/guards.js";
 import { requireScope, requireGauge, type AuthzVars } from "../../lib/authorize.js";
@@ -95,6 +96,7 @@ webhooksV1Router.post(
   validator(
     "json",
     z.object({
+      // Shape only; the address rule lives in `webhookUrlSchema`.
       url: z.string().url().max(2000),
       events: z.array(z.string()).min(1).max(20),
       /** Omit to receive events for every form in the organization. */
@@ -113,6 +115,11 @@ webhooksV1Router.post(
   async (c) => {
     const orgId = c.get("orgId")!;
     const body = c.req.valid("json");
+
+    // The rule its dashboard twin has always had. This route accepted any
+    // scheme and any host, so a URL the dashboard refused could be created
+    // here and then delivered to — `http://10.0.0.1/` included.
+    if (!deliverableUrl(c.env, body.url)) return c.json(BAD_WEBHOOK_URL, 400);
 
     if (body.formId && !keyOwnsForm(c, body.formId)) {
       return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);

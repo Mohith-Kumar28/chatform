@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
+import { HiddenFieldsInput } from "../../lib/inputs.js";
 import { z } from "zod";
 import {
   readFormDoc,
@@ -215,7 +216,7 @@ const AnswerInput = z.record(z.string(), z.unknown());
 const CreateResponseBody = z
   .object({
     answers: AnswerInput.optional(),
-    hiddenFields: z.record(z.string(), z.string()).optional(),
+    hiddenFields: HiddenFieldsInput.optional(),
     /** Finish in the same call. Still writes one row per answer. */
     complete: z.boolean().default(false),
     /**
@@ -590,7 +591,7 @@ responsesRouter.post(
       );
     }
 
-    const body = (await c.req.json().catch(() => ({}))) as { endingRef?: string };
+    const body = c.req.valid("json");
     const { state, cursor } = replayState(form.doc, answers, hidden);
     let ending = cursor.kind === "ending" ? cursor.ending : resolveEnding(form.doc, state);
     if (body?.endingRef) {
@@ -655,7 +656,7 @@ responsesRouter.post(
     const hidden = jsonOr<Record<string, string>>(row.hidden_fields, {});
     const answers = await loadAnswers(c.env, row.id);
     const { state } = replayState(form.doc, answers, hidden);
-    const body = (await c.req.json().catch(() => ({}))) as { reason?: string };
+    const body = c.req.valid("json");
 
     await finalizeResponse(ownerOf(c.env, form, row), {
       responseId: row.id,

@@ -2,7 +2,8 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { resolveRespondent } from "../../lib/respondents.js";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { sha256Hex, toPublicBlock, readFormDoc } from "@repo/form-schema";
+import { sha256Hex, toPublicBlock, RefString, readFormDoc } from "@repo/form-schema";
+import { HiddenFieldsInput } from "../../lib/inputs.js";
 import type { Bindings } from "../../env.js";
 import { assertChatSessionAccess, keyOwnsForm, type GuardVars } from "../../lib/guards.js";
 import { requireScope, type AuthzVars } from "../../lib/authorize.js";
@@ -64,7 +65,7 @@ for (const base of SESSION_BASES) {
 
 const CreateSessionBody = z
   .object({
-    hiddenFields: z.record(z.string(), z.string()).optional(),
+    hiddenFields: HiddenFieldsInput.optional(),
     /** Your own identifier for this respondent, echoed back in webhooks. */
     externalId: z.string().max(200).optional(),
     /** Seconds the returned respondent token stays usable. */
@@ -213,7 +214,7 @@ createSessionRoute("/forms/:id/chat/sessions");
 
 const MessageBody = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string().min(1).max(5000) }),
-  z.object({ type: z.literal("structured"), ref: z.string(), value: z.unknown() }),
+  z.object({ type: z.literal("structured"), ref: RefString, value: z.unknown() }),
 ]);
 
 /** Shared by the message and action routes: run it, and answer honestly if it is slow. */

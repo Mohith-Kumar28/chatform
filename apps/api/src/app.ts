@@ -1,5 +1,8 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { bodyLimit } from "hono/body-limit";
+import { HTTPException } from "hono/http-exception";
+import { secureHeaders } from "hono/secure-headers";
 import { Scalar } from "@scalar/hono-api-reference";
 import type { Bindings } from "./env.js";
 import { webOrigins } from "./lib/origins.js";
@@ -31,6 +34,35 @@ import { requestId, type RequestIdVars } from "./lib/request-id.js";
 import { publicIpLimit } from "./lib/ratelimit.js";
 import { attachErrorContext } from "./lib/api-error.js";
 
+/**
+ * A JSON body has no business being larger than this. 256 KB is generous: the
+ * largest one a client legitimately sends is a form document, and the comment
+ * at `forms.ts:556` puts those around 80 KB.
+ */
+const MAX_JSON_BODY = 256 * 1024;
+
+/**
+ * The routes that carry bytes rather than JSON, and are bounded by their own
+ * rules instead.
+ *
+ * Each of these either streams to R2 against a plan limit — the only way a
+ * 100 MB file fits through a 128 MB Worker — or measures itself (the feedback
+ * snapshot's own 256 KB check), or belongs to a transport that frames its own
+ * payload (`/mcp`). A global ceiling below their real limits would reject
+ * legitimate uploads on the `Content-Length` check before the handler ever
+ * runs.
+ *
+ * This has to be a path test rather than a mount-order trick: `app.use("*")`
+ * registered ahead of the routers still runs for every one of them.
+ */
+const SELF_BOUNDED_BODY = [
+  /^\/(?:p|v1)\/sessions\/[^/]+\/uploads\/[^/]+$/,
+  /^\/api\/assets$/,
+  /^\/(?:api|v1)\/forms\/[^/]+\/knowledge\/upload$/,
+  /^\/p\/sessions\/[^/]+\/feedback\/[^/]+\/snapshot$/,
+  /^\/mcp$/,
+];
+
 export function createApp() {
   const app = new Hono<{ Bindings: Bindings; Variables: Partial<RequestIdVars> }>();
 
@@ -40,6 +72,56 @@ export function createApp() {
    * the responses a support conversation actually starts from.
    */
   app.use("*", requestId);
+
+  /**
+   * Security headers on every response, including the ones the routers never
+   * see — a 404 and a 500 both leave through here.
+   *
+   * Mounted **after `requestId`**, and that is load-bearing rather than tidy.
+   * `secureHeaders` mutates `c.res.headers` directly, and a response handed
+   * back from `stub.fetch()` — the SSE stream out of `SessionDO` — has
+   * immutable headers in workerd. What makes this legal is that `requestId`
+   * calls `c.header()` before `next()`, which forces Hono to re-instantiate a
+   * mutable response. Move this above it and the event stream starts throwing
+   * "Can't modify immutable headers".
+   *
+   * `crossOriginResourcePolicy` is off deliberately. Its default is
+   * `same-origin`, and this worker serves images cross-origin by design:
+   * `GET /p/assets/:id` is loaded from `chatform.in` into `api.chatform.in` by
+   * the chat runtime, the builder preview, the embed preview and the public
+   * form config's own `assetUrl`. Leaving the default on blanks every form
+   * logo, avatar, background and inline image. The asset routes already carry
+   * the headers that matter for them — `nosniff` and a sandbox CSP — set
+   * per-response at the point of serving.
+   */
+  app.use(
+    "*",
+    secureHeaders({
+      crossOriginResourcePolicy: false,
+      // A cross-origin isolated API would break the same asset loads.
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+
+  /**
+   * One ceiling on every JSON body, before any handler reads one.
+   *
+   * The middleware only reads the stream when a request arrives chunked; with
+   * a `Content-Length` it compares the header and returns. Either way the
+   * bytes reach the handler unchanged, which is what keeps the Dodo webhook's
+   * HMAC-over-raw-bytes valid.
+   */
+  const limitBody = bodyLimit({
+    maxSize: MAX_JSON_BODY,
+    onError: (c) =>
+      c.json(
+        { error: { code: "too_large", message: `Request body may not exceed ${MAX_JSON_BODY} bytes` } },
+        413,
+      ),
+  });
+  app.use("*", async (c, next) =>
+    SELF_BOUNDED_BODY.some((route) => route.test(c.req.path)) ? next() : limitBody(c, next),
+  );
 
   app.use(
     "/p/*",
@@ -173,6 +255,16 @@ export function createApp() {
 
   app.notFound((c) => c.json({ error: { code: "not_found", message: "Route not found" } }, 404));
   app.onError((err, c) => {
+    /**
+     * A refusal a middleware raised on purpose is not a crash.
+     *
+     * Without this branch every `HTTPException` — a 413 from `bodyLimit`, and
+     * anything else a middleware throws — was logged as `unhandled_error` and
+     * answered with a 500, telling the caller the server had broken when in
+     * fact it had declined. Nothing in this worker threw `HTTPException`
+     * before, which is why the gap went unnoticed.
+     */
+    if (err instanceof HTTPException) return err.getResponse();
     console.error("unhandled_error", { requestId: c.get("requestId"), path: c.req.path }, err);
     return c.json({ error: { code: "internal_error", message: "Internal server error" } }, 500);
   });

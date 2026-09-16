@@ -1394,6 +1394,23 @@ export class SessionDO extends DurableObject<Bindings> {
     this.writers.add(writer);
 
     /**
+     * A write to a reader that has gone away is a disconnect, not an error.
+     *
+     * These four writes — the retry hint, the replay, the readiness frame and
+     * the keep-alive ping — were bare `void writer.write(...)` calls. A
+     * respondent closing the tab rejects every one of them, and an unhandled
+     * rejection is what that looked like from the outside: noise in the logs
+     * for the most ordinary thing a person can do. `emit` already prunes a
+     * writer that fails (see `writeFrame`); this is the same courtesy for the
+     * frames sent before any turn has run.
+     */
+    const push = (bytes: Uint8Array): void => {
+      void writer.write(bytes).catch(() => {
+        this.writers.delete(writer);
+      });
+    };
+
+    /**
      * Replay from durable storage — the newest events, not the oldest.
      *
      * `list` is ascending, so a bare `limit` returns the *first* N keys. Past N
@@ -1418,9 +1435,9 @@ export class SessionDO extends DurableObject<Bindings> {
     });
     const replay = [...stored.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([, v]) => v);
     const init = this.encoder.encode(`retry: 3000\n\n`);
-    void writer.write(init);
+    push(init);
     for (const evt of replay) {
-      void writer.write(this.encoder.encode(this.serialize(evt)));
+      push(this.encoder.encode(this.serialize(evt)));
     }
     // per-connection readiness signal (not persisted, sent after replay)
     if (this.meta) {
@@ -1451,7 +1468,7 @@ export class SessionDO extends DurableObject<Bindings> {
             : null,
         },
       };
-      void writer.write(this.encoder.encode(this.serialize(ready)));
+      push(this.encoder.encode(this.serialize(ready)));
     }
 
     /**
@@ -1490,7 +1507,7 @@ export class SessionDO extends DurableObject<Bindings> {
 
     // periodic ping to keep connection alive
     const ping = setInterval(() => {
-      void writer.write(this.encoder.encode(this.serialize({ v: 1, seq: 0, ts: Date.now(), type: "ping", data: {} })));
+      push(this.encoder.encode(this.serialize({ v: 1, seq: 0, ts: Date.now(), type: "ping", data: {} })));
     }, 15000);
     void writer.closed
       .finally(() => {

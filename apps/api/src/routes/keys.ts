@@ -269,7 +269,9 @@ keysRouter.post(
     const userId = c.get("userId")!;
     const orgId = c.get("orgId")!;
     const id = c.req.param("id");
-    const graceHours = (await c.req.json().catch(() => ({})))?.graceHours ?? 24;
+    // The validator above already bounded this to 0..168 and defaulted it;
+    // re-reading the raw body here only risked the two drifting apart.
+    const graceHours = c.req.valid("json")?.graceHours ?? 24;
 
     const old = await c.env.DB.prepare(
       `SELECT ${KEY_COLUMNS} FROM api_keys WHERE id = ? AND organization_id = ?`,

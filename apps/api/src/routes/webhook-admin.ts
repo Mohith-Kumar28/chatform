@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
+import { BAD_WEBHOOK_URL, deliverableUrl } from "../lib/webhook-url.js";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
 import { hmac, EVENT_ALIASES } from "../lib/webhooks.js";
@@ -76,7 +77,9 @@ webhooksRouter.post(
   validator(
     "json",
     z.object({
-      url: z.string().url().refine((u) => u.startsWith("https://") || u.startsWith("http://localhost")),
+      // Shape only here; `webhookUrlSchema` decides whether the address is
+      // one we may deliver to, because that answer depends on the environment.
+      url: z.string().url().max(2000),
       events: z.array(z.enum(SUBSCRIBABLE_EVENTS)).min(1),
       formId: z.string().nullable().optional(),
     }),
@@ -86,6 +89,7 @@ webhooksRouter.post(
     const orgId = c.get("orgId");
     if (!orgId) return c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
     const { url, events, formId } = c.req.valid("json");
+    if (!deliverableUrl(c.env, url)) return c.json(BAD_WEBHOOK_URL, 400);
 
     /**
      * Per-form ceiling, counted live rather than metered — a counter would drift the

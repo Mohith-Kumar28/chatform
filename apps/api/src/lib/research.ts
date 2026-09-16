@@ -1,4 +1,5 @@
 import { embedFromUrl } from "@repo/form-schema";
+import { guardedFetch, isBlockedHost, readTruncatedText } from "@repo/guard";
 /**
  * Reading the web before drafting a form.
  *
@@ -40,28 +41,6 @@ export interface SiteReading {
 const EXPLICIT_URL = /https?:\/\/[^\s<>"'()]+/gi;
 const BARE_HOST =
   /(?<![@\w.-])((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|org|net|io|ai|app|dev|co|in|so|xyz|me|sh|to|is|gg|cloud|site|store|tech|design|studio|page|link|space|online|live|fyi|inc|team|works|new|blog|wiki|info|biz|us|uk|ca|de|fr|nl|eu|au|jp|br|es|it|se|no|fi|dk|pl|ch|at|be|ie|nz|sg|hk|kr|cn|ru|tr|mx|ar|cl|za|ng|ke|id|my|ph|th|vn|pk|bd|lk|np)(?:\/[^\s<>"'()]*)?)/gi;
-
-/**
- * Hostnames that must never be fetched.
- *
- * The URL comes from user input and the fetch runs inside the Worker, so
- * without this an author could aim it at loopback or a cloud metadata endpoint.
- * Cloudflare Workers cannot reach a private network from `fetch` in the first
- * place, but the intent should be readable here rather than inferred from the
- * platform.
- */
-function isBlockedHost(hostname: string): boolean {
-  const h = hostname.toLowerCase();
-  if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local") || h.endsWith(".internal")) return true;
-  if (h === "metadata.google.internal" || h === "169.254.169.254") return true;
-  // Literal IPs in private and link-local ranges, plus IPv6 loopback/ULA.
-  if (/^(10|127)\./.test(h)) return true;
-  if (/^192\.168\./.test(h)) return true;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
-  if (/^169\.254\./.test(h)) return true;
-  if (h === "::1" || h === "[::1]" || h.startsWith("fd") || h.startsWith("fc")) return true;
-  return false;
-}
 
 /** Every fetchable URL mentioned in the prompt, deduped by origin+path, capped. */
 export function extractUrls(text: string): string[] {
@@ -157,27 +136,34 @@ export function htmlToText(html: string): string {
  * a timeout, a non-2xx, a PDF, an empty client-rendered shell.
  */
 export async function fetchSiteText(url: string): Promise<SiteReading | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
-      redirect: "follow",
-      signal: controller.signal,
-      headers: {
-        // Identified, and asking for markup rather than whatever the default is.
-        "user-agent": "Mozilla/5.0 (compatible; ChatformBot/1.0; +https://chatform.in/bot)",
-        accept: "text/html,application/xhtml+xml",
-        "accept-language": "en",
+    /**
+     * `guardedFetch` rather than `fetch`, and the difference that matters is
+     * redirects: this used to follow them with `redirect: "follow"`, so a
+     * perfectly ordinary URL an author pasted could answer `302` toward
+     * loopback or a metadata endpoint and be followed without anyone looking.
+     * Every hop is vetted now, and the content-type allowlist that used to be
+     * a check after the fact is part of the call.
+     */
+    const { response } = await guardedFetch(url, {
+      allowInsecure: true,
+      timeoutMs: FETCH_TIMEOUT_MS,
+      contentTypes: /text\/html|application\/xhtml|text\/plain/i,
+      init: {
+        headers: {
+          // Identified, and asking for markup rather than whatever the default is.
+          "user-agent": "Mozilla/5.0 (compatible; ChatformBot/1.0; +https://chatform.in/bot)",
+          accept: "text/html,application/xhtml+xml",
+          "accept-language": "en",
+        },
       },
     });
-    if (!res.ok) return null;
-    const ctype = res.headers.get("content-type") ?? "";
-    if (!/text\/html|application\/xhtml|text\/plain/i.test(ctype)) return null;
+    if (!response.ok) return null;
 
-    // Read with a ceiling rather than calling res.text(): the body length is
-    // attacker-controlled, and one 40MB page should not decide how much memory
-    // this request uses.
-    const html = await readCapped(res, MAX_BYTES);
+    // Truncating rather than refusing: the body length is attacker-controlled,
+    // and one 40 MB page should not decide how much memory this request uses —
+    // but its first half is still worth reading.
+    const html = await readTruncatedText(response, MAX_BYTES);
     const text = htmlToText(html);
     // A client-rendered shell yields a nav bar and nothing else. Below this it
     // is noise that would only mislead the generator.
@@ -185,29 +171,7 @@ export async function fetchSiteText(url: string): Promise<SiteReading | null> {
     return { url, title: extractTitle(html), text };
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
-}
-
-async function readCapped(res: Response, maxBytes: number): Promise<string> {
-  if (!res.body) return "";
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder("utf-8");
-  let out = "";
-  let read = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      read += value.byteLength;
-      out += decoder.decode(value, { stream: true });
-      if (read >= maxBytes) break;
-    }
-  } finally {
-    await reader.cancel().catch(() => {});
-  }
-  return out;
 }
 
 /** Read every URL in the prompt, in parallel, dropping the ones that fail. */

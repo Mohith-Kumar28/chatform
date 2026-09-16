@@ -1314,10 +1314,12 @@ export type GetPFormsBySlugConfig404 = {
 export type PostPFormsBySlugSessionsBodyHiddenFields = {[key: string]: string};
 
 export type PostPFormsBySlugSessionsBodyEmbed = {
+  /** @maxLength 200 */
   origin?: string;
 };
 
 export type PostPFormsBySlugSessionsBody = {
+  /** @maxLength 4096 */
   turnstileToken?: string;
   /** @maxLength 200 */
   password?: string;
@@ -3403,6 +3405,7 @@ export type PostV1SessionsBySidMessagesBody = {
   text: string;
 } | {
   type: 'structured';
+  /** @pattern ^[a-z][a-z0-9_]{1,40}$ */
   ref: string;
   value: unknown;
 };
@@ -3435,6 +3438,7 @@ export type PostV1ChatSessionsBySidMessagesBody = {
   text: string;
 } | {
   type: 'structured';
+  /** @pattern ^[a-z][a-z0-9_]{1,40}$ */
   ref: string;
   value: unknown;
 };
@@ -3661,6 +3665,7 @@ export const PostApiWebhooksBodyEventsItem = {
 } as const;
 
 export type PostApiWebhooksBody = {
+  /** @maxLength 2000 */
   url: string;
   /** @minItems 1 */
   events: PostApiWebhooksBodyEventsItem[];

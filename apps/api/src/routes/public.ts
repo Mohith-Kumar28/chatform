@@ -2,7 +2,8 @@ import { Hono, type Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { sha256Hex, toPublicConfig, type FormDoc, readFormDoc } from "@repo/form-schema";
+import { sha256Hex, toPublicConfig, RefString, type FormDoc, readFormDoc } from "@repo/form-schema";
+import { EmbedInput, HiddenFieldsInput, ProviderToken } from "../lib/inputs.js";
 import { respondentToken, hashToken } from "./helpers.js";
 import type { Bindings } from "../env.js";
 import { timingSafeEqual, isHashedPassword, verifyPassword } from "../lib/crypto.js";
@@ -45,10 +46,10 @@ sessionsRouter.use("/sessions/:id/auth/*", respondentAuthLimit);
 sessionsRouter.use("/sessions/:id/verify/*", respondentAuthLimit);
 
 const createSessionSchema = z.object({
-  turnstileToken: z.string().optional(),
+  turnstileToken: ProviderToken.optional(),
   password: z.string().max(200).optional(),
-  hiddenFields: z.record(z.string(), z.string()).optional(),
-  embed: z.object({ origin: z.string().optional() }).optional(),
+  hiddenFields: HiddenFieldsInput.optional(),
+  embed: EmbedInput.optional(),
   /**
    * The signed token from a follow-up email. Continues the response it names
    * rather than starting a new one — see `resumeSubmissionId` in `openSession`
@@ -112,7 +113,7 @@ const turnId = z.string().min(8).max(64).optional();
 
 const messageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string().min(1).max(5000), turnId }),
-  z.object({ type: z.literal("structured"), ref: z.string(), value: z.unknown(), turnId }),
+  z.object({ type: z.literal("structured"), ref: RefString, value: z.unknown(), turnId }),
 ]);
 
 const actionSchema = z.object({

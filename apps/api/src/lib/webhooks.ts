@@ -1,4 +1,5 @@
 import type { Bindings } from "../env.js";
+import { deliverableUrl } from "./webhook-url.js";
 import { sign as signStandard } from "./dodo-webhook.js";
 
 /**
@@ -137,6 +138,21 @@ export async function deliverWebhookEvent(env: Bindings, evt: WebhookEvent): Pro
     const events = JSON.parse(hook.events) as string[];
     const names = eventNames(evt.event);
     if (!events.some((e) => names.includes(e))) continue;
+
+    /**
+     * The address check, at the moment it matters.
+     *
+     * Rows created before the create routes agreed on a rule are still here,
+     * and one of them may point at `http://10.0.0.1/` — the `/v1` route used
+     * to accept it. A delivery is a fetch from inside the worker, so it is the
+     * last place the question can be asked. Skipped rather than retried: a
+     * private address will not become public on the fourth attempt, and
+     * burning ten retries on it only delays every other delivery in the batch.
+     */
+    if (!deliverableUrl(env, hook.url)) {
+      console.warn("webhook_url_refused", { hookId: hook.id, event: evt.event });
+      continue;
+    }
 
     const body = JSON.stringify(payload);
     const timestamp = Math.floor(Date.now() / 1000);

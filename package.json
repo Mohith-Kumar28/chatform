@@ -65,7 +65,8 @@
   },
   "pnpm": {
     "overrides": {
-      "@better-auth/utils": "0.4.2"
+      "@better-auth/utils": "0.4.2",
+      "zod": "4.4.3"
     },
     "patchedDependencies": {
       "@opennextjs/cloudflare@1.20.4": "patches/@opennextjs__cloudflare@1.20.4.patch"

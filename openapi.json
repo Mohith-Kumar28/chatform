@@ -5585,7 +5585,8 @@
                 "type": "object",
                 "properties": {
                   "turnstileToken": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 4096
                   },
                   "password": {
                     "type": "string",
@@ -5594,17 +5595,20 @@
                   "hiddenFields": {
                     "type": "object",
                     "propertyNames": {
-                      "type": "string"
+                      "type": "string",
+                      "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]{0,60}$"
                     },
                     "additionalProperties": {
-                      "type": "string"
+                      "type": "string",
+                      "maxLength": 500
                     }
                   },
                   "embed": {
                     "type": "object",
                     "properties": {
                       "origin": {
-                        "type": "string"
+                        "type": "string",
+                        "maxLength": 200
                       }
                     }
                   },
@@ -10100,10 +10104,12 @@
                   "hiddenFields": {
                     "type": "object",
                     "propertyNames": {
-                      "type": "string"
+                      "type": "string",
+                      "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]{0,60}$"
                     },
                     "additionalProperties": {
-                      "type": "string"
+                      "type": "string",
+                      "maxLength": 500
                     }
                   },
                   "complete": {
@@ -14761,10 +14767,12 @@
                   "hiddenFields": {
                     "type": "object",
                     "propertyNames": {
-                      "type": "string"
+                      "type": "string",
+                      "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]{0,60}$"
                     },
                     "additionalProperties": {
-                      "type": "string"
+                      "type": "string",
+                      "maxLength": 500
                     }
                   },
                   "externalId": {
@@ -14898,10 +14906,12 @@
                   "hiddenFields": {
                     "type": "object",
                     "propertyNames": {
-                      "type": "string"
+                      "type": "string",
+                      "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]{0,60}$"
                     },
                     "additionalProperties": {
-                      "type": "string"
+                      "type": "string",
+                      "maxLength": 500
                     }
                   },
                   "externalId": {
@@ -15056,7 +15066,8 @@
                         "const": "structured"
                       },
                       "ref": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{1,40}$"
                       },
                       "value": {}
                     },
@@ -15452,7 +15463,8 @@
                         "const": "structured"
                       },
                       "ref": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{1,40}$"
                       },
                       "value": {}
                     },
@@ -16626,6 +16638,7 @@
                 "properties": {
                   "url": {
                     "type": "string",
+                    "maxLength": 2000,
                     "format": "uri"
                   },
                   "events": {

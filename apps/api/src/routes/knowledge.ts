@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
+import { isSafeUrl } from "@repo/guard";
 import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
 import { requireSession, requireOrg, requireFormAccess, keyOwnsForm, type GuardVars } from "../lib/guards.js";
@@ -103,6 +104,25 @@ const KNOWLEDGE_MIME = new Set([
 ]);
 
 const MAX_KNOWLEDGE_MB = 25;
+
+/**
+ * Whether a URL is one the worker may read.
+ *
+ * Shared by the link and crawl routes, and deliberately the *fetch*-side check
+ * rather than the render-side one: plain `http` is fine (plenty of
+ * documentation sites still are), a private, loopback or metadata address is
+ * not. It has to be decided here because a knowledge source is fetched by the
+ * queue consumer minutes later, from whatever `knowledge_sources.origin`
+ * holds — an unvetted URL stored now is an SSRF that fires out of band.
+ */
+function fetchable(url: string): boolean {
+  return isSafeUrl(url, { allowInsecure: true });
+}
+
+const BAD_URL = {
+  error: { code: "bad_url", message: "Only public http and https pages can be read." },
+} as const;
+
 
 const SourceOut = z.object({
   id: z.string(),
@@ -255,9 +275,10 @@ knowledgeRouter.post(
     const formId = c.req.param("id");
     if (!owns(c, formId)) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     const { url, title } = c.req.valid("json");
-    if (!/^https?:$/.test(new URL(url).protocol)) {
-      return c.json({ error: { code: "bad_url", message: "Only http and https pages can be read." } }, 400);
-    }
+    // The scheme-only check this replaces let through every address the
+    // worker should never read: `http://169.254.169.254/` is http, and so is
+    // `http://10.0.0.1/`.
+    if (!fetchable(url)) return c.json(BAD_URL, 400);
     // A page's size is unknown until it is read; charge a nominal amount so a
     // form at its ceiling cannot add unlimited links.
     const denied = await gate(c.env, c.get("orgId")!, formId, 0, 1);
@@ -292,6 +313,9 @@ knowledgeRouter.post(
     const formId = c.req.param("id");
     if (!owns(c, formId)) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     const { url, pages } = c.req.valid("json");
+    // The seed was not checked at all, and it is the more dangerous of the
+    // two: one seed becomes up to 25 fetches.
+    if (!fetchable(url)) return c.json(BAD_URL, 400);
     const cap = Math.min(pages ?? CRAWL_PAGE_CAP, CRAWL_PAGE_CAP);
     const denied = await gate(c.env, c.get("orgId")!, formId, 0, cap);
     if (denied) return c.json(denied.body, denied.status);
