@@ -1,6 +1,7 @@
 import { FormDoc, lintFormDoc, hasErrors, migrateFormDoc, type FormDoc as FormDocT } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
-import { stripForPublish, checkDocLimits } from "./doc-entitlements.js";
+import { stripForPublish, checkDocLimits, checkGatewayPayments } from "./doc-entitlements.js";
+import { signInBypassed } from "./payments/flag.js";
 import { backfillFollowUps } from "./followups.js";
 import { limitReached, type Entitlements } from "@repo/entitlements";
 import { describeSchemaError, type ApiIssue } from "./api-error.js";
@@ -87,15 +88,24 @@ export async function publishForm(
       body: { error: { code: "invalid_doc", message: "Working document is invalid" } },
     };
   }
-  if (hasErrors(parsed.issues as never)) {
+  /*
+   * The local sign-in bypass has to reach publish as well as the session: a
+   * gateway block cannot be published on a form without sign-in, so without
+   * this there is nothing for the bypassed session to run. Same switch, same
+   * never-in-production rule — see `signInBypassed`.
+   */
+  const issues = signInBypassed(env)
+    ? parsed.issues.filter((i) => i.code !== "payment_requires_sign_in")
+    : parsed.issues;
+  if (hasErrors(issues as never)) {
     return {
       ok: false,
       status: 422,
       body: {
         error: {
           code: "lint_failed",
-          message: parsed.issues.filter((i) => i.level === "error").map((i) => i.message).join("; "),
-          issues: parsed.issues.filter((i) => i.level === "error"),
+          message: issues.filter((i) => i.level === "error").map((i) => i.message).join("; "),
+          issues: issues.filter((i) => i.level === "error"),
         },
       },
     };
@@ -116,6 +126,10 @@ export async function publishForm(
       }),
     };
   }
+
+  // Verified payment questions need the plan, and an account that can still take the money.
+  const payments = await checkGatewayPayments(env, row.organization_id, parsed.doc, args.ent);
+  if (payments) return { ok: false, status: payments.status, body: payments.body };
 
   /**
    * Gated settings are removed from the version being published, and every

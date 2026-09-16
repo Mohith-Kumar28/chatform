@@ -31,7 +31,15 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { displayCell, splitAnswers, type ResultColumn } from "./response-answers";
+import {
+  csvCellsFor,
+  csvHeadersFor,
+  displayCell,
+  splitAnswers,
+  uncountedPayments,
+  type ResultColumn,
+} from "./response-answers";
+import { PaymentAnswerDetails, PaymentCell, usePaymentAttempts } from "./payment-answer";
 import {
   getGetApiFormsByIdAnalyticsQueryKey,
   getGetApiFormsByIdSubmissionsQueryKey,
@@ -1384,9 +1392,13 @@ export function SubmissionsTable({
                     )}
                     {columns.map((b) => (
                       <td key={b.ref} className="px-3 py-2.5">
-                        <span className="block max-w-[16rem] truncate">
-                          {displayCell(b, byRef.get(b.ref)) || <span className="text-muted-foreground/60">—</span>}
-                        </span>
+                        {b.type === "payment" ? (
+                          <PaymentCell column={b} value={byRef.get(b.ref)} />
+                        ) : (
+                          <span className="block max-w-[16rem] truncate">
+                            {displayCell(b, byRef.get(b.ref)) || <span className="text-muted-foreground/60">—</span>}
+                          </span>
+                        )}
                       </td>
                     ))}
                     {hasRespondentIds && (
@@ -1445,6 +1457,7 @@ export function SubmissionsTable({
       )}
 
       <SubmissionDialog
+        formId={formId}
         row={open}
         columns={columns}
         index={shownIndex}
@@ -1567,6 +1580,7 @@ function HeadCell({ icon: Icon, children }: { icon: React.ComponentType<{ classN
  * the lens five times.
  */
 function SubmissionDialog({
+  formId,
   row,
   columns,
   index,
@@ -1579,6 +1593,7 @@ function SubmissionDialog({
   onDelete,
   onDownload,
 }: {
+  formId: string;
   row: SubmissionRecord | null;
   columns: ResultColumn[];
   /** Position in the whole table, zero-based — not in the page on screen. */
@@ -1902,7 +1917,9 @@ function SubmissionDialog({
 
           <FollowUpDetail row={row} />
 
-          {view === "answers" && <AnswerList key={row.id} columns={columns} byRef={byRef} />}
+          {view === "answers" && (
+            <AnswerList key={row.id} formId={formId} submissionId={row.id} columns={columns} byRef={byRef} />
+          )}
 
           {view === "chat" &&
             (row.transcript.length > 0 ? (
@@ -2025,15 +2042,31 @@ function formatWhen(row: SubmissionRecord): string {
  * arrives collapsed instead of inheriting the last one's open disclosure.
  */
 function AnswerList({
+  formId,
+  submissionId,
   columns,
   byRef,
 }: {
+  formId: string;
+  submissionId: string;
   columns: ResultColumn[];
   byRef: Map<string, unknown>;
 }) {
   const [showBlanks, setShowBlanks] = useState(false);
   const valueOf = (b: ResultColumn) => displayCell(b, byRef.get(b.ref));
-  const { answered, blank } = splitAnswers(columns, byRef);
+  const split = splitAnswers(columns, byRef);
+  /*
+   * An unanswered payment question that money came in for belongs with the answers, not behind
+   * "show unanswered". Nothing else in the product tells the admin they are holding a payment
+   * the response does not count, and a disclosure nobody opens is the same as not saying it.
+   */
+  const { data: attempts } = usePaymentAttempts(formId, submissionId, columns.some((c) => c.type === "payment"));
+  const owed = (b: ResultColumn) =>
+    b.type === "payment" && uncountedPayments(attempts?.payments ?? [], b.ref).length > 0;
+  const answered = [...split.answered, ...split.blank.filter(owed)].sort(
+    (a, b) => columns.indexOf(a) - columns.indexOf(b),
+  );
+  const blank = split.blank.filter((b) => !owed(b));
 
   /**
    * One row: the answer is the thing, the question is its label.
@@ -2066,6 +2099,16 @@ function AnswerList({
           >
             {value || "Not answered"}
           </dd>
+          {/* Answered or not: an unanswered payment question is where money with nothing
+              counting it shows up. See `PaymentAnswerDetails`. */}
+          {b.type === "payment" && (
+            <PaymentAnswerDetails
+              formId={formId}
+              submissionId={submissionId}
+              blockRef={b.ref}
+              value={byRef.get(b.ref)}
+            />
+          )}
         </div>
       </div>
     );
@@ -2113,7 +2156,8 @@ function downloadCsv(rows: SubmissionRecord[], columns: ResultColumn[], withResp
     // Marked here as well as in the server-side export: a file outlives the
     // screen it was downloaded from, and by then "Team member 3" being a
     // question the form no longer asks is not recoverable from the header.
-    ...columns.map((c) => (c.retired ? `${c.title} (removed)` : c.title)),
+    // A payment brings its four reconciliation columns, as the server's does.
+    ...columns.flatMap(csvHeadersFor),
     // Last, like its column: the thing you sort by after opening the file, not
     // the thing you read first.
     ...(withRespondentId ? ["Respondent ID"] : []),
@@ -2126,7 +2170,7 @@ function downloadCsv(rows: SubmissionRecord[], columns: ResultColumn[], withResp
         new Date(row.completedAt ?? row.startedAt).toISOString(),
         row.status,
         ...(withRespondent ? [row.respondent?.label ?? ""] : []),
-        ...columns.map((b) => displayCell(b, byRef.get(b.ref))),
+        ...columns.flatMap((b) => csvCellsFor(b, byRef.get(b.ref))),
         ...(withRespondentId ? [row.respondentId ?? ""] : []),
       ]
         .map((v) => esc(String(v)))

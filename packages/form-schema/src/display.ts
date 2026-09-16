@@ -87,12 +87,38 @@ export function displayAnswer(block: Block, value: unknown): string {
     }
 
     case "payment": {
-      const p = value as { status?: string; amount?: number; currency?: string; reference?: string };
+      const p = value as {
+        status?: string;
+        method?: string;
+        verified?: boolean;
+        refunded?: boolean;
+        testMode?: boolean;
+        amount?: number;
+        currency?: string;
+        reference?: string;
+      };
       // The same formatter the payment control uses, so the amount reads the
       // same in the thread as it did on the button that collected it.
       const amount = typeof p.amount === "number" ? ` ${formatAmount(p.amount, p.currency ?? block.currency)}` : "";
+      /*
+       * The two kinds of "Paid" are told apart in words, on every surface.
+       *
+       * A results table where a gateway-confirmed payment and a button someone
+       * pressed both read "Paid ₹499" is the reconciliation problem verified
+       * payments exist to end, reintroduced one column over. So a manual one
+       * says it is unverified, and a verified one says so — and only when it
+       * really is `method: "gateway"` with `verified: true`, both of which only
+       * the server writes.
+       */
+      if (p.method === "gateway" && p.verified === true) {
+        if (p.refunded) return `Refunded${amount}`;
+        // A sandbox confirmation is not money. Said instead of "verified",
+        // never beside it, so nobody reads a test card as a paid seat.
+        if (p.testMode) return p.status === "paid" ? `Paid${amount} · test mode` : `Payment pending${amount}`;
+        return p.status === "paid" ? `Paid${amount} · verified` : `Payment pending${amount}`;
+      }
       const ref = p.reference ? ` · ref ${p.reference}` : "";
-      return `${p.status === "paid" ? "Paid" : "Payment pending"}${amount}${ref}`;
+      return p.status === "paid" ? `Paid${amount} · unverified${ref}` : `Payment pending${amount}${ref}`;
     }
 
     case "scheduling": {

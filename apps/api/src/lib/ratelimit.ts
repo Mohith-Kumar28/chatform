@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 import type { Bindings } from "../env.js";
 import { readPresentedKey, hashApiKey } from "./apikeys.js";
+import { respondentToken } from "../routes/helpers.js";
 import type { GuardVars } from "./guards.js";
 import { isInternalCall } from "./internal-call.js";
 
@@ -136,6 +137,38 @@ export const sessionStartLimit: MiddlewareHandler<{ Bindings: Bindings }> = asyn
 export const respondentAuthLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
   const ip = c.req.header("cf-connecting-ip");
   if (await limited(c, c.env.RATE_LIMIT_P_AUTH, [`pa:${ip}`])) {
+    return tooMany(c, { seconds: 60, scope: "ip", policy: "12;w=60" });
+  }
+  await next();
+};
+
+/**
+ * Opening a checkout: a call on the form admin's gateway account, and possibly a token refresh.
+ *
+ * Per respondent, not per address. It shared the sign-in bucket once — twelve a minute per
+ * address — and a live event is exactly where that fails: a campus Wi-Fi puts hundreds of
+ * respondents behind one address, their phone codes and their Pay presses all counted together,
+ * and the thirteenth person to tap Pay in a minute was told to slow down at the moment they were
+ * trying to hand over money. One respondent is the unit that can misbehave here, and
+ * `MAX_PAYMENT_ATTEMPTS` already caps the orders one of them can open; this bounds the rest (a
+ * retry loop, a gateway that keeps refusing) to twelve a minute each.
+ *
+ * "One respondent" means their token, not the session id in the path. A session id is not a
+ * secret — it rides in the `/p` URL and in the return address a gateway redirects to, and it ends
+ * up in gateway logs and browser history — so a bucket named after one let anybody who had seen
+ * it spend a respondent's whole minute of Pay presses with unauthenticated posts, which is a
+ * thing to do to a form at the moment its event starts. The token is the credential the route
+ * goes on to check, hashed here for the same reason the API-key limiter hashes: a rate-limit key
+ * is not a place to put a secret. A request with no token has nothing to own a bucket with, so it
+ * is counted by address instead, and answered 401 a moment later by `requireRespondent`.
+ *
+ * The same binding as sign-in, under its own key prefix, so the two never share a count and no
+ * new binding has to be provisioned.
+ */
+export const respondentPaymentLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
+  const token = respondentToken(c);
+  const key = token ? `pay:t:${await bucketFor(token)}` : `pay:ip:${c.req.header("cf-connecting-ip") ?? "unknown"}`;
+  if (await limited(c, c.env.RATE_LIMIT_P_AUTH, [key])) {
     return tooMany(c, { seconds: 60, scope: "ip", policy: "12;w=60" });
   }
   await next();

@@ -204,6 +204,61 @@ export interface Bindings {
    * can be proved at all.
    */
   FIREBASE_PROJECT_ID?: string;
+
+  /**
+   * Verified payments on a payment block: checkouts created on the form
+   * admin's OWN gateway account, never ours. Nothing here is chatform's money;
+   * Dodo above is the only gateway chatform itself is paid through.
+   *
+   * `PAYMENTS_ENCRYPTION_KEY` seals every stored merchant credential — base64
+   * of 32 random bytes (`openssl rand -base64 32`). Absent, nothing can be
+   * connected: `lib/secret-box.ts` throws rather than store a token in the
+   * clear. `_PREV` is the key being rotated out, tried only when opening.
+   */
+  PAYMENTS_ENCRYPTION_KEY?: string;
+  PAYMENTS_ENCRYPTION_KEY_PREV?: string;
+  /**
+   * `"on"` turns gateway payments on for every organization. Anything else
+   * leaves them on only for the ids in `PAYMENTS_GATEWAY_ORGS`, comma-separated
+   * — the rollout is one internal org on sandbox accounts before anyone else.
+   * See `lib/payments/flag.ts`.
+   */
+  PAYMENTS_GATEWAY_ENABLED?: string;
+  PAYMENTS_GATEWAY_ORGS?: string;
+  /**
+   * `"on"` lets a payment start without a signed-in respondent, and lets a
+   * form with a gateway block publish without sign-in turned on. It exists so
+   * the flow can be driven on a local stack, which cannot complete a real
+   * Google or Firebase sign-in. Never set it on a deployed worker: it is
+   * deliberately absent from `.prod.vars.example` and `push-secrets.py`.
+   */
+  PAYMENTS_DEV_SKIP_SIGNIN?: string;
+  /**
+   * Cashfree partner (OAuth) credentials. `CASHFREE_PARTNER_API_KEY` signs the
+   * partner-level webhooks. `CASHFREE_ENVIRONMENT` is `"sandbox"` or
+   * `"production"`; absent means sandbox, so a missing variable never moves
+   * real money.
+   */
+  CASHFREE_PARTNER_CLIENT_ID?: string;
+  CASHFREE_PARTNER_CLIENT_SECRET?: string;
+  CASHFREE_PARTNER_API_KEY?: string;
+  CASHFREE_ENVIRONMENT?: string;
+  /**
+   * Razorpay Technology Partner OAuth app, and the app-level webhook secret.
+   * `RAZORPAY_ENVIRONMENT` is `"test"` or `"live"`; absent means test.
+   */
+  RAZORPAY_OAUTH_CLIENT_ID?: string;
+  RAZORPAY_OAUTH_CLIENT_SECRET?: string;
+  RAZORPAY_WEBHOOK_SECRET?: string;
+  RAZORPAY_ENVIRONMENT?: string;
+  /**
+   * Reserved for Stripe Connect and read by nothing yet. Stripe today is a
+   * restricted key the admin pastes, whose webhook secret is per account and
+   * lives sealed on its `payment_accounts` row.
+   */
+  STRIPE_PLATFORM_SECRET_KEY?: string;
+  STRIPE_CONNECT_WEBHOOK_SECRET?: string;
+
   SIGNING_SALT: string;
 }
 

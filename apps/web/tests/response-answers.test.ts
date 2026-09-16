@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { displayCell, splitAnswers, type ResultColumn } from "@/components/builder/response-answers";
+import {
+  csvCellsFor,
+  csvHeadersFor,
+  displayCell,
+  splitAnswers,
+  uncountedPayments,
+  type PaymentAttempt,
+  type ResultColumn,
+} from "@/components/builder/response-answers";
 
 /**
  * The columns of one response, split into what was said and what was not.
@@ -87,5 +95,97 @@ describe("displayCell", () => {
   it("is empty for the three ways a cell has nothing in it", () => {
     const c = column("q_x", "short_text");
     for (const value of [undefined, null, ""]) expect(displayCell(c, value)).toBe("");
+  });
+});
+
+describe("csvHeadersFor / csvCellsFor", () => {
+  /*
+    The rows downloaded from the results screen are the file the server's export
+    would have produced for them. A payment question brings the same four
+    reconciliation columns there as here, or a person checking one file against
+    the other finds columns that only exist in one.
+  */
+  const pay = { ...column("q_ticket", "payment", "Ticket"), currency: "INR" } as ResultColumn;
+
+  it("adds status, amount, currency and gateway id after a payment column", () => {
+    expect(csvHeadersFor(pay)).toEqual([
+      "Ticket",
+      "Ticket — Payment status",
+      "Ticket — Amount",
+      "Ticket — Currency",
+      "Ticket — Gateway payment ID",
+    ]);
+    const value = { status: "paid", method: "gateway", verified: true, provider: "stripe", paymentId: "pi_1", amount: 499, currency: "INR" };
+    expect(csvCellsFor(pay, value)).toEqual(["Paid ₹499 · verified", "paid · verified", "499", "INR", "pi_1"]);
+  });
+
+  it("falls back to the block's currency for a manual answer that carries none", () => {
+    expect(csvCellsFor(pay, { status: "paid", method: "upi", verified: false, amount: 50 }).slice(1, 4)).toEqual([
+      "paid · unverified",
+      "50",
+      "INR",
+    ]);
+  });
+
+  it("leaves every other column as one cell", () => {
+    const text = column("q_name", "short_text", "Name");
+    expect(csvHeadersFor(text)).toEqual(["Name"]);
+    expect(csvCellsFor(text, "Ada")).toEqual(["Ada"]);
+  });
+
+  it("marks a removed payment question on all five headers", () => {
+    expect(csvHeadersFor({ ...pay, retired: true }).every((h) => h.startsWith("Ticket (removed)"))).toBe(true);
+  });
+
+  it("writes five empty cells for an unanswered payment", () => {
+    expect(csvCellsFor(pay, undefined)).toEqual(["", "", "", "", ""]);
+  });
+});
+
+/**
+ * Money that reached the gateway and that no answer counts.
+ *
+ * The case this exists for has no answer at all: the respondent paid ₹100, changed the quantity,
+ * and never paid the new total. The server takes the answer off the question and flags the
+ * record, and until the results dialog reads the records there is nothing anywhere in the
+ * product that tells the admin they are holding that ₹100.
+ */
+describe("uncountedPayments", () => {
+  const attempt = (over: Partial<PaymentAttempt> & { id: string }): PaymentAttempt => ({
+    blockRef: "q_pay",
+    provider: "razorpay",
+    environment: "test",
+    status: "paid",
+    duplicate: false,
+    failureReason: null,
+    amount: 100,
+    currency: "INR",
+    providerPaymentId: null,
+    dashboardUrl: null,
+    ...over,
+  });
+
+  it("finds a paid record the price moved away from, with no answer on the question", () => {
+    const rows = [attempt({ id: "rpay_1", failureReason: "amount_changed" })];
+    expect(uncountedPayments(rows, "q_pay").map((p) => p.id)).toEqual(["rpay_1"]);
+  });
+
+  it("finds a duplicate beside the payment that did become the answer", () => {
+    const rows = [
+      attempt({ id: "rpay_answer" }),
+      attempt({ id: "rpay_dup", duplicate: true, failureReason: "duplicate" }),
+    ];
+    expect(uncountedPayments(rows, "q_pay", "rpay_answer").map((p) => p.id)).toEqual(["rpay_dup"]);
+  });
+
+  it("leaves out the record the answer counts, other questions, and money already given back", () => {
+    const rows = [
+      attempt({ id: "rpay_answer" }),
+      attempt({ id: "rpay_other_block", blockRef: "q_donation", failureReason: "duplicate" }),
+      attempt({ id: "rpay_refunded", status: "refunded", failureReason: "duplicate" }),
+      attempt({ id: "rpay_never_paid", status: "created" }),
+      attempt({ id: "rpay_failed", status: "failed", failureReason: "provider_upstream" }),
+    ];
+    expect(uncountedPayments(rows, "q_pay", "rpay_answer")).toEqual([]);
   });
 });

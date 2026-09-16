@@ -2967,6 +2967,1472 @@
         ]
       }
     },
+    "/v1/payment-accounts": {
+      "get": {
+        "operationId": "getV1PaymentAccounts",
+        "tags": [
+          "v1"
+        ],
+        "summary": "List connected payment gateway accounts",
+        "description": "The Cashfree, Razorpay and Stripe accounts this organization has connected for verified payments. Credentials are never returned. `formsUsing` counts forms whose working document names the account.",
+        "responses": {
+          "200": {
+            "description": "Accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "cashfree",
+                              "razorpay",
+                              "stripe"
+                            ]
+                          },
+                          "credentialKind": {
+                            "type": "string",
+                            "enum": [
+                              "oauth",
+                              "restricted_key",
+                              "connect"
+                            ]
+                          },
+                          "environment": {
+                            "type": "string",
+                            "enum": [
+                              "test",
+                              "live"
+                            ]
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "needs_reconnect",
+                              "revoked",
+                              "disconnected"
+                            ]
+                          },
+                          "lastError": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "currencies": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "createdAt": {
+                            "type": "number"
+                          },
+                          "formsUsing": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "provider",
+                          "credentialKind",
+                          "environment",
+                          "label",
+                          "status",
+                          "lastError",
+                          "currencies",
+                          "createdAt"
+                        ]
+                      }
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "providers": {
+                      "type": "object",
+                      "properties": {
+                        "cashfree": {
+                          "type": "object",
+                          "properties": {
+                            "configured": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "configured"
+                          ]
+                        },
+                        "razorpay": {
+                          "type": "object",
+                          "properties": {
+                            "configured": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "configured"
+                          ]
+                        },
+                        "stripe": {
+                          "type": "object",
+                          "properties": {
+                            "configured": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "configured"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "cashfree",
+                        "razorpay",
+                        "stripe"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "accounts",
+                    "enabled",
+                    "providers"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing payment:read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "payment:read",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/payment-accounts/oauth/{provider}/start": {
+      "post": {
+        "operationId": "postV1PaymentAccountsOauthByProviderStart",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "returnTo": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "returnTo"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Start connecting a Cashfree or Razorpay account",
+        "description": "Returns the gateway's consent URL. It must be opened in a browser signed in to chatform as the user who created this key; the state is single-use and expires in ten minutes. `returnTo` must be a page on the chatform app.",
+        "responses": {
+          "200": {
+            "description": "Consent URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "url"
+                  ]
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Plan does not include collecting payments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing payment:write, or verified payments are not enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "returnTo is not a page on the app",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "provider",
+            "required": true
+          }
+        ],
+        "x-required-scope": "payment:write",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/payment-accounts/stripe": {
+      "post": {
+        "operationId": "postV1PaymentAccountsStripe",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restrictedKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "restrictedKey"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Connect a Stripe account with a restricted key",
+        "description": "Accepts only a restricted key (`rk_test_…` or `rk_live_…`); a full `sk_` secret key is refused with `full_secret_key`. The key is checked by reading the account, creating and immediately expiring a Checkout Session, and creating a webhook endpoint — a missing permission comes back as `missing_permission` with the permission named.",
+        "responses": {
+          "200": {
+            "description": "Connected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "account": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string",
+                          "enum": [
+                            "cashfree",
+                            "razorpay",
+                            "stripe"
+                          ]
+                        },
+                        "credentialKind": {
+                          "type": "string",
+                          "enum": [
+                            "oauth",
+                            "restricted_key",
+                            "connect"
+                          ]
+                        },
+                        "environment": {
+                          "type": "string",
+                          "enum": [
+                            "test",
+                            "live"
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "needs_reconnect",
+                            "revoked",
+                            "disconnected"
+                          ]
+                        },
+                        "lastError": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "currencies": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "createdAt": {
+                          "type": "number"
+                        },
+                        "formsUsing": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "provider",
+                        "credentialKind",
+                        "environment",
+                        "label",
+                        "status",
+                        "lastError",
+                        "currencies",
+                        "createdAt"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "account"
+                  ]
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Plan does not include collecting payments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The Stripe account is connected to another organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "full_secret_key, invalid_key or missing_permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "payment:write",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/payment-accounts/cashfree/onboard": {
+      "post": {
+        "operationId": "postV1PaymentAccountsCashfreeOnboard",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "format": "email",
+                    "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 20
+                  },
+                  "businessName": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "businessType": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 60
+                  },
+                  "website": {
+                    "type": "string",
+                    "maxLength": 250,
+                    "format": "uri"
+                  },
+                  "signatoryName": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "returnTo": {
+                    "type": "string",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "email",
+                  "phone",
+                  "businessName",
+                  "businessType"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Create a Cashfree account for a business that has none",
+        "description": "Returns the Cashfree KYC link, or `{ useOAuth: true }` when the email already has a Cashfree account.",
+        "responses": {
+          "200": {
+            "description": "Onboarding link, or a pointer to OAuth",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "onboardingUrl": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "onboardingUrl"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "useOAuth": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "useOAuth"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Plan does not include collecting payments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "payment:write",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/payment-accounts/{id}": {
+      "delete": {
+        "operationId": "deleteV1PaymentAccountsById",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Disconnect a payment account",
+        "description": "Revokes the grant (Cashfree, Razorpay) or deletes the webhook endpoint (Stripe) at the gateway, then wipes the stored credentials. Forms still pointing at the account stop accepting payments until another account is chosen.",
+        "responses": {
+          "200": {
+            "description": "Disconnected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-required-scope": "payment:write",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/forms/{id}/payments": {
+      "get": {
+        "operationId": "getV1FormsByIdPayments",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "default": "all",
+              "type": "string",
+              "enum": [
+                "created",
+                "paid",
+                "failed",
+                "expired",
+                "refunded",
+                "superseded",
+                "all"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "response_id",
+            "schema": {
+              "type": "string",
+              "maxLength": 40
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 25,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "tags": [
+          "v1"
+        ],
+        "summary": "List a form's payment attempts, newest first",
+        "description": "Every checkout opened on a verified payment block, including the ones that never became an answer — a payment that arrived after the respondent left, a duplicate from a second tab, a failure. `status` defaults to `all`. Amounts are given both in minor units (`amount_minor`, what the gateway charged) and major units. Pass `next_cursor` back as `cursor` for the next page.",
+        "responses": {
+          "200": {
+            "description": "A page of payment attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "object": {
+                            "type": "string",
+                            "const": "payment"
+                          },
+                          "form_id": {
+                            "type": "string"
+                          },
+                          "block_ref": {
+                            "type": "string"
+                          },
+                          "response_id": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "environment": {
+                            "type": "string",
+                            "enum": [
+                              "test",
+                              "live"
+                            ]
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "test",
+                              "live"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "created",
+                              "paid",
+                              "failed",
+                              "expired",
+                              "refunded",
+                              "superseded"
+                            ]
+                          },
+                          "duplicate": {
+                            "type": "boolean"
+                          },
+                          "amount_minor": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "currency": {
+                            "type": "string"
+                          },
+                          "provider_order_id": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "provider_payment_id": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "dashboard_url": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "failure_reason": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "settled_to_response": {
+                            "type": "boolean"
+                          },
+                          "payment_account_id": {
+                            "type": "string"
+                          },
+                          "created_at": {
+                            "type": "number"
+                          },
+                          "updated_at": {
+                            "type": "number"
+                          },
+                          "paid_at": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "expires_at": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "object",
+                          "form_id",
+                          "block_ref",
+                          "response_id",
+                          "provider",
+                          "environment",
+                          "mode",
+                          "status",
+                          "duplicate",
+                          "amount_minor",
+                          "amount",
+                          "currency",
+                          "provider_order_id",
+                          "provider_payment_id",
+                          "dashboard_url",
+                          "failure_reason",
+                          "settled_to_response",
+                          "payment_account_id",
+                          "created_at",
+                          "updated_at",
+                          "paid_at",
+                          "expires_at"
+                        ]
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    },
+                    "next_cursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "has_more",
+                    "next_cursor"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Form not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "response:read",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
     "/v1/webhooks": {
       "get": {
         "operationId": "getV1Webhooks",
@@ -5156,7 +6622,10 @@
                       "submit",
                       "resend_code",
                       "change_answer",
-                      "undo_screen_out"
+                      "undo_screen_out",
+                      "retry_payment",
+                      "cancel_payment",
+                      "simulate_payment"
                     ]
                   },
                   "ref": {
@@ -5306,6 +6775,132 @@
             },
             "in": "path",
             "name": "sid",
+            "required": true
+          }
+        ],
+        "x-required-scope": "session:write",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/sessions/{sid}/payments": {
+      "post": {
+        "operationId": "postV1SessionsBySidPayments",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "phone": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32
+                  }
+                },
+                "required": [
+                  "ref"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Open a verified checkout for the current payment question",
+        "responses": {
+          "200": {
+            "description": "Checkout opened, or the one already open"
+          },
+          "402": {
+            "description": "The organization's plan does not include payments"
+          },
+          "403": {
+            "description": "The respondent has to sign in first (`sign_in_required`)"
+          },
+          "409": {
+            "description": "Not payable right now: `stale_ref`, `payment_unavailable`, `preview_live_account`, `live_account_in_test_mode` (a `*_test_` key on a live account), `already_paid`"
+          },
+          "422": {
+            "description": "`phone_required`: the gateway needs a number for the receipt — start again with `phone`"
+          },
+          "429": {
+            "description": "`too_many_attempts`"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          }
+        ],
+        "x-required-scope": "session:write",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/sessions/{sid}/payments/{recordId}/confirm": {
+      "post": {
+        "operationId": "postV1SessionsBySidPaymentsByRecordIdConfirm",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Re-check a checkout with the gateway, and settle it if it was paid",
+        "responses": {
+          "200": {
+            "description": "Where the payment stands: `{ recordId, status, settled }`"
+          },
+          "404": {
+            "description": "No such payment on this session"
+          },
+          "502": {
+            "description": "The gateway could not be reached"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "recordId",
             "required": true
           }
         ],
@@ -5552,7 +7147,10 @@
                       "submit",
                       "resend_code",
                       "change_answer",
-                      "undo_screen_out"
+                      "undo_screen_out",
+                      "retry_payment",
+                      "cancel_payment",
+                      "simulate_payment"
                     ]
                   },
                   "ref": {
@@ -5702,6 +7300,132 @@
             },
             "in": "path",
             "name": "sid",
+            "required": true
+          }
+        ],
+        "x-required-scope": "session:write",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/chat/sessions/{sid}/payments": {
+      "post": {
+        "operationId": "postV1ChatSessionsBySidPayments",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "phone": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32
+                  }
+                },
+                "required": [
+                  "ref"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Open a verified checkout for the current payment question",
+        "responses": {
+          "200": {
+            "description": "Checkout opened, or the one already open"
+          },
+          "402": {
+            "description": "The organization's plan does not include payments"
+          },
+          "403": {
+            "description": "The respondent has to sign in first (`sign_in_required`)"
+          },
+          "409": {
+            "description": "Not payable right now: `stale_ref`, `payment_unavailable`, `preview_live_account`, `live_account_in_test_mode` (a `*_test_` key on a live account), `already_paid`"
+          },
+          "422": {
+            "description": "`phone_required`: the gateway needs a number for the receipt — start again with `phone`"
+          },
+          "429": {
+            "description": "`too_many_attempts`"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          }
+        ],
+        "x-required-scope": "session:write",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/chat/sessions/{sid}/payments/{recordId}/confirm": {
+      "post": {
+        "operationId": "postV1ChatSessionsBySidPaymentsByRecordIdConfirm",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Re-check a checkout with the gateway, and settle it if it was paid",
+        "responses": {
+          "200": {
+            "description": "Where the payment stands: `{ recordId, status, settled }`"
+          },
+          "404": {
+            "description": "No such payment on this session"
+          },
+          "502": {
+            "description": "The gateway could not be reached"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "recordId",
             "required": true
           }
         ],

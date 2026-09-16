@@ -106,7 +106,8 @@ function errorTable(type: BlockType): string {
      * — an empty answer produces one.
      */
     const probe = example ? example.value : code === "required" ? "" : undefined;
-    const result = probe === undefined ? null : validateAnswer(parsed, probe);
+    const result =
+      probe === undefined ? null : validateAnswer(example?.block ? Block.parse(example.block) : parsed, probe);
     /**
      * `duplicate` is the one row here that is written rather than run.
      *

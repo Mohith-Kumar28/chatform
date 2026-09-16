@@ -64,10 +64,10 @@ curl -X POST https://api.chatform.in/v1/forms/$FORM_ID/sessions \
 
 Worth knowing before you build against it.
 
-- **Payments are not verified.** A payment block hands the respondent to your
-  own checkout or a UPI app and records that they said they paid. Nothing here
-  talks to a gateway, so `verified` is always `false`. Reconcile against your
-  processor.
+- **Only gateway payments are verified.** A payment block on a link or UPI QR
+  records that the respondent said they paid, so `verified` is `false` and you
+  reconcile against your processor. [Verified checkout](/docs/payments) on your
+  own Razorpay, Cashfree or Stripe account is the one kind a gateway confirms.
 - **Scheduling is a hand-off.** A scheduling block records the booking link and,
   if you pass it, the slot. It does not hold a calendar.
 - **Answers are re-validated server-side, always.** Whatever your interface

@@ -6,7 +6,7 @@ import type { ConditionGroup } from "./conditions";
 import { identityFieldForBlock, type IdentityField } from "./identity-fields";
 import { Ending, HiddenField, LogicRule, Variable } from "./logic";
 import { SettingsDoc, ThemeDoc } from "./settings";
-import { buildUpiUri } from "./payment-link";
+import { buildUpiUri, type PaymentProviderName } from "./payment-link";
 
 export const SCHEMA_VERSION = 9;
 
@@ -91,8 +91,17 @@ export interface PublicBlock {
   timeMax?: string;
   /** scheduling: the external booking link. payment (method "link"): the checkout page. */
   url?: string;
-  /** payment: how the respondent is asked to pay. */
-  paymentMethod?: "link" | "upi";
+  /** payment: how the respondent is asked to pay. `gateway` is verified checkout on the admin's own account. */
+  paymentMethod?: "link" | "upi" | "gateway";
+  /**
+   * payment (method "gateway"): which gateway checkout opens on.
+   *
+   * Never set by `toPublicBlock`: the document names an account id, and which
+   * gateway that account is lives in D1. The API fills it in where it has the
+   * row; a client without it takes the provider from `payment_required`.
+   * `paymentAccountId` itself is deliberately not on this interface at all.
+   */
+  paymentProvider?: PaymentProviderName;
   /** payment (method "upi"): the ready-to-scan `upi://pay` URI, built server-side. */
   upiUri?: string;
   /** payment (method "upi"): shown as text so the payer can copy it into their own app. */
@@ -290,7 +299,15 @@ export function toPublicBlock(b: Block): PublicBlock {
       // `am` lets the payer enter it. Better than publishing a wrong number.
       pub.amount = b.amountMode === "fixed" ? b.amount : undefined;
       pub.paymentMethod = b.method;
-      if (b.method === "upi") {
+      if (b.method === "gateway") {
+        /*
+         * No url, no UPI ID, and above all no `paymentAccountId`: checkout is
+         * created server-side from the account, and the browser is handed only
+         * what `payment_required` carries. A variable amount stays undefined
+         * here as it does for the manual methods — the server resolves it when
+         * the respondent presses Pay.
+         */
+      } else if (b.method === "upi") {
         pub.upiId = b.upiId;
         pub.payeeName = b.upiPayeeName;
         pub.upiUri =

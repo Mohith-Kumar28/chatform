@@ -53,8 +53,15 @@ const nextConfig: NextConfig = {
          * framed. Its per-form allowlist is enforced where it cannot be
          * bypassed — when a session is opened, against the Origin header the
          * browser sets.
+         *
+         * /pay/return goes with it, for the same reason at one remove: a gateway that has to
+         * leave the page for a bank or a UPI app leaves the *iframe* an embedded form is in, and
+         * sends the respondent back to this page — inside that same frame. Refused there, the
+         * embed showed a blocked frame instead of the form, with the payment already made. The
+         * page itself holds nothing a host page could read: it takes a record id from the
+         * address, and its only credential comes from storage the frame already has.
          */
-        source: "/:path((?!f/).*)",
+        source: "/:path((?!f/|pay/return).*)",
         headers: [
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },

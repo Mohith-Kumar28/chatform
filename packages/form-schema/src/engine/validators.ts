@@ -1,5 +1,6 @@
 import { andList, contactFieldBlock, contactFieldPhrase, groupFieldBlock, type Block } from "../blocks";
 import type { AnswerValue } from "../answers";
+import { fromMinorUnits, type PaymentProviderName } from "../payment-link";
 
 /**
  * Every reason an answer can be refused.
@@ -43,6 +44,16 @@ export const VALIDATION_CODES = [
   "file_too_large",
   "name_required",
   "payment_pending",
+  /**
+   * A `gateway` payment question was handed an answer instead of a settled
+   * payment.
+   *
+   * Every such answer is refused, however convincing — `{ status: "paid",
+   * verified: true }` from a browser, the `/v1` chat, or a direct write to
+   * `/v1/responses/:id/answers` alike. The only way past a verified payment is
+   * the server's own payment record, passed as `opts.settledPayment`.
+   */
+  "payment_unverified",
   "incomplete",
   "consent_required",
   /**
@@ -109,6 +120,35 @@ export interface ValidationResult {
   partial?: Record<string, string>;
 }
 
+/**
+ * A payment the admin's gateway has confirmed, as the server's own
+ * `respondent_payments` record states it.
+ *
+ * The one input to `validateAnswer` that does not come from the respondent.
+ * Only server code that has just read a `paid` record and checked it against
+ * the gateway may construct one — see `SessionDO.settlePayment` and the late
+ * settlement path in `lib/payments/service.ts`.
+ */
+export interface SettledPayment {
+  recordId: string;
+  provider: PaymentProviderName;
+  providerPaymentId: string | null;
+  amountMinor: number;
+  currency: string;
+  /** Epoch ms. */
+  paidAt: number;
+  /**
+   * Confirmed by a gateway account in test mode — a sandbox, where a public
+   * test card "pays". Real verification, of no real money, so the answer says
+   * so; see `testMode` on the payment answer.
+   */
+  testMode?: boolean;
+}
+
+export interface ValidateOptions {
+  settledPayment?: SettledPayment;
+}
+
 const ok = (value?: AnswerValue): ValidationResult => ({ ok: true, value });
 const fail = (code: ValidationCode, hint: string): ValidationResult => ({ ok: false, code, hint });
 
@@ -156,7 +196,45 @@ function isFileDescriptorArray(v: unknown): v is { fileId: string; filename: str
  * `raw` comes from structured client actions (already typed) or from
  * LLM-extracted values for free text. Returns canonical value on success.
  */
-export function validateAnswer(block: Block, raw: unknown): ValidationResult {
+export function validateAnswer(block: Block, raw: unknown, opts: ValidateOptions = {}): ValidationResult {
+  /*
+   * A verified payment, before anything looks at `raw`.
+   *
+   * Ahead of the emptiness gate because settlement passes no raw value at all
+   * — the answer is built entirely from the record — and a required block
+   * handed `null` would otherwise be refused as unanswered. And ahead of the
+   * `switch` because that branch trusts the shape it is given, which is right
+   * for a manual payment and exactly wrong here: the browser that sends
+   * `{ status: "paid", verified: true }` is the party the check exists to
+   * doubt.
+   */
+  if (block.type === "payment" && block.method === "gateway") {
+    const settled = opts.settledPayment;
+    if (settled) {
+      return ok({
+        status: "paid",
+        method: "gateway",
+        verified: true,
+        provider: settled.provider,
+        paymentRecordId: settled.recordId,
+        paymentId: settled.providerPaymentId ?? undefined,
+        amount: fromMinorUnits(settled.amountMinor, settled.currency),
+        currency: settled.currency.toUpperCase(),
+        paidAt: settled.paidAt,
+        ...(settled.testMode ? { testMode: true } : {}),
+      });
+    }
+    /*
+     * Skipping an optional payment is still an answer the respondent may give:
+     * nothing is claimed, so there is nothing to verify. Anything else — any
+     * value at all, or silence on a required block — is sent back to the Pay
+     * button, the only thing that can produce a settled payment.
+     */
+    const empty = raw === undefined || raw === null || (typeof raw === "string" && raw.trim() === "");
+    if (empty && !block.required) return ok(undefined);
+    return fail("payment_unverified", "Use the Pay button to complete payment.");
+  }
+
   /*
    * Whitespace is not an answer.
    *

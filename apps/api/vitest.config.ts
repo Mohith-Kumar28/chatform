@@ -27,6 +27,10 @@ export default defineConfig({
           // DODO_API_KEY stays unset so nothing can reach the real API from a test run.
           DODO_WEBHOOK_SECRET: "whsec_test_dodo_secret",
           DODO_ENVIRONMENT: "test",
+          // Seals stored gateway credentials in tests: base64 of a fixed 32-byte string, so a
+          // failing test's ciphertext can be reproduced. Never a real key. The partner and
+          // Stripe credentials stay unset for the same reason DODO_API_KEY does.
+          PAYMENTS_ENCRYPTION_KEY: "Y2hhdGZvcm0tdGVzdC1wYXltZW50cy1rZXktMzJieXQ=",
         },
       },
     }),

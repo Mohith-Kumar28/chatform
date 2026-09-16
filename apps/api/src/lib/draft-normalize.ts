@@ -671,6 +671,11 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
        * silently collects nothing. That fallback is what turned "the ticket is
        * 499 rupees, UPI mohith808@axl" into a short-text box titled "Payment
        * Confirmation".
+       *
+       * Only ever `link` or `upi`. A model that writes `method=gateway` gets a
+       * link block: verified checkout needs an account the author connected
+       * and sign-in they switched on, and a draft can do neither — so it is
+       * chosen in the builder by the author, never here.
        */
       case "payment": {
         const upi = config.get("upi") ?? config.get("upiid") ?? config.get("vpa");
@@ -900,6 +905,9 @@ export function applyBlockConfig(block: Block, raw: string | undefined): Block |
       const upi = config.get("upi") ?? config.get("upiid") ?? config.get("vpa");
       const url = config.get("url") ?? config.get("link");
       const method = config.get("method")?.toLowerCase();
+      // `gateway` is not an edit a model can make; see `normalizeBlock`. A
+      // block the author already set to it keeps it unless they ask for a
+      // manual method by name.
       if (method === "upi" || method === "link") patch.method = method;
       else if (upi && !url) patch.method = "upi";
       if (upi !== undefined) patch.upiId = upi;

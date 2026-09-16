@@ -22,6 +22,8 @@ import { templatesV1Router } from "./v1/templates.js";
 import { versionsV1Router } from "./v1/versions.js";
 import { aiV1Router } from "./v1/ai.js";
 import { integrationsV1Router } from "./v1/integrations.js";
+import { paymentAccountsV1Router } from "./v1/payment-accounts.js";
+import { formPaymentsV1Router } from "./v1/form-payments.js";
 import { uploadsV1Router } from "./uploads.js";
 import { knowledgeV1Router } from "./knowledge.js";
 
@@ -157,6 +159,14 @@ v1Router.route("/", aiV1Router);
  * schedule — the same rows an export produces, over a URL that is its own credential.
  */
 v1Router.route("/", integrationsV1Router);
+
+/**
+ * Verified payments: the gateway accounts an organization has connected, and
+ * every checkout attempt on a form for reconciliation. Twins of
+ * `routes/payment-accounts.ts` and `routes/form-payments.ts`.
+ */
+v1Router.route("/", paymentAccountsV1Router);
+v1Router.route("/", formPaymentsV1Router);
 
 /**
  * Webhook endpoints.

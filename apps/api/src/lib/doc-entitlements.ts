@@ -21,16 +21,24 @@
 import {
   DEFAULT_CONFIRMATION_BODY,
   DEFAULT_CONFIRMATION_SUBJECT,
+  PAYMENT_PROVIDER_LABELS,
+  toMinorUnits,
   type FormDoc,
 } from "@repo/form-schema";
 import {
   can,
+  featureLocked,
   limitOf,
   FEATURES,
   minPlanFor,
   type Entitlements,
   type FeatureKey,
+  type GateErrorBody,
 } from "@repo/entitlements";
+import type { Bindings } from "../env.js";
+import { loadAccountForOrg } from "./payments/accounts.js";
+import { gatewayEnabled } from "./payments/flag.js";
+import { toStripeAmount } from "./payments/stripe.js";
 
 export interface StrippedSetting {
   /** Dotted path into the document, e.g. `settings.branding.hidePoweredBy`. */
@@ -251,6 +259,144 @@ export function checkDocLimits(doc: FormDoc, ent: Entitlements): DocLimitProblem
     problems.push({ limitKey: "blocks_per_form", label: "Questions per form", used: doc.blocks.length, limit: blockLimit });
   }
   return problems;
+}
+
+/**
+ * Verified payment questions, checked against the plan and the organization's connected
+ * accounts before a version that asks for money is published.
+ *
+ * Refused rather than stripped, which is where these part ways with verified answers above.
+ * A `verify` question with the check taken off still collects the email; a payment question
+ * with its gateway taken off has nothing left to be — there is no manual method to fall back
+ * to without a link or a UPI ID the author never gave, and quietly publishing a Pay button
+ * that cannot take payment is the dead end lint exists to prevent. So the plan gate is a 402
+ * with the upsell, and everything else is a 422 that names the question.
+ *
+ * What lint cannot see, because it lives in D1: whether the account still exists and belongs
+ * to this organization (`loadAccountForOrg` answers "not found" for another org's id, so the
+ * two read the same), whether it is still connected, and whether it can charge the block's
+ * currency. Cashfree and Razorpay accounts are connected through partner OAuth, and
+ * collecting in anything but rupees on a linked merchant is not confirmed for either, so
+ * both are INR-only until it is. Stripe is not currency-checked: an account presents in any
+ * of 135+ currencies whatever its default is.
+ *
+ * `clampForRuntime` deliberately has no counterpart. A form published while entitled and
+ * then downgraded keeps its payment question, and the session refuses at the Pay button
+ * with `plan_required` — the same stance, reached at the only moment it can be.
+ */
+export interface GatewayPublishIssue {
+  level: "error";
+  code:
+    | "payment_gateway_disabled"
+    | "payment_account_missing"
+    | "payment_account_inactive"
+    | "payment_currency_unsupported"
+    | "payment_amount_unsupported";
+  message: string;
+  refs: string[];
+}
+
+export type GatewayPublishProblem =
+  | { status: 402; body: GateErrorBody }
+  | {
+      status: 422;
+      body: { error: { code: "payment_setup_invalid"; message: string; issues: GatewayPublishIssue[] } };
+    };
+
+const INR_ONLY_PROVIDERS = new Set(["cashfree", "razorpay"]);
+
+export async function checkGatewayPayments(
+  env: Bindings,
+  orgId: string,
+  doc: FormDoc,
+  ent: Entitlements,
+): Promise<GatewayPublishProblem | null> {
+  const blocks = doc.blocks.flatMap((b) => (b.type === "payment" && b.method === "gateway" ? [b] : []));
+  if (blocks.length === 0) return null;
+
+  if (!can(ent, "collect_payments")) {
+    return {
+      status: 402,
+      body: featureLocked("collect_payments", ent.planId, {
+        surface: "publish",
+        count: blocks.length,
+        noun: blocks.length === 1 ? "verified payment question" : "verified payment questions",
+      }),
+    };
+  }
+
+  const issues: GatewayPublishIssue[] = [];
+  if (!gatewayEnabled(env, orgId)) {
+    issues.push({
+      level: "error",
+      code: "payment_gateway_disabled",
+      message: "Verified payments aren't switched on for this organization yet. Use a payment link or UPI QR instead.",
+      refs: blocks.map((b) => b.ref),
+    });
+  } else {
+    // Lint has already refused a gateway block with no account, so every id here is set.
+    const accounts = new Map<string, Awaited<ReturnType<typeof loadAccountForOrg>>>();
+    for (const b of blocks) {
+      const id = b.paymentAccountId ?? "";
+      if (!accounts.has(id)) accounts.set(id, id ? await loadAccountForOrg(env, orgId, id) : null);
+      const account = accounts.get(id) ?? null;
+      const named = b.title || b.ref;
+      if (!account || account.status === "disconnected") {
+        issues.push({
+          level: "error",
+          code: "payment_account_missing",
+          message: `"${named}" takes payments on an account that isn't connected to this organization. Pick another account.`,
+          refs: [b.ref],
+        });
+        continue;
+      }
+      const provider = PAYMENT_PROVIDER_LABELS[account.provider];
+      if (account.status !== "active") {
+        issues.push({
+          level: "error",
+          code: "payment_account_inactive",
+          message: `"${named}" takes payments on a ${provider} account that needs reconnecting. Reconnect it in Integrate.`,
+          refs: [b.ref],
+        });
+        continue;
+      }
+      if (INR_ONLY_PROVIDERS.has(account.provider) && b.currency.toUpperCase() !== "INR") {
+        issues.push({
+          level: "error",
+          code: "payment_currency_unsupported",
+          message: `"${named}" charges in ${b.currency.toUpperCase()}, but ${provider} accounts connected to Chatform take rupees only. Switch the currency to INR.`,
+          refs: [b.ref],
+        });
+        continue;
+      }
+      /*
+       * A fixed price Stripe cannot charge in its own units — a fraction of an ariary, a
+       * thousandth of a dinar. Said here rather than at the Pay button, where the respondent
+       * would be the one to find out. A variable amount can only be checked when it resolves.
+       */
+      if (
+        account.provider === "stripe" &&
+        b.amountMode === "fixed" &&
+        typeof b.amount === "number" &&
+        b.amount > 0 &&
+        toStripeAmount(toMinorUnits(b.amount, b.currency), b.currency) === null
+      ) {
+        issues.push({
+          level: "error",
+          code: "payment_amount_unsupported",
+          message: `"${named}" charges ${b.amount} ${b.currency.toUpperCase()}, which Stripe can't charge in that currency's smallest unit. Round the amount.`,
+          refs: [b.ref],
+        });
+      }
+    }
+  }
+  if (issues.length === 0) return null;
+  return {
+    status: 422,
+    body: {
+      error: { code: "payment_setup_invalid", message: issues.map((i) => i.message).join("; "), issues },
+    },
+  };
 }
 
 /**

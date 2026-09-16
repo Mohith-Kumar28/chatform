@@ -3,7 +3,9 @@
  *
  * Both the payment and scheduling blocks hand off to something the builder
  * already owns. Nothing here talks to a gateway or a calendar API — it only
- * builds the URI and reads enough of a URL to label the button honestly.
+ * builds the URI and reads enough of a URL to label the button honestly, and,
+ * for verified payments, does the arithmetic every gateway call depends on:
+ * minor units and the amount a block resolves to.
  */
 
 /**
@@ -75,6 +77,131 @@ export function formatAmount(amount: number, currency: string): string {
   const symbol = CURRENCY_SYMBOLS[code] ?? `${code} `;
   const shown = Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
   return `${symbol}${shown}`;
+}
+
+// ───────────────────────── Verified gateway payments ─────────────────────────
+
+/**
+ * The gateways a `gateway` payment block can be checked against — each one the
+ * form admin's OWN account, connected in the builder. Listed here rather than
+ * in the API because the answer records which one confirmed it.
+ */
+export const PAYMENT_PROVIDERS = ["cashfree", "razorpay", "stripe"] as const;
+export type PaymentProviderName = (typeof PAYMENT_PROVIDERS)[number];
+
+export const PAYMENT_PROVIDER_LABELS: Record<PaymentProviderName, string> = {
+  cashfree: "Cashfree",
+  razorpay: "Razorpay",
+  stripe: "Stripe",
+};
+
+/**
+ * Currencies whose smallest unit is the major unit, and the handful with three
+ * decimals. Everything else has two.
+ *
+ * This is ISO 4217's exponent, which is what Stripe, Razorpay and Cashfree all
+ * mean by "the smallest currency unit". Getting it wrong is not a rounding
+ * error: ¥500 sent as 50000 charges a hundred times the price.
+ */
+const ZERO_DECIMAL = new Set([
+  "BIF", "CLP", "DJF", "GNF", "ISK", "JPY", "KMF", "KRW", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF",
+]);
+const THREE_DECIMAL = new Set(["BHD", "JOD", "KWD", "OMR", "TND"]);
+
+export function currencyExponent(currency: string): 0 | 2 | 3 {
+  const code = currency.toUpperCase();
+  if (ZERO_DECIMAL.has(code)) return 0;
+  if (THREE_DECIMAL.has(code)) return 3;
+  return 2;
+}
+
+/**
+ * Major units to the integer a gateway wants: 19.99 USD → 1999, ₹499 → 49900,
+ * ¥500 → 500, 1.5 KWD → 1500.
+ *
+ * Through `toPrecision(15)` before rounding, because binary floating point
+ * stores 1.005 as 1.00499999…, and `Math.round(1.005 * 100)` is 100. Fifteen
+ * significant digits is below where doubles start to lie, so the representation
+ * error is shed and the value a person typed is the value that rounds.
+ */
+export function toMinorUnits(amount: number, currency: string): number {
+  const factor = 10 ** currencyExponent(currency);
+  return Math.round(Number((amount * factor).toPrecision(15)));
+}
+
+/** The inverse of `toMinorUnits`: 1999 USD → 19.99. */
+export function fromMinorUnits(minor: number, currency: string): number {
+  const exp = currencyExponent(currency);
+  return Number((minor / 10 ** exp).toFixed(exp));
+}
+
+/**
+ * The smallest charge the gateways accept, in minor units.
+ *
+ * Razorpay and Cashfree refuse under ₹1; Stripe under roughly 50 cents in the
+ * major currencies. Checked before an order is created, because a refusal from
+ * the gateway arrives after the respondent has already pressed Pay.
+ */
+export const PROVIDER_MIN_MINOR: Readonly<Record<string, number>> = { INR: 100, USD: 50, EUR: 50, GBP: 30 };
+
+export function providerMinMinor(currency: string): number {
+  const code = currency.toUpperCase();
+  return PROVIDER_MIN_MINOR[code] ?? (currencyExponent(code) === 2 ? 50 : 1);
+}
+
+/** The fields of a payment block that decide what it charges. */
+export interface PaymentAmountSource {
+  amountMode: "fixed" | "variable";
+  amount?: number;
+  amountVariable?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  currency: string;
+}
+
+export type ResolvedPaymentAmount =
+  | { ok: true; amountMinor: number; amount: number; currency: string }
+  | { ok: false; code: "payment_no_amount" | "payment_bad_amount" | "payment_amount_out_of_range" };
+
+/**
+ * What this payment block charges, right now, decided on the server.
+ *
+ * `amountVariable` was stored and never read: a variable-amount block published
+ * no amount at all and left the checkout page to state a price. A verified
+ * payment cannot work that way — the record the gateway is checked against has
+ * to hold the amount before checkout opens — so the variable is resolved here,
+ * against the session's variables, and nowhere in the browser.
+ *
+ * A numeric string is accepted because variables set from a text answer arrive
+ * as text. Anything that is not a finite positive number is refused rather than
+ * coerced to zero: a checkout for nothing is a form that silently gives away
+ * whatever it was selling.
+ */
+export function resolvePaymentAmount(
+  block: PaymentAmountSource,
+  variables: Record<string, unknown>,
+): ResolvedPaymentAmount {
+  let raw: unknown;
+  if (block.amountMode === "variable") {
+    if (!block.amountVariable) return { ok: false, code: "payment_no_amount" };
+    raw = variables[block.amountVariable];
+  } else {
+    raw = block.amount;
+  }
+  if (raw === undefined || raw === null || (typeof raw === "string" && raw.trim() === "")) {
+    return { ok: false, code: "payment_no_amount" };
+  }
+  const n = typeof raw === "string" ? Number(raw.trim().replace(/,/g, "")) : raw;
+  if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) return { ok: false, code: "payment_bad_amount" };
+
+  if (block.minAmount !== undefined && n < block.minAmount) return { ok: false, code: "payment_amount_out_of_range" };
+  if (block.maxAmount !== undefined && n > block.maxAmount) return { ok: false, code: "payment_amount_out_of_range" };
+
+  const currency = block.currency.toUpperCase();
+  const amountMinor = toMinorUnits(n, currency);
+  // After conversion, so 0.001 USD — positive, and zero cents — is refused too.
+  if (amountMinor < providerMinMinor(currency)) return { ok: false, code: "payment_bad_amount" };
+  return { ok: true, amountMinor, amount: fromMinorUnits(amountMinor, currency), currency };
 }
 
 /**

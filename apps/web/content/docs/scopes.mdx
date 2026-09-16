@@ -30,6 +30,7 @@ is on its reference page, and in the spec as `x-required-scope`.
 | `file` | `read`, `write` | Uploads and downloads |
 | `analytics` | `read` | Aggregates |
 | `ai` | `generate` | Generating or editing a document with a model |
+| `payment` | `read`, `write` | Connected payment gateway accounts (Cashfree, Razorpay, Stripe) |
 
 `ai:generate` is the only scope that costs money to use. A generation spends your
 plan's `ai_generations` allowance and the tokens it takes, so it is a separate

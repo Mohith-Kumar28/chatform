@@ -29,6 +29,14 @@ export const SCOPES = {
    * instead, and a caller who wants that should have to say so.
    */
   ai: ["generate"],
+  /**
+   * The payment gateway accounts an organization has connected — where respondents' money goes.
+   *
+   * Its own resource for the same reason as `ai`: `webhook:write` is in the agent preset, and a
+   * key minted to manage delivery endpoints should not also be able to disconnect the Stripe
+   * account a live form is charging on, or connect a different one. No preset includes it.
+   */
+  payment: ["read", "write"],
 } as const;
 
 export type ScopeResource = keyof typeof SCOPES;

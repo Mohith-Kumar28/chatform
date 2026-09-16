@@ -1,5 +1,6 @@
 import type { Bindings } from "../env.js";
 import { deleteOrganizationReports } from "./feedback-issues.js";
+import { revokeOrganizationPaymentAccounts } from "./payments/accounts.js";
 
 /**
  * Everything a departing account leaves behind, removed before the account is.
@@ -74,6 +75,14 @@ export async function purgeUserData(env: Bindings, userId: string): Promise<void
     // Bug reports name the organization without a foreign key, so nothing
     // cascades them — nor the vectors and issues built from them.
     await deleteOrganizationReports(env, org);
+    /*
+      Connected payment gateways. Their rows go with the organization's cascade — and the
+      payments recorded against them with the forms — but the grants live at Cashfree, Razorpay
+      and Stripe, and a deleted workspace must not leave a working token or a subscribed webhook
+      endpoint on someone's merchant account. Best effort, account by account: a gateway that is
+      down does not get to veto a person's deletion.
+    */
+    await revokeOrganizationPaymentAccounts(env, org);
     await env.DB.prepare(`DELETE FROM organizations WHERE id = ?`).bind(org).run();
   }
 

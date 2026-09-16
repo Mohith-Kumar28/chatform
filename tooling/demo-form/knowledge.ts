@@ -17,8 +17,8 @@ import { PLANS, yearlyPerMonthCents } from "@repo/entitlements";
  *    every visitor. `PLANS` is the same source the pricing page reads.
  * 2. **The last entry is the honest one.** Somebody evaluating a form product
  *    will poke at what it cannot do, and an agent that only knows good news
- *    reads as marketing the moment they find the edge. Saying "payments are
- *    recorded, not verified" costs nothing and buys the rest of it credibility.
+ *    reads as marketing the moment they find the edge. Saying "a manual payment
+ *    is recorded, not verified" costs nothing and buys the rest of it credibility.
  */
 
 const usd = (cents: number) => `$${Math.round(cents / 100)}`;
@@ -103,7 +103,7 @@ Out of the product: CSV and JSONL export, webhooks when a response completes, Go
 
 Things chatform does not do, which are worth knowing before anyone builds on it:
 
-Payments are not verified. A payment question hands the respondent to a payment link or a UPI app and records that they said they paid. Nothing talks to a payment gateway, so you have to reconcile against your own processor.
+Payments are only verified on your own gateway account. A payment question can open checkout on a Razorpay, Cashfree or Stripe account you connect, and the conversation moves on only once that gateway confirms the money arrived. The money goes straight to you and chatform takes no cut. It needs the Pro plan and sign-in on the form, and it is being switched on for accounts gradually. A payment link or UPI QR is not verified: the question hands the respondent to the link or their UPI app and only records that they said they paid, so those you still reconcile against your own statement.
 
 Scheduling is a hand-off. A scheduling question records a booking link and the slot if you pass one; it does not hold a calendar.
 

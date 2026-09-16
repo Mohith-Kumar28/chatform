@@ -345,6 +345,28 @@ describe("block types that need setup", () => {
     expect(doc.blocks.find((b) => b.ref === "q_pay")?.type).toBe("payment");
   });
 
+  it("never drafts verified checkout, whatever the model writes", () => {
+    // A gateway payment needs an account the author connected and sign-in they
+    // switched on. A draft can do neither, so `method=gateway` is a link block.
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome" }),
+          block({ ref: "q_pay", type: "payment", config: "method=gateway; amount=499; currency=INR" }),
+        ],
+      }),
+    );
+    const paid = doc.blocks.find((b) => b.ref === "q_pay");
+    if (paid?.type !== "payment") throw new Error("not a payment block");
+    expect(paid.method).toBe("link");
+    expect(paid.paymentAccountId).toBeUndefined();
+
+    const edited = applyBlockConfig(paid, "method=gateway; amount=599");
+    if (edited?.type !== "payment") throw new Error("not a payment block");
+    expect(edited.method).toBe("link");
+    expect(edited.amount).toBe(599);
+  });
+
   it("takes a booking link for scheduling", () => {
     const { doc } = draftToDoc(
       draft({

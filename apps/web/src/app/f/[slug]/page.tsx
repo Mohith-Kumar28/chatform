@@ -119,6 +119,19 @@ export default async function PublicFormPage({ params, searchParams }: PageProps
   const resumeToken = typeof query.resume === "string" ? query.resume : undefined;
   const followUpId = typeof query.fu === "string" ? query.fu : undefined;
 
+  /**
+   * Back from a gateway checkout that took the whole window (Stripe).
+   *
+   * The conversation itself resumes from storage exactly as a reload would;
+   * this is only the record to ask the server about as soon as the stream is
+   * up, so the chat moves on as the respondent lands rather than whenever the
+   * webhook arrives. Not a hidden field: the loop above only reads names the
+   * form declared.
+   */
+  const paymentReturn = typeof query.cf_pay === "string" ? query.cf_pay : undefined;
+  /** The same checkout, backed out of: the stream's open card is cancelled rather than left waiting. */
+  const paymentCancelled = typeof query.cf_pay_cancelled === "string" ? query.cf_pay_cancelled : undefined;
+
   return (
     <div className={embedded ? "cf-embedded" : undefined}>
       {/* A view is a view whether it is framed or not. */}
@@ -134,6 +147,8 @@ export default async function PublicFormPage({ params, searchParams }: PageProps
         hiddenFields={hiddenFields}
         resumeToken={resumeToken}
         followUpId={followUpId}
+        paymentReturn={paymentReturn}
+        paymentCancelled={paymentCancelled}
       />
     </div>
   );

@@ -1,4 +1,5 @@
 import type { PublicBlock, PublicEnding, RespondentAuthMethod } from "@repo/form-schema";
+import type { CheckoutLaunch, PaymentProvider } from "./payments/types.js";
 
 export interface SSEEnvelope {
   v: 1;
@@ -114,6 +115,54 @@ export type ServerEvent =
        */
       type: "verify_settled";
       data: { ref: string; verified: boolean };
+    }
+  | {
+      /**
+       * A verified payment is waiting on the respondent, and this is how to
+       * open its checkout.
+       *
+       * Emitted when they press Pay, and again on `resync` while it is still
+       * outstanding, so a reloaded tab gets the card back instead of a
+       * question it cannot answer. Like `verify_required`, it sits in the
+       * thread under one question rather than gating the session.
+       *
+       * `launch` never carries a secret — see `CheckoutLaunch`. `amount` is
+       * major units and `display` is `formatAmount`'s rendering, so the card
+       * and the answer summary show the same price. `preview` marks a builder
+       * preview, whose checkout is simulated and never reaches a gateway.
+       */
+      type: "payment_required";
+      data: {
+        ref: string;
+        provider: PaymentProvider;
+        amountMinor: number;
+        amount: number;
+        currency: string;
+        display: string;
+        launch: CheckoutLaunch;
+        recordId: string;
+        /** Epoch ms after which this checkout can no longer be paid. */
+        expiresAt: number;
+        preview?: boolean;
+      };
+    }
+  | {
+      /**
+       * The gateway confirmed it. The answer is recorded from the server's
+       * record and `answer_recorded` and the next question follow — this event
+       * only takes the card down. The SSE stream decides the outcome; a
+       * client's own confirm call is a nudge, never the verdict.
+       */
+      type: "payment_settled";
+      data: { ref: string; recordId: string; status: "paid" };
+    }
+  | {
+      /**
+       * This attempt did not go through — declined, expired, cancelled. The
+       * card stays up so they can try again, and `code` says whether they can.
+       */
+      type: "payment_failed";
+      data: { ref: string; recordId: string; code: string; message: string };
     }
   | {
       type: "ending";

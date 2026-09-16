@@ -78,7 +78,7 @@ describe("displayAnswer", () => {
       url: "https://example.com/checkout",
     });
     const value = { status: "paid", method: "link", verified: false, reference: "CFTEST", amount: 10, currency: "USD" };
-    expect(displayAnswer(block, value)).toBe("Paid $10 · ref CFTEST");
+    expect(displayAnswer(block, value)).toBe("Paid $10 · unverified · ref CFTEST");
   });
 
   it("splits a date that carries a time", () => {

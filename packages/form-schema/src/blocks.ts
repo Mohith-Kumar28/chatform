@@ -509,22 +509,48 @@ export const Block = z.discriminatedUnion("type", [
     drawnNameRequired: z.boolean().default(false),
   }),
   /**
-   * Payment is collected *outside* Chatform: we show the respondent where to
-   * pay and record that they say they did. We are never in the flow of funds,
-   * so there is no gateway to verify against — see `verified` on the answer.
+   * Chatform is never in the flow of funds, whichever method is chosen. The
+   * money goes to the form admin; the question is only whether anything
+   * checks that it arrived.
    *
-   * `link` sends them to a checkout page the builder already owns (Razorpay,
-   * Stripe, PayPal, anything). `upi` takes a VPA and builds the `upi://` URI
-   * itself, which renders as both a QR to scan and a link to tap.
+   * `gateway` is verified. Checkout opens on the admin's OWN connected
+   * Cashfree, Razorpay or Stripe account (`paymentAccountId`), and the answer
+   * is written only from the server's payment record once that gateway
+   * confirms it — never from anything the respondent's browser sends. It needs
+   * sign-in on the form, which lint enforces.
+   *
+   * `link` and `upi` are manual and unverified: we show the respondent where to
+   * pay and record that they say they did. `link` sends them to a checkout page
+   * the builder already owns (Razorpay, Stripe, PayPal, anything). `upi` takes
+   * a VPA and builds the `upi://` URI itself, which renders as both a QR to
+   * scan and a link to tap. Kept because existing forms use them and because a
+   * UPI ID needs no gateway account at all.
    */
   z.object({
     ...BlockBase,
     type: z.literal("payment"),
-    method: z.enum(["link", "upi"]).default("link"),
+    method: z.enum(["link", "upi", "gateway"]).default("link"),
     amountMode: z.enum(["fixed", "variable"]).default("fixed"),
     amount: z.number().min(0).optional(),
+    /** `variable`: the form variable holding the amount, in major units. Resolved by `resolvePaymentAmount`. */
     amountVariable: z.string().optional(),
+    /**
+     * `variable`: bounds on what the variable may resolve to, in major units.
+     *
+     * A variable is computed from answers, and answers come from strangers. A
+     * "pay what you like" field that resolves to 0.01, or a quantity someone
+     * typed as 10000, should stop at the checkout rather than reach a gateway.
+     */
+    minAmount: z.number().min(0).optional(),
+    maxAmount: z.number().min(0).optional(),
     currency: z.string().length(3).default("USD"),
+    /**
+     * `gateway`: the `payment_accounts` row checkout is created on.
+     *
+     * An id, not a credential — and still never projected to a respondent (see
+     * `toPublicBlock`), because which account an org uses is theirs to know.
+     */
+    paymentAccountId: z.string().max(40).optional(),
     /** `link`: the checkout page. Optional in the schema so a half-built block still saves; lint requires it to publish. */
     url: z.string().url().max(500).optional(),
     /** `upi`: the payee VPA, e.g. "acme@okhdfcbank". */

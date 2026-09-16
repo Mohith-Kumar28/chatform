@@ -30,8 +30,44 @@ import {
   type PublicEnding,
   interpolate,
   contactFieldPhrase,
+  resolvePaymentAmount,
+  formatAmount,
+  toMinorUnits,
+  fromMinorUnits,
+  PAYMENT_PROVIDERS,
+  PAYMENT_PROVIDER_LABELS,
+  type SettledPayment,
+  type ValidateOptions,
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
+import { gatewayEnabled, signInBypassed } from "../lib/payments/flag.js";
+import { loadAccountForOrg } from "../lib/payments/accounts.js";
+import {
+  CheckoutUnavailableError,
+  MAX_PAYMENT_ATTEMPTS,
+  PAYMENT_GRACE_MS,
+  claimSettlement,
+  clearAmountChanged,
+  confirmPaymentRecord,
+  countPaymentAttempts,
+  createCheckoutForSession,
+  customerIdFor,
+  findSettledPayment,
+  flagStaleSiblings,
+  loadRecord,
+  markAmountChanged,
+  markDuplicate,
+  markSettled,
+  providersForAccounts,
+  releaseSettlementClaim,
+  settledPaymentOf,
+  supersedeRecord,
+  type SettleResult,
+  type StartPaymentErrorCode,
+  type StartPaymentResult,
+} from "../lib/payments/service.js";
+import type { CheckoutLaunch, PaymentProvider, RespondentPaymentRow } from "../lib/payments/types.js";
+import { webOrigins } from "../lib/origins.js";
 import type { ServerEvent, SSEEnvelope } from "../lib/events.js";
 import { asideText, clarifyText, closingText, codeExpectedText, codeSentText, codeVerifiedText, escalateText, greeting, looksLikeQuestion, questionText, transitionAck } from "../lib/phrasing.js";
 import {
@@ -157,6 +193,48 @@ interface DoSessionMeta {
    */
   verified?: string[];
   /**
+   * A verified-payment checkout the respondent has opened and not finished.
+   *
+   * The payment-block sibling of `pendingVerify`, and on the session for the
+   * same reason: it decides how the next turn is read, and what a reloaded tab
+   * is shown. While it is set a typed message is a question about the
+   * checkout, not an answer, and `resync` puts the Pay card back rather than a
+   * question the respondent cannot answer by typing.
+   *
+   * Nothing here is proof of anything. The answer is only ever written from
+   * the D1 record once the gateway confirms it — see `settlePayment`. `launch`
+   * is what the browser needs to reopen checkout and carries no secret.
+   */
+  pendingPayment?: {
+    ref: string;
+    recordId: string;
+    provider: PaymentProvider;
+    amountMinor: number;
+    amount: number;
+    currency: string;
+    display: string;
+    launch: CheckoutLaunch;
+    /** Epoch ms. The checkout cannot be paid after this; the session waits `PAYMENT_GRACE_MS` longer. */
+    expiresAt: number;
+    /** Checkouts opened for this ref so far, this one included. */
+    attempts: number;
+    preview?: boolean;
+  } | null;
+  /**
+   * Checkouts opened per question, kept past the pending one being cleared.
+   *
+   * A retry clears `pendingPayment`, so the count cannot live only there — or
+   * "retry" would be a way to open unlimited gateway orders on the admin's
+   * account, each one a real API call against their rate limit.
+   */
+  paymentAttempts?: Record<string, number>;
+  /**
+   * A phone number the respondent typed into the Pay card, for a gateway that will not open a
+   * checkout without one (Cashfree) on a session that had none — a Google sign-in, and no phone
+   * question before the payment. Kept so a retry does not ask again. Never an answer.
+   */
+  paymentPhone?: string | null;
+  /**
    * Which surface opened this session.
    *
    * Optional, and defaulted to `"chat"` when read: sessions persisted before
@@ -222,6 +300,26 @@ export interface SyncTurnResult {
 type TurnInput =
   | { type: "text"; text: string; turnId?: string }
   | { type: "structured"; ref: string; value: unknown; turnId?: string };
+
+/**
+ * Everything a respondent can press that is not an answer.
+ *
+ * `retry_payment` and `cancel_payment` only mean anything while a checkout is
+ * open. `simulate_payment` exists only in a builder preview, where it stands
+ * in for a gateway that must never be charged — see `simulatePayment`.
+ */
+type SessionAction =
+  | "skip"
+  | "stop"
+  | "restart"
+  | "edit"
+  | "submit"
+  | "resend_code"
+  | "change_answer"
+  | "undo_screen_out"
+  | "retry_payment"
+  | "cancel_payment"
+  | "simulate_payment";
 
 interface StoredSession {
   meta: DoSessionMeta;
@@ -640,6 +738,12 @@ export class SessionDO extends DurableObject<Bindings> {
        * agent over questions already answered and cost a conversation's worth
        * of tokens to arrive at the same block.
        */
+      /*
+       * Before the replay, not after it: the replay walks past every answered question, so a
+       * verified payment question carrying an answer nothing verified would be behind the cursor
+       * by the time `advanceTo` (and `releaseStalePayments` with it) ran.
+       */
+      this.dropUnverifiedGatewayAnswers();
       const { state, cursor } = replayState(this.doc, this.state.answers, this.state.hidden);
       this.state.variables = state.variables;
       await this.replayAnswerHistory();
@@ -1299,6 +1403,1248 @@ export class SessionDO extends DurableObject<Bindings> {
     await this.emit("verify_settled", { ref: pending.ref, verified: false });
   }
 
+  // ─────────────────────── verified payments ───────────────────────
+
+  /**
+   * Open a checkout on the form admin's own gateway account for the payment
+   * question in front of the respondent.
+   *
+   * Called by the route when they press Pay. The guards run in a fixed order,
+   * cheapest and most fundamental first, and each refusal says which it was:
+   *
+   *   1. the session is live and this is the question it is on
+   *   2. the question is a verified payment
+   *   3. gateway payments are switched on for this organization
+   *   4. the plan includes `collect_payments`
+   *   5. somebody is signed in — mandatory, whatever the form's gate says
+   *   6. the amount resolves, on the server, from this session's variables
+   *   7. the account exists, is connected, and is not live money in a preview
+   *   8. fewer than `MAX_PAYMENT_ATTEMPTS` checkouts for this question
+   *
+   * Sign-in is checked here even though lint refuses to publish a gateway
+   * block without it: a form whose `afterBlocks` puts the gate *after* the
+   * payment passes lint, and a gate the plan clamps off would pass nothing. A
+   * payment with no verified person behind it is a payment the admin cannot
+   * attribute or refund to anyone, so the card is replaced by the sign-in card
+   * and the question comes back once they have.
+   *
+   * Pressing Pay twice returns the same checkout. A changed amount — a
+   * variable recomputed from an edited answer — retires the old one.
+   */
+  async startPayment(ref: string, opts: { phone?: string } = {}): Promise<StartPaymentResult> {
+    /*
+     * One start at a time, per session.
+     *
+     * A Durable Object's input gate does not hold other requests while this one waits on the
+     * outside world, and a start waits on plenty of it: the plan, the account row, the gateway.
+     * Two presses — two tabs, or a double tap that slipped past the client — both saw no
+     * pending checkout, both opened an order, and the later one overwrote the first in
+     * `pendingPayment` without superseding it, leaving a payable checkout nothing would ever
+     * settle. Chained, the second press starts after the first has finished, finds its
+     * checkout pending, and hands the same one back.
+     */
+    return this.onPaymentChain(() => this.startPaymentOnce(ref, opts));
+  }
+
+  /**
+   * Every payment entry point from outside — start, settle, fail, refund — one at a time.
+   *
+   * Settlement races as readily as a start does, and did more damage: a Razorpay modal's confirm
+   * and the `payment.captured` webhook arrive together, both read no answer before their D1
+   * awaits, and both recorded the payment — the rules applied twice, two concurrent AI turns
+   * asking the next question, or two closings. Two different records paid close together both
+   * passed `findSettledPayment`, since neither was settled yet, and nobody was told about the
+   * double charge. On one chain, the second settle starts after the first has written its
+   * answer and finds it there.
+   *
+   * Nothing on the chain calls back into it — none of these call one another, and the alarm's
+   * last look (which does call `settlePayment`) is not itself on it — so it cannot deadlock.
+   */
+  private onPaymentChain<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.paymentChain.then(task);
+    this.paymentChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private paymentChain: Promise<void> = Promise.resolve();
+
+  private async startPaymentOnce(ref: string, opts: { phone?: string }): Promise<StartPaymentResult> {
+    const ok = await this.ensureLoaded();
+    if (!ok || !this.meta || !this.doc) return refuse("session_not_found", "This conversation has ended.");
+    if (this.meta.status !== "active") return refuse("session_closed", "This conversation has ended.");
+    let result: StartPaymentResult;
+    try {
+      result = await this.runStartPayment(ref, opts);
+    } catch (err) {
+      console.error("payment_start_failed", {
+        sessionId: this.meta.sessionId,
+        formId: this.meta.formId,
+        blockRef: ref,
+        ...errorInfo(err),
+      });
+      result = refuse("payment_unavailable", "We couldn't open checkout. Please try again in a moment.");
+    }
+    /*
+     * A preview that cannot take this payment for real — no account connected yet, a plan
+     * without payments, a live account — still has to let its author see the rest of the form.
+     * The server says so rather than leaving the browser to guess from the code, because the
+     * browser cannot tell a preview's "unavailable" from a live form's.
+     */
+    if (!result.ok && this.meta.formVersionId === "preview" && SIMULATABLE_REFUSALS.has(result.code)) {
+      result = { ...result, preview: true };
+    }
+    return result;
+  }
+
+  private async runStartPayment(ref: string, opts: { phone?: string }): Promise<StartPaymentResult> {
+    const meta = this.meta!;
+    const block = await this.currentBlock();
+    if (!block || block.ref !== ref) return refuse("stale_ref", "That question is no longer being asked.");
+    if (block.type !== "payment" || block.method !== "gateway") {
+      return refuse("payment_unavailable", "This question doesn't take a payment.");
+    }
+
+    // On the server, from this session's answers, before anything else reads it. See `priceNow`.
+    const amount = this.priceNow(block);
+
+    /*
+     * Already paid for this question — they went back with the pencil, started over, or a
+     * second tab is still showing the card. A second checkout would take their money twice;
+     * the payment they already made is put back as the answer instead, which moves the
+     * conversation on exactly as the first settlement did.
+     *
+     * Only a payment of what the question charges *now*. One made before an answer that sets
+     * the price was changed is not a payment for this question any more.
+     */
+    const held = amount.ok ? await this.heldPayment(block, amount) : null;
+    if (held) {
+      /*
+       * A checkout still open for this question is surplus the moment the question is answered.
+       * Left in `pendingPayment`, every later typed answer went to "your checkout is still open".
+       */
+      if (meta.pendingPayment?.ref === ref) await this.clearPendingPayment();
+      const recorded = await this.record(block, null, { settledPayment: held });
+      /*
+       * Settled, if it never was: a payment refused at settlement because the price had moved
+       * away from it is put back here when the price moves back, and nothing else will mark it.
+       */
+      if (recorded.accepted && !held.recordId.startsWith("rpay_preview_")) {
+        await markSettled(this.env, held.recordId);
+        /*
+         * And every other payment this respondent made for the question is now one the question
+         * does not ask for. Start over, pay ₹1,000, start over again and go back to ₹100: the
+         * ₹100 comes back as the answer here, and without this the ₹1,000 was left `paid`,
+         * settled and unflagged — invisible to the refund list, and counted as a valid payment
+         * the next one could be called a duplicate of.
+         */
+        await flagStaleSiblings(this.env, {
+          sessionId: meta.sessionId,
+          blockRef: ref,
+          keepId: held.recordId,
+          amountMinor: held.amountMinor,
+          currency: held.currency,
+        });
+        await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
+      }
+      return refuse("already_paid", "You've already paid for this.");
+    }
+
+    if (!gatewayEnabled(this.env, meta.organizationId)) {
+      // Same sentence as a missing account, and for the same reason: nothing the
+      // respondent does reaches it, so don't invite them to wait and retry.
+      return refuse("payment_unavailable", "This form can't take payments right now. Let its owner know.");
+    }
+    const ent = await getEntitlements(this.env, meta.organizationId);
+    if (!can(ent, "collect_payments")) {
+      return refuse("plan_required", "This form can't take payments right now. Let its owner know.");
+    }
+    if (!meta.identity && !signInBypassed(this.env)) {
+      // `gatedAtRef` is what brings this question back after they sign in.
+      await this.rememberGatedCursor();
+      await this.emitAuthRequired();
+      return refuse("sign_in_required", "Sign in to pay.");
+    }
+    if (!meta.identity) {
+      console.warn("payment_signin_bypassed", { sessionId: meta.sessionId, blockRef: ref });
+    }
+
+    if (!amount.ok) {
+      console.warn("payment_amount_unresolved", { sessionId: meta.sessionId, blockRef: ref, code: amount.code });
+      /*
+       * Outside the form's own limits is the respondent's to fix, not the owner's: the total
+       * came from their answers — fifty tickets on a form that takes at most ten.
+       */
+      return refuse(
+        "payment_unavailable",
+        amount.code === "payment_amount_out_of_range"
+          ? "That total is outside what this form can take. Change the answer it comes from to carry on."
+          : "This payment isn't set up correctly. Let the form's owner know.",
+      );
+    }
+
+    const account = block.paymentAccountId
+      ? await loadAccountForOrg(this.env, meta.organizationId, block.paymentAccountId)
+      : null;
+    if (!account || account.status !== "active") {
+      console.warn("payment_account_unavailable", {
+        sessionId: meta.sessionId,
+        blockRef: ref,
+        accountStatus: account?.status ?? "missing",
+      });
+      /*
+       * Said differently from the one a failed checkout call gets ("We couldn't
+       * open checkout. Please try again in a moment."). Both used to open with
+       * "Payments aren't available", which told a respondent to wait out
+       * something only the form's owner can fix — this one is the account being
+       * gone, and no amount of retrying reaches it.
+       */
+      return refuse("payment_unavailable", "This form can't take payments right now. Let its owner know.");
+    }
+    const preview = meta.formVersionId === "preview";
+    if (preview && account.environment === "live") {
+      return refuse(
+        "preview_live_account",
+        "Preview never charges a live account. Use Simulate payment, or connect a test account.",
+      );
+    }
+    /*
+     * Nor does a session opened with a `*_test_` key. Its response is a test response, hidden
+     * from every count and pruned after thirty days; a real card charged against it would be
+     * real money attached to a response built to be thrown away.
+     */
+    if (meta.isTest && account.environment === "live") {
+      return refuse(
+        "live_account_in_test_mode",
+        "A test-mode session never charges a live account. Use a live API key, or connect a test account.",
+      );
+    }
+
+    const now = Date.now();
+    const pending = meta.pendingPayment;
+    if (
+      pending &&
+      pending.ref === ref &&
+      pending.amountMinor === amount.amountMinor &&
+      pending.currency === amount.currency &&
+      // A checkout about to expire is not worth handing back: it would close
+      // under them mid-payment.
+      pending.expiresAt - now > 60_000
+    ) {
+      /*
+       * Only while the gateway would still take it. A record that came back `refunded` on its
+       * first look, or was held for an amount mismatch, is an order nothing can be paid into
+       * again — and this branch handed its launch back on every press, so the respondent tapped
+       * Pay at a dead checkout until the thirty minutes ran out. A new one instead.
+       */
+      const row = await loadRecord(this.env, pending.recordId);
+      if (row && (row.status === "created" || row.status === "superseded")) {
+        await this.emitPaymentRequired();
+        return { ok: true, recordId: pending.recordId, launch: pending.launch, expiresAt: pending.expiresAt, reused: true };
+      }
+      console.warn("payment_pending_not_payable", {
+        sessionId: meta.sessionId,
+        blockRef: ref,
+        recordId: pending.recordId,
+        recordStatus: row?.status ?? "missing",
+      });
+      await this.clearPendingPayment();
+    }
+
+    /*
+     * Null only under the local sign-in bypass, which is the one path that
+     * reaches here unidentified. The gateway still needs *something* to put on
+     * the receipt, so the session id stands in for the person — see
+     * `signInBypassed`.
+     */
+    const identity = meta.identity ?? null;
+    /*
+     * A number for the receipt, where the gateway insists on one.
+     *
+     * Cashfree will not open an order without `customer_phone`, and a Google sign-in on a form
+     * with no phone question has none to give. Refused here, before an attempt is counted or a
+     * record written, with a code the Pay card answers by asking for a number — never by
+     * inventing one, which Cashfree would text.
+     */
+    let phone = identity?.phone ?? this.answeredPhone() ?? meta.paymentPhone ?? null;
+    if (opts.phone !== undefined) {
+      const given = normalizeE164(opts.phone);
+      if (!given) return refuse("phone_required", "That number needs its country code — for example +91 98765 43210.");
+      phone = given;
+      meta.paymentPhone = given;
+    }
+    if (account.provider === "cashfree" && !phone) {
+      return refuse("phone_required", "What number should the payment receipt go to?");
+    }
+
+    /*
+     * The response row before the checkout, never after. A payment that lands
+     * once this tab is closed and the session abandoned has to be written onto
+     * *something*, and `settleLate` finds it through this row.
+     */
+    const submissionId = preview ? null : await this.ensureSubmissionRow();
+
+    /*
+     * The cap counts the orders on the *response*, not the ones this session remembers.
+     *
+     * A session is cheap to replace: a new tab under the same sign-in adopts the same response
+     * and its counter starts at zero, so five orders per session was no cap at all on a script
+     * opening sessions in a loop — every one of them a call on the admin's gateway account. The
+     * rows outlive the session, so they are what it is really counted from; the session's own
+     * counter still stands in for a preview, which writes no response.
+     */
+    const priorAttempts = Math.max(
+      meta.paymentAttempts?.[ref] ?? 0,
+      preview ? 0 : await countPaymentAttempts(this.env, { sessionId: meta.sessionId, submissionId, blockRef: ref }),
+    );
+    const attempts = priorAttempts + 1;
+    if (attempts > MAX_PAYMENT_ATTEMPTS) {
+      return refuse("too_many_attempts", "That's too many attempts for now. Please contact the form's owner.");
+    }
+    if (pending) await this.clearPendingPayment();
+    meta.paymentAttempts = { ...meta.paymentAttempts, [ref]: attempts };
+    await this.persistMeta();
+
+    const origin = webOrigins(this.env)[0] ?? this.env.APP_ORIGIN;
+    const answerBefore = this.state.answers[ref];
+
+    let opened: Awaited<ReturnType<typeof createCheckoutForSession>>;
+    try {
+      opened = await createCheckoutForSession(this.env, {
+        account,
+        organizationId: meta.organizationId,
+        formId: meta.formId,
+        formVersionId: meta.formVersionId,
+        sessionId: meta.sessionId,
+        submissionId,
+        blockRef: ref,
+        amountMinor: amount.amountMinor,
+        currency: amount.currency,
+        title: block.title.slice(0, 120),
+        description: this.doc!.title.slice(0, 200),
+        customer: {
+          id: customerIdFor(identity, meta.sessionId),
+          name: identity?.name ?? null,
+          email: identity?.email ?? null,
+          phone,
+        },
+        urls: (recordId) => paymentReturnUrls(origin, { recordId, sessionId: meta.sessionId, slug: meta.slug }),
+        preview,
+        testSession: meta.isTest === true,
+      });
+    } catch (err) {
+      /*
+       * Not an attempt. The cap exists so "retry" cannot open unlimited orders on the admin's
+       * account; a checkout the gateway refused to open is not one, and counting it let a
+       * five-minute gateway outage use up a respondent's tries for good. Repeated presses are
+       * still bounded by the route's rate limit.
+       */
+      meta.paymentAttempts = { ...meta.paymentAttempts, [ref]: attempts - 1 };
+      await this.persistMeta();
+      const recordId = err instanceof CheckoutUnavailableError ? (err.recordId ?? "") : "";
+      const message = "We couldn't open checkout. Please try again in a moment.";
+      await this.emit("payment_failed", { ref, recordId, code: "payment_unavailable", message });
+      await this.emitQuestion();
+      if (!(err instanceof CheckoutUnavailableError)) throw err;
+      return refuse("payment_unavailable", message);
+    }
+
+    /*
+     * The conversation may have moved while the gateway was answering — the old tab's payment
+     * settled this question, or an action took the cursor elsewhere. A checkout for a question
+     * that is no longer waiting on one is retired at once rather than put on screen.
+     */
+    if (meta.status !== "active" || meta.currentRef !== ref || this.state.answers[ref] !== answerBefore) {
+      await supersedeRecord(this.env, opened.record.id);
+      const answered = this.state.answers[ref] !== answerBefore;
+      return answered
+        ? refuse("already_paid", "You've already paid for this.")
+        : refuse("stale_ref", "That question is no longer being asked.");
+    }
+
+    /*
+     * And the price may have moved while the gateway was answering, without this question's own
+     * answer changing: the amount was resolved before the plan, the account row and the gateway
+     * were waited on — up to eighteen seconds with a token refresh — and the answer the price
+     * comes *from* is another question, which another tab can edit in that window. Checkout would
+     * have opened at the old total, been paid, and then been refused at settlement as stale.
+     */
+    const priceAfter = this.priceNow(block);
+    if (!priceAfter.ok || priceAfter.amountMinor !== amount.amountMinor || priceAfter.currency !== amount.currency) {
+      console.warn("payment_price_moved_while_opening", {
+        sessionId: meta.sessionId,
+        blockRef: ref,
+        recordId: opened.record.id,
+        openedMinor: amount.amountMinor,
+        askedMinor: priceAfter.ok ? priceAfter.amountMinor : null,
+      });
+      await supersedeRecord(this.env, opened.record.id);
+      return refuse("stale_ref", "The amount for this question just changed. Tap Pay again for the new total.");
+    }
+
+    const expiresAt = opened.record.expiresAt ?? now;
+    meta.pendingPayment = {
+      ref,
+      recordId: opened.record.id,
+      provider: account.provider,
+      amountMinor: amount.amountMinor,
+      amount: amount.amount,
+      currency: amount.currency,
+      display: formatAmount(amount.amount, amount.currency),
+      launch: opened.launch,
+      expiresAt,
+      attempts,
+      /*
+       * No `preview` flag here, even in a builder preview. On the wire that
+       * flag means "simulated: never open `launch`", and this is a real
+       * test-mode checkout the author connected a test account to try. The
+       * preview's simulated payment is the `simulate_payment` action, which
+       * never comes through here.
+       */
+    };
+    await this.persistMeta();
+    await this.appendMessage(
+      "system_event",
+      `Checkout opened: ${meta.pendingPayment.display} via ${PAYMENT_PROVIDER_LABELS[account.provider]}`,
+    );
+    await this.emitPaymentRequired();
+    await this.ctx.storage.setAlarm(Math.max(now + IDLE_ALARM_MS, expiresAt + PAYMENT_GRACE_MS));
+    return { ok: true, recordId: opened.record.id, launch: opened.launch, expiresAt, reused: false };
+  }
+
+  /** Arm the client's Pay card. Also used on replay, and for a typed nudge. */
+  private async emitPaymentRequired(): Promise<void> {
+    const pending = this.meta?.pendingPayment;
+    if (!pending) return;
+    if (pending.expiresAt <= Date.now()) {
+      await this.emitQuestion();
+      return;
+    }
+    await this.emit("payment_required", {
+      ref: pending.ref,
+      provider: pending.provider,
+      amountMinor: pending.amountMinor,
+      amount: pending.amount,
+      currency: pending.currency,
+      display: pending.display,
+      launch: pending.launch,
+      recordId: pending.recordId,
+      expiresAt: pending.expiresAt,
+      ...(pending.preview ? { preview: true } : {}),
+    });
+  }
+
+  /**
+   * Something typed while checkout is open.
+   *
+   * It is kept — unlike a code, a message about a payment is ordinary
+   * conversation the admin may want to read — but it is not an answer, and
+   * the agent is not given it: "I paid" typed into the box is precisely the
+   * claim this whole flow exists not to take on trust.
+   */
+  private async handlePendingPaymentText(text: string): Promise<{ accepted: boolean; error?: string }> {
+    const msgId = await this.appendMessage("user", text);
+    await this.emit("user_message", { messageId: msgId, text });
+    this.pendingUserTextPersisted = false;
+    this.pendingUserMessageId = null;
+    await this.emitMessage(
+      "Your checkout is still open — finish paying there, and I'll carry on as soon as it goes through. If the window closed, tap Pay again.",
+    );
+    await this.emitPaymentRequired();
+    return { accepted: true };
+  }
+
+  /**
+   * The payment the gateway confirmed, settled into the conversation.
+   *
+   * Called over RPC by `lib/payments/service.ts` — from the confirm route, a
+   * webhook, or this object's own alarm — only after the D1 record is `paid`.
+   * The record is re-read here rather than taken from the caller, so the one
+   * thing that decides the answer is the row, not an argument.
+   *
+   * Idempotent: every path that notices a payment calls this, and they race.
+   * The second caller finds the answer already holding this record's id.
+   */
+  async settlePayment(recordId: string): Promise<SettleResult> {
+    return this.onPaymentChain(() => this.settlePaymentOnce(recordId));
+  }
+
+  private async settlePaymentOnce(recordId: string): Promise<SettleResult> {
+    const ok = await this.ensureLoaded();
+    if (!ok || !this.meta || !this.doc) return { accepted: false, reason: "session_not_found" };
+    const record = await loadRecord(this.env, recordId);
+    // `paid` only. A refund that beat settlement here is a payment the admin
+    // has already given back, and writing "Paid" into the thread would be false.
+    if (!record || record.status !== "paid") return { accepted: false, reason: "not_paid" };
+    if (record.sessionId !== this.meta.sessionId) return { accepted: false, reason: "wrong_session" };
+    const result = await this.settleFromRecord(settledPaymentOf(record), record.blockRef, false, record);
+    /*
+     * Flagged here rather than by the caller, because not every caller is `settleRecord`: the
+     * alarm's last look comes straight to this method, and a payment it found that the question
+     * could not take has to reach the admin's refund list all the same.
+     */
+    try {
+      if (result.reason === "duplicate") await markDuplicate(this.env, record);
+      if (result.reason === "amount_changed") await markAmountChanged(this.env, record.id);
+    } catch (err) {
+      console.error("payment_flag_failed", { sessionId: this.meta.sessionId, recordId, reason: result.reason, ...errorInfo(err) });
+    }
+    return result;
+  }
+
+  private async settleFromRecord(
+    settled: SettledPayment,
+    ref: string,
+    simulated: boolean,
+    record?: RespondentPaymentRow,
+  ): Promise<SettleResult> {
+    const meta = this.meta!;
+    const existing = this.state.answers[ref] as
+      | { method?: string; status?: string; paymentRecordId?: string }
+      | undefined;
+    if (existing?.paymentRecordId === settled.recordId) {
+      if (!simulated) await markSettled(this.env, settled.recordId);
+      return { accepted: true, reason: "already_settled" };
+    }
+
+    /** The settlement slot this call took in D1, to be given back if the answer never lands. */
+    let claimed: string | null = null;
+
+    const block = this.doc!.blocks.find((b) => b.ref === ref);
+    const payable = block && block.type === "payment" && block.method === "gateway" ? block : null;
+
+    /*
+     * Paid, but not what the question charges now.
+     *
+     * The record's amount matched the gateway's, which proves the money; it does not prove the
+     * price. A variable amount is worked out from answers, and the respondent can change an
+     * answer after a checkout opened — one ticket at ₹100, then ten — and still pay the old
+     * checkout, which stays live at the gateway until it expires. Settled, that wrote "Paid ₹100
+     * · verified" against ten tickets. So the amount is resolved again from the variables this
+     * session holds, which also stand for an abandoned one, and a payment that does not match
+     * is refused and flagged for a refund rather than taken as the answer.
+     */
+    if (payable && !simulated) {
+      const now = this.priceNow(payable);
+      /*
+       * A price that no longer resolves at all is the same verdict, not a pass. Fifty tickets on a
+       * form that takes at most ten is a total the form refuses to charge — Pay says so — and the
+       * old one-ticket checkout still open in another tab must not become the answer for it. Only
+       * a doc with no variable named is let through: an author's error lint refuses to publish,
+       * and the one case where "doesn't resolve" says nothing about what the respondent changed.
+       */
+      const stale = now.ok
+        ? now.amountMinor !== settled.amountMinor || now.currency !== settled.currency.toUpperCase()
+        : payable.amountMode === "variable" && Boolean(payable.amountVariable);
+      if (stale) {
+        console.warn("payment_settle_amount_changed", {
+          sessionId: meta.sessionId,
+          blockRef: ref,
+          recordId: settled.recordId,
+          paidMinor: settled.amountMinor,
+          askedMinor: now.ok ? now.amountMinor : null,
+          askedCode: now.ok ? null : now.code,
+        });
+        if (meta.status === "active") await this.refuseStalePayment(settled, ref, now);
+        return { accepted: false, reason: "amount_changed" };
+      }
+    }
+
+    if (!simulated && record) {
+      /*
+       * A second payment for a question that already holds one is the admin's to refund, not a
+       * replacement for the first. See `markDuplicate`.
+       *
+       * Decided from what still pays for the question, not from what the answer happens to
+       * say. The answer this session holds may be for a payment since refunded, and a
+       * refunded payment is not one the next can duplicate; and the question may be paid for
+       * on the response without this session's copy knowing — a Start over, or another
+       * session of the same signed-in respondent. `findSettledPayment` reads both.
+       */
+      if (existing?.method === "gateway" && existing.status === "paid" && existing.paymentRecordId) {
+        const prior = await loadRecord(this.env, existing.paymentRecordId);
+        if (prior && prior.status === "paid" && !prior.failureReason) return this.refuseDuplicatePayment(ref);
+      }
+      const submissionId =
+        meta.formVersionId === "preview"
+          ? null
+          : ((await this.ctx.storage.get<string>("submission_id")) ?? record.submissionId);
+      const other = await findSettledPayment(this.env, {
+        sessionId: meta.sessionId,
+        submissionId,
+        blockRef: ref,
+        excludeId: settled.recordId,
+      });
+      if (other) {
+        // Same price: a second payment for one question, whichever session made it.
+        if (other.amountMinor === settled.amountMinor && other.currency === settled.currency.toUpperCase()) {
+          return this.refuseDuplicatePayment(ref);
+        }
+        /*
+         * Two prices, and only one of them can be the answer. Which is stale is a question about
+         * the answers the *response* holds, and this session only knows its own copy of them.
+         *
+         * Its own payment it may judge: a different price from this session means this session's
+         * answers moved (a Start over, an edit), and the earlier one is the stale one.
+         *
+         * Another session's it may not. The response is shared — the same signed-in respondent's
+         * laptop adopts what their phone began — so a session left open on an old answer can
+         * reach here holding an old price, and "the other one is stale" flagged the payment that
+         * actually stands for refund while `settleLate` wrote the old price over the answer. A
+         * payment the price moved away from is released by the session that moved it, so another
+         * session's payment that is still settled and unflagged is one nothing has released: the
+         * response is paid for at that price, and it is this one that goes on the refund list.
+         */
+        if (other.sessionId !== meta.sessionId) {
+          console.warn("payment_settle_response_paid_elsewhere", {
+            sessionId: meta.sessionId,
+            blockRef: ref,
+            recordId: settled.recordId,
+            standingRecordId: other.id,
+          });
+          if (meta.status === "active") await this.refusePaidElsewhere(settled, ref);
+          return { accepted: false, reason: "amount_changed" };
+        }
+        await markAmountChanged(this.env, other.id);
+      }
+
+      /*
+       * The one settlement slot for this question, taken in D1 before the answer is written.
+       * Two sessions of one response can settle at the same instant, and nothing inside this
+       * object serialises them; see `claimSettlement`.
+       */
+      if (!(await claimSettlement(this.env, record, submissionId))) {
+        return this.refuseDuplicatePayment(ref);
+      }
+      claimed = settled.recordId;
+      // Everything else this respondent paid for the question, at a price it no longer asks.
+      // The reuse path does the same; see `flagStaleSiblings`.
+      await flagStaleSiblings(this.env, {
+        sessionId: meta.sessionId,
+        blockRef: ref,
+        keepId: settled.recordId,
+        amountMinor: settled.amountMinor,
+        currency: settled.currency,
+      });
+    }
+
+    if (meta.status !== "active") return { accepted: false, reason: "session_not_active" };
+    if (!block || !payable) return { accepted: false, reason: "no_block" };
+
+    this.turnHandedBack = false;
+    try {
+      const pending = meta.pendingPayment;
+      if (pending && pending.ref === ref) {
+        // A different attempt than the one on screen paid — an older tab. The
+        // one on screen is now surplus.
+        if (!simulated && pending.recordId !== settled.recordId) await supersedeRecord(this.env, pending.recordId);
+        meta.pendingPayment = null;
+        await this.persistMeta();
+      }
+
+      /*
+       * Not the question on screen: they skipped past an optional payment, or
+       * went back to edit something else, and paid anyway. The answer is kept
+       * without dragging the conversation back to it.
+       */
+      if (meta.currentRef !== ref) {
+        const value = validateAnswer(payable, null, { settledPayment: settled });
+        if (!value.ok || value.value === undefined) {
+          if (claimed) await releaseSettlementClaim(this.env, claimed);
+          return { accepted: false, reason: "failed" };
+        }
+        if (this.state.answers[ref] === undefined) this.collectedCount += 1;
+        this.state.answers[ref] = value.value;
+        await this.persistMeta();
+        this.ctx.waitUntil(this.projectAnswer(payable, value.value));
+        await this.emit("payment_settled", { ref, recordId: settled.recordId, status: "paid" });
+        /*
+         * `null`, not a message id: nothing the respondent typed is this answer. The client
+         * treats that as "no bubble to put a pencil on" rather than guessing at the last one.
+         */
+        await this.emit("answer_recorded", { ref, pct: this.progressPct(), messageId: null });
+        if (!simulated) await markSettled(this.env, settled.recordId);
+        // Paying is activity. Without this the alarm the checkout pushed out still fires at its
+        // expiry and abandons a respondent who paid minutes ago.
+        await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
+        return { accepted: true, reason: "recorded_off_cursor" };
+      }
+
+      await this.emit("payment_settled", { ref, recordId: settled.recordId, status: "paid" });
+      await this.appendMessage(
+        "system_event",
+        `Payment ${simulated ? "simulated" : "verified"}: ${formatAmount(fromMinorUnits(settled.amountMinor, settled.currency), settled.currency)} via ${PAYMENT_PROVIDER_LABELS[settled.provider]}`,
+      );
+      this.pendingUserTextPersisted = false;
+      this.pendingUserMessageId = null;
+      const recorded = await this.record(payable, null, { settledPayment: settled });
+      if (!recorded.accepted) {
+        if (claimed) await releaseSettlementClaim(this.env, claimed);
+        return { accepted: false, reason: "failed" };
+      }
+      if (!simulated) await markSettled(this.env, settled.recordId);
+      if (!this.turnHandedBack) {
+        console.error("payment_settle_without_handback", { sessionId: meta.sessionId, blockRef: ref });
+        await this.resync();
+      }
+      // See the off-cursor path: the conversation has just moved, so the idle clock restarts.
+      await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
+      return { accepted: true, reason: "settled" };
+    } catch (err) {
+      console.error("payment_settle_failed", {
+        sessionId: meta.sessionId,
+        formId: meta.formId,
+        blockRef: ref,
+        recordId: settled.recordId,
+        ...errorInfo(err),
+      });
+      /*
+       * The slot goes back, or the retry of this delivery reads a record already settled — with
+       * no answer anywhere — and drops it. See `claimSettlement`.
+       */
+      if (claimed) await releaseSettlementClaim(this.env, claimed);
+      await this.failTurn("payment_settle_failed", "Your payment went through — give us a moment to record it.");
+      return { accepted: false, reason: "failed" };
+    }
+  }
+
+  /**
+   * Tell the respondent a payment that landed was not counted, because the question's price
+   * moved after its checkout opened. Only when it is the checkout on screen, or when nothing
+   * is — a failure for some older attempt would clobber the card for the one they are using.
+   */
+  private async refuseStalePayment(
+    settled: SettledPayment,
+    ref: string,
+    now: ReturnType<typeof resolvePaymentAmount>,
+  ): Promise<void> {
+    const meta = this.meta!;
+    const pending = meta.pendingPayment;
+    const onScreen = pending?.recordId === settled.recordId || (!pending && meta.currentRef === ref);
+    if (pending?.recordId === settled.recordId) {
+      meta.pendingPayment = null;
+      await this.persistMeta();
+    }
+    if (!onScreen || meta.currentRef !== ref) return;
+    const paid = formatAmount(fromMinorUnits(settled.amountMinor, settled.currency), settled.currency);
+    await this.emit("payment_failed", {
+      ref,
+      recordId: settled.recordId,
+      code: "payment_amount_changed",
+      message: now.ok
+        ? `That payment of ${paid} was for an earlier total, so it wasn't counted — the form's owner can refund it. This now comes to ${formatAmount(now.amount, now.currency)}. Tap Pay to pay that.`
+        : `That payment of ${paid} was for an earlier total, so it wasn't counted — the form's owner can refund it. The total your answers come to now isn't one this form can take; change the answer it comes from to carry on.`,
+    });
+    await this.emitQuestion();
+  }
+
+  /**
+   * Tell the respondent a payment was not counted because the response is already paid for, at
+   * another price, from somewhere this conversation cannot see — their other device, usually.
+   *
+   * Said rather than settled, and said plainly: this session's answers are the old ones, so it
+   * cannot offer the new price either. The money is real, and the flag on the record is what
+   * puts it in front of the admin.
+   */
+  private async refusePaidElsewhere(settled: SettledPayment, ref: string): Promise<void> {
+    const meta = this.meta!;
+    if (meta.pendingPayment?.recordId === settled.recordId) {
+      meta.pendingPayment = null;
+      await this.persistMeta();
+    }
+    if (meta.currentRef !== ref) return;
+    const paid = formatAmount(fromMinorUnits(settled.amountMinor, settled.currency), settled.currency);
+    await this.emit("payment_failed", {
+      ref,
+      recordId: settled.recordId,
+      code: "payment_amount_changed",
+      message: `That payment of ${paid} wasn't counted: this has already been paid for, for a different amount, somewhere else — on another device, or in another tab. The form's owner can refund it.`,
+    });
+    await this.emitQuestion();
+  }
+
+  /**
+   * A payment refused as a second one for a question already paid for.
+   *
+   * It may be the very checkout this session has on screen — a respondent's phone holding one
+   * open while their laptop paid for the same response — and a `pendingPayment` left pointing
+   * at it swallowed every typed answer as "your checkout is still open" until the alarm gave up
+   * on the conversation. Any checkout still open for the question is surplus now, so it goes,
+   * and the card says why. Pay on it finds the payment that stands and moves on.
+   */
+  private async refuseDuplicatePayment(ref: string): Promise<SettleResult> {
+    const meta = this.meta!;
+    const pending = meta.pendingPayment;
+    if (pending && pending.ref === ref) {
+      // Superseding a record the gateway has already moved on is a no-op; see `supersedeRecord`.
+      await this.clearPendingPayment();
+      if (meta.status === "active" && meta.currentRef === ref) {
+        await this.emit("payment_failed", {
+          ref,
+          recordId: pending.recordId,
+          code: "payment_duplicate",
+          message: paymentFailureMessage("payment_duplicate"),
+        });
+        await this.emitQuestion();
+      }
+    }
+    return { accepted: false, reason: "duplicate" };
+  }
+
+  /**
+   * The gateway reported a refund for this record. The session's own copy of the answer says
+   * so too, so nothing that re-records from that copy writes "paid" back over it. See
+   * `notifyRefunded` in `lib/payments/service.ts`.
+   */
+  async paymentRefunded(recordId: string): Promise<{ accepted: boolean }> {
+    return this.onPaymentChain(() => this.paymentRefundedOnce(recordId));
+  }
+
+  private async paymentRefundedOnce(recordId: string): Promise<{ accepted: boolean }> {
+    const ok = await this.ensureLoaded();
+    if (!ok || !this.meta || !this.doc) return { accepted: false };
+
+    /*
+     * A refund on the checkout still on screen ends that checkout too.
+     *
+     * The gateway will not take a refunded order again — this happens to a late capture the
+     * gateway auto-refunds — and a `pendingPayment` left pointing at it swallowed every typed
+     * message as "your checkout is still open" and handed the same dead launch back to Pay.
+     */
+    const pending = this.meta.pendingPayment;
+    if (pending?.recordId === recordId) {
+      this.meta.pendingPayment = null;
+      await this.persistMeta();
+      if (this.meta.status === "active") {
+        await this.emit("payment_failed", {
+          ref: pending.ref,
+          recordId,
+          code: "payment_refunded",
+          message: paymentFailureMessage("payment_refunded"),
+        });
+        await this.emitQuestion();
+      }
+    }
+
+    for (const [ref, value] of Object.entries(this.state.answers)) {
+      const v = value as { method?: string; paymentRecordId?: string; refunded?: boolean } | null;
+      if (!v || typeof v !== "object" || v.method !== "gateway" || v.paymentRecordId !== recordId) continue;
+      if (v.refunded) return { accepted: true };
+      this.state.answers[ref] = { ...(v as object), refunded: true } as AnswerMap[string];
+      await this.persistMeta();
+      return { accepted: true };
+    }
+    return { accepted: Boolean(pending?.recordId === recordId) };
+  }
+
+  /**
+   * The gateway said this attempt did not go through. The card offers a retry.
+   *
+   * Only for the attempt on screen: a failure report for an older, superseded
+   * checkout says nothing about the one the respondent is looking at.
+   */
+  async paymentFailed(recordId: string, code: string): Promise<{ accepted: boolean }> {
+    return this.onPaymentChain(() => this.paymentFailedOnce(recordId, code));
+  }
+
+  private async paymentFailedOnce(recordId: string, code: string): Promise<{ accepted: boolean }> {
+    const ok = await this.ensureLoaded();
+    if (!ok || !this.meta || this.meta.status !== "active") return { accepted: false };
+    const pending = this.meta.pendingPayment;
+    if (!pending || pending.recordId !== recordId) return { accepted: false };
+    try {
+      this.meta.pendingPayment = null;
+      await this.persistMeta();
+      await this.emit("payment_failed", {
+        ref: pending.ref,
+        recordId,
+        code,
+        message: paymentFailureMessage(code),
+      });
+      await this.emitQuestion();
+      return { accepted: true };
+    } catch (err) {
+      console.error("payment_failed_emit_failed", { sessionId: this.meta.sessionId, recordId, ...errorInfo(err) });
+      return { accepted: false };
+    }
+  }
+
+  /**
+   * A payment, pretended — in a builder preview and nowhere else.
+   *
+   * A preview has to show an author the whole flow, including what happens
+   * after Pay, and must never take money: not from a live account, and not
+   * even a test-mode record in D1. So the settlement is synthesised in memory
+   * and goes through the same `settleFromRecord` a real one does, which is
+   * what keeps the preview from quietly drifting away from the live chat.
+   */
+  private async simulatePayment(ref: string | undefined): Promise<{ accepted: boolean; error?: string }> {
+    const meta = this.meta!;
+    if (meta.formVersionId !== "preview") return { accepted: false, error: "not_preview" };
+    const block = await this.currentBlock();
+    if (!block) return { accepted: false, error: "no_question" };
+    if (ref !== undefined && ref !== block.ref) return { accepted: false, error: "stale_ref" };
+    if (block.type !== "payment" || block.method !== "gateway") return { accepted: false, error: "not_payment" };
+
+    const amount = this.priceNow(block);
+    if (!amount.ok) {
+      await this.emit("validation_error", {
+        ref: block.ref,
+        code: "payment_unverified",
+        message: "This payment's amount doesn't resolve — check the amount or its variable.",
+      });
+      await this.emitQuestion();
+      return { accepted: true };
+    }
+    let provider: PaymentProvider = meta.pendingPayment?.provider ?? "stripe";
+    if (!meta.pendingPayment && block.paymentAccountId) {
+      provider =
+        (await providersForAccounts(this.env, meta.organizationId, [block.paymentAccountId])).get(block.paymentAccountId) ??
+        provider;
+    }
+    if (meta.pendingPayment) await this.clearPendingPayment();
+
+    const settled: SettledPayment = {
+      recordId: `rpay_preview_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`,
+      provider: PAYMENT_PROVIDERS.includes(provider) ? provider : "stripe",
+      providerPaymentId: null,
+      amountMinor: amount.amountMinor,
+      currency: amount.currency,
+      paidAt: Date.now(),
+    };
+    const result = await this.settleFromRecord(settled, block.ref, true);
+    return result.accepted ? { accepted: true } : { accepted: false, error: result.reason ?? "rejected" };
+  }
+
+  /** Retire the open checkout, if any. The record stays payable; see `supersedeRecord`. */
+  private async clearPendingPayment(): Promise<void> {
+    const pending = this.meta?.pendingPayment;
+    if (!pending) return;
+    this.meta!.pendingPayment = null;
+    await this.persistMeta();
+    await supersedeRecord(this.env, pending.recordId);
+  }
+
+  /**
+   * The alarm's last question to the gateway before abandoning a conversation
+   * with a checkout still open. True when it turned out to be paid.
+   *
+   * Once, and failure is not retried: the webhook and `settleLate` still cover
+   * a payment this misses, and an alarm that retried a down gateway would hold
+   * an abandoned conversation open indefinitely.
+   */
+  private async lastLookAtPayment(recordId: string): Promise<boolean> {
+    try {
+      const confirmed = await confirmPaymentRecord(this.env, recordId);
+      if (confirmed?.record.status === "paid" && !confirmed.mismatch) {
+        const settled = await this.settlePayment(recordId);
+        if (settled.accepted) return true;
+      }
+    } catch (err) {
+      console.error("payment_alarm_confirm_failed", { sessionId: this.meta?.sessionId, recordId, ...errorInfo(err) });
+    }
+    if (this.meta?.pendingPayment?.recordId === recordId) {
+      this.meta.pendingPayment = null;
+      await this.persistMeta();
+    }
+    return false;
+  }
+
+  /**
+   * A payment that already pays for this question at the price it asks now, as proof for
+   * `record`. Null for anything else — a manual payment, a refunded one, one for another price,
+   * nothing.
+   *
+   * Read from D1, not from the answer this session holds. That copy was the whole check once,
+   * and it is the wrong authority twice over: a refund reaches the D1 row, so the copy went on
+   * saying "paid" and the next Pay re-recorded it over the refund; and Start over empties the
+   * copy while the payment still stands, so the next Pay charged the respondent again. The
+   * answer's record id is looked at first because it is the likeliest; the response's settled
+   * payments are the fallback.
+   */
+  private async heldPayment(
+    block: Block,
+    amount: { amountMinor: number; currency: string },
+  ): Promise<SettledPayment | null> {
+    const meta = this.meta!;
+    const v = this.state.answers[block.ref] as
+      | {
+          method?: string;
+          status?: string;
+          provider?: PaymentProvider;
+          paymentRecordId?: string;
+          amount?: number;
+          currency?: string;
+          paidAt?: number;
+        }
+      | undefined;
+
+    // A simulated payment exists only in this preview's memory; there is no row to consult.
+    if (v?.method === "gateway" && v.status === "paid" && v.paymentRecordId?.startsWith("rpay_preview_")) {
+      if (v.amount === undefined || !v.currency || !v.provider) return null;
+      const minor = toMinorUnits(v.amount, v.currency);
+      if (minor !== amount.amountMinor || v.currency.toUpperCase() !== amount.currency) return null;
+      return {
+        recordId: v.paymentRecordId,
+        provider: v.provider,
+        providerPaymentId: null,
+        amountMinor: minor,
+        currency: v.currency,
+        paidAt: v.paidAt ?? Date.now(),
+      };
+    }
+
+    const submissionId =
+      meta.formVersionId === "preview" ? null : ((await this.ctx.storage.get<string>("submission_id")) ?? null);
+    const pays = (r: RespondentPaymentRow | null): r is RespondentPaymentRow =>
+      r !== null &&
+      r.status === "paid" &&
+      r.blockRef === block.ref &&
+      r.formId === meta.formId &&
+      (r.sessionId === meta.sessionId || (submissionId !== null && r.submissionId === submissionId)) &&
+      (r.failureReason === null || r.failureReason === "amount_changed") &&
+      r.amountMinor === amount.amountMinor &&
+      r.currency === amount.currency;
+
+    let record = v?.method === "gateway" && v.paymentRecordId ? await loadRecord(this.env, v.paymentRecordId) : null;
+    if (!pays(record)) {
+      record = await findSettledPayment(this.env, {
+        sessionId: meta.sessionId,
+        submissionId,
+        blockRef: block.ref,
+        reusableFor: amount,
+      });
+    }
+    if (!pays(record)) return null;
+
+    /*
+     * One question to the gateway before this counts as the answer again.
+     *
+     * The row says `paid` because that is what the gateway last said, and D1 only hears about a
+     * refund when a refund webhook arrives — which for Cashfree means only a SUCCESS refund, and
+     * a refund can sit PENDING there for days. So a respondent whose earlier payment the admin
+     * has just refunded, coming back to the question, had that refunded payment written as
+     * "Paid · verified" and the response completed on money that had gone back. Reuse is a tap on
+     * Pay, so this costs one call at a moment the respondent is already waiting.
+     */
+    const fresh = await this.confirmedForReuse(record);
+    if (!fresh) return null;
+
+    // The price came back to what was paid: it pays for the question again.
+    if (fresh.failureReason === "amount_changed") await clearAmountChanged(this.env, fresh.id);
+    return settledPaymentOf(fresh);
+  }
+
+  /**
+   * The record as the gateway has it right now, if it still pays for the question — null if the
+   * gateway says it does not: refunded, being refunded, part-refunded, or an amount that no
+   * longer matches. Refusing here only means the respondent is offered checkout again.
+   */
+  private async confirmedForReuse(record: RespondentPaymentRow): Promise<RespondentPaymentRow | null> {
+    if (record.id.startsWith("rpay_preview_")) return record;
+    try {
+      const confirmed = await confirmPaymentRecord(this.env, record.id);
+      if (!confirmed || confirmed.mismatch || confirmed.refundPending) return null;
+      if (confirmed.unverifiable) {
+        // Nobody can ask about it any more (the account is gone). The row is all there is, and
+        // it says paid; charging the respondent a second time would be the worse of the two.
+        return record;
+      }
+      const now = confirmed.record;
+      if (now.status !== "paid" || now.amountMinor !== record.amountMinor || now.currency !== record.currency) {
+        return null;
+      }
+      return now;
+    } catch (err) {
+      /*
+       * The gateway could not be reached. The row is the best evidence left, and it says paid —
+       * and the alternative here is opening a second checkout for a question this respondent has
+       * already paid for, which is a double charge rather than a stale answer.
+       */
+      console.error("payment_reuse_confirm_failed", {
+        sessionId: this.meta?.sessionId,
+        recordId: record.id,
+        ...errorInfo(err),
+      });
+      return record;
+    }
+  }
+
+  /**
+   * Answers that a changed price has left behind.
+   *
+   * A verified payment is an answer for one amount. When an answer that sets a variable amount
+   * changes — the pencil on "how many tickets", or a typed correction — the payment answer that
+   * was right for the old total is not an answer for the new one, and it cannot stay: the
+   * resume after an edit walks past every answered question, so a ₹100 payment for one ticket
+   * would have carried a response for ten straight to the end. So it is taken off the question
+   * (the session, the tally, the results row), its record is flagged for the admin to refund,
+   * and the respondent is told why they are about to be asked to pay again.
+   *
+   * Checked on every move forward, because that is the one moment an answer that sets the price
+   * may have just changed. The price is replayed from the answers — see `priceNow` — never read
+   * off the running variables, which move on every answer and would take a payment back off the
+   * moment it settled.
+   *
+   * A price that no longer resolves releases the answer too. "Doesn't resolve" for a variable
+   * amount means the answers now come to a total the form refuses to charge — above its
+   * `maxAmount`, below its `minAmount` — which is exactly the case those limits exist for; kept,
+   * the resume walked a response for fifty tickets past its one-ticket payment to the end. Only
+   * a doc with no variable named is left alone: an author's error, and nothing the respondent
+   * changed.
+   */
+  private async releaseStalePayments(): Promise<void> {
+    if (!this.doc || !this.meta) return;
+    this.dropUnverifiedGatewayAnswers();
+    for (const block of this.doc.blocks) {
+      if (block.type !== "payment" || block.method !== "gateway") continue;
+      const held = this.state.answers[block.ref] as
+        | { method?: string; status?: string; amount?: number; currency?: string; paymentRecordId?: string }
+        | undefined;
+      if (!held || held.method !== "gateway" || held.status !== "paid" || held.amount === undefined || !held.currency) {
+        continue;
+      }
+      /*
+       * A question the flow no longer reaches has no price to be stale against.
+       *
+       * `priceNow` falls back to the session's running variables when the replay never gets to
+       * the block, and those keep growing: `applyLogicRules` re-applies every matching
+       * `add_score` on each `resolveNext`. So a respondent who paid at a question and then took
+       * a branch that skips it had the payment released against a total that block never asked
+       * for, and was told to pay an amount nothing will ever charge them. Left alone: the answer
+       * is not in their way (the flow does not go there), and if the branch comes back the
+       * comparison below happens then.
+       */
+      if (
+        block.amountMode === "variable" &&
+        variablesReaching(this.doc, this.state.answers, this.state.hidden, block.ref) === null
+      ) {
+        continue;
+      }
+      const now = this.priceNow(block);
+      if (!now.ok && (block.amountMode !== "variable" || !block.amountVariable)) continue;
+      if (
+        now.ok &&
+        toMinorUnits(held.amount, held.currency) === now.amountMinor &&
+        held.currency.toUpperCase() === now.currency
+      ) {
+        continue;
+      }
+
+      console.warn("payment_answer_released", {
+        sessionId: this.meta.sessionId,
+        blockRef: block.ref,
+        recordId: held.paymentRecordId,
+        paidMinor: toMinorUnits(held.amount, held.currency),
+        askedMinor: now.ok ? now.amountMinor : null,
+        askedCode: now.ok ? null : now.code,
+      });
+      delete this.state.answers[block.ref];
+      this.collectedCount = Math.max(0, this.collectedCount - 1);
+      await this.persistMeta();
+      this.ctx.waitUntil(this.unprojectAnswer(block.ref));
+      if (held.paymentRecordId && !held.paymentRecordId.startsWith("rpay_preview_")) {
+        await markAmountChanged(this.env, held.paymentRecordId).catch((err: unknown) =>
+          console.error("payment_release_flag_failed", { recordId: held.paymentRecordId, ...errorInfo(err) }),
+        );
+      }
+      await this.emitMessage(
+        now.ok
+          ? `That changes "${block.title}" to ${formatAmount(now.amount, now.currency)}, so the ${formatAmount(held.amount, held.currency)} you paid earlier no longer covers it. You'll need to pay the new amount — the form's owner can refund the earlier payment.`
+          : `That changes "${block.title}" to a total this form can't take, so the ${formatAmount(held.amount, held.currency)} you paid earlier no longer covers it. Change the answer the total comes from to carry on — the form's owner can refund the earlier payment.`,
+      );
+    }
+  }
+
+  /**
+   * Answers on a verified payment question that no gateway ever confirmed.
+   *
+   * Answers arrive in a session without going through `validateAnswer` twice: a resume link and
+   * an identity adoption both put a stored answer map straight into state. So a draft answered
+   * while the block collected fees by UPI — `{status:"paid", method:"upi", verified:false}`, which
+   * is nothing but the respondent's own word — outlived the author switching that block to
+   * verified checkout, and `replayState` walked the resumed conversation straight past the Pay
+   * card to the end. Dropped, the question is simply unanswered and gets asked properly.
+   *
+   * Not persisted here: every caller is about to persist, or to replay and then persist.
+   */
+  private dropUnverifiedGatewayAnswers(): void {
+    if (!this.doc) return;
+    for (const block of this.doc.blocks) {
+      if (block.type !== "payment" || block.method !== "gateway") continue;
+      const held = this.state.answers[block.ref] as { method?: string; verified?: boolean } | undefined;
+      if (held === undefined || held === null) continue;
+      if (typeof held === "object" && held.method === "gateway" && held.verified === true) continue;
+      console.warn("payment_unverified_answer_dropped", {
+        sessionId: this.meta?.sessionId,
+        blockRef: block.ref,
+        method: typeof held === "object" ? (held.method ?? null) : null,
+      });
+      delete this.state.answers[block.ref];
+      this.collectedCount = Math.max(0, this.collectedCount - 1);
+    }
+  }
+
+  /**
+   * What a verified payment question charges, worked out from this session's answers.
+   *
+   * Every reading of the price goes through here — Pay, the re-check at settlement, the release
+   * of a stale answer, the preview's simulation — so the four cannot disagree about it. The
+   * variables are the ones the flow holds on reaching the question when the answers are
+   * replayed; see `variablesReaching` for why the session's running copy is not used. The
+   * running copy stands in only when the replay never reaches the question at all.
+   */
+  private priceNow(
+    block: Parameters<typeof resolvePaymentAmount>[0] & { ref: string },
+  ): ReturnType<typeof resolvePaymentAmount> {
+    const variables =
+      block.amountMode === "variable" && this.doc
+        ? (variablesReaching(this.doc, this.state.answers, this.state.hidden, block.ref) ?? this.state.variables)
+        : this.state.variables;
+    return resolvePaymentAmount(block, variables);
+  }
+
+  /**
+   * A phone number this respondent already gave, for gateways that insist on
+   * one (Cashfree). A phone sign-in is preferred by the caller; this covers a
+   * Google sign-in on a form that asked for a number anyway.
+   */
+  private answeredPhone(): string | null {
+    for (const block of this.doc?.blocks ?? []) {
+      const value = this.state.answers[block.ref];
+      if (block.type === "phone" && typeof value === "string" && value) return value;
+      if (block.type === "contact_info" && value && typeof value === "object") {
+        const phone = (value as { phone?: unknown }).phone;
+        if (typeof phone === "string" && phone) return phone;
+      }
+    }
+    return null;
+  }
+
+  /** Which gateway a verified payment block's account is, resolved once per account per isolate. */
+  private paymentProviders = new Map<string, PaymentProvider | null>();
+
+  /**
+   * `toPublicBlock`, plus the one fact only D1 knows: which gateway checkout
+   * opens on, so the card can say "Pay with Razorpay" before anyone presses it.
+   */
+  private async publicBlockOf(block: Block): Promise<PublicBlock> {
+    const pub = toPublicBlock(block);
+    if (block.type !== "payment" || block.method !== "gateway" || !block.paymentAccountId || !this.meta) return pub;
+    let provider = this.paymentProviders.get(block.paymentAccountId);
+    if (provider === undefined) {
+      provider =
+        (await providersForAccounts(this.env, this.meta.organizationId, [block.paymentAccountId])).get(
+          block.paymentAccountId,
+        ) ?? null;
+      this.paymentProviders.set(block.paymentAccountId, provider);
+    }
+    if (provider) pub.paymentProvider = provider;
+    return pub;
+  }
+
   /** Cold hydration after eviction. */
   private async ensureLoaded(): Promise<boolean> {
     if (this.loaded) return true;
@@ -1375,9 +2721,47 @@ export class SessionDO extends DurableObject<Bindings> {
   override async alarm(): Promise<void> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta) return;
-    if (this.meta.status === "active") {
-      await this.abandon("idle_timeout");
+    if (this.meta.status !== "active") return;
+
+    /*
+     * Idle is not the same as gone while a checkout is open.
+     *
+     * Somebody on a bank's 3-D Secure page, or waiting on a UPI approval on
+     * their phone, sends this conversation nothing at all — and abandoning it
+     * at the half-hour would finalise the response seconds before their money
+     * lands, leaving the payment to the late path for no reason. So the alarm
+     * keeps waking until the checkout's own expiry plus a grace period, and
+     * then asks the gateway once before giving up.
+     */
+    const pending = this.meta.pendingPayment;
+    if (pending) {
+      const graceEnd = pending.expiresAt + PAYMENT_GRACE_MS;
+      if (Date.now() < graceEnd) {
+        await this.ctx.storage.setAlarm(graceEnd);
+        return;
+      }
+      if (await this.lastLookAtPayment(pending.recordId)) {
+        // Settled and moved on; they may yet come back to finish the rest.
+        await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
+        return;
+      }
+      /*
+       * That last look is a D1 read and a call to the gateway, and this object takes other
+       * requests while it waits on them. The respondent coming back in that window — a typed
+       * answer, or Pay opening a fresh checkout — is a conversation that is no longer idle, and
+       * abandoning it anyway closed the form under somebody who had just paid into it. Whoever
+       * moved also moved the alarm, so a later alarm is the signal that they did.
+       */
+      const alarmAt = await this.ctx.storage.getAlarm();
+      if (
+        this.meta?.status !== "active" ||
+        (this.meta.pendingPayment && this.meta.pendingPayment.recordId !== pending.recordId) ||
+        (alarmAt !== null && alarmAt > Date.now())
+      ) {
+        return;
+      }
     }
+    await this.abandon("idle_timeout");
   }
 
   // ────────────────────────── SSE ──────────────────────────
@@ -1536,13 +2920,15 @@ export class SessionDO extends DurableObject<Bindings> {
       if (run) data = { ...(data as object), text: run.text };
     }
     const evt: SSEEnvelope = { v: 1, seq: ++this.seq, ts: Date.now(), type, data };
-    // The five events that put the respondent back in control. See `turnHandedBack`.
+    // The events that put the respondent back in control. See `turnHandedBack`.
+    // An open checkout card is one: the next move is theirs, in the gateway.
     if (
       type === "question" ||
       type === "ending" ||
       type === "auth_required" ||
       type === "verify_required" ||
-      type === "review"
+      type === "review" ||
+      type === "payment_required"
     ) {
       this.turnHandedBack = true;
     }
@@ -2368,6 +3754,13 @@ export class SessionDO extends DurableObject<Bindings> {
      * owner can read — and hand it to the agent as an answer besides.
      */
     if (this.meta.pendingVerify) return this.handlePendingVerify(input);
+    /*
+     * Typing while a checkout is open is talking about the checkout. Only text:
+     * a structured answer for the payment question still goes to `record`,
+     * where `validateAnswer` refuses it as `payment_unverified` — which is the
+     * whole point of that code.
+     */
+    if (this.meta.pendingPayment && input.type === "text") return this.handlePendingPaymentText(input.text);
 
     if (input.type === "text") {
       const msgId = await this.appendMessage("user", input.text);
@@ -2549,7 +3942,7 @@ export class SessionDO extends DurableObject<Bindings> {
 
     if (count >= agent.escalateAfterInvalid) {
       await this.emitMessage(escalateText(block));
-      await this.emit("escalate_ui", { ref: block.ref, spec: toPublicBlock(block), reason: "repeated_invalid" });
+      await this.emit("escalate_ui", { ref: block.ref, spec: await this.publicBlockOf(block), reason: "repeated_invalid" });
       // Escalating used to be the one branch here that did not re-state the
       // question. The client arms its controls off the `question` event, so
       // the respondent reached the step meant to make answering *easier* and
@@ -2595,8 +3988,18 @@ export class SessionDO extends DurableObject<Bindings> {
     return Object.keys(held).map(contactFieldPhrase);
   }
 
-  private async record(block: Block, raw: unknown): Promise<{ accepted: boolean; error?: string }> {
-    const result = validateAnswer(block, raw);
+  /**
+   * `opts.settledPayment` is the server's own payment record, and only
+   * `settleFromRecord` passes one. Every other caller — the agent's tools, a
+   * structured answer, free text — reaches a verified payment block without it
+   * and is refused, whatever it claims.
+   */
+  private async record(
+    block: Block,
+    raw: unknown,
+    opts: ValidateOptions = {},
+  ): Promise<{ accepted: boolean; error?: string }> {
+    const result = validateAnswer(block, raw, opts);
 
     /**
      * Uniqueness, checked here rather than inside `validateAnswer`.
@@ -2833,6 +4236,7 @@ export class SessionDO extends DurableObject<Bindings> {
      * edited question — answering it, skipping it — resumes the same way, and
      * so a bookmark can never outlive the edit that set it.
      */
+    await this.releaseStalePayments();
     let next = target;
     if (this.editingRef !== null && fromRef !== undefined) {
       const wasEditing = this.editingRef === fromRef;
@@ -3122,7 +4526,7 @@ export class SessionDO extends DurableObject<Bindings> {
   /** The same, for skip / stop / restart / edit / submit / undo. */
   async actionSync(
     input: {
-      action: "skip" | "stop" | "restart" | "edit" | "submit" | "resend_code" | "change_answer" | "undo_screen_out";
+      action: SessionAction;
       ref?: string;
     },
     opts: { deadlineMs?: number } = {},
@@ -3248,7 +4652,7 @@ export class SessionDO extends DurableObject<Bindings> {
 
     return {
       status: await this.getStatus(),
-      question: block ? toPublicBlock(block) : null,
+      question: block ? await this.publicBlockOf(block) : null,
       // The projection, not the raw ending: the stored object carries internal
       // ids and skips the form-level redirect default.
       ending: ending && this.doc ? this.projectEnding(ending) : null,
@@ -3322,7 +4726,7 @@ export class SessionDO extends DurableObject<Bindings> {
       }
     }
     if (!block) return;
-    const pub = toPublicBlock(block);
+    const pub = await this.publicBlockOf(block);
     const prefill = this.partials.get(block.ref);
     await this.emit("question", {
       messageId: crypto.randomUUID(),
@@ -3408,13 +4812,24 @@ export class SessionDO extends DurableObject<Bindings> {
       await this.emitVerifyRequired(false);
       return { ok: true };
     }
+    /*
+     * The same for an open checkout: a reload comes back to the Pay card with
+     * its launch payload, not to a question whose only answer is that card.
+     * No message — the one saying checkout opened is already in the replay.
+     * An expired checkout is not re-offered; the question comes back, and Pay
+     * on it opens a new one.
+     */
+    if (this.meta.pendingPayment) {
+      await this.emitPaymentRequired();
+      return { ok: true };
+    }
     // `emitQuestion` rebuilds `currentRef` when a dead turn left it empty.
     await this.emitQuestion();
     return { ok: true };
   }
 
   async action(input: {
-    action: "skip" | "stop" | "restart" | "edit" | "submit" | "resend_code" | "change_answer" | "undo_screen_out";
+    action: SessionAction;
     /** For `edit`: the block to go back and re-answer. */
     ref?: string;
   }): Promise<{ accepted: boolean; error?: string }> {
@@ -3449,7 +4864,7 @@ export class SessionDO extends DurableObject<Bindings> {
   }
 
   private async runAction(input: {
-    action: "skip" | "stop" | "restart" | "edit" | "submit" | "resend_code" | "change_answer" | "undo_screen_out";
+    action: SessionAction;
     ref?: string;
   }): Promise<{ accepted: boolean; error?: string }> {
     const ok = await this.ensureLoaded();
@@ -3489,12 +4904,47 @@ export class SessionDO extends DurableObject<Bindings> {
     }
 
     /*
+     * The checkout's own buttons. Like the code step's, they refuse politely
+     * when there is nothing to act on rather than inventing a state: a stale
+     * tab pressing "try again" after the payment settled must not reopen a
+     * question that has been answered.
+     */
+    if (input.action === "retry_payment" || input.action === "cancel_payment") {
+      const pending = this.meta.pendingPayment;
+      if (!pending) {
+        // Nothing open. Put whatever is current back on screen so the device
+        // that pressed it settles its turn, and say it did nothing.
+        await this.emitQuestion();
+        return { accepted: false, error: "no_pending_payment" };
+      }
+      if (input.ref !== undefined && input.ref !== pending.ref) return { accepted: false, error: "stale_ref" };
+      await this.clearPendingPayment();
+      if (input.action === "cancel_payment") {
+        await this.emit("payment_failed", {
+          ref: pending.ref,
+          recordId: pending.recordId,
+          code: "payment_cancelled",
+          message: "Payment cancelled.",
+        });
+      }
+      await this.emitQuestion();
+      return { accepted: true };
+    }
+    if (input.action === "simulate_payment") return this.simulatePayment(input.ref);
+
+    /*
      * Every other way out of the code step abandons it. Leaving `pendingVerify`
      * set would read the next turn as a code — so skipping the question, going
      * back to edit another answer, or starting over would each leave the
      * conversation quietly waiting for six digits nobody is going to type.
      */
     if (this.meta.pendingVerify) await this.cancelVerification();
+    /*
+     * And a checkout nobody is going to finish. Retired rather than left
+     * `created`, so an idempotent Pay on the question they come back to opens
+     * a fresh one — but still allowed to land if the old tab pays it anyway.
+     */
+    if (this.meta.pendingPayment) await this.clearPendingPayment();
 
     if (input.action === "skip") {
       const block = await this.currentBlock();
@@ -3847,6 +5297,23 @@ export class SessionDO extends DurableObject<Bindings> {
      * the code itself comes back as an ordinary message.
      */
     pendingVerification: { ref: string; channel: "sms" | "email"; sentTo: string; sentAt: number } | null;
+    /**
+     * An open checkout, for a caller with no stream — the same fields
+     * `payment_required` carries, so a headless integration can open the
+     * gateway's checkout itself and knows not to send the payment question an
+     * answer (which would be refused as `payment_unverified`).
+     */
+    pendingPayment: {
+      ref: string;
+      recordId: string;
+      provider: PaymentProvider;
+      amountMinor: number;
+      amount: number;
+      currency: string;
+      display: string;
+      launch: CheckoutLaunch;
+      expiresAt: number;
+    } | null;
   } | null> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta) return null;
@@ -3880,6 +5347,19 @@ export class SessionDO extends DurableObject<Bindings> {
             channel: this.meta.pendingVerify.channel,
             sentTo: this.meta.pendingVerify.sentTo,
             sentAt: this.meta.pendingVerify.sentAt,
+          }
+        : null,
+      pendingPayment: this.meta.pendingPayment
+        ? {
+            ref: this.meta.pendingPayment.ref,
+            recordId: this.meta.pendingPayment.recordId,
+            provider: this.meta.pendingPayment.provider,
+            amountMinor: this.meta.pendingPayment.amountMinor,
+            amount: this.meta.pendingPayment.amount,
+            currency: this.meta.pendingPayment.currency,
+            display: this.meta.pendingPayment.display,
+            launch: this.meta.pendingPayment.launch,
+            expiresAt: this.meta.pendingPayment.expiresAt,
           }
         : null,
     };
@@ -4321,6 +5801,106 @@ export class SessionDO extends DurableObject<Bindings> {
     return submissionId;
   }
 
+}
+
+/**
+ * The refusals a builder preview answers with Simulate. Not a sign-in, a stale question, an
+ * existing payment or a closed session — each of those has its own way forward that simulating
+ * would skip past.
+ */
+const SIMULATABLE_REFUSALS = new Set<StartPaymentErrorCode>([
+  "payment_unavailable",
+  "plan_required",
+  "preview_live_account",
+  "too_many_attempts",
+  /*
+   * Sign-in included, and only here.
+   *
+   * The gate is real for a respondent and the session still refuses to open a
+   * checkout without an identity. But the preview is the author walking their
+   * own form, and nobody signs into their own preview: lint forces sign-in on
+   * for a gateway block, so without this every author who presses Pay in the
+   * preview meets the sign-in card and can never see the payment step they
+   * just built. Simulating needs no identity, so offer that instead.
+   */
+  "sign_in_required",
+]);
+
+function refuse(code: StartPaymentErrorCode, message: string): StartPaymentResult {
+  return { ok: false, code, message };
+}
+
+/** What the Pay card says about an attempt that did not become the answer. */
+function paymentFailureMessage(code: string): string {
+  switch (code) {
+    case "payment_expired":
+      return "That checkout expired before the payment went through. Tap Pay to try again.";
+    case "payment_duplicate":
+      return "This was already paid for, so that payment wasn't counted — the form's owner can refund it. Tap Pay to carry on.";
+    case "payment_refunded":
+      return "That payment has been refunded, so this still needs paying. Tap Pay to try again.";
+    case "payment_amount_mismatch":
+      return "That payment didn't match what this question asks, so it wasn't counted — the form's owner can see it and refund it if it went through. Tap Pay to try again.";
+    default:
+      return "That payment didn't go through. Tap Pay to try again.";
+  }
+}
+
+/**
+ * The variables as they stand when the flow, replayed from the answers, reaches `ref` — before
+ * that question's own answer applies any rule. Null when the replayed flow never gets there.
+ *
+ * Why a payment's price is read from here and not from the session's running variables: those
+ * are not a function of the answers. `applyLogicRules` re-applies every matching `set_variable`
+ * and `add_score` on each `resolveNext`, so an `add_score` whose condition an earlier answer
+ * met adds itself again on every question after it — including the payment question's own
+ * answer. A ₹1,500 checkout for "workshop: yes" was settled, `record` ran `resolveNext`, the
+ * total became ₹2,000, and the very next step took the verified payment back off as stale.
+ * Replaying stops at the question, so the price is the one it was asked at, however many
+ * questions have been answered since and however an edit has walked the flow.
+ *
+ * Unlike `replayState`, an unanswered question is walked past rather than stopped at: a
+ * skipped optional question holds no answer, and the live flow went past it just the same.
+ */
+function variablesReaching(
+  doc: FormDoc,
+  answers: AnswerMap,
+  hidden: Record<string, string>,
+  ref: string,
+): Record<string, unknown> | null {
+  const state: EvalState = { answers: {}, variables: {}, hidden };
+  for (const v of doc.variables) state.variables[v.name] = v.initial;
+  let cursor = resolveNext(doc, null, state);
+  // As `replayState`: a ceiling no legitimate flow reaches, against a `goto` cycle.
+  const ceiling = doc.blocks.length * 2 + 2;
+  for (let guard = 0; guard < ceiling && cursor.kind === "block"; guard += 1) {
+    const block = cursor.block;
+    if (block.ref === ref) return state.variables;
+    const stored = answers[block.ref];
+    if (stored !== undefined && block.type !== "welcome" && block.type !== "statement") {
+      state.answers[block.ref] = stored;
+    }
+    cursor = resolveNext(doc, block.ref, state);
+  }
+  return null;
+}
+
+/**
+ * Where a redirect checkout sends the respondent back to.
+ *
+ * The web app's return page, which finds the conversation again from these
+ * parameters and nudges confirm. The record id is ours and the session id is
+ * already in the respondent's own URL; neither is a credential — confirming
+ * still needs the respondent token the page holds.
+ */
+function paymentReturnUrls(
+  origin: string,
+  p: { recordId: string; sessionId: string; slug: string },
+): { returnUrl: string; cancelUrl: string } {
+  const q = new URLSearchParams({ cf_pay: p.recordId, slug: p.slug, session: p.sessionId });
+  const returnUrl = `${origin.replace(/\/$/, "")}/pay/return?${q.toString()}`;
+  q.set("cancelled", "1");
+  return { returnUrl, cancelUrl: `${origin.replace(/\/$/, "")}/pay/return?${q.toString()}` };
 }
 
 function nextInSequence(doc: FormDoc, ref: string): string | null {

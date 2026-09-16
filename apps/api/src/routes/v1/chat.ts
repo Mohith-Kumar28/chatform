@@ -10,6 +10,7 @@ import { idempotent } from "../../lib/idempotency.js";
 import { openSession, type FormRow } from "../../lib/open-session.js";
 import type { SessionDO } from "../../do/session-do.js";
 import { mountRespondentAuth, type AuthRouter } from "../respondent-auth.js";
+import { confirmPaymentForSession, providersForAccounts, startPaymentForSession } from "../../lib/payments/service.js";
 
 /**
  * The conversational API, headless.
@@ -190,6 +191,12 @@ const createSessionRoute = (path: string) =>
     const current = status?.currentRef
       ? opened.runtimeDoc.blocks.find((b) => b.ref === status.currentRef)
       : null;
+    const question = current ? toPublicBlock(current) : null;
+    // The same provider every later `question` carries; see `publicBlockOf` in the session object.
+    if (question && current?.type === "payment" && current.method === "gateway" && current.paymentAccountId) {
+      const provider = (await providersForAccounts(c.env, orgId, [current.paymentAccountId])).get(current.paymentAccountId);
+      if (provider) question.paymentProvider = provider;
+    }
 
     return c.json({
       sessionId: opened.sessionId,
@@ -203,7 +210,7 @@ const createSessionRoute = (path: string) =>
       expiresAt: opened.expiresAt,
       streamUrl: `/v1/sessions/${opened.sessionId}/events`,
       greeting,
-      question: current ? toPublicBlock(current) : null,
+      question,
     });
   },
 );
@@ -243,6 +250,15 @@ async function respondToTurn(
      * answer of its own.
      */
     pendingVerification: result.status?.pendingVerification ?? null,
+    /**
+     * Set when the turn ended on an open checkout. The payment question cannot
+     * be answered with a message — `payment_unverified` is all that comes back
+     * — so a caller opens `launch` with the gateway, or calls `…/payments/…/confirm`,
+     * and the session moves on once the gateway says it was paid. The
+     * `payment_required`, `payment_settled` and `payment_failed` events are in
+     * `events` as they happened.
+     */
+    pendingPayment: result.status?.pendingPayment ?? null,
     events: result.events,
     sinceSeq: result.sinceSeq,
   };
@@ -306,6 +322,10 @@ const actionsRoute = (base: string) =>
        *
        * `undo_screen_out` is the only action a finished session accepts: it
        * takes back a refusal and reopens the answer that caused it.
+       *
+       * `retry_payment` and `cancel_payment` drop an open checkout and put the
+       * payment question back. `simulate_payment` is refused outside a builder
+       * preview, which a key can never open.
        */
       action: z.enum([
         "skip",
@@ -316,6 +336,9 @@ const actionsRoute = (base: string) =>
         "resend_code",
         "change_answer",
         "undo_screen_out",
+        "retry_payment",
+        "cancel_payment",
+        "simulate_payment",
       ]),
       /**
        * For `edit`: the question to go back to — one already answered, or the
@@ -423,6 +446,70 @@ const eventsRoute = (base: string) =>
   },
 );
 
+/**
+ * Open a verified checkout on the form admin's own gateway for the payment
+ * question the session is on — the headless Pay button.
+ *
+ * The same contract as the hosted page's: the amount comes from the session,
+ * never the caller, and the respondent must already be signed in through
+ * `…/auth/*`. Hand `launch` to the gateway's own checkout in the respondent's
+ * browser; the session settles when the gateway confirms, not when you say so.
+ */
+const startPaymentRoute = (base: string) =>
+  chatRouter.post(
+  `${base}/payments`,
+  requireScope("session", "write"),
+  validator(
+    "json",
+    z.object({
+      ref: z.string().min(1).max(64),
+      /** Only after a `phone_required` refusal: an E.164 number for the gateway's receipt. */
+      phone: z.string().min(1).max(32).optional(),
+    }),
+  ),
+  describeRoute({
+    tags: ["v1"],
+    summary: "Open a verified checkout for the current payment question",
+    responses: {
+      200: { description: "Checkout opened, or the one already open" },
+      402: { description: "The organization's plan does not include payments" },
+      403: { description: "The respondent has to sign in first (`sign_in_required`)" },
+      409: {
+        description:
+          "Not payable right now: `stale_ref`, `payment_unavailable`, `preview_live_account`, `live_account_in_test_mode` (a `*_test_` key on a live account), `already_paid`",
+      },
+      422: { description: "`phone_required`: the gateway needs a number for the receipt — start again with `phone`" },
+      429: { description: "`too_many_attempts`" },
+    },
+  }),
+  async (c) => {
+    const sid = c.req.param("sid")!;
+    const { ref, phone } = c.req.valid("json");
+    const result = await startPaymentForSession(c.env, sid, ref, { phone });
+    return c.json(result.body as object, result.status);
+  },
+);
+
+const confirmPaymentRoute = (base: string) =>
+  chatRouter.post(
+  `${base}/payments/:recordId/confirm`,
+  requireScope("session", "write"),
+  describeRoute({
+    tags: ["v1"],
+    summary: "Re-check a checkout with the gateway, and settle it if it was paid",
+    responses: {
+      200: { description: "Where the payment stands: `{ recordId, status, settled }`" },
+      404: { description: "No such payment on this session" },
+      502: { description: "The gateway could not be reached" },
+    },
+  }),
+  async (c) => {
+    const sid = c.req.param("sid")!;
+    const result = await confirmPaymentForSession(c.env, sid, c.req.param("recordId") ?? "");
+    return c.json(result.body as object, result.status);
+  },
+);
+
 const rotateRoute = (base: string) =>
   chatRouter.post(
   `${base}/token/rotate`,
@@ -460,6 +547,8 @@ for (const base of SESSION_BASES) {
   stateRoute(base);
   eventsRoute(base);
   rotateRoute(base);
+  startPaymentRoute(base);
+  confirmPaymentRoute(base);
   mountRespondentAuth(chatRouter as unknown as AuthRouter, {
     base,
     stub: (env, sessionId) => stub(env, sessionId),

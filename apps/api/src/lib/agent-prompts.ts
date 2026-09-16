@@ -227,6 +227,21 @@ export function affordanceNote(block: Block): string | null {
       return block.verify
         ? `Their answer will be confirmed with a 6-digit code sent to it before it counts. Ask for the ${block.type === "phone" ? "number" : "address"} and stop — do not move on to the next question in the same message, and do not explain the code step: the form says so itself the moment the code goes out.`
         : null;
+    /**
+     * A verified payment is the one answer the agent cannot give.
+     *
+     * The answer is written by the server from the gateway's own record, and
+     * `validateAnswer` refuses anything else as `payment_unverified` — so a
+     * model that tries `record_answer` on "done, I paid" just burns a turn and
+     * then has to explain a refusal. Worse is the model that believes them and
+     * says "thanks, payment received": the respondent stops, and nothing was.
+     * A manual link or UPI payment has no such rule; its own "I've paid" button
+     * records what they say, which is all it ever claims.
+     */
+    case "payment":
+      return block.method === "gateway"
+        ? "A Pay button is ALREADY on screen under your message; it opens a secure checkout. Say briefly what the payment is for and stop. You cannot take, record or confirm this payment: never call record_answer for it, never treat \"I paid\" as payment, and never say it went through — the form moves on by itself the moment the gateway confirms it. If they say they have paid, point them back to the Pay button."
+        : null;
     default:
       return null;
   }

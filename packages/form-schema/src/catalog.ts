@@ -134,8 +134,15 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
   signature: { summary: "A signature drawn with a finger or mouse, for agreements." },
 
   payment: {
+    /*
+     * Only the manual methods are offered here, and that is deliberate. A
+     * verified `gateway` payment needs a connected account and sign-in on the
+     * form — both decisions for the author in the builder, never for a model
+     * drafting a document it cannot connect anything to. `normalizeBlock` only
+     * ever builds `link` or `upi` from a draft's `method=`.
+     */
     summary:
-      "Takes money. Use this whenever the request mentions a price, a fee, a ticket, a deposit or a UPI id — never a text question asking them to confirm they paid.",
+      "Takes money. Use this whenever the request mentions a price, a fee, a ticket, a deposit or a UPI id — never a text question asking them to confirm they paid. Verified checkout on the author's own gateway is set up by the author in the builder, never in a draft.",
     config:
       "method=upi with upi=<vpa like name@bank>, OR method=link with url=<checkout page>; amount=<number>, currency=<3-letter code, INR for rupees>",
     configKeys: ["method", "upi", "upiid", "vpa", "url", "link", "payee", "amount", "currency"],

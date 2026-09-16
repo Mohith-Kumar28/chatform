@@ -379,6 +379,18 @@ export async function pruneTestData(env: Bindings, limit = 500): Promise<number>
   )
     .bind(cutoff, limit)
     .run();
+  /*
+    Checkout attempts made from test sessions and previews. They cascade with their form, not
+    with the chat session above, so they need their own pass — and a test payment is exactly as
+    disposable as the test response it belonged to.
+  */
+  await env.DB.prepare(
+    `DELETE FROM respondent_payments WHERE id IN (
+       SELECT id FROM respondent_payments WHERE is_test = 1 AND created_at < ? LIMIT ?
+     )`,
+  )
+    .bind(cutoff, limit)
+    .run();
   return res.meta?.changes ?? 0;
 }
 
@@ -503,3 +515,9 @@ export async function sweepStuckKnowledgeIngest(env: Bindings, limit = 25): Prom
 }
 
 export { pruneIdempotencyKeys };
+
+/**
+ * Connected gateway accounts whose OAuth tokens expire soon, renewed ahead of time. Lives with the
+ * accounts it reads — see `sweepPaymentTokens` in `lib/payments/accounts.ts`.
+ */
+export { sweepPaymentTokens } from "./payments/accounts.js";

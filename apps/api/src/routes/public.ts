@@ -18,12 +18,13 @@ import { canonicalZone } from "../lib/quiet-hours.js";
 import { findDeviceResumable } from "../lib/respondent-history.js";
 import { reopenAbandonedResponse } from "../lib/submissions.js";
 import { mountRespondentAuth } from "./respondent-auth.js";
-import { sessionStartLimit, respondentAuthLimit } from "../lib/ratelimit.js";
+import { sessionStartLimit, respondentAuthLimit, respondentPaymentLimit } from "../lib/ratelimit.js";
 import { getEntitlements, meter, checkQuota } from "../lib/entitlements.js";
 import { brandingHiddenFor, clampForRuntime } from "../lib/doc-entitlements.js";
 import { verifyEmailToken } from "../lib/signed-url.js";
 import { cancelFollowUps, cancelFollowUpsForAddress, recordFollowUpClick, suppress } from "../lib/followups.js";
 import type { RespondentIdentity } from "@repo/form-schema";
+import { confirmPaymentForSession, providersForAccounts, startPaymentForSession } from "../lib/payments/service.js";
 
 const sessionsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -43,6 +44,15 @@ const sessionsRouter = new Hono<{ Bindings: Bindings }>();
 sessionsRouter.use("/forms/:slug/sessions", sessionStartLimit);
 sessionsRouter.use("/sessions/:id/auth/*", respondentAuthLimit);
 sessionsRouter.use("/sessions/:id/verify/*", respondentAuthLimit);
+/**
+ * Opening a checkout is a call to the form admin's gateway, on the admin's
+ * rate limit and — for an OAuth account — possibly a token refresh as well.
+ * Counted per respondent token rather than per address; see `respondentPaymentLimit`.
+ * Confirm is deliberately not in it: a page polling confirm from a Stripe tab
+ * it cannot see into is legitimate, and the route itself declines to ask the
+ * gateway more than once every two seconds.
+ */
+sessionsRouter.use("/sessions/:id/payments", respondentPaymentLimit);
 
 const createSessionSchema = z.object({
   turnstileToken: z.string().optional(),
@@ -124,6 +134,11 @@ const actionSchema = z.object({
    * `undo_screen_out` is the only action a finished session accepts. It takes
    * back a refusal and reopens the answer that caused it — see
    * `undoScreenOut` in the session object.
+   *
+   * `retry_payment` and `cancel_payment` apply while a verified checkout is
+   * open: drop it and put the question back, with or without a "cancelled"
+   * notice. `simulate_payment` settles a payment without a gateway, and is
+   * refused anywhere but a builder preview.
    */
   action: z.enum([
     "skip",
@@ -134,6 +149,9 @@ const actionSchema = z.object({
     "resend_code",
     "change_answer",
     "undo_screen_out",
+    "retry_payment",
+    "cancel_payment",
+    "simulate_payment",
   ]),
   /**
    * Required for `edit`: which question to go back to. Optional for `skip`: the
@@ -248,6 +266,24 @@ sessionsRouter.get(
     // turned into a URL, so every share card came out blank.
     assetUrl: (key) => `${new URL(c.req.url).origin}/p/assets/${assetIdFromKey(key)}`,
   });
+  /*
+   * Which gateway each verified payment block checks out on. The document names
+   * an account id, which is the org's own business and never published; the
+   * provider it resolves to is what lets the page say "Pay with Razorpay" and
+   * load the right script before anyone presses the button. `config.blocks` is
+   * `doc.blocks` projected in order, so the two index together.
+   */
+  const accountIds = doc.blocks.flatMap((b) =>
+    b.type === "payment" && b.method === "gateway" && b.paymentAccountId ? [b.paymentAccountId] : [],
+  );
+  if (accountIds.length > 0) {
+    const providers = await providersForAccounts(c.env, formRow.organization_id, accountIds);
+    config.blocks = config.blocks.map((pub, i) => {
+      const b = doc.blocks[i];
+      const provider = b?.type === "payment" && b.paymentAccountId ? providers.get(b.paymentAccountId) : undefined;
+      return provider ? { ...pub, paymentProvider: provider } : pub;
+    });
+  }
   return c.json(config);
 });
 
@@ -570,6 +606,113 @@ sessionsRouter.post("/sessions/:id/actions", zValidator("json", actionSchema), a
   if (!result.accepted) return c.json({ error: { code: result.error ?? "rejected", message: "Action rejected" } }, 400);
   return c.json({ ok: true }, 202);
 });
+
+const startPaymentSchema = z.object({
+  ref: z.string().min(1).max(64),
+  /**
+   * A number for the receipt, sent only after a `phone_required` refusal: the
+   * gateway needs one (Cashfree) and neither the sign-in nor an earlier answer
+   * gave it. E.164, e.g. `+919876543210`.
+   */
+  phone: z.string().min(1).max(32).optional(),
+});
+
+const PaymentError = z.object({
+  error: z.object({
+    code: z.enum([
+      "sign_in_required",
+      "plan_required",
+      "payment_unavailable",
+      "stale_ref",
+      "too_many_attempts",
+      "preview_live_account",
+      "already_paid",
+      "session_not_found",
+      "session_closed",
+      "phone_required",
+      "live_account_in_test_mode",
+    ]),
+    message: z.string(),
+    /** A builder preview that cannot take this payment for real: offer Simulate instead. */
+    preview: z.boolean().optional(),
+  }),
+});
+
+/**
+ * Press Pay: open a checkout on the form admin's own gateway account for the
+ * payment question the respondent is on.
+ *
+ * The amount is not in the body and could not be: the session resolves it
+ * from its own variables, and the browser only ever learns it back in the
+ * `launch` payload. The same checkout arrives on the stream as
+ * `payment_required`; a second press returns the same one.
+ */
+sessionsRouter.post(
+  "/sessions/:id/payments",
+  describeRoute({
+    tags: ["public"],
+    summary: "Open a verified checkout for the current payment question",
+    responses: {
+      200: {
+        description: "Checkout opened (or the open one, again)",
+        content: {
+          "application/json": {
+            schema: resolver(z.object({ recordId: z.string(), launch: z.unknown(), expiresAt: z.number() })),
+          },
+        },
+      },
+      402: { description: "The form's plan does not include payments", content: { "application/json": { schema: resolver(PaymentError) } } },
+      403: { description: "The respondent has to sign in first", content: { "application/json": { schema: resolver(PaymentError) } } },
+      409: { description: "Not payable right now", content: { "application/json": { schema: resolver(PaymentError) } } },
+      422: {
+        description: "The gateway needs a phone number for the receipt: start again with `phone`",
+        content: { "application/json": { schema: resolver(PaymentError) } },
+      },
+      429: { description: "Too many attempts", content: { "application/json": { schema: resolver(PaymentError) } } },
+    },
+  }),
+  zValidator("json", startPaymentSchema),
+  async (c) => {
+    const sessionId = await requireRespondent(c);
+    if (!sessionId) return c.json({ error: { code: "unauthorized", message: "Invalid session token" } }, 401);
+    const { ref, phone } = c.req.valid("json");
+    const result = await startPaymentForSession(c.env, sessionId, ref, { phone });
+    return c.json(result.body as object, result.status);
+  },
+);
+
+/**
+ * "The gateway's window closed — go and look."
+ *
+ * A nudge, never a verdict: the server asks the gateway, and whatever it says
+ * reaches the respondent over the stream. The status here is for a page with
+ * no stream to read it from.
+ */
+sessionsRouter.post(
+  "/sessions/:id/payments/:recordId/confirm",
+  describeRoute({
+    tags: ["public"],
+    summary: "Re-check a checkout with the gateway and settle it if paid",
+    responses: {
+      200: {
+        description: "Where the payment stands",
+        content: {
+          "application/json": {
+            schema: resolver(z.object({ recordId: z.string(), status: z.string(), settled: z.boolean() })),
+          },
+        },
+      },
+      404: { description: "No such payment on this session" },
+      502: { description: "The gateway could not be reached" },
+    },
+  }),
+  async (c) => {
+    const sessionId = await requireRespondent(c);
+    if (!sessionId) return c.json({ error: { code: "unauthorized", message: "Invalid session token" } }, 401);
+    const result = await confirmPaymentForSession(c.env, sessionId, c.req.param("recordId"));
+    return c.json(result.body as object, result.status);
+  },
+);
 
 /**
  * "Tell me again where we are."

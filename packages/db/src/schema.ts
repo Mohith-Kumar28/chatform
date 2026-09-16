@@ -750,6 +750,132 @@ export const integrations = sqliteTable(
   ],
 );
 
+// ─────────────────────── Respondent payments (the admin's gateway) ───────────────────────
+
+/**
+ * A gateway account a form admin connected — their own Cashfree, Razorpay or
+ * Stripe, never ours.
+ *
+ * Chatform is never in the flow of funds, so this is a credential store rather
+ * than a balance: `credentialsEnc` is `lib/secret-box.ts` ciphertext bound to
+ * the row id, and no route ever returns it. Disconnecting keeps the row with
+ * wiped credentials, because `respondent_payments` points at it and the admin
+ * still needs to see which account an old payment went to.
+ *
+ * Not to be confused with `payments` below, which is chatform's own Dodo
+ * subscription billing. See `0034_payment_gateways.sql`.
+ */
+export const paymentAccounts = sqliteTable(
+  "payment_accounts",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    /** `cashfree` | `razorpay` | `stripe` */
+    provider: text("provider").notNull(),
+    /** `oauth` | `restricted_key` | `connect` */
+    credentialKind: text("credential_kind").notNull(),
+    /** `test` | `live` */
+    environment: text("environment").notNull(),
+    /** The gateway's merchant id, checked against every webhook and status response. */
+    providerAccountId: text("provider_account_id"),
+    displayLabel: text("display_label").notNull(),
+    credentialsEnc: text("credentials_enc").notNull(),
+    accessExpiresAt: ts("access_expires_at"),
+    refreshExpiresAt: ts("refresh_expires_at"),
+    /** A lease: only one request refreshes an OAuth token at a time. */
+    refreshLockUntil: ts("refresh_lock_until"),
+    webhookSecretEnc: text("webhook_secret_enc"),
+    providerWebhookId: text("provider_webhook_id"),
+    /** `active` | `needs_reconnect` | `revoked` | `disconnected` */
+    status: text("status").notNull().default("active"),
+    lastError: text("last_error"),
+    /** JSON `string[]` of ISO currency codes. */
+    currenciesJson: text("currencies_json").notNull().default("[]"),
+    capabilitiesJson: text("capabilities_json").notNull().default("{}"),
+    /** Reserved; chatform takes nothing per transaction. */
+    platformFeeBps: integer("platform_fee_bps").notNull().default(0),
+    connectedByUserId: text("connected_by_user_id"),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+    updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("idx_payment_accounts_org_status").on(t.organizationId, t.status),
+    uniqueIndex("uq_payment_accounts_provider_account")
+      .on(t.provider, t.environment, t.providerAccountId)
+      .where(sql`status != 'disconnected'`),
+  ],
+);
+
+/**
+ * One checkout attempt by one respondent on one payment question.
+ *
+ * Per attempt rather than per answer: an abandoned checkout is `superseded` or
+ * `expired`, never overwritten, so a payment that lands on an attempt everyone
+ * thought was dead still has a row to land on. `id` (rpay_…) is also our order
+ * id, Stripe's `client_reference_id` and Razorpay's receipt.
+ */
+export const respondentPayments = sqliteTable(
+  "respondent_payments",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    formId: text("form_id").notNull().references(() => forms.id, { onDelete: "cascade" }),
+    formVersionId: text("form_version_id"),
+    sessionId: text("session_id").notNull(),
+    submissionId: text("submission_id"),
+    blockRef: text("block_ref").notNull(),
+    paymentAccountId: text("payment_account_id").notNull().references(() => paymentAccounts.id),
+    provider: text("provider").notNull(),
+    environment: text("environment").notNull(),
+    providerOrderId: text("provider_order_id"),
+    providerPaymentId: text("provider_payment_id"),
+    /** Minor units in `currency`'s own exponent — see `toMinorUnits`. */
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull(),
+    /** `created` | `paid` | `failed` | `expired` | `refunded` | `superseded` */
+    status: text("status").notNull(),
+    /** The gateway's reason, or `duplicate` for a second successful payment on a ref already paid. */
+    failureReason: text("failure_reason"),
+    platformFeeMinor: integer("platform_fee_minor"),
+    providerFeeMinor: integer("provider_fee_minor"),
+    settledToSession: bool("settled_to_session").notNull().default(false),
+    isTest: bool("is_test").notNull().default(false),
+    rawLastEvent: text("raw_last_event"),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+    updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
+    paidAt: ts("paid_at"),
+    expiresAt: ts("expires_at"),
+  },
+  (t) => [
+    uniqueIndex("uq_respondent_payments_provider_order").on(t.provider, t.providerOrderId),
+    uniqueIndex("uq_respondent_payments_provider_payment")
+      .on(t.provider, t.providerPaymentId)
+      .where(sql`provider_payment_id IS NOT NULL`),
+    index("idx_respondent_payments_session_ref").on(t.sessionId, t.blockRef),
+    index("idx_respondent_payments_submission").on(t.submissionId),
+    index("idx_respondent_payments_form_created").on(t.formId, t.createdAt),
+    index("idx_respondent_payments_status_expires").on(t.status, t.expiresAt),
+  ],
+);
+
+/** Gateway webhook delivery dedupe — the same shape and rules as `dodo_events`. */
+export const paymentWebhookEvents = sqliteTable(
+  "payment_webhook_events",
+  {
+    id: text("id").primaryKey(),
+    provider: text("provider").notNull(),
+    eventId: text("event_id").notNull(),
+    type: text("type"),
+    payload: text("payload").notNull(),
+    /** `received` | `processed` | `failed` | `ignored` */
+    status: text("status").notNull().default("received"),
+    error: text("error"),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+    processedAt: ts("processed_at"),
+  },
+  (t) => [uniqueIndex("uq_payment_webhook_events_provider_event").on(t.provider, t.eventId)],
+);
+
 /**
  * The template catalogue.
  *

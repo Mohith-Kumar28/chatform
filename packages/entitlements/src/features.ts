@@ -91,7 +91,10 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
     blurb: "Send a code to an email or phone answer, and only keep it once they type the code back.",
   },
   one_response_per_identity: { label: "One response per verified person", blurb: "On a form with sign-in, key the limit to who they signed in as — another browser or device does not get a second response." },
-  collect_payments: { label: "Collect payments", blurb: "Show your payment link or UPI QR mid-conversation." },
+  collect_payments: {
+    label: "Collect payments",
+    blurb: "Take verified payments through your own Razorpay, Cashfree or Stripe account.",
+  },
 
   partial_responses: {
     label: "Partial responses",

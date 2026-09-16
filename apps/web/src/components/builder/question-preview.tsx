@@ -13,6 +13,7 @@ import { chatThemeVars } from "@/lib/chat-theme";
 import { API_ORIGIN } from "@/lib/api/mutator";
 import { LogoMark } from "@/components/brand/logo";
 import { useEntitlements } from "@/hooks/use-entitlements";
+import { usePaymentAccounts } from "@/components/integrations/payment-accounts";
 import { revealInInspector } from "./inspector-reveal";
 
 
@@ -43,7 +44,20 @@ export function QuestionPreview({
   slug?: string | null;
 }) {
   const themeVars = useMemo(() => chatThemeVars(doc.theme, slug), [doc.theme, slug]);
-  const pub = useMemo(() => toPublicBlock(block), [block]);
+  /*
+    A verified payment block names an account id, and which gateway that
+    account is lives in D1 — so `toPublicBlock` leaves `paymentProvider` unset
+    and the API fills it in for a live session. The preview fills it in the
+    same way, from the accounts the inspector already loaded, so the card shows
+    the gateway checkout will actually open on.
+  */
+  const gatewayAccountId = block.type === "payment" && block.method === "gateway" ? block.paymentAccountId : undefined;
+  const { data: paymentAccounts } = usePaymentAccounts({ enabled: gatewayAccountId !== undefined });
+  const pub = useMemo(() => {
+    const projected = toPublicBlock(block);
+    const provider = paymentAccounts?.accounts.find((a) => a.id === gatewayAccountId)?.provider;
+    return provider ? { ...projected, paymentProvider: provider } : projected;
+  }, [block, gatewayAccountId, paymentAccounts]);
   const agentName = doc.settings.agent.displayName || doc.title;
 
   // Brand logo/name are a Pro feature (`brand_logo`) — publish strips them for

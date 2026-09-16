@@ -1,11 +1,29 @@
 "use client";
 
-import { isValidUpiId, parseEmailDomains, UPI_CURRENCY, type Block } from "@repo/form-schema";
+import Link from "next/link";
+import { ArrowUpRight, ShieldCheck, TriangleAlert } from "lucide-react";
+import { toast } from "sonner";
+import {
+  isValidUpiId,
+  parseEmailDomains,
+  PAYMENT_PROVIDER_LABELS,
+  UPI_CURRENCY,
+  type Block,
+} from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
+import { Button } from "@/components/ui/button";
 import { InfoHint } from "@/components/ui/info-hint";
+import {
+  accountName,
+  INR_ONLY_PROVIDERS,
+  usePaymentAccounts,
+  type PaymentAccount,
+} from "@/components/integrations/payment-accounts";
+import { useBuilderStore } from "@/stores/builder-store";
 import { DomainsHelp, GroupFieldsEditor, PatternHelp, patternIsValid } from "./group-fields";
 import {
   CheckboxGroup,
+  Field,
   ListEditor,
   NumberField,
   SelectField,
@@ -471,82 +489,7 @@ export function TypeFields({
       );
 
     case "payment":
-      return (
-        <>
-          <SelectField
-            label="Method"
-            value={block.method}
-            onChange={(v) =>
-              patch({
-                method: v,
-                // UPI settles in rupees only, so switching to it and leaving the
-                // currency at USD would show a price nobody can actually be charged.
-                ...(v === "upi" && block.currency !== UPI_CURRENCY ? { currency: UPI_CURRENCY } : {}),
-              } as Partial<Block>)
-            }
-            options={[
-              { value: "link", label: "Payment link" },
-              { value: "upi", label: "UPI ID (QR + link)" },
-            ]}
-          />
-
-          {block.method === "upi" ? (
-            <>
-              <TextField
-                label="UPI ID"
-                value={block.upiId ?? ""}
-                placeholder="acme@okhdfcbank"
-                onChange={(v) => patch({ upiId: v.trim() || undefined } as Partial<Block>, key("upi"))}
-              />
-              {block.upiId && !isValidUpiId(block.upiId) ? (
-                <p className="text-destructive -mt-4 text-xs">Use the name@bank format</p>
-              ) : null}
-              <TextField
-                label="Payee name"
-                value={block.upiPayeeName ?? ""}
-                onChange={(v) => patch({ upiPayeeName: v || undefined } as Partial<Block>, key("payee"))}
-              />
-            </>
-          ) : (
-            <TextField
-              label="Payment link"
-              value={block.url ?? ""}
-              placeholder="https://rzp.io/l/…"
-              onChange={(v) => patch({ url: v.trim() || undefined } as Partial<Block>, key("url"))}
-            />
-          )}
-
-          <SelectField
-            label="Amount type"
-            value={block.amountMode}
-            onChange={(v) => patch({ amountMode: v } as Partial<Block>)}
-            options={[
-              { value: "fixed", label: "Fixed" },
-              { value: "variable", label: "From a variable" },
-            ]}
-          />
-          {block.amountMode === "fixed" ? (
-            <NumberField
-              label="Amount"
-              value={block.amount}
-              min={0}
-              onChange={(v) => patch({ amount: v } as Partial<Block>, key("amount"))}
-            />
-          ) : (
-            <TextField
-              label="Variable name"
-              value={block.amountVariable ?? ""}
-              onChange={(v) => patch({ amountVariable: v || undefined } as Partial<Block>, key("amountVar"))}
-            />
-          )}
-          <TextField
-            label="Currency"
-            value={block.currency}
-            onChange={(v) => patch({ currency: v.toUpperCase().slice(0, 3) } as Partial<Block>, key("cur"))}
-            maxLength={3}
-          />
-        </>
-      );
+      return <PaymentFields block={block} patch={patch} />;
 
     case "scheduling":
       return (
@@ -730,6 +673,403 @@ export function TypeFields({
     default:
       return null;
   }
+}
+
+type PaymentBlock = Extract<Block, { type: "payment" }>;
+
+/** Radix refuses an empty item value, so "no account picked" needs a name. */
+const NO_ACCOUNT = "__none";
+
+/**
+ * The currency a block should carry once it charges on `account`.
+ *
+ * Cashfree and Razorpay are rupees only, exactly as UPI is, so picking one of
+ * them snaps the currency to INR the way switching to UPI always has. A Stripe
+ * account presents in any of Stripe's currencies whatever its default is — the
+ * one currency the API lists for it is only that default — so a block moving
+ * onto Stripe keeps the currency it already had.
+ */
+function currencyFor(account: PaymentAccount | undefined, current: string): string | undefined {
+  if (!account) return undefined;
+  if (INR_ONLY_PROVIDERS.has(account.provider)) return current === "INR" ? undefined : "INR";
+  return undefined;
+}
+
+/**
+ * The payment block's fields.
+ *
+ * Three methods, and the labels say which kind of trust each one buys, because
+ * an author picks between them once and then reads results for months:
+ * "Verified checkout" is confirmed by the admin's own gateway before the chat
+ * moves on; a payment link and a UPI QR record that the respondent *said* they
+ * paid. Existing forms keep the manual methods, under names that are honest
+ * about them.
+ *
+ * Verified checkout is offered only where the rollout flag is on for the
+ * organization — and still shown on a block that already uses it, so a flag
+ * turned off never leaves a select with nothing selected.
+ */
+function PaymentFields({
+  block,
+  patch,
+}: {
+  block: PaymentBlock;
+  patch: (p: Partial<Block>, coalesceKey?: string) => void;
+}) {
+  const key = (field: string) => `${field}:${block.ref}`;
+  const { data, isPending } = usePaymentAccounts();
+  const gateway = block.method === "gateway";
+  const accounts = data?.accounts ?? [];
+  const account = accounts.find((a) => a.id === block.paymentAccountId);
+  /*
+   * Whether the empty list means anything. While the query is in flight, and when the read
+   * failed (`readAccounts` answers with `unavailable` rather than throwing, so a passive read
+   * never throws a paywall or a toast at an author), "no accounts" is not a fact — and the
+   * picker's messages are accusations about the author's setup. Until it is a fact they say
+   * nothing, and the method list keeps whatever the block already uses.
+   */
+  const known = !isPending && data !== undefined && data.unavailable !== true;
+
+  const methodOptions = [
+    ...(data?.enabled || gateway ? [{ value: "gateway" as const, label: "Verified checkout (recommended)" }] : []),
+    { value: "link" as const, label: "Payment link (manual, unverified)" },
+    { value: "upi" as const, label: "UPI QR (manual, unverified)" },
+  ];
+
+  const chooseAccount = (next: PaymentAccount | undefined) => {
+    const currency = currencyFor(next, block.currency);
+    patch({ paymentAccountId: next?.id, ...(currency ? { currency } : {}) } as Partial<Block>);
+  };
+
+  return (
+    <>
+      <SelectField
+        label="Method"
+        value={block.method}
+        onChange={(v) => {
+          if (v === "gateway") {
+            // One account connected is the account; making the author pick it
+            // from a list of one is a step that can only be got wrong.
+            const only = !block.paymentAccountId && accounts.length === 1 ? accounts[0] : undefined;
+            const chosen = only ?? account;
+            const currency = currencyFor(chosen, block.currency);
+            patch({
+              method: v,
+              ...(only ? { paymentAccountId: only.id } : {}),
+              ...(currency ? { currency } : {}),
+            } as Partial<Block>);
+            return;
+          }
+          patch({
+            method: v,
+            // UPI settles in rupees only, so switching to it and leaving the
+            // currency at USD would show a price nobody can actually be charged.
+            ...(v === "upi" && block.currency !== UPI_CURRENCY ? { currency: UPI_CURRENCY } : {}),
+          } as Partial<Block>);
+        }}
+        options={methodOptions}
+      />
+
+      {gateway ? (
+        <LockedControl feature="collect_payments">
+          <div className="space-y-6">
+            <SignInNotice />
+            <AccountPicker
+              accounts={accounts}
+              account={account}
+              selectedId={block.paymentAccountId}
+              known={known}
+              onChange={chooseAccount}
+            />
+            <AmountFields block={block} patch={patch} gateway />
+            <CurrencyField block={block} account={account} patch={patch} />
+          </div>
+        </LockedControl>
+      ) : (
+        <>
+          {block.method === "upi" ? (
+            <>
+              <TextField
+                label="UPI ID"
+                value={block.upiId ?? ""}
+                placeholder="acme@okhdfcbank"
+                onChange={(v) => patch({ upiId: v.trim() || undefined } as Partial<Block>, key("upi"))}
+              />
+              {block.upiId && !isValidUpiId(block.upiId) ? (
+                <p className="text-destructive -mt-4 text-xs">Use the name@bank format</p>
+              ) : null}
+              <TextField
+                label="Payee name"
+                value={block.upiPayeeName ?? ""}
+                onChange={(v) => patch({ upiPayeeName: v || undefined } as Partial<Block>, key("payee"))}
+              />
+            </>
+          ) : (
+            <TextField
+              label="Payment link"
+              value={block.url ?? ""}
+              placeholder="https://rzp.io/l/…"
+              onChange={(v) => patch({ url: v.trim() || undefined } as Partial<Block>, key("url"))}
+            />
+          )}
+          <AmountFields block={block} patch={patch} />
+          <TextField
+            label="Currency"
+            value={block.currency}
+            onChange={(v) => patch({ currency: v.toUpperCase().slice(0, 3) } as Partial<Block>, key("cur"))}
+            maxLength={3}
+          />
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * Verified payments need to know who paid, so the form needs sign-in — and
+ * publishing refuses a gateway block on a form without it. Said here, where the
+ * block is being set up, with the one click that fixes it, rather than as a
+ * publish error an author meets later and has to trace back.
+ *
+ * The switch goes through the builder store like any other edit, so it lands
+ * in undo history and autosaves with everything else. The method stays
+ * whatever the form had (Google unless changed), which Settings → Access can
+ * change.
+ */
+function SignInNotice() {
+  const signInOn = useBuilderStore((s) => s.doc?.settings.requireAuth.enabled ?? true);
+  const edit = useBuilderStore((s) => s.edit);
+  if (signInOn) return null;
+  return (
+    <div className="flex gap-2 rounded-lg bg-[var(--warning-soft)] px-3 py-2.5 text-[var(--warning-soft-foreground)]">
+      <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+      <div className="min-w-0 flex-1 space-y-2 text-xs leading-relaxed">
+        <p>Payments need respondents to sign in (Google or phone) so every payment is tied to a real person.</p>
+        <LockedControl feature="respondent_auth_google" chip="inline">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              edit((d) => {
+                d.settings.requireAuth.enabled = true;
+              });
+              toast.success("Sign-in is on. Choose Google or phone in Settings → Access.");
+            }}
+          >
+            <ShieldCheck className="size-3.5" />
+            Turn on sign-in
+          </Button>
+        </LockedControl>
+      </div>
+    </div>
+  );
+}
+
+function AccountPicker({
+  accounts,
+  account,
+  selectedId,
+  known,
+  onChange,
+}: {
+  accounts: PaymentAccount[];
+  account: PaymentAccount | undefined;
+  selectedId: string | undefined;
+  /** The account list is a fact, not a query still in flight or one that failed. */
+  known: boolean;
+  onChange: (account: PaymentAccount | undefined) => void;
+}) {
+  const formId = useBuilderStore((s) => s.formId);
+  const integrate = `/forms/${formId}/integrate#payments`;
+
+  if (!known && accounts.length === 0) {
+    return (
+      <Field label="Payment account">
+        <p className="text-muted-foreground text-xs">Checking connected accounts…</p>
+      </Field>
+    );
+  }
+
+  if (accounts.length === 0) {
+    return (
+      <Field label="Payment account">
+        {/*
+         * A link, drawn as one. Outline + full width + left-aligned is the shape
+         * of every select beside it in this panel, so the one control here that
+         * goes somewhere read as an input nobody had filled in.
+         */}
+        <Button variant="secondary" size="sm" asChild className="w-fit gap-1.5">
+          <Link href={integrate}>
+            Connect a payment account
+            <ArrowUpRight className="size-3.5" aria-hidden />
+          </Link>
+        </Button>
+        {selectedId && (
+          <p className="text-destructive text-xs">The account this question used is no longer connected.</p>
+        )}
+      </Field>
+    );
+  }
+
+  const options = [
+    ...(selectedId ? [] : [{ value: NO_ACCOUNT, label: "Choose an account" }]),
+    ...(selectedId && !account ? [{ value: selectedId, label: "No longer connected" }] : []),
+    ...accounts.map((a) => ({ value: a.id, label: accountName(a, PAYMENT_PROVIDER_LABELS[a.provider]) })),
+  ];
+
+  return (
+    <div className="space-y-2">
+      <SelectField
+        label="Payment account"
+        value={selectedId ?? NO_ACCOUNT}
+        onChange={(v) => onChange(accounts.find((a) => a.id === v))}
+        options={options}
+      />
+      {selectedId && !account && (
+        <p className="text-destructive text-xs">That account was disconnected. Pick another one.</p>
+      )}
+      {account && account.status !== "active" && (
+        <p className="text-destructive text-xs">
+          This account needs reconnecting before it can take payments.{" "}
+          <Link href={integrate} className="underline">
+            Open Integrate
+          </Link>
+        </p>
+      )}
+      <Link href={integrate} className="text-muted-foreground hover:text-foreground block text-xs">
+        Manage payment accounts
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * Fixed, or read from a variable.
+ *
+ * For verified checkout the variable is picked from the form's own variables
+ * and bounded: a variable is computed from answers, and a bound is what stops
+ * a "pay what you like" that resolves to ₹0.01 from reaching a gateway.
+ * Manual methods keep the free-text name they always had.
+ */
+function AmountFields({
+  block,
+  patch,
+  gateway = false,
+}: {
+  block: PaymentBlock;
+  patch: (p: Partial<Block>, coalesceKey?: string) => void;
+  gateway?: boolean;
+}) {
+  const key = (field: string) => `${field}:${block.ref}`;
+  const variables = useBuilderStore((s) => s.doc?.variables ?? []);
+  const pickable = gateway && variables.length > 0;
+
+  return (
+    <>
+      <SelectField
+        label="Amount type"
+        value={block.amountMode}
+        onChange={(v) => patch({ amountMode: v } as Partial<Block>)}
+        options={[
+          { value: "fixed", label: "Fixed" },
+          { value: "variable", label: "From a variable" },
+        ]}
+      />
+      {block.amountMode === "fixed" ? (
+        <NumberField
+          label="Amount"
+          value={block.amount}
+          min={0}
+          onChange={(v) => patch({ amount: v } as Partial<Block>, key("amount"))}
+        />
+      ) : (
+        <>
+          {pickable ? (
+            <SelectField
+              label="Variable"
+              value={block.amountVariable ?? NO_ACCOUNT}
+              onChange={(v) => patch({ amountVariable: v === NO_ACCOUNT ? undefined : v } as Partial<Block>)}
+              options={[
+                ...(block.amountVariable ? [] : [{ value: NO_ACCOUNT, label: "Choose a variable" }]),
+                ...(block.amountVariable && !variables.some((v) => v.name === block.amountVariable)
+                  ? [{ value: block.amountVariable, label: `${block.amountVariable} (missing)` }]
+                  : []),
+                ...variables.map((v) => ({ value: v.name, label: v.name })),
+              ]}
+            />
+          ) : (
+            <TextField
+              label="Variable name"
+              value={block.amountVariable ?? ""}
+              onChange={(v) => patch({ amountVariable: v || undefined } as Partial<Block>, key("amountVar"))}
+            />
+          )}
+          {gateway && (
+            <div className="grid grid-cols-2 gap-3">
+              <NumberField
+                label="Minimum amount"
+                value={block.minAmount}
+                min={0}
+                placeholder="None"
+                onChange={(v) => patch({ minAmount: v } as Partial<Block>, key("minAmount"))}
+              />
+              <NumberField
+                label="Maximum amount"
+                value={block.maxAmount}
+                min={0}
+                placeholder="None"
+                onChange={(v) => patch({ maxAmount: v } as Partial<Block>, key("maxAmount"))}
+              />
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+/** Pinned to INR on a rupee-only gateway; free text otherwise, Stripe included (see `currencyFor`). */
+function CurrencyField({
+  block,
+  account,
+  patch,
+}: {
+  block: PaymentBlock;
+  account: PaymentAccount | undefined;
+  patch: (p: Partial<Block>, coalesceKey?: string) => void;
+}) {
+  const current = block.currency.toUpperCase();
+  const supported = account && INR_ONLY_PROVIDERS.has(account.provider) ? ["INR"] : [];
+
+  if (supported.length === 0) {
+    return (
+      <TextField
+        label="Currency"
+        value={block.currency}
+        onChange={(v) => patch({ currency: v.toUpperCase().slice(0, 3) } as Partial<Block>, `cur:${block.ref}`)}
+        maxLength={3}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <SelectField
+        label="Currency"
+        value={current}
+        onChange={(v) => patch({ currency: v } as Partial<Block>)}
+        options={[
+          ...(supported.includes(current) ? [] : [{ value: current, label: `${current} (not supported)` }]),
+          ...supported.map((c) => ({ value: c, label: c })),
+        ]}
+      />
+      {!supported.includes(current) && (
+        <p className="text-destructive text-xs">
+          {PAYMENT_PROVIDER_LABELS[account!.provider]} can&apos;t charge in {current} on this account.
+        </p>
+      )}
+    </div>
+  );
 }
 
 /**

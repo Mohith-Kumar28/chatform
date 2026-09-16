@@ -79,3 +79,20 @@ RESEND_API_KEY=
 # transport, so every reminder fails five retries deep into the DLQ while
 # transactional mail carries on working.
 EMAIL_FROM_MARKETING=
+
+# ── Verified payments (the form admin's OWN gateway) ──────────────────────────
+# See .dev.vars.example for what each of these is. Generate the key with
+# `openssl rand -base64 32` and never reuse the local one.
+PAYMENTS_ENCRYPTION_KEY=
+PAYMENTS_ENCRYPTION_KEY_PREV=
+# Off in production until rollout: list internal org ids first, "on" at general availability.
+PAYMENTS_GATEWAY_ENABLED=
+PAYMENTS_GATEWAY_ORGS=
+CASHFREE_PARTNER_CLIENT_ID=
+CASHFREE_PARTNER_CLIENT_SECRET=
+CASHFREE_PARTNER_API_KEY=
+CASHFREE_ENVIRONMENT=sandbox
+RAZORPAY_OAUTH_CLIENT_ID=
+RAZORPAY_OAUTH_CLIENT_SECRET=
+RAZORPAY_WEBHOOK_SECRET=
+RAZORPAY_ENVIRONMENT=test

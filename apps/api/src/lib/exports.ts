@@ -1,4 +1,11 @@
-import { readFormDoc, displayAnswer, type Block, type FormDoc } from "@repo/form-schema";
+import {
+  readFormDoc,
+  displayAnswer,
+  paymentCells,
+  paymentColumnTitles,
+  type Block,
+  type FormDoc,
+} from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { resolveRetiredBlocks } from "./retired-columns.js";
 import { BIND_CHUNK, bindChunks, holesFor } from "./d1-bindings.js";
@@ -238,16 +245,20 @@ export async function buildCsv(
 
   // The question, not its ref: `b_short` means nothing to whoever opens the
   // file. The ref follows in brackets so a column can still be matched back.
+  const retiredRefs = new Set(retired.map((b) => b.ref));
   const header = [
     "response_id",
     "status",
     "source",
     "started_at",
     "completed_at",
-    ...answerable.map((b) => `${b.title} (${b.ref})`),
-    // Marked: a column the form no longer has must explain itself to whoever
-    // opens the file a year from now.
-    ...retired.map((b) => `${b.title} (${b.ref}) [removed]`),
+    ...columns.flatMap((b) => {
+      // Marked: a column the form no longer has must explain itself to whoever
+      // opens the file a year from now.
+      const title = `${b.title} (${b.ref})${retiredRefs.has(b.ref) ? " [removed]" : ""}`;
+      // A payment's reconciliation columns follow it, as in `response-table.ts`.
+      return b.type === "payment" ? [title, ...paymentColumnTitles(title)] : [title];
+    }),
   ];
   const out: string[] = [header.map(esc).join(",")];
 
@@ -267,16 +278,22 @@ export async function buildCsv(
           s.completed_at ? new Date(s.completed_at).toISOString() : "",
           // Labels, not ids. A file full of `opt_founder001` is an export of
           // our primary keys, not of anyone's data.
-          ...columns.map((b) => {
+          ...columns.flatMap((b) => {
             const raw = map.get(b.ref);
+            let parsed: unknown;
+            let cell = "";
             // An unanswered cell is empty, not "(skipped)" — a spreadsheet
             // already has a way to say nothing is there.
-            if (!raw) return "";
-            try {
-              return displayAnswer(b as Block, JSON.parse(raw));
-            } catch {
-              return raw;
+            if (raw) {
+              try {
+                parsed = JSON.parse(raw);
+                cell = displayAnswer(b as Block, parsed);
+              } catch {
+                cell = raw;
+              }
             }
+            if (b.type !== "payment") return [cell];
+            return [cell, ...paymentCells(parsed, (b as Extract<Block, { type: "payment" }>).currency)];
           }),
         ]
           .map(esc)

@@ -7,7 +7,8 @@ import { ErrorEnvelope } from "../lib/openapi.js";
 import { hashPassword, isHashedPassword } from "../lib/crypto.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 import { requirePermission, requireGauge, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
-import { stripForPublish, checkDocLimits } from "../lib/doc-entitlements.js";
+import { stripForPublish, checkDocLimits, checkGatewayPayments } from "../lib/doc-entitlements.js";
+import { signInBypassed } from "../lib/payments/flag.js";
 import { publishFingerprint, hasUnpublishedChanges } from "../lib/publish-state.js";
 import { backfillFollowUps } from "../lib/followups.js";
 import { afterResponse, parseStoredDoc, recordDocChange, recordFormEvent, stampVersionStatement } from "../lib/form-activity.js";
@@ -686,7 +687,11 @@ formsRouter.post(
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     const parsed = FormDoc.safeParse(migrateFormDoc(JSON.parse(row.working_schema)));
     if (!parsed.success) return c.json({ error: { code: "invalid_doc", message: "Working document is invalid" } }, 422);
-    const issues = lintFormDoc(parsed.data);
+    // The dashboard lints here rather than in `publishForm`, so the local
+    // sign-in bypass has to be honoured in both places. See `signInBypassed`.
+    const issues = lintFormDoc(parsed.data).filter(
+      (i) => !(signInBypassed(c.env) && i.code === "payment_requires_sign_in"),
+    );
     if (hasErrors(issues)) {
       return c.json({ error: { code: "lint_failed", message: issues.filter((i) => i.level === "error").map((i) => i.message).join("; ") } }, 422);
     }
@@ -704,6 +709,10 @@ formsRouter.post(
       const first = overLimit[0]!;
       return c.json(limitReached({ limitKey: first.limitKey, plan: ent.planId, used: first.used, limit: first.limit, context: { surface: "publish" } }), 402);
     }
+
+    // Verified payment questions need the plan, and an account that can still take the money.
+    const payments = await checkGatewayPayments(c.env, c.get("form")!.organization_id, parsed.data, ent);
+    if (payments) return c.json(payments.body, payments.status);
 
     /**
      * Gated settings are removed from the version being published, and every removal is

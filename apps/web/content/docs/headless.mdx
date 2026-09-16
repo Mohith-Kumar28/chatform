@@ -96,6 +96,8 @@ POST /v1/sessions/{id}/actions
 
 `skip`, `stop`, `restart`, `edit` (with a `ref`), `submit`, and — while a
 verified answer is waiting on its code — `resend_code` and `change_answer`.
+While a [verified payment](/docs/payments) checkout is open, `cancel_payment`
+drops it and `retry_payment` puts the question back for a fresh one.
 
 `submit` matters more than it looks: forms default to showing a review step
 before finishing, so without it such a form can never be completed. When
@@ -116,7 +118,8 @@ The event types are `session_ready`, `user_message`, `message_start`, `token`,
 `message_end`, `question`, `validation_error`, `upload_request`,
 `upload_received`, `answer_recorded`, `branch_jump`, `escalate_ui`, `review`,
 `auth_required`, `auth_verified`, `verify_required`, `verify_settled`,
-`ending`, `complete`, `error`, `rate_limited` and `ping`.
+`payment_required`, `payment_settled`, `payment_failed`, `ending`, `complete`,
+`error`, `rate_limited` and `ping`.
 
 Without `accept: text/event-stream`, the same path takes `?since=` and returns a
 page of stored events instead — which is what you want after a dropped
@@ -187,6 +190,16 @@ with Google and they type that same address, or verified their number and they
 type that same number, the answer is recorded straight away — a different value
 is a different claim, and is proved on its own.
 </Callout>
+
+## Verified payments
+
+A payment question on verified checkout is not answered with a value. Start its
+checkout with `POST /v1/sessions/{id}/payments` and `{ "ref": … }`, open the
+`launch` it returns, and wait for `payment_settled` — the answer is written from
+the gateway's confirmation and the conversation moves on by itself. Each turn
+result carries `pendingPayment` while a checkout is open.
+
+[Verified payments →](/docs/payments)
 
 ## Rendering the questions
 

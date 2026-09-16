@@ -1,0 +1,167 @@
+---
+title: Verified payments
+description: Take payment on your own Razorpay, Cashfree or Stripe account, and move on only once the gateway confirms it.
+---
+
+A [payment question](/docs/blocks/payment) comes in two kinds, and they make very
+different promises.
+
+| | Verified checkout | Payment link or UPI QR |
+| --- | --- | --- |
+| Where the money goes | Your own gateway account | Wherever the link or UPI ID points |
+| What the answer means | The gateway confirmed the payment | The respondent pressed "I've paid" |
+| `verified` on the answer | `true` | always `false` |
+| Needs | Pro plan, sign-in on the form, a connected account | Nothing |
+
+The rest of this page is about verified checkout. A link or UPI payment still
+has to be matched against your own statement by hand.
+
+<Callout>
+Verified checkout is being switched on for organizations gradually. Until it is
+on for yours, the builder only offers the link and UPI kinds.
+</Callout>
+
+## Your account, your money
+
+You connect **your own** gateway account. Respondents pay you directly: chatform
+never holds the money, never pays it out, and takes no cut of any payment. Your
+gateway's own fees are the only ones. Refunds, disputes and payouts all stay in
+your gateway's dashboard, exactly as they are for any other payment you take.
+
+## Connect an account
+
+In the builder, open a form's **Integrate** tab and find **Take payments**.
+
+- **Razorpay** and **Cashfree** connect with one button. You approve chatform on
+  the gateway's own page and come straight back. There is no key to copy.
+  Accounts connected this way take payments in rupees (INR) only.
+- **Stripe** connects with a *restricted* key. Create one in Stripe's dashboard
+  with these permissions, and leave everything else as None:
+
+  | Resource | Access |
+  | --- | --- |
+  | Accounts | Read |
+  | Checkout Sessions | Write |
+  | Webhook Endpoints | Write |
+  | Payment Intents | Read |
+  | Charges | Read |
+
+  A full secret key (`sk_…`) is refused. It can move money out of your account,
+  and a form tool has no reason to hold one. The key is checked before it is
+  saved: chatform creates a checkout, cancels it straight away, and registers
+  a webhook on your Stripe account.
+
+A Stripe test key (`rk_test_…`) connects a test account, which you can pay with
+Stripe's test cards in the builder's preview. A preview never charges a live
+account; it offers **Simulate payment** instead.
+
+Disconnecting removes chatform's access at the gateway and deletes the stored
+credential. Payments already recorded stay in your results.
+
+## Set up the question
+
+Pick **Verified checkout** as the payment question's method, choose the account,
+and set the amount:
+
+- **Fixed** — one price for everyone.
+- **Variable** — read from a form variable, such as a ticket price multiplied
+  by a quantity. Set a minimum and maximum so an unexpected value stops at the
+  checkout rather than reaching the gateway.
+
+Every amount is worked out on the server from the respondent's own answers.
+Nothing a browser sends can change what is charged.
+
+**Sign-in is required.** A form with a verified payment question must ask
+respondents to sign in with Google or a phone number, so every payment belongs
+to a real person you can refund. The builder offers a one-click **Turn on
+sign-in**, and publishing refuses a form without it.
+
+Publishing also checks that the account is still connected, and that a Razorpay
+or Cashfree question charges in INR. A failed check names the question.
+
+## What respondents see
+
+1. They reach the question and tap **Pay**.
+2. The gateway's checkout opens: a Razorpay or Cashfree window over the form,
+   or Stripe's own page.
+3. The conversation carries on the moment the gateway confirms the payment. There
+   is no "I've paid" button to press.
+
+If they close the tab straight after paying, the payment is still recorded when
+the gateway tells chatform about it, even if the conversation has already ended.
+If a payment fails or they cancel, the question stays open with **Try again**.
+
+Cashfree needs a phone number for its receipt. When the respondent signed in with
+Google and the form has not asked for a number before the payment, the Pay card
+asks for one first.
+
+A variable amount follows the answers it is worked out from. If a respondent
+changes one of those answers after paying, the earlier payment no longer counts
+for the question: they are asked to pay the new amount, and the earlier payment
+is flagged for you to refund. Changing the answer back makes the earlier payment
+count again, with nothing charged twice.
+
+## In your results
+
+The answer reads back as:
+
+```json
+{
+  "status": "paid",
+  "method": "gateway",
+  "verified": true,
+  "provider": "razorpay",
+  "paymentRecordId": "rpay_…",
+  "paymentId": "pay_…",
+  "amount": 499,
+  "currency": "INR",
+  "paidAt": 1788592149473
+}
+```
+
+A refund made in your gateway adds `"refunded": true`. A payment confirmed by a
+test-mode account adds `"testMode": true` and reads "Paid · test mode", never
+"verified": a form published on a test account accepts test cards, and no money
+moves. [Exports](/docs/exports) put four columns beside every payment question:
+payment status, amount, currency and the gateway's payment ID.
+
+Two tabs can mean two payments for one question. The second is flagged as a
+duplicate, never refunded automatically — refund it from your gateway. A payment
+made before the respondent changed the amount is flagged the same way, with
+`failure_reason` set to `amount_changed`.
+
+To reconcile every checkout attempt, including unfinished and duplicate ones:
+
+```bash
+curl https://api.chatform.in/v1/forms/$FORM_ID/payments?status=paid \
+  -H "x-api-key: $CHATFORM_SECRET_KEY"
+```
+
+The key needs the `response:read` [scope](/docs/scopes).
+
+## From the API
+
+A verified payment question cannot be answered with a value. Sending one to
+`POST /v1/responses/{id}/answers` or a session message fails with
+`payment_unverified`.
+
+A [headless](/docs/headless) session starts checkout itself:
+
+```bash
+curl -X POST https://api.chatform.in/v1/sessions/$SESSION_ID/payments \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"ref": "q_payment"}'
+```
+
+The reply is `{ recordId, launch, expiresAt }`. A `422` with `phone_required`
+means the gateway needs a phone number for its receipt: send the same request
+again with `"phone": "+919876543210"`. A session opened with a `*_test_` key
+never charges a live account and is refused with `live_account_in_test_mode`. `launch` says how to open the
+checkout and never carries a secret; the stream sends the same thing as
+`payment_required`. Once the gateway confirms, it sends `payment_settled` and
+then the next question, or `payment_failed` if the attempt did not go through.
+
+When the respondent comes back from the gateway,
+`POST /v1/sessions/{id}/payments/{recordId}/confirm` asks chatform to check with
+the gateway straight away instead of waiting for its webhook.

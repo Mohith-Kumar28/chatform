@@ -21,6 +21,9 @@ import { keysRouter } from "./routes/keys.js";
 import { webhooksRouter } from "./routes/webhook-admin.js";
 import { integrationsRouter, feedRouter } from "./routes/integrations.js";
 import { billingRouter, billingPublicRouter } from "./routes/billing.js";
+import { paymentAccountsRouter, paymentAccountsPublicRouter } from "./routes/payment-accounts.js";
+import { paymentWebhooksRouter } from "./routes/payment-webhooks.js";
+import { formPaymentsRouter } from "./routes/form-payments.js";
 import { previewRouter } from "./routes/preview.js";
 import { templatesRouter } from "./routes/templates.js";
 import { auditRouter } from "./routes/audit.js";
@@ -50,6 +53,19 @@ export function createApp() {
       maxAge: 86400,
     }),
   );
+  /**
+   * Gateway webhooks, registered ahead of the `/p` IP limiter below so they
+   * answer before it runs.
+   *
+   * Cashfree, Razorpay and Stripe deliver every merchant's events from a small
+   * pool of their own addresses. Counted per address, a 120-a-minute window
+   * becomes a ceiling on how many respondents across the whole platform can
+   * pay in a minute, and each 429 is a settlement pushed back to the gateway's
+   * retry schedule. The HMAC signature is what stands in front of these
+   * routes instead — see `routes/payment-webhooks.ts`.
+   */
+  app.route("/p", paymentWebhooksRouter);
+
   /**
    * After CORS, so a 429 is a response the page can actually read.
    *
@@ -188,6 +204,13 @@ export function createApp() {
    * them here means they answer and return before any session middleware runs.
    */
   app.route("/api", billingPublicRouter);
+  /**
+   * The payment-gateway OAuth callbacks, for the same reason: the gateway
+   * redirects the admin's browser here, and the signed single-use `state` is
+   * the credential rather than a session — which the routers below would
+   * demand before it could be read.
+   */
+  app.route("/api", paymentAccountsPublicRouter);
 
   /**
    * The platform console, mounted early for exactly the reason above.
@@ -226,6 +249,8 @@ export function createApp() {
   app.route("/api", keysRouter);
   app.route("/api", webhooksRouter);
   app.route("/api", integrationsRouter);
+  app.route("/api", paymentAccountsRouter);
+  app.route("/api", formPaymentsRouter);
   app.route("/api", billingRouter);
   app.route("/api", previewRouter);
   app.route("/api", templatesRouter);

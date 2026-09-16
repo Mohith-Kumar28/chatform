@@ -20,6 +20,7 @@ import {
   pruneIdempotencyKeys,
   sweepDeletedFormKnowledge,
   sweepStuckKnowledgeIngest,
+  sweepPaymentTokens,
 } from "./lib/sweeps.js";
 import { rollupPlatformDaily, rollupFormStructure, backfillPlatformDaily } from "./lib/platform-rollup.js";
 
@@ -204,6 +205,12 @@ export default {
        */
       await sweepFollowUps(env).catch((err) => console.error("followup_sweep_failed", err));
       await pruneIdempotencyKeys(env).catch((err) => console.error("idempotency_prune_failed", err));
+      /**
+       * Gateway OAuth tokens on accounts nobody has charged on lately. A Cashfree access token
+       * lasts a day, so without this a quiet form's first payment of the week always pays for a
+       * refresh — and a refresh token left unused for ninety days is gone for good.
+       */
+      await sweepPaymentTokens(env).catch((err) => console.error("payment_token_sweep_failed", err));
       // A row per message sent. Kept long enough to explain last week's outage,
       // not long enough to become the largest table in the database.
       await pruneMailDeliveries(env).catch((err) => console.error("mail_prune_failed", err));

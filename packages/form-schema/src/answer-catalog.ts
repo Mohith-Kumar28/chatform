@@ -36,6 +36,14 @@ export interface AnswerCounterExample {
   value: unknown;
   code: ValidationCode;
   note?: string;
+  /**
+   * Checked against this block instead of the entry's.
+   *
+   * For a refusal that only one configuration of the type can produce — a
+   * verified `gateway` payment refusing a forged answer cannot be shown on the
+   * `link` block that represents the type everywhere else.
+   */
+  block?: BlockInput;
 }
 
 export interface AnswerCatalogEntry {
@@ -400,7 +408,10 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
     codes: ["required", "type", "name_required"],
   },
   payment: {
-    shape: "The respondent's report that they paid. Never proof of it.",
+    shape:
+      "On a `link` or `upi` block, the respondent's report that they paid — never proof of it. " +
+      "On a `gateway` block, nothing you send is accepted: the answer is written by chatform from the payment the form admin's own gateway confirmed, " +
+      'and reads back as `{ status: "paid", method: "gateway", verified: true, provider, paymentRecordId, paymentId, amount, currency, paidAt }`.',
     tsType: '{ status: "pending" | "paid"; method?: "link" | "upi"; reference?: string; amount?: number }',
     block: {
       id: "blk_pay00001", ref: "q_payment", type: "payment", title: "Pay the deposit", required: true,
@@ -413,14 +424,23 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
           status: "paid", method: "link", verified: false, reference: "CF-7K2M9X",
           paymentId: undefined, amount: undefined, currency: "USD",
         },
-        note: "`verified` is forced to false however it arrives — nothing in this flow talks to a gateway, so nobody can confirm their own payment",
+        note: "`verified` is forced to false however it arrives — a `link` or `upi` payment happens where nothing can check it, so nobody can confirm their own",
       },
     ],
     counterExamples: [
       { value: { status: "maybe" }, code: "payment_pending" },
       { value: "paid", code: "type" },
+      {
+        value: { status: "paid", method: "gateway", verified: true, paymentId: "pay_Q1w2E3r4" },
+        code: "payment_unverified",
+        note: "on a `gateway` block, every value is refused — only a payment the gateway confirmed can answer it",
+        block: {
+          id: "blk_pay00002", ref: "q_payment", type: "payment", title: "Pay the deposit", required: true,
+          method: "gateway", amountMode: "fixed", amount: 499, currency: "INR", paymentAccountId: "pac_example",
+        },
+      },
     ],
-    codes: ["required", "type", "payment_pending"],
+    codes: ["required", "type", "payment_pending", "payment_unverified"],
   },
   scheduling: {
     shape: "The booking the respondent made on your calendar provider.",

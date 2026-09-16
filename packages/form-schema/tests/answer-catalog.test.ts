@@ -54,7 +54,8 @@ describe.each(BLOCK_TYPES)("%s", (type: BlockType) => {
   it("rejects every documented counter-example with the documented code", () => {
     const block = Block.parse(entry.block);
     for (const counter of entry.counterExamples) {
-      const result = validateAnswer(block, counter.value);
+      // A counter-example may name the one configuration that produces it.
+      const result = validateAnswer(counter.block ? Block.parse(counter.block) : block, counter.value);
       expect(
         result.ok,
         `${type}: ${JSON.stringify(counter.value)} is documented as invalid but passed`,

@@ -6,12 +6,24 @@ import { rememberValue } from "./respondent-profile";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PublicBlock } from "@repo/form-schema";
 import { getRespondentSignal } from "@/lib/respondent-signal";
+import { isFramed, launchCheckout, preopenCheckoutTab } from "@/lib/payments/launch-checkout";
+import type {
+  CheckoutLaunch,
+  PaymentFailedEvent,
+  PaymentProvider,
+  PaymentRequiredEvent,
+  PaymentSettledEvent,
+  StartPaymentError,
+  StartPaymentErrorCode,
+  StartPaymentResponse,
+} from "@/lib/payments/types";
 import {
   clearRespondentHint,
   loadRespondentHint,
   saveRespondentHint,
   type RespondentHint,
 } from "./respondent-hint";
+import { rememberEmbedQuery, storageKey, submittedKey } from "./session-store";
 
 export interface ChatMessage {
   /**
@@ -154,6 +166,125 @@ export interface VerifiedIdentity {
   pictureUrl: string | null;
 }
 
+/**
+ * A verified gateway payment, while one is under way for the question on
+ * screen.
+ *
+ * Shaped like `VerifyState`: the answer is waiting on something outside the
+ * conversation, and the stream is what says it is over. No phase here means
+ * "paid". Only `payment_settled` clears this for a success, and the answer
+ * that follows it is built by the server from the gateway's own record, so
+ * nothing this device holds could fake one.
+ *
+ *   - `starting`: the tap has gone to the server and checkout is being created.
+ *   - `awaiting`: checkout exists (it may be open, closed, or in another tab),
+ *     and we are waiting on the gateway's word.
+ *   - `failed`: this attempt did not go through. The card stays up to try again.
+ *   - `phone`: the gateway needs a number for the receipt that nothing so far
+ *     has given (Cashfree, after a Google sign-in). The card asks for one, and
+ *     Pay sends it with the next start.
+ *
+ * No phase means idle: the Pay button.
+ */
+export interface PaymentState {
+  ref: string;
+  phase: "starting" | "awaiting" | "failed" | "phone";
+  recordId: string | null;
+  provider: PaymentProvider | null;
+  /** The server's formatted amount, e.g. "₹499". Wins over the block's, which is absent for a variable amount. */
+  display: string | null;
+  launch: CheckoutLaunch | null;
+  expiresAt: number | null;
+  /** A builder preview: nothing reaches a gateway, and the card offers a simulated payment. */
+  preview: boolean;
+  /** `failed` and `phone`: what to tell them. */
+  message: string | null;
+  /** The browser refused the checkout tab, so the card leads with opening it by hand. */
+  blocked: boolean;
+}
+
+/**
+ * How often a checkout in another tab is checked on, and for how long.
+ *
+ * Only for Stripe opened from a frame or the preview. A top-window redirect
+ * comes back through the return page, and a modal reports back to this page
+ * itself. A tab is the one place nothing tells us the respondent is done, so
+ * we ask the server to look. The server looks at the gateway, which is why
+ * this is every few seconds and not constantly, and only while the form is
+ * visible: somebody still in the checkout tab is not going to be helped by it.
+ */
+const PAYMENT_POLL_MS = 3000;
+const PAYMENT_POLL_MAX_MS = 10 * 60 * 1000;
+/**
+ * After a confirm that says "paid", how long the stream gets to say the same
+ * before we ask it to.
+ */
+const PAYMENT_RESYNC_MS = 4000;
+
+const blankPayment = (ref: string): PaymentState => ({
+  ref,
+  phase: "starting",
+  recordId: null,
+  provider: null,
+  display: null,
+  launch: null,
+  expiresAt: null,
+  preview: false,
+  message: null,
+  blocked: false,
+});
+
+/** Which gateway a launch belongs to. Stripe is the only one that redirects. */
+function providerForLaunch(launch: CheckoutLaunch): PaymentProvider {
+  switch (launch.kind) {
+    case "cashfree_sdk":
+      return "cashfree";
+    case "razorpay_checkout":
+      return "razorpay";
+    case "redirect":
+      return "stripe";
+  }
+}
+
+/** What a refused start says, in the respondent's words rather than ours. */
+function paymentRefusalMessage(
+  code: StartPaymentErrorCode | string | null,
+  status: number,
+  serverMessage?: string,
+  preview = false,
+): string {
+  switch (code) {
+    case "too_many_attempts":
+      return "That's too many attempts to pay here. Please contact whoever sent you this form.";
+    case "payment_unavailable":
+      // The server's words when it has them: "unavailable" covers both a form that cannot take
+      // payments and a total the respondent's own answers put outside the form's limits, and
+      // only the second is theirs to fix.
+      return serverMessage || "Payment isn't available on this form right now. Please try again later.";
+    case "plan_required":
+      // The server's sentence, for the same reason as `payment_unavailable`: it knows
+      // whether this is the owner's plan or the author's own preview, and saying
+      // something different here left two explanations for one refusal.
+      return serverMessage || "Payment isn't available on this form right now. Please try again later.";
+    case "sign_in_required":
+      /*
+       * Only reachable in the preview: a live respondent meets the sign-in card
+       * instead, and never this. So say what the author is actually looking at
+       * — "Sign in to pay", the respondent's sentence, would read as an
+       * instruction to an author who cannot sign into their own preview.
+       */
+      return "Respondents sign in before paying. Simulate the payment to carry on here.";
+    case "preview_live_account":
+      return "This form takes payments on a live account, which a preview never charges. Simulate the payment instead, or connect a test account to try real checkout.";
+    case "live_account_in_test_mode":
+      return "This is a test session, which never charges a live account.";
+    default:
+      return status === 429
+        ? "You're going a bit fast. Give it a moment, then try again."
+        : "Checkout couldn't start. Please try again.";
+  }
+}
+
 export interface UploadSpec {
   ref: string;
   accept: string[];
@@ -186,6 +317,22 @@ interface UseChatOptions {
    * "Start over" reconnected to the session it was trying to leave.
    */
   onRestart?: () => void;
+  /**
+   * From `?cf_pay=`: the payment record a gateway redirect has just sent this
+   * respondent back from.
+   *
+   * The conversation resumes from storage as on any reload. This only adds a
+   * nudge, once the stream is up, asking the server to check that record now
+   * rather than waiting for the webhook.
+   */
+  paymentReturn?: string;
+  /**
+   * From `?cf_pay_cancelled=`: the payment record whose redirect checkout the
+   * respondent backed out of. The session still holds it as open — a gateway's
+   * cancel link does not close the checkout — so once the stream has put its
+   * card back, it is cancelled the way the card's own Cancel would.
+   */
+  paymentCancelled?: string;
 }
 
 const MAX_RECONNECT_ATTEMPTS = 8;
@@ -217,19 +364,17 @@ const STALL_MS = 45000;
  */
 const BOOT_MAX_MS = 8000;
 
-/**
- * Where a respondent's place in a form is remembered.
+/*
+ * Where a respondent's place in a form is remembered: `storageKey` and
+ * `submittedKey`, from `session-store`.
  *
  * Partial answers already persist server-side — every accepted answer is
  * written to D1 immediately — but the token that identifies the session lived
  * only in memory, so closing the tab orphaned it and reopening the link
- * started from scratch. Keeping it here is what makes the link resumable.
- *
- * Scoped per form, so two forms on one device do not collide.
+ * started from scratch. Keeping it in storage is what makes the link
+ * resumable. The keys moved out of this file so the gateway return page can
+ * find the same conversation without importing this hook.
  */
-const storageKey = (slug: string) => `chatform:session:${slug}`;
-/** Kept after completion so a return visit knows it has already been filled. */
-const submittedKey = (slug: string) => `chatform:submitted:${slug}`;
 
 function loadSaved(slug: string): { sessionId: string; token: string } | null {
   try {
@@ -344,7 +489,17 @@ async function refusalCode(res: Response): Promise<string | null> {
   }
 }
 
-export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId, existingSession, onRestart }: UseChatOptions) {
+export function useChat({
+  slug,
+  apiOrigin,
+  hiddenFields,
+  resumeToken,
+  followUpId,
+  existingSession,
+  onRestart,
+  paymentReturn,
+  paymentCancelled,
+}: UseChatOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState<QuestionState | null>(null);
   /** The question on screen, for callbacks that must stay stable across renders. */
@@ -407,6 +562,35 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
   const [resumed, setResumed] = useState(false);
   const [auth, setAuth] = useState<AuthState | null>(null);
   const [verify, setVerify] = useState<VerifyState | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<PaymentState | null>(null);
+  /** The same, for callbacks that must stay stable across renders. */
+  const pendingPaymentRef = useRef<PaymentState | null>(null);
+  useEffect(() => {
+    pendingPaymentRef.current = pendingPayment;
+  }, [pendingPayment]);
+  /**
+   * Records the stream has said are simulated.
+   *
+   * A ref beside the state because the start request and `payment_required`
+   * race: the session emits the event while it is still answering the request,
+   * so the event is usually applied first but not always rendered first. What
+   * has to be right is that a preview checkout is never opened for real.
+   */
+  const previewRecordsRef = useRef(new Set<string>());
+  /** One start at a time. A double tap must not create two orders. */
+  const paymentStartingRef = useRef(false);
+  /** A checkout is being put on screen, or is on screen as a modal. See `openCheckout`. */
+  const checkoutOpeningRef = useRef(false);
+  /**
+   * Which attempt the checkout being opened belongs to.
+   *
+   * A gateway's script can take twenty seconds to load on mobile data, and Cancel is live that
+   * whole time. Cancelling cleared the card and superseded the order, and then the SDK finished
+   * loading and put the modal up anyway — for the order they had just cancelled, which the
+   * gateway will still take money for. Bumped by everything that ends an attempt; `openCheckout`
+   * checks it again after the load and walks away if it has moved.
+   */
+  const checkoutAttemptRef = useRef(0);
   const [identity, setIdentity] = useState<VerifiedIdentity | null>(null);
   /**
    * Who this device signed in as last time, if anyone.
@@ -662,7 +846,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
       on("answer_recorded", (e) => {
         const { ref, messageId } = JSON.parse((e as MessageEvent).data) as {
           ref: string;
-          messageId?: string;
+          messageId?: string | null;
         };
         /**
          * The ref, never the value.
@@ -673,6 +857,14 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
          * where the data lives.
          */
         emitEmbedEvent({ type: "answer", ref });
+        /*
+         * An explicit `null` means there is no bubble: the answer came from
+         * something outside the transcript, and a payment settled off-screen is
+         * the one that does. Guessing here pinned "is this refundable?" — or any
+         * message the server never read as an answer — with a pencil that opens
+         * the payment question. Only an *absent* id is the old server's shape.
+         */
+        if (messageId === null) return;
         setMessages((prev) => {
           const idx = messageId
             ? prev.findIndex((m) => m.serverId === messageId || m.id === messageId)
@@ -766,6 +958,11 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
          */
         setReview(null);
         settleTurn();
+        // A payment belongs to its question. Moving to another one (an edit, a
+        // skip, a cancel that went on) leaves nothing of it on screen; the same
+        // question re-stated keeps it, because a reload re-states the question
+        // and then the checkout that is still open against it.
+        setPendingPayment((p) => (p && p.ref !== data.block?.ref ? null : p));
         // Cleared when the conversation moves on, not when the *same* question
         // is re-stated. Escalation now re-emits its own question so the
         // controls come back with it, and clearing unconditionally threw the
@@ -864,9 +1061,98 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
         setValidationHint(null);
       });
 
+      /*
+       * A checkout is waiting on the respondent.
+       *
+       * Sent when a start creates or reuses one, and again on resync, which is
+       * how a reloaded tab gets the card back mid-payment. It never opens
+       * checkout by itself. Opening happens in `startPayment`, on the tap,
+       * because a tab opened without a tap behind it is refused, and because a
+       * replay that re-opened a modal on every reconnect would be unbearable.
+       */
+      on("payment_required", (e) => {
+        const data = JSON.parse((e as MessageEvent).data) as PaymentRequiredEvent;
+        if (data.preview) previewRecordsRef.current.add(data.recordId);
+        // The latest one wins outright. The stream is ordered, so a later
+        // `payment_required` is a newer attempt: a retry, or a checkout the
+        // server re-created because the amount changed and it superseded the old.
+        setPendingPayment((prev) => ({
+          ref: data.ref,
+          phase: "awaiting",
+          recordId: data.recordId,
+          provider: data.provider,
+          display: data.display,
+          launch: data.launch,
+          expiresAt: data.expiresAt,
+          preview: data.preview === true,
+          message: null,
+          blocked: prev?.recordId === data.recordId ? prev.blocked : false,
+        }));
+        setValidationHint(null);
+        settleTurn();
+      });
+
+      /*
+       * The gateway confirmed it. The card goes, and the answer and the next
+       * question follow on the stream, written by the server from its own
+       * record.
+       *
+       * `answering` as well as the dots: until the next question lands, the
+       * question on screen is still this payment, and with the pending state
+       * cleared its card would fall back to idle, putting "Pay ₹499" back up in
+       * front of somebody who has just paid. This is an answer in flight in
+       * every sense that matters, so it is treated as one, and the same events
+       * (and the same watchdog) bring the controls back.
+       */
+      on("payment_settled", (e) => {
+        const data = JSON.parse((e as MessageEvent).data) as PaymentSettledEvent;
+        setPendingPayment((prev) => (prev && (prev.recordId === data.recordId || prev.ref === data.ref) ? null : prev));
+        /*
+         * Only for the question on screen. A payment can settle for one the respondent has
+         * moved past — they skipped an optional payment, or went back to edit something, and
+         * paid in the other tab anyway — and the server then records it quietly, with no
+         * question event to follow. Raising the flags for that hid the controls of the question
+         * they are actually on behind typing dots until the watchdog gave up on it.
+         */
+        if (data.ref === currentQuestionRef.current) {
+          setThinking(true);
+          setAnswering(true);
+        }
+      });
+
+      on("payment_failed", (e) => {
+        const data = JSON.parse((e as MessageEvent).data) as PaymentFailedEvent;
+        // The server has finished with this attempt, so a launch still loading for it must not
+        // put a modal up. See `checkoutAttemptRef`.
+        if (!pendingPaymentRef.current?.recordId || pendingPaymentRef.current.recordId === data.recordId) {
+          checkoutAttemptRef.current += 1;
+        }
+        setPendingPayment((prev) => {
+          // A failure for an attempt that has since been replaced says nothing
+          // about the one on screen.
+          if (prev && prev.recordId && prev.recordId !== data.recordId && prev.phase !== "failed") return prev;
+          /*
+           * Cancel is what the respondent asked for, not something that went wrong: the Pay
+           * button comes back, not a red "Payment cancelled." with Try again. On the device
+           * that pressed it this is already the state, and on another — or a replay after a
+           * reload — it is the state it should land in.
+           */
+          if (data.code === "payment_cancelled") return prev && prev.ref !== data.ref ? prev : null;
+          return {
+            ...(prev && prev.ref === data.ref ? prev : blankPayment(data.ref)),
+            phase: "failed",
+            recordId: data.recordId,
+            message: data.message,
+            blocked: false,
+          };
+        });
+        settleTurn();
+      });
+
       on("review", (e) => {
         setReview(JSON.parse((e as MessageEvent).data) as ReviewState);
         setQuestion(null);
+        setPendingPayment(null);
         settleTurn();
       });
 
@@ -878,6 +1164,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
         setEnding(canUndo === undefined ? ending : { ...ending, canUndo });
         setQuestion(null);
         setReview(null);
+        setPendingPayment(null);
         settleTurn();
       });
 
@@ -1020,15 +1307,51 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
           `${apiOrigin}/p/sessions/${saved.sessionId}?t=${saved.token}`,
         );
         if (probe.ok) {
-          const state = (await probe.json()) as { status?: string };
+          const state = (await probe.json()) as {
+            status?: string;
+            summary?: SubmittedState["answers"];
+            completedAt?: number | null;
+            ending?: EndingState | null;
+            canRepeat?: boolean;
+          };
           if (state.status === "active") {
             sessionRef.current = saved;
             setResumed(true);
             connectStream(saved.sessionId, saved.token, 0);
             return;
           }
+          /*
+           * Finished while this tab was not watching.
+           *
+           * Only the stream's `complete` handler moves a session from the saved key to the
+           * submitted one, and a tab that was somewhere else never runs it. The usual way is a
+           * payment: Stripe took the whole window, or a phone discarded the tab while its owner
+           * was in a UPI app, and the payment — the last question, on a form with no review step
+           * — settled and completed the response meanwhile. Treated as gone, that threw the
+           * finished response away and opened a blank one at question one, in front of somebody
+           * who had just paid; walking it again charged them a second time. So it is recorded
+           * as submitted here, and shown the way a submitted one is.
+           */
+          if (state.status === "completed" || state.status === "disqualified") {
+            clearSaved(slug);
+            markSubmitted(slug, saved);
+            if (state.status === "disqualified") {
+              sessionRef.current = saved;
+              connectStream(saved.sessionId, saved.token, 0);
+              return;
+            }
+            setSubmitted({
+              at: state.completedAt ?? Date.now(),
+              answers: state.summary ?? [],
+              ending: state.ending ?? null,
+              canRepeat: state.canRepeat,
+            });
+            setStatus("ended");
+            setResolving(false);
+            return;
+          }
         }
-        // Completed, abandoned or gone — do not resurrect it.
+        // Abandoned or gone — do not resurrect it.
         clearSaved(slug);
       } catch {
         clearSaved(slug);
@@ -1265,7 +1588,15 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
           // Reconnecting cannot revive this one; the way back is a new session.
           sessionDeadRef.current = true;
           setError("This conversation has expired. Tap retry to start a fresh one.");
-        } else if (code === "auth_required" || code === "stale_ref" || code === "no_question") {
+        } else if (
+          code === "auth_required" ||
+          code === "stale_ref" ||
+          code === "no_question" ||
+          // Cancel or retry on a checkout the server had already dropped — it settled, failed
+          // or expired meanwhile. Nothing went wrong that the respondent could send again; the
+          // server has put the current question back, and a resync makes sure this device has it.
+          code === "no_pending_payment"
+        ) {
           // The session knows something this device does not. Rather than
           // guessing at it, ask the conversation to say where it stands — the
           // sign-in card, or the question we are actually on, comes back.
@@ -1366,6 +1697,282 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     await post("actions", { action: "change_answer" });
   }, [post]);
 
+  /**
+   * Ask the server to look at a payment now.
+   *
+   * Only a nudge, and never the verdict. The server asks the gateway and, if
+   * the money is there, settles it, and the chat learns that from
+   * `payment_settled` like everyone else. The status that comes back is for the
+   * card's "Check payment" line and nothing more. The one thing done with it
+   * here: if the server says paid but the stream stays quiet, ask the stream to
+   * re-state itself, since that event may have gone to a socket that is no
+   * longer there.
+   */
+  const confirmPayment = useCallback(
+    async (recordId?: string): Promise<string | null> => {
+      const session = sessionRef.current;
+      const id = recordId ?? pendingPaymentRef.current?.recordId;
+      if (!session || !id) return null;
+      try {
+        const res = await fetch(
+          `${apiOrigin}/p/sessions/${session.sessionId}/payments/${encodeURIComponent(id)}/confirm`,
+          {
+            method: "POST",
+            headers: { "x-respondent-token": session.token },
+            signal: AbortSignal.timeout(POST_TIMEOUT_MS),
+          },
+        );
+        if (!res.ok) return null;
+        const body = (await res.json().catch(() => null)) as { status?: string } | null;
+        const status = typeof body?.status === "string" ? body.status : null;
+        if (status === "paid") {
+          setTimeout(() => {
+            if (pendingPaymentRef.current?.recordId === id) void resyncRef.current?.();
+          }, PAYMENT_RESYNC_MS);
+        }
+        return status;
+      } catch {
+        return null;
+      }
+    },
+    [apiOrigin],
+  );
+
+  /**
+   * Put checkout on screen for a record the server has created.
+   *
+   * Whatever the gateway's own UI reports on the way out, finished or closed,
+   * is worth one confirm nudge and nothing more. See `launchCheckout`.
+   */
+  const openCheckout = useCallback(
+    async (recordId: string, launch: CheckoutLaunch, preopened: Window | null) => {
+      /*
+       * One launch at a time. The card reads "Waiting for payment confirmation" with an "Open
+       * checkout again" chip from the moment the order exists, while the gateway's script can
+       * still be loading for seconds on mobile data — and a respondent who saw nothing open
+       * tapped the chip, putting two modals up on one order. A modal's launch lasts until it
+       * closes, so this also covers a tap on the page underneath one.
+       */
+      if (checkoutOpeningRef.current) return;
+      checkoutOpeningRef.current = true;
+      const attempt = checkoutAttemptRef.current;
+      let outcome: Awaited<ReturnType<typeof launchCheckout>>;
+      try {
+        outcome = await launchCheckout(launch, {
+          newTab: ephemeral || isFramed(),
+          preopened,
+          // Cancel, or anything else that took the card down, while the script was loading.
+          abandoned: () => checkoutAttemptRef.current !== attempt,
+        });
+      } finally {
+        checkoutOpeningRef.current = false;
+      }
+      if (checkoutAttemptRef.current !== attempt) {
+        preopened?.close();
+        return;
+      }
+      switch (outcome.kind) {
+        case "abandoned":
+          preopened?.close();
+          return;
+        case "completed":
+        case "dismissed":
+          void confirmPayment(recordId);
+          return;
+        case "blocked":
+          setPendingPayment((p) => (p?.recordId === recordId ? { ...p, blocked: true } : p));
+          return;
+        case "unavailable":
+          setPendingPayment((p) =>
+            p?.recordId === recordId ? { ...p, phase: "failed", message: outcome.message, blocked: false } : p,
+          );
+          return;
+        case "navigating":
+        case "tab_opened":
+          setPendingPayment((p) => (p?.recordId === recordId && p.blocked ? { ...p, blocked: false } : p));
+          return;
+      }
+    },
+    [confirmPayment, ephemeral],
+  );
+
+  /**
+   * The Pay button, and Try again.
+   *
+   * A request rather than a message or an action, because it needs its answer
+   * inline: the checkout it creates has to be opened from this tap. A tab
+   * opened from an event that arrives on the stream later has no tap behind it
+   * and is refused. The same request serves a retry: the server hands back the
+   * checkout that is still open, or makes a new one if the last attempt failed.
+   *
+   * Refusals that are not about payment go where they belong. `sign_in_required`
+   * means the gate comes first (the server raises the sign-in card, and a
+   * resync makes sure this device sees it), and a stale ref means the
+   * conversation has moved on without us.
+   */
+  const startPayment = useCallback(
+    async (ref: string, opts: { phone?: string } = {}) => {
+      const session = sessionRef.current;
+      if (!session || paymentStartingRef.current) return;
+      paymentStartingRef.current = true;
+
+      const current = pendingPaymentRef.current?.ref === ref ? pendingPaymentRef.current : null;
+      const block = currentBlockRef.current?.ref === ref ? currentBlockRef.current : null;
+      const newTab = ephemeral || isFramed();
+      // Before any await, while the tap still counts. Only when the gateway is
+      // known to redirect: a blank tab for a modal checkout would be litter.
+      const provider = current?.provider ?? block?.paymentProvider ?? null;
+      const preopened = newTab && provider === "stripe" && !current?.preview ? preopenCheckoutTab() : null;
+
+      setPendingPayment((p) => ({
+        ...(p?.ref === ref ? p : blankPayment(ref)),
+        phase: "starting",
+        message: null,
+        blocked: false,
+      }));
+      setValidationHint(null);
+
+      const fail = (message: string, extra: Partial<PaymentState> = {}) => {
+        preopened?.close();
+        setPendingPayment((p) => ({
+          ...(p?.ref === ref ? p : blankPayment(ref)),
+          phase: "failed",
+          message,
+          blocked: false,
+          ...extra,
+        }));
+      };
+
+      try {
+        let res: Response;
+        try {
+          res = await fetch(`${apiOrigin}/p/sessions/${session.sessionId}/payments`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-respondent-token": session.token },
+            body: JSON.stringify(opts.phone ? { ref, phone: opts.phone } : { ref }),
+            signal: AbortSignal.timeout(POST_TIMEOUT_MS),
+          });
+        } catch {
+          fail("That didn't reach the form. Check your connection and try again.");
+          return;
+        }
+
+        const body = (await res.json().catch(() => null)) as
+          | (Partial<StartPaymentResponse> & { error?: StartPaymentError })
+          | null;
+
+        if (!res.ok || !body?.recordId || !body.launch) {
+          const code = body?.error?.code ?? null;
+          // `already_paid`: the server has re-recorded the payment this
+          // question already holds and moved on, so what is missing here is
+          // only the stream catching up.
+          if (code === "sign_in_required" || code === "stale_ref" || code === "already_paid") {
+            preopened?.close();
+            setPendingPayment(null);
+            void resyncRef.current?.();
+            return;
+          }
+          if (code === "session_closed" || code === "session_not_found" || code === "unauthorized") {
+            preopened?.close();
+            setPendingPayment(null);
+            sessionDeadRef.current = true;
+            setError("This conversation has expired. Tap retry to start a fresh one.");
+            return;
+          }
+          // Asked for, not failed: the card turns into a phone field, and its
+          // Pay sends the number with the next start. The server's message says
+          // whether this is the first ask or a number it could not use.
+          if (code === "phone_required") {
+            preopened?.close();
+            setPendingPayment((p) => ({
+              ...(p?.ref === ref ? p : blankPayment(ref)),
+              phase: "phone",
+              message: opts.phone ? (body?.error?.message ?? null) : null,
+              blocked: false,
+              preview: body?.error?.preview === true || (p?.ref === ref && p.preview),
+            }));
+            return;
+          }
+          // A preview that cannot pay for real (no account yet, a live one, a
+          // plan without payments) still gets to walk past the payment, just
+          // not by paying. The server says which refusals those are.
+          const previewRefusal = body?.error?.preview === true || code === "preview_live_account";
+          fail(
+            paymentRefusalMessage(code, res.status, body?.error?.message, previewRefusal),
+            previewRefusal ? { preview: true } : {},
+          );
+          return;
+        }
+
+        const recordId = body.recordId;
+        const launch = body.launch;
+        const preview = body.preview === true || previewRecordsRef.current.has(recordId);
+        setPendingPayment((p) => ({
+          ...(p?.ref === ref ? p : blankPayment(ref)),
+          phase: "awaiting",
+          recordId,
+          // Until `payment_required` names it: the launch already says which
+          // gateway this is, and the card's "Secure checkout by" line should
+          // not wait on the stream to say so.
+          provider: p?.ref === ref && p.provider ? p.provider : providerForLaunch(launch),
+          launch,
+          expiresAt: typeof body.expiresAt === "number" ? body.expiresAt : null,
+          preview: preview || (p?.recordId === recordId && p.preview),
+          message: null,
+          blocked: false,
+        }));
+        if (preview) {
+          preopened?.close();
+          return;
+        }
+        await openCheckout(recordId, launch, preopened);
+      } finally {
+        paymentStartingRef.current = false;
+      }
+    },
+    [apiOrigin, ephemeral, openCheckout],
+  );
+
+  /**
+   * Open the same checkout again: after the modal was closed, after a reload,
+   * or when the browser refused the tab. Called straight from a tap, and
+   * `launchCheckout` reaches `window.open` before its first await, so the tab
+   * is not refused a second time.
+   */
+  const reopenCheckout = useCallback(() => {
+    const p = pendingPaymentRef.current;
+    if (!p?.launch || !p.recordId || p.preview || p.phase !== "awaiting") return;
+    // The Pay tap's own launch is still under way.
+    if (paymentStartingRef.current) return;
+    void openCheckout(p.recordId, p.launch, null);
+  }, [openCheckout]);
+
+  /** Walk away from this checkout and put the Pay button back. */
+  const cancelPayment = useCallback(async () => {
+    const p = pendingPaymentRef.current;
+    if (!p) return;
+    /*
+     * The launch this cancels may still be loading its script. Retiring the attempt stops that
+     * one opening a modal for an order nobody wants any more, and frees the Pay button, which
+     * would otherwise ignore the next tap until the abandoned load finished.
+     */
+    checkoutAttemptRef.current += 1;
+    paymentStartingRef.current = false;
+    setPendingPayment(null);
+    await post("actions", { action: "cancel_payment", ref: p.ref });
+  }, [post]);
+
+  /**
+   * The builder preview's stand-in for paying. The server refuses it on a real
+   * session, and records nothing in D1 for it on a preview.
+   */
+  const simulatePayment = useCallback(async () => {
+    const p = pendingPaymentRef.current;
+    if (!p) return;
+    setThinking(true);
+    await post("actions", { action: "simulate_payment", ref: p.ref });
+  }, [post]);
+
   /** Go back and change a previous answer. */
   const editAnswer = useCallback(
     async (ref: string) => {
@@ -1431,6 +2038,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
       setReview(null);
       setAuth(null);
       setVerify(null);
+      setPendingPayment(null);
       setIdentity(null);
       setError(null);
       setRateLimited(null);
@@ -1467,6 +2075,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     setResumed(false);
     setAuth(null);
     setVerify(null);
+    setPendingPayment(null);
     setIdentity(null);
     setError(null);
     setStatus("connecting");
@@ -1876,6 +2485,109 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     return () => clearInterval(timer);
   }, [thinking, resync, hardReconnect, settleTurn]);
 
+  /**
+   * A checkout in another tab, checked on while the form is looked at.
+   *
+   * See `PAYMENT_POLL_MS`. Keyed on the record, so a retry that creates a new
+   * one restarts the ten minutes rather than inheriting what is left of them.
+   */
+  const pollRecordId =
+    pendingPayment?.phase === "awaiting" && pendingPayment.launch?.kind === "redirect" && !pendingPayment.preview
+      ? pendingPayment.recordId
+      : null;
+  useEffect(() => {
+    if (!pollRecordId || !(ephemeral || isFramed())) return;
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      if (Date.now() - startedAt > PAYMENT_POLL_MAX_MS) {
+        clearInterval(timer);
+        return;
+      }
+      if (document.visibilityState === "visible") void confirmPayment(pollRecordId);
+    }, PAYMENT_POLL_MS);
+    return () => clearInterval(timer);
+  }, [pollRecordId, ephemeral, confirmPayment]);
+
+  /**
+   * Coming back to the form while a payment is out.
+   *
+   * The moment that matters most on a phone: the respondent left for their UPI
+   * app, or for the checkout tab, paid, and switched back. Asking then, rather
+   * than waiting for a webhook, is what makes the chat move on as they arrive.
+   * For every kind of checkout, not only the polled one.
+   */
+  const awaitingRecordId =
+    pendingPayment?.phase === "awaiting" && !pendingPayment.preview ? pendingPayment.recordId : null;
+  useEffect(() => {
+    if (!awaitingRecordId) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void confirmPayment(awaitingRecordId);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [awaitingRecordId, confirmPayment]);
+
+  /*
+   * Remembered before any checkout can take this window away from the form: a gateway that
+   * redirects (Cashfree, when the payment method needs a page of its own) comes back through
+   * `/pay/return`, which rebuilds this address from the slug — and without these an embedded
+   * form returns as a standalone one, inside the host page's frame. See `rememberEmbedQuery`.
+   */
+  useEffect(() => {
+    rememberEmbedQuery(slug, window.location.search);
+  }, [slug]);
+
+  /**
+   * Back from a gateway redirect (`?cf_pay=`).
+   *
+   * Once the stream is up, which is when the resumed session is known to be
+   * this one. Then the parameter comes out of the address bar, so a reload
+   * later is an ordinary visit and a shared link does not carry it.
+   */
+  const paymentReturnRef = useRef(paymentReturn ?? null);
+  useEffect(() => {
+    if (status !== "ready") return;
+    const recordId = paymentReturnRef.current;
+    if (!recordId) return;
+    paymentReturnRef.current = null;
+    void confirmPayment(recordId);
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("cf_pay")) {
+        url.searchParams.delete("cf_pay");
+        window.history.replaceState(null, "", url.toString());
+      }
+    } catch {
+      /* A URL we cannot parse is not worth failing a live session over. */
+    }
+  }, [status, confirmPayment]);
+
+  /**
+   * Back from a redirect checkout the respondent cancelled (`?cf_pay_cancelled=`).
+   *
+   * Without this the replayed `payment_required` put the card straight into "Waiting for
+   * payment confirmation…", with a spinner and nothing polling, for a payment they had just told
+   * the gateway they were not making. Only that record, and only while it is still the one
+   * waiting: a checkout since replaced, or already settled by the webhook, is left alone.
+   */
+  const paymentCancelledRef = useRef(paymentCancelled ?? null);
+  useEffect(() => {
+    if (status !== "ready") return;
+    const recordId = paymentCancelledRef.current;
+    if (!recordId) return;
+    paymentCancelledRef.current = null;
+    if (pendingPayment?.recordId === recordId && pendingPayment.phase === "awaiting") void cancelPayment();
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("cf_pay_cancelled")) {
+        url.searchParams.delete("cf_pay_cancelled");
+        window.history.replaceState(null, "", url.toString());
+      }
+    } catch {
+      /* As above. */
+    }
+  }, [status, pendingPayment, cancelPayment]);
+
   useEffect(() => {
     const t = setTimeout(() => void start(), 0);
     return () => {
@@ -1912,6 +2624,12 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
     submitVerifyPhoneToken,
     resendVerifyCode,
     changeVerifyAnswer,
+    pendingPayment,
+    startPayment,
+    confirmPayment,
+    reopenCheckout,
+    cancelPayment,
+    simulatePayment,
     escalatedRef,
     validationHint,
     uploadSpec,

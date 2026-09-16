@@ -57,6 +57,8 @@ export function ChatClient({
   existingSession,
   previewMode,
   onRestart,
+  paymentReturn,
+  paymentCancelled,
 }: {
   config: PublicFormConfig;
   hiddenFields?: Record<string, string>;
@@ -68,6 +70,10 @@ export function ChatClient({
   previewMode?: boolean;
   /** Preview only: mint a fresh session, since a draft has no public slug. */
   onRestart?: () => void;
+  /** From `?cf_pay=` — the payment record a gateway redirect just returned from. */
+  paymentReturn?: string;
+  /** From `?cf_pay_cancelled=` — the redirect checkout the respondent backed out of. */
+  paymentCancelled?: string;
 }) {
   const chat = useChat({
     slug: config.slug,
@@ -77,6 +83,8 @@ export function ChatClient({
     ...(followUpId ? { followUpId } : {}),
     existingSession,
     onRestart,
+    ...(paymentReturn ? { paymentReturn } : {}),
+    ...(paymentCancelled ? { paymentCancelled } : {}),
   });
 
   return <ChatSurface chat={chat} config={config} previewMode={previewMode} />;
@@ -370,6 +378,22 @@ export function ChatSurface({
     [currentRef, sendStructured],
   );
   const onSkip = useCallback(() => void sendAction("skip"), [sendAction]);
+  /*
+    The gateway payment card's handlers, as one stable object for the same
+    reason: it is a prop on the memoised affordance. Every function in it is a
+    `useCallback` in `useChat`, so this only changes when they do.
+  */
+  const { startPayment, reopenCheckout, confirmPayment, cancelPayment, simulatePayment } = chat;
+  const paymentActions = useMemo(
+    () => ({
+      start: (ref: string, opts?: { phone?: string }) => void startPayment(ref, opts),
+      reopen: reopenCheckout,
+      confirm: () => confirmPayment(),
+      cancel: () => void cancelPayment(),
+      simulate: () => void simulatePayment(),
+    }),
+    [startPayment, reopenCheckout, confirmPayment, cancelPayment, simulatePayment],
+  );
   /* Stable for the same reason as the handlers above: it rides on every bubble. */
   const { switchAccount } = chat;
   const onSwitchAccount = useCallback(() => void switchAccount(), [switchAccount]);
@@ -624,6 +648,10 @@ export function ChatSurface({
                 disabled={chat.status === "error"}
                 uploadBase={uploadBase}
                 respondentToken={respondentToken}
+                // A gateway payment's card: idle, opening, waiting on the
+                // gateway, or failed. See `GatewayPaymentAffordance`.
+                payment={chat.pendingPayment}
+                paymentActions={paymentActions}
                 onStructured={onStructured}
                 onSkip={onSkip}
               />

@@ -8,7 +8,14 @@ import {
   type ConditionGroup,
 } from "../conditions";
 import type { LogicRule } from "../logic";
-import { isValidUpiId, UPI_CURRENCY } from "../payment-link";
+import {
+  formatAmount,
+  fromMinorUnits,
+  isValidUpiId,
+  providerMinMinor,
+  toMinorUnits,
+  UPI_CURRENCY,
+} from "../payment-link";
 
 type GotoRule = Extract<LogicRule, { action_kind: "goto" }>;
 
@@ -512,8 +519,70 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
   // respondent reaches it, finds a dead end, and abandons the whole form. The
   // schema keeps these fields optional so a half-built block still saves, so
   // the requirement is enforced here, at publish.
+  const gatewayRefs: string[] = [];
   for (const b of doc.blocks) {
     if (b.type !== "payment") continue;
+    const named = b.title || b.ref;
+    if (b.method === "gateway") {
+      gatewayRefs.push(b.ref);
+      /*
+       * Only what the document alone can tell. Whether the account still exists,
+       * is active, belongs to this org, charges in this currency, and whether the
+       * plan includes `collect_payments` all live in D1 and are checked by the
+       * API's publish path — a lint that guessed at them would pass forms that
+       * then fail at the Pay button.
+       */
+      if (!b.paymentAccountId?.trim()) {
+        issues.push({
+          level: "error",
+          code: "payment_gateway_no_account",
+          message: `"${named}" takes verified payments but has no payment account connected. Connect one in Integrate, then pick it here.`,
+          refs: [b.ref],
+        });
+      }
+      if (b.amountMode === "variable") {
+        if (!b.amountVariable?.trim()) {
+          issues.push({
+            level: "error",
+            code: "payment_no_amount_variable",
+            message: `"${named}" charges a variable amount but doesn't say which variable holds it.`,
+            refs: [b.ref],
+          });
+        } else if (!variableNames.has(b.amountVariable)) {
+          issues.push({
+            level: "error",
+            code: "payment_no_amount_variable",
+            message: `"${named}" charges the amount in "${b.amountVariable}", but the form has no variable by that name.`,
+            refs: [b.ref],
+          });
+        }
+        if (b.minAmount !== undefined && b.maxAmount !== undefined && b.minAmount > b.maxAmount) {
+          issues.push({
+            level: "error",
+            code: "payment_bad_amount",
+            message: `"${named}" has a minimum amount above its maximum, so no amount could ever be charged.`,
+            refs: [b.ref],
+          });
+        }
+      } else if (b.amount === undefined || !(b.amount > 0)) {
+        issues.push({
+          level: "error",
+          code: "payment_bad_amount",
+          message: `"${named}" takes verified payments but has no amount to charge.`,
+          refs: [b.ref],
+        });
+      } else if (toMinorUnits(b.amount, b.currency) < providerMinMinor(b.currency)) {
+        // Refused by the gateway after the respondent has already pressed Pay,
+        // which is the worst moment to learn the price is too small to charge.
+        issues.push({
+          level: "error",
+          code: "payment_bad_amount",
+          message: `${formatAmount(b.amount, b.currency)} is below the smallest amount payment gateways accept in ${b.currency.toUpperCase()} (${formatAmount(fromMinorUnits(providerMinMinor(b.currency), b.currency), b.currency)}).`,
+          refs: [b.ref],
+        });
+      }
+      continue;
+    }
     if (b.method === "upi") {
       if (!b.upiId?.trim()) {
         issues.push({
@@ -542,6 +611,28 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
         message: `"${b.title || b.ref}" collects payment but has no payment link.`,
       });
     }
+  }
+
+  /*
+   * A verified payment needs to know who paid.
+   *
+   * The gateway is told a customer, the record is tied to a person rather than
+   * a device, and a refund or a duplicate is resolved by asking who it was.
+   * Without sign-in the form has none of that, and the payment step would be
+   * a checkout anyone can open for anybody. The session refuses to start a
+   * payment without an identity too; this is what tells the author before
+   * publishing rather than their respondents after.
+   */
+  if (gatewayRefs.length > 0 && !doc.settings.requireAuth.enabled) {
+    issues.push({
+      level: "error",
+      code: "payment_requires_sign_in",
+      message:
+        gatewayRefs.length === 1
+          ? "Verified payments need respondents to sign in. Turn on sign-in (Google or phone) in Settings."
+          : `${gatewayRefs.length} questions take verified payments, which need respondents to sign in. Turn on sign-in (Google or phone) in Settings.`,
+      refs: gatewayRefs,
+    });
   }
 
   return issues;

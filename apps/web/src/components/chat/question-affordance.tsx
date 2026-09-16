@@ -10,7 +10,8 @@ import { DateComposer } from "./composers/date";
 import { SignatureComposer } from "./composers/signature";
 import { FieldsComposer, GroupComposer, MatrixComposer, RankingComposer } from "./composers/structured";
 import { FileUploadControl } from "./file-upload";
-import { PaymentAffordance } from "./payment-affordance";
+import { PaymentAffordance, type GatewayPaymentActions } from "./payment-affordance";
+import type { PaymentState } from "./use-chat";
 import { assetUrl } from "@/lib/assets";
 import { cn } from "@/lib/utils";
 
@@ -66,6 +67,17 @@ export const QuestionAffordance = memo(function QuestionAffordance(props: {
   preview?: boolean;
   uploadBase: string | null;
   respondentToken: string | null;
+  /**
+   * A verified payment in progress for this question, and what its card can
+   * ask the session to do. Only a `gateway` payment block reads either; the
+   * builder's question preview passes neither and gets the idle card.
+   *
+   * `paymentActions` must be stable (memoised by the caller) for the same
+   * reason the other callbacks are: a new object per streamed token would
+   * defeat the memo.
+   */
+  payment?: PaymentState | null;
+  paymentActions?: GatewayPaymentActions;
   onStructured: (value: unknown, display: string) => void;
   onSkip: () => void;
 }) {
@@ -182,6 +194,8 @@ function AffordanceControls({
   prefill,
   uploadBase,
   respondentToken,
+  payment,
+  paymentActions,
   onStructured,
   onSkip,
 }: {
@@ -191,6 +205,8 @@ function AffordanceControls({
   prefill?: Record<string, string>;
   uploadBase: string | null;
   respondentToken: string | null;
+  payment?: PaymentState | null;
+  paymentActions?: GatewayPaymentActions;
   onStructured: (value: unknown, display: string) => void;
   onSkip: () => void;
 }) {
@@ -506,11 +522,16 @@ function AffordanceControls({
       );
     }
 
+    // Manual (link, UPI) or verified gateway checkout: `PaymentAffordance`
+    // branches on the block's method, so this stays the one place a payment
+    // question is drawn for the live chat, the preview chat and the builder.
     case "payment":
       return (
         <PaymentAffordance
           block={block}
           disabled={disabled}
+          payment={payment}
+          paymentActions={paymentActions}
           onStructured={onStructured}
           onSkip={onSkip}
         />

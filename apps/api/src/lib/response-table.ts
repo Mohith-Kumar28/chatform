@@ -1,4 +1,4 @@
-import { displayAnswer, readFormDoc, type Block } from "@repo/form-schema";
+import { displayAnswer, paymentCells, paymentColumnTitles, readFormDoc, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { resolveRetiredBlocks } from "./retired-columns.js";
 
@@ -142,6 +142,8 @@ export async function buildResponseTable(
   const retired = await resolveRetiredBlocks(env, formId, seen, new Set(doc.blocks.map((b) => b.ref)));
   const columns = [...answerable, ...retired];
 
+  const retiredRefs = new Set(retired.map((b) => b.ref));
+
   // The question, not its ref. `b_short` means nothing to whoever opens this;
   // the ref follows in brackets so a column can still be matched to the doc.
   const header = [
@@ -149,11 +151,13 @@ export async function buildResponseTable(
     "status",
     "started_at",
     "completed_at",
-    ...answerable.map((b) => `${b.title} (${b.ref})`),
-    // Marked, because a column the form no longer has needs to explain itself
-    // to whoever opens the file — and because the same question re-added later
-    // gets a new ref, so both columns can be present and neither is a mistake.
-    ...retired.map((b) => `${b.title} (${b.ref}) [removed]`),
+    ...columns.flatMap((b) => {
+      // Marked, because a column the form no longer has needs to explain itself
+      // to whoever opens the file — and because the same question re-added later
+      // gets a new ref, so both columns can be present and neither is a mistake.
+      const title = `${b.title} (${b.ref})${retiredRefs.has(b.ref) ? " [removed]" : ""}`;
+      return b.type === "payment" ? [title, ...paymentColumnTitles(title)] : [title];
+    }),
   ];
 
   const rows = kept.map((s) => {
@@ -167,16 +171,32 @@ export async function buildResponseTable(
       // `{"row_ui000001":"col_bad00001"}` is not an export of anyone's data —
       // it is an export of our primary keys, and whoever opens it has no way
       // to decode them.
-      ...columns.map((b) => {
+      ...columns.flatMap((b) => {
         const v = map.get(b.ref);
+        let parsed: unknown;
+        let cell: string;
         // An unanswered cell is empty, not "(skipped)" — a spreadsheet already
         // has a way to say nothing is there.
-        if (!v) return "";
-        try {
-          return deFang(displayAnswer(b as Block, JSON.parse(v)));
-        } catch {
-          return deFang(v);
+        if (!v) {
+          cell = "";
+        } else {
+          try {
+            parsed = JSON.parse(v);
+            cell = deFang(displayAnswer(b as Block, parsed));
+          } catch {
+            cell = deFang(v);
+          }
         }
+        if (b.type !== "payment") return [cell];
+        /*
+         * A payment also gets its reconciliation cells, right beside the
+         * sentence. Here rather than in each caller, so the CSV, the workbook
+         * and the feed all carry them — see `paymentCells`. A retired payment
+         * question gets them too: a payment from a question since deleted is
+         * still money someone received.
+         */
+        const currency = (b as Extract<Block, { type: "payment" }>).currency;
+        return [cell, ...paymentCells(parsed, currency).map(deFang)];
       }),
     ];
   });

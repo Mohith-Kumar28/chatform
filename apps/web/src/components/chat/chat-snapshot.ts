@@ -37,6 +37,7 @@ export type ScreenState = Pick<
   | "resumed"
   | "auth"
   | "verify"
+  | "pendingPayment"
   | "identity"
   | "respondentHint"
   | "escalatedRef"
@@ -106,6 +107,9 @@ export function captureSnapshot(config: PublicFormConfig, chat: ChatState): Chat
       resumed: chat.resumed,
       auth: chat.auth,
       verify: chat.verify ? { ...chat.verify, devCode: undefined } : null,
+      // The card, not the checkout: a launch payload is a live payment link
+      // (a Stripe URL, a Cashfree session) and has no business in a report.
+      pendingPayment: chat.pendingPayment ? { ...chat.pendingPayment, launch: null } : null,
       identity: chat.identity,
       respondentHint: chat.respondentHint,
       escalatedRef: chat.escalatedRef,
@@ -158,6 +162,7 @@ export function toChatState(snapshot: ChatSnapshot): ChatState {
               }
             : null,
           verify: null,
+          pendingPayment: null,
           identity: null,
           respondentHint: null,
           escalatedRef: null,
@@ -167,6 +172,8 @@ export function toChatState(snapshot: ChatSnapshot): ChatState {
 
   const chat: ChatState = {
     ...state,
+    // Reports filed before payments existed carry no such field.
+    pendingPayment: state.pendingPayment ?? null,
     forgetRespondentHint: noop,
     switchAccount: noopAsync,
     signInWithGoogle: noopAsync,
@@ -175,6 +182,11 @@ export function toChatState(snapshot: ChatSnapshot): ChatState {
     submitVerifyPhoneToken: noopAsync,
     resendVerifyCode: noopAsync,
     changeVerifyAnswer: noopAsync,
+    startPayment: noopAsync,
+    confirmPayment: async () => null,
+    reopenCheckout: noop,
+    cancelPayment: noopAsync,
+    simulatePayment: noopAsync,
     getUploadBase: () => null,
     getRespondentToken: () => null,
     sendFeedback: async () => ({ ok: false }),

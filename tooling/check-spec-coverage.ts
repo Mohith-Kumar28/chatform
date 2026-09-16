@@ -174,6 +174,7 @@ const DASHBOARD_ONLY: Record<string, string> = {
   "/api/keys/scopes": "vocabulary for the key-creation dialog",
   "/api/keys/{id}": "see /api/keys",
   "/api/keys/{id}/rotate": "see /api/keys",
+  "/api/payment-accounts/oauth/{provider}/callback": "a gateway's browser redirect, bound to a signed-in person; /v1 can start the flow",
   "/api/billing/checkout": "changing a plan needs a person, not a key",
   "/api/billing/portal": "see /api/billing/checkout",
   "/api/billing/plans": "public pricing catalogue for the marketing site",

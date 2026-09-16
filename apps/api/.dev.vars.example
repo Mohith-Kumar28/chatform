@@ -146,3 +146,36 @@ GOOGLE_DASHBOARD_CLIENT_SECRET=
 # and the card says so. Email verification is unaffected: those codes are ours
 # and go out over the mail queue.
 FIREBASE_PROJECT_ID=
+
+# ── Verified payments (the form admin's OWN gateway) ──────────────────────────
+# Respondents pay the form admin directly, on a Cashfree / Razorpay / Stripe account the
+# admin connects in the builder's Integrate tab. None of this is chatform's money — Dodo
+# above is the only gateway chatform itself is paid through.
+#
+# Seals every stored merchant credential. Base64 of 32 random bytes:
+#   openssl rand -base64 32
+# Unset: connecting an account fails rather than storing a token in the clear.
+# Rotating: move the old value to _PREV, put the new one here; both open, new rows use this.
+PAYMENTS_ENCRYPTION_KEY=
+PAYMENTS_ENCRYPTION_KEY_PREV=
+# "on" for every organization. Otherwise only the org ids listed below, comma-separated.
+PAYMENTS_GATEWAY_ENABLED=
+PAYMENTS_GATEWAY_ORGS=
+
+# Cashfree partner program (partner.cashfree.com). "sandbox" or "production"; unset is sandbox.
+CASHFREE_PARTNER_CLIENT_ID=
+CASHFREE_PARTNER_CLIENT_SECRET=
+# Signs the partner-level webhooks.
+CASHFREE_PARTNER_API_KEY=
+CASHFREE_ENVIRONMENT=sandbox
+
+# Razorpay Technology Partner OAuth app, and its app-level webhook secret. "test" or "live"; unset is test.
+RAZORPAY_OAUTH_CLIENT_ID=
+RAZORPAY_OAUTH_CLIENT_SECRET=
+RAZORPAY_WEBHOOK_SECRET=
+RAZORPAY_ENVIRONMENT=test
+
+# Reserved for Stripe Connect; read by nothing yet. Stripe today is a restricted key the
+# admin pastes, with a per-account webhook secret stored sealed on its row.
+STRIPE_PLATFORM_SECRET_KEY=
+STRIPE_CONNECT_WEBHOOK_SECRET=
