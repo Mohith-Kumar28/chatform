@@ -356,7 +356,12 @@ uploadsRouter.post(
       });
       if (!verdict.ok) {
         await c.env.R2.delete(file.r2_key);
-        await c.env.DB.prepare(`UPDATE files SET status = 'rejected' WHERE id = ?`).bind(fileId).run();
+        // `reject_reason` already exists on this table for exactly this: the
+        // row is the only record left once the object is gone, so it should
+        // say why rather than just that.
+        await c.env.DB.prepare(`UPDATE files SET status = 'rejected', reject_reason = ? WHERE id = ?`)
+          .bind(`declared ${file.mime}, bytes ${verdict.sniffed ?? "unrecognised"}`, fileId)
+          .run();
         console.warn("upload_bytes_rejected", {
           fileId,
           declared: file.mime,

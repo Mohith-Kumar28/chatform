@@ -757,26 +757,34 @@ describe("parsing a document twice", () => {
 });
 
 /**
- * A value an older version of the schema allowed.
+ * The payment method a stored document may carry.
  *
  * Found by parsing every document in the database against this schema rather
- * than by reading it: six stored forms carry `method: "gateway"` on a payment
- * block, a value this enum has not accepted for some time and no migration
- * maps. `readFormDoc` threw on all six — so those forms were not serving a
- * wrong payment method, they were not serving at all.
+ * than by reading it: six stored forms carry `method: "gateway"`, and
+ * `readFormDoc` threw on all six — they were not serving a wrong payment
+ * method, they were not serving at all.
+ *
+ * `gateway` is the verified-checkout method being built on the `payments`
+ * branch, so it is named in the enum rather than coerced. Coercing it would
+ * have been worse than the crash it fixed: a form set up for checkout on the
+ * owner's own gateway account would quietly render a plain payment link, and
+ * nothing would say so. The `.catch` is kept for a value genuinely from the
+ * future, and these two cases pin the halves apart.
  */
-describe("a payment method from an older schema", () => {
-  const doc = {
+describe("a stored payment method", () => {
+  const withMethod = (method: string) => ({
     schemaVersion: SCHEMA_VERSION,
     title: "Deposit",
-    blocks: [
-      { id: "blk_pay0001", ref: "q_pay", type: "payment", title: "Pay the deposit", method: "gateway" },
-    ],
+    blocks: [{ id: "blk_pay0001", ref: "q_pay", type: "payment", title: "Pay the deposit", method }],
     endings: [{ id: "end_pay0001", ref: "end_thanks", title: "Thanks" }],
-  };
+  });
 
-  it("loads the form instead of refusing it", () => {
-    expect(() => readFormDoc(doc)).not.toThrow();
-    expect((readFormDoc(doc).blocks[0] as { method: string }).method).toBe("link");
+  it("keeps `gateway` exactly as stored", () => {
+    expect((readFormDoc(withMethod("gateway")).blocks[0] as { method: string }).method).toBe("gateway");
+  });
+
+  it("loads the form rather than refusing a method it has never heard of", () => {
+    expect(() => readFormDoc(withMethod("carrier-pigeon"))).not.toThrow();
+    expect((readFormDoc(withMethod("carrier-pigeon")).blocks[0] as { method: string }).method).toBe("link");
   });
 });

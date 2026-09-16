@@ -93,7 +93,7 @@ export interface PublicBlock {
   /** scheduling: the external booking link. payment (method "link"): the checkout page. */
   url?: string;
   /** payment: how the respondent is asked to pay. */
-  paymentMethod?: "link" | "upi";
+  paymentMethod?: "link" | "upi" | "gateway";
   /** payment (method "upi"): the ready-to-scan `upi://pay` URI, built server-side. */
   upiUri?: string;
   /** payment (method "upi"): shown as text so the payer can copy it into their own app. */

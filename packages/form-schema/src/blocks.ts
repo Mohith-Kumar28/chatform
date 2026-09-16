@@ -527,19 +527,28 @@ export const Block = z.discriminatedUnion("type", [
     ...BlockBase,
     type: z.literal("payment"),
     /**
-     * `.catch("link")` because there are stored documents this enum refuses.
+     * `gateway` is here, and the `.catch` is for something else.
      *
-     * An earlier version of this field allowed `"gateway"`, and documents
-     * written then are still in the database — six of them in the local one.
-     * Nothing in the codebase writes that value any more and no migration maps
-     * it, so `readFormDoc` threw on every one of them: not a form with a
-     * wrong payment method, a form that could not be served at all. Found by
-     * parsing every stored document against this schema.
+     * Parsing every stored document against this schema turned up six that
+     * `readFormDoc` threw on, all carrying `method: "gateway"` — so those
+     * forms were not serving a wrong payment method, they were not serving at
+     * all. The first read of that was "a value an older schema allowed", and
+     * it was wrong: `gateway` is the verified-checkout method being built on
+     * the `payments` branch, which adds this exact enum member. Those six
+     * documents are that work in progress, not residue.
      *
-     * Falling back is the same rule the theme colours and the stored URLs
-     * follow — a document already published must keep loading.
+     * Which matters, because coercing them with `.catch("link")` would have
+     * been worse than the crash it fixed: a form configured for checkout on
+     * the owner's own gateway account would quietly render a plain payment
+     * link instead, and nothing would have said so. Naming the member lets it
+     * round-trip untouched and makes this line identical to the one that
+     * branch already has, so the merge is a no-op.
+     *
+     * `.catch("link")` stays for a value genuinely from the future — the same
+     * rule the theme colours and stored URLs follow, because a document
+     * already published has to keep loading.
      */
-    method: z.enum(["link", "upi"]).default("link").catch("link"),
+    method: z.enum(["link", "upi", "gateway"]).default("link").catch("link"),
     amountMode: z.enum(["fixed", "variable"]).default("fixed"),
     amount: z.number().min(0).optional(),
     amountVariable: z.string().optional(),
