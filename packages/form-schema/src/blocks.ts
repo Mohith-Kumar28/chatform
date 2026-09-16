@@ -529,7 +529,14 @@ export const Block = z.discriminatedUnion("type", [
   z.object({
     ...BlockBase,
     type: z.literal("payment"),
-    method: z.enum(["link", "upi", "gateway"]).default("link"),
+    /*
+     * `.catch` keeps a document readable rather than correct-or-nothing: a
+     * `method` this build has never heard of falls back to a plain link
+     * instead of throwing, and a form that cannot be parsed cannot be served
+     * at all. Adopted from main's untrusted-input pass, which found six stored
+     * documents that `["link","upi"]` refused outright.
+     */
+    method: z.enum(["link", "upi", "gateway"]).default("link").catch("link"),
     amountMode: z.enum(["fixed", "variable"]).default("fixed"),
     amount: z.number().min(0).optional(),
     /** `variable`: the form variable holding the amount, in major units. Resolved by `resolvePaymentAmount`. */
