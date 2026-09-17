@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme/theme-provider";
 import { ApiProvider } from "@/lib/api/api-provider";
 import { AuthUIProvider } from "@/components/auth/auth-ui-provider";
 import { JsonLd } from "@/components/seo/json-ld";
+import { Clarity } from "@/components/analytics/clarity";
 import { SITE_ORIGIN, organizationLd, webSiteLd } from "@/lib/seo";
 import "./globals.css";
 
@@ -132,6 +133,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           few hundred bytes and removes the whole class of problem.
         */}
         <JsonLd nodes={[organizationLd(), webSiteLd()]} />
+        {/*
+          Clarity mounts here rather than in the marketing layout, because the
+          dashboard and the builder are worth watching too — and it excludes
+          itself from the respondent-facing routes. The reasoning for both is in
+          the component.
+        */}
+        <Clarity />
         <ThemeProvider>
           {/*
             Inside ApiProvider on purpose: Better Auth UI reads and writes
