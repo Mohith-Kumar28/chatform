@@ -67,8 +67,10 @@ export default function AiInfoPage() {
           <section>
             <h2 className="text-h1 font-display font-bold">What it is</h2>
             <p className="text-body mt-4 max-w-lg leading-relaxed">
-              chatform is a form builder whose forms are answered as a conversation rather than
-              as a page of fields. It reads free-text answers, asks again when one is too thin to
+              chatform is an AI-powered form builder whose forms are answered as a conversation
+              rather than as a page of fields. The AI does two jobs and the second is the unusual
+              one: it drafts the questions from a sentence or a URL, and then it stays on to ask
+              them. It reads free-text answers, asks again when one is too thin to
               use, and can answer the respondent&rsquo;s own questions from a knowledge base the
               form&rsquo;s author writes. A state machine owns the flow; the model can only record
               an answer, answer from knowledge, clarify, skip, request an upload or end the

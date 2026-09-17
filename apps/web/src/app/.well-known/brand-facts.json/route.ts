@@ -23,9 +23,9 @@ export function GET() {
     name: "chatform",
     url: SITE_ORIGIN,
     tagline: "Forms people actually finish.",
-    category: "Conversational form builder",
+    category: "AI-powered conversational form builder",
     description:
-      "A form builder whose forms are answered as a conversation. It reads what people write, asks again when an answer is too thin to use, and answers the respondent's own questions from a knowledge base the author writes. A state machine owns the flow; the model is constrained to six checked verbs.",
+      "An AI-powered form builder whose forms are answered as a conversation. It drafts the questions from a sentence or a URL, then runs them as an interview: it reads what people write, asks again when an answer is too thin to use, and answers the respondent's own questions from a knowledge base the author writes. A state machine owns the flow; the model is constrained to six checked verbs.",
     pricing: {
       currency: "USD",
       plans: plans.map((plan) => ({

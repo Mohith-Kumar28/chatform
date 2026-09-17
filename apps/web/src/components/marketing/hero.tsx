@@ -124,7 +124,25 @@ export function Hero() {
               needs a footnote is a headline still deciding what it wants to
               say.
 
-              This one skips the problem and states the result, in the two
+              A fifth now names the mechanism in front of the result, because
+              the fourth had a problem no amount of tuning fixes: "AI forms" on
+              its own means something else in this market. Typeform, Jotform and
+              Tally all sell "AI" as the thing that WRITES your form from a
+              prompt — chatform does that too — so a visitor read this headline
+              as a prompt-to-form generator and never learned that the form
+              talks back. "that follow up" is the one clause none of them can
+              say, and it covers both halves of the product: the interviewer
+              asks again when an answer is thin, and the follow-up sequence
+              chases the people who left.
+
+              "AI forms" stays, exactly as written, because it is the phrase
+              people search with and the `h1` is where that counts for most. The
+              disambiguation rides on the verb rather than on replacing the noun
+              with a category term — "conversational forms" was the other
+              candidate, and it buys the clarity by spending the search traffic
+              and by filing us as a Typeform variant.
+
+              The tail states the result, in the two
               words a person running a form actually measures. Everything the
               old line implied is still on the page and better placed for it:
               the band directly beneath breaks the claim into three mechanisms,
@@ -149,24 +167,37 @@ export function Hero() {
             place on the site allowed to do that.
 
             The shared utility tops out at 4.5rem, which was right for "Turn any
-            form into a chat." at 26 characters. This headline is 34, and at
+            form into a chat." at 26 characters. This headline is 55, and at
             72px a line that long overflows the 574px column and breaks with a
             word orphaned on its own. A type scale that cannot respond to the
             length of the line it is setting is a scale applied to the wrong
             thing.
 
-            The clamp is tuned so the headline holds two lines from the `lg`
-            breakpoint up, which is what keeps the ring on "more" mid-line
-            rather than stranding it. */}
+            The clamp did not move when the headline grew from 40 characters to
+            55. It sets three lines from `lg` up and two across the single-column
+            widths, and the thing worth protecting was never the line COUNT but
+            where the ring lands — which the NBSP below protects directly, and
+            more cheaply than a second type scale would. */}
           <h1 className="font-display font-bold tracking-[-0.045em] text-balance text-[clamp(2.5rem,1.1rem+3.4vw,4rem)] leading-[1]">
             <span className="word-rise inline-block" style={{ animationDelay: "60ms" }}>
-              AI forms that get{" "}
+              AI forms that follow up &mdash; and get{"\u00a0"}
               {/* The ring moved from "more" to the number.
 
                   "more" is the qualitative word in the sentence and it was the
                   one being circled, which is the opposite of what a pen does:
                   you ring the thing that is hard to believe. With a figure in
-                  the line, the figure is that thing. */}
+                  the line, the figure is that thing.
+
+                  The space in front of it is a NBSP, and it is load-bearing
+                  rather than typographic fussiness. The ring is drawn
+                  `-inset-x-4` — a rem wider than the figure on each side — so a
+                  line break in front of the number puts the mark's left edge
+                  outside the `h1` box, hanging into the page gutter and running
+                  into the line above. Measured at 592px and 720px — the `sm`
+                  and `md` single-column widths, before the two-column grid
+                  starts — a breaking space put the figure first on its line at
+                  both. Glued to "get" it cannot start a line, and the smallest
+                  clearance across 342–574px is 74px. */}
               <span className="relative mx-3 inline-block">
                 {/* Tilted off the baseline, and only the figure — the ring
                     stays level. A number written at a slight angle inside a

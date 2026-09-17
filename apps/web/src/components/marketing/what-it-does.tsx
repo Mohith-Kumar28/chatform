@@ -162,8 +162,8 @@ export function WhatItDoes() {
           what you actually do here. You do not build. You ask. */}
       <BandTitle className="max-w-3xl">You don&rsquo;t build it. You just ask.</BandTitle>
       <BandLede>
-        The AI writes the questions, the wording and the branching. You change your mind by
-        saying so.
+        The AI writes the questions, the wording and the branching &mdash; and then stays on to
+        ask them. You change your mind by saying so.
       </BandLede>
 
       <div className="mt-12 grid gap-4 lg:grid-cols-12">
