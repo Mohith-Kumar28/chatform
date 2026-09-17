@@ -124,23 +124,26 @@ export function Hero() {
               needs a footnote is a headline still deciding what it wants to
               say.
 
-              A fifth now names the mechanism in front of the result, because
-              the fourth had a problem no amount of tuning fixes: "AI forms" on
-              its own means something else in this market. Typeform, Jotform and
-              Tally all sell "AI" as the thing that WRITES your form from a
-              prompt — chatform does that too — so a visitor read this headline
-              as a prompt-to-form generator and never learned that the form
-              talks back. "that follow up" is the one clause none of them can
-              say, and it covers both halves of the product: the interviewer
-              asks again when an answer is thin, and the follow-up sequence
-              chases the people who left.
+              A fifth drops "AI forms" for the category's own name, and that is
+              a positioning decision rather than a copy one.
 
-              "AI forms" stays, exactly as written, because it is the phrase
-              people search with and the `h1` is where that counts for most. The
-              disambiguation rides on the verb rather than on replacing the noun
-              with a category term — "conversational forms" was the other
-              candidate, and it buys the clarity by spending the search traffic
-              and by filing us as a Typeform variant.
+              "AI forms" was kept for a while on the argument that it is the
+              phrase people search with. The argument is true and it was still
+              the wrong trade: in this market the phrase already means something
+              else. Typeform, Jotform and Tally all sell "AI" as the thing that
+              WRITES your form from a prompt, so an `h1` built on it reads as a
+              prompt-to-form generator — a feature chatform has, and the least
+              interesting one it has. "Conversational forms" names what a
+              visitor is actually being offered, and it is a category term they
+              may already know from Typeform rather than a coinage we have to
+              teach.
+
+              The search traffic that the noun used to carry is not given up,
+              only moved off the headline. "AI-powered" now appears in the meta
+              description, the OG description, the lede below, `llms.txt`,
+              `brand-facts.json`, `/ai-info` and the first FAQ answer — every
+              surface that answers the query rather than the one that has to
+              carry the positioning.
 
               The tail states the result, in the two
               words a person running a form actually measures. Everything the
@@ -167,20 +170,28 @@ export function Hero() {
             place on the site allowed to do that.
 
             The shared utility tops out at 4.5rem, which was right for "Turn any
-            form into a chat." at 26 characters. This headline is 55, and at
+            form into a chat." at 26 characters. This headline is 51, and at
             72px a line that long overflows the 574px column and breaks with a
             word orphaned on its own. A type scale that cannot respond to the
             length of the line it is setting is a scale applied to the wrong
             thing.
 
-            The clamp did not move when the headline grew from 40 characters to
-            55. It sets three lines from `lg` up and two across the single-column
-            widths, and the thing worth protecting was never the line COUNT but
-            where the ring lands — which the NBSP below protects directly, and
-            more cheaply than a second type scale would. */}
-          <h1 className="font-display font-bold tracking-[-0.045em] text-balance text-[clamp(2.5rem,1.1rem+3.4vw,4rem)] leading-[1]">
+            The cap is 3.5rem rather than 4rem, and the half-rem is the
+            difference between three lines and four at the 574px column. The
+            breakpoint is sharp and it is between 58px and 60px: 58 sets three
+            lines, 60 sets four. That is measured against the rendered page and
+            not against a scratch harness — `next/font` serves Bricolage with
+            its `opsz` axis live, and a copy pulled from the Google Fonts CDN
+            wraps a line earlier, which is a difference big enough to have cost
+            a deploy.
+
+            Across the ladder that leaves 2 lines at `sm` and `md`, 4 at `lg`
+            and below 430px, 3 from `xl` up — and the ringed figure at least
+            77px into its line at every width, which is the number that actually
+            matters here. */}
+          <h1 className="font-display font-bold tracking-[-0.045em] text-balance text-[clamp(2.5rem,1.1rem+3.4vw,3.5rem)] leading-[1]">
             <span className="word-rise inline-block" style={{ animationDelay: "60ms" }}>
-              AI forms that follow up &mdash; and get{"\u00a0"}
+              Conversational forms that{" "}
               {/* The ring moved from "more" to the number.
 
                   "more" is the qualitative word in the sentence and it was the
@@ -188,47 +199,45 @@ export function Hero() {
                   you ring the thing that is hard to believe. With a figure in
                   the line, the figure is that thing.
 
-                  The space in front of it is a NBSP, and it is load-bearing
+                  The clause is held on one line, and that is load-bearing
                   rather than typographic fussiness. The ring is drawn
                   `-inset-x-4` — a rem wider than the figure on each side — so a
-                  line break in front of the number puts the mark's left edge
+                  line break on either side of the number puts the mark's edge
                   outside the `h1` box, hanging into the page gutter and running
-                  into the line above. Measured at 592px and 720px — the `sm`
-                  and `md` single-column widths, before the two-column grid
-                  starts — a breaking space put the figure first on its line at
-                  both. Glued to "get" it cannot start a line, and the smallest
-                  clearance across 342–574px is 74px. */}
-              <span className="relative mx-3 inline-block">
-                {/* Tilted off the baseline, and only the figure — the ring
-                    stays level. A number written at a slight angle inside a
-                    level pen mark reads as the one word in the line somebody
-                    leaned in to write; tilting the pair instead would just
-                    look like the headline had slipped. `transform` does not
-                    change the layout box, so the ring keeps its geometry. */}
-                <span className="inline-block -rotate-[4deg]">2.3&#215;</span>
-                {/* Drawn on, and last. The words rise first; the ring starts once
-                    they have landed, which is the order it would happen if
-                    somebody were actually marking up the page. It needs no
-                    `InView` — this is the top of the document, always on screen at
-                    load — so it carries the armed attribute itself. */}
-                <span data-armed="" data-inview="" className="contents">
-                  <CircleMark
-                    draw
-                    delay={900}
-                    className="text-[var(--on-band-vivid)] opacity-80"
-                  />
+                  into the neighbouring line. A NBSP in front of the figure is
+                  not enough on its own: `text-balance` re-flows around it and
+                  simply moves the break to the other side. Holding "get 2.3×
+                  more" together as a unit is what fixes it, because the ring
+                  then has a word on both sides whatever the balancer decides.
+                  Measured at 312, 342, 382, 482, 574, 592 and 720px, the figure
+                  sits at least 74px into its line at every width. */}
+              <span className="whitespace-nowrap">
+                get{"\u00a0"}
+                <span className="relative mx-3 inline-block">
+                  {/* Tilted off the baseline, and only the figure — the ring
+                      stays level. A number written at a slight angle inside a
+                      level pen mark reads as the one word in the line somebody
+                      leaned in to write; tilting the pair instead would just
+                      look like the headline had slipped. `transform` does not
+                      change the layout box, so the ring keeps its geometry. */}
+                  <span className="inline-block -rotate-[4deg]">2.3&#215;</span>
+                  {/* Drawn on, and last. The words rise first; the ring starts
+                      once they have landed, which is the order it would happen
+                      if somebody were actually marking up the page. It needs no
+                      `InView` — this is the top of the document, always on
+                      screen at load — so it carries the armed attribute
+                      itself. */}
+                  <span data-armed="" data-inview="" className="contents">
+                    <CircleMark
+                      draw
+                      delay={900}
+                      className="text-[var(--on-band-vivid)] opacity-80"
+                    />
+                  </span>
                 </span>
+                {"\u00a0"}more
               </span>{" "}
-              {/* `mx-3` above because the ring is drawn `-inset-x-4` — a whole
-                  rem wider than the word on each side, which is what makes it
-                  read as a pen going round something rather than as a border.
-                  Mid-sentence that overhang eats the word space on BOTH sides,
-                  so the number keeps its normal space and the mark gets its
-                  own, symmetrically. It was `me-3`: the overhang was paid for
-                  after the number and not before it, so the ring cleared
-                  "more" by a comfortable margin and very nearly touched the
-                  "t" of "get". */}
-              more submissions.
+              submissions.
             </span>
           </h1>
 
@@ -269,8 +278,8 @@ export function Hero() {
             style={{ color: "var(--on-band-vivid-muted)" }}
             className="text-body-lg mt-6 max-w-md text-balance"
           >
-            chatform turns your form into a conversation that asks again when an answer is
-            thin, and follows up with the people who leave.
+            chatform turns your form into an AI-powered conversation that asks again when an
+            answer is thin, and follows up with the people who leave.
           </p>
 
           {/*

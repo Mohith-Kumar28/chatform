@@ -38,19 +38,19 @@ export const metadata: Metadata = {
    * sees. Every other route wants the template and keeps it; only the
    * home page names the brand itself.
    */
-  title: { absolute: "chatform — AI forms that follow up. 2.3× more submissions" },
+  title: { absolute: "chatform — Conversational forms that get 2.3× more submissions" },
   description:
     "AI-powered conversational forms, free with unlimited submissions. chatform turns your form into a conversation that reads what people write, asks again when an answer is thin, and follows up with the ones who leave.",
   ...canonical("/"),
   openGraph: {
     ...openGraphBase("/"),
-    // The h1, minus its em dash. A social card that promises something the
-    // page then words differently is a card the reader has to reconcile — and
-    // "agentic" was doing that work here while the page had already moved to
-    // "AI", which is the phrase people search with. "AI forms" is kept for
-    // exactly that reason; "that follow up" is what stops it reading as the
-    // prompt-to-form generator every other builder sells under those two words.
-    title: "chatform — AI forms that follow up. 2.3× more submissions",
+    // The h1 verbatim. A social card that promises something the page then
+    // words differently is a card the reader has to reconcile — first "agentic"
+    // was doing that, then "AI forms", which said prompt-to-form generator to
+    // anyone who has shopped this category. The noun is the category's own now.
+    // "AI-powered" is not missing from this object; it opens both descriptions,
+    // which is where a keyword belongs once the headline has a job of its own.
+    title: "chatform — Conversational forms that get 2.3× more submissions",
     description:
       "An AI-powered form that reads what people write, asks again when an answer is thin, and follows up with the ones who leave. Free, with unlimited submissions.",
     // A baked file, not an `opengraph-image.tsx`: nothing on this card changes,
@@ -62,7 +62,7 @@ export const metadata: Metadata = {
         width: 1200,
         height: 630,
         type: "image/jpeg",
-        alt: "chatform — AI forms that follow up and get 2.3× more submissions",
+        alt: "chatform — Conversational forms that get 2.3× more submissions",
       },
     ],
   },

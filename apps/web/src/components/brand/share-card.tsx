@@ -24,7 +24,7 @@ import { BRICOLAGE_700, BRICOLAGE_800, INTER_500, INTER_600 } from "./share-card
 
 /* Alt text is read by someone who cannot see the card, in a feed of other
    cards — a scan position, so it names the category and the claim. */
-export const shareCardAlt = "chatform — AI forms that follow up and get 2.3× more submissions";
+export const shareCardAlt = "chatform — Conversational forms that get 2.3× more submissions";
 
 const DEFAULT_KICKER = "chatform turns your form into a conversation that people actually finish.";
 
@@ -129,14 +129,14 @@ function Wordmark({ size }: { size: number }) {
  * wrap a ringed word in, so the lines are set by hand — which is also what keeps
  * the ring mid-line, the way the hero holds it.
  *
- * Four lines now rather than three, because the headline grew from "AI forms
- * that get 2.3× more submissions." to one that says what the forms DO. Every
+ * Four lines now rather than three, because "Conversational" is fourteen
+ * characters and holds a line of its own at this size. Every
  * measurement below derives from `SIZE` rather than being typed twice: the
  * previous version had the ring's geometry written as six literals tuned to
  * 82px, so dropping the type a step to fit the fourth line would have left a
  * correctly-sized headline inside a pen mark still drawn for the old one.
  *
- * 66px is the largest step where the longest line — "follow up — and", at 15
+ * 66px is the largest step where the longest line — "Conversational", at 14
  * characters — still clears the 592px this column has after its 68px inset, and
  * where four lines plus the kicker and the footer row still fit the 522px of
  * usable card height.
@@ -161,8 +161,8 @@ function RingedHeadline() {
         color: INK,
       }}
     >
-      <div style={line}>AI forms that</div>
-      <div style={line}>follow up &#8212; and</div>
+      <div style={line}>Conversational</div>
+      <div style={line}>forms that</div>
       <div style={line}>
         get
         {/* The figure leans; the ring stays level — a number somebody leaned
