@@ -124,6 +124,11 @@ answering the respondent's questions; Jotform's AI Agents are the only other one
 - perspective.co — "15 Best AI Form Builders for 2026"
 - surveyninja.io — "Best Form Builders in 2026"
 - Zapier — "Best free survey tools / form builders" (hard, but huge)
+- From the keyword research (`docs/KEYWORD-RESEARCH.md`) — lists ranking for our
+  target keywords, several of which add new tools: **Formgrid**, **Antforms**,
+  **typeformalternative.com**, **involve.me** and **Qualaroo** (Typeform
+  alternatives); **Zapier's Jotform alternatives**, **Zonka**, **AlternativeTo**
+  (Jotform alternatives).
 
 **Pitch (4–5 sentences, personalise line one):**
 > Hi {name} — your {list title} is the one I send people to, especially the
