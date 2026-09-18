@@ -89,6 +89,17 @@ export const LD_ID = {
   website: `${SITE_ORIGIN}/#website`,
 } as const;
 
+/**
+ * chatform's profiles elsewhere — LinkedIn, GitHub, Crunchbase, Product Hunt,
+ * G2 and so on, as they are created (see `docs/LINK-BUILDING.md`).
+ *
+ * `sameAs` is how Google ties those profiles to this site as one entity, which
+ * is the strongest lever there is against the four other products called
+ * Chatform. Only real, live URLs: a `sameAs` pointing at a 404 or at somebody
+ * else's account is worse than none.
+ */
+const SAME_AS: readonly string[] = [];
+
 const ORGANIZATION_DESCRIPTION =
   "chatform turns forms into conversations that read what people write, ask again when an answer is too thin to use, and answer questions back — so more people finish.";
 
@@ -108,6 +119,7 @@ export function organizationLd(): LdNode {
      * people disambiguate us when they search.
      */
     alternateName: ["chatform.in", "chatform conversational forms"],
+    ...(SAME_AS.length > 0 ? { sameAs: [...SAME_AS] } : {}),
   };
 }
 
