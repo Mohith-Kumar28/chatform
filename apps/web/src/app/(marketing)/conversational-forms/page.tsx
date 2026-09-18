@@ -323,7 +323,8 @@ export default function ConversationalFormsPage() {
             </li>
             <li>
               <strong>Describe it, or pick a template.</strong> In chatform you can paste a
-              description and get a draft, or start from one of the{" "}
+              description and get a draft from the{" "}
+              <Link href="/ai-form-builder">AI form builder</Link>, or start from one of the{" "}
               <Link href="/form-templates">free form templates</Link>, each with its questions
               and branching already written.
             </li>

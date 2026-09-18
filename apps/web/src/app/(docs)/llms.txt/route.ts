@@ -49,6 +49,7 @@ export function GET() {
     "## Start here",
     "",
     `- [For AI assistants](${SITE_ORIGIN}/ai-info): What chatform is, what it costs, and the things it genuinely cannot do.`,
+    `- [AI form builder](${SITE_ORIGIN}/ai-form-builder): What the AI does before and after a form is published — drafting from a sentence or URL, then follow-ups, answers and reminders — and what it is not allowed to do.`,
     `- [Conversational forms](${SITE_ORIGIN}/conversational-forms): What a conversational form is, the two kinds sold under the name, when a normal form is better, and how to build one.`,
     `- [Why conversation works](${SITE_ORIGIN}/why-conversation-works): The peer-reviewed research on conversational data collection, with DOIs — and what it does not show.`,
     `- [Form statistics, traced](${SITE_ORIGIN}/form-statistics): Popular form completion and abandonment statistics followed to their original sources, with what each actually measured.`,

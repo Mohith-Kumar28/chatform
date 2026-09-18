@@ -55,6 +55,21 @@ export interface ComparisonUpdate {
   note: string;
 }
 
+/** One row of the short summary under the h1. */
+export interface ComparisonGlanceRow {
+  label: string;
+  us: string;
+  them: string;
+}
+
+/** A named competitor worth considering instead, with where to read more. */
+export interface ComparisonOther {
+  name: string;
+  /** Our own comparison page for it, when there is one. */
+  href?: string;
+  body: string;
+}
+
 export interface ComparisonInput {
   /** The search phrase, as the URL. `typeform-alternative`, not `typeform`. */
   slug: string;
@@ -79,6 +94,27 @@ export interface ComparisonInput {
   extraRows?: readonly { label: string; hint?: string; us: Cell; them: Cell }[];
   pricing: readonly ComparisonPriceRow[];
   faq: readonly ComparisonFaq[];
+
+  /*
+   * The sections below came out of the keyword research in
+   * `docs/KEYWORD-RESEARCH.md`: every page ranking for "<vendor> alternative"
+   * opens with a summary table, says why people leave, explains how to move,
+   * and names the other options. All optional, so a page gains them one at a
+   * time, and each is held to the same sourcing rule as the rest of the file.
+   */
+  /** Four or five rows, above the fold: the page's argument as a table. */
+  atAGlance?: readonly ComparisonGlanceRow[];
+  /** Why people search for an alternative, in their terms, from the vendor's own pages. */
+  whyLeave?: readonly ComparisonStrength[];
+  /** How to move, honestly — including what does not carry over. */
+  switching?: readonly ComparisonStrength[];
+  /** The other alternatives, and who should pick each one. */
+  otherAlternatives?: readonly ComparisonOther[];
+  /** A longer roundup on the blog, when there is one. */
+  roundup?: { href: string; label: string };
+  /** Named author and the date the page was last checked, shown under the lede. */
+  byline?: { author: string; checkedOn: string };
+
   sources: readonly ComparisonSource[];
   updates: readonly ComparisonUpdate[];
 }

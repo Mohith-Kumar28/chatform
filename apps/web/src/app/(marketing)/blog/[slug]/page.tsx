@@ -8,7 +8,7 @@ import { Prose } from "@/components/marketing/prose";
 import { mdxComponents } from "@/components/docs/mdx-components";
 import { JsonLd } from "@/components/seo/json-ld";
 import { getPost, posts } from "@/lib/blog-source";
-import { articleLd, breadcrumbLd, canonical, openGraphBase } from "@/lib/seo";
+import { articleLd, breadcrumbLd, canonical, faqPageLd, openGraphBase } from "@/lib/seo";
 
 export const dynamicParams = false;
 
@@ -60,6 +60,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             { name: "Writing", path: "/blog" },
             { name: post.title, path: post.url },
           ]),
+          ...(post.faq.length > 0 ? [faqPageLd(post.faq)] : []),
         ]}
       />
 
@@ -103,6 +104,17 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
 
           <Prose className="mt-12">
             <MDX components={mdxComponents} />
+            {post.faq.length > 0 && (
+              <>
+                <h2>Questions people ask</h2>
+                {post.faq.map((item) => (
+                  <div key={item.question}>
+                    <h3>{item.question}</h3>
+                    <p>{item.answer}</p>
+                  </div>
+                ))}
+              </>
+            )}
           </Prose>
         </article>
       </Band>

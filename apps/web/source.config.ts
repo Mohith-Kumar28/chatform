@@ -46,6 +46,12 @@ export const blog = defineCollections({
     author: z.string().default("chatform"),
     /** Shown after a named author — "founder of chatform". Ignored for the default author. */
     authorTitle: z.string().optional(),
+    /**
+     * Questions answered at the end of the post and emitted as a FAQPage graph.
+     * In frontmatter rather than the body so the page and the structured data
+     * read from one list and cannot disagree.
+     */
+    faq: z.array(z.object({ question: z.string(), answer: z.string() })).default([]),
     tags: z.array(z.string()).default([]),
   }),
 });

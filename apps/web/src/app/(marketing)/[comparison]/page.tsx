@@ -94,7 +94,61 @@ export default async function ComparisonPage({
           <p className="text-caption text-muted-foreground mt-5">
             Unlimited responses on the free plan · No card
           </p>
+          {entry.byline && (
+            <p className="text-caption text-muted-foreground mt-2">
+              By {entry.byline.author}, founder of chatform · Checked {entry.byline.checkedOn}
+            </p>
+          )}
         </div>
+
+        {/* The argument as a table, above the fold. Every page ranking for
+            this search opens with one; a reader comparing four tabs reads
+            this and nothing else. */}
+        {entry.atAGlance && (
+          <div className="border-border/70 mt-14 max-w-4xl overflow-x-auto rounded-2xl border">
+            <table className="w-full min-w-[34rem] border-collapse text-left">
+              <caption className="sr-only">chatform and {entry.competitor} at a glance</caption>
+              <thead>
+                <tr className="bg-muted/50">
+                  <th scope="col" className="text-caption w-[34%] px-5 py-3 font-semibold">
+                    At a glance
+                  </th>
+                  <th scope="col" className="text-caption text-primary px-4 py-3 font-semibold">
+                    chatform
+                  </th>
+                  <th scope="col" className="text-caption px-4 py-3 font-semibold">
+                    {entry.competitor}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {entry.atAGlance.map((row) => (
+                  <tr key={row.label} className="border-border/50 border-t align-top">
+                    <th scope="row" className="text-body px-5 py-3 font-medium">
+                      {row.label}
+                    </th>
+                    <td className="text-body px-4 py-3">{row.us}</td>
+                    <td className="text-body text-muted-foreground px-4 py-3">{row.them}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {entry.whyLeave && (
+          <div className="mt-16">
+            <h2 className="text-h1 font-display font-bold">Why people leave {entry.competitor}</h2>
+            <ul className="mt-6 grid gap-x-12 gap-y-7 sm:grid-cols-2">
+              {entry.whyLeave.map((reason) => (
+                <li key={reason.title}>
+                  <h3 className="text-h2 font-semibold">{reason.title}</h3>
+                  <p className="text-body text-muted-foreground mt-2 leading-relaxed">{reason.body}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </Band>
 
       {/*
@@ -192,6 +246,26 @@ export default async function ComparisonPage({
         </dl>
       </Band>
 
+      {entry.switching && (
+        <Band>
+          <div className="max-w-2xl">
+            <BandTitle>Moving from {entry.competitor}.</BandTitle>
+            <BandLede>What carries over, what you rebuild, and what does not come with you.</BandLede>
+          </div>
+          <ol className="mt-12 grid gap-x-12 gap-y-9 sm:grid-cols-2">
+            {entry.switching.map((step, index) => (
+              <li key={step.title} className="flex gap-4">
+                <span className="font-display text-h1 text-primary font-bold tabular">{index + 1}</span>
+                <div>
+                  <h3 className="text-h2 font-semibold">{step.title}</h3>
+                  <p className="text-body text-muted-foreground mt-2 leading-relaxed">{step.body}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </Band>
+      )}
+
       <Band tone="content">
         <div className="max-w-2xl">
           <BandTitle>The questions people actually type.</BandTitle>
@@ -226,6 +300,42 @@ export default async function ComparisonPage({
         the date each was last read, is what makes that drift findable by a
         reader rather than only by us.
       */}
+      {entry.otherAlternatives && (
+        <Band>
+          <div className="max-w-2xl">
+            <BandTitle>Other {entry.competitor} alternatives.</BandTitle>
+            <BandLede>If chatform is not the one, one of these probably is.</BandLede>
+          </div>
+          <ul className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {entry.otherAlternatives.map((other) => (
+              <li
+                key={other.name}
+                className="border-border/70 bg-card flex flex-col rounded-xl border p-5 shadow-xs"
+              >
+                <h3 className="text-h2 font-display font-bold">{other.name}</h3>
+                <p className="text-body text-muted-foreground mt-1.5 flex-1 leading-relaxed">{other.body}</p>
+                {other.href && (
+                  <Link
+                    href={other.href}
+                    className="text-caption text-primary mt-3 inline-flex items-center gap-1.5 font-medium"
+                  >
+                    {other.name} vs chatform
+                    <ArrowRight className="size-4" />
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+          {entry.roundup && (
+            <p className="text-body mt-8">
+              <Link href={entry.roundup.href} className="text-primary underline underline-offset-4">
+                {entry.roundup.label}
+              </Link>
+            </p>
+          )}
+        </Band>
+      )}
+
       <Band size="tight">
         <div className="grid gap-10 sm:grid-cols-2 lg:gap-16">
           <div>

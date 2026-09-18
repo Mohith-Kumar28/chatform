@@ -4,9 +4,9 @@ export default defineComparison({
   slug: "jotform-alternative",
   competitor: "Jotform",
   vendor: "Jotform",
-  title: "Jotform alternative — the honest comparison",
+  title: "Free Jotform Alternative: Conversational Forms · chatform",
   description:
-    "A Jotform alternative for teams who want the conversation, not the catalogue: unlimited free responses, a headless conversation API, and logic that is linted before publish. Prices read in September 2026.",
+    "A Jotform alternative with conversational forms: no monthly response cap on the free plan, AI follow-ups on thin answers, Pro at $16/mo. Where Jotform wins.",
   h1: "A Jotform alternative with far less surface, and better answers.",
   lede:
     "Jotform is the biggest form platform there is. This is the smaller one, built around a single idea it does better.",
@@ -60,6 +60,60 @@ export default defineComparison({
     { label: "HIPAA", us: false, them: "Gold and Enterprise" },
   ],
 
+  byline: { author: "Mohith Kumar", checkedOn: "September 2026" },
+
+  atAGlance: [
+    { label: "Free plan", us: "100 forms, unlimited responses (fair use 10,000/mo)", them: "5 forms, 100 submissions a month" },
+    { label: "Entry plan, billed yearly", us: "$16/mo, no response quota", them: "$34/mo (Bronze), 1,000 submissions a month" },
+    { label: "AI conversations", us: "200 free, 2,000 on Pro", them: "AI Agents: 100 free, 1,000 on Bronze" },
+    { label: "Team members", us: "3 on Pro, 5 on Business", them: "1 on every plan below Enterprise" },
+  ],
+
+  whyLeave: [
+    {
+      title: "Five forms on the free plan",
+      body: "Jotform's free Starter plan allows 5 forms, 100 submissions a month and 10,000 form views. Run a few forms at once and you are paying.",
+    },
+    {
+      title: "The price climbs with submissions",
+      body: "Billed yearly, Bronze is $34 a month for 1,000 submissions, Silver $39 for 2,500 and Gold $99 for 10,000. The bill follows your volume.",
+    },
+    {
+      title: "One user until Enterprise",
+      body: "Every plan below Enterprise is single-user, so a team shares a login or pays for Enterprise. chatform Pro includes 3 members and Business 5.",
+    },
+    {
+      title: "HIPAA starts at Gold",
+      body: "HIPAA features begin on Gold at $99 a month billed yearly. If that is why you are looking, chatform will not help — it has no HIPAA offering at all.",
+    },
+  ],
+
+  switching: [
+    {
+      title: "Rebuild it from a sentence or a link",
+      body: "There is no Jotform importer. Describe the form, or paste the URL of the page it sits on, and chatform drafts the questions, wording and branching (10 drafts a month free, 200 on Pro).",
+    },
+    {
+      title: "Decide what happens to payments and PDFs",
+      body: "chatform can show your existing checkout link or a UPI QR mid-conversation, but it does not process payments, generate PDFs or collect e-signatures. Forms that depend on those should stay on Jotform.",
+    },
+    {
+      title: "Point your data where it went before",
+      body: "A spreadsheet feed you pull into Google Sheets or Excel, signed webhooks, and the REST API. No connector catalogue — anything you clicked together in Jotform is wired with a webhook here.",
+    },
+    {
+      title: "Swap the embed",
+      body: "One script tag — inline, popup, side tab or full page — or a link and a QR code. Old Jotform links need replacing wherever they are posted.",
+    },
+  ],
+
+  otherAlternatives: [
+    { name: "Tally", href: "/tally-alternative", body: "Free and unlimited, with the fastest editor in the category, for forms that do not need a conversation." },
+    { name: "Fillout", href: "/fillout-alternative", body: "Cheapest paid tier and deep Airtable and Notion integrations, with payments and PDFs built in." },
+    { name: "Typeform", href: "/typeform-alternative", body: "The best-looking one-question-per-screen forms; conversational AI is Formless, sold separately." },
+    { name: "Google Forms", href: "/google-forms-alternative", body: "Free, unlimited and native to Google Sheets, when the questions need no interpreting." },
+  ],
+
   pricing: [
     { label: "Free plan", us: "100 forms, unlimited responses", them: "5 forms, 100 submissions a month" },
     { label: "Most affordable plan, billed yearly", us: "$16/mo", them: "$34/mo (Bronze)" },
@@ -67,6 +121,21 @@ export default defineComparison({
   ],
 
   faq: [
+    {
+      question: "Is there a Jotform alternative with no submission limits?",
+      answer:
+        "chatform has no per-plan response quota on any plan, including free, subject to a fair-use ceiling (10,000 a month on Free, 50,000 on paid plans). Jotform caps submissions on every plan below Enterprise: 100 a month free, 1,000 on Bronze, 2,500 on Silver and 10,000 on Gold.",
+    },
+    {
+      question: "Can I import my Jotform forms?",
+      answer:
+        "Not directly — there is no importer. Describe the form in a sentence or paste the URL of the page it lives on, and chatform drafts the questions, wording and branching for you to edit. Payments, PDFs and e-signatures do not carry over, because chatform does not do them.",
+    },
+    {
+      question: "Which Jotform alternative is best for teams?",
+      answer:
+        "It depends what the team needs. Jotform is single-user on every plan below Enterprise. chatform Pro includes 3 team members and Business 5, with roles, for $16 and $55 a month billed yearly. If the team mainly lives in Airtable or Notion, Fillout is worth a look too.",
+    },
     {
       question: "Is chatform more affordable than Jotform?",
       answer:
@@ -92,6 +161,10 @@ export default defineComparison({
   sources: [{ label: "Jotform pricing", url: "https://www.jotform.com/pricing/", checkedOn: "September 2026" }],
 
   updates: [
+    {
+      date: "18 September 2026",
+      note: "Read Jotform's pricing page again for the new sections: Starter 5 forms, 100 submissions and 10,000 views a month; Bronze $34, Silver $39, Gold $99 a month billed yearly (1,000 / 2,500 / 10,000 submissions); all single-user below Enterprise; HIPAA from Gold; AI Agents 100 / 1,000 / 2,500 / 10,000 conversations.",
+    },
     {
       date: "September 2026",
       note: "Re-read Jotform's pricing: Starter is still 5 forms and 100 submissions a month, Bronze is still $39/mo monthly and $34/mo billed yearly.",
