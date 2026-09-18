@@ -77,8 +77,8 @@ Quality over count; 20 good listings beat 200 junk ones.
 
 **50 words:** chatform turns forms into conversations. It asks one question at a
 time, reads each answer, and follows up when a reply is too vague to use. It
-answers respondents' questions from your notes, then carries on. Free with
-unlimited responses; 35 templates for intake, applications, feedback and more.
+can answer respondents' questions from your notes (Pro), then carries on. Free
+with unlimited responses; 35 templates for intake, applications, feedback and more.
 
 **150 words:** add to the above —
 Most forms lose people to length and get one-word answers to the questions that
@@ -114,8 +114,8 @@ These pages want real projects and link to them:
 
 ### c) Get into the existing "best form builder" lists
 Lists already ranking for the category — ask to be added, pitching the one
-thing none of their entries do (AI follow-ups *and* answering the respondent's
-questions, free):
+thing almost none of their entries do (AI follow-ups on thin answers, plus
+answering the respondent's questions; Jotform's AI Agents are the only other one):
 - neomanex.com — "Best Conversational Form Builders 2026: 9 Tools Ranked"
 - formester.com — "18 Best Conversational Form Builder Tools 2026" (vendor, but lists competitors)
 - forms.app — "Best form builders for 2026: top 20+"
@@ -128,9 +128,9 @@ questions, free):
 **Pitch (4–5 sentences, personalise line one):**
 > Hi {name} — your {list title} is the one I send people to, especially the
 > note on {specific entry}. I'm the founder of chatform, a conversational form
-> builder that does something none of the {n} tools on the list do: it reads
-> free-text answers and asks a follow-up when one is too vague, and it answers
-> the respondent's own questions mid-form. It's free with unlimited responses.
+> builder that does something few tools on the list do: it reads free-text
+> answers and asks a follow-up when one is too vague, and it can answer the
+> respondent's own questions mid-form. It's free with unlimited responses.
 > If it's useful, here's a 60-second demo: {link}. Happy to set you up with a
 > Business account to test it properly.
 
