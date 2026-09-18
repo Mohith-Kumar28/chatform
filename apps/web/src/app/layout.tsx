@@ -6,6 +6,7 @@ import { ApiProvider } from "@/lib/api/api-provider";
 import { AuthUIProvider } from "@/components/auth/auth-ui-provider";
 import { JsonLd } from "@/components/seo/json-ld";
 import { Clarity } from "@/components/analytics/clarity";
+import { GoogleTagManager } from "@/components/analytics/google-tag-manager";
 import { SITE_ORIGIN, organizationLd, webSiteLd } from "@/lib/seo";
 import "./globals.css";
 
@@ -140,6 +141,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           the component.
         */}
         <Clarity />
+        {/*
+          GTM sits beside Clarity and shares its exclusions, so the two
+          analytics loaders have one answer between them about where they are
+          allowed to run. It is mounted here rather than in the head the
+          install snippet asks for; the component says why that instruction
+          does not buy anything on a client-rendered tree.
+        */}
+        <GoogleTagManager />
         <ThemeProvider>
           {/*
             Inside ApiProvider on purpose: Better Auth UI reads and writes
