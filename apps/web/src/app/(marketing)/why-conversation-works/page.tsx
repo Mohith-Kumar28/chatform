@@ -31,7 +31,7 @@ const FAQ = [
   {
     question: "Do conversational forms have a higher completion rate?",
     answer:
-      "Nobody can honestly give you one number, and the ones circulating in this category mostly trace back to vendor marketing rather than to a study. What the peer-reviewed work does show is narrower and more useful: asking through a chat interface produces more differentiated answers and less satisficing (Kim, Lee and Gweon, CHI 2019), and an AI that probes thin answers produces significantly more informative and specific ones (Xiao et al., TOCHI 2020). Separately, Baymard Institute finds 22% of checkout abandonment is attributed to length and complexity. chatform reports completion rate and per-question drop-off for your own form; it does not claim an industry average.",
+      "Nobody can honestly give you one number, and the ones circulating in this category mostly trace back to vendor marketing rather than to a study. What the peer-reviewed work does show is narrower and more useful: asking through a chat interface produces more differentiated answers and less satisficing (Kim, Lee and Gweon, CHI 2019), and an AI that probes thin answers produces significantly more informative and specific ones (Xiao et al., TOCHI 2020). Separately, Baymard Institute finds 17% of US online shoppers have abandoned an order because the checkout was too long or complicated. chatform reports completion rate and per-question drop-off for your own form; it does not claim an industry average.",
   },
   {
     question: "Why do people give short or fake answers to open-ended questions?",
@@ -132,10 +132,10 @@ export default function WhyConversationWorksPage() {
               arrival, and the decision a visitor makes is not about any single question — it is
               about the whole visible stack. Baymard Institute&rsquo;s checkout research finds{" "}
               <a href={baymard.url} className="text-primary underline underline-offset-4" rel="noopener">
-                22% of people who abandon a checkout say they left because it was too long or too
-                complicated
+                17% of US online shoppers have abandoned an order because the checkout was too long or
+                too complicated
               </a>{" "}
-              — ahead of the several other reasons people usually assume come first.
+              — a reason that is entirely about the form, not about what was being bought.
             </p>
           </div>
           <div className="flex justify-center">

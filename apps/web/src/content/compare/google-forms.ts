@@ -83,7 +83,7 @@ export default defineComparison({
     {
       question: "Why do people abandon long Google Forms?",
       answer:
-        "Because a long form is visibly long. Baymard Institute's checkout research finds 22% of users abandon on complexity alone, and survey research going back to Schober and Conrad in 1997 shows that letting the interviewer clarify what a question means sharply reduces error compared with fixed wording. A page of twenty-five fields does neither: it shows you the whole cost upfront and cannot explain itself when a question is ambiguous.",
+        "Because a long form is visibly long. Baymard Institute finds 17% of US online shoppers have abandoned an order because the checkout was too long or complicated, and survey research going back to Schober and Conrad in 1997 shows that letting the interviewer clarify what a question means sharply reduces error compared with fixed wording. A page of twenty-five fields does neither: it shows you the whole cost upfront and cannot explain itself when a question is ambiguous.",
     },
     {
       question: "Does chatform work with a Google account?",

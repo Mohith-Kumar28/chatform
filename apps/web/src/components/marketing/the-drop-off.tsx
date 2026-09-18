@@ -44,8 +44,8 @@ export function TheDropOff() {
                    band's one mark and it goes on the number, which is the only
                    thing in three sentences of prose that a reader will quote
                    back to somebody else. */
-                lead: "22%",
-                text: " of people who abandon a checkout say they left because it was too long or too complicated.",
+                lead: "17%",
+                text: " of US online shoppers have abandoned an order because the checkout was too long or too complicated.",
               },
               {
                 study: kim,

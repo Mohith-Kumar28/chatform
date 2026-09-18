@@ -188,7 +188,8 @@ export default function ConversationalFormsPage() {
           <p>
             Baymard Institute&rsquo;s checkout research puts a number on that for shopping:{" "}
             <a href={baymard.url} rel="noopener">
-              22% of people who abandon a checkout say it was too long or too complicated
+              17% of US online shoppers have abandoned an order because the checkout was too long or
+              complicated
             </a>
             . A conversation spends that cost in small pieces, so the decision to leave gets made
             one question at a time instead of once, at the door.

@@ -57,6 +57,7 @@ const COLUMNS = [
       { href: "/conversational-forms", label: "What are conversational forms?" },
       { href: "/use-cases", label: "Guides by use case" },
       { href: "/why-conversation-works", label: "Why conversation works" },
+      { href: "/form-statistics", label: "Form statistics, traced" },
       { href: "/blog", label: "Writing" },
       { href: "/ai-info", label: "For AI assistants" },
     ],
