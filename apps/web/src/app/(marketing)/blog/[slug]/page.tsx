@@ -91,6 +91,14 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             <p className="text-body-lg text-muted-foreground mt-4 max-w-2xl leading-relaxed">
               {post.description}
             </p>
+            {/* A person, when there is one. Somebody deciding whether to trust
+                a comparison wants to know who wrote it, and so does Google. */}
+            {post.author !== "chatform" && (
+              <p className="text-caption text-muted-foreground mt-5">
+                By <span className="text-foreground font-medium">{post.author}</span>
+                {post.authorTitle ? `, ${post.authorTitle}` : ""}
+              </p>
+            )}
           </header>
 
           <Prose className="mt-12">

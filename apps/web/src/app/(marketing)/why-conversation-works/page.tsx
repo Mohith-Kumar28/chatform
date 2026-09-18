@@ -291,7 +291,11 @@ export default function WhyConversationWorksPage() {
           ))}
         </ol>
         <p className="text-caption text-muted-foreground mt-8">
-          Comparing tools rather than formats?{" "}
+          New to the idea?{" "}
+          <Link href="/conversational-forms" className="text-primary underline underline-offset-4">
+            What conversational forms are, and when they work
+          </Link>
+          . Comparing tools rather than formats?{" "}
           <Link href="/compare" className="text-primary underline underline-offset-4">
             The comparisons, including where we lose
           </Link>

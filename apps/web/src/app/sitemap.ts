@@ -25,6 +25,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: `${SITE_ORIGIN}/`, changeFrequency: "weekly", priority: 1 },
     { url: `${SITE_ORIGIN}/pricing`, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${SITE_ORIGIN}/conversational-forms`, changeFrequency: "monthly", priority: 0.9 },
     { url: `${SITE_ORIGIN}/why-conversation-works`, changeFrequency: "monthly", priority: 0.9 },
     { url: `${SITE_ORIGIN}/compare`, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE_ORIGIN}/use-cases`, changeFrequency: "monthly", priority: 0.9 },

@@ -51,6 +51,7 @@ const COLUMNS = [
   {
     title: "Learn",
     links: [
+      { href: "/conversational-forms", label: "What are conversational forms?" },
       { href: "/use-cases", label: "Guides by use case" },
       { href: "/why-conversation-works", label: "Why conversation works" },
       { href: "/blog", label: "Writing" },

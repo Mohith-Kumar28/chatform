@@ -22,6 +22,10 @@ export function Prose({ children, className }: { children: React.ReactNode; clas
         "[&_h2]:font-display [&_h2]:text-display [&_h2]:mt-12 [&_h2]:font-bold [&_h2]:tracking-[-0.02em] [&_h2]:text-balance",
         "[&_h3]:text-h1 [&_h3]:font-display [&_h3]:mt-9 [&_h3]:font-bold",
         "[&_a]:text-primary [&_a]:underline [&_a]:underline-offset-4",
+        /* MDX headings arrive wrapped in their own anchor link, which the rule
+           above painted orange and underlined — every h2 in every post read as
+           a link. The anchor still works; it just looks like a heading. */
+        "[&_h2_a]:text-inherit [&_h2_a]:no-underline [&_h3_a]:text-inherit [&_h3_a]:no-underline",
         "[&_strong]:font-semibold",
         "[&_ul]:flex [&_ul]:flex-col [&_ul]:gap-2.5 [&_ul]:pl-5 [&_ul]:list-disc",
         "[&_ol]:flex [&_ol]:flex-col [&_ol]:gap-2.5 [&_ol]:pl-5 [&_ol]:list-decimal",
@@ -31,6 +35,14 @@ export function Prose({ children, className }: { children: React.ReactNode; clas
         "[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[0.82em]",
         "[&_blockquote]:border-primary/40 [&_blockquote]:text-muted-foreground [&_blockquote]:border-l-2 [&_blockquote]:pl-5",
         "[&_hr]:border-border/70 [&_hr]:my-10",
+        /* Tables, for the comparison posts. Scroll sideways on a phone rather
+           than squeezing six columns into 360px. */
+        "[&_table]:text-body [&_table]:block [&_table]:w-full [&_table]:overflow-x-auto [&_table]:border-collapse",
+        /* Wider than the measure on a desktop — a five-column comparison in a
+           42rem column clips its last column behind a scrollbar. */
+        "lg:[&_div:has(>table)]:w-[min(60rem,calc(100vw-8rem))] lg:[&_div:has(>table)]:max-w-none",
+        "[&_th]:border-border [&_th]:border-b [&_th]:py-2.5 [&_th]:pr-4 [&_th]:text-left [&_th]:font-semibold [&_th]:whitespace-nowrap",
+        "[&_td]:border-border/60 [&_td]:border-b [&_td]:py-2.5 [&_td]:pr-4 [&_td]:align-top",
         className,
       )}
     >

@@ -44,6 +44,8 @@ export const blog = defineCollections({
   schema: frontmatterSchema.extend({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use an ISO date: YYYY-MM-DD"),
     author: z.string().default("chatform"),
+    /** Shown after a named author — "founder of chatform". Ignored for the default author. */
+    authorTitle: z.string().optional(),
     tags: z.array(z.string()).default([]),
   }),
 });
