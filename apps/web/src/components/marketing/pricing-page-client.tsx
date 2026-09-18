@@ -99,7 +99,11 @@ const GROUPS: {
       { feature: "agent_knowledge" },
       { feature: "agent_guardrails" },
       { feature: "agent_model_picker" },
-      { limit: "knowledge_entries" },
+      /* Was `knowledge_entries`, a limit that no longer exists — the row
+         rendered nothing, so the table never said how much knowledge each
+         plan allows. */
+      { limit: "knowledge_sources_count" },
+      { limit: "knowledge_bytes" },
     ],
   },
   {
@@ -122,6 +126,10 @@ function formatLimit(value: number | null, unit: string): string {
   if (unit === "tokens" && value >= 1_000_000) return `${value / 1_000_000}M`;
   if (unit === "tokens" && value >= 1_000) return `${value / 1_000}k`;
   if (unit === "chars") return `${value.toLocaleString()} chars`;
+  if (unit === "bytes") {
+    const mb = value / (1024 * 1024);
+    return mb >= 1024 ? `${Math.round(mb / 1024)} GB` : `${Math.round(mb)} MB`;
+  }
   return value.toLocaleString();
 }
 
@@ -163,7 +171,7 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
         <div className="max-w-2xl">
           <BandTitle as="h1">Collect for free. Pay to look closer.</BandTitle>
           <BandLede>
-            Unlimited forms and unlimited responses on every plan, including the free one.
+            Unlimited responses on every plan, including the free one.
           </BandLede>
         </div>
 

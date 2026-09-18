@@ -92,7 +92,7 @@ export default async function ComparisonPage({
             </Button>
           </div>
           <p className="text-caption text-muted-foreground mt-5">
-            Unlimited forms and responses on the free plan · No card
+            Unlimited responses on the free plan · No card
           </p>
         </div>
       </Band>

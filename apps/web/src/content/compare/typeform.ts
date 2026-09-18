@@ -30,12 +30,12 @@ export default defineComparison({
     {
       title: "It answers questions back",
       body:
-        "Give it up to twenty knowledge entries and it quotes you, mid-form, without losing its place in the flow. Typeform's own conversational product, Formless, does this — but Formless is sold separately, and starts at $59 a month for 250 AI conversations. chatform's free plan includes 200.",
+        "On Pro, give it your documents, pages or notes — up to 50 knowledge sources — and it quotes you, mid-form, without losing its place in the flow. Typeform's own conversational product, Formless, does this — but Formless is sold separately, and starts at $59 a month for 250 AI conversations. chatform Pro is $16 a month billed yearly and includes 2,000.",
     },
     {
       title: "Unlimited responses on the free plan",
       body:
-        "Typeform's free tier stops at 10 responses a month. chatform's free plan has no per-plan response quota at all, subject to a fair-use ceiling of 10,000 a month — and unlimited forms alongside it.",
+        "Typeform's free tier stops at 10 responses a month. chatform's free plan has no per-plan response quota at all, subject to a fair-use ceiling of 10,000 a month, across up to 100 forms.",
     },
     {
       title: "A documented headless API",
@@ -79,7 +79,7 @@ export default defineComparison({
     {
       question: "Is chatform really free?",
       answer:
-        "Yes. Unlimited forms and unlimited responses on the free plan, subject to a fair-use ceiling of 10,000 responses a month, plus 200 AI-run conversations a month. No card, no trial clock. Paid plans start at $16 a month billed yearly, and they buy brand control, partial-response export, the API and a bigger AI allowance — not the right to collect answers.",
+        "Yes. Unlimited responses on the free plan, subject to a fair-use ceiling of 10,000 a month, across up to 100 forms, plus 200 AI-run conversations a month. No card, no trial clock. Paid plans start at $16 a month billed yearly, and they buy brand control, partial-response export, the API and a bigger AI allowance — not the right to collect answers.",
     },
     {
       question: "How does chatform compare to Typeform on pricing?",

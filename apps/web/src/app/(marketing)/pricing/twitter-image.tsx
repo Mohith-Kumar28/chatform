@@ -17,6 +17,6 @@ export const contentType = shareCardContentType;
 export default function Image() {
   return renderShareCard({
     headline: "Collect for free.",
-    kicker: "Unlimited forms and unlimited responses on every plan, including the free one.",
+    kicker: "Unlimited responses on every plan, including the free one.",
   });
 }

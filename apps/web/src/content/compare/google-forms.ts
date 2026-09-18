@@ -30,7 +30,7 @@ export default defineComparison({
     {
       title: "It answers questions back",
       body:
-        "Up to twenty knowledge entries it can quote mid-form without losing its place. A Google Form that raises a question in the respondent's mind has nowhere to put it except abandonment.",
+        "On Pro, up to 50 knowledge sources it can quote mid-form without losing its place. A Google Form that raises a question in the respondent's mind has nowhere to put it except abandonment.",
     },
     {
       title: "Branching that is checked before publish",
@@ -60,7 +60,7 @@ export default defineComparison({
   ],
 
   pricing: [
-    { label: "Free plan", us: "Unlimited forms and responses, 200 AI conversations", them: "Unlimited, with a Google account" },
+    { label: "Free plan", us: "Unlimited responses, 100 forms, 200 AI conversations", them: "Unlimited, with a Google account" },
     {
       label: "Paid",
       us: "$16/mo billed yearly",
@@ -73,7 +73,7 @@ export default defineComparison({
     {
       question: "Is there a free Google Forms alternative?",
       answer:
-        "chatform's free plan gives you unlimited forms and unlimited responses, subject to a fair-use ceiling of 10,000 responses a month, plus 200 AI-run conversations a month. No card and no trial clock. It is not free in the same absolute way Google Forms is — running an interview costs money — but collecting answers is.",
+        "chatform's free plan gives you unlimited responses across up to 100 forms, subject to a fair-use ceiling of 10,000 responses a month, plus 200 AI-run conversations a month. No card and no trial clock. It is not free in the same absolute way Google Forms is — running an interview costs money — but collecting answers is.",
     },
     {
       question: "Can I send Google Forms responses to a spreadsheet from chatform?",

@@ -111,7 +111,7 @@ Keep the tone warm and unfussy, the way you would talk to someone at the desk. I
   steps: [
     {
       title: "Open chatform and make an account",
-      body: "Go to chatform.in and sign up. It takes about thirty seconds, there is no card, and the free plan is genuinely free — unlimited forms, unlimited bookings.",
+      body: "Go to chatform.in and sign up. It takes about thirty seconds, there is no card, and the free plan is genuinely free, with unlimited bookings.",
     },
     {
       title: "Describe the booking form in your own words",

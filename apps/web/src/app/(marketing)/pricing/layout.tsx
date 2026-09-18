@@ -20,12 +20,12 @@ export const metadata: Metadata = {
    * one a comparison shopper sees, not the second.
    */
   description:
-    "Free conversational forms with unlimited forms and unlimited responses on every plan. Compare limits, question types and AI-powered features across Free, Pro and Business.",
+    "Free conversational forms with unlimited responses on every plan, including free. Compare limits, question types and AI-powered features across Free, Pro and Business.",
   ...canonical("/pricing"),
   openGraph: {
     ...openGraphBase("/pricing"),
     title: "chatform pricing — collect for free, pay to look closer",
-    description: "Unlimited forms and unlimited responses on every plan, including free.",
+    description: "Unlimited responses on every plan, including free.",
   },
   twitter: { card: "summary_large_image" },
 };

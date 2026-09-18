@@ -202,7 +202,7 @@ export default function WhyConversationWorksPage() {
             },
             {
               term: "It can explain what a question means",
-              def: "Schober and Conrad found that letting an interviewer clarify sharply reduces error. Give it up to twenty knowledge entries and it answers from them, quoting you, then carries on exactly where it was.",
+              def: "Schober and Conrad found that letting an interviewer clarify sharply reduces error. On Pro, give it your documents, pages and notes as a knowledge base and it answers from them, quoting you, then carries on exactly where it was.",
             },
             {
               term: "It is a machine, and says so",

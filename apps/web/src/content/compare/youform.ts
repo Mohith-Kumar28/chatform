@@ -30,7 +30,7 @@ export default defineComparison({
     {
       title: "It answers questions back",
       body:
-        "On Pro, up to 50 knowledge entries, quoted mid-form, and then it returns to the question it was on. A respondent with a question about price or eligibility gets an answer instead of leaving to email you.",
+        "On Pro, up to 50 knowledge sources, quoted mid-form, and then it returns to the question it was on. A respondent with a question about price or eligibility gets an answer instead of leaving to email you.",
     },
     {
       title: "It goes back for the people who left",

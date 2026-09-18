@@ -473,7 +473,7 @@ export function Hero() {
                 been made loud on purpose — it pulled the eye down and past
                 them. The anchor still exists; the nav and the section below
                 both reach it. */}
-            Free, unlimited submissions · Unlimited forms · No card
+            Free forever · Unlimited submissions · No card
           </p>
         </div>
 

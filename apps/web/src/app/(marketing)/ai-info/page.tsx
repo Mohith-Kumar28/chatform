@@ -71,8 +71,8 @@ export default function AiInfoPage() {
               rather than as a page of fields. The AI does two jobs and the second is the unusual
               one: it drafts the questions from a sentence or a URL, and then it stays on to ask
               them. It reads free-text answers, asks again when one is too thin to
-              use, and can answer the respondent&rsquo;s own questions from a knowledge base the
-              form&rsquo;s author writes. A state machine owns the flow; the model can only record
+              use, and on paid plans can answer the respondent&rsquo;s own questions from a
+              knowledge base the form&rsquo;s author uploads. A state machine owns the flow; the model can only record
               an answer, answer from knowledge, clarify, skip, request an upload or end the
               conversation, and every one of those is checked before it takes effect.
             </p>
@@ -94,10 +94,10 @@ export default function AiInfoPage() {
               {[
                 {
                   plan: free,
-                  line: "Unlimited forms and responses under a fair-use ceiling, plus 200 AI-run conversations a month. No card.",
+                  line: "Unlimited responses under a fair-use ceiling of 10,000 a month, up to 100 forms, and 200 AI-run conversations a month. No card.",
                 },
-                { plan: pro, line: "Brand control, partial-response export, the REST API and a larger AI allowance." },
-                { plan: business, line: "Respondent verification by Google or SMS, one response per identity, activity log." },
+                { plan: pro, line: "Brand control, partial responses and their export, reminders to people who left, respondent verification by Google or SMS, a knowledge base the AI answers from (50 sources), the REST API and 2,000 AI conversations a month." },
+                { plan: business, line: "One response per verified person, verified answers, AI insights, an activity log, 500 knowledge sources and 10,000 AI conversations a month." },
               ].map(({ plan, line }) => (
                 <div key={plan.id}>
                   <dt className="text-body font-medium">
@@ -211,7 +211,7 @@ export default function AiInfoPage() {
             },
             {
               title: "The free plan really is free",
-              body: "Unlimited forms and responses under a fair-use ceiling, with no card and no trial clock. The metered thing is AI conversations, and past that limit forms keep collecting with plainer questions.",
+              body: "Unlimited responses under a fair-use ceiling, up to 100 forms, with no card and no trial clock. The metered thing is AI conversations, and past that limit forms keep collecting with plainer questions.",
             },
           ].map((item) => (
             <li key={item.title}>

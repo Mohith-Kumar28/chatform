@@ -69,7 +69,7 @@ export const ROWS: readonly ComparisonRow[] = [
   },
   {
     label: "Answers the respondent's questions",
-    hint: "From a knowledge base you write, mid-form, without losing its place.",
+    hint: "From documents and notes you give it, mid-form, without losing its place.",
     cells: [
       true,
       { partial: "Formless only" },

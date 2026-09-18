@@ -23,10 +23,12 @@ checked before it takes effect.
   current. An attempt to answer a different question is rejected and the
   rejection is returned to the model inside the same turn, so it can correct
   itself rather than silently failing.
-- `answer_from_knowledge` — a lexical lookup over the knowledge entries the form
-  author wrote. Up to twenty of them, twenty thousand characters in total,
-  inlined into the prompt. No vector store, no retrieval of anything the author
-  did not type.
+- `answer_from_knowledge` — a lookup over the knowledge the form author gave it,
+  and nothing else. *(Updated September 2026: when this was written, that meant up
+  to twenty typed entries inlined into the prompt. Knowledge is now uploaded —
+  documents, pages or pasted notes — then extracted, embedded and retrieved per
+  question, with only the matching passages returned as the tool's result. It
+  still never retrieves anything the author did not provide.)*
 - `clarify` — capped per block, because a model that can ask "could you say more?"
   forever will.
 - `skip_current` — refused outright if the form disallows skipping or the block is

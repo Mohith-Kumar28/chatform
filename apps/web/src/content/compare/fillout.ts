@@ -30,7 +30,7 @@ export default defineComparison({
     {
       title: "It answers the respondent's questions",
       body:
-        "On Pro, give it up to 50 knowledge entries — prices, policies, what happens next — and it answers from them mid-form, then carries on from the same question. A state machine owns the order, so answering never skips or reorders anything.",
+        "On Pro, give it up to 50 knowledge sources — prices, policies, what happens next — and it answers from them mid-form, then carries on from the same question. A state machine owns the order, so answering never skips or reorders anything.",
     },
     {
       title: "Unlimited responses on the free plan",

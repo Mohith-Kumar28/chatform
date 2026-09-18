@@ -25,7 +25,7 @@ const CALLOUTS = [
   {
     icon: BookOpen,
     title: "Quotes your knowledge base",
-    body: "Twenty entries you write. It quotes you, not the internet.",
+    body: "Your documents, pages and notes, on Pro. It quotes you, not the internet.",
   },
   {
     icon: CornerDownLeft,
