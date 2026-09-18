@@ -24,6 +24,8 @@ import { breadcrumbLd, canonical, faqPageLd, openGraphBase } from "@/lib/seo";
  * segments still win — `/pricing` and `/compare` are matched before this ever
  * runs.
  */
+const NUMBER_WORDS: Record<number, string> = { 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six" };
+
 export const dynamicParams = false;
 
 export function generateStaticParams() {
@@ -141,7 +143,12 @@ export default async function ComparisonPage({
       <Band tone="brand" size="tall">
         <div className="max-w-2xl">
           <BandTitle>What you get here instead.</BandTitle>
-          <BandLede tone="brand">Four differences that are worth switching a form for — and only four.</BandLede>
+          <BandLede tone="brand">
+            {/* Counted, not typed: it said "four" above five items once already. */}
+            {NUMBER_WORDS[entry.ourStrengths.length] ?? entry.ourStrengths.length} differences that are
+            worth switching a form for — and only{" "}
+            {(NUMBER_WORDS[entry.ourStrengths.length] ?? String(entry.ourStrengths.length)).toLowerCase()}.
+          </BandLede>
         </div>
         <ul className="mt-12 grid gap-x-12 gap-y-10 sm:grid-cols-2">
           {entry.ourStrengths.map((strength) => (

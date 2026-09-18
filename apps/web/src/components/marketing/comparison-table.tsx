@@ -1,6 +1,9 @@
 import { Check, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { FOOTNOTES, ROWS, VENDORS, type Cell } from "./comparison-data";
+import { FOOTNOTES, MATRIX_VENDORS, ROWS, VENDORS, type Cell } from "./comparison-data";
+
+/** Where each matrix column sits in `ROWS[].cells`, which is ordered by `VENDORS`. */
+const MATRIX_COLUMNS = MATRIX_VENDORS.map((vendor) => VENDORS.indexOf(vendor));
 
 /**
  * Deliberately not animated (DESIGN.md 4.5: never animate tables), and
@@ -21,7 +24,7 @@ export function ComparisonTable() {
                 <th scope="col" className="text-caption w-[26%] px-5 py-3 font-semibold">
                   &nbsp;
                 </th>
-                {VENDORS.map((vendor, i) => (
+                {MATRIX_VENDORS.map((vendor, i) => (
                   <th
                     key={vendor}
                     scope="col"
@@ -46,7 +49,7 @@ export function ComparisonTable() {
                       </span>
                     )}
                   </th>
-                  {row.cells.map((cell, i) => (
+                  {MATRIX_COLUMNS.map((column) => row.cells[column]!).map((cell, i) => (
                     <td
                       key={i}
                       className={cn("px-4 py-3.5", i === 0 && "bg-primary-soft/40")}

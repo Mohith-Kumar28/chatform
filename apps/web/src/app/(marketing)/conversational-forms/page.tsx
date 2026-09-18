@@ -49,7 +49,7 @@ const FAQ = [
   {
     question: "Is there a free conversational form builder?",
     answer:
-      "Yes. chatform's free plan has unlimited forms and unlimited responses, with 200 AI conversations a month. Tally and Youform are free one-question-at-a-time builders without the AI follow-ups, and Jotform's AI Agents have a free tier of 100 conversations.",
+      "Yes. chatform's free plan has unlimited responses (fair use 10,000 a month) on up to 100 forms, with 200 AI conversations a month; answering respondents' questions from your own notes starts on Pro. Tally and Youform are free one-question-at-a-time builders without the AI follow-ups, and Jotform's AI Agents have a free tier of 100 conversations.",
   },
   {
     question: "Can I put a conversational form on my website or WordPress site?",
@@ -334,7 +334,8 @@ export default function ConversationalFormsPage() {
             </li>
             <li>
               <strong>Give it something to answer questions from.</strong> Prices, opening hours,
-              what happens next. Without it, the respondent&rsquo;s question is a dead end.
+              what happens next. Without it, the respondent&rsquo;s question is a dead end. (In
+              chatform, knowledge entries start on the Pro plan.)
             </li>
             <li>
               <strong>Share it and read the drop-off.</strong> Per-question drop-off tells you
