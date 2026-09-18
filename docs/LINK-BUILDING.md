@@ -144,7 +144,7 @@ product pages.
 
 ## Step 4 — months 2–3: linkable assets and PR
 
-- **`/form-statistics`** (being built now) — popular form statistics traced to
+- **`/form-statistics`** (live) — nine popular form statistics traced to
   their original source, including the ones that are not real. Outreach target:
   every post that cites "conversational forms convert 40% better" or similar;
   tell them where the number actually comes from. Journalists and bloggers
