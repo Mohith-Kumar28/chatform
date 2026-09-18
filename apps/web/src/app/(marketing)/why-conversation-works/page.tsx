@@ -8,7 +8,12 @@ import { STUDIES, study } from "@/content/research";
 import { articleLd, breadcrumbLd, canonical, faqPageLd, openGraphBase } from "@/lib/seo";
 
 const PATH = "/why-conversation-works";
-const TITLE = "Why people finish a conversation and abandon a form";
+/**
+ * The question as it is searched. The h1 below keeps the page's own voice;
+ * the title is what a results page shows, and "conversational vs traditional
+ * forms" is the comparison people type when they are deciding.
+ */
+const TITLE = "Conversational vs traditional forms: what the research says";
 const DESCRIPTION =
   "The research on conversational data collection, with sources: what actually changes when the same questions are asked in a conversation by something that reads the answers — and what does not.";
 

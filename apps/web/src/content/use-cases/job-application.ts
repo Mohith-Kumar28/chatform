@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "job-application-form",
   name: "Job applications",
+  keyword: "Job application form",
   group: "Hire and onboard",
   audience: "Cafés, shops, salons, small agencies — anyone hiring one to five people",
   navBlurb: "Get a shortlist instead of an inbox, with the deal-breakers asked upfront.",

@@ -7,7 +7,8 @@
  * table declared in the first migration was never once read, adding a template
  * was a deploy, and nothing counted how often one was used.
  *
- * Run: `pnpm gen:templates`. The output is committed and `pnpm templates:verify`
+ * Run: `pnpm gen:templates`. Also writes the public catalogue the marketing
+ * site renders — see `catalogueFor`. The output is committed and `pnpm templates:verify`
  * fails on drift. Apply with `pnpm seed:templates`.
  */
 
@@ -88,7 +89,42 @@ function sqlFor(): string {
   return lines.join("\n");
 }
 
+/**
+ * The same catalogue, as JSON, for the public template pages on the marketing
+ * site (`/form-templates`).
+ *
+ * The API serves templates only to a signed-in workspace, which is right for
+ * the app and useless to a crawler — and a template gallery nobody can find
+ * from a search is a gallery that only existing customers ever see. The
+ * marketing pages are statically rendered, so they read this file at build
+ * time instead of calling the API. Written by the same run as the SQL, and
+ * verified by the same diff, so the two cannot drift.
+ *
+ * `usage_count` is deliberately absent: it is runtime data, and a committed
+ * number would be wrong the day after it was generated.
+ */
+function catalogueFor(): string {
+  const rows = TEMPLATES.map((t) => ({
+    slug: t.slug,
+    title: t.title,
+    category: t.category,
+    description: t.description,
+    blurb: t.blurb,
+    tags: t.tags,
+    icon: t.icon,
+    accent: t.accent,
+    blockCount: t.blockCount,
+    estMinutes: t.estMinutes,
+    doc: t.doc,
+  }));
+  return `${JSON.stringify(rows, null, 1)}\n`;
+}
+
 const here = dirname(fileURLToPath(import.meta.url));
 const out = join(here, "seed-templates.sql");
 writeFileSync(out, sqlFor());
 console.log(`wrote ${out} — ${TEMPLATES.length} templates`);
+
+const catalogue = join(here, "../apps/web/src/content/templates/catalogue.generated.json");
+writeFileSync(catalogue, catalogueFor());
+console.log(`wrote ${catalogue}`);

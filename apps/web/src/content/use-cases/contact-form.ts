@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "contact-form-alternative",
   name: "Contact form that qualifies",
+  keyword: "Contact form",
   group: "Win more work",
   audience: "Agencies, studios, freelancers and anyone with an enquiry form",
   navBlurb: "Turn “Hi, I need a website” into a brief you can quote from, before you reply.",

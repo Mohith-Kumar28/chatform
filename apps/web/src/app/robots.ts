@@ -41,6 +41,8 @@ const ASSISTANT_AGENTS = [
 
 const PRIVATE_PATHS = [
   "/dashboard",
+  // The platform console. Behind its own guard, and nothing a searcher wants.
+  "/admin",
   "/forms/",
   "/preview/",
   "/api/",

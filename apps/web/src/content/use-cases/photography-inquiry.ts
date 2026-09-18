@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "photography-inquiry-form",
   name: "Photography enquiries",
+  keyword: "Photography inquiry form",
   group: "Win more work",
   audience: "Wedding photographers, videographers, makeup artists, planners, venues",
   navBlurb: "Tell couples whether their date is free before you've even opened your phone.",

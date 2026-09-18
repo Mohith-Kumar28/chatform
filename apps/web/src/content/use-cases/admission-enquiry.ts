@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "admission-enquiry-form",
   name: "Admission enquiry",
+  keyword: "Admission enquiry form",
   group: "Fill your calendar",
   audience: "Schools, preschools, coaching centres, tuition and academies",
   navBlurb: "Answer the fee and batch questions on the spot, then book the campus visit.",

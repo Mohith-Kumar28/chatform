@@ -77,7 +77,7 @@ export const metadata: Metadata = {
    * position, where communicating is the entire job.
    */
   title: {
-    default: "chatform — AI chat forms",
+    default: "chatform — Conversational forms",
     template: "%s · chatform",
   },
   description:

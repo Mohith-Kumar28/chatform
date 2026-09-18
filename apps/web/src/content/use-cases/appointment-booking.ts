@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "appointment-booking-form",
   name: "Appointment booking",
+  keyword: "Appointment booking form",
   group: "Fill your calendar",
   audience: "Salons, clinics, tutors, coaches, garages — anyone with a diary",
   navBlurb: "Take bookings from a link or a QR code, with the details you need before they arrive.",

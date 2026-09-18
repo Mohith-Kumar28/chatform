@@ -198,6 +198,16 @@ export function MarketingNav() {
                       </SheetClose>
                     </li>
                   ))}
+                  <li>
+                    <SheetClose asChild>
+                      <Link
+                        href="/form-templates"
+                        className="text-body text-primary hover:bg-accent/60 block rounded-lg px-3 py-2 font-medium"
+                      >
+                        Form templates
+                      </Link>
+                    </SheetClose>
+                  </li>
                 </ul>
               </div>
               <div className="mt-auto flex flex-col gap-2 p-4">

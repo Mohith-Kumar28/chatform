@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "webinar-registration-form",
   name: "Webinar & workshop signups",
+  keyword: "Webinar registration form",
   group: "Fill your calendar",
   audience: "Course creators, studios running workshops, B2B marketers",
   navBlurb: "Register people, and find out what they want answered before you build the deck.",

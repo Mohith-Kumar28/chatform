@@ -17,6 +17,7 @@ const COLUMNS = [
     title: "Product",
     links: [
       { href: "/use-cases", label: "What people use it for" },
+      { href: "/form-templates", label: "Form templates" },
       { href: "/#how-it-works", label: "How it works" },
       { href: "/#the-moment", label: "How it answers back" },
       /* `/#product` was the describe/shape/share band, which is gone — the

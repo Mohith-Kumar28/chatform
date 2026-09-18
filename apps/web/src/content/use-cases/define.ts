@@ -54,6 +54,12 @@ export interface UseCaseInput {
   slug: string;
   /** Short label, for the nav menu. */
   name: string;
+  /**
+   * The search phrase in words — "Appointment booking form" — which opens the
+   * h1. The headline after it is written for the reader; this is written for
+   * the query, and the h1 is the one place both have to be.
+   */
+  keyword: string;
   group: UseCaseGroup;
   /** Who this is for, in their own words. Shown under the nav label. */
   audience: string;

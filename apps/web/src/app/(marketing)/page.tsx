@@ -11,7 +11,9 @@ import { TheDropOff } from "@/components/marketing/the-drop-off";
 import { Band, BandTitle, BandLede } from "@/components/marketing/band";
 import { InView } from "@/components/marketing/in-view";
 import { ArrowMark, HandNote } from "@/components/marketing/annotate";
-import { canonical, openGraphBase } from "@/lib/seo";
+import { JsonLd } from "@/components/seo/json-ld";
+import { buildCatalogue, dollars } from "@/lib/pricing-catalogue";
+import { canonical, openGraphBase, softwareApplicationLd } from "@/lib/seo";
 
 /**
  * Plain words in every position, page and metadata alike — and the outcome
@@ -127,8 +129,28 @@ export const metadata: Metadata = {
  * does not reverse.
  */
 export default function LandingPage() {
+  const catalogue = buildCatalogue();
+
   return (
     <>
+      {/*
+        The product, as a product, on the page most searches for it land on.
+        It was only on `/pricing`, so the home page told a crawler that an
+        organisation and a website existed and nothing about what they sell.
+        Same offers as the pricing page, built from the same catalogue.
+      */}
+      <JsonLd
+        nodes={[
+          softwareApplicationLd(
+            catalogue.plans.map((plan) => ({
+              name: plan.name,
+              price: dollars(plan.priceMonthlyCents),
+              billingDuration: "P1M",
+              url: "/pricing",
+            })),
+          ),
+        ]}
+      />
       <Hero />
       <HowItConverts />
       <SpectrumStrip />

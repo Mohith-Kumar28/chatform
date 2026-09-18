@@ -30,7 +30,7 @@
     "gen:plans": "pnpm --filter @repo/tooling gen:plans",
     "gen:templates": "pnpm --filter @repo/tooling gen:templates",
     "plans:verify": "pnpm gen:plans && git diff --exit-code -- tooling/seed-plans.sql",
-    "templates:verify": "pnpm gen:templates && git diff --exit-code -- tooling/seed-templates.sql",
+    "templates:verify": "pnpm gen:templates && git diff --exit-code -- tooling/seed-templates.sql apps/web/src/content/templates/catalogue.generated.json",
     "deploy:api": "pnpm --filter @repo/api run deploy",
     "clean": "turbo run clean && rm -rf node_modules",
     "deploy:web": "pnpm --filter @repo/web run cf:build && pnpm --filter @repo/web run cf:deploy",

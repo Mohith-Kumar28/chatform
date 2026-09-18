@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { USE_CASE_GROUPS } from "@/content/use-cases";
+import { FEATURED_TEMPLATES } from "@/content/templates/featured";
 import { cn } from "@/lib/utils";
 
 /**
@@ -95,41 +96,75 @@ export function UseCasesMenu({ onWash }: { onWash: boolean }) {
            — inheriting that ink would be the only thing on the page reading as
            a colour it did not choose. */
         style={{ color: "var(--color-foreground)" }}
-        className="border-border/70 bg-popover absolute top-full left-0 z-[var(--z-dropdown)] mt-2 w-[min(56rem,90vw)] rounded-2xl border p-5 shadow-lg"
+        className="border-border/70 bg-popover absolute top-full left-0 z-[var(--z-dropdown)] mt-2 w-[min(66rem,92vw)] rounded-2xl border p-5 shadow-lg"
       >
-        <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
-          {USE_CASE_GROUPS.map((group) => (
-            <div key={group.title}>
-              <h3 className="text-micro text-muted-foreground font-semibold tracking-[0.12em] uppercase">
-                {group.title}
-              </h3>
-              <ul className="mt-2 flex flex-col">
-                {group.items.map((item) => (
-                  <li key={item.slug}>
-                    <Link
-                      href={item.path}
-                      onClick={() => setOpen(false)}
-                      className="hover:bg-accent/60 -mx-2 block rounded-lg px-2 py-1.5 transition-colors duration-[var(--duration-micro)]"
-                    >
-                      <span className="text-body block font-medium">{item.name}</span>
-                      <span className="text-micro text-muted-foreground block leading-snug">
-                        {item.audience}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+        <div className="grid gap-x-8 gap-y-5 lg:grid-cols-[1fr_13rem]">
+          <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+            {USE_CASE_GROUPS.map((group) => (
+              <div key={group.title}>
+                <h3 className="text-micro text-muted-foreground font-semibold tracking-[0.12em] uppercase">
+                  {group.title}
+                </h3>
+                <ul className="mt-2 flex flex-col">
+                  {group.items.map((item) => (
+                    <li key={item.slug}>
+                      <Link
+                        href={item.path}
+                        onClick={() => setOpen(false)}
+                        className="hover:bg-accent/60 -mx-2 block rounded-lg px-2 py-1.5 transition-colors duration-[var(--duration-micro)]"
+                      >
+                        <span className="text-body block font-medium">{item.name}</span>
+                        <span className="text-micro text-muted-foreground block leading-snug">
+                          {item.audience}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+
+          {/*
+            The finished forms, beside the guides. A guide is the whole job
+            explained; a template is the job already done — and some people
+            browsing this menu only want the second. Named by what they search
+            for, and six of them, not thirty-five: the full catalogue is a page.
+          */}
+          <div className="border-border/60 lg:border-l lg:pl-8">
+            <h3 className="text-micro text-muted-foreground font-semibold tracking-[0.12em] uppercase">
+              Start from a template
+            </h3>
+            <ul className="mt-2 flex flex-col">
+              {FEATURED_TEMPLATES.map((template) => (
+                <li key={template.slug}>
+                  <Link
+                    href={`/form-templates/${template.slug}`}
+                    onClick={() => setOpen(false)}
+                    className="text-body hover:bg-accent/60 -mx-2 block rounded-lg px-2 py-1.5 font-medium transition-colors duration-[var(--duration-micro)]"
+                  >
+                    {template.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
 
-        <div className="border-border/60 mt-5 border-t pt-4">
+        <div className="border-border/60 mt-5 flex flex-wrap justify-between gap-x-6 gap-y-2 border-t pt-4">
           <Link
             href="/use-cases"
             onClick={() => setOpen(false)}
             className="text-caption text-primary font-medium"
           >
             Every guide, with what each one is for →
+          </Link>
+          <Link
+            href="/form-templates"
+            onClick={() => setOpen(false)}
+            className="text-caption text-primary font-medium"
+          >
+            Browse all form templates →
           </Link>
         </div>
       </div>

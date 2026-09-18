@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "quote-request-form",
   name: "Quote requests",
+  keyword: "Quote request form",
   group: "Win more work",
   audience: "Builders, cleaners, landscapers, movers, decorators, interior designers",
   navBlurb: "Get the photos and the scope before you drive across town to quote.",

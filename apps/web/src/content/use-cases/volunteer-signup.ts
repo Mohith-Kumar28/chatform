@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "volunteer-signup-form",
   name: "Volunteer signups",
+  keyword: "Volunteer sign up form",
   group: "Run a community",
   audience: "Charities, trusts, temples, PTAs, sports clubs, alumni groups",
   navBlurb: "Get volunteers who actually turn up, matched to shifts they can make.",

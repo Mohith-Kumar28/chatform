@@ -3,6 +3,7 @@ import { source } from "@/lib/source";
 import { posts } from "@/lib/blog-source";
 import { COMPARISONS } from "@/content/compare";
 import { USE_CASES } from "@/content/use-cases";
+import { TEMPLATES } from "@/content/templates";
 import { SITE_ORIGIN } from "@/lib/seo";
 
 /**
@@ -27,6 +28,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_ORIGIN}/why-conversation-works`, changeFrequency: "monthly", priority: 0.9 },
     { url: `${SITE_ORIGIN}/compare`, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE_ORIGIN}/use-cases`, changeFrequency: "monthly", priority: 0.9 },
+    { url: `${SITE_ORIGIN}/form-templates`, changeFrequency: "monthly", priority: 0.9 },
     { url: `${SITE_ORIGIN}/blog`, changeFrequency: "weekly", priority: 0.7 },
     { url: `${SITE_ORIGIN}/ai-info`, changeFrequency: "monthly", priority: 0.4 },
     { url: `${SITE_ORIGIN}/signin`, changeFrequency: "yearly", priority: 0.3 },
@@ -35,6 +37,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       url: `${SITE_ORIGIN}${entry.path}`,
       changeFrequency: "monthly" as const,
       priority: 0.8,
+    })),
+
+    ...TEMPLATES.map((template) => ({
+      url: `${SITE_ORIGIN}${template.path}`,
+      changeFrequency: "monthly" as const,
+      priority: 0.7,
     })),
 
     ...COMPARISONS.map((entry) => ({

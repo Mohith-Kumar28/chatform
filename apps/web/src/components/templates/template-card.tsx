@@ -28,6 +28,7 @@ export function TemplateCard({
   disabled = false,
   onUse,
   onOpen,
+  href,
 }: {
   template: TemplateSummary;
   variant?: "full" | "compact";
@@ -37,6 +38,8 @@ export function TemplateCard({
   onUse?: () => void;
   /** Fired when the card is followed — the create dialog closes itself on it. */
   onOpen?: () => void;
+  /** Where the card leads. The app's own detail page unless the public gallery says otherwise. */
+  href?: string;
 }) {
   const accent = templateAccent(template.category, template.accent, template.icon);
   const Icon = accent.icon;
@@ -64,7 +67,7 @@ export function TemplateCard({
           and the explicit actions below sit above it so they win the click
           where they overlap. */}
       <Link
-        href={`/templates/${template.slug}`}
+        href={href ?? `/templates/${template.slug}`}
         onClick={onOpen}
         aria-label={`View the ${template.title} template`}
         className="absolute inset-0 z-0 rounded-2xl focus:outline-none"
@@ -81,21 +84,23 @@ export function TemplateCard({
           <Icon className={compact ? "size-4" : "size-5"} strokeWidth={1.75} />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className={cn("font-display truncate font-semibold", compact ? "text-sm" : "text-base")}>
+          {/* Two lines, and the full width of the card: the public gallery
+              names templates by their search phrase ("Customer satisfaction
+              survey"), which a single line shared with the counts cut to
+              "Customer sati…". The counts moved under it, beside the category. */}
+          <h3 className={cn("font-display line-clamp-2 font-semibold", compact ? "text-sm" : "text-base")}>
             {template.title}
           </h3>
-          <p className="text-muted-foreground mt-0.5 text-xs">{template.category}</p>
-        </div>
-        {meta.length > 0 && (
-          <div className="text-muted-foreground flex shrink-0 items-center gap-2.5 pt-1 text-xs">
+          <p className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs">
+            <span>{template.category}</span>
             {meta.map((m) => (
               <span key={m.label} className="tabular inline-flex items-center gap-1">
                 <m.icon className="size-3" strokeWidth={1.75} />
                 {m.label}
               </span>
             ))}
-          </div>
-        )}
+          </p>
+        </div>
       </div>
 
       <p

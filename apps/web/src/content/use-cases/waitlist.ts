@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "waitlist-form",
   name: "Waitlist signup",
+  keyword: "Waitlist form",
   group: "Grow an audience",
   audience: "Founders, creators, D2C brands and anyone launching something",
   navBlurb: "Collect emails and the sentence that tells you what to build.",

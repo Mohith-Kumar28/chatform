@@ -1,6 +1,7 @@
 import { source } from "@/lib/source";
 import { COMPARISONS } from "@/content/compare";
 import { USE_CASES } from "@/content/use-cases";
+import { TEMPLATES } from "@/content/templates";
 import { posts } from "@/lib/blog-source";
 import { SITE_ORIGIN } from "@/lib/seo";
 
@@ -55,6 +56,14 @@ export function GET() {
     "",
     ...USE_CASES.map(
       (entry) => `- [${entry.name}](${SITE_ORIGIN}${entry.path}): ${entry.description}`,
+    ),
+    "",
+    "## Form templates",
+    "",
+    `Every template is public, with its full question list and flow. The gallery is ${SITE_ORIGIN}/form-templates.`,
+    "",
+    ...TEMPLATES.map(
+      (t) => `- [${t.searchName} template](${SITE_ORIGIN}${t.path}): ${t.description}`,
     ),
     "",
     "## Comparisons",
