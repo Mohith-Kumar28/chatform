@@ -40,7 +40,7 @@ export const metadata: Metadata = {
    * sees. Every other route wants the template and keeps it; only the
    * home page names the brand itself.
    */
-  title: { absolute: "chatform — Conversational forms that get 2.3× more submissions" },
+  title: { absolute: "chatform — Conversational forms people actually finish" },
   description:
     "AI-powered conversational forms, free with unlimited submissions. chatform turns your form into a conversation that reads what people write, asks again when an answer is thin, and follows up with the ones who leave.",
   ...canonical("/"),
@@ -52,7 +52,7 @@ export const metadata: Metadata = {
     // anyone who has shopped this category. The noun is the category's own now.
     // "AI-powered" is not missing from this object; it opens both descriptions,
     // which is where a keyword belongs once the headline has a job of its own.
-    title: "chatform — Conversational forms that get 2.3× more submissions",
+    title: "chatform — Conversational forms people actually finish",
     description:
       "An AI-powered form that reads what people write, asks again when an answer is thin, and follows up with the ones who leave. Free, with unlimited submissions.",
     // A baked file, not an `opengraph-image.tsx`: nothing on this card changes,
@@ -64,7 +64,7 @@ export const metadata: Metadata = {
         width: 1200,
         height: 630,
         type: "image/jpeg",
-        alt: "chatform — Conversational forms that get 2.3× more submissions",
+        alt: "chatform — Conversational forms people actually finish",
       },
     ],
   },

@@ -191,36 +191,24 @@ export function Hero() {
             matters here. */}
           <h1 className="font-display font-bold tracking-[-0.045em] text-balance text-[clamp(2.5rem,1.1rem+3.4vw,3.5rem)] leading-[1]">
             <span className="word-rise inline-block" style={{ animationDelay: "60ms" }}>
-              Conversational forms that{" "}
-              {/* The ring moved from "more" to the number.
+              Conversational forms people{" "}
+              {/* The ring is on "finish", the outcome word.
 
-                  "more" is the qualitative word in the sentence and it was the
-                  one being circled, which is the opposite of what a pen does:
-                  you ring the thing that is hard to believe. With a figure in
-                  the line, the figure is that thing.
+                  This line said "that get 2.3× more submissions" and ringed the
+                  figure. The figure had no source — it matched Typeform's own
+                  47.3%-against-an-unsourced-21.5% claim, which /form-statistics
+                  calls out — so it went, and the pen went to the word that
+                  carries the promise instead.
 
-                  The clause is held on one line, and that is load-bearing
-                  rather than typographic fussiness. The ring is drawn
-                  `-inset-x-4` — a rem wider than the figure on each side — so a
-                  line break on either side of the number puts the mark's edge
-                  outside the `h1` box, hanging into the page gutter and running
-                  into the neighbouring line. A NBSP in front of the figure is
-                  not enough on its own: `text-balance` re-flows around it and
-                  simply moves the break to the other side. Holding "get 2.3×
-                  more" together as a unit is what fixes it, because the ring
-                  then has a word on both sides whatever the balancer decides.
-                  Measured at 312, 342, 382, 482, 574, 592 and 720px, the figure
-                  sits at least 74px into its line at every width. */}
+                  The pair is held on one line for the reason the figure was:
+                  the ring is drawn `-inset-x-4`, a rem wider than the word on
+                  each side, so a break next to it would hang the mark outside
+                  the `h1` box. "actually finish" as one unit gives it a word on
+                  its left whatever `text-balance` decides. */}
               <span className="whitespace-nowrap">
-                get{"\u00a0"}
-                <span className="relative mx-3 inline-block">
-                  {/* Tilted off the baseline, and only the figure — the ring
-                      stays level. A number written at a slight angle inside a
-                      level pen mark reads as the one word in the line somebody
-                      leaned in to write; tilting the pair instead would just
-                      look like the headline had slipped. `transform` does not
-                      change the layout box, so the ring keeps its geometry. */}
-                  <span className="inline-block -rotate-[4deg]">2.3&#215;</span>
+                actually{"\u00a0"}
+                <span className="relative mr-4 ml-2 inline-block">
+                  finish
                   {/* Drawn on, and last. The words rise first; the ring starts
                       once they have landed, which is the order it would happen
                       if somebody were actually marking up the page. It needs no
@@ -235,9 +223,8 @@ export function Hero() {
                     />
                   </span>
                 </span>
-                {"\u00a0"}more
-              </span>{" "}
-              submissions.
+                .
+              </span>
             </span>
           </h1>
 
