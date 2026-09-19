@@ -38,6 +38,13 @@ import { usePathname } from "next/navigation";
 const GTM_CONTAINER_ID = "GTM-NQLPKDG5";
 
 /**
+ * The Google Ads tag (gtag.js). It loads alongside the container, on the same
+ * strategy and behind the same exclusion, rather than as a tag inside GTM, so
+ * it shares the container's `dataLayer` and stays out of the respondent runtime.
+ */
+const GOOGLE_ADS_ID = "AW-452851592";
+
+/**
  * The same exclusion as Clarity, for a reason that is one step further back.
  *
  * `/f/*` is a respondent answering somebody else's form and `/preview/*` is
@@ -68,12 +75,25 @@ export function GoogleTagManager() {
     is blank for them. There is no session to measure, only an iframe to ship.
   */
   return (
-    <Script id="google-tag-manager" strategy="afterInteractive">
-      {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    <>
+      <Script id="google-tag-manager" strategy="afterInteractive">
+        {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
 j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
 })(window,document,'script','dataLayer','${GTM_CONTAINER_ID}');`}
-    </Script>
+      </Script>
+      <Script
+        id="google-ads-gtag-src"
+        src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}`}
+        strategy="afterInteractive"
+      />
+      <Script id="google-ads-gtag" strategy="afterInteractive">
+        {`window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', '${GOOGLE_ADS_ID}');`}
+      </Script>
+    </>
   );
 }
