@@ -9,23 +9,23 @@ Business name: chatform
 
 ## Headlines (max 30 chars)
 
-| # | Headline | Chars |
-|---|---|---|
-| 1 | chatform: Conversational Forms | 30 |
-| 2 | Conversational Form Builder | 27 |
-| 3 | AI Form Builder, Free to Start | 30 |
-| 4 | Online Survey Maker With AI | 27 |
-| 5 | Free Typeform Alternative | 25 |
-| 6 | Free Jotform Alternative | 24 |
-| 7 | Forms That Feel Like a Chat | 27 |
-| 8 | Chat-Style Surveys and Forms | 28 |
-| 9 | AI Asks Smart Follow-Ups | 24 |
-| 10 | Get Better Survey Answers | 25 |
-| 11 | Build a Form From One Sentence | 30 |
-| 12 | Win Back People Who Drop Off | 28 |
-| 13 | Unlimited Responses, Free | 25 |
-| 14 | Free Plan, No Card Needed | 25 |
-| 15 | Try chatform Free Today | 23 |
+| #   | Headline                       | Cha |
+| --- | ------------------------------ | --- |
+| 1   | chatform: Conversational Forms | 30  |
+| 2   | Conversational Form Builder    | 27  |
+| 3   | AI Form Builder, Free to Start | 30  |
+| 4   | Online Survey Maker With AI    | 27  |
+| 5   | Free Typeform Alternative      | 25  |
+| 6   | Free Jotform Alternative       | 24  |
+| 7   | Forms That Feel Like a Chat    | 27  |
+| 8   | Chat-Style Surveys and Forms   | 28  |
+| 9   | AI Asks Smart Follow-Ups       | 24  |
+| 10  | Get Better Survey Answers      | 25  |
+| 11  | Build a Form From One Sentence | 30  |
+| 12  | Win Back People Who Drop Off   | 28  |
+| 13  | Unlimited Responses, Free      | 25  |
+| 14  | Free Plan, No Card Needed      | 25  |
+| 15  | Try chatform Free Today        | 23  |
 
 Spare, if a price is wanted: `Pro From $16/mo Billed Yearly` (29).
 If Typeform/Jotform block #5/#6 on trademark: `Chat-Style Form Alternative` (27).
@@ -54,14 +54,14 @@ Trademark fallback for #3:
 
 ## Sitelinks (text max 25, each description line max 35)
 
-| Text | Line 1 | Line 2 | URL |
-|---|---|---|---|
-| Conversational Forms | Forms that feel like a chat | AI follows up on thin answers | /conversational-forms |
-| Pricing | Free plan, no credit card | Pro from $16/mo billed yearly | /pricing |
-| AI Form Builder | Describe it in one sentence | AI drafts the whole form for you | /ai-form-builder |
-| Free Form Templates | Surveys, lead forms and signups | Pick one and publish in minutes | /form-templates |
-| Typeform Alternative | Conversational and free to start | See how chatform compares | /typeform-alternative |
-| Use Cases | Feedback, leads, hiring and more | See what teams build with chatform | /use-cases |
+| Text                 | Line 1                           | Line 2                             | URL                   |
+| -------------------- | -------------------------------- | ---------------------------------- | --------------------- |
+| Conversational Forms | Forms that feel like a chat      | AI follows up on thin answers      | /conversational-forms |
+| Pricing              | Free plan, no credit card        | Pro from $16/mo billed yearly      | /pricing              |
+| AI Form Builder      | Describe it in one sentence      | AI drafts the whole form for you   | /ai-form-builder      |
+| Free Form Templates  | Surveys, lead forms and signups  | Pick one and publish in minutes    | /form-templates       |
+| Typeform Alternative | Conversational and free to start | See how chatform compares          | /typeform-alternative |
+| Use Cases            | Feedback, leads, hiring and more | See what teams build with chatform | /use-cases            |
 
 Trademark fallback for the Typeform row: text `Compare Form Builders`, lines
 `See how chatform stacks up` / `Conversational and free to start`, URL `/compare`.
