@@ -137,13 +137,12 @@ describe("shows the product off", () => {
 
   it("uses the block types the landing page is selling", () => {
     const types = new Set(doc.blocks.map((b) => b.type));
-    // The showy ones, which is the point: a drag-to-order ranking and a
-    // calendar inside a conversation, a scale, stars, an upload, and a consent
-    // that can be refused. The other choice blocks are deliberately absent:
-    // see the note on `DEMO_FORM`.
+    // The showy ones, which is the point: four pictures and a calendar inside
+    // a conversation, a scale, stars, an upload, and a consent that can be
+    // refused. The other choice blocks are deliberately absent: see the note
+    // on `DEMO_FORM`.
     for (const wanted of [
       "picture_choice",
-      "ranking",
       "opinion_scale",
       "rating",
       "file_upload",
@@ -166,22 +165,42 @@ describe("shows the product off", () => {
     expect(repeated, `repeated block types: ${repeated.join(", ")}`).toEqual([]);
   });
 
-  it("asks at most one question that is a list of options", () => {
-    // These five look different in a screenshot and are the same act to
-    // answer: read a list, pick from it. Four of them in a row is what made an
-    // earlier version of this form feel like one long question, and it is the
-    // reason a visitor could not tell it from a page of radio buttons.
+  it("asks at most two questions that are a list, and never two of the same kind", () => {
+    // These five are the same act to answer: read a set, pick from it. Four of
+    // them in a row is what made an earlier version of this form feel like one
+    // long question, and it is the reason a visitor could not tell it from a
+    // page of radio buttons.
     //
-    // `ranking` is not in the set. It draws a list and takes an ordering, so
-    // answering it is a different act from tapping one of six, and it is the
-    // block this form leans on to make that point.
-    //
-    // `picture_choice` is in the set and is the one that spends the budget:
-    // it is still pick-one, and the reason it beat the text list it replaced
-    // is that four drawings are read at a glance rather than read.
+    // Two is affordable because these two do not read as the same screen: one
+    // is four drawings taken in at a glance, the other is four short phrases
+    // and a Continue button. A second picture grid, or a second row of chips,
+    // would be the thing this rule exists to stop.
     const family = new Set(["single_select", "multi_select", "dropdown", "yes_no", "picture_choice"]);
     const lists = doc.blocks.filter((b) => family.has(b.type));
-    expect(lists.map((b) => `${b.ref}:${b.type}`)).toHaveLength(1);
+    expect(lists.length).toBeLessThanOrEqual(2);
+    expect(lists.filter((b) => b.type === "picture_choice")).toHaveLength(1);
+    expect(lists.filter((b) => b.type !== "picture_choice").length).toBeLessThanOrEqual(1);
+  });
+
+  it("never asks for an answer a respondent could get stuck on", () => {
+    // What the ranking did, and why it is gone: it refuses a partial answer,
+    // so the second question could not be left without ordering four things
+    // somebody may have no opinion about. `signature` asks for a drawing,
+    // `matrix` for a grid of them.
+    //
+    // A `multi_select` is the safe shape of the same question as long as one
+    // pick is enough to continue: `minSelections` above 1 puts the stuck state
+    // straight back.
+    for (const block of doc.blocks) {
+      expect(["ranking", "matrix", "signature"], `${block.ref} is a control people abandon on`).not.toContain(
+        block.type,
+      );
+      if (block.type === "multi_select") {
+        expect(block.minSelections, `${block.ref} demands more than one pick`).toBeLessThanOrEqual(1);
+        // And a ceiling, or "what matters most" collects "all of it".
+        expect(block.maxSelections, `${block.ref} lets them pick everything`).toBeLessThan(block.options.length);
+      }
+    }
   });
 
   it("never asks the same options twice on one screen", () => {

@@ -22,30 +22,33 @@ export { DEMO_KNOWLEDGE } from "./knowledge.js";
  * It does two jobs at once, and both constrain the questions:
  *
  * The visitor's job is to experience the product. That rules out a
- * questionnaire: in eight questions they should meet a drag-to-order ranking,
- * a scale, stars, an upload, a consent they can actually refuse, a calendar,
- * three questions they can skip, branching that reads their answers, and an
- * agent that answers questions back, in about three minutes, because a demo
- * nobody finishes demonstrates nothing.
+ * questionnaire: in eight questions they should meet four pictures, a scale,
+ * stars, an upload, a consent they can actually refuse, a calendar, three
+ * questions they can skip, branching that reads their answers, and an agent
+ * that answers questions back, in about three minutes, because a demo nobody
+ * finishes demonstrates nothing.
  *
- * Three rules, all asserted in `demo-form.test.ts`:
+ * Four rules, all asserted in `demo-form.test.ts`:
  *
  * 1. **One block type per question.** A repeated type is a wasted screen: the
  *    second one shows the visitor nothing the first did not, on the one form
  *    whose job is to show them everything.
- * 2. **One question, at most, that is a list of options.** `single_select`,
- *    `multi_select`, `dropdown`, `yes_no` and `picture_choice` look different
- *    in a screenshot and are the same act to answer: read a list, pick from
- *    it. Four of those in a row is what made an earlier version feel like one
- *    long question, and it is the reason a visitor cannot tell a chat form
- *    from a page of radio buttons. `ranking` is deliberately not in that set:
- *    it is a list on screen and an ordering to answer, which is a different
- *    act and the one this form uses to show that.
+ * 2. **Two questions at most that are a list of options, and they may not be
+ *    the same kind of list.** `single_select`, `multi_select`, `dropdown`,
+ *    `yes_no` and `picture_choice` are the same act to answer: read a set,
+ *    pick from it. Four of those in a row is what made an earlier version feel
+ *    like one long question. Two is affordable when one of them is pictures
+ *    and the other is words, because those do not read as the same screen.
  * 3. **Never ask the same options twice on one screen.** This is what the
  *    matrix did. Three rows of "Fine / Could be better / Actively painful"
  *    under one question is the same row of buttons printed three times, and it
  *    is the least conversational thing the product can draw. The grid is still
  *    a block anybody can add; it is not what greets a visitor here.
+ * 4. **No control a respondent can get stuck in.** This is why the ranking
+ *    went. A ranking will not accept a partial answer, so the second question
+ *    was one nobody could leave without ordering four things they may not have
+ *    an opinion about. Every control here takes one tap and says what it wants.
+ *    `signature`, `payment` and `matrix` fail this for their own reasons.
  *
  * The typing is last and skippable for a related reason: a text box is the
  * least interesting control we have and the most expensive one to answer.
@@ -70,7 +73,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 18;
+export const DEMO_REVISION = 19;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -140,31 +143,33 @@ export const DEMO_FORM = buildAuthoredDoc({
     },
     {
       /*
-       * A drag-to-order ranking, and the block that replaced the matrix.
+       * Two taps and a button, and it used to be a drag-to-order ranking.
        *
-       * The matrix asked three parallel questions with the same three options
-       * under each, which on screen is the same row of buttons printed three
-       * times: the ugliest thing on the form and the one that looked most like
-       * a spreadsheet wearing a chat bubble.
+       * The ranking was the right data and the wrong control. It will not
+       * accept a partial answer: all four items have to be placed before the
+       * respondent may go on, so somebody who cares about one thing and is
+       * indifferent to the rest has to invent an order for the rest anyway.
+       * On a form whose entire job is to be finished, the second question is
+       * the worst possible place for the only control nobody can guess at.
        *
-       * A forced ranking collects the same thing better. "Everything matters"
-       * is not an available answer, so what comes back is an actual order, and
-       * the act of answering (tap them into place, drag to fix it) is one no
-       * page of radio buttons can do.
-       *
-       * Four items, not six: every extra item is another tap before anyone may
-       * move on, and this is question two.
+       * `maxSelections: 2` is what keeps the answer worth having. Asked to
+       * pick any number, everybody picks everything and the question tells us
+       * nothing; asked for two, they have to choose, which is the whole point
+       * of having asked. `minSelections: 1` is what un-sticks it: the
+       * Continue button lights up on the first tap.
        */
       ref: "priorities",
-      type: "ranking",
-      title: "When you send a form out, what matters most?",
-      description: "Tap them in order, best first. You can drag them around after.",
+      type: "multi_select",
+      title: "What matters most when you send a form out?",
+      description: "Pick one or two.",
       required: true,
-      items: [
-        "People actually finishing it",
-        "Answers clean enough to use",
-        "How fast it is to build",
-        "How it looks",
+      minSelections: 1,
+      maxSelections: 2,
+      options: [
+        { label: "People actually finishing it" },
+        { label: "Answers clean enough to use" },
+        { label: "How fast it is to build" },
+        { label: "How it looks" },
       ],
     },
     {
@@ -291,9 +296,10 @@ export const DEMO_FORM = buildAuthoredDoc({
    *
    * The old flow branched six ways off "what's your biggest problem?" into
    * three follow-up questions, which is a lot of canvas for one thing: asking
-   * the same "say more" in three different voices. The ranking gets the same
-   * reading in one tap-and-drag, so what is left to route on is what somebody
-   * wants to happen next, which is the part a respondent can feel.
+   * the same "say more" in three different voices. Asking for the two things
+   * that matter most gets the same reading without a branch, so what is left
+   * to route on is what somebody wants to happen next, which is the part a
+   * respondent can feel.
    *
    * Consent is routable because `answerOperand` unwraps the audit record to
    * its `accepted` boolean; `is_checked` then does what it says.
