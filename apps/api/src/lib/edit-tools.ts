@@ -206,7 +206,7 @@ export function buildEditTools(
     get_question_type: tool({
       description:
         "The exact config keys for one question type, as a checked list rather than prose. " +
-        "You should not normally need this — add_question already describes every type. Use it only when a config key has " +
+        "You should not normally need this, because add_question already describes every type. Use it only when a config key has " +
         "been rejected and you need to see precisely what that type accepts.",
       inputSchema: z.object({
         type: z.enum(ADDABLE_BLOCK_TYPES).describe("The question type to describe."),
@@ -214,7 +214,7 @@ export function buildEditTools(
       execute: async ({ type }) => {
         const d = describeBlockType(type);
         const lines = [
-          `${d.type} — ${d.summary}`,
+          `${d.type}: ${d.summary}`,
           d.needsOptions ? "Needs at least two options." : "Takes no options.",
           d.configKeys.length > 0
             ? `config keys: ${d.configKeys.join(", ")}, required`
@@ -248,10 +248,10 @@ export function buildEditTools(
     ask_user: tool({
       description:
         "Ask the author one question, when the request cannot be acted on as written and guessing would waste their time. " +
-        "Calling this ENDS your turn and changes nothing — so use it only when no reading of the request is actionable: " +
+        "Calling this ENDS your turn and changes nothing, so use it only when no reading of the request is actionable: " +
         "a ref that could mean two different questions, a routing change where you cannot tell which answer goes where, " +
         "a destination only they have (their UPI id, their booking link). " +
-        "Never ask about wording, length, or anything you could pick a sensible default for — they are looking at the form " +
+        "Never ask about wording, length, or anything you could pick a sensible default for. They are looking at the form " +
         "and can change it. If you can make a reasonable change and say what you assumed in your summary, do that instead.",
       inputSchema: z.object({
         question: z
@@ -265,7 +265,7 @@ export function buildEditTools(
     add_question: tool({
       description:
         "Add a new question to the form.\n\n" +
-        "Most edits to a working form need NONE of these — a request about who gets asked what is a routing change, so use " +
+        "Most edits to a working form need NONE of these. A request about who gets asked what is a routing change, so use " +
         "set_branch. Never add a question to carry a setting an existing one could have had; use configure_question.\n\n" +
         "The types you may add, what each collects, and how each is configured:\n" +
         renderBlockCatalog(ADDABLE_BLOCK_TYPES),
@@ -277,7 +277,7 @@ export function buildEditTools(
         required: z.boolean(),
         options: z
           .array(z.string())
-          .describe('Choice labels as written for the respondent — ["Android", "iPhone"]. [] for types that take none.'),
+          .describe('Choice labels as written for the respondent: ["Android", "iPhone"]. [] for types that take none.'),
         scale: z.number().int().min(0).max(20).describe("rating: how many stars. opinion_scale: how many steps. 0 otherwise."),
         config: z
           .string()
@@ -288,7 +288,7 @@ export function buildEditTools(
         insertAfter: z
           .string()
           .describe(
-            'The ref this goes directly after — one already in the form, or one you added earlier this turn. "" for the end. ' +
+            'The ref this goes directly after: one already in the form, or one you added earlier this turn. "" for the end. ' +
               "A question only asked for SOME answers must sit immediately below the question that decides it.",
           ),
       }),
@@ -354,7 +354,7 @@ export function buildEditTools(
         description: z
           .string()
           .describe(
-            '"" leaves the description alone. Anything else REPLACES it whole — keep the text that is there and add to it. ' +
+            '"" leaves the description alone. Anything else REPLACES it whole, so keep the text that is there and add to it. ' +
               "A video, image or link goes here as its URL alone on its own line.",
           ),
       }),
@@ -369,7 +369,7 @@ export function buildEditTools(
         if (!block.existing) {
           return reject(
             "configure_question",
-            `"${ref}" was added by this edit — set it up with add_question's config instead of changing it afterwards.`,
+            `"${ref}" was added by this edit, so set it up with add_question's config instead of changing it afterwards.`,
           );
         }
         if (!config.trim() && !description.trim()) {
@@ -415,7 +415,7 @@ export function buildEditTools(
       description:
         "Route one answer to one destination.\n\n" +
         "This REPLACES the existing rule for the same question and the same answer, and leaves every other route alone. " +
-        "So restate the routes you are changing, in full — including an answer whose destination stays the same but whose " +
+        "So restate the routes you are changing, in full, including an answer whose destination stays the same but whose " +
         "neighbours are moving. A route you do not mention keeps working exactly as it does now.\n\n" +
         "Answers you do not branch fall through to the question directly below. There is no operator for \"and then\": if a " +
         "question should be SKIPPED by some answers, branch the answers that skip it past it, not the ones that reach it.",
@@ -464,7 +464,7 @@ export function buildEditTools(
             return reject(
               "set_branch",
               `"${whenRef}" has these options: ${from.optionLabels.map((l) => `"${l}"`).join(", ")}. ` +
-                `"${value}" is not one of them — use a label exactly as it is written.`,
+                `"${value}" is not one of them. Use a label exactly as it is written.`,
             );
           }
         }
@@ -480,18 +480,18 @@ export function buildEditTools(
     set_ending: tool({
       description:
         "Add an outcome, or change one that already exists. A ref already in the form is changed in place; any other ref adds a new one.\n\n" +
-        'A "screen_out" REFUSES the respondent — they have told you something that means they cannot submit. It is what a failing ' +
+        'A "screen_out" REFUSES the respondent: they have told you something that means they cannot submit. It is what a failing ' +
         "answer must point at. Never point a failing answer at a success ending: that is what makes a form say " +
         '"Submitted Successfully" to somebody it has just turned away. A form must keep at least one success ending.',
       inputSchema: z.object({
         ref: z.string().describe("An existing ending's ref to change, or a new one shaped end_<slug>."),
-        title: z.string().min(1).describe("On a screen_out, say plainly that they cannot submit — not a thank-you."),
+        title: z.string().min(1).describe("On a screen_out, say plainly that they cannot submit, not a thank-you."),
         body: z.string().describe("What they can do about it, if anything. \"\" when there is genuinely nothing."),
         kind: z.enum(["success", "screen_out"]),
         requirements: z
           .string()
           .describe(
-            'screen_out only: what they had to meet, separated by " | ", stated as requirements and not as failures — ' +
+            'screen_out only: what they had to meet, separated by " | ", stated as requirements and not as failures: ' +
               '"A team of 2-5 people | At least one member over 18". "" on a success ending.',
           ),
         redirectUrl: z
@@ -516,7 +516,7 @@ export function buildEditTools(
           if (!otherSuccess) {
             return reject(
               "set_ending",
-              `"${ref}" is this form's only success ending. A form whose only outcome refuses is a form nobody can finish — ` +
+              `"${ref}" is this form's only success ending. A form whose only outcome refuses is a form nobody can finish, ` +
                 `add a screen_out under a new ref instead.`,
             );
           }

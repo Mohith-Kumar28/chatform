@@ -566,7 +566,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -607,7 +607,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -1209,7 +1209,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -1250,7 +1250,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -1827,7 +1827,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -1868,7 +1868,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -2464,7 +2464,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -2505,7 +2505,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -2852,7 +2852,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -2893,7 +2893,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -3237,7 +3237,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -3278,7 +3278,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -3704,7 +3704,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -3745,7 +3745,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -4163,7 +4163,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -4204,7 +4204,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -4616,7 +4616,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -4657,7 +4657,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -5156,7 +5156,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -5197,7 +5197,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -5891,7 +5891,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -5932,7 +5932,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -6349,7 +6349,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -6390,7 +6390,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -6796,7 +6796,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -6837,7 +6837,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -7272,7 +7272,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -7313,7 +7313,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -7767,7 +7767,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -7808,7 +7808,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -8189,7 +8189,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -8230,7 +8230,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -8746,7 +8746,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -8787,7 +8787,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -9173,7 +9173,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -9214,7 +9214,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -10045,7 +10045,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -10086,7 +10086,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -10658,7 +10658,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -10699,7 +10699,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -11264,7 +11264,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -11305,7 +11305,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -11639,7 +11639,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -11680,7 +11680,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -12058,7 +12058,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -12099,7 +12099,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -12674,7 +12674,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -12715,7 +12715,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -13271,7 +13271,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -13312,7 +13312,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -13862,7 +13862,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -13903,7 +13903,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -14471,7 +14471,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -14512,7 +14512,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -15213,7 +15213,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -15254,7 +15254,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -15742,7 +15742,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -15783,7 +15783,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -16225,7 +16225,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -16266,7 +16266,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -16880,7 +16880,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -16921,7 +16921,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -17450,7 +17450,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -17491,7 +17491,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -18192,7 +18192,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -18233,7 +18233,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -18802,7 +18802,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -18843,7 +18843,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,
@@ -19272,7 +19272,7 @@
      "autoReplyEmail": {
       "enabled": true,
       "subject": "Thanks for your response",
-      "bodyMd": "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.",
+      "bodyMd": "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.",
       "includeAnswers": true
      }
     },
@@ -19313,7 +19313,7 @@
      "rephraseQuestions": true,
      "guardrails": {
       "answerOffTopic": true,
-      "refusalMessage": "I'm not sure about that one — but I can pass it on. Back to the form:",
+      "refusalMessage": "I'm not sure about that one, but I can pass it on. Back to the form:",
       "forbiddenTopics": []
      },
      "maxClarificationsPerBlock": 2,

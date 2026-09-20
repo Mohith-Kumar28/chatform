@@ -20,7 +20,7 @@ import { interpolate, type Block, type FormDoc } from "@repo/form-schema";
  * `SessionDO.init` decides which applies.
  */
 export function greeting(doc: FormDoc): string {
-  return `Hi! I'll walk you through "${doc.title}" — it only takes a minute.`;
+  return `Hi! I'll walk you through "${doc.title}". It only takes a minute.`;
 }
 
 /**
@@ -48,13 +48,13 @@ export function transitionAck(index: number): string {
 }
 
 export function clarifyText(block: Block, hint: string, attempt: number): string {
-  const openers = ["Hmm, ", "Sorry — ", "One more try: ", "Let me rephrase: "];
+  const openers = ["Hmm, ", "Sorry, ", "One more try: ", "Let me rephrase: "];
   const opener = openers[Math.min(attempt, openers.length - 1)]!;
   return `${opener}${hint} ${block.title}`;
 }
 
 export function escalateText(block: Block): string {
-  return `No problem — let's make this easier. You can use the controls below for "${block.title}".`;
+  return `No problem, let's make this easier. You can use the controls below for "${block.title}".`;
 }
 
 export function closingText(endingTitle: string): string {
@@ -91,8 +91,8 @@ export function asideText(block: Block): string {
   const why = block.agentHints?.whyWeAsk?.trim();
   if (why) return why;
   return block.required
-    ? "Good question — I can't answer that one here, but this answer is needed to finish."
-    : "Good question — I can't answer that one here, and you're welcome to skip this if you'd rather.";
+    ? "Good question. I can't answer that one here, but this answer is needed to finish."
+    : "Good question. I can't answer that one here, and you're welcome to skip this if you'd rather.";
 }
 
 /**
@@ -109,15 +109,15 @@ export function asideText(block: Block): string {
  */
 export function codeSentText(channel: "sms" | "email", destination: string): string {
   return channel === "sms"
-    ? `Let's confirm ${destination} — tap send below and a 6-digit code will come through by text.`
-    : `I've emailed a 6-digit code to ${destination} — pop it in below to confirm the address.`;
+    ? `Let's confirm ${destination}. Tap send below and a 6-digit code will come through by text.`
+    : `I've emailed a 6-digit code to ${destination}. Pop it in below to confirm the address.`;
 }
 
 /** When they replied to the code step with something that is not a code. */
 export function codeExpectedText(channel: "sms" | "email"): string {
   return channel === "sms"
-    ? "Use the box below to confirm that number — the code has to go through the verification step, not the chat."
-    : "I still need the 6-digit code from that email — or say the word and I'll send another.";
+    ? "Use the box below to confirm that number. The code has to go through the verification step, not the chat."
+    : "I still need the 6-digit code from that email, or say the word and I'll send another.";
 }
 
 /** Once the code checks out, before the conversation moves on. */

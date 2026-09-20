@@ -960,7 +960,7 @@ export class SessionDO extends DurableObject<Bindings> {
           // As below: the verification stands. Do not report this as a failed
           // sign-in, or they are sent back to a gate they have already cleared.
           console.error("gated_resume_failed", { sessionId: this.meta.sessionId, err });
-          await this.failTurn("interview_resume_failed", "You're verified — give it another moment.");
+          await this.failTurn("interview_resume_failed", "You're verified. Give it another moment.");
         }
       }
       return { accepted: true };
@@ -2457,18 +2457,18 @@ export class SessionDO extends DurableObject<Bindings> {
         : "";
       const options =
         "options" in block && block.options
-          ? ` The allowed values are: ${block.options.map((o) => `${o.id} (${o.label})`).join(", ")} — use the id.`
+          ? ` The allowed values are: ${block.options.map((o) => `${o.id} (${o.label})`).join(", ")}. Use the id.`
           : "";
 
       const ok = await this.aiStreamMessage(
         `The respondent replied: "${text}"\n\n` +
-          `Their message may contain an answer, a question of their own, or both — handle everything in it.\n` +
+          `Their message may contain an answer, a question of their own, or both, so handle everything in it.\n` +
           `1. If any part of it answers "${block.title}", call record_answer with ref=${block.ref}.${shape}${options}\n` +
           `2. If they also asked something, answer that too, in one or two sentences.\n` +
           `   If instead they want to change an answer they gave EARLIER, call change_earlier_answer for that ` +
           `question and follow its result rather than steps 1 and 3.\n` +
           `3. Then, if you recorded an answer, go straight on in the same message to the question ` +
-          `record_answer names in its result — not the one that follows in the list, which on a branching ` +
+          `record_answer names in its result, not the one that follows in the list, which on a branching ` +
           `form is a different question. ` +
           `If you did not, ask "${block.title}" again.\n` +
           `Never ignore a question they asked, even when they also answered.`,
@@ -2535,7 +2535,7 @@ export class SessionDO extends DurableObject<Bindings> {
           `- If they want to change an answer, call change_earlier_answer for that question and follow its result.\n` +
           `- If they asked something, answer it briefly.\n` +
           `- Otherwise, say in one short line that they can tap any answer above to change it, or send the form.\n` +
-          `Never ask any other question from the form — every one is answered.`,
+          `Never ask any other question from the form. Every one is answered.`,
         { review: true },
       );
       if (ok) {
@@ -2678,7 +2678,7 @@ export class SessionDO extends DurableObject<Bindings> {
     if (result.ok && block.type === "file_upload") {
       const authentic = await this.authenticFiles(result.value);
       if (!authentic) {
-        return this.recordInvalid(block, "invalid", "We could not find those uploads — try attaching the file again.");
+        return this.recordInvalid(block, "invalid", "We could not find those uploads. Try attaching the file again.");
       }
       // The stored rows replace what the client sent, field for field.
       result = { ...result, value: authentic };
@@ -3004,9 +3004,9 @@ export class SessionDO extends DurableObject<Bindings> {
         aiOk = await this.aiStreamMessage(
           verbatim
             ? `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
-                `Acknowledge it in one short sentence and answer anything they asked. Do NOT ask the next question — it follows immediately, word for word.`
+                `Acknowledge it in one short sentence and answer anything they asked. Do NOT ask the next question. It follows immediately, word for word.`
             : `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
-                `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref} — which is: "${next.block.title}" (${next.block.type}) — in your own words. Ask ONLY that question.` +
+                `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref}, which is "${next.block.title}" (${next.block.type}), in your own words. Ask ONLY that question.` +
                 (affordance ? ` ${affordance}` : ""),
         );
         if (aiOk) await this.applyPendingEffects();
@@ -3146,8 +3146,8 @@ export class SessionDO extends DurableObject<Bindings> {
     await this.persistMeta();
     await this.emitMessage(
       missing.length === 1
-        ? `Almost — I still need one answer before I can send this.`
-        : `Almost — there are ${missing.length} answers still missing before I can send this.`,
+        ? `Almost there. I still need one answer before I can send this.`
+        : `Almost there. ${missing.length} answers are still missing before I can send this.`,
     );
     await this.emitMessage(questionText(target));
     await this.emitQuestion();
@@ -3686,7 +3686,7 @@ export class SessionDO extends DurableObject<Bindings> {
       this.reopenQuestion(target);
       await this.persistMeta();
 
-      await this.emitMessage(`Sure — let's redo that one.`);
+      await this.emitMessage(`Sure, let's redo that one.`);
       if (this.doc.settings.agent.rephraseQuestions === false || !this.aiEnabled()) {
         await this.emitMessage(questionText(target));
       } else {

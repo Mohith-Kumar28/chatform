@@ -402,7 +402,7 @@ describe("outcomes that refuse the respondent", () => {
     // screen-out beside the one that is there, or aims the failing answer at a
     // success ending.
     const prompt = buildEditPrompt(doc, "stop teams bigger than five from submitting");
-    expect(prompt).toContain("end_ineligible (SCREEN-OUT — refuses the respondent)");
+    expect(prompt).toContain("end_ineligible (SCREEN-OUT, refuses the respondent)");
     expect(prompt).toContain("end_thanks (success)");
     expect(prompt).toContain('requirements listed: "A team of 2 to 5 people"');
   });

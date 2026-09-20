@@ -199,7 +199,7 @@ Fields specific to `phone`. The [fields every block has](/docs/blocks/common-fie
 }
 ```
 
-In a generated draft these arrive as `config` pairs: `country=<2-letter code> to assume a dialling code; verify=true ONLY when the author asked for the number to be confirmed — it texts a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number`.
+In a generated draft these arrive as `config` pairs: `country=<2-letter code> to assume a dialling code; verify=true ONLY when the author asked for the number to be confirmed. It texts a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave, such as a team name, a username or a seat number`.
 
 ## What you receive
 
@@ -281,6 +281,6 @@ The value is normalised before it is saved, so what you read back is not always 
 | --- | --- | --- |
 | `required` | an empty answer on a required block | This question needs an answer. |
 | `type` | `9812345678` | Please enter a phone number. |
-| `invalid_phone` | `"not a phone"` | Please enter a valid phone number with country code. |
+| `invalid_phone` | `"not a phone"` | That number needs its country code — for example +91 98765 43210. |
 | `duplicate` | `unique` is on and another response already gave this answer | Someone has already used that — please try a different one. |
 | `invalid_code` | `verify` is on and the code sent to this answer was wrong, expired, or guessed at too often | Varies with what went wrong — a wrong code says how many tries are left; an expired one asks for a new code. |

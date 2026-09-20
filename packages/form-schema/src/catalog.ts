@@ -68,31 +68,31 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
   statement: { summary: "Says something and moves on. Collects no answer." },
 
   short_text: {
-    summary: "One line of free text — a name, a job title, a company.",
+    summary: "One line of free text: a name, a job title, a company.",
     configKeys: ["unique", "pattern", "minlength", "maxlength"],
     config:
-      "pattern=<regular expression> when the author describes a SHAPE the answer must have — a student number like 1MS22CS045, an order id, a vehicle registration, a postcode. Write a real JavaScript regex anchored with ^ and $ (pattern=^1MS\\d{2}[A-Z]{2}\\d{3}$), and only when the author actually stated the format; never guess one, because a pattern nobody asked for refuses answers that were correct. unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
+      "pattern=<regular expression> when the author describes a SHAPE the answer must have, such as a student number like 1MS22CS045, an order id, a vehicle registration, a postcode. Write a real JavaScript regex anchored with ^ and $ (pattern=^1MS\\d{2}[A-Z]{2}\\d{3}$), and only when the author actually stated the format; never guess one, because a pattern nobody asked for refuses answers that were correct. unique=true to refuse a value another respondent already gave, such as a team name, a username or a seat number",
   },
   long_text: { summary: "A paragraph. Only when you genuinely want prose.", configKeys: ["minlength", "maxlength"] },
   email: {
     summary: "An email address, validated as one.",
     configKeys: ["unique", "businessonly", "domains", "domain", "alloweddomains", "verify"],
-    config: "domains=<acme.com|acme.co.uk> to accept ONLY those domains — use it whenever the author names the company, college or organisation an address must belong to; businessOnly=true to refuse gmail and the other free providers when no particular domain was named; verify=true ONLY when the author asked for the address to be confirmed — it emails a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
+    config: "domains=<acme.com|acme.co.uk> to accept ONLY those domains. Use it whenever the author names the company, college or organisation an address must belong to; businessOnly=true to refuse gmail and the other free providers when no particular domain was named; verify=true ONLY when the author asked for the address to be confirmed. It emails a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave, such as a team name, a username or a seat number",
   },
   phone: {
     summary: "A phone number, validated as one.",
     configKeys: ["unique", "country", "countryhint", "verify"],
-    config: "country=<2-letter code> to assume a dialling code; verify=true ONLY when the author asked for the number to be confirmed — it texts a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
+    config: "country=<2-letter code> to assume a dialling code; verify=true ONLY when the author asked for the number to be confirmed. It texts a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave, such as a team name, a username or a seat number",
   },
-  url: { summary: "A web address.", configKeys: ["unique"], config: "unique=true to refuse a value another respondent already gave — a team name, a username, a seat number" },
+  url: { summary: "A web address.", configKeys: ["unique"], config: "unique=true to refuse a value another respondent already gave, such as a team name, a username or a seat number" },
   number: {
-    summary: "A quantity — how many guests, how many seats, a budget.",
+    summary: "A quantity: how many guests, how many seats, a budget.",
     configKeys: ["unique", "integeronly", "min", "max", "currency"],
-    config: "min, max, integerOnly=true, currency=<3-letter code> when it is money; unique=true to refuse a value another respondent already gave — a team name, a username, a seat number",
+    config: "min, max, integerOnly=true, currency=<3-letter code> when it is money; unique=true to refuse a value another respondent already gave, such as a team name, a username or a seat number",
   },
   date: {
     summary:
-      "A date, or a date and time they choose — an arrival time, a preferred day. This is the right type when YOU are asking them when; `scheduling` is for booking against a calendar you own.",
+      "A date, or a date and time they choose: an arrival time, a preferred day. This is the right type when YOU are asking them when; `scheduling` is for booking against a calendar you own.",
     config: "disablePast=true to refuse dates already gone",
     configKeys: ["disablepast"],
   },
@@ -104,7 +104,7 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
 
   single_select: { summary: "Pick one from a short list.", needsOptions: true },
   multi_select: { summary: "Pick any number from a list.", needsOptions: true },
-  dropdown: { summary: "Pick one from a long list — a country, a plan.", needsOptions: true },
+  dropdown: { summary: "Pick one from a long list: a country, a plan.", needsOptions: true },
   picture_choice: {
     summary: "Pick by image. The builder attaches the pictures afterwards.",
     needsOptions: true,
@@ -119,7 +119,7 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
   },
   ranking: { summary: "Drag a list into order of preference. `options` are the things being ranked.", needsOptions: true },
   matrix: {
-    summary: "A grid — the same choice made once per row.",
+    summary: "A grid: the same choice made once per row.",
     config: "rows=<Row A|Row B|Row C>; `options` are the columns",
     configKeys: ["rows", "multipleperrow"],
     configRequiresOneOf: [["rows"]],
@@ -127,7 +127,7 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
   },
 
   file_upload: {
-    summary: "A file or image — a CV, a screenshot, a receipt.",
+    summary: "A file or image: a CV, a screenshot, a receipt.",
     config: "accept=<image/*|application/pdf>, maxFiles=<1-10>, maxSizeMB=<0.1-100>",
     configKeys: ["accept", "maxfiles", "maxsizemb"],
   },
@@ -135,15 +135,15 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
 
   payment: {
     summary:
-      "Takes money. Use this whenever the request mentions a price, a fee, a ticket, a deposit or a UPI id — never a text question asking them to confirm they paid.",
+      "Takes money. Use this whenever the request mentions a price, a fee, a ticket, a deposit or a UPI id, and never a text question asking them to confirm they paid.",
     config:
       "method=upi with upi=<vpa like name@bank>, OR method=link with url=<checkout page>; amount=<number>, currency=<3-letter code, INR for rupees>",
     configKeys: ["method", "upi", "upiid", "vpa", "url", "link", "payee", "amount", "currency"],
   },
   scheduling: {
     summary:
-      "Books a slot on a calendar the builder already owns — Cal.com, Calendly, a Meet room. Needs their booking link. If you do not have one, use `date` instead and ask them for a time directly.",
-    config: "url=<booking link> — required; without it this becomes a date question",
+      "Books a slot on a calendar the builder already owns: Cal.com, Calendly, a Meet room. Needs their booking link. If you do not have one, use `date` instead and ask them for a time directly.",
+    config: "url=<booking link>, required; without it this becomes a date question",
     configKeys: ["url", "link"],
     configRequiresOneOf: [["url", "link"]],
   },
@@ -161,15 +161,15 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
   },
   field_group: {
     summary:
-      "A small form asked once per person or item, repeated as many times as needed — two to five team members each with a name and an email, guests on a booking, line items on an order. Use this whenever the request describes the SAME set of details collected several times over; never a numbered run of separate questions (\"Member 1 name\", \"Member 2 name\"), which cannot stretch to a team of six or shrink to a team of two.",
+      "A small form asked once per person or item, repeated as many times as needed: two to five team members each with a name and an email, guests on a booking, line items on an order. Use this whenever the request describes the SAME set of details collected several times over; never a numbered run of separate questions (\"Member 1 name\", \"Member 2 name\"), which cannot stretch to a team of six or shrink to a team of two.",
     config:
-      "fields=<Label:kind|Label:kind> where kind is one of short_text, long_text, email, phone, url, number, date, single_select, yes_no — append * to make a field required, and list a select's choices in brackets (Role:single_select[Lead|Member]); item=<Team member> names one entry; min=<2>, max=<5> bound how many there may be; domains=<acme.com> and businessOnly=true apply to every email column in the group",
+      "fields=<Label:kind|Label:kind> where kind is one of short_text, long_text, email, phone, url, number, date, single_select, yes_no. Append * to make a field required, and list a select's choices in brackets (Role:single_select[Lead|Member]); item=<Team member> names one entry; min=<2>, max=<5> bound how many there may be; domains=<acme.com> and businessOnly=true apply to every email column in the group",
     configKeys: ["fields", "columns", "item", "itemlabel", "min", "max", "domains", "domain", "alloweddomains", "businessonly"],
     configRequiresOneOf: [["fields", "columns"]],
   },
   legal_consent: {
     summary:
-      "Agreeing to terms, a waiver, a code of conduct. Put the wording in `description`. By default the only answer is yes; add decline=true when a refusal has to be a real answer you can route on — an eligibility gate, a policy someone may decline.",
+      "Agreeing to terms, a waiver, a code of conduct. Put the wording in `description`. By default the only answer is yes; add decline=true when a refusal has to be a real answer you can route on: an eligibility gate, a policy someone may decline.",
     config: "decline=true to offer an explicit refusal; agree=<label>, declineLabel=<label> to relabel the two buttons",
     configKeys: ["decline", "allowdecline", "agree", "declinelabel"],
   },
@@ -188,7 +188,7 @@ export function renderBlockCatalog(only?: readonly BlockType[]): string {
   return types
     .map((type) => {
       const entry = BLOCK_CATALOG[type];
-      const parts = [`- ${type} — ${entry.summary}`];
+      const parts = [`- ${type}: ${entry.summary}`];
       if (entry.needsOptions) parts.push("  Requires `options`.");
       if (entry.config) parts.push(`  config: ${entry.config}`);
       return parts.join("\n");
@@ -225,7 +225,7 @@ export function renderBlockIndex(only?: readonly BlockType[]): string {
   return types
     .map((type) => {
       const entry = BLOCK_CATALOG[type];
-      return `- ${type} — ${entry.summary}${entry.needsOptions ? " (needs options)" : ""}`;
+      return `- ${type}: ${entry.summary}${entry.needsOptions ? " (needs options)" : ""}`;
     })
     .join("\n");
 }

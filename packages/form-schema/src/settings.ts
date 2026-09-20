@@ -17,7 +17,7 @@ export const DEFAULT_CONFIRMATION_SUBJECT = "Thanks for your response";
  * is a commitment on their behalf; "this is your copy" is only true.
  */
 export const DEFAULT_CONFIRMATION_BODY =
-  "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.";
+  "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.";
 
 /**
  * What a closed form says when the author has not written anything else.
@@ -456,7 +456,7 @@ export const SettingsDoc = z.object({
           refusalMessage: z
             .string()
             .max(500)
-            .default("I'm not sure about that one — but I can pass it on. Back to the form:"),
+            .default("I'm not sure about that one, but I can pass it on. Back to the form:"),
           forbiddenTopics: z.array(boundedString(120)).max(20).default([]),
         })
         .prefault({}),

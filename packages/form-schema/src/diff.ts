@@ -455,7 +455,7 @@ export function summarizeChanges(changes: readonly DocChange[]): string {
       case "title.changed":
         return c.from ? `Renamed the form to “${c.to}”` : `Created “${c.to}”`;
       default:
-        return `${c.label} — ${verb}`;
+        return `${c.label}: ${verb}`;
     }
   }
 
