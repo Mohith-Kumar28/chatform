@@ -142,7 +142,7 @@ export const SALES: TemplateSeed[] = [
     icon: "MonitorPlay",
     description: "Book a demo and learn exactly what to show before the call.",
     blurb:
-      "Half of a good demo is knowing what to skip. This asks what they want to see, and each answer opens the one follow-up that makes the demo specific — which integrations, which compliance regime, which system they are migrating from — then hands them straight to your booking link.",
+      "Half of a good demo is knowing what to skip. This asks what they want to see, and each answer opens the one follow-up that makes the demo specific (which integrations, which compliance regime, which system they are migrating from), then hands them straight to your booking link.",
     tags: ["demo", "sales", "booking", "branching"],
     greeting: "Let's get you a demo. Two minutes of questions so we don't waste yours.",
     questions: [
@@ -176,7 +176,7 @@ export const SALES: TemplateSeed[] = [
         ref: "demo_focus",
         type: "single_select",
         title: "What would you most like to see?",
-        description: "Pick the one that matters most — we'll cover the rest if there's time.",
+        description: "Pick the one that matters most. We'll cover the rest if there's time.",
         required: true,
         options: [
           { label: "The basics, end to end" },
@@ -280,7 +280,7 @@ export const SALES: TemplateSeed[] = [
     icon: "FileText",
     description: "Scope a job well enough to price it without a call.",
     blurb:
-      "Most quote forms collect a name and a vague description, then cost you a discovery call anyway. This asks the questions the price actually depends on, and which ones those are depends on the job — a new build is scoped differently from a rescue, and ongoing support differently again. The first reply can be a number.",
+      "Most quote forms collect a name and a vague description, then cost you a discovery call anyway. This asks the questions the price actually depends on, and which ones those are depends on the job: a new build is scoped differently from a rescue, and ongoing support differently again. The first reply can be a number.",
     tags: ["quote", "pricing", "services", "branching"],
     greeting: "Tell us what you need and we'll come back with a price.",
     questions: [
@@ -319,7 +319,7 @@ export const SALES: TemplateSeed[] = [
         title: "Is there a design already?",
         required: true,
         yesLabel: "Yes, it's ready",
-        noLabel: "No — we'd need that too",
+        noLabel: "No, we'd need that too",
       },
 
       // ── redesign ──
@@ -372,7 +372,7 @@ export const SALES: TemplateSeed[] = [
         ref: "budget",
         type: "single_select",
         title: "What's your budget range?",
-        description: "A range is fine — it tells us what's realistic.",
+        description: "A range is fine. It tells us what's realistic.",
         required: true,
         options: [
           { label: "Under $5k" },
@@ -414,7 +414,7 @@ export const SALES: TemplateSeed[] = [
     icon: "Handshake",
     description: "Sort real partnership proposals from the cold pitches.",
     blurb:
-      "A partnerships inbox fills with pitches that were never going to fit. Each kind of partnership is asked the one thing that makes it credible — an integration for the API it would use, a reseller for the market it sells into, co-marketing for the size of its audience — and a proposal that can't answer that is the one you were going to decline anyway.",
+      "A partnerships inbox fills with pitches that were never going to fit. Each kind of partnership is asked the one thing that makes it credible (an integration for the API it would use, a reseller for the market it sells into, co-marketing for the size of its audience), and a proposal that can't answer that is the one you were going to decline anyway.",
     tags: ["partnerships", "bizdev", "branching"],
     greeting: "Thinking of working together? Tell us what you have in mind.",
     questions: [
@@ -534,7 +534,7 @@ export const SALES: TemplateSeed[] = [
       { when: "agency_services", always: true, then: "outcome" },
     ],
     ending: {
-      title: "Thanks — we'll read it properly 🤝",
+      title: "Thanks. We'll read it properly 🤝",
       body: "If there's a fit, you'll hear from us within the week.",
     },
   }),

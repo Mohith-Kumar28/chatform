@@ -8,7 +8,7 @@ export const EVENTS: TemplateSeed[] = [
     icon: "PartyPopper",
     description: "Collect RSVPs with plus-ones, dietary notes and travel.",
     blurb:
-      "Everything the caterer and the door need, in the order a guest thinks about it — and nothing else. Someone who can't come is asked one kind question and let go in twenty seconds; someone who is coming is walked through guests, food and arrival.",
+      "Everything the caterer and the door need, in the order a guest thinks about it, and nothing else. Someone who can't come is asked one kind question and let go in twenty seconds; someone who is coming is walked through guests, food and arrival.",
     tags: ["rsvp", "party", "guests", "branching"],
     greeting: "You're invited! 🎉 Let us know if you can make it.",
     questions: [
@@ -56,7 +56,7 @@ export const EVENTS: TemplateSeed[] = [
           { label: "Gluten-free" },
           { label: "Dairy-free" },
           { label: "Nut allergy" },
-          { label: "Other — I'll explain below" },
+          { label: "Other (I'll explain below)" },
         ],
       },
       {
@@ -71,7 +71,7 @@ export const EVENTS: TemplateSeed[] = [
         type: "single_select",
         title: "How are you getting here?",
         required: false,
-        options: [{ label: "Driving — I'll need parking" }, { label: "Public transport" }, { label: "Taxi or lift" }, { label: "Walking" }],
+        options: [{ label: "Driving (I'll need parking)" }, { label: "Public transport" }, { label: "Taxi or lift" }, { label: "Walking" }],
       },
       {
         ref: "song",
@@ -84,7 +84,7 @@ export const EVENTS: TemplateSeed[] = [
       {
         ref: "cannot_reason",
         type: "single_select",
-        title: "Ah — anything we should know?",
+        title: "Ah, anything we should know?",
         required: false,
         options: [
           { label: "Away that week" },
@@ -104,7 +104,7 @@ export const EVENTS: TemplateSeed[] = [
     branches: [
       { when: "attending", is: true, then: "guests" },
       { when: "attending", is: false, then: "cannot_reason" },
-      { when: "dietary", op: "not_contains", is: "Other — I'll explain below", then: "arrival" },
+      { when: "dietary", op: "not_contains", is: "Other (I'll explain below)", then: "arrival" },
       { when: "song", always: true, then: "end_thanks" },
       { when: "message", always: true, then: "end_sorry" },
     ],
@@ -112,7 +112,7 @@ export const EVENTS: TemplateSeed[] = [
       {
         ref: "end_sorry",
         title: "We'll miss you 💛",
-        body: "Thanks for letting us know — it genuinely helps with the numbers.",
+        body: "Thanks for letting us know. It genuinely helps with the numbers.",
       },
     ],
     ending: { title: "See you there 🥂", body: "We'll send the final details a week before." },
@@ -125,7 +125,7 @@ export const EVENTS: TemplateSeed[] = [
     icon: "MessagesSquare",
     description: "Rate the parts of an event separately, and dig where the score was low.",
     blurb:
-      "A single “how was it?” averages a great speaker and a cold room into a seven. A grid tells you which one to fix — and anyone who rated the day three or under is asked what happened, while the people who loved it are asked whether they'd speak next time.",
+      "A single “how was it?” averages a great speaker and a cold room into a seven. A grid tells you which one to fix, and anyone who rated the day three or under is asked what happened, while the people who loved it are asked whether they'd speak next time.",
     tags: ["feedback", "events", "matrix", "branching"],
     greeting: "Thanks for coming! How did we do?",
     questions: [
@@ -202,7 +202,7 @@ export const EVENTS: TemplateSeed[] = [
     icon: "Mic",
     description: "Take talk proposals in a shape a committee can review.",
     blurb:
-      "Proposals arrive as essays when what a review committee needs is a title, an abstract, a length and a bio — comparable at a glance. First-time speakers are offered a mentor; workshop proposals are asked the things only a workshop needs, like room setup and what attendees must install.",
+      "Proposals arrive as essays when what a review committee needs is a title, an abstract, a length and a bio, comparable at a glance. First-time speakers are offered a mentor; workshop proposals are asked the things only a workshop needs, like room setup and what attendees must install.",
     tags: ["cfp", "conference", "speakers", "branching"],
     greeting: "Got a talk in you? Tell us about it.",
     questions: [
@@ -210,7 +210,7 @@ export const EVENTS: TemplateSeed[] = [
       { ref: "email", type: "email", title: "Email?", required: true },
       { ref: "pronouns", type: "short_text", title: "Pronouns, for the programme?", required: false },
       { ref: "talk_title", type: "short_text", title: "Talk title", required: true, maxLength: 120 },
-      { ref: "abstract", type: "long_text", title: "Abstract — what will people learn?", required: true, maxLength: 2000 },
+      { ref: "abstract", type: "long_text", title: "Abstract: what will people learn?", required: true, maxLength: 2000 },
       {
         ref: "takeaways",
         type: "long_text",
@@ -308,9 +308,9 @@ export const EVENTS: TemplateSeed[] = [
     icon: "CalendarCheck",
     description: "Sign people up, take payment, and check they're ready for the day.",
     blurb:
-      "A hands-on workshop goes badly when half the room hasn't installed anything. This asks about experience and setup so the right prep email goes to the right people — and beginners get walked through the extras while the experienced are left alone.",
+      "A hands-on workshop goes badly when half the room hasn't installed anything. This asks about experience and setup so the right prep email goes to the right people, and beginners get walked through the extras while the experienced are left alone.",
     tags: ["workshop", "training", "registration", "payment"],
-    greeting: "Let's get you registered — a few details and you're set.",
+    greeting: "Let's get you registered. A few details and you're set.",
     questions: [
       { ref: "name", type: "short_text", title: "Your name?", required: true },
       { ref: "email", type: "email", title: "Email?", required: true },
@@ -321,9 +321,9 @@ export const EVENTS: TemplateSeed[] = [
         title: "Which session?",
         required: true,
         options: [
-          { label: "Morning — 9:00 to 12:00" },
-          { label: "Afternoon — 13:00 to 16:00" },
-          { label: "Evening — 18:00 to 21:00" },
+          { label: "Morning (9:00 to 12:00)" },
+          { label: "Afternoon (13:00 to 16:00)" },
+          { label: "Evening (18:00 to 21:00)" },
         ],
       },
       {
@@ -378,7 +378,7 @@ export const EVENTS: TemplateSeed[] = [
         ref: "accessibility",
         type: "long_text",
         title: "Anything we can do to make the day work better for you?",
-        description: "Access, seating, captions, breaks, food — anything.",
+        description: "Access, seating, captions, breaks, food: anything.",
         required: false,
         maxLength: 600,
       },

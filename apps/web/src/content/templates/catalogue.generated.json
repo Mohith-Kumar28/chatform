@@ -642,7 +642,7 @@
   "title": "Demo request",
   "category": "Sales",
   "description": "Book a demo and learn exactly what to show before the call.",
-  "blurb": "Half of a good demo is knowing what to skip. This asks what they want to see, and each answer opens the one follow-up that makes the demo specific — which integrations, which compliance regime, which system they are migrating from — then hands them straight to your booking link.",
+  "blurb": "Half of a good demo is knowing what to skip. This asks what they want to see, and each answer opens the one follow-up that makes the demo specific (which integrations, which compliance regime, which system they are migrating from), then hands them straight to your booking link.",
   "tags": [
    "demo",
    "sales",
@@ -772,7 +772,7 @@
      "id": "blk_demorequ05",
      "ref": "demo_focus",
      "title": "What would you most like to see?",
-     "description": "Pick the one that matters most — we'll cover the rest if there's time.",
+     "description": "Pick the one that matters most. We'll cover the rest if there's time.",
      "required": true,
      "visibility": null,
      "image_key": null,
@@ -1285,7 +1285,7 @@
   "title": "Quote request",
   "category": "Sales",
   "description": "Scope a job well enough to price it without a call.",
-  "blurb": "Most quote forms collect a name and a vague description, then cost you a discovery call anyway. This asks the questions the price actually depends on, and which ones those are depends on the job — a new build is scoped differently from a rescue, and ongoing support differently again. The first reply can be a number.",
+  "blurb": "Most quote forms collect a name and a vague description, then cost you a discovery call anyway. This asks the questions the price actually depends on, and which ones those are depends on the job: a new build is scoped differently from a rescue, and ongoing support differently again. The first reply can be a number.",
   "tags": [
    "quote",
    "pricing",
@@ -1435,7 +1435,7 @@
      "media": null,
      "type": "yes_no",
      "yesLabel": "Yes, it's ready",
-     "noLabel": "No — we'd need that too"
+     "noLabel": "No, we'd need that too"
     },
     {
      "id": "blk_quotereq07",
@@ -1577,7 +1577,7 @@
      "id": "blk_quotereq13",
      "ref": "budget",
      "title": "What's your budget range?",
-     "description": "A range is fine — it tells us what's realistic.",
+     "description": "A range is fine. It tells us what's realistic.",
      "required": true,
      "visibility": null,
      "image_key": null,
@@ -1903,7 +1903,7 @@
   "title": "Partnership inquiry",
   "category": "Sales",
   "description": "Sort real partnership proposals from the cold pitches.",
-  "blurb": "A partnerships inbox fills with pitches that were never going to fit. Each kind of partnership is asked the one thing that makes it credible — an integration for the API it would use, a reseller for the market it sells into, co-marketing for the size of its audience — and a proposal that can't answer that is the one you were going to decline anyway.",
+  "blurb": "A partnerships inbox fills with pitches that were never going to fit. Each kind of partnership is asked the one thing that makes it credible (an integration for the API it would use, a reseller for the market it sells into, co-marketing for the size of its audience), and a proposal that can't answer that is the one you were going to decline anyway.",
   "tags": [
    "partnerships",
    "bizdev",
@@ -2255,7 +2255,7 @@
     {
      "id": "end_partners01",
      "ref": "end_thanks",
-     "title": "Thanks — we'll read it properly 🤝",
+     "title": "Thanks. We'll read it properly 🤝",
      "bodyMd": "If there's a fit, you'll hear from us within the week.",
      "imageUrl": null,
      "redirectDelaySec": 5,
@@ -2540,7 +2540,7 @@
   "title": "NPS survey",
   "category": "Product",
   "description": "Measure loyalty, then ask detractors and promoters different things.",
-  "blurb": "The score on its own tells you almost nothing you can act on, and the same follow-up cannot serve both ends of it. Someone who scored a 3 is asked what went wrong; someone who scored a 10 is asked what to quote — so one survey produces a fix list and a testimonial list.",
+  "blurb": "The score on its own tells you almost nothing you can act on, and the same follow-up cannot serve both ends of it. Someone who scored a 3 is asked what went wrong; someone who scored a 10 is asked what to quote, so one survey produces a fix list and a testimonial list.",
   "tags": [
    "nps",
    "loyalty",
@@ -2559,7 +2559,7 @@
     {
      "id": "blk_npssurve00",
      "ref": "welcome",
-     "title": "One quick question — it takes about twenty seconds.",
+     "title": "One quick question. It takes about twenty seconds.",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -3313,7 +3313,7 @@
   "title": "Product-market fit survey",
   "category": "Product",
   "description": "The Sean Ellis question, with a different follow-up for each answer.",
-  "blurb": "Ask how disappointed people would be if your product disappeared. Above about forty percent “very disappointed” is the usual fit signal — but the useful part is what each group says next, so the three answers lead to three different conversations instead of one generic one.",
+  "blurb": "Ask how disappointed people would be if your product disappeared. Above about forty percent “very disappointed” is the usual fit signal, but the useful part is what each group says next, so the three answers lead to three different conversations instead of one generic one.",
   "tags": [
    "pmf",
    "research",
@@ -3374,7 +3374,7 @@
      "id": "blk_productm02",
      "ref": "main_benefit",
      "title": "What's the main benefit you get from it?",
-     "description": "In your own words — we use these almost verbatim on the site.",
+     "description": "In your own words. We use these almost verbatim on the site.",
      "required": true,
      "visibility": null,
      "image_key": null,
@@ -3563,7 +3563,7 @@
     {
      "id": "end_productm01",
      "ref": "end_thanks",
-     "title": "Really useful — thank you 🙏",
+     "title": "Really useful. Thank you 🙏",
      "bodyMd": "",
      "imageUrl": null,
      "redirectDelaySec": 5,
@@ -3780,7 +3780,7 @@
   "title": "Feature request",
   "category": "Product",
   "description": "Capture the problem behind the request, not just the request.",
-  "blurb": "People ask for solutions; roadmaps need problems. This asks what they are trying to do and how they work around it today — and when someone says they are blocked right now, it takes that seriously and collects enough to reply to them personally.",
+  "blurb": "People ask for solutions; roadmaps need problems. This asks what they are trying to do and how they work around it today, and when someone says they are blocked right now, it takes that seriously and collects enough to reply to them personally.",
   "tags": [
    "roadmap",
    "feedback",
@@ -4035,7 +4035,7 @@
      "id": "end_featurer02",
      "ref": "end_urgent",
      "title": "Flagged as blocking 🚧",
-     "bodyMd": "Someone will reply today — often with a workaround before the fix exists.",
+     "bodyMd": "Someone will reply today, often with a workaround before the fix exists.",
      "imageUrl": null,
      "redirectDelaySec": 5,
      "showSummary": false,
@@ -4239,7 +4239,7 @@
   "title": "Beta signup",
   "category": "Product",
   "description": "Recruit testers who will actually test, sorted by platform.",
-  "blurb": "A beta list full of people who never log in is worse than a short one. This asks about their setup, their appetite for rough edges and how much time they can give — and everyone who says they can give real time gets asked the questions that decide the first invite wave.",
+  "blurb": "A beta list full of people who never log in is worse than a short one. This asks about their setup, their appetite for rough edges and how much time they can give, and everyone who says they can give real time gets asked the questions that decide the first invite wave.",
   "tags": [
    "beta",
    "research",
@@ -4692,7 +4692,7 @@
   "title": "Cancellation survey",
   "category": "Product",
   "description": "Find out why people leave, and offer the right thing to the ones you can keep.",
-  "blurb": "The exit is the most honest moment you get, and the reason decides what is worth saying next. Price gets a question about what would have worked; a missing feature gets asked which one; “no longer need it” gets left alone. Nobody is talked out of leaving — they are asked the one thing their answer makes worth asking.",
+  "blurb": "The exit is the most honest moment you get, and the reason decides what is worth saying next. Price gets a question about what would have worked; a missing feature gets asked which one; “no longer need it” gets left alone. Nobody is talked out of leaving. They are asked the one thing their answer makes worth asking.",
   "tags": [
    "churn",
    "retention",
@@ -4786,8 +4786,8 @@
        "image_key": null
       },
       {
-       "id": "opt_the_price_is",
-       "label": "The price is fine — the value wasn't",
+       "id": "opt_fine_price_not",
+       "label": "Fine price, not enough value",
        "image_key": null
       },
       {
@@ -4898,7 +4898,7 @@
      "id": "blk_cancella10",
      "ref": "keep_in_touch",
      "title": "Want us to let you know when we do?",
-     "description": "Only for this — no marketing.",
+     "description": "Only for this. No marketing.",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -5232,7 +5232,7 @@
   "title": "Launch waitlist",
   "category": "Marketing",
   "description": "Collect signups, segment by platform, and find your first testers.",
-  "blurb": "An email address alone gives you a number to announce and nothing to act on. This asks what someone is waiting for and which platform they are on, then follows that answer down its own path — so launch day starts with a list already sorted into the builds you have to ship.",
+  "blurb": "An email address alone gives you a number to announce and nothing to act on. This asks what someone is waiting for and which platform they are on, then follows that answer down its own path, so launch day starts with a list already sorted into the builds you have to ship.",
   "tags": [
    "waitlist",
    "launch",
@@ -5425,7 +5425,7 @@
      "id": "blk_waitlist07",
      "ref": "android_device",
      "title": "Which Android phone do you use?",
-     "description": "Pixel 8, Galaxy S24 — anything specific helps us test on the right hardware.",
+     "description": "Pixel 8, Galaxy S24: anything specific helps us test on the right hardware.",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -5967,7 +5967,7 @@
   "title": "Newsletter signup",
   "category": "Marketing",
   "description": "Subscribe people to the topics they actually want.",
-  "blurb": "A single list means every send is wrong for someone. Asking which topics and how often, at the moment of signing up, is the cheapest unsubscribe prevention there is — and someone who came for one specific thing gets asked what it was.",
+  "blurb": "A single list means every send is wrong for someone. Asking which topics and how often, at the moment of signing up, is the cheapest unsubscribe prevention there is, and someone who came for one specific thing gets asked what it was.",
   "tags": [
    "newsletter",
    "email",
@@ -6086,7 +6086,7 @@
      "id": "blk_newslett05",
      "ref": "evaluating_against",
      "title": "What else are you looking at?",
-     "description": "No wrong answer — it tells us which comparisons are worth writing.",
+     "description": "No wrong answer. It tells us which comparisons are worth writing.",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -6425,7 +6425,7 @@
   "title": "Webinar registration",
   "category": "Marketing",
   "description": "Register attendees, and ask the no-shows what would have helped.",
-  "blurb": "The best webinar Q&A is written before the webinar starts. This asks what they want covered, and splits the people joining live from the ones who only want the recording — because those two get different emails afterwards and should be told so now.",
+  "blurb": "The best webinar Q&A is written before the webinar starts. This asks what they want covered, and splits the people joining live from the ones who only want the recording, because those two get different emails afterwards and should be told so now.",
   "tags": [
    "webinar",
    "events",
@@ -6443,7 +6443,7 @@
     {
      "id": "blk_webinarr00",
      "ref": "welcome",
-     "title": "Save your seat — takes about a minute.",
+     "title": "Save your seat. It takes about a minute.",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -6557,7 +6557,7 @@
       },
       {
        "id": "opt_no_send_me",
-       "label": "No — send me the recording",
+       "label": "No, send me the recording",
        "image_key": null
       }
      ],
@@ -6872,7 +6872,7 @@
   "title": "Content download",
   "category": "Marketing",
   "description": "Gate a guide without making it feel like a toll booth.",
-  "blurb": "Every extra field costs downloads faster than it gains lead quality — so the file is unlocked after four questions, and the two that qualify are asked only of the people already researching a purchase. Everyone else gets their guide and is left alone.",
+  "blurb": "Every extra field costs downloads faster than it gains lead quality, so the file is unlocked after four questions, and the two that qualify are asked only of the people already researching a purchase. Everyone else gets their guide and is left alone.",
   "tags": [
    "lead magnet",
    "content",
@@ -6890,7 +6890,7 @@
     {
      "id": "blk_contentd00",
      "ref": "welcome",
-     "title": "Almost there — tell us where to send it.",
+     "title": "Almost there. Tell us where to send it.",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -7088,7 +7088,7 @@
      "id": "end_contentd01",
      "ref": "end_thanks",
      "title": "On its way 📄",
-     "bodyMd": "Check your inbox — it should arrive within a minute.",
+     "bodyMd": "Check your inbox. It should arrive within a minute.",
      "imageUrl": null,
      "redirectDelaySec": 5,
      "showSummary": false,
@@ -7348,7 +7348,7 @@
   "title": "Event RSVP",
   "category": "Events",
   "description": "Collect RSVPs with plus-ones, dietary notes and travel.",
-  "blurb": "Everything the caterer and the door need, in the order a guest thinks about it — and nothing else. Someone who can't come is asked one kind question and let go in twenty seconds; someone who is coming is walked through guests, food and arrival.",
+  "blurb": "Everything the caterer and the door need, in the order a guest thinks about it, and nothing else. Someone who can't come is asked one kind question and let go in twenty seconds; someone who is coming is walked through guests, food and arrival.",
   "tags": [
    "rsvp",
    "party",
@@ -7492,7 +7492,7 @@
       },
       {
        "id": "opt_other_i_ll",
-       "label": "Other — I'll explain below",
+       "label": "Other (I'll explain below)",
        "image_key": null
       }
      ],
@@ -7527,7 +7527,7 @@
      "options": [
       {
        "id": "opt_driving_i_ll",
-       "label": "Driving — I'll need parking",
+       "label": "Driving (I'll need parking)",
        "image_key": null
       },
       {
@@ -7565,7 +7565,7 @@
     {
      "id": "blk_eventrsv10",
      "ref": "cannot_reason",
-     "title": "Ah — anything we should know?",
+     "title": "Ah, anything we should know?",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -7627,7 +7627,7 @@
      "id": "end_eventrsv02",
      "ref": "end_sorry",
      "title": "We'll miss you 💛",
-     "bodyMd": "Thanks for letting us know — it genuinely helps with the numbers.",
+     "bodyMd": "Thanks for letting us know. It genuinely helps with the numbers.",
      "imageUrl": null,
      "redirectDelaySec": 5,
      "showSummary": false,
@@ -7843,7 +7843,7 @@
   "title": "Post-event feedback",
   "category": "Events",
   "description": "Rate the parts of an event separately, and dig where the score was low.",
-  "blurb": "A single “how was it?” averages a great speaker and a cold room into a seven. A grid tells you which one to fix — and anyone who rated the day three or under is asked what happened, while the people who loved it are asked whether they'd speak next time.",
+  "blurb": "A single “how was it?” averages a great speaker and a cold room into a seven. A grid tells you which one to fix, and anyone who rated the day three or under is asked what happened, while the people who loved it are asked whether they'd speak next time.",
   "tags": [
    "feedback",
    "events",
@@ -8265,7 +8265,7 @@
   "title": "Call for speakers",
   "category": "Events",
   "description": "Take talk proposals in a shape a committee can review.",
-  "blurb": "Proposals arrive as essays when what a review committee needs is a title, an abstract, a length and a bio — comparable at a glance. First-time speakers are offered a mentor; workshop proposals are asked the things only a workshop needs, like room setup and what attendees must install.",
+  "blurb": "Proposals arrive as essays when what a review committee needs is a title, an abstract, a length and a bio, comparable at a glance. First-time speakers are offered a mentor; workshop proposals are asked the things only a workshop needs, like room setup and what attendees must install.",
   "tags": [
    "cfp",
    "conference",
@@ -8353,7 +8353,7 @@
     {
      "id": "blk_speakers05",
      "ref": "abstract",
-     "title": "Abstract — what will people learn?",
+     "title": "Abstract: what will people learn?",
      "required": true,
      "visibility": null,
      "image_key": null,
@@ -8822,7 +8822,7 @@
   "title": "Workshop registration",
   "category": "Events",
   "description": "Sign people up, take payment, and check they're ready for the day.",
-  "blurb": "A hands-on workshop goes badly when half the room hasn't installed anything. This asks about experience and setup so the right prep email goes to the right people — and beginners get walked through the extras while the experienced are left alone.",
+  "blurb": "A hands-on workshop goes badly when half the room hasn't installed anything. This asks about experience and setup so the right prep email goes to the right people, and beginners get walked through the extras while the experienced are left alone.",
   "tags": [
    "workshop",
    "training",
@@ -8841,7 +8841,7 @@
     {
      "id": "blk_workshop00",
      "ref": "welcome",
-     "title": "Let's get you registered — a few details and you're set.",
+     "title": "Let's get you registered. A few details and you're set.",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -8906,17 +8906,17 @@
      "options": [
       {
        "id": "opt_morning_9_00",
-       "label": "Morning — 9:00 to 12:00",
+       "label": "Morning (9:00 to 12:00)",
        "image_key": null
       },
       {
        "id": "opt_afternoon_13_00",
-       "label": "Afternoon — 13:00 to 16:00",
+       "label": "Afternoon (13:00 to 16:00)",
        "image_key": null
       },
       {
        "id": "opt_evening_18_00",
-       "label": "Evening — 18:00 to 21:00",
+       "label": "Evening (18:00 to 21:00)",
        "image_key": null
       }
      ]
@@ -9032,7 +9032,7 @@
      "id": "blk_workshop11",
      "ref": "accessibility",
      "title": "Anything we can do to make the day work better for you?",
-     "description": "Access, seating, captions, breaks, food — anything.",
+     "description": "Access, seating, captions, breaks, food: anything.",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -9249,7 +9249,7 @@
   "title": "Job application",
   "category": "HR",
   "description": "Screen candidates, and ask each discipline its own questions.",
-  "blurb": "Everything a first-pass review needs and nothing it doesn't. The role someone picks decides what they are asked next — engineers get a code sample, designers a portfolio walkthrough, sales a number — so one form serves five hiring managers without asking anyone an irrelevant question.",
+  "blurb": "Everything a first-pass review needs and nothing it doesn't. The role someone picks decides what they are asked next: engineers get a code sample, designers a portfolio walkthrough, sales a number. One form serves five hiring managers without asking anyone an irrelevant question.",
   "tags": [
    "hiring",
    "recruiting",
@@ -9820,7 +9820,7 @@
      "id": "blk_jobappli26",
      "ref": "accommodations",
      "title": "Anything we should do to make the process work for you?",
-     "description": "Interview format, timing, access — it never counts against an application.",
+     "description": "Interview format, timing, access. It never counts against an application.",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -10121,7 +10121,7 @@
   "title": "Employee onboarding",
   "category": "HR",
   "description": "Collect what a new starter needs before day one.",
-  "blurb": "The details that otherwise arrive as five separate emails in the first week — legal name, address, kit, a signature on the handbook. Remote starters get shipping and home-setup questions; office starters get desk and access ones, and neither sees the other's.",
+  "blurb": "The details that otherwise arrive as five separate emails in the first week: legal name, address, kit, a signature on the handbook. Remote starters get shipping and home-setup questions; office starters get desk and access ones, and neither sees the other's.",
   "tags": [
    "onboarding",
    "people ops",
@@ -10487,7 +10487,7 @@
     {
      "id": "blk_employee15",
      "ref": "emergency_contact",
-     "title": "Emergency contact — name and number",
+     "title": "Emergency contact: name and number",
      "required": true,
      "visibility": null,
      "image_key": null,
@@ -10530,7 +10530,7 @@
      "id": "end_employee01",
      "ref": "end_thanks",
      "title": "All set 🎊",
-     "bodyMd": "See you on day one — we'll email the schedule shortly.",
+     "bodyMd": "See you on day one. We'll email the schedule shortly.",
      "imageUrl": null,
      "redirectDelaySec": 5,
      "showSummary": false,
@@ -10734,7 +10734,7 @@
   "title": "Exit interview",
   "category": "HR",
   "description": "Ask why someone is leaving in a way they can answer honestly.",
-  "blurb": "Leaving is when people say what they meant. Structured enough to count across a year of departures, open enough to catch what no option covers — and the follow-up follows the reason, so someone leaving over their manager is not asked about the salary bands.",
+  "blurb": "Leaving is when people say what they meant. Structured enough to count across a year of departures, open enough to catch what no option covers, and the follow-up follows the reason, so someone leaving over their manager is not asked about the salary bands.",
   "tags": [
    "retention",
    "people ops",
@@ -10753,7 +10753,7 @@
     {
      "id": "blk_exitinte00",
      "ref": "welcome",
-     "title": "Before you go — your honest answers help the people staying. This is confidential.",
+     "title": "Before you go: your honest answers help the people staying. This is confidential.",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -10889,8 +10889,8 @@
        "image_key": null
       },
       {
-       "id": "opt_it_wasn_t",
-       "label": "It wasn't the number — it was how it was decided",
+       "id": "opt_not_the_number",
+       "label": "Not the number itself, the way it was decided",
        "image_key": null
       }
      ],
@@ -11045,7 +11045,7 @@
     {
      "id": "end_exitinte01",
      "ref": "end_thanks",
-     "title": "Thank you — genuinely 🙏",
+     "title": "Thank you, genuinely 🙏",
      "bodyMd": "All the best for what's next.",
      "imageUrl": null,
      "redirectDelaySec": 5,
@@ -11340,7 +11340,7 @@
   "title": "Engagement pulse",
   "category": "HR",
   "description": "A short, repeatable check that follows up on the low scores.",
-  "blurb": "Short enough to send monthly and consistent enough to trend: six scaled statements that stay identical every round. Anyone who scores low on workload or support gets one extra question about it — which is where the anonymised comments worth reading come from.",
+  "blurb": "Short enough to send monthly and consistent enough to trend: six scaled statements that stay identical every round. Anyone who scores low on workload or support gets one extra question about it, which is where the anonymised comments worth reading come from.",
   "tags": [
    "culture",
    "pulse",
@@ -11359,7 +11359,7 @@
     {
      "id": "blk_engageme00",
      "ref": "welcome",
-     "title": "Quick pulse check — anonymous, and under two minutes.",
+     "title": "Quick pulse check. Anonymous, and under two minutes.",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -11715,7 +11715,7 @@
   "title": "Employee referral",
   "category": "HR",
   "description": "Make referring someone take a minute, not an afternoon.",
-  "blurb": "Referral schemes die on friction. Name, contact, role and one honest line is enough for a recruiter to act on — and when the referrer hasn't asked the candidate yet, the form says so and takes their word rather than an email address they shouldn't be sharing.",
+  "blurb": "Referral schemes die on friction. Name, contact, role and one honest line is enough for a recruiter to act on, and when the referrer hasn't asked the candidate yet, the form says so and takes their word rather than an email address they shouldn't be sharing.",
   "tags": [
    "referral",
    "hiring",
@@ -11853,7 +11853,7 @@
      "media": null,
      "type": "yes_no",
      "yesLabel": "Yes, I'll check with them",
-     "noLabel": "No — just log it for now"
+     "noLabel": "No, just log it for now"
     },
     {
      "id": "blk_referral08",
@@ -12134,7 +12134,7 @@
   "title": "Bug report",
   "category": "Support",
   "description": "Get reproducible reports instead of “it's broken”.",
-  "blurb": "Asks for the three things an engineer needs and a reporter always forgets: what they expected, what happened, and the exact steps between. Where it happened decides what is asked next — a browser gets asked about the console, a phone about its model and OS — and anyone who says they cannot work at all is routed straight to a human.",
+  "blurb": "Asks for the three things an engineer needs and a reporter always forgets: what they expected, what happened, and the exact steps between. Where it happened decides what is asked next (a browser gets asked about the console, a phone about its model and OS), and anyone who says they cannot work at all is routed straight to a human.",
   "tags": [
    "bugs",
    "engineering",
@@ -12501,7 +12501,7 @@
      "id": "end_bugrepor01",
      "ref": "end_thanks",
      "title": "Reported 🐛",
-     "bodyMd": "Thanks — a real person reads every one of these.",
+     "bodyMd": "Thanks. A real person reads every one of these.",
      "imageUrl": null,
      "redirectDelaySec": 5,
      "showSummary": false,
@@ -12750,7 +12750,7 @@
   "title": "Support ticket",
   "category": "Support",
   "description": "Route requests to the right queue, with the details that queue needs.",
-  "blurb": "Category asked up front is what lets a ticket reach the right person without a triage pass — and each category can then ask its own thing. Billing gets an invoice number, login gets the error text, a how-to gets a chance to be answered by a link instead of a person.",
+  "blurb": "Category asked up front is what lets a ticket reach the right person without a triage pass, and each category can then ask its own thing. Billing gets an invoice number, login gets the error text, a how-to gets a chance to be answered by a link instead of a person.",
   "tags": [
    "support",
    "helpdesk",
@@ -12986,7 +12986,7 @@
      "id": "blk_supportt09",
      "ref": "trying_to_do",
      "title": "What are you trying to get done?",
-     "description": "Describe the outcome, not the button — we'll often know a shorter way.",
+     "description": "Describe the outcome, not the button. We'll often know a shorter way.",
      "required": true,
      "visibility": null,
      "image_key": null,
@@ -13010,7 +13010,7 @@
      "options": [
       {
        "id": "opt_blocking_i_can",
-       "label": "Blocking — I can't work",
+       "label": "Blocking: I can't work",
        "image_key": null
       },
       {
@@ -13347,7 +13347,7 @@
   "title": "Contact us",
   "category": "Support",
   "description": "A general enquiry form that sorts the inbox as it fills it.",
-  "blurb": "The one form every site needs. What the message is about decides the two or three follow-ups worth asking — a sales enquiry gets company and size, press gets a deadline, careers gets pointed at the actual openings — so nothing arrives needing a reply that just asks for more.",
+  "blurb": "The one form every site needs. What the message is about decides the two or three follow-ups worth asking (a sales enquiry gets company and size, press gets a deadline, careers gets pointed at the actual openings), so nothing arrives needing a reply that just asks for more.",
   "tags": [
    "contact",
    "general",
@@ -13938,7 +13938,7 @@
   "title": "Refund request",
   "category": "Support",
   "description": "Handle refunds with the evidence a finance team needs.",
-  "blurb": "Order reference, date, reason and preferred resolution — collected once so nobody has to email back asking for them. A damaged item is asked for a photo; a missing one for the tracking status; a duplicate charge for the second transaction. The reason list doubles as a running count of why people ask.",
+  "blurb": "Order reference, date, reason and preferred resolution, collected once so nobody has to email back asking for them. A damaged item is asked for a photo; a missing one for the tracking status; a duplicate charge for the second transaction. The reason list doubles as a running count of why people ask.",
   "tags": [
    "refund",
    "billing",
@@ -14645,7 +14645,7 @@
       },
       {
        "id": "opt_not_sure_help",
-       "label": "Not sure — help me choose",
+       "label": "Not sure, help me choose",
        "image_key": null
       }
      ]
@@ -15289,7 +15289,7 @@
   "title": "Student feedback",
   "category": "Education",
   "description": "End-of-course feedback that separates teaching from material.",
-  "blurb": "A course can have excellent material and a rushed delivery, or the reverse — so they are rated apart. Anyone who says the pace was wrong is asked where it went wrong; anyone who would not recommend it is asked what would have to change, which is the only answer that improves the next cohort.",
+  "blurb": "A course can have excellent material and a rushed delivery, or the reverse, so they are rated apart. Anyone who says the pace was wrong is asked where it went wrong; anyone who would not recommend it is asked what would have to change, which is the only answer that improves the next cohort.",
   "tags": [
    "teaching",
    "feedback",
@@ -15818,7 +15818,7 @@
   "title": "Knowledge quiz",
   "category": "Education",
   "description": "A scored quiz that adapts to how the first answers go.",
-  "blurb": "Worked example questions with scores already attached to the options, so the wiring is done and you only replace the wording. The warm-up question decides whether the taker gets the easier set or the harder one — which is how a quiz stays interesting for both ends of a class.",
+  "blurb": "Worked example questions with scores already attached to the options, so the wiring is done and you only replace the wording. The warm-up question decides whether the taker gets the easier set or the harder one, which is how a quiz stays interesting for both ends of a class.",
   "tags": [
    "quiz",
    "scoring",
@@ -15837,7 +15837,7 @@
     {
      "id": "blk_quiz00",
      "ref": "welcome",
-     "title": "A short quiz. No pressure — you'll get your score at the end.",
+     "title": "A short quiz. No pressure: you'll get your score at the end.",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -16097,7 +16097,7 @@
      "id": "end_quiz01",
      "ref": "end_thanks",
      "title": "Nicely done ✅",
-     "bodyMd": "Swap in your own questions — the scores are already wired up.",
+     "bodyMd": "Swap in your own questions. The scores are already wired up.",
      "imageUrl": null,
      "redirectDelaySec": 5,
      "showSummary": false,
@@ -16301,7 +16301,7 @@
   "title": "New client intake",
   "category": "Services",
   "description": "Everything you need before the first client session.",
-  "blurb": "Replaces the intake PDF nobody fills in. What someone is here for decides what they are asked next — a one-off project gets scope and budget, an ongoing engagement gets scale and decision-makers, a second opinion gets asked what was said the first time. Signed, and done before the first meeting rather than during it.",
+  "blurb": "Replaces the intake PDF nobody fills in. What someone is here for decides what they are asked next: a one-off project gets scope and budget, an ongoing engagement gets scale and decision-makers, a second opinion gets asked what was said the first time. Signed, and done before the first meeting rather than during it.",
   "tags": [
    "intake",
    "clients",
@@ -16460,7 +16460,7 @@
      "id": "blk_clientin08",
      "ref": "project_budget",
      "title": "What budget are you working with?",
-     "description": "A range is fine — it tells us what's realistic before we spend your time.",
+     "description": "A range is fine. It tells us what's realistic before we spend your time.",
      "required": true,
      "visibility": null,
      "image_key": null,
@@ -16705,7 +16705,7 @@
     {
      "id": "end_clientin01",
      "ref": "end_thanks",
-     "title": "Thanks — we're ready 🤝",
+     "title": "Thanks, we're ready 🤝",
      "bodyMd": "We'll be in touch to arrange the first session.",
      "imageUrl": null,
      "redirectDelaySec": 5,
@@ -17202,7 +17202,7 @@
      "id": "blk_appointm14",
      "ref": "access_needs",
      "title": "Anything we should arrange for your visit?",
-     "description": "Step-free access, an interpreter, a longer appointment — just say.",
+     "description": "Step-free access, an interpreter, a longer appointment: just say.",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -17244,7 +17244,7 @@
      "id": "end_appointm02",
      "ref": "end_urgent",
      "title": "We'll call you back within the hour ☎️",
-     "bodyMd": "Keep your phone nearby. If it's an emergency, please don't wait for us — call your local emergency number.",
+     "bodyMd": "Keep your phone nearby. If it's an emergency, please don't wait for us. Call your local emergency number.",
      "imageUrl": null,
      "redirectDelaySec": 5,
      "showSummary": false,
@@ -17526,7 +17526,7 @@
   "title": "Volunteer signup",
   "category": "Community",
   "description": "Match volunteers to shifts they can actually make.",
-  "blurb": "Availability and skills as structured choices, so a coordinator fills a rota by filtering rather than by reading. Anyone offering to drive is asked about their licence and insurance; anyone offering to work with people directly is asked about their DBS check — the two questions that otherwise hold up a whole rota.",
+  "blurb": "Availability and skills as structured choices, so a coordinator fills a rota by filtering rather than by reading. Anyone offering to drive is asked about their licence and insurance; anyone offering to work with people directly is asked about their DBS check. Those are the two questions that otherwise hold up a whole rota.",
   "tags": [
    "volunteers",
    "nonprofit",
@@ -17808,7 +17808,7 @@
       },
       {
        "id": "opt_no_i_d",
-       "label": "No — I'd need one",
+       "label": "No, I'd need one",
        "image_key": null
       },
       {
@@ -17910,7 +17910,7 @@
     {
      "id": "blk_voluntee17",
      "ref": "emergency_contact",
-     "title": "Emergency contact — name and number",
+     "title": "Emergency contact: name and number",
      "required": true,
      "visibility": null,
      "image_key": null,
@@ -18268,7 +18268,7 @@
   "title": "Membership application",
   "category": "Community",
   "description": "Take applications with the tier, the evidence and the terms in one pass.",
-  "blurb": "Everything a membership secretary would otherwise chase over three emails. A concession is asked for the evidence that supports it, a household membership for the other names on it, and a life membership is handed straight to the committee — so the reply is a decision rather than another question.",
+  "blurb": "Everything a membership secretary would otherwise chase over three emails. A concession is asked for the evidence that supports it, a household membership for the other names on it, and a life membership is handed straight to the committee, so the reply is a decision rather than another question.",
   "tags": [
    "membership",
    "club",
@@ -18447,7 +18447,7 @@
      "id": "blk_membersh08",
      "ref": "concession_evidence",
      "title": "Something that shows it",
-     "description": "A student card, a letter, a screenshot — anything dated in the last year.",
+     "description": "A student card, a letter, a screenshot: anything dated in the last year.",
      "required": false,
      "visibility": null,
      "image_key": null,
@@ -18878,7 +18878,7 @@
   "title": "Testimonial request",
   "category": "Community",
   "description": "Collect quotes you're actually allowed to publish.",
-  "blurb": "Most testimonials never get used because nobody asked permission in writing. The quote, the attribution and the consent are collected together — and how they want to be credited decides what else is asked, so an anonymous quote is never chased for a headshot.",
+  "blurb": "Most testimonials never get used because nobody asked permission in writing. The quote, the attribution and the consent are collected together, and how they want to be credited decides what else is asked, so an anonymous quote is never chased for a headshot.",
   "tags": [
    "testimonial",
    "social proof",
@@ -18950,7 +18950,7 @@
     {
      "id": "blk_testimon04",
      "ref": "quote",
-     "title": "In your own words — what was it like?",
+     "title": "In your own words: what was it like?",
      "required": true,
      "visibility": null,
      "image_key": null,
@@ -19132,7 +19132,7 @@
      "id": "end_testimon01",
      "ref": "end_thanks",
      "title": "Thank you ⭐",
-     "bodyMd": "That means a lot — we'll let you know where it ends up.",
+     "bodyMd": "That means a lot. We'll let you know where it ends up.",
      "imageUrl": null,
      "redirectDelaySec": 5,
      "showSummary": false,

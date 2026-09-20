@@ -15,6 +15,26 @@ import { DEMO_FORM, DEMO_SLUG, DEMO_REVISION, DEMO_KNOWLEDGE } from "./demo-form
  * than a generator that throws during an unrelated `pnpm check`.
  */
 
+/**
+ * Dashes that read as machine-written, which is not all of them.
+ *
+ * An em dash is always one. An en dash is only one when it is used as
+ * punctuation, with spaces around it: written tight between two values it is
+ * a range ("2\u201310", "$5k\u2013$15k", "10\u201325%") and is simply correct.
+ */
+function dashOffenders(copy: string): string[] {
+  const out: string[] = [];
+  for (const match of copy.matchAll(/[\u2013\u2014]/g)) {
+    const at = match.index;
+    const before = copy.slice(Math.max(0, at - 28), at);
+    const after = copy.slice(at + 1, at + 29);
+    const spaced = /\s$/.test(before) || /^\s/.test(after);
+    if (match[0] === "\u2013" && !spaced) continue;
+    out.push(`${before}${match[0]}${after}`.replace(/\s+/g, " ").trim());
+  }
+  return out;
+}
+
 const doc = DEMO_FORM.doc;
 
 describe("the document", () => {
@@ -203,7 +223,7 @@ describe("shows the product off", () => {
     ].join("\n");
     // Reported as the words either side of the dash: the settings blob is one
     // long line, and printing all of it hides which string is at fault.
-    const offenders = [...copy.matchAll(/(\S+\s+\S+\s*[\u2013\u2014]\s*\S+\s+\S+)/g)].map((m) => m[1]!);
+    const offenders = dashOffenders(copy);
     expect(offenders, `em or en dash in demo copy: ${offenders.join(" / ")}`).toEqual([]);
   });
 

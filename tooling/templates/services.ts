@@ -8,7 +8,7 @@ export const SERVICES: TemplateSeed[] = [
     icon: "ClipboardList",
     description: "Everything you need before the first client session.",
     blurb:
-      "Replaces the intake PDF nobody fills in. What someone is here for decides what they are asked next — a one-off project gets scope and budget, an ongoing engagement gets scale and decision-makers, a second opinion gets asked what was said the first time. Signed, and done before the first meeting rather than during it.",
+      "Replaces the intake PDF nobody fills in. What someone is here for decides what they are asked next: a one-off project gets scope and budget, an ongoing engagement gets scale and decision-makers, a second opinion gets asked what was said the first time. Signed, and done before the first meeting rather than during it.",
     tags: ["intake", "clients", "agency", "branching"],
     greeting: "Welcome! A few questions so we're ready for our first session.",
     questions: [
@@ -61,7 +61,7 @@ export const SERVICES: TemplateSeed[] = [
         ref: "project_budget",
         type: "single_select",
         title: "What budget are you working with?",
-        description: "A range is fine — it tells us what's realistic before we spend your time.",
+        description: "A range is fine. It tells us what's realistic before we spend your time.",
         required: true,
         options: [
           { label: "Under $5k" },
@@ -145,7 +145,7 @@ export const SERVICES: TemplateSeed[] = [
       { when: "project_budget", always: true, then: "background" },
       { when: "ongoing_stakeholders", always: true, then: "background" },
     ],
-    ending: { title: "Thanks — we're ready 🤝", body: "We'll be in touch to arrange the first session." },
+    ending: { title: "Thanks, we're ready 🤝", body: "We'll be in touch to arrange the first session." },
   }),
 
   defineTemplate({
@@ -252,7 +252,7 @@ export const SERVICES: TemplateSeed[] = [
         ref: "access_needs",
         type: "long_text",
         title: "Anything we should arrange for your visit?",
-        description: "Step-free access, an interpreter, a longer appointment — just say.",
+        description: "Step-free access, an interpreter, a longer appointment: just say.",
         required: false,
         maxLength: 500,
       },
@@ -272,7 +272,7 @@ export const SERVICES: TemplateSeed[] = [
       {
         ref: "end_urgent",
         title: "We'll call you back within the hour ☎️",
-        body: "Keep your phone nearby. If it's an emergency, please don't wait for us — call your local emergency number.",
+        body: "Keep your phone nearby. If it's an emergency, please don't wait for us. Call your local emergency number.",
       },
     ],
     ending: { title: "Booked 🗓️", body: "We'll confirm by text shortly." },

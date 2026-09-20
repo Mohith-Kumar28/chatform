@@ -8,9 +8,9 @@ export const PRODUCT: TemplateSeed[] = [
     icon: "Gauge",
     description: "Measure loyalty, then ask detractors and promoters different things.",
     blurb:
-      "The score on its own tells you almost nothing you can act on, and the same follow-up cannot serve both ends of it. Someone who scored a 3 is asked what went wrong; someone who scored a 10 is asked what to quote — so one survey produces a fix list and a testimonial list.",
+      "The score on its own tells you almost nothing you can act on, and the same follow-up cannot serve both ends of it. Someone who scored a 3 is asked what went wrong; someone who scored a 10 is asked what to quote, so one survey produces a fix list and a testimonial list.",
     tags: ["nps", "loyalty", "survey", "branching"],
-    greeting: "One quick question — it takes about twenty seconds.",
+    greeting: "One quick question. It takes about twenty seconds.",
     questions: [
       { ref: "score", type: "nps", title: "How likely are you to recommend us to a friend or colleague?", required: true },
 
@@ -175,7 +175,7 @@ export const PRODUCT: TemplateSeed[] = [
     icon: "Target",
     description: "The Sean Ellis question, with a different follow-up for each answer.",
     blurb:
-      "Ask how disappointed people would be if your product disappeared. Above about forty percent “very disappointed” is the usual fit signal — but the useful part is what each group says next, so the three answers lead to three different conversations instead of one generic one.",
+      "Ask how disappointed people would be if your product disappeared. Above about forty percent “very disappointed” is the usual fit signal, but the useful part is what each group says next, so the three answers lead to three different conversations instead of one generic one.",
     tags: ["pmf", "research", "strategy", "branching"],
     greeting: "A few questions about how you use us. Honest answers help most.",
     questions: [
@@ -196,7 +196,7 @@ export const PRODUCT: TemplateSeed[] = [
         ref: "main_benefit",
         type: "long_text",
         title: "What's the main benefit you get from it?",
-        description: "In your own words — we use these almost verbatim on the site.",
+        description: "In your own words. We use these almost verbatim on the site.",
         required: true,
         maxLength: 800,
       },
@@ -263,7 +263,7 @@ export const PRODUCT: TemplateSeed[] = [
       { when: "who_benefits", always: true, then: "improvement" },
       { when: "whats_missing", always: true, then: "improvement" },
     ],
-    ending: { title: "Really useful — thank you 🙏", body: "" },
+    ending: { title: "Really useful. Thank you 🙏", body: "" },
   }),
 
   defineTemplate({
@@ -273,7 +273,7 @@ export const PRODUCT: TemplateSeed[] = [
     icon: "Lightbulb",
     description: "Capture the problem behind the request, not just the request.",
     blurb:
-      "People ask for solutions; roadmaps need problems. This asks what they are trying to do and how they work around it today — and when someone says they are blocked right now, it takes that seriously and collects enough to reply to them personally.",
+      "People ask for solutions; roadmaps need problems. This asks what they are trying to do and how they work around it today, and when someone says they are blocked right now, it takes that seriously and collects enough to reply to them personally.",
     tags: ["roadmap", "feedback", "product", "branching"],
     greeting: "Got an idea? Tell us what you're trying to do and we'll take it from there.",
     questions: [
@@ -342,7 +342,7 @@ export const PRODUCT: TemplateSeed[] = [
       {
         ref: "end_urgent",
         title: "Flagged as blocking 🚧",
-        body: "Someone will reply today — often with a workaround before the fix exists.",
+        body: "Someone will reply today, often with a workaround before the fix exists.",
       },
     ],
     ending: { title: "Logged 💡", body: "We read every one of these." },
@@ -355,7 +355,7 @@ export const PRODUCT: TemplateSeed[] = [
     icon: "FlaskConical",
     description: "Recruit testers who will actually test, sorted by platform.",
     blurb:
-      "A beta list full of people who never log in is worse than a short one. This asks about their setup, their appetite for rough edges and how much time they can give — and everyone who says they can give real time gets asked the questions that decide the first invite wave.",
+      "A beta list full of people who never log in is worse than a short one. This asks about their setup, their appetite for rough edges and how much time they can give, and everyone who says they can give real time gets asked the questions that decide the first invite wave.",
     tags: ["beta", "research", "recruiting", "branching"],
     greeting: "Want early access? Tell us a little about how you'd use it.",
     questions: [
@@ -442,7 +442,7 @@ export const PRODUCT: TemplateSeed[] = [
     icon: "DoorOpen",
     description: "Find out why people leave, and offer the right thing to the ones you can keep.",
     blurb:
-      "The exit is the most honest moment you get, and the reason decides what is worth saying next. Price gets a question about what would have worked; a missing feature gets asked which one; “no longer need it” gets left alone. Nobody is talked out of leaving — they are asked the one thing their answer makes worth asking.",
+      "The exit is the most honest moment you get, and the reason decides what is worth saying next. Price gets a question about what would have worked; a missing feature gets asked which one; “no longer need it” gets left alone. Nobody is talked out of leaving. They are asked the one thing their answer makes worth asking.",
     tags: ["churn", "retention", "feedback", "branching"],
     greeting: "Sorry to see you go. A couple of questions, and then you're done.",
     questions: [
@@ -470,7 +470,7 @@ export const PRODUCT: TemplateSeed[] = [
         options: [
           { label: "Half what I'm paying" },
           { label: "A bit less" },
-          { label: "The price is fine — the value wasn't" },
+          { label: "Fine price, not enough value" },
           { label: "A smaller plan would have worked" },
         ],
       },
@@ -525,7 +525,7 @@ export const PRODUCT: TemplateSeed[] = [
         ref: "keep_in_touch",
         type: "email",
         title: "Want us to let you know when we do?",
-        description: "Only for this — no marketing.",
+        description: "Only for this. No marketing.",
         required: false,
       },
     ],

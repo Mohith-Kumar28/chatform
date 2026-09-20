@@ -11,6 +11,26 @@ import { CATEGORIES, CATEGORY_ACCENT, TEMPLATES } from "./templates/index.js";
  * catalogue it claims to come from.
  */
 
+/**
+ * Dashes that read as machine-written, which is not all of them.
+ *
+ * An em dash is always one. An en dash is only one when it is used as
+ * punctuation, with spaces around it: written tight between two values it is
+ * a range ("2\u201310", "$5k\u2013$15k", "10\u201325%") and is simply correct.
+ */
+function dashOffenders(copy: string): string[] {
+  const out: string[] = [];
+  for (const match of copy.matchAll(/[\u2013\u2014]/g)) {
+    const at = match.index;
+    const before = copy.slice(Math.max(0, at - 28), at);
+    const after = copy.slice(at + 1, at + 29);
+    const spaced = /\s$/.test(before) || /^\s/.test(after);
+    if (match[0] === "\u2013" && !spaced) continue;
+    out.push(`${before}${match[0]}${after}`.replace(/\s+/g, " ").trim());
+  }
+  return out;
+}
+
 describe("template catalogue", () => {
   it("has templates across every category", () => {
     expect(TEMPLATES.length).toBeGreaterThanOrEqual(30);
@@ -106,6 +126,22 @@ describe("template catalogue", () => {
       expect(t.blockCount, t.slug).toBe(asked);
       expect(t.estMinutes, t.slug).toBeGreaterThan(0);
     }
+  });
+
+  it("writes like a person, not like a language model", () => {
+    // Every one of these is copy somebody publishes under their own name: the
+    // greeting their respondents read, the questions, the sign-off, and the
+    // card in the gallery. An em dash is the tell that it was drafted by a
+    // machine, and it is also the example the agent rephrases from.
+    //
+    // The same rule is enforced on the demo form and stated in the prompts;
+    // this is the third place it would otherwise leak back in.
+    const offenders: string[] = [];
+    for (const t of TEMPLATES) {
+      const copy = [t.title, t.description, t.blurb, JSON.stringify(t.doc)].join("\n");
+      for (const hit of dashOffenders(copy)) offenders.push(`${t.slug}: ${hit}`);
+    }
+    expect(offenders, `em or en dash in template copy:\n${offenders.join("\n")}`).toEqual([]);
   });
 
   it("carries the presentation metadata the gallery renders", () => {
