@@ -93,11 +93,11 @@ describe("shows the product off", () => {
   it("branches on what the respondent said", () => {
     // Was five-or-more, when the form branched six ways off "what's your
     // biggest problem?" into three follow-ups that all asked "say more". The
-    // matrix collects those three readings without a branch, so the routing
-    // that is left is the routing a respondent can feel: the consent answer
-    // decides whether they are offered a slot, and the slot decides which
-    // thank-you they land on. Three is the floor because the branching has to
-    // stay real — a demo of a conversational form that walks in a straight
+    // ranking gets that reading in one question without a branch, so the
+    // routing that is left is the routing a respondent can feel: the consent
+    // answer decides whether they are offered a slot, and the slot decides
+    // which thank-you they land on. Three is the floor because the branching
+    // has to stay real: a demo of a conversational form that walks in a straight
     // line is demonstrating a questionnaire.
     const gotos = doc.logic.filter((r) => r.action_kind === "goto");
     const conditional = gotos.filter((r) => (r.when?.conditions.length ?? 0) > 0);
@@ -117,13 +117,14 @@ describe("shows the product off", () => {
 
   it("uses the block types the landing page is selling", () => {
     const types = new Set(doc.blocks.map((b) => b.type));
-    // The showy ones, which is the point: a grid and a calendar inside a
-    // conversation, a drag-to-order ranking, stars, an upload, and a consent
-    // that can be refused. The three choice blocks are deliberately absent —
+    // The showy ones, which is the point: a drag-to-order ranking and a
+    // calendar inside a conversation, a scale, stars, an upload, and a consent
+    // that can be refused. The other choice blocks are deliberately absent:
     // see the note on `DEMO_FORM`.
     for (const wanted of [
-      "matrix",
-      "nps",
+      "picture_choice",
+      "ranking",
+      "opinion_scale",
       "rating",
       "file_upload",
       "long_text",
@@ -146,13 +147,64 @@ describe("shows the product off", () => {
   });
 
   it("asks at most one question that is a list of options", () => {
-    // These six look different in a screenshot and are the same act to answer:
-    // read a list, pick from it. Four of them in a row is what made an earlier
-    // version of this form feel like one long question — and it is the reason
-    // a visitor could not tell it from a page of radio buttons.
-    const family = new Set(["single_select", "multi_select", "dropdown", "yes_no", "picture_choice", "ranking"]);
+    // These five look different in a screenshot and are the same act to
+    // answer: read a list, pick from it. Four of them in a row is what made an
+    // earlier version of this form feel like one long question, and it is the
+    // reason a visitor could not tell it from a page of radio buttons.
+    //
+    // `ranking` is not in the set. It draws a list and takes an ordering, so
+    // answering it is a different act from tapping one of six, and it is the
+    // block this form leans on to make that point.
+    //
+    // `picture_choice` is in the set and is the one that spends the budget:
+    // it is still pick-one, and the reason it beat the text list it replaced
+    // is that four drawings are read at a glance rather than read.
+    const family = new Set(["single_select", "multi_select", "dropdown", "yes_no", "picture_choice"]);
     const lists = doc.blocks.filter((b) => family.has(b.type));
     expect(lists.map((b) => `${b.ref}:${b.type}`)).toHaveLength(1);
+  });
+
+  it("never asks the same options twice on one screen", () => {
+    // What the matrix did, and why it is gone from here: three rows of
+    // "Fine / Could be better / Actively painful" under one question is the
+    // same row of buttons printed three times. It is the least conversational
+    // thing the product can draw, and it was the first grid a visitor met.
+    //
+    // The block still exists for anyone whose survey genuinely needs a grid.
+    // It is not what greets somebody who clicked "Try a demo form".
+    expect(doc.blocks.some((b) => b.type === "matrix")).toBe(false);
+  });
+
+  it("gives every picture option a picture", () => {
+    // A picture_choice whose options have no image renders as the first letter
+    // of each label in a grey box, which is worse than the text list it
+    // replaced. The URLs are absolute because they are files in the web app's
+    // `public/`, not uploads in anybody's account.
+    for (const block of doc.blocks) {
+      if (block.type !== "picture_choice") continue;
+      for (const option of block.options) {
+        expect(option.image_key, `${option.label} has no picture`).toMatch(/^https:\/\/chatform\.in\/demo\/.+\.svg$/);
+      }
+    }
+  });
+
+  it("writes like a person, not like a language model", () => {
+    // Em dashes are the tell. The agent rephrases from these titles and quotes
+    // these endings and this knowledge base, so a dash here is a dash in the
+    // conversation: the standing rule in `agent-prompts.ts` cannot undo an
+    // example the form itself sets.
+    const copy = [
+      doc.title,
+      doc.description,
+      ...doc.blocks.flatMap((b) => [b.title, b.description ?? ""]),
+      ...doc.endings.flatMap((e) => [e.title, e.body ?? ""]),
+      JSON.stringify(doc.settings),
+      ...DEMO_KNOWLEDGE.flatMap((k) => [k.title, k.body]),
+    ].join("\n");
+    // Reported as the words either side of the dash: the settings blob is one
+    // long line, and printing all of it hides which string is at fault.
+    const offenders = [...copy.matchAll(/(\S+\s+\S+\s*[\u2013\u2014]\s*\S+\s+\S+)/g)].map((m) => m[1]!);
+    expect(offenders, `em or en dash in demo copy: ${offenders.join(" / ")}`).toEqual([]);
   });
 
   it("keeps the typing late, and skippable", () => {

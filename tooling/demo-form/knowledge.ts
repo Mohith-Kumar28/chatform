@@ -30,7 +30,7 @@ const business = PLANS.business;
 export const DEMO_KNOWLEDGE: { title: string; body: string }[] = [
   {
     title: "What chatform is",
-    body: `chatform is a form builder where the form is a conversation. Instead of a page of fields, an AI agent asks one question at a time, reads the answer, and asks the next one — which is what this form is doing right now.
+    body: `chatform is a form builder where the form is a conversation. Instead of a page of fields, an AI agent asks one question at a time, reads the answer, and asks the next one, which is what this form is doing right now.
 
 You build it the way you would build any form: a list of questions, each with a type (short text, multiple choice, rating, file upload, and about twenty more), plus logic for what follows what. The agent handles the asking. It rephrases questions so they fit the conversation, notices when an answer does not really answer the question, and asks once more before moving on.
 
@@ -42,16 +42,16 @@ Every answer is validated the same way whatever route it came in by, so an email
 
 HOW TO QUOTE THESE. Always lead with the monthly price. The lower figure on each
 paid plan is the per-month cost of paying a year up front, and it is only
-available that way — quoting it on its own ("plans start at ${usd(yearlyPerMonthCents(pro))}/month")
+available that way. Quoting it on its own ("plans start at ${usd(yearlyPerMonthCents(pro))}/month")
 states a price nobody can actually pay monthly, which is the one pricing claim
 that gets a product accused of bait pricing. Say "${usd(pro.priceMonthlyCents)}/month, or ${usd(yearlyPerMonthCents(pro))}/month billed yearly",
 and if you only have room for one number, use the monthly one.
 
-Free — ${usd(free.priceMonthlyCents)}. No card, no expiry. Unlimited forms and unlimited responses, up to ${free.limits.responses_ceiling_per_month.toLocaleString()} a month. ${free.limits.ai_conversations_per_month} AI conversations a month; past that the interview keeps working but asks questions as written instead of phrasing them itself. Forms carry a small chatform mark.
+Free. ${usd(free.priceMonthlyCents)}. No card, no expiry. Unlimited forms and unlimited responses, up to ${free.limits.responses_ceiling_per_month.toLocaleString()} a month. ${free.limits.ai_conversations_per_month} AI conversations a month; past that the interview keeps working but asks questions as written instead of phrasing them itself. Forms carry a small chatform mark.
 
-Pro — ${usd(pro.priceMonthlyCents)}/month, or ${usd(yearlyPerMonthCents(pro))}/month billed yearly. Removes the chatform mark, adds your own fonts and logo, partial responses (what people typed before they left), analytics, file uploads up to ${pro.limits.max_upload_mb_per_file}MB, a custom domain, the developer API, and the agent's persona and knowledge base. ${pro.limits.ai_conversations_per_month.toLocaleString()} AI conversations a month, ${pro.limits.seats} seats.
+Pro. ${usd(pro.priceMonthlyCents)}/month, or ${usd(yearlyPerMonthCents(pro))}/month billed yearly. Removes the chatform mark, adds your own fonts and logo, partial responses (what people typed before they left), analytics, file uploads up to ${pro.limits.max_upload_mb_per_file}MB, a custom domain, the developer API, and the agent's persona and knowledge base. ${pro.limits.ai_conversations_per_month.toLocaleString()} AI conversations a month, ${pro.limits.seats} seats.
 
-Business — ${usd(business.priceMonthlyCents)}/month, or ${usd(yearlyPerMonthCents(business))}/month billed yearly. Adds verified respondents (sign in with Google or a phone number, like this form asked), one-response-per-person, an activity log, and ${business.limits.ai_conversations_per_month.toLocaleString()} AI conversations a month.
+Business. ${usd(business.priceMonthlyCents)}/month, or ${usd(yearlyPerMonthCents(business))}/month billed yearly. Adds verified respondents (sign in with Google or a phone number, like this form asked), one-response-per-person, an activity log, and ${business.limits.ai_conversations_per_month.toLocaleString()} AI conversations a month.
 
 If someone asks which plan they need, ask what they are trying to do rather than guessing.`,
   },
@@ -59,13 +59,13 @@ If someone asks which plan they need, ask what they are trying to do rather than
     title: "How it differs from Typeform, Tally, Youform and Google Forms",
     body: `Those are all good tools, and the honest answer is that the difference is the interview, not the feature list.
 
-Typeform shows one question per screen — a form that feels like a conversation. chatform is an actual conversation: the agent reads what you wrote, and can ask about it. If you answer a "what went wrong?" question with "it broke", Typeform stores "it broke". chatform asks what broke.
+Typeform shows one question per screen, a form that feels like a conversation. chatform is an actual conversation: the agent reads what you wrote, and can ask about it. If you answer a "what went wrong?" question with "it broke", Typeform stores "it broke". chatform asks what broke.
 
 Google Forms and Tally are excellent at being quick and free. Neither rephrases anything or follows up, and their branching is a rules table you maintain by hand.
 
 Youform is the closest on price and does unlimited responses on its free tier too.
 
-What none of them do is let a respondent ask a question back. You can ask me things about chatform right now, mid-form, and I will answer — that is a knowledge base the form's author wrote, not me improvising.
+What none of them do is let a respondent ask a question back. You can ask me things about chatform right now, mid-form, and I will answer from a knowledge base the form's author wrote, not from improvising.
 
 Be fair about the others. Do not claim chatform gets better completion rates or better data: those numbers are not measured, and inventing one would be a lie.`,
   },
@@ -73,7 +73,7 @@ Be fair about the others. Do not claim chatform gets better completion rates or 
     title: "The agent, and how much of it the author controls",
     body: `The author sets the agent's tone, a persona, a goal, and what it may talk about. They can turn the rephrasing off entirely, in which case questions are asked exactly as written.
 
-They give it a knowledge base — up to ${business.limits.knowledge_entries} entries — which is how I can answer questions about chatform. The agent quotes it and is told not to invent anything beyond it. Guardrails set a cap on how long a conversation can run and a list of topics to refuse.
+They give it a knowledge base of up to ${business.limits.knowledge_entries} entries, which is how I can answer questions about chatform. The agent quotes it and is told not to invent anything beyond it. Guardrails set a cap on how long a conversation can run and a list of topics to refuse.
 
 When an answer does not fit the question, the agent says so conversationally and asks again, up to a limit the author sets. After that it stops arguing and shows the plain input instead, so nobody gets stuck in a loop with a chatbot.
 
@@ -85,21 +85,21 @@ There is a three-mode setting: template (no model at all, deterministic question
 
 It is evaluated in code after every answer, never by the model. That matters: the agent cannot decide to skip your screening question because the conversation was going well.
 
-A form can have several endings, and which one someone reaches can depend on their answers — so a form that qualifies people can thank a lead and turn away a mismatch with different words. An ending can be marked as a screen-out, which keeps disqualified responses out of your completion rate.
+A form can have several endings, and which one someone reaches can depend on their answers, so a form that qualifies people can thank a lead and turn away a mismatch with different words. An ending can be marked as a screen-out, which keeps disqualified responses out of your completion rate.
 
 This form is branching right now. Which questions you have been asked depends on what you answered earlier.`,
   },
   {
     title: "Where the answers go",
-    body: `Everything lands in a results table you can read, filter and search, with the full conversation transcript beside each response — so you can see not just what someone answered but what they were asked and what they said on the way.
+    body: `Everything lands in a results table you can read, filter and search, with the full conversation transcript beside each response, so you can see not just what someone answered but what they were asked and what they said on the way.
 
 Partial responses are kept: if someone leaves halfway, what they had already typed is saved rather than discarded.
 
-Out of the product: CSV and JSONL export, webhooks when a response completes, Google Sheets, Slack, Zapier, and a developer API with SDKs for JavaScript and React. The API can also drive the interview headlessly, so you can build your own interface on the same engine — a chat, a classic form, a voice agent.`,
+Out of the product: CSV and JSONL export, webhooks when a response completes, Google Sheets, Slack, Zapier, and a developer API with SDKs for JavaScript and React. The API can also drive the interview headlessly, so you can build your own interface on the same engine: a chat, a classic form, a voice agent.`,
   },
   {
     title: "What this demo does with your answers, and what chatform cannot do yet",
-    body: `This form is a real chatform form, and your answers are a real response stored in a real account — the team's own. They are read as research about how people use form tools, which is why the questions are what they are. You signed in with Google, so your name and email address are attached to the response. Nothing here is sold or passed to anyone else. If you want yours removed, say so and it will be.
+    body: `This form is a real chatform form, and your answers are a real response stored in a real account, the team's own. They are read as research about how people use form tools, which is why the questions are what they are. You signed in with Google, so your name and email address are attached to the response. Nothing here is sold or passed to anyone else. If you want yours removed, say so and it will be.
 
 Things chatform does not do, which are worth knowing before anyone builds on it:
 

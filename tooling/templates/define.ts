@@ -83,7 +83,16 @@ export type Question = DistributiveOmit<
    * side of every logic rule someone later writes.
    */
   ref: string;
-  options?: { label: string; description?: string; score?: number }[];
+  /**
+   * `image` is what a `picture_choice` shows above the label.
+   *
+   * It is a full https URL rather than an R2 key, which is what an uploaded
+   * option image normally is: nothing authored in this repo has been through
+   * the upload flow, and `assetUrl` passes an absolute URL straight through to
+   * the `<img>`. So an image committed to `apps/web/public` can be an option's
+   * picture without anybody uploading it into an account first.
+   */
+  options?: { label: string; description?: string; score?: number; image?: string }[];
   /** Ranking items, as plain labels. */
   items?: string[];
   rows?: string[];
@@ -322,6 +331,7 @@ export function buildAuthoredDoc(input: AuthoredForm): AuthoredDoc {
                 label: o.label,
                 ...(o.description ? { description: o.description } : {}),
                 ...(o.score !== undefined ? { score: o.score } : {}),
+                ...(o.image ? { image_key: o.image } : {}),
               })),
             }
           : {}),
