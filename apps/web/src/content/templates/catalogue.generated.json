@@ -341,7 +341,7 @@
      "title": "Talk soon 🤝",
      "bodyMd": "We've sent you a trial link so you can have a look around in the meantime.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -352,7 +352,7 @@
      "title": "We'll call you 🤝",
      "bodyMd": "Someone from the team will be in touch within one business day, with your answers already in front of them.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -561,7 +561,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -1037,7 +1037,7 @@
      "title": "Booked 📅",
      "bodyMd": "Check your inbox for the invite. We'll have your answers open on the call.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -1204,7 +1204,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -1655,7 +1655,7 @@
      "title": "On it 📝",
      "bodyMd": "You'll have a quote within two working days.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -1822,7 +1822,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -2258,7 +2258,7 @@
      "title": "Thanks. We'll read it properly 🤝",
      "bodyMd": "If there's a fit, you'll hear from us within the week.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -2459,7 +2459,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -2726,7 +2726,7 @@
      "title": "Thank you 💛",
      "bodyMd": "Your answer shapes what we build next.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -2847,7 +2847,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -3100,7 +3100,7 @@
      "title": "Thanks for telling us ⭐",
      "bodyMd": "",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -3111,7 +3111,7 @@
      "title": "Someone will be in touch 📮",
      "bodyMd": "We've flagged this as unresolved. Expect a reply within one working day.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -3232,7 +3232,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -3566,7 +3566,7 @@
      "title": "Really useful. Thank you 🙏",
      "bodyMd": "",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -3699,7 +3699,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -4026,7 +4026,7 @@
      "title": "Logged 💡",
      "bodyMd": "We read every one of these.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -4037,7 +4037,7 @@
      "title": "Flagged as blocking 🚧",
      "bodyMd": "Someone will reply today, often with a workaround before the fix exists.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -4158,7 +4158,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -4502,7 +4502,7 @@
      "title": "You're on the list 🧪",
      "bodyMd": "We'll email you when your invite is ready.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -4611,7 +4611,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -4918,7 +4918,7 @@
      "title": "Thanks for the honesty 👋",
      "bodyMd": "Your account stays active until the end of the period.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -5151,7 +5151,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -5672,7 +5672,7 @@
      "title": "You're in 🎉",
      "bodyMd": "We'll email you the moment there's something to try.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -5886,7 +5886,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -6209,7 +6209,7 @@
      "title": "Subscribed ✉️",
      "bodyMd": "Check your inbox to confirm.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -6344,7 +6344,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -6669,7 +6669,7 @@
      "title": "See you there 🎥",
      "bodyMd": "The calendar invite is on its way.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -6680,7 +6680,7 @@
      "title": "We'll send the recording 📼",
      "bodyMd": "It goes out within a day of the session. No need to be anywhere.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -6791,7 +6791,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -7090,7 +7090,7 @@
      "title": "On its way 📄",
      "bodyMd": "Check your inbox. It should arrive within a minute.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -7101,7 +7101,7 @@
      "title": "Guide sent, and we'll be in touch 📄",
      "bodyMd": "Someone who knows this properly will email you within a working day.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -7267,7 +7267,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -7618,7 +7618,7 @@
      "title": "See you there 🥂",
      "bodyMd": "We'll send the final details a week before.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -7629,7 +7629,7 @@
      "title": "We'll miss you 💛",
      "bodyMd": "Thanks for letting us know. It genuinely helps with the numbers.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -7762,7 +7762,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -8085,7 +8085,7 @@
      "title": "Thank you 🙌",
      "bodyMd": "This genuinely shapes the next one.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -8184,7 +8184,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -8575,7 +8575,7 @@
      "title": "Submitted 🎤",
      "bodyMd": "We review proposals in batches and reply to everyone, either way.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -8741,7 +8741,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -9068,7 +9068,7 @@
      "title": "Registered ✅",
      "bodyMd": "Prep instructions are on their way.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -9168,7 +9168,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -9839,7 +9839,7 @@
      "title": "Application received 🚀",
      "bodyMd": "We review every application within a week, and reply either way.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -10040,7 +10040,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -10532,7 +10532,7 @@
      "title": "All set 🎊",
      "bodyMd": "See you on day one. We'll email the schedule shortly.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -10653,7 +10653,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -11048,7 +11048,7 @@
      "title": "Thank you, genuinely 🙏",
      "bodyMd": "All the best for what's next.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -11259,7 +11259,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -11534,7 +11534,7 @@
      "title": "Thanks 💬",
      "bodyMd": "Results are shared with the whole team.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -11634,7 +11634,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -11954,7 +11954,7 @@
      "title": "Thanks for the referral 🙌",
      "bodyMd": "We'll take it from here and keep you posted.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -12053,7 +12053,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -12503,7 +12503,7 @@
      "title": "Reported 🐛",
      "bodyMd": "Thanks. A real person reads every one of these.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -12514,7 +12514,7 @@
      "title": "Flagged as blocking 🚨",
      "bodyMd": "Send a screenshot to support if you have one. Someone is looking at this now.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -12669,7 +12669,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -13065,7 +13065,7 @@
      "title": "Ticket created 🎫",
      "bodyMd": "We reply to most tickets within a few hours.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -13266,7 +13266,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -13634,7 +13634,7 @@
      "title": "Message sent 📨",
      "bodyMd": "We usually reply within one working day.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -13857,7 +13857,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -14266,7 +14266,7 @@
      "title": "Request received 💳",
      "bodyMd": "Refunds are usually processed within five working days.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -14277,7 +14277,7 @@
      "title": "Sent to finance 💳",
      "bodyMd": "A duplicate charge is usually reversed within three working days, without anything else from you.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -14466,7 +14466,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -14941,7 +14941,7 @@
      "title": "You're enrolled 🎓",
      "bodyMd": "Your welcome pack is on its way.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -14952,7 +14952,7 @@
      "title": "We'll invoice your employer 🧾",
      "bodyMd": "Your place is held for fourteen days while the invoice is settled.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -14963,7 +14963,7 @@
      "title": "Bursary application received 🎓",
      "bodyMd": "The panel meets fortnightly. We'll hold a place for you until they've decided.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -15208,7 +15208,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -15547,7 +15547,7 @@
      "title": "Thank you 📚",
      "bodyMd": "Every cohort improves because of answers like these.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -15737,7 +15737,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -16099,7 +16099,7 @@
      "title": "Nicely done ✅",
      "bodyMd": "Swap in your own questions. The scores are already wired up.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -16220,7 +16220,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -16708,7 +16708,7 @@
      "title": "Thanks, we're ready 🤝",
      "bodyMd": "We'll be in touch to arrange the first session.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -16875,7 +16875,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -17235,7 +17235,7 @@
      "title": "Booked 🗓️",
      "bodyMd": "We'll confirm by text shortly.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -17246,7 +17246,7 @@
      "title": "We'll call you back within the hour ☎️",
      "bodyMd": "Keep your phone nearby. If it's an emergency, please don't wait for us. Call your local emergency number.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -17445,7 +17445,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -17944,7 +17944,7 @@
      "title": "Welcome to the team 💚",
      "bodyMd": "A coordinator will be in touch with the rota.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -18187,7 +18187,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -18630,7 +18630,7 @@
      "title": "Application in 🎟️",
      "bodyMd": "The committee reviews applications monthly.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -18797,7 +18797,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,
@@ -19134,7 +19134,7 @@
      "title": "Thank you ⭐",
      "bodyMd": "That means a lot. We'll let you know where it ends up.",
      "imageUrl": null,
-     "redirectDelaySec": 5,
+     "redirectDelaySec": 4,
      "showSummary": false,
      "kind": "success",
      "requirements": []
@@ -19267,7 +19267,7 @@
     "allowResubmissions": true,
     "onComplete": {
      "requireSubmit": true,
-     "delaySec": 5,
+     "delaySec": 4,
      "notificationEmails": [],
      "autoReplyEmail": {
       "enabled": true,

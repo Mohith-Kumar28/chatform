@@ -2,6 +2,7 @@ import { z } from "zod";
 import { boundedString, safeUrl, storedUrl, storedUrlOptional } from "@repo/guard";
 import { ConditionGroup } from "./conditions";
 import { NanoId, RefString, VariableName } from "./ids";
+import { DEFAULT_REDIRECT_DELAY_SEC } from "./defaults";
 
 const RuleBase = { id: NanoId };
 
@@ -115,7 +116,7 @@ export const Ending = z.object({
    */
   ctaUrl: storedUrlOptional(1000),
   redirectUrl: storedUrlOptional(1000),
-  redirectDelaySec: z.number().int().min(0).max(120).default(5),
+  redirectDelaySec: z.number().int().min(0).max(120).default(DEFAULT_REDIRECT_DELAY_SEC),
   showSummary: z.boolean().default(false),
   /**
    * How this outcome ended.

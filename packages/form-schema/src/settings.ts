@@ -2,6 +2,7 @@ import { z } from "zod";
 import { boundedString, safeUrl, storedUrl, storedUrlOptional } from "@repo/guard";
 import { NanoId } from "./ids";
 import { RespondentAuthMethod } from "./respondent";
+import { DEFAULT_REDIRECT_DELAY_SEC } from "./defaults";
 
 /**
  * The confirmation email's copy when the author has not written their own.
@@ -211,7 +212,7 @@ export const SettingsDoc = z.object({
       requireSubmit: z.boolean().default(true),
       // Cleaned on read, not rejected — see the note on `Ending.ctaUrl`.
       redirectUrl: storedUrlOptional(1000),
-      delaySec: z.number().int().min(0).max(120).default(5),
+      delaySec: z.number().int().min(0).max(120).default(DEFAULT_REDIRECT_DELAY_SEC),
       notificationEmails: z.array(z.string().email()).max(10).default([]),
       /**
        * The receipt the respondent gets, and the only email in this product

@@ -1,7 +1,16 @@
 import { create } from "zustand";
 import type { Shortcut } from "@/lib/shortcuts";
 import { produce } from "immer";
-import { bridgeDeletedBlocks, pruneEndingRules, repairFlow, type Block, type FormDoc, type Ending, type LogicRuleInput } from "@repo/form-schema";
+import {
+  DEFAULT_REDIRECT_DELAY_SEC,
+  bridgeDeletedBlocks,
+  pruneEndingRules,
+  repairFlow,
+  type Block,
+  type FormDoc,
+  type Ending,
+  type LogicRuleInput,
+} from "@repo/form-schema";
 
 /**
  * Builder state.
@@ -476,7 +485,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         title: "Thank you!",
         bodyMd: "",
         imageUrl: null,
-        redirectDelaySec: 5,
+        redirectDelaySec: DEFAULT_REDIRECT_DELAY_SEC,
         showSummary: false,
         kind: "success",
         requirements: [],

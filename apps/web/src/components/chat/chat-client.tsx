@@ -14,7 +14,7 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import { stripRichText } from "@repo/form-schema";
+import { DEFAULT_REDIRECT_DELAY_SEC, stripRichText } from "@repo/form-schema";
 import { safeHref, safeMediaSrc } from "@repo/guard";
 import { QuestionDescription, RichText, SAFE_ELEMENTS } from "./rich-text";
 import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
@@ -299,7 +299,7 @@ export function ChatSurface({
    * turn a live form into a 500 instead of a form with one dead button.
    */
   const redirectTarget = safeHref(chat.ending?.redirectUrl);
-  const redirectDelaySec = chat.ending?.redirectDelaySec ?? 5;
+  const redirectDelaySec = chat.ending?.redirectDelaySec ?? DEFAULT_REDIRECT_DELAY_SEC;
   useEffect(() => {
     const target = redirectTarget;
     if (!target || previewMode) return;
@@ -1803,7 +1803,7 @@ function EndingCard({
    * rendering: the first paint shows the delay the author configured, which is
    * what the countdown says at that instant anyway.
    */
-  const delaySec = ending.redirectDelaySec ?? 5;
+  const delaySec = ending.redirectDelaySec ?? DEFAULT_REDIRECT_DELAY_SEC;
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const counting = redirectArmed && !replay && !redirectBlocked;
   useEffect(() => {

@@ -44,7 +44,14 @@ import { CanvasMenuProvider, NodeMenu, PaneMenu, type CanvasMenuActions } from "
 import { toast } from "sonner";
 import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
-import { Block as BlockSchema, bridgeDeletedBlocks, lintFormDoc, pruneEndingRules, rulesAreExhaustive } from "@repo/form-schema";
+import {
+  DEFAULT_REDIRECT_DELAY_SEC,
+  Block as BlockSchema,
+  bridgeDeletedBlocks,
+  lintFormDoc,
+  pruneEndingRules,
+  rulesAreExhaustive,
+} from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -519,7 +526,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
         title: "Thank you!",
         bodyMd: "",
         imageUrl: null,
-        redirectDelaySec: 5,
+        redirectDelaySec: DEFAULT_REDIRECT_DELAY_SEC,
         showSummary: false,
         kind: "success",
         requirements: [],

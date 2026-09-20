@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { FormDoc, ThemeDoc, lintFormDoc, hasErrors, migrateFormDoc } from "@repo/form-schema";
+import { DEFAULT_REDIRECT_DELAY_SEC, FormDoc, ThemeDoc, lintFormDoc, hasErrors, migrateFormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
 import { hashPassword, isHashedPassword } from "../lib/crypto.js";
@@ -260,7 +260,7 @@ function defaultDoc(title: string): string {
       { id: `blk_${crypto.randomUUID().slice(0, 8)}`, ref: "welcome", type: "welcome", title: `Hey! Let's get started with ${title}.`, required: false },
       { id: `blk_${crypto.randomUUID().slice(0, 8)}`, ref: "q_email", type: "email", title: "What's your email?", required: true },
     ],
-    endings: [{ id: `end_${crypto.randomUUID().slice(0, 8)}`, ref: "end_thanks", title: "Thank you! 🎉", bodyMd: "", redirectDelaySec: 5, showSummary: false }],
+    endings: [{ id: `end_${crypto.randomUUID().slice(0, 8)}`, ref: "end_thanks", title: "Thank you! 🎉", bodyMd: "", redirectDelaySec: DEFAULT_REDIRECT_DELAY_SEC, showSummary: false }],
     logic: [],
     endingRules: [],
     variables: [],
