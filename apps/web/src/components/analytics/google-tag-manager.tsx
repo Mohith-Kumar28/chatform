@@ -42,7 +42,7 @@ const GTM_CONTAINER_ID = "GTM-NQLPKDG5";
  * strategy and behind the same exclusion, rather than as a tag inside GTM, so
  * it shares the container's `dataLayer` and stays out of the respondent runtime.
  */
-const GOOGLE_ADS_ID = "AW-452851592";
+export const GOOGLE_ADS_ID = "AW-452851592";
 
 /**
  * The same exclusion as Clarity, for a reason that is one step further back.
