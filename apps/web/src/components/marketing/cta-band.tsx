@@ -1,7 +1,21 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { LogoMark } from "@/components/brand/logo";
-import { GradientField } from "@/components/brand/gradient-field";
+import dynamic from "next/dynamic";
+import { LazySection } from "@/components/marketing/lazy-section";
+
+/**
+ * The page's second gradient field, in the last band.
+ *
+ * Same reasoning as the second `ChatDemo`: a pointer loop under a viewport
+ * sized `blur(44px)` was mounting during hydration, at the very bottom of a
+ * 13,700px page, competing for the main thread with the hero. The band keeps
+ * its own `tier="full"` ground colour underneath, so until the field arrives
+ * the close reads as the flat version of itself rather than as a hole.
+ */
+const GradientField = dynamic(
+  () => import("@/components/brand/gradient-field").then((m) => m.GradientField),
+);
 import { InView } from "./in-view";
 import { UnderlineMark } from "./annotate";
 
@@ -43,7 +57,9 @@ export function CtaBand() {
       className="relative overflow-hidden px-6 py-24 sm:py-28"
       style={{ color: "var(--on-primary)" }}
     >
-      <GradientField tier="full" />
+      <LazySection rootMargin="300px">
+        <GradientField tier="full" />
+      </LazySection>
 
       {/* The mark, oversized and bled off the right edge — the same shape the
           hero's wash is split on, closing the page where it opened. Ink at low

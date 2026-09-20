@@ -2,6 +2,7 @@
 
 import Script from "next/script";
 import { usePathname } from "next/navigation";
+import { useDeferredLoad } from "./use-deferred-load";
 
 /**
  * Microsoft Clarity — heatmaps and session replay.
@@ -49,7 +50,18 @@ const EXCLUDED = ["/f/", "/preview/"];
 
 export function Clarity() {
   const pathname = usePathname();
+  /**
+   * Both hooks run before the exclusion check, because they are hooks — an
+   * early return above them would change the hook order between an excluded
+   * route and an included one.
+   *
+   * Once this flips, `next/script` mounts and runs the loader on the spot:
+   * `afterInteractive` is long past by then, so the strategy below is about
+   * where the tag is injected, not when.
+   */
+  const ready = useDeferredLoad();
   if (EXCLUDED.some((prefix) => pathname.startsWith(prefix))) return null;
+  if (!ready) return null;
 
   return (
     <Script id="ms-clarity" strategy="afterInteractive">

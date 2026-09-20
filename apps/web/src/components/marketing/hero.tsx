@@ -92,8 +92,12 @@ export function Hero() {
 
           Two-thirds of the field is still flat colour, which is what keeps the
           headline, the buttons and the caption line on full-strength ground. */}
+      {/* `defer` because this one sits behind the LCP headline — it holds its
+          opening frame until the page settles rather than re-rasterising a
+          viewport-wide blur every frame. See `gradient-field.tsx`. */}
       <GradientField
         tier="vivid"
+        defer
         className="-top-32 [mask-image:linear-gradient(to_bottom,#000_0%,#000_66%,#000000ee_71%,#000000c2_76%,#00000093_81%,#0000006c_85%,#0000003e_89%,#0000001a_93%,#00000007_97%,transparent_100%)]"
       />
       {/* The dot grid keeps the wash from reading as a flat panel. */}

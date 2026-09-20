@@ -1,8 +1,8 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Check, Lock, Minus } from "lucide-react";
-import { useGetApiBillingPlans, getGetApiBillingPlansQueryKey } from "@/lib/api/billing/billing";
+import { customFetch } from "@/lib/api/mutator";
 import type { Catalogue } from "@/lib/pricing-catalogue";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Band, BandTitle, BandLede } from "@/components/marketing/band";
@@ -138,9 +138,32 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
   // number for us, and it is what every comparable product does.
   const [cycle, setCycle] = useState<"yearly" | "monthly">("yearly");
   const annual = cycle === "yearly";
-  const { data: raw } = useGetApiBillingPlans({
-    query: { queryKey: getGetApiBillingPlansQueryKey(), staleTime: 5 * 60_000 },
-  });
+  /**
+   * A plain fetch rather than the generated react-query hook.
+   *
+   * That hook was the only thing on any marketing route that needed a
+   * `QueryClientProvider`, and keeping it meant mounting TanStack Query — and,
+   * through it, the whole signed-in app shell — on public pages to overlay one
+   * boolean onto a catalogue the server had already rendered.
+   *
+   * Nothing here wanted a cache: the query had no invalidation, no mutation
+   * and no second reader, and a `staleTime` on a page people open once is not
+   * doing work. One request on mount, and `live ?? initial` below is unchanged.
+   */
+  const [live, setLive] = useState<Catalogue | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    customFetch<Catalogue>("/api/billing/plans", { method: "GET" })
+      .then((next) => {
+        if (alive) setLive(next);
+      })
+      // The authoring catalogue is already on screen and already right about
+      // everything but `checkoutReady`; a failed refresh should leave it there.
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
   /**
    * The seeded catalogue when it arrives, the authoring catalogue until then.
    *
@@ -155,7 +178,6 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
    * "contact us to set this up" note against a guess would put a false claim in
    * the prerendered HTML — which is the thing this whole change exists to stop.
    */
-  const live = raw as Catalogue | undefined;
   const data = live ?? initial;
   const plans = data.plans;
   const saving = plans.find((p) => p.id === "pro")?.yearlySavingPercent;

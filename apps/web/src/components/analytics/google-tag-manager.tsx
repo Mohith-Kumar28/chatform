@@ -2,6 +2,7 @@
 
 import Script from "next/script";
 import { usePathname } from "next/navigation";
+import { useDeferredLoad } from "./use-deferred-load";
 
 /**
  * Google Tag Manager.
@@ -66,6 +67,8 @@ const EXCLUDED = ["/f/", "/preview/"];
 
 export function GoogleTagManager() {
   const pathname = usePathname();
+  // A hook, so it runs before the exclusion check rather than after it.
+  const ready = useDeferredLoad();
   if (EXCLUDED.some((prefix) => pathname.startsWith(prefix))) return null;
 
   /*
@@ -76,24 +79,65 @@ export function GoogleTagManager() {
   */
   return (
     <>
-      <Script id="google-tag-manager" strategy="afterInteractive">
-        {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-})(window,document,'script','dataLayer','${GTM_CONTAINER_ID}');`}
-      </Script>
-      <Script
-        id="google-ads-gtag-src"
-        src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}`}
-        strategy="afterInteractive"
-      />
+      {/*
+        The queue goes up immediately; the machinery that drains it can wait.
+
+        This is what keeps the Ads conversion honest. `signup-conversion.tsx`
+        polls for `window.gtag` and gives up after fifteen seconds, so
+        deferring the tag without also defining the function would have turned
+        a real signup into a bet on how fast the network was. gtag's own design
+        is exactly this shape: the function pushes onto `dataLayer`, and the
+        library drains whatever it finds there whenever it arrives. Calls made
+        before the script lands are replayed, not lost.
+
+        So `gtag('event','conversion',…)` works from the first frame and the
+        tag machinery arrives later — which makes the conversion *more*
+        reliable than it was, not less.
+
+        `afterInteractive` and deliberately not `beforeInteractive`: the latter
+        is only honoured in `app/layout.tsx` itself, and this component is
+        mounted there rather than being that file — outside it Next warns and
+        the strategy degrades anyway. It does not matter here. The stub has no
+        `src`, so it emits no preload and fetches nothing (about 120 bytes of
+        inline HTML), and the conversion it protects fires on the dashboard
+        after a redirect, many seconds after hydration.
+
+        It stays outside the `ready` gate below so the queue exists from the
+        first frame, and inside the exclusion check above so the respondent
+        runtime still gets nothing at all.
+      */}
       <Script id="google-ads-gtag" strategy="afterInteractive">
         {`window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
 gtag('config', '${GOOGLE_ADS_ID}');`}
       </Script>
+
+      {ready && (
+        <>
+          <Script id="google-tag-manager" strategy="afterInteractive">
+            {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','${GTM_CONTAINER_ID}');`}
+          </Script>
+          {/*
+            `next/script` emits a `<link rel="preload" as="script">` for any
+            `afterInteractive` tag carrying a `src`, and that preload was
+            shipping in the prerendered `<head>` of every marketing page —
+            racing the font preloads and the stylesheets for bandwidth across
+            the LCP window, for a tag whose only job runs after somebody
+            creates an account. Gating the whole element on `ready` keeps it
+            out of the prerendered HTML entirely, so no preload is emitted.
+          */}
+          <Script
+            id="google-ads-gtag-src"
+            src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}`}
+            strategy="afterInteractive"
+          />
+        </>
+      )}
     </>
   );
 }

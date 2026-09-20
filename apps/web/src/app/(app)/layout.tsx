@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AppProviders } from "@/components/providers/app-providers";
 import { SignupConversion } from "@/components/analytics/signup-conversion";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 
@@ -17,10 +18,10 @@ export const metadata: Metadata = {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <>
+    <AppProviders>
       {/* Every route that a new account can first land on is inside this shell. */}
       <SignupConversion />
       <DashboardShell>{children}</DashboardShell>
-    </>
+    </AppProviders>
   );
 }

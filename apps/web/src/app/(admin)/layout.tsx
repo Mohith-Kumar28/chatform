@@ -1,3 +1,4 @@
+import { AppProviders } from "@/components/providers/app-providers";
 import { AdminShell } from "@/components/admin/admin-shell";
 
 /**
@@ -8,5 +9,9 @@ import { AdminShell } from "@/components/admin/admin-shell";
  * describe *an* account on a surface that is about every account at once.
  */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  return <AdminShell>{children}</AdminShell>;
+  return (
+    <AppProviders>
+      <AdminShell>{children}</AdminShell>
+    </AppProviders>
+  );
 }

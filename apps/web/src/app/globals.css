@@ -1196,6 +1196,28 @@
   animation: cf-field-circle 17s ease-in-out infinite reverse;
 }
 
+/* A deferred field holds its opening frame until the page says go.
+ *
+ * `animation-play-state: paused` renders the 0% keyframe — the same
+ * arrangement the reduced-motion path ships, and one that already looks
+ * finished. So the hero is pixel-identical at first paint, and the browser is
+ * not re-rasterising a viewport-wide `blur(44px)` layer at 60fps through the
+ * window LCP is measured over. `GradientField` flips `data-field` to "lit"
+ * after an idle callback and the drift starts from where it was parked.
+ *
+ * Only a field that opted in with `defer` is ever held: without the attribute
+ * these rules do not match, so every other instance is untouched.
+ */
+[data-field="held"] :is(
+    .field-drift-1,
+    .field-drift-2,
+    .field-drift-3,
+    .field-drift-4,
+    .field-drift-5
+  ) {
+  animation-play-state: paused;
+}
+
 /* The inspector field a preview click points at (`inspector-reveal.ts`).
    Deliberately loud: it has to pull the eye across the screen from the
    preview, so it is a hard shake that dies away, with an accent ring that
