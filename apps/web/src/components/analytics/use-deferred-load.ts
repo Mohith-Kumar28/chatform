@@ -41,17 +41,41 @@ export function useDeferredLoad(): boolean {
       addEventListener(e, fire, { once: true, passive: true, capture: true });
     }
 
-    // `requestIdleCallback` is missing in Safari before 17. The timeout is the
-    // ceiling either way, so the fallback is that ceiling on its own. The
-    // capability is read through `typeof` rather than truthiness because the
-    // DOM lib types it as always present.
+    /**
+     * The idle clock does not start until the page has finished loading.
+     *
+     * A flat 3.5s ceiling was fine on a laptop and wrong on a phone. Under the
+     * 4x CPU throttle Lighthouse models — and that a mid-range Android really
+     * has — the page is still assembling itself at 3.5s, so the tags landed in
+     * the middle of it: 713ms of blocking from the GTM container and 152ms
+     * from Clarity, about a third of the page's total blocking time, spent
+     * while the visitor was still waiting for the headline.
+     *
+     * Waiting for `load` first makes the delay proportional to how slow the
+     * device actually is, instead of a guess that is generous on fast hardware
+     * and destructive on slow. On a quick connection `load` is a second in and
+     * nothing has changed; on a slow phone the tags wait their turn.
+     *
+     * The interaction listeners above still win the race, so anybody who
+     * scrolls or taps is recorded from that moment regardless.
+     */
     const idle = typeof window.requestIdleCallback === "function";
-    const handle: number = idle
-      ? window.requestIdleCallback(fire, { timeout: 3500 })
-      : window.setTimeout(fire, 3500);
+    let handle = 0;
+
+    const startIdleClock = () => {
+      if (done) return;
+      handle = idle
+        ? window.requestIdleCallback(fire, { timeout: 2000 })
+        : window.setTimeout(fire, 2000);
+    };
+
+    if (document.readyState === "complete") startIdleClock();
+    else addEventListener("load", startIdleClock, { once: true });
 
     function cleanup() {
       for (const e of EVENTS) removeEventListener(e, fire, { capture: true });
+      removeEventListener("load", startIdleClock);
+      if (!handle) return;
       if (idle) window.cancelIdleCallback(handle);
       else clearTimeout(handle);
     }
