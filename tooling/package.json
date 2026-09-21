@@ -10,7 +10,8 @@
     "gen:api-docs": "tsx gen-api-docs.ts",
     "spec:coverage": "tsx check-spec-coverage.ts",
     "test": "vitest run",
-    "gen:demo": "tsx gen-seed-demo-form.ts"
+    "gen:demo": "tsx gen-seed-demo-form.ts",
+    "api:verify": "tsx api-verify/run.ts"
   },
   "dependencies": {
     "@repo/entitlements": "workspace:*",
