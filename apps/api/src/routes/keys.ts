@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../lib/validator.js";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";

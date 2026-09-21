@@ -1,4 +1,5 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
+import { rows } from "../internal/rows.js";
 
 export interface WebhookEndpoint {
   id: string;
@@ -22,8 +23,8 @@ export class WebhookEndpoints {
    * every method here answered 401 with a perfectly valid API key, and the
    * `webhook:read`/`webhook:write` scopes described an ability no key had.
    */
-  list(options: { formId?: string } = {}, request?: RequestOptions) {
-    return this.http.get<WebhookEndpoint[]>("/v1/webhooks", options, request);
+  async list(options: { formId?: string } = {}, request?: RequestOptions): Promise<WebhookEndpoint[]> {
+    return rows(await this.http.get<WebhookEndpoint[] | { data: WebhookEndpoint[] }>("/v1/webhooks", options, request));
   }
 
   /** The signing secret comes back once. Store it now. */

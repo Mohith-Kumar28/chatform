@@ -19,7 +19,9 @@
  * option on the table.
  */
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { AiDocumentView } from "../../lib/v1-schemas.js";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../../lib/validator.js";
 import { z } from "zod";
 import type { Bindings } from "../../env.js";
 import { ErrorEnvelope } from "../../lib/openapi.js";
@@ -82,7 +84,7 @@ aiV1Router.post(
       "An edit may add no questions at all: most requests about a working form change the routing rather than the wording. " +
       "Pass `history` (oldest first) when this is a follow-up, or the model cannot resolve 'also', 'it' or 'instead'.",
     responses: {
-      200: { description: "The proposed document and what changed" },
+      200: { description: "The proposed document and what changed", content: { "application/json": { schema: resolver(AiDocumentView) } } },
       402: { description: "Out of generations for this billing period", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
       403: { description: "The key lacks the ai:generate scope", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
       404: { description: "Form not found", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },

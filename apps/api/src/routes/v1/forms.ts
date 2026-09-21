@@ -1,5 +1,8 @@
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { AnalyticsView, DeletedView, DocSavedView, FollowUpStatsView, FormSummaryView, OkView, Paged, PublishedView } from "../../lib/v1-schemas.js";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../../lib/validator.js";
+import { apiError } from "../../lib/api-error.js";
 import { z } from "zod";
 import { readFormDoc, toPublicConfig } from "@repo/form-schema";
 import type { Bindings } from "../../env.js";
@@ -38,7 +41,16 @@ interface FormRecord {
 }
 
 const ListQuery = z.object({
-  status: z.enum(["draft", "published", "archived", "all"]).default("published"),
+  /**
+   * Everything, not just what is live.
+   *
+   * This defaulted to `published`, so `POST /v1/forms` handed back an id and
+   * the very next `GET /v1/forms` did not contain it. The endpoint is
+   * owner-facing and scoped to the caller's own organization; there is no
+   * reason for it to hide the caller's drafts by default, and every row says
+   * which it is.
+   */
+  status: z.enum(["draft", "published", "archived", "all"]).default("all"),
   limit: z.coerce.number().int().min(1).max(100).default(25),
   cursor: z.string().optional(),
 });
@@ -50,7 +62,10 @@ formsV1Router.get(
   describeRoute({
     tags: ["v1"],
     summary: "List forms",
-    responses: { 200: { description: "A page of forms" }, 400: { description: "Malformed cursor" } },
+    responses: {
+      200: { description: "A page of forms", content: { "application/json": { schema: resolver(Paged(FormSummaryView)) } } },
+      400: { description: "Malformed cursor" },
+    },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
@@ -105,7 +120,23 @@ formsV1Router.get(
   describeRoute({
     tags: ["v1"],
     summary: "Read a form: its public config, or the document behind it",
-    responses: { 200: { description: "Form" }, 404: { description: "Not found" } },
+    description:
+      "Without `view`, this answers the published form exactly as a respondent receives it. A form you have " +
+      "just created has no published version yet, so it answers 404 `not_published` until you publish it; pass " +
+      "`view=document` to read the working draft instead.",
+    parameters: [
+      {
+        name: "view",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: ["public", "document"], default: "public" },
+        description: "`document` returns the editable working draft, which is the only view a form has before it is published.",
+      },
+    ],
+    responses: {
+      200: { description: "Form", content: { "application/json": { schema: resolver(z.unknown()) } } },
+      404: { description: "Not found, or not published and no `view=document` was asked for" },
+    },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
@@ -129,7 +160,31 @@ formsV1Router.get(
     )
       .bind(id, orgId)
       .first<{ schema_json: string; slug: string }>();
-    if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    if (!row) {
+      /**
+       * "Form not found" was a lie told to the person who had just created it.
+       *
+       * This query only matches a *published* form, so a draft fell through to
+       * a 404 that read as though the id were wrong. Ask again before saying
+       * so: if the form is there and simply unpublished, say that, and name the
+       * parameter that reads it. A form belonging to another organization still
+       * gets the indistinguishable `not_found`, which is the point of it.
+       */
+      const draft = await c.env.DB.prepare(
+        `SELECT status FROM forms WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`,
+      )
+        .bind(id, orgId)
+        .first<{ status: string }>();
+      if (draft) {
+        return apiError(
+          c,
+          404,
+          "not_published",
+          `This form is ${draft.status} and has no published version to read. Add ?view=document to read the working draft, or publish it first.`,
+        );
+      }
+      return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    }
 
     /**
      * The same projection a respondent gets, clamped by the same plan.
@@ -153,7 +208,10 @@ formsV1Router.post(
   describeRoute({
     tags: ["v1"],
     summary: "Create a form",
-    responses: { 201: { description: "Created" }, 422: { description: "The document is invalid" } },
+    responses: {
+      201: { description: "Created", content: { "application/json": { schema: resolver(FormSummaryView) } } },
+      422: { description: "The document is invalid" },
+    },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
@@ -221,7 +279,11 @@ formsV1Router.put(
   describeRoute({
     tags: ["v1"],
     summary: "Replace the working document, returning lint issues",
-    responses: { 200: { description: "Saved, with issues" }, 404: { description: "Not found" }, 422: { description: "Invalid" } },
+    responses: {
+      200: { description: "Saved, with issues", content: { "application/json": { schema: resolver(DocSavedView) } } },
+      404: { description: "Not found" },
+      422: { description: "Invalid" },
+    },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
@@ -266,7 +328,7 @@ formsV1Router.post(
     tags: ["v1"],
     summary: "Take a published form off the air, keeping its version and responses",
     responses: {
-      200: { description: "Unpublished" },
+      200: { description: "Unpublished", content: { "application/json": { schema: resolver(OkView) } } },
       404: { description: "Not found" },
       409: { description: "The form is not published" },
     },
@@ -311,7 +373,7 @@ formsV1Router.post(
     tags: ["v1"],
     summary: "Publish the working document as a new immutable version",
     responses: {
-      200: { description: "Published" },
+      200: { description: "Published", content: { "application/json": { schema: resolver(PublishedView) } } },
       402: { description: "A plan limit refuses the publish" },
       404: { description: "Not found" },
       422: { description: "Lint errors" },
@@ -357,7 +419,10 @@ formsV1Router.delete(
   describeRoute({
     tags: ["v1"],
     summary: "Delete a form (soft, so responses are kept)",
-    responses: { 200: { description: "Deleted" }, 404: { description: "Not found" } },
+    responses: {
+      200: { description: "Deleted", content: { "application/json": { schema: resolver(DeletedView) } } },
+      404: { description: "Not found" },
+    },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
@@ -383,7 +448,7 @@ formsV1Router.get(
     tags: ["v1"],
     summary: "Counts, per-question funnel and answer distributions",
     responses: {
-      200: { description: "Analytics" },
+      200: { description: "Analytics", content: { "application/json": { schema: resolver(AnalyticsView) } } },
       402: { description: "The per-question detail needs a plan that includes it" },
       404: { description: "Form not found" },
     },
@@ -455,7 +520,7 @@ formsV1Router.get(
     tags: ["v1"],
     summary: "Follow-up recovery report (sent, clicked, recovered, holdout lift)",
     responses: {
-      200: { description: "Recovery report" },
+      200: { description: "Recovery report", content: { "application/json": { schema: resolver(FollowUpStatsView) } } },
       404: { description: "Form not found" },
     },
   }),

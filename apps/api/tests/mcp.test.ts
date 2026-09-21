@@ -474,7 +474,7 @@ describe("capabilities that used to be dashboard-only", () => {
     const listed = await callTool("list_templates", {});
     expect(listed.isError).toBe(false);
 
-    const catalogue = JSON.parse(listed.text) as { slug: string }[];
+    const catalogue = (JSON.parse(listed.text) as { data: { slug: string }[] }).data;
     if (catalogue.length === 0) return; // no seeded templates in this environment
 
     const slug = catalogue[0]!.slug;
@@ -509,7 +509,7 @@ describe("capabilities that used to be dashboard-only", () => {
 
     const versions = await callTool("list_form_versions", { form_id: formId });
     expect(versions.isError).toBe(false);
-    const list = JSON.parse(versions.text) as { version: number; responses: number }[];
+    const list = (JSON.parse(versions.text) as { data: { version: number; responses: number }[] }).data;
     expect(list.length).toBeGreaterThan(0);
     // The response count is what makes a rollback a decision rather than a tidy-up.
     expect(list[0]).toHaveProperty("responses");

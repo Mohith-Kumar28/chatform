@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../lib/validator.js";
 import { z } from "zod";
 import { sha256Hex, toPublicConfig, RefString, type FormDoc, readFormDoc } from "@repo/form-schema";
 import { EmbedInput, HiddenFieldsInput, ProviderToken } from "../lib/inputs.js";

@@ -32,7 +32,7 @@ import { adminRouter } from "./routes/admin/index.js";
 import { mountOpenApiSpec } from "./lib/openapi.js";
 import { requestId, type RequestIdVars } from "./lib/request-id.js";
 import { publicIpLimit } from "./lib/ratelimit.js";
-import { attachErrorContext } from "./lib/api-error.js";
+import { attachErrorContext, apiError } from "./lib/api-error.js";
 
 /**
  * A JSON body has no business being larger than this. 256 KB is generous: the
@@ -264,7 +264,21 @@ export function createApp() {
      * fact it had declined. Nothing in this worker threw `HTTPException`
      * before, which is why the gap went unnoticed.
      */
-    if (err instanceof HTTPException) return err.getResponse();
+    if (err instanceof HTTPException) {
+      /**
+       * A middleware that built its own response meant it; pass it through.
+       *
+       * The rest carry only a status and a message, and `getResponse()` renders
+       * those as `text/plain` — so `POST` with `content-type: application/json`
+       * and an empty body answered `Malformed JSON in request body` as text,
+       * with no code to branch on and no request id to quote. Most HTTP clients
+       * set that header on every POST, so it was easy to hit and impossible to
+       * handle.
+       */
+      if (err.res) return err.res;
+      const code = err.status === 413 ? "payload_too_large" : err.status === 400 ? "malformed_json" : "request_refused";
+      return apiError(c, err.status, code, err.message || "The request was refused");
+    }
     console.error("unhandled_error", { requestId: c.get("requestId"), path: c.req.path }, err);
     return c.json({ error: { code: "internal_error", message: "Internal server error" } }, 500);
   });

@@ -1,6 +1,6 @@
-# API verification run `mubbpl6efimj`
+# API verification run `mubbyav699yb`
 
-Target: `https://api.chatform.in` (production). 2026-09-21T14:13:20.417Z
+Target: `https://api.chatform.in` (production). 2026-09-21T14:20:36.622Z
 
 ## Coverage
 
@@ -9,14 +9,14 @@ Target: `https://api.chatform.in` (production). 2026-09-21T14:13:20.417Z
 | `/v1` operations in the spec | 69 |
 | reached by this run | 69 |
 | never reached | 0 |
-| pass | 63 |
+| pass | 60 |
 | fail | 0 |
 | negative-only | 6 |
-| skipped | 0 |
+| skipped | 3 |
 
-Response checking: **22** verified against a schema the spec declares, **20** against a hand-written expectation, **27** not checked.
+Response checking: **20** verified against a schema the spec declares, **19** against a hand-written expectation, **30** not checked.
 
-Latency across 75 calls: p50 332ms, p95 5571ms, max 16601ms.
+Latency across 72 calls: p50 1344ms, p95 5752ms, max 7810ms.
 
 ## Findings
 
@@ -149,72 +149,72 @@ Both have explanations and neither is discoverable. `GET /v1/forms/{id}` returns
 
 | Operation | Status | Expected | Check | Outcome | ms |
 | --- | --- | --- | --- | --- | --- |
-| `DELETE /v1/forms/{id}` | 200 | 200/204 | unchecked | pass | 172 |
-| `DELETE /v1/forms/{id}/integrations/spreadsheet` | 200 | 200/204/404 | unchecked | pass | 201 |
-| `DELETE /v1/forms/{id}/knowledge/{sourceId}` | 200 | 200/204 | schema-verified | pass | 2196 |
-| `DELETE /v1/responses/{id}/answers/{ref}` | 200 | 200/204 | unchecked | pass | 249 |
-| `DELETE /v1/webhooks/{id}` | 200 | 200/204 | unchecked | pass | 235 |
-| `GET /v1/blocks` | 200 | 200 | shape-asserted | pass | 332 |
-| `GET /v1/blocks/{type}` | 200 | 200 | shape-asserted | pass | 189 |
-| `GET /v1/chat/sessions/{sid}` | 200 | 200 | unchecked | pass | 683 |
-| `GET /v1/chat/sessions/{sid}/events` | 200 | 200 | unchecked | pass | 403 |
-| `GET /v1/events` | 200 | 200 | shape-asserted | pass | 195 |
-| `GET /v1/exports` | 200 | 200 | unchecked | pass | 157 |
-| `GET /v1/exports/{id}` | 200 | 200 | schema-verified | pass | 243 |
-| `GET /v1/files/{id}` | 200 | 200 | schema-verified | pass | 158 |
-| `GET /v1/forms` | 200 | 200 | shape-asserted | pass | 221 |
-| `GET /v1/forms/{id}` | 200 | 200 | shape-asserted | pass | 254 |
-| `GET /v1/forms/{id}/analytics` | 200 | 200 | shape-asserted | pass | 347 |
-| `GET /v1/forms/{id}/followup-analytics` | 200 | 200 | shape-asserted | pass | 167 |
-| `GET /v1/forms/{id}/integrations` | 200 | 200 | schema-verified | pass | 248 |
-| `GET /v1/forms/{id}/knowledge` | 200 | 200 | schema-verified | pass | 198 |
-| `GET /v1/forms/{id}/responses` | 200 | 200 | shape-asserted | pass | 458 |
-| `GET /v1/forms/{id}/versions` | 200 | 200 | schema-verified | pass | 209 |
-| `GET /v1/forms/{id}/versions/{version}` | 200 | 200 | shape-asserted | pass | 226 |
-| `GET /v1/me` | 200 | 200 | shape-asserted | pass | 2086 |
-| `GET /v1/responses/{id}` | 200 | 200 | shape-asserted | pass | 206 |
-| `GET /v1/responses/{id}/next` | 200 | 200 | unchecked | pass | 311 |
-| `GET /v1/sessions/{sid}` | 200 | 200 | unchecked | pass | 206 |
-| `GET /v1/sessions/{sid}/events` | 200 | 200 | unchecked | pass | 197 |
-| `GET /v1/templates` | 200 | 200 | schema-verified | pass | 239 |
-| `GET /v1/templates/{slug}` | 200 | 200 | schema-verified | pass | 190 |
-| `GET /v1/webhooks` | 200 | 200 | schema-verified | pass | 474 |
-| `GET /v1/webhooks/{id}/deliveries` | 200 | 200 | unchecked | pass | 342 |
-| `POST /v1/ai/clarify-form` | 200 | 200 | schema-verified | pass | 3240 |
-| `POST /v1/ai/edit-form` | 200 | 200/422 | shape-asserted | pass | 3622 |
-| `POST /v1/ai/generate-form` | 200 | 200 | schema-verified | pass | 10236 |
-| `POST /v1/chat/sessions/{sid}/actions` | 200 | 200/400/409 | unchecked | pass | 16601 |
-| `POST /v1/chat/sessions/{sid}/auth/google` | 400 | 400/401/403/409/422 | unchecked | negative-only | 195 |
-| `POST /v1/chat/sessions/{sid}/auth/phone/token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 2377 |
-| `POST /v1/chat/sessions/{sid}/messages` | 200 | 200/202 | unchecked | pass | 8764 |
-| `POST /v1/chat/sessions/{sid}/token/rotate` | 200 | 200 | unchecked | pass | 180 |
-| `POST /v1/chat/sessions/{sid}/verify/phone-token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 242 |
-| `POST /v1/forms` | 201 | 200/201 | shape-asserted | pass | 227 |
-| `POST /v1/forms/{id}/chat/sessions` | 200 | 200/201 | schema-verified | pass | 6652 |
-| `POST /v1/forms/{id}/exports` | 202 | 200/201/202 | schema-verified | pass | 693 |
-| `POST /v1/forms/{id}/knowledge/crawl` | 200 | 200/201/202 | schema-verified | pass | 2688 |
-| `POST /v1/forms/{id}/knowledge/link` | 200 | 200/201 | schema-verified | pass | 1159 |
-| `POST /v1/forms/{id}/knowledge/text` | 200 | 200/201 | schema-verified | pass | 1104 |
-| `POST /v1/forms/{id}/knowledge/upload` | 200 | 200/201 | schema-verified | pass | 2669 |
-| `POST /v1/forms/{id}/publish` | 200 | 200/201 | shape-asserted | pass | 615 |
-| `POST /v1/forms/{id}/responses` | 201 | 200/201 | shape-asserted | pass | 342 |
-| `POST /v1/forms/{id}/sessions` | 200 | 200/201 | schema-verified | pass | 3633 |
-| `POST /v1/forms/{id}/unpublish` | 200 | 200/204 | unchecked | pass | 232 |
-| `POST /v1/forms/{id}/versions/{version}/restore` | 200 | 200 | shape-asserted | pass | 290 |
-| `POST /v1/responses/{id}/abandon` | 200 | 200/204 | unchecked | pass | 361 |
-| `POST /v1/responses/{id}/answers` | 200 | 200 | unchecked | pass | 290 |
-| `POST /v1/responses/{id}/complete` | 200 | 200 | shape-asserted | pass | 2710 |
-| `POST /v1/sessions/{sid}/actions` | 200 | 200/400/409 | unchecked | pass | 5528 |
-| `POST /v1/sessions/{sid}/auth/google` | 400 | 400/401/403/409/422 | unchecked | negative-only | 206 |
-| `POST /v1/sessions/{sid}/auth/phone/token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 2575 |
-| `POST /v1/sessions/{sid}/messages` | 200 | 200/202 | unchecked | pass | 5571 |
-| `POST /v1/sessions/{sid}/token/rotate` | 200 | 200 | unchecked | pass | 227 |
-| `POST /v1/sessions/{sid}/uploads/intent` | 200 | 200/201 | schema-verified | pass | 1452 |
-| `POST /v1/sessions/{sid}/uploads/{fileId}/confirm` | 200 | 200/201 | schema-verified | pass | 2814 |
-| `POST /v1/sessions/{sid}/verify/phone-token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 218 |
-| `POST /v1/templates/{slug}/use` | 200 | 200/201 | shape-asserted | pass | 281 |
-| `POST /v1/webhooks` | 201 | 200/201 | shape-asserted | pass | 216 |
-| `POST /v1/webhooks/{id}/deliveries/{deliveryId}/replay` | 200 | 200/201/202 | unchecked | pass | 655 |
-| `PUT /v1/forms/{id}/doc` | 200 | 200 | shape-asserted | pass | 2710 |
-| `PUT /v1/forms/{id}/integrations/spreadsheet` | 200 | 200/201/402 | schema-verified | pass | 276 |
-| `PUT /v1/sessions/{sid}/uploads/{fileId}` | 200 | 200/201/204 | schema-verified | pass | 1244 |
+| `DELETE /v1/forms/{id}` | 200 | 200/204 | unchecked | pass | 162 |
+| `DELETE /v1/forms/{id}/integrations/spreadsheet` | 200 | 200/204/404 | unchecked | pass | 1177 |
+| `DELETE /v1/forms/{id}/knowledge/{sourceId}` | 200 | 200/204 | schema-verified | pass | 1999 |
+| `DELETE /v1/responses/{id}/answers/{ref}` | 200 | 200/204 | unchecked | pass | 1550 |
+| `DELETE /v1/webhooks/{id}` | 200 | 200/204 | unchecked | pass | 175 |
+| `GET /v1/blocks` | 200 | 200 | shape-asserted | pass | 911 |
+| `GET /v1/blocks/{type}` | 200 | 200 | shape-asserted | pass | 784 |
+| `GET /v1/chat/sessions/{sid}` | 200 | 200 | unchecked | pass | 431 |
+| `GET /v1/chat/sessions/{sid}/events` | 200 | 200 | unchecked | pass | 335 |
+| `GET /v1/events` | 200 | 200 | shape-asserted | pass | 801 |
+| `GET /v1/exports` | 200 | 200 | unchecked | pass | 159 |
+| `GET /v1/exports/{id}` | 200 | 200 | schema-verified | pass | 210 |
+| `GET /v1/files/{id}` | 200 | 200 | schema-verified | pass | 164 |
+| `GET /v1/forms` | 200 | 200 | shape-asserted | pass | 970 |
+| `GET /v1/forms/{id}` | 200 | 200 | shape-asserted | pass | 938 |
+| `GET /v1/forms/{id}/analytics` | 200 | 200 | shape-asserted | pass | 442 |
+| `GET /v1/forms/{id}/followup-analytics` | 200 | 200 | shape-asserted | pass | 244 |
+| `GET /v1/forms/{id}/integrations` | 200 | 200 | schema-verified | pass | 1163 |
+| `GET /v1/forms/{id}/knowledge` | 200 | 200 | schema-verified | pass | 944 |
+| `GET /v1/forms/{id}/responses` | 200 | 200 | shape-asserted | pass | 1374 |
+| `GET /v1/forms/{id}/versions` | 200 | 200 | schema-verified | pass | 1286 |
+| `GET /v1/forms/{id}/versions/{version}` | 200 | 200 | shape-asserted | pass | 1258 |
+| `GET /v1/me` | 200 | 200 | shape-asserted | pass | 2110 |
+| `GET /v1/responses/{id}` | 200 | 200 | shape-asserted | pass | 1348 |
+| `GET /v1/responses/{id}/next` | 200 | 200 | unchecked | pass | 1344 |
+| `GET /v1/sessions/{sid}` | 200 | 200 | unchecked | pass | 1390 |
+| `GET /v1/sessions/{sid}/events` | 200 | 200 | unchecked | pass | 1085 |
+| `GET /v1/templates` | 200 | 200 | schema-verified | pass | 954 |
+| `GET /v1/templates/{slug}` | 200 | 200 | schema-verified | pass | 1224 |
+| `GET /v1/webhooks` | 200 | 200 | schema-verified | pass | 1031 |
+| `GET /v1/webhooks/{id}/deliveries` | 200 | 200 | unchecked | pass | 186 |
+| `POST /v1/ai/clarify-form` | 0 | - | unchecked | skipped | 0 |
+| `POST /v1/ai/edit-form` | 0 | - | unchecked | skipped | 0 |
+| `POST /v1/ai/generate-form` | 0 | - | unchecked | skipped | 0 |
+| `POST /v1/chat/sessions/{sid}/actions` | 200 | 200/400/409 | unchecked | pass | 5123 |
+| `POST /v1/chat/sessions/{sid}/auth/google` | 400 | 400/401/403/409/422 | unchecked | negative-only | 198 |
+| `POST /v1/chat/sessions/{sid}/auth/phone/token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 2090 |
+| `POST /v1/chat/sessions/{sid}/messages` | 200 | 200/202 | unchecked | pass | 7810 |
+| `POST /v1/chat/sessions/{sid}/token/rotate` | 200 | 200 | unchecked | pass | 208 |
+| `POST /v1/chat/sessions/{sid}/verify/phone-token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 189 |
+| `POST /v1/forms` | 201 | 200/201 | shape-asserted | pass | 1125 |
+| `POST /v1/forms/{id}/chat/sessions` | 200 | 200/201 | schema-verified | pass | 5752 |
+| `POST /v1/forms/{id}/exports` | 202 | 200/201/202 | schema-verified | pass | 2565 |
+| `POST /v1/forms/{id}/knowledge/crawl` | 200 | 200/201/202 | schema-verified | pass | 2625 |
+| `POST /v1/forms/{id}/knowledge/link` | 200 | 200/201 | schema-verified | pass | 1704 |
+| `POST /v1/forms/{id}/knowledge/text` | 200 | 200/201 | schema-verified | pass | 1444 |
+| `POST /v1/forms/{id}/knowledge/upload` | 200 | 200/201 | schema-verified | pass | 2874 |
+| `POST /v1/forms/{id}/publish` | 200 | 200/201 | shape-asserted | pass | 1692 |
+| `POST /v1/forms/{id}/responses` | 201 | 200/201 | shape-asserted | pass | 1972 |
+| `POST /v1/forms/{id}/sessions` | 200 | 200/201 | schema-verified | pass | 6614 |
+| `POST /v1/forms/{id}/unpublish` | 200 | 200/204 | unchecked | pass | 1220 |
+| `POST /v1/forms/{id}/versions/{version}/restore` | 200 | 200 | shape-asserted | pass | 1406 |
+| `POST /v1/responses/{id}/abandon` | 200 | 200/204 | unchecked | pass | 2267 |
+| `POST /v1/responses/{id}/answers` | 200 | 200 | unchecked | pass | 2192 |
+| `POST /v1/responses/{id}/complete` | 200 | 200 | shape-asserted | pass | 3214 |
+| `POST /v1/sessions/{sid}/actions` | 200 | 200/400/409 | unchecked | pass | 6699 |
+| `POST /v1/sessions/{sid}/auth/google` | 400 | 400/401/403/409/422 | unchecked | negative-only | 1137 |
+| `POST /v1/sessions/{sid}/auth/phone/token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 2050 |
+| `POST /v1/sessions/{sid}/messages` | 200 | 200/202 | unchecked | pass | 6823 |
+| `POST /v1/sessions/{sid}/token/rotate` | 200 | 200 | unchecked | pass | 1303 |
+| `POST /v1/sessions/{sid}/uploads/intent` | 200 | 200/201 | schema-verified | pass | 1729 |
+| `POST /v1/sessions/{sid}/uploads/{fileId}/confirm` | 200 | 200/201 | schema-verified | pass | 2538 |
+| `POST /v1/sessions/{sid}/verify/phone-token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 1076 |
+| `POST /v1/templates/{slug}/use` | 200 | 200/201 | shape-asserted | pass | 1401 |
+| `POST /v1/webhooks` | 201 | 200/201 | shape-asserted | pass | 1097 |
+| `POST /v1/webhooks/{id}/deliveries/{deliveryId}/replay` | 200 | 200/201/202 | unchecked | pass | 1418 |
+| `PUT /v1/forms/{id}/doc` | 200 | 200 | shape-asserted | pass | 2808 |
+| `PUT /v1/forms/{id}/integrations/spreadsheet` | 200 | 200/201/402 | schema-verified | pass | 1397 |
+| `PUT /v1/sessions/{sid}/uploads/{fileId}` | 200 | 200/201/204 | schema-verified | pass | 1312 |

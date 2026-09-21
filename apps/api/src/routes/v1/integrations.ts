@@ -10,7 +10,10 @@
  * a `form:write` matter: what it hands out is respondent data, on a schedule.
  */
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { OkView, Paged } from "../../lib/v1-schemas.js";
+import { page } from "../../lib/api-page.js";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../../lib/validator.js";
 import { z } from "zod";
 import type { Bindings } from "../../env.js";
 import { ErrorEnvelope } from "../../lib/openapi.js";
@@ -56,7 +59,7 @@ integrationsV1Router.get(
     description:
       "Currently just the spreadsheet feed, if one exists. An empty array means no feed has been created.",
     responses: {
-      200: { description: "Integrations", content: { "application/json": { schema: resolver(z.array(IntegrationRow)) } } },
+      200: { description: "Integrations", content: { "application/json": { schema: resolver(Paged(IntegrationRow)) } } },
       404: { description: "Form not found", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
     },
   }),
@@ -64,7 +67,7 @@ integrationsV1Router.get(
     const form = await formForKey(c as never);
     if (!form) return c.json(notFound, 404);
     const feed = await readFeed(c.env, form.id);
-    return c.json(feed ? [projectFeed(feed, publicOrigin(c.req.url))] : []);
+    return c.json(page(feed ? [projectFeed(feed, publicOrigin(c.req.url))] : []));
   },
 );
 
@@ -122,7 +125,7 @@ integrationsV1Router.delete(
     summary: "Revoke the spreadsheet feed",
     description: "The URL stops working immediately. Any spreadsheet reading it will start failing to refresh.",
     responses: {
-      200: { description: "Revoked" },
+      200: { description: "Revoked", content: { "application/json": { schema: resolver(OkView) } } },
       404: { description: "Form not found", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
     },
   }),

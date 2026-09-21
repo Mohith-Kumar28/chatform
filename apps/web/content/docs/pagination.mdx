@@ -22,6 +22,13 @@ curl "https://api.chatform.in/v1/forms/$FORM_ID/responses?limit=50&cursor=$NEXT"
 
 Stop when `has_more` is false. `limit` defaults to 25 and caps at 100.
 
+Every list answers in that shape, including the bounded ones. A form has a
+handful of versions and an organization a handful of webhooks, so
+`/v1/templates`, `/v1/webhooks`, `/v1/forms/{id}/versions`,
+`/v1/forms/{id}/integrations` and `/v1/exports` return everything they have and
+`has_more` is always `false`. Read them the same way as the rest and nothing
+will need changing on the day one of them grows a cursor.
+
 ## Why not offsets
 
 Responses arrive while you are reading them. With `?page=2`, a new response

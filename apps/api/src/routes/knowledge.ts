@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../lib/validator.js";
 import { z } from "zod";
 import { isSafeUrl } from "@repo/guard";
 import { ALLOWED_KNOWLEDGE_MIME, checkFileBytes, safeFilename } from "@repo/guard/files";

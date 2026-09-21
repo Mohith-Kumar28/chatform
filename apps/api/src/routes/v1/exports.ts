@@ -1,5 +1,8 @@
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { Paged } from "../../lib/v1-schemas.js";
+import { page } from "../../lib/api-page.js";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../../lib/validator.js";
 import { z } from "zod";
 import { featureLocked } from "@repo/entitlements";
 import type { Bindings } from "../../env.js";
@@ -180,7 +183,7 @@ exportsV1Router.get(
     summary: "List recent exports",
     description:
       "Newest first, optionally narrowed to one form. Exports are deleted 24 hours after they are requested, so this is a short window rather than a history.",
-    responses: { 200: { description: "Exports, newest first" } },
+    responses: { 200: { description: "Exports, newest first", content: { "application/json": { schema: resolver(Paged(ExportView)) } } } },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
@@ -197,7 +200,7 @@ exportsV1Router.get(
       .bind(...binds, q.limit)
       .all<ExportRow>();
     const visible = (rows.results ?? []).filter((r) => keyOwnsForm(c, r.form_id));
-    return c.json({ data: await Promise.all(visible.map((r) => project(c.env, r))) });
+    return c.json(page(await Promise.all(visible.map((r) => project(c.env, r)))));
   },
 );
 

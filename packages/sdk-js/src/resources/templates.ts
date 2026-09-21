@@ -1,4 +1,5 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
+import { rows } from "../internal/rows.js";
 import type { FormDocument, FormSummary, TemplateDetail, TemplateSummary } from "../types/index.js";
 
 /**
@@ -12,8 +13,8 @@ export class Templates {
   constructor(private readonly http: HttpClient) {}
 
   /** Most-used first. */
-  list(request?: RequestOptions) {
-    return this.http.get<TemplateSummary[]>("/v1/templates", undefined, request);
+  async list(request?: RequestOptions): Promise<TemplateSummary[]> {
+    return rows(await this.http.get<TemplateSummary[] | { data: TemplateSummary[] }>("/v1/templates", undefined, request));
   }
 
   /** One template, including the document it would create. */

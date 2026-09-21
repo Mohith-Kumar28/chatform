@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../lib/validator.js";
 import { z } from "zod";
 import { readFormDoc } from "@repo/form-schema";
 import { ALLOWED_UPLOAD_MIME, SNIFF_BYTES, checkFileBytes, safeFilename, sniffMime } from "@repo/guard/files";

@@ -22,6 +22,24 @@ Every error has the same shape:
 `request_id` is on every response, error or not, as the `X-Request-Id` header.
 Quote it and we can find the request. If you send your own, we keep it.
 
+That shape is universal, including when the request body did not match the
+schema. A malformed body is `400 invalid_request`, and `issues[]` carries one
+entry per field with the `path` that failed:
+
+```json
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "Ref: This is missing (and 1 other field)",
+    "issues": [
+      { "path": "ref", "code": "invalid_type", "message": "Ref: This is missing" },
+      { "path": "value", "code": "invalid_type", "message": "Value: This is missing" }
+    ],
+    "request_id": "req_9f2c…"
+  }
+}
+```
+
 ## Statuses
 
 | Status | Meaning | What to do |
@@ -60,6 +78,14 @@ The full set:
 
 The messages are the same ones a respondent would have seen, so you can show
 them as-is.
+
+## Request errors
+
+| Code | Meaning |
+| --- | --- |
+| `invalid_request` | The body or query did not match the schema; `issues` names each field |
+| `malformed_json` | A JSON content type with a body that is not JSON, including an empty one |
+| `not_published` | The form exists but has no published version; read the draft with `?view=document` |
 
 ## Flow errors
 

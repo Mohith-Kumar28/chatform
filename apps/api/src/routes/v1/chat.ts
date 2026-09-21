@@ -1,6 +1,8 @@
 import { Hono, type MiddlewareHandler } from "hono";
+import { RotatedTokenView, SessionEventsView, SessionStateView, TurnResultView } from "../../lib/v1-schemas.js";
 import { resolveRespondent } from "../../lib/respondents.js";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../../lib/validator.js";
 import { z } from "zod";
 import { sha256Hex, toPublicBlock, RefString, readFormDoc } from "@repo/form-schema";
 import { HiddenFieldsInput } from "../../lib/inputs.js";
@@ -275,7 +277,7 @@ const messagesRoute = (base: string) =>
     tags: ["v1"],
     summary: "Send a message or a structured answer, and get the turn's result",
     responses: {
-      200: { description: "The turn, with the next question" },
+      200: { description: "The turn, with the next question", content: { "application/json": { schema: resolver(TurnResultView) } } },
       202: { description: "Still running; resume from sinceSeq" },
       400: { description: "Rejected" },
     },
@@ -330,7 +332,7 @@ const actionsRoute = (base: string) =>
     tags: ["v1"],
     summary: "Skip, edit, restart, stop, submit, undo a screen-out, or resend a verification code",
     responses: {
-      200: { description: "The turn's result" },
+      200: { description: "The turn's result", content: { "application/json": { schema: resolver(TurnResultView) } } },
       202: { description: "Still running" },
       400: { description: "Rejected" },
     },
@@ -354,7 +356,10 @@ const stateRoute = (base: string) =>
   describeRoute({
     tags: ["v1"],
     summary: "Session state",
-    responses: { 200: { description: "State" }, 404: { description: "Not found" } },
+    responses: {
+      200: { description: "State", content: { "application/json": { schema: resolver(SessionStateView) } } },
+      404: { description: "Not found" },
+    },
   }),
   async (c) => {
     const sid = c.req.param("sid")!;
@@ -380,7 +385,13 @@ const eventsRoute = (base: string) =>
   describeRoute({
     tags: ["v1"],
     summary: "The session's events, streamed or pulled since a sequence number",
-    responses: { 200: { description: "SSE stream, or a JSON page of events" } },
+    responses: {
+      200: {
+        description:
+          "Server-sent events when `Accept: text/event-stream`, otherwise a JSON page of events since `since`.",
+        content: { "application/json": { schema: resolver(SessionEventsView) } },
+      },
+    },
   }),
   async (c) => {
     const sid = c.req.param("sid")!;
@@ -431,7 +442,10 @@ const rotateRoute = (base: string) =>
   describeRoute({
     tags: ["v1"],
     summary: "Issue a fresh respondent token, invalidating the old one",
-    responses: { 200: { description: "The new token" }, 404: { description: "Not found" } },
+    responses: {
+      200: { description: "The new token", content: { "application/json": { schema: resolver(RotatedTokenView) } } },
+      404: { description: "Not found" },
+    },
   }),
   async (c) => {
     const sid = c.req.param("sid")!;

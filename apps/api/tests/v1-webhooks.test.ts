@@ -57,8 +57,8 @@ describe("managing endpoints", () => {
     const created = (await res.json()) as { id: string; secret: string; secretPreview: string };
     expect(created.secret.startsWith("whsec_")).toBe(true);
 
-    const list = (await (await api("/v1/webhooks")).json()) as { id: string; secret?: string }[];
-    const listed = list.find((w) => w.id === created.id);
+    const list = (await (await api("/v1/webhooks")).json()) as { data: { id: string; secret?: string }[] };
+    const listed = list.data.find((w) => w.id === created.id);
     expect(listed).toBeTruthy();
     // Only a preview afterwards — the same treatment an API key gets.
     expect(listed).not.toHaveProperty("secret");
@@ -147,8 +147,8 @@ describe("scopes and tenancy", () => {
     const otherKey = (await seedKey(other, "v1whbkey", { scopes: { webhook: ["read"] } })).raw;
     const list = (await (
       await fetchApi("/v1/webhooks", { headers: { "x-api-key": otherKey } })
-    ).json()) as unknown[];
-    expect(list).toHaveLength(0);
+    ).json()) as { data: unknown[] };
+    expect(list.data).toHaveLength(0);
   });
 });
 

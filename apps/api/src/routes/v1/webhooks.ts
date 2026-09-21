@@ -1,5 +1,8 @@
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { DeletedView, OkView, Paged, WebhookDeliveryView } from "../../lib/v1-schemas.js";
+import { page } from "../../lib/api-page.js";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../../lib/validator.js";
 import { z } from "zod";
 import { BAD_WEBHOOK_URL, deliverableUrl } from "../../lib/webhook-url.js";
 import type { Bindings } from "../../env.js";
@@ -73,7 +76,7 @@ webhooksV1Router.get(
   describeRoute({
     tags: ["v1"],
     summary: "List webhook endpoints",
-    responses: { 200: { description: "Endpoints", content: { "application/json": { schema: resolver(z.array(WebhookView)) } } } },
+    responses: { 200: { description: "Endpoints", content: { "application/json": { schema: resolver(Paged(WebhookView)) } } } },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
@@ -85,7 +88,7 @@ webhooksV1Router.get(
     )
       .bind(...(formId ? [orgId, formId] : [orgId]))
       .all<WebhookRow>();
-    return c.json((rows.results ?? []).map(project));
+    return c.json(page((rows.results ?? []).map(project)));
   },
 );
 
@@ -107,7 +110,7 @@ webhooksV1Router.post(
     tags: ["v1"],
     summary: "Create a webhook endpoint. The signing secret is returned ONCE",
     responses: {
-      201: { description: "Created" },
+      201: { description: "Created, with the signing secret", content: { "application/json": { schema: resolver(WebhookView) } } },
       404: { description: "Form not found" },
       422: { description: "Unknown event name" },
     },
@@ -199,7 +202,10 @@ webhooksV1Router.delete(
   describeRoute({
     tags: ["v1"],
     summary: "Delete a webhook endpoint",
-    responses: { 200: { description: "Deleted" }, 404: { description: "Not found" } },
+    responses: {
+      200: { description: "Deleted", content: { "application/json": { schema: resolver(DeletedView) } } },
+      404: { description: "Not found" },
+    },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
@@ -228,7 +234,10 @@ webhooksV1Router.get(
   describeRoute({
     tags: ["v1"],
     summary: "Recent delivery attempts, for working out why an endpoint is quiet",
-    responses: { 200: { description: "Deliveries" }, 404: { description: "Not found" } },
+    responses: {
+      200: { description: "Deliveries", content: { "application/json": { schema: resolver(Paged(WebhookDeliveryView)) } } },
+      404: { description: "Not found" },
+    },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
@@ -244,7 +253,7 @@ webhooksV1Router.get(
     )
       .bind(id)
       .all();
-    return c.json({ data: rows.results ?? [] });
+    return c.json(page(rows.results ?? []));
   },
 );
 
@@ -261,7 +270,11 @@ webhooksV1Router.post(
   describeRoute({
     tags: ["v1"],
     summary: "Replay one delivery",
-    responses: { 200: { description: "Queued" }, 404: { description: "Not found" }, 422: { description: "Nothing to replay" } },
+    responses: {
+      200: { description: "Queued", content: { "application/json": { schema: resolver(OkView) } } },
+      404: { description: "Not found" },
+      422: { description: "Nothing to replay" },
+    },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;

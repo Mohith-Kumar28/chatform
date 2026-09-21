@@ -1,5 +1,9 @@
 ---
 title: 'Read a form: its public config, or the document behind it'
+description: Without `view`, this answers the published form exactly as a
+  respondent receives it. A form you have just created has no published version
+  yet, so it answers 404 `not_published` until you publish it; pass
+  `view=document` to read the working draft instead.
 full: true
 _openapi:
   preload:
@@ -9,7 +13,11 @@ _openapi:
   toc: []
   structuredData:
     headings: []
-    contents: []
+    contents:
+      - content: Without `view`, this answers the published form exactly as a respondent
+          receives it. A form you have just created has no published version
+          yet, so it answers 404 `not_published` until you publish it; pass
+          `view=document` to read the working draft instead.
 llmsExclude: true
 ---
 

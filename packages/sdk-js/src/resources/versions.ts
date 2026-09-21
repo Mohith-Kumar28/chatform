@@ -1,4 +1,5 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
+import { rows } from "../internal/rows.js";
 import type { FormDocument, FormVersion, FormVersionSummary, RestoredVersion } from "../types/index.js";
 
 /**
@@ -18,8 +19,14 @@ export class Versions {
    * answered can be replaced freely, while one with responses behind it is the
    * schema those answers were recorded against.
    */
-  list(formId: string, request?: RequestOptions) {
-    return this.http.get<FormVersionSummary[]>(`/v1/forms/${formId}/versions`, undefined, request);
+  async list(formId: string, request?: RequestOptions): Promise<FormVersionSummary[]> {
+    return rows(
+      await this.http.get<FormVersionSummary[] | { data: FormVersionSummary[] }>(
+        `/v1/forms/${formId}/versions`,
+        undefined,
+        request,
+      ),
+    );
   }
 
   /** One version, optionally diffed against another. */

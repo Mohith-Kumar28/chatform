@@ -174,3 +174,35 @@ describe("respondent auth", () => {
     ]);
   });
 });
+
+describe("list envelopes", () => {
+  /**
+   * Four list endpoints changed from a bare array to `{data, has_more,
+   * next_cursor}`. Both shapes are in the wild at once: self-hosted workers
+   * update when they update, and 0.1.1 is on the registry expecting arrays. A
+   * client that reads only one of them breaks against the other.
+   */
+  const bounded = [
+    ["templates.list", (cf: any) => cf.templates.list()],
+    ["webhooks.list", (cf: any) => cf.webhooks.list()],
+    ["forms.versions.list", (cf: any) => cf.forms.versions.list("frm_1")],
+    ["forms.integrations.list", (cf: any) => cf.forms.integrations.list("frm_1")],
+  ] as const;
+
+  for (const [name, call] of bounded) {
+    it(`${name} reads a bare array`, async () => {
+      const { fetchImpl } = recorder([{ id: "a" }, { id: "b" }]);
+      expect(await call(client(fetchImpl))).toHaveLength(2);
+    });
+
+    it(`${name} reads the standard envelope`, async () => {
+      const { fetchImpl } = recorder({ data: [{ id: "a" }, { id: "b" }], has_more: false, next_cursor: null });
+      expect(await call(client(fetchImpl))).toHaveLength(2);
+    });
+  }
+
+  it("returns an array rather than throwing when a list comes back empty or odd", async () => {
+    const { fetchImpl } = recorder({ nothing: true });
+    expect(await client(fetchImpl).templates.list()).toEqual([]);
+  });
+});

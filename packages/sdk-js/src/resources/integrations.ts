@@ -1,4 +1,5 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
+import { rows } from "../internal/rows.js";
 import type { Integration, SpreadsheetIntegration } from "../types/index.js";
 
 /**
@@ -11,8 +12,10 @@ import type { Integration, SpreadsheetIntegration } from "../types/index.js";
 export class Integrations {
   constructor(private readonly http: HttpClient) {}
 
-  list(formId: string, request?: RequestOptions) {
-    return this.http.get<Integration[]>(`/v1/forms/${formId}/integrations`, undefined, request);
+  async list(formId: string, request?: RequestOptions): Promise<Integration[]> {
+    return rows(
+      await this.http.get<Integration[] | { data: Integration[] }>(`/v1/forms/${formId}/integrations`, undefined, request),
+    );
   }
 
   /**

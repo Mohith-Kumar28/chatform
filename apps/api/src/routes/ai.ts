@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { APICallError } from "ai";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../lib/validator.js";
 import { z } from "zod";
 import { FormDoc, buildFlowRules, lintFormDoc, hasErrors, migrateFormDoc, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";

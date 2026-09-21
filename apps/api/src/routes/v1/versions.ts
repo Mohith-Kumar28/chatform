@@ -11,7 +11,10 @@
  * use too.
  */
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { FormVersionView, Paged, RestoredVersionView } from "../../lib/v1-schemas.js";
+import { page } from "../../lib/api-page.js";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../../lib/validator.js";
 import { z } from "zod";
 import type { Bindings } from "../../env.js";
 import { ErrorEnvelope } from "../../lib/openapi.js";
@@ -70,14 +73,14 @@ versionsV1Router.get(
     description:
       "Each version carries the number of completed responses recorded against it. A version nobody answered can be replaced freely; one with responses behind it is the schema those answers were recorded against.",
     responses: {
-      200: { description: "Versions", content: { "application/json": { schema: resolver(z.array(VersionSummary)) } } },
+      200: { description: "Versions", content: { "application/json": { schema: resolver(Paged(VersionSummary)) } } },
       404: { description: "Form not found", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
     },
   }),
   async (c) => {
     const form = await formForKey(c as never);
     if (!form) return c.json(notFound, 404);
-    return c.json(await listVersions(c.env, form));
+    return c.json(page(await listVersions(c.env, form)));
   },
 );
 
@@ -90,7 +93,7 @@ versionsV1Router.get(
     summary: "One published version, optionally diffed against another",
     description: "Pass `compare` with another version number to get the list of changes between them.",
     responses: {
-      200: { description: "The published document, plus a diff when `compare` is given" },
+      200: { description: "The published document, plus a diff when `compare` is given", content: { "application/json": { schema: resolver(FormVersionView) } } },
       404: { description: "No such form or version", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
     },
   }),
@@ -125,7 +128,7 @@ versionsV1Router.post(
     description:
       "Writes the draft, not the live form, so respondents see nothing change until you publish. Returns the restored document and what it changed.",
     responses: {
-      200: { description: "The draft now matches that version" },
+      200: { description: "The draft now matches that version", content: { "application/json": { schema: resolver(RestoredVersionView) } } },
       404: { description: "No such form or version", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
       422: { description: "That version cannot be read", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
     },

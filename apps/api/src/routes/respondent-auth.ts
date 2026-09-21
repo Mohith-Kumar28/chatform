@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
-import { describeRoute } from "hono-openapi";
+import { RespondentAuthView } from "../lib/v1-schemas.js";
+import { describeRoute, resolver } from "hono-openapi";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import {
@@ -331,7 +332,7 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
       tags: ["v1"],
       summary: "Verify a respondent with a Google ID token",
       responses: {
-        200: { description: "Verified" },
+        200: { description: "Verified", content: { "application/json": { schema: resolver(RespondentAuthView) } } },
         400: { description: "The token did not check out" },
         409: { description: "This identity has already answered" },
       },
@@ -360,7 +361,7 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
       tags: ["v1"],
       summary: "Verify a respondent with a Firebase phone ID token",
       responses: {
-        200: { description: "Verified" },
+        200: { description: "Verified", content: { "application/json": { schema: resolver(RespondentAuthView) } } },
         400: { description: "The token did not check out" },
         409: { description: "This identity has already answered" },
       },
@@ -390,7 +391,7 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
       tags: ["v1"],
       summary: "Confirm a phone answer with a Firebase phone ID token",
       responses: {
-        200: { description: "The answer is verified and recorded" },
+        200: { description: "The answer is verified and recorded", content: { "application/json": { schema: resolver(RespondentAuthView) } } },
         400: { description: "The token did not check out, or proves a different number" },
       },
     }),
