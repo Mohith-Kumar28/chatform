@@ -22,11 +22,11 @@ export { DEMO_KNOWLEDGE } from "./knowledge.js";
  * It does two jobs at once, and both constrain the questions:
  *
  * The visitor's job is to experience the product. That rules out a
- * questionnaire: in eight questions they should meet four pictures, a scale,
- * stars, an upload, a consent they can actually refuse, a calendar, three
- * questions they can skip, branching that reads their answers, and an agent
- * that answers questions back, in about three minutes, because a demo nobody
- * finishes demonstrates nothing.
+ * questionnaire: in eight questions they should meet four pictures, a poll
+ * that answers back, a scale, stars, an upload, a consent they can actually
+ * refuse, a calendar, three questions they can skip, branching that reads
+ * their answers, and an agent that answers questions back, in about three
+ * minutes, because a demo nobody finishes demonstrates nothing.
  *
  * Four rules, all asserted in `demo-form.test.ts`:
  *
@@ -73,7 +73,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 20;
+export const DEMO_REVISION = 21;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -143,28 +143,31 @@ export const DEMO_FORM = buildAuthoredDoc({
     },
     {
       /*
-       * Two taps and a button, and it used to be a drag-to-order ranking.
+       * The poll, and the only question here that answers back.
        *
-       * The ranking was the right data and the wrong control. It will not
-       * accept a partial answer: all four items have to be placed before the
-       * respondent may go on, so somebody who cares about one thing and is
-       * indifferent to the rest has to invent an order for the rest anyway.
-       * On a form whose entire job is to be finished, the second question is
-       * the worst possible place for the only control nobody can guess at.
+       * It has been three things: a matrix (the same three buttons printed
+       * under three rows, which is what started all of this), a drag-to-order
+       * ranking (right data, wrong control: it refuses a partial answer, so
+       * the second question of the form was one nobody could leave without
+       * ordering four things they may not care about), and a pick-two.
        *
-       * `maxSelections: 2` is what keeps the answer worth having. Asked to
-       * pick any number, everybody picks everything and the question tells us
-       * nothing; asked for two, they have to choose, which is the whole point
-       * of having asked. `minSelections: 1` is what un-sticks it: the
-       * Continue button lights up on the first tap.
+       * As a poll it collects the same reading in one tap and gives something
+       * back for it. What comes back is also the best argument this form can
+       * make: the visitor sees that most of the people ahead of them picked
+       * "people actually finishing it", which is our whole pitch stated by
+       * somebody other than us. If they do not pick it, that is worth knowing
+       * and the bar says so honestly.
+       *
+       * This is the second of the two list-shaped questions here and the
+       * budget is spent: four pictures and four chips are different enough to
+       * be two screens, a third would be the repetition this form was rebuilt
+       * to get rid of.
        */
       ref: "priorities",
-      type: "multi_select",
+      type: "poll",
       title: "What matters most when you send a form out?",
-      description: "Pick one or two.",
+      description: "Pick the one that matters most. You'll see what everyone else said.",
       required: true,
-      minSelections: 1,
-      maxSelections: 2,
       options: [
         { label: "People actually finishing it" },
         { label: "Answers clean enough to use" },
@@ -296,10 +299,10 @@ export const DEMO_FORM = buildAuthoredDoc({
    *
    * The old flow branched six ways off "what's your biggest problem?" into
    * three follow-up questions, which is a lot of canvas for one thing: asking
-   * the same "say more" in three different voices. Asking for the two things
-   * that matter most gets the same reading without a branch, so what is left
-   * to route on is what somebody wants to happen next, which is the part a
-   * respondent can feel.
+   * the same "say more" in three different voices. Asking what matters most
+   * gets the same reading without a branch, so what is left to route on is
+   * what somebody wants to happen next, which is the part a respondent can
+   * feel.
    *
    * Consent is routable because `answerOperand` unwraps the audit record to
    * its `accepted` boolean; `is_checked` then does what it says.

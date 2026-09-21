@@ -143,6 +143,7 @@ describe("shows the product off", () => {
     // on `DEMO_FORM`.
     for (const wanted of [
       "picture_choice",
+      "poll",
       "opinion_scale",
       "rating",
       "file_upload",
@@ -173,13 +174,28 @@ describe("shows the product off", () => {
     //
     // Two is affordable because these two do not read as the same screen: one
     // is four drawings taken in at a glance, the other is four short phrases
-    // and a Continue button. A second picture grid, or a second row of chips,
-    // would be the thing this rule exists to stop.
-    const family = new Set(["single_select", "multi_select", "dropdown", "yes_no", "picture_choice"]);
+    // that answer back with a tally. A second picture grid, or a second plain
+    // row of chips, would be the thing this rule exists to stop.
+    //
+    // `poll` counts. It is a list you pick one from, whatever it does after.
+    const family = new Set(["single_select", "poll", "multi_select", "dropdown", "yes_no", "picture_choice"]);
     const lists = doc.blocks.filter((b) => family.has(b.type));
     expect(lists.length).toBeLessThanOrEqual(2);
     expect(lists.filter((b) => b.type === "picture_choice")).toHaveLength(1);
     expect(lists.filter((b) => b.type !== "picture_choice").length).toBeLessThanOrEqual(1);
+  });
+
+  it("shows the poll's results back, which is the only reason to use one", () => {
+    // A poll with `showResults` off is a single select wearing a different
+    // name, and this form is where the block is being demonstrated.
+    const polls = doc.blocks.filter((b) => b.type === "poll");
+    expect(polls).toHaveLength(1);
+    for (const poll of polls) {
+      expect(poll.showResults, `${poll.ref} collects a poll and shows nobody`).toBe(true);
+      // The floor stays low here on purpose: a demo that never reaches it is
+      // a demo of a single select.
+      expect(poll.minResponsesToReveal).toBeLessThanOrEqual(3);
+    }
   });
 
   it("never asks for an answer a respondent could get stuck on", () => {
