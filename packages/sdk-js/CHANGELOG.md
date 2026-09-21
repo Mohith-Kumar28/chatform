@@ -60,6 +60,20 @@ types that could not represent what the API was already sending:
   publish. `forms.list()` likewise hides drafts unless you pass
   `status: "draft"` or `"all"`.
 
+### Reads both list envelopes
+
+`/v1/templates`, `/v1/webhooks`, `/v1/forms/{id}/versions` and
+`/v1/forms/{id}/integrations` used to answer a bare array and now answer
+`{data, has_more, next_cursor}` like every other list. This version reads either,
+so it works against a deployment on either side of that change, and keeps
+returning an array from `list()` for all four: they are bounded, so there is no
+cursor for a caller to carry.
+
+**If you are on 0.1.1, one method breaks against the updated API**:
+`webhooks.list()` returns the envelope object rather than an array. Nothing else
+does — `exports.list()` already unwrapped `data`, and every other method is
+unaffected. Upgrading to 0.2.0 fixes it.
+
 ### Internal
 
 - `HttpClient` gained a multipart arm for `knowledge.upload`, which leaves
