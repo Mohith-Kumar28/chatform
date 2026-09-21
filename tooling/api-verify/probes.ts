@@ -203,7 +203,12 @@ export async function runProbes(client: ApiClient, formId: string, responseId: s
       .reduce((n, [, ops]) => n + Object.keys(ops).filter((m) => ["get", "post", "put", "patch", "delete"].includes(m)).length, 0);
     const words: Record<string, number> = { "forty-three": 43, "sixty-nine": 69 };
     const claimed = claim ? words[claim[2]] : undefined;
-    log(claimed === actual, `scopes.mdx endpoint count matches the spec (says ${claim?.[2]}, is ${actual})`);
+    /**
+     * No claim is the right answer. A hand-written count is stale the day an
+     * endpoint is added, so the page having no number to be wrong about is a
+     * pass rather than a gap.
+     */
+    log(!claim || claimed === actual, claim ? `scopes.mdx endpoint count matches the spec (says ${claim[2]}, is ${actual})` : `scopes.mdx states no endpoint count to go stale (there are ${actual})`);
     if (claim && claimed !== actual) {
       out.push({
         severity: "low",

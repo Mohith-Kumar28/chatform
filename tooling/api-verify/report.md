@@ -1,6 +1,6 @@
-# API verification run `mubay3y8pxvt`
+# API verification run `mubbpl6efimj`
 
-Target: `https://api.chatform.in` (production). 2026-09-21T13:52:12.079Z
+Target: `https://api.chatform.in` (production). 2026-09-21T14:13:20.417Z
 
 ## Coverage
 
@@ -16,7 +16,7 @@ Target: `https://api.chatform.in` (production). 2026-09-21T13:52:12.079Z
 
 Response checking: **22** verified against a schema the spec declares, **20** against a hand-written expectation, **27** not checked.
 
-Latency across 75 calls: p50 236ms, p95 6578ms, max 19040ms.
+Latency across 75 calls: p50 332ms, p95 5571ms, max 16601ms.
 
 ## Findings
 
@@ -132,32 +132,6 @@ So the one artifact a developer must compose to build a form programmatically is
 
 Guessing against the linter is what this run did, and it took three rounds. Two of the linter's messages were excellent (it named the option id to use, and explained that an ending rule pinned to a question can never fire). The third, for an `endings[].requirements` entry given as a string rather than `{id, label, when}`, was `"Requirements: This is missing"` -- which never says what was expected.
 
-### 16 em dashes in the published API reference
-
-Severity: low.
-
-Two commits swept em dashes out of the product (`89c4ff7`, `9ef4be5`) and the developer surface was not in either. These strings are `summary` and `description` values on `/v1` routes, and they render onto the public reference pages at `chatform.in/docs/api/v1/*`. `apps/api/src/lib/guards.ts:289` ships one inside a live error message, and `apps/api/src/routes/v1/meta.ts:64` ships one inside a response body, where `GET /v1/blocks/{type}` returns `answered_by: "matched exactly — never sent to a model"`.
-
-- `GET /v1/forms/{id} (summary)`
-- `DELETE /v1/forms/{id} (summary)`
-- `POST /v1/templates/{slug}/use (description)`
-- `GET /v1/forms/{id}/versions (description)`
-- `POST /v1/forms/{id}/versions/{version}/restore (description)`
-- `POST /v1/ai/generate-form (description)`
-- `POST /v1/ai/edit-form (description)`
-- `POST /v1/ai/clarify-form (description)`
-- `PUT /v1/forms/{id}/integrations/spreadsheet (description)`
-- `POST /v1/webhooks (summary)`
-- `GET /v1/files/{id} (description)`
-- `POST /v1/sessions/{sid}/uploads/intent (summary)`
-- ...and 4 more
-
-### `docs/scopes.mdx` states an endpoint count that is out of date
-
-Severity: low.
-
-The page says "Twenty-one of the forty-three `/v1` endpoints accept a publishable key". There are now **69**. A hand-written count goes stale on the next endpoint; deriving it in `tooling/gen-api-docs.ts` would keep it honest.
-
 ### A form you just created is invisible through both documented read paths
 
 Severity: high.
@@ -175,72 +149,72 @@ Both have explanations and neither is discoverable. `GET /v1/forms/{id}` returns
 
 | Operation | Status | Expected | Check | Outcome | ms |
 | --- | --- | --- | --- | --- | --- |
-| `DELETE /v1/forms/{id}` | 200 | 200/204 | unchecked | pass | 986 |
-| `DELETE /v1/forms/{id}/integrations/spreadsheet` | 200 | 200/204/404 | unchecked | pass | 168 |
-| `DELETE /v1/forms/{id}/knowledge/{sourceId}` | 200 | 200/204 | schema-verified | pass | 821 |
-| `DELETE /v1/responses/{id}/answers/{ref}` | 200 | 200/204 | unchecked | pass | 214 |
-| `DELETE /v1/webhooks/{id}` | 200 | 200/204 | unchecked | pass | 212 |
-| `GET /v1/blocks` | 200 | 200 | shape-asserted | pass | 226 |
-| `GET /v1/blocks/{type}` | 200 | 200 | shape-asserted | pass | 138 |
-| `GET /v1/chat/sessions/{sid}` | 200 | 200 | unchecked | pass | 220 |
-| `GET /v1/chat/sessions/{sid}/events` | 200 | 200 | unchecked | pass | 302 |
-| `GET /v1/events` | 200 | 200 | shape-asserted | pass | 144 |
-| `GET /v1/exports` | 200 | 200 | unchecked | pass | 149 |
-| `GET /v1/exports/{id}` | 200 | 200 | schema-verified | pass | 155 |
-| `GET /v1/files/{id}` | 200 | 200 | schema-verified | pass | 1155 |
-| `GET /v1/forms` | 200 | 200 | shape-asserted | pass | 154 |
-| `GET /v1/forms/{id}` | 200 | 200 | shape-asserted | pass | 528 |
-| `GET /v1/forms/{id}/analytics` | 200 | 200 | shape-asserted | pass | 166 |
-| `GET /v1/forms/{id}/followup-analytics` | 200 | 200 | shape-asserted | pass | 229 |
-| `GET /v1/forms/{id}/integrations` | 200 | 200 | schema-verified | pass | 178 |
-| `GET /v1/forms/{id}/knowledge` | 200 | 200 | schema-verified | pass | 161 |
-| `GET /v1/forms/{id}/responses` | 200 | 200 | shape-asserted | pass | 154 |
-| `GET /v1/forms/{id}/versions` | 200 | 200 | schema-verified | pass | 323 |
-| `GET /v1/forms/{id}/versions/{version}` | 200 | 200 | shape-asserted | pass | 172 |
-| `GET /v1/me` | 200 | 200 | shape-asserted | pass | 1485 |
-| `GET /v1/responses/{id}` | 200 | 200 | shape-asserted | pass | 272 |
-| `GET /v1/responses/{id}/next` | 200 | 200 | unchecked | pass | 188 |
-| `GET /v1/sessions/{sid}` | 200 | 200 | unchecked | pass | 196 |
-| `GET /v1/sessions/{sid}/events` | 200 | 200 | unchecked | pass | 150 |
-| `GET /v1/templates` | 200 | 200 | schema-verified | pass | 154 |
-| `GET /v1/templates/{slug}` | 200 | 200 | schema-verified | pass | 158 |
-| `GET /v1/webhooks` | 200 | 200 | schema-verified | pass | 1045 |
-| `GET /v1/webhooks/{id}/deliveries` | 200 | 200 | unchecked | pass | 155 |
-| `POST /v1/ai/clarify-form` | 200 | 200 | schema-verified | pass | 2161 |
-| `POST /v1/ai/edit-form` | 200 | 200/422 | shape-asserted | pass | 4198 |
-| `POST /v1/ai/generate-form` | 200 | 200 | schema-verified | pass | 6578 |
-| `POST /v1/chat/sessions/{sid}/actions` | 200 | 200/400/409 | unchecked | pass | 19040 |
-| `POST /v1/chat/sessions/{sid}/auth/google` | 400 | 400/401/403/409/422 | unchecked | negative-only | 159 |
-| `POST /v1/chat/sessions/{sid}/auth/phone/token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 146 |
-| `POST /v1/chat/sessions/{sid}/messages` | 200 | 200/202 | unchecked | pass | 11004 |
-| `POST /v1/chat/sessions/{sid}/token/rotate` | 200 | 200 | unchecked | pass | 549 |
-| `POST /v1/chat/sessions/{sid}/verify/phone-token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 146 |
-| `POST /v1/forms` | 201 | 200/201 | shape-asserted | pass | 172 |
-| `POST /v1/forms/{id}/chat/sessions` | 200 | 200/201 | schema-verified | pass | 11350 |
-| `POST /v1/forms/{id}/exports` | 202 | 200/201/202 | schema-verified | pass | 1164 |
-| `POST /v1/forms/{id}/knowledge/crawl` | 200 | 200/201/202 | schema-verified | pass | 1715 |
-| `POST /v1/forms/{id}/knowledge/link` | 200 | 200/201 | schema-verified | pass | 1958 |
-| `POST /v1/forms/{id}/knowledge/text` | 200 | 200/201 | schema-verified | pass | 1036 |
-| `POST /v1/forms/{id}/knowledge/upload` | 200 | 200/201 | schema-verified | pass | 2833 |
-| `POST /v1/forms/{id}/publish` | 200 | 200/201 | shape-asserted | pass | 224 |
-| `POST /v1/forms/{id}/responses` | 201 | 200/201 | shape-asserted | pass | 236 |
-| `POST /v1/forms/{id}/sessions` | 200 | 200/201 | schema-verified | pass | 4578 |
-| `POST /v1/forms/{id}/unpublish` | 200 | 200/204 | unchecked | pass | 194 |
-| `POST /v1/forms/{id}/versions/{version}/restore` | 200 | 200 | shape-asserted | pass | 347 |
-| `POST /v1/responses/{id}/abandon` | 200 | 200/204 | unchecked | pass | 2385 |
-| `POST /v1/responses/{id}/answers` | 200 | 200 | unchecked | pass | 250 |
-| `POST /v1/responses/{id}/complete` | 200 | 200 | shape-asserted | pass | 1121 |
-| `POST /v1/sessions/{sid}/actions` | 200 | 200/400/409 | unchecked | pass | 10774 |
-| `POST /v1/sessions/{sid}/auth/google` | 400 | 400/401/403/409/422 | unchecked | negative-only | 158 |
-| `POST /v1/sessions/{sid}/auth/phone/token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 164 |
-| `POST /v1/sessions/{sid}/messages` | 200 | 200/202 | unchecked | pass | 5897 |
-| `POST /v1/sessions/{sid}/token/rotate` | 200 | 200 | unchecked | pass | 173 |
-| `POST /v1/sessions/{sid}/uploads/intent` | 200 | 200/201 | schema-verified | pass | 197 |
-| `POST /v1/sessions/{sid}/uploads/{fileId}/confirm` | 200 | 200/201 | schema-verified | pass | 4854 |
-| `POST /v1/sessions/{sid}/verify/phone-token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 162 |
-| `POST /v1/templates/{slug}/use` | 200 | 200/201 | shape-asserted | pass | 220 |
-| `POST /v1/webhooks` | 201 | 200/201 | shape-asserted | pass | 221 |
-| `POST /v1/webhooks/{id}/deliveries/{deliveryId}/replay` | 200 | 200/201/202 | unchecked | pass | 1242 |
-| `PUT /v1/forms/{id}/doc` | 200 | 200 | shape-asserted | pass | 221 |
-| `PUT /v1/forms/{id}/integrations/spreadsheet` | 200 | 200/201/402 | schema-verified | pass | 306 |
-| `PUT /v1/sessions/{sid}/uploads/{fileId}` | 200 | 200/201/204 | schema-verified | pass | 1202 |
+| `DELETE /v1/forms/{id}` | 200 | 200/204 | unchecked | pass | 172 |
+| `DELETE /v1/forms/{id}/integrations/spreadsheet` | 200 | 200/204/404 | unchecked | pass | 201 |
+| `DELETE /v1/forms/{id}/knowledge/{sourceId}` | 200 | 200/204 | schema-verified | pass | 2196 |
+| `DELETE /v1/responses/{id}/answers/{ref}` | 200 | 200/204 | unchecked | pass | 249 |
+| `DELETE /v1/webhooks/{id}` | 200 | 200/204 | unchecked | pass | 235 |
+| `GET /v1/blocks` | 200 | 200 | shape-asserted | pass | 332 |
+| `GET /v1/blocks/{type}` | 200 | 200 | shape-asserted | pass | 189 |
+| `GET /v1/chat/sessions/{sid}` | 200 | 200 | unchecked | pass | 683 |
+| `GET /v1/chat/sessions/{sid}/events` | 200 | 200 | unchecked | pass | 403 |
+| `GET /v1/events` | 200 | 200 | shape-asserted | pass | 195 |
+| `GET /v1/exports` | 200 | 200 | unchecked | pass | 157 |
+| `GET /v1/exports/{id}` | 200 | 200 | schema-verified | pass | 243 |
+| `GET /v1/files/{id}` | 200 | 200 | schema-verified | pass | 158 |
+| `GET /v1/forms` | 200 | 200 | shape-asserted | pass | 221 |
+| `GET /v1/forms/{id}` | 200 | 200 | shape-asserted | pass | 254 |
+| `GET /v1/forms/{id}/analytics` | 200 | 200 | shape-asserted | pass | 347 |
+| `GET /v1/forms/{id}/followup-analytics` | 200 | 200 | shape-asserted | pass | 167 |
+| `GET /v1/forms/{id}/integrations` | 200 | 200 | schema-verified | pass | 248 |
+| `GET /v1/forms/{id}/knowledge` | 200 | 200 | schema-verified | pass | 198 |
+| `GET /v1/forms/{id}/responses` | 200 | 200 | shape-asserted | pass | 458 |
+| `GET /v1/forms/{id}/versions` | 200 | 200 | schema-verified | pass | 209 |
+| `GET /v1/forms/{id}/versions/{version}` | 200 | 200 | shape-asserted | pass | 226 |
+| `GET /v1/me` | 200 | 200 | shape-asserted | pass | 2086 |
+| `GET /v1/responses/{id}` | 200 | 200 | shape-asserted | pass | 206 |
+| `GET /v1/responses/{id}/next` | 200 | 200 | unchecked | pass | 311 |
+| `GET /v1/sessions/{sid}` | 200 | 200 | unchecked | pass | 206 |
+| `GET /v1/sessions/{sid}/events` | 200 | 200 | unchecked | pass | 197 |
+| `GET /v1/templates` | 200 | 200 | schema-verified | pass | 239 |
+| `GET /v1/templates/{slug}` | 200 | 200 | schema-verified | pass | 190 |
+| `GET /v1/webhooks` | 200 | 200 | schema-verified | pass | 474 |
+| `GET /v1/webhooks/{id}/deliveries` | 200 | 200 | unchecked | pass | 342 |
+| `POST /v1/ai/clarify-form` | 200 | 200 | schema-verified | pass | 3240 |
+| `POST /v1/ai/edit-form` | 200 | 200/422 | shape-asserted | pass | 3622 |
+| `POST /v1/ai/generate-form` | 200 | 200 | schema-verified | pass | 10236 |
+| `POST /v1/chat/sessions/{sid}/actions` | 200 | 200/400/409 | unchecked | pass | 16601 |
+| `POST /v1/chat/sessions/{sid}/auth/google` | 400 | 400/401/403/409/422 | unchecked | negative-only | 195 |
+| `POST /v1/chat/sessions/{sid}/auth/phone/token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 2377 |
+| `POST /v1/chat/sessions/{sid}/messages` | 200 | 200/202 | unchecked | pass | 8764 |
+| `POST /v1/chat/sessions/{sid}/token/rotate` | 200 | 200 | unchecked | pass | 180 |
+| `POST /v1/chat/sessions/{sid}/verify/phone-token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 242 |
+| `POST /v1/forms` | 201 | 200/201 | shape-asserted | pass | 227 |
+| `POST /v1/forms/{id}/chat/sessions` | 200 | 200/201 | schema-verified | pass | 6652 |
+| `POST /v1/forms/{id}/exports` | 202 | 200/201/202 | schema-verified | pass | 693 |
+| `POST /v1/forms/{id}/knowledge/crawl` | 200 | 200/201/202 | schema-verified | pass | 2688 |
+| `POST /v1/forms/{id}/knowledge/link` | 200 | 200/201 | schema-verified | pass | 1159 |
+| `POST /v1/forms/{id}/knowledge/text` | 200 | 200/201 | schema-verified | pass | 1104 |
+| `POST /v1/forms/{id}/knowledge/upload` | 200 | 200/201 | schema-verified | pass | 2669 |
+| `POST /v1/forms/{id}/publish` | 200 | 200/201 | shape-asserted | pass | 615 |
+| `POST /v1/forms/{id}/responses` | 201 | 200/201 | shape-asserted | pass | 342 |
+| `POST /v1/forms/{id}/sessions` | 200 | 200/201 | schema-verified | pass | 3633 |
+| `POST /v1/forms/{id}/unpublish` | 200 | 200/204 | unchecked | pass | 232 |
+| `POST /v1/forms/{id}/versions/{version}/restore` | 200 | 200 | shape-asserted | pass | 290 |
+| `POST /v1/responses/{id}/abandon` | 200 | 200/204 | unchecked | pass | 361 |
+| `POST /v1/responses/{id}/answers` | 200 | 200 | unchecked | pass | 290 |
+| `POST /v1/responses/{id}/complete` | 200 | 200 | shape-asserted | pass | 2710 |
+| `POST /v1/sessions/{sid}/actions` | 200 | 200/400/409 | unchecked | pass | 5528 |
+| `POST /v1/sessions/{sid}/auth/google` | 400 | 400/401/403/409/422 | unchecked | negative-only | 206 |
+| `POST /v1/sessions/{sid}/auth/phone/token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 2575 |
+| `POST /v1/sessions/{sid}/messages` | 200 | 200/202 | unchecked | pass | 5571 |
+| `POST /v1/sessions/{sid}/token/rotate` | 200 | 200 | unchecked | pass | 227 |
+| `POST /v1/sessions/{sid}/uploads/intent` | 200 | 200/201 | schema-verified | pass | 1452 |
+| `POST /v1/sessions/{sid}/uploads/{fileId}/confirm` | 200 | 200/201 | schema-verified | pass | 2814 |
+| `POST /v1/sessions/{sid}/verify/phone-token` | 400 | 400/401/403/409/422 | unchecked | negative-only | 218 |
+| `POST /v1/templates/{slug}/use` | 200 | 200/201 | shape-asserted | pass | 281 |
+| `POST /v1/webhooks` | 201 | 200/201 | shape-asserted | pass | 216 |
+| `POST /v1/webhooks/{id}/deliveries/{deliveryId}/replay` | 200 | 200/201/202 | unchecked | pass | 655 |
+| `PUT /v1/forms/{id}/doc` | 200 | 200 | shape-asserted | pass | 2710 |
+| `PUT /v1/forms/{id}/integrations/spreadsheet` | 200 | 200/201/402 | schema-verified | pass | 276 |
+| `PUT /v1/sessions/{sid}/uploads/{fileId}` | 200 | 200/201/204 | schema-verified | pass | 1244 |
