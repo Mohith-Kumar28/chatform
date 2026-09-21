@@ -375,7 +375,7 @@ export function Hero() {
                 href={DEMO_SLUG ? `/f/${DEMO_SLUG}` : "#how-it-works"}
                 {...(DEMO_SLUG ? { target: "_blank", rel: "noopener noreferrer" } : {})}
               >
-                {DEMO_SLUG ? "Try it yourself" : "See how it works"}
+                {DEMO_SLUG ? "Try Demo Form" : "See how it works"}
                 <ArrowRight className="size-4" strokeWidth={2.25} />
                 {/* The one thing about this link a screen reader cannot see
                     coming. Inside the label rather than an `aria-label`, which
