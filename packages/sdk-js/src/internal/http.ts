@@ -54,6 +54,13 @@ export class HttpClient {
        * which is always JSON-encoded.
        */
       raw?: { body: BodyInit; contentType: string };
+      /**
+       * A multipart body, whose `content-type` is deliberately left unset.
+       * `fetch` writes it, including the boundary it just generated; setting
+       * the header by hand drops the boundary and the request arrives
+       * unparseable.
+       */
+      form?: FormData;
       options?: RequestOptions;
     } = {},
   ): Promise<T> {
@@ -93,7 +100,7 @@ export class HttpClient {
       const res = await this.fetchImpl(url, {
         method,
         headers,
-        body: args.raw ? args.raw.body : args.body === undefined ? undefined : JSON.stringify(args.body),
+        body: args.form ?? (args.raw ? args.raw.body : args.body === undefined ? undefined : JSON.stringify(args.body)),
         signal: args.options?.signal,
       });
 
@@ -137,6 +144,10 @@ export class HttpClient {
   }
   put<T>(path: string, body?: unknown, options?: RequestOptions) {
     return this.request<T>("PUT", path, { body, options });
+  }
+  /** A multipart POST. See `form` on `request` for why the header is not set. */
+  postForm<T>(path: string, form: FormData, options?: RequestOptions) {
+    return this.request<T>("POST", path, { form, options });
   }
   /** PUT raw bytes — the upload step, which is not JSON. */
   putRaw<T>(path: string, body: BodyInit, contentType: string, options?: RequestOptions) {

@@ -1,5 +1,6 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
 import type { AnswerValue, SessionCreated, SessionEvent, TurnResult } from "../types/index.js";
+import { RespondentAuth } from "./respondent-auth.js";
 
 export interface CreateSessionOptions {
   hiddenFields?: Record<string, string>;
@@ -26,7 +27,12 @@ export type SessionAction =
   | "undo_screen_out";
 
 export class Sessions {
-  constructor(private readonly http: HttpClient) {}
+  /** Attaching a verified identity to a respondent, mid-conversation. */
+  readonly auth: RespondentAuth;
+
+  constructor(private readonly http: HttpClient) {
+    this.auth = new RespondentAuth(http);
+  }
 
   /**
    * Open a conversation.
@@ -92,5 +98,18 @@ export class Sessions {
       undefined,
       request,
     );
+  }
+
+  /**
+   * Settle a pending phone verification on a question.
+   *
+   * Deliberately not under `auth`. This attaches no identity and files nothing
+   * under a respondent: it proves the phone number *answering a question* is
+   * real, and the conversation moves on. It belongs beside
+   * `act(sessionId, "resend_code")`, which is the other half of the same
+   * moment.
+   */
+  verifyPhoneAnswer(sessionId: string, input: { idToken: string }, request?: RequestOptions) {
+    return this.http.post<{ ok: true }>(`/v1/sessions/${sessionId}/verify/phone-token`, input, request);
   }
 }

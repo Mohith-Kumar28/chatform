@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createBrowserClient, streamSession } from "@chatformhq/js/browser";
-import type { PublicBlock, PublicEnding, SessionEvent } from "@chatformhq/js/browser";
+import type { PublicBlock, PublicEnding, SessionAction, SessionEvent } from "@chatformhq/js/browser";
 
 /**
  * A conversation, as React state.
@@ -42,10 +42,30 @@ export interface UseChatformSession {
   validation: { ref: string; code: string; message: string } | null;
   error: Error | null;
   awaitingSubmit: boolean;
+  /**
+   * True when the form turned this respondent away rather than thanking them.
+   *
+   * Worth branching on. A screen-out is a terminal ending like any other, so a
+   * component that only checks `ending` renders "Thank you!" at somebody who
+   * was just told they do not qualify. `requirements` is what they would have
+   * needed, when the author wrote them down.
+   */
+  screenedOut: boolean;
+  requirements: string[];
   start: () => Promise<void>;
   send: (text: string) => Promise<void>;
   answer: (ref: string, value: unknown) => Promise<void>;
-  act: (action: "skip" | "stop" | "restart" | "submit", ref?: string) => Promise<void>;
+  /**
+   * Every action the runtime accepts, including `edit`, the verification pair
+   * (`resend_code`, `change_answer`) and `undo_screen_out`.
+   */
+  act: (action: SessionAction, ref?: string) => Promise<void>;
+  /** Another code to the same place, while a verification is pending. */
+  resendCode: () => Promise<void>;
+  /** Drop a pending verification and re-ask the question it belongs to. */
+  changeAnswer: () => Promise<void>;
+  /** Take a screen-out back and reopen the answer that caused it. */
+  undoScreenOut: () => Promise<void>;
 }
 
 export function useChatformSession(options: UseChatformSessionOptions): UseChatformSession {
@@ -163,7 +183,7 @@ export function useChatformSession(options: UseChatformSessionOptions): UseChatf
   );
 
   const act = useCallback(
-    async (action: "skip" | "stop" | "restart" | "submit", ref?: string) =>
+    async (action: SessionAction, ref?: string) =>
       turn(() => client.current!.sessions.act(sessionId!, action, ref)),
     [sessionId, turn],
   );
@@ -177,10 +197,15 @@ export function useChatformSession(options: UseChatformSessionOptions): UseChatf
     validation,
     error,
     awaitingSubmit,
+    screenedOut: ending?.kind === "screen_out",
+    requirements: ending?.requirements ?? [],
     start,
     send,
     answer,
     act,
+    resendCode: () => act("resend_code"),
+    changeAnswer: () => act("change_answer"),
+    undoScreenOut: () => act("undo_screen_out"),
   };
 }
 

@@ -1,8 +1,8 @@
 # Publishing the SDKs
 
-`@chatformhq/js` and `@chatformhq/react` are **published** — currently at
-`0.1.1`. Everything below is verified against the real registry and a real
-`pnpm pack`.
+`@chatformhq/js` and `@chatformhq/react` are **published**. The registry is at
+`0.1.1`; the repo is at `0.2.0` and not yet pushed. Everything below is verified
+against the real registry and a real `pnpm pack`.
 
 ## 1. The scope
 
@@ -102,9 +102,23 @@ node -e "import('@chatformhq/js').then(m => console.log(Object.keys(m)))"
 That import is the check that matters — it is exactly what the npm-published
 version would have failed.
 
+## Testing a tarball before you push it
+
+The React package depends on `@chatformhq/js@workspace:*`, and pnpm rewrites
+that to the real version on pack — a version that is not on the registry yet.
+So install **both tarballs in the same command**, or the React one fails to
+resolve its own dependency for a reason that has nothing to do with the package
+being wrong:
+
+```bash
+cd "$(mktemp -d)" && npm init -y >/dev/null && npm pkg set type=module
+npm i /path/to/chatformhq-js-0.2.0.tgz /path/to/chatformhq-react-0.2.0.tgz
+node --input-type=module -e "import('@chatformhq/js').then(m => console.log(Object.keys(m)))"
+```
+
 ## Versioning
 
-Both are at `0.1.1`, and the two are kept in lockstep. There is no changesets
+Both are at `0.2.0`, and the two are kept in lockstep. There is no changesets
 setup and no `version` script, so edit `version` in both `package.json` files by
 hand before publishing. A published version can never be reused, so a mistake
 costs a patch bump rather than a fix.

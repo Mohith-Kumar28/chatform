@@ -4,6 +4,9 @@ import { Blocks } from "./resources/forms.js";
 import { Files } from "./resources/files.js";
 import { streamSession, type StreamOptions } from "./session/stream.js";
 
+/** Every action the runtime accepts, for a UI that renders buttons for them. */
+export type { SessionAction, CreateSessionOptions } from "./resources/sessions.js";
+
 export { ChatformError } from "./internal/errors.js";
 export { streamSession, parseFrame } from "./session/stream.js";
 export * from "./types/index.js";
@@ -35,6 +38,11 @@ export function createBrowserClient(config: BrowserClientConfig) {
   const http = new HttpClient({ ...config, apiKey: config.publishableKey });
   const files = new Files(http);
   return {
+    /**
+     * Includes `sessions.auth` and `verifyPhoneAnswer`. Those belong here as
+     * much as on the server client: the Google and Firebase flows that mint
+     * the token run in the page, so this is where the token already is.
+     */
     sessions: new Sessions(http),
     blocks: new Blocks(http),
     /**
