@@ -311,7 +311,7 @@ export function FormNotFound() {
 
       <div className="text-muted-foreground mt-6 flex items-center gap-1.5 text-xs">
         <CalendarX2 className="size-3.5 shrink-0" strokeWidth={2} />
-        <span>Closed forms keep working and say so — this address matches no form at all.</span>
+        <span>Closed forms keep working and say so. This address matches no form at all.</span>
       </div>
 
       <a

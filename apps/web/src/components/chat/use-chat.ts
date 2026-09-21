@@ -873,7 +873,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
 
       on("rate_limited", (e) => {
         const { message } = JSON.parse((e as MessageEvent).data) as { message?: string };
-        setRateLimited(message ?? "You're going a bit fast — give it a moment.");
+        setRateLimited(message ?? "You're going a bit fast. Give it a moment.");
         settleTurn();
       });
 
@@ -1311,7 +1311,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
         if (res.ok) return;
 
         if (res.status === 429) {
-          setRateLimited("You're going a bit fast — give it a moment.");
+          setRateLimited("You're going a bit fast. Give it a moment.");
           settleTurn();
           settleEcho();
           return;

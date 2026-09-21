@@ -134,7 +134,7 @@ export function DateComposer({
 
         {open.length === 0 ? (
           <p className="px-1 py-4 text-center text-xs opacity-60">
-            No times left on that day — pick another one.
+            No times left on that day. Pick another one.
           </p>
         ) : (
           <div className="grid max-h-56 grid-cols-3 gap-1.5 overflow-y-auto">

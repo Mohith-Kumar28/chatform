@@ -76,7 +76,7 @@ export function FileUploadControl({
           name: file.name,
           size: file.size,
           state: "error",
-          error: `This one is ${formatSize(file.size)} — the limit is ${maxSizeMB}MB. Try a smaller version, or a screenshot instead.`,
+          error: `This one is ${formatSize(file.size)}, and the limit is ${maxSizeMB}MB. Try a smaller version, or a screenshot instead.`,
         });
         continue;
       }

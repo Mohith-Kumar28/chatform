@@ -1553,8 +1553,8 @@ function ReviewCard({
       */}
       <p className="text-sm font-medium">
         {counting
-          ? "That’s everything — tap any answer to change it, or hold it with Cancel below."
-          : "That’s everything — tap any answer to change it before you send."}
+          ? "That’s everything. Tap any answer to change it, or hold it with Cancel below."
+          : "That’s everything. Tap any answer to change it before you send."}
       </p>
 
       <ul className="space-y-0.5">
@@ -1715,7 +1715,7 @@ function StartOverButton({ onConfirm }: { onConfirm: () => void }) {
         }
       }}
       onBlur={() => setArmed(false)}
-      aria-label={armed ? "Confirm starting over — this clears your answers" : "Start over"}
+      aria-label={armed ? "Confirm starting over. This clears your answers" : "Start over"}
       className={cn(
         "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-opacity",
         armed
