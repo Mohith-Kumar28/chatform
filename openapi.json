@@ -13620,7 +13620,7 @@
           "v1"
         ],
         "summary": "Read a form: its public config, or the document behind it",
-        "description": "Without `view`, this answers the published form exactly as a respondent receives it. A form you have just created has no published version yet, so it answers 404 `not_published` until you publish it; pass `view=document` to read the working draft instead.",
+        "description": "Without `view`, this answers the published form exactly as a respondent receives it. A form with no published version has only a draft, so that is what comes back instead -- the same body as `view=document`, with `status` saying which you are looking at. Pass `view=document` to read the draft of a form that is already live.",
         "parameters": [
           {
             "name": "view",
@@ -13647,10 +13647,90 @@
         ],
         "responses": {
           "200": {
-            "description": "Form",
+            "description": "The published config, or the working draft when there is no published version",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "doc": {}
+                      },
+                      "required": [
+                        "id",
+                        "slug",
+                        "status",
+                        "doc"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "slug": {
+                          "type": "string"
+                        },
+                        "blocks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "ref": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "required": {
+                                "type": "boolean"
+                              },
+                              "imageKey": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "media": {}
+                            },
+                            "required": [
+                              "id",
+                              "ref",
+                              "type",
+                              "title",
+                              "required"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        }
+                      },
+                      "required": [
+                        "slug",
+                        "blocks"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  ]
+                }
               }
             }
           },

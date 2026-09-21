@@ -340,3 +340,23 @@ export const FormVersionView = z
     summary: z.string(),
   })
   .loose();
+
+/** The working draft, as `view=document` and as an unpublished form both answer. */
+export const FormDocumentView = z
+  .object({ id: z.string(), slug: z.string(), status: z.string(), doc: z.unknown() })
+  .loose();
+
+/** A published form's public projection: the same one a respondent receives. */
+export const PublicFormConfigView = z
+  .object({ slug: z.string(), blocks: z.array(PublicBlockView) })
+  .loose();
+
+/**
+ * What `GET /v1/forms/{id}` answers.
+ *
+ * Two shapes, and which one you get is in the request rather than a surprise:
+ * the public config for a published form, the working draft for one that has
+ * no published version yet or when `view=document` asks for it. `status` on
+ * the second is what tells them apart.
+ */
+export const FormReadView = z.union([FormDocumentView, PublicFormConfigView]);

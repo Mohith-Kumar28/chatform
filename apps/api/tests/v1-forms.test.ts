@@ -248,3 +248,63 @@ describe("delete", () => {
     expect((await api(`/v1/forms/${created.id}`, { method: "DELETE" })).status).toBe(404);
   });
 });
+
+/**
+ * The first thing anybody does after creating a form is read it back.
+ *
+ * Both documented read paths used to hide it: `GET /v1/forms/{id}` answers the
+ * *published* form, so a fresh draft fell through to "Form not found" said to
+ * the person holding the id, and `GET /v1/forms` defaulted to published-only so
+ * it was missing from the list too. Nothing was broken; it was just invisible.
+ */
+describe("a form you just created", () => {
+  it("is readable by id, and says it is a draft", async () => {
+    const created = (await (
+      await fetchApi("/v1/forms", {
+        method: "POST",
+        headers: { "x-api-key": key, "content-type": "application/json" },
+        body: JSON.stringify({ title: "Readable while still a draft" }),
+      })
+    ).json()) as { id: string };
+
+    const res = await fetchApi(`/v1/forms/${created.id}`, { headers: { "x-api-key": key } });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { id: string; status: string; doc: unknown };
+    expect(body.id).toBe(created.id);
+    expect(body.status).toBe("draft");
+    expect(body.doc).toBeTruthy();
+  });
+
+  it("appears in the list without having to ask for drafts", async () => {
+    const created = (await (
+      await fetchApi("/v1/forms", {
+        method: "POST",
+        headers: { "x-api-key": key, "content-type": "application/json" },
+        body: JSON.stringify({ title: "Listed while still a draft" }),
+      })
+    ).json()) as { id: string };
+
+    const list = (await (await fetchApi("/v1/forms", { headers: { "x-api-key": key } })).json()) as {
+      data: { id: string }[];
+    };
+    expect(list.data.map((f) => f.id)).toContain(created.id);
+  });
+
+  it("is still indistinguishable from nothing when it belongs to someone else", async () => {
+    const created = (await (
+      await fetchApi("/v1/forms", {
+        method: "POST",
+        headers: { "x-api-key": key, "content-type": "application/json" },
+        body: JSON.stringify({ title: "Not yours" }),
+      })
+    ).json()) as { id: string };
+
+    const other = await seedTenant("v1fdraft");
+    await subscribePro(other.orgId);
+    const otherKey = (await seedKey(other, "v1fdraftkey", { scopes: { form: ["read"] } })).raw;
+
+    const res = await fetchApi(`/v1/forms/${created.id}`, { headers: { "x-api-key": otherKey } });
+    expect(res.status).toBe(404);
+    expect((await res.json()).error.code).toBe("not_found");
+  });
+});

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { AnalyticsView, DeletedView, DocSavedView, FollowUpStatsView, FormSummaryView, OkView, Paged, PublishedView } from "../../lib/v1-schemas.js";
+import { AnalyticsView, DeletedView, DocSavedView, FollowUpStatsView, FormReadView, FormSummaryView, OkView, Paged, PublishedView } from "../../lib/v1-schemas.js";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../../lib/validator.js";
 import { apiError } from "../../lib/api-error.js";
@@ -121,9 +121,10 @@ formsV1Router.get(
     tags: ["v1"],
     summary: "Read a form: its public config, or the document behind it",
     description:
-      "Without `view`, this answers the published form exactly as a respondent receives it. A form you have " +
-      "just created has no published version yet, so it answers 404 `not_published` until you publish it; pass " +
-      "`view=document` to read the working draft instead.",
+      "Without `view`, this answers the published form exactly as a respondent receives it. A form with no " +
+      "published version has only a draft, so that is what comes back instead -- the same body as " +
+      "`view=document`, with `status` saying which you are looking at. Pass `view=document` to read the draft " +
+      "of a form that is already live.",
     parameters: [
       {
         name: "view",
@@ -134,7 +135,10 @@ formsV1Router.get(
       },
     ],
     responses: {
-      200: { description: "Form", content: { "application/json": { schema: resolver(z.unknown()) } } },
+      200: {
+        description: "The published config, or the working draft when there is no published version",
+        content: { "application/json": { schema: resolver(FormReadView) } },
+      },
       404: { description: "Not found, or not published and no `view=document` was asked for" },
     },
   }),
@@ -162,28 +166,31 @@ formsV1Router.get(
       .first<{ schema_json: string; slug: string }>();
     if (!row) {
       /**
-       * "Form not found" was a lie told to the person who had just created it.
+       * "Form not found" was a lie told to the person holding the id.
        *
-       * This query only matches a *published* form, so a draft fell through to
-       * a 404 that read as though the id were wrong. Ask again before saying
-       * so: if the form is there and simply unpublished, say that, and name the
-       * parameter that reads it. A form belonging to another organization still
-       * gets the indistinguishable `not_found`, which is the point of it.
+       * This query matches only a *published* form, so a form created a moment
+       * earlier fell through to a 404 that read as though the id were wrong.
+       * The summary above already promises "its public config, or the document
+       * behind it", and a draft has only the second of those, so that is what
+       * it answers with -- the same body as `view=document`, `status` saying
+       * which it is.
+       *
+       * Nothing can be relying on the old behaviour, because the old behaviour
+       * was a 404. A form belonging to another organization still gets the
+       * indistinguishable `not_found`, which is the whole point of it.
        */
       const draft = await c.env.DB.prepare(
-        `SELECT status FROM forms WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`,
+        `SELECT working_schema, slug, status FROM forms WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`,
       )
         .bind(id, orgId)
-        .first<{ status: string }>();
-      if (draft) {
-        return apiError(
-          c,
-          404,
-          "not_published",
-          `This form is ${draft.status} and has no published version to read. Add ?view=document to read the working draft, or publish it first.`,
-        );
-      }
-      return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+        .first<{ working_schema: string; slug: string; status: string }>();
+      if (!draft) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+      return c.json({
+        id,
+        slug: draft.slug,
+        status: draft.status,
+        doc: readFormDoc(JSON.parse(draft.working_schema)),
+      });
     }
 
     /**
