@@ -259,6 +259,7 @@ export function TypeFields({
       );
 
     case "single_select":
+    case "poll":
     case "multi_select":
     case "dropdown":
     case "picture_choice":
@@ -284,6 +285,28 @@ export function TypeFields({
               checked={block.allowOther}
               onChange={(v) => patch({ allowOther: v } as Partial<Block>)}
             />
+          )}
+          {block.type === "poll" && (
+            <>
+              <SwitchField
+                label="Show results to respondents"
+                checked={block.showResults}
+                onChange={(v) => patch({ showResults: v } as Partial<Block>)}
+              />
+              {/*
+                Only worth asking once results are shown at all. Off, this
+                question is a single select and the number below governs
+                nothing a respondent will ever see.
+              */}
+              {block.showResults && (
+                <NumberField
+                  label="Hide results until this many answers"
+                  value={block.minResponsesToReveal}
+                  min={1}
+                  onChange={(v) => patch({ minResponsesToReveal: v ?? 2 } as Partial<Block>, key("reveal"))}
+                />
+              )}
+            </>
           )}
           {block.type === "multi_select" && (
             <div className="grid grid-cols-2 gap-3">

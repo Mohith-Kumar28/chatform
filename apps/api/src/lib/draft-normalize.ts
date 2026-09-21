@@ -629,6 +629,7 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
       case "file_upload":
         return done(BlockSchema.parse({ ...base, type, accept: ["image/*", "application/pdf"], maxFiles: 1, maxSizeMB: 10 }));
       case "single_select":
+      case "poll":
       case "multi_select":
       case "dropdown":
       case "picture_choice": {
@@ -651,6 +652,16 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
         }
         if (type === "picture_choice") {
           return done(BlockSchema.parse({ ...base, type, options, multiSelect: false }));
+        }
+        /*
+         * A poll keeps the generator's defaults rather than taking anything
+         * from the draft: showing the split is the reason the model reached
+         * for this type at all, and the reveal floor is a privacy decision the
+         * author should make in the builder, not one a sentence in a prompt
+         * should be able to lower.
+         */
+        if (type === "poll") {
+          return done(BlockSchema.parse({ ...base, type, options }));
         }
         return done(BlockSchema.parse({ ...base, type, options, allowOther: false }));
       }

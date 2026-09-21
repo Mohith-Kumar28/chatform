@@ -53,6 +53,9 @@ export interface PublicBlock {
   labels?: { low?: string; high?: string };
   yesLabel?: string;
   noLabel?: string;
+  /** `poll` only: whether the tally is ever shown back, and the floor it is held until. */
+  showResults?: boolean;
+  minResponsesToReveal?: number;
   accept?: string[];
   maxFiles?: number;
   maxSizeMB?: number;
@@ -177,6 +180,7 @@ export function toPublicBlock(b: Block): PublicBlock {
       pub.buttonLabel = b.buttonLabel;
       break;
     case "single_select":
+    case "poll":
     case "multi_select":
     case "dropdown":
     case "picture_choice":
@@ -192,6 +196,10 @@ export function toPublicBlock(b: Block): PublicBlock {
       }
       if (b.type === "single_select" || b.type === "multi_select") {
         pub.allowOther = b.allowOther;
+      }
+      if (b.type === "poll") {
+        pub.showResults = b.showResults;
+        pub.minResponsesToReveal = b.minResponsesToReveal;
       }
       break;
     case "ranking":

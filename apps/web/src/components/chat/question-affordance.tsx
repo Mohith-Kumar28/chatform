@@ -154,6 +154,7 @@ function choicesFor(block: PublicBlock): Choice[] {
         { id: "no", label: block.noLabel ?? "No", value: false, key: "2" },
       ];
     case "single_select":
+    case "poll":
     case "dropdown":
     case "picture_choice":
     case "multi_select":
@@ -263,7 +264,14 @@ function AffordanceControls({
         </Affordance>
       );
 
+    /*
+     * A poll is a single select that answers back. Nothing about the choosing
+     * differs, which is the point: the bars arrive under the answer a moment
+     * later, from `poll_result`, and drawing anything here about results would
+     * be promising them before the vote is counted.
+     */
     case "single_select":
+    case "poll":
     case "dropdown":
       return (
         <Affordance>

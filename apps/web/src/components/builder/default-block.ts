@@ -44,6 +44,18 @@ export function defaultBlock(type: Block["type"], existingRefs: Set<string>): Bl
       return BlockSchema.parse({ ...base, type, title: "Are you interested?" });
     case "single_select":
       return BlockSchema.parse({ ...base, type, title: "Which one fits best?", options: [opt("Option one"), opt("Option two"), opt("Option three")] });
+    /*
+     * Required by default, unlike the other choice blocks.
+     *
+     * A poll that can be skipped shows the skipper a tally they did not
+     * contribute to, which is the one interaction this block cannot make sense
+     * of: the deal is that you answer and then you get to see.
+     */
+    case "poll":
+      return BlockSchema.parse({
+        ...base, type, required: true, title: "Which one do you reach for?",
+        options: [opt("Option one"), opt("Option two"), opt("Option three")],
+      });
     case "multi_select":
       return BlockSchema.parse({ ...base, type, title: "Select all that apply", options: [opt("Option one"), opt("Option two"), opt("Option three")] });
     case "dropdown":

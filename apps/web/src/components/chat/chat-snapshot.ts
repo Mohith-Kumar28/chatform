@@ -24,6 +24,7 @@ import type { ChatState } from "./chat-client";
 export type ScreenState = Pick<
   ChatState,
   | "messages"
+  | "pollResults"
   | "question"
   | "review"
   | "submitted"
@@ -62,6 +63,8 @@ export interface ChatSnapshotV1 {
   capturedAt: number;
   config: PublicFormConfig;
   messages: ScreenState["messages"];
+  /** Optional: a report filed before polls existed, or a form with none, has no bars to replay. */
+  pollResults?: ScreenState["pollResults"];
   question: ScreenState["question"];
   review: ScreenState["review"];
   ending: ScreenState["ending"];
@@ -94,6 +97,7 @@ export function captureSnapshot(config: PublicFormConfig, chat: ChatState): Chat
     config,
     state: {
       messages: chat.messages.map((m) => ({ ...m, streaming: false, optimistic: false })),
+      pollResults: chat.pollResults,
       question: chat.question,
       review: chat.review,
       submitted: chat.submitted,
@@ -148,6 +152,7 @@ export function toChatState(snapshot: ChatSnapshot): ChatState {
         { ...snapshot.state, closed: snapshot.state.closed ?? null }
       : {
           messages: snapshot.messages,
+          pollResults: snapshot.pollResults ?? {},
           question: snapshot.question,
           review: snapshot.review,
           ending: snapshot.ending,

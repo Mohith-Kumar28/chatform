@@ -17,6 +17,7 @@ export const BLOCK_TYPES = [
   "yes_no",
   "single_select",
   "multi_select",
+  "poll",
   "dropdown",
   "picture_choice",
   "rating",
@@ -458,6 +459,39 @@ export const Block = z.discriminatedUnion("type", [
     minSelections: z.number().int().min(0).max(100).default(1),
     maxSelections: z.number().int().min(1).max(100).default(10),
     allowOther: z.boolean().default(false),
+  }),
+  /**
+   * The one question that answers back.
+   *
+   * A poll is a `single_select` that shows the tally the moment it is
+   * answered, which is not a cosmetic difference: it is the only block in the
+   * product that gives the respondent something for answering rather than
+   * taking something from them. That is also its cost. The counts are real
+   * answers from real people, so a poll on a form with four responses tells a
+   * respondent what those four people said, and `minResponsesToReveal` is
+   * what stops a small audience being identifiable by the person who just
+   * made it smaller.
+   */
+  z.object({
+    ...BlockBase,
+    type: z.literal("poll"),
+    options: z.array(Option).min(2).max(20),
+    /**
+     * Off makes this an ordinary single select that nobody can tell apart
+     * from one, which is the point: an author who wants the question without
+     * the crowd effect should not have to swap the block and lose the answers
+     * already collected under this ref.
+     */
+    showResults: z.boolean().default(true),
+    /**
+     * How many answers there must be before anybody is shown the split.
+     *
+     * Two, not one: at one the only answer on screen is the respondent's own,
+     * which tells them nothing and tells the next person exactly what the
+     * first one said. Below this the respondent is told the count so far and
+     * moves on.
+     */
+    minResponsesToReveal: z.number().int().min(1).max(1000).default(2),
   }),
   z.object({
     ...BlockBase,

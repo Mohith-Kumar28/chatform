@@ -1569,3 +1569,36 @@ export const feedbackEmbeddings = sqliteTable("feedback_embeddings", {
   vector: text("vector").notNull(),
   createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
 });
+
+/**
+ * How many people picked each option of a `poll` block.
+ *
+ * A counter table rather than a `GROUP BY` over `responses`, because this is
+ * read on the respondent's path: every poll answer is followed immediately by
+ * the tally, so the cost of reading it is paid once per answer by the person
+ * waiting. Counting from the responses table would mean scanning a form's
+ * whole history and extracting JSON to show four bars.
+ *
+ * Kept honest by the session: it increments on an answer and decrements the
+ * option a respondent moves away from, so changing your mind moves the bar
+ * instead of adding to both. Previews and test sessions never write here, for
+ * the same reason they never write a response row: an author trying their own
+ * form must not be able to stuff their own poll.
+ *
+ * Rebuildable. If it ever drifts, the responses table is the source of truth
+ * and this is a cache that can be recomputed from it.
+ */
+export const pollTallies = sqliteTable(
+  "poll_tallies",
+  {
+    formId: text("form_id")
+      .notNull()
+      .references(() => forms.id, { onDelete: "cascade" }),
+    /** The block's ref, not its id: a ref survives republishing, a block id does not. */
+    blockRef: text("block_ref").notNull(),
+    optionId: text("option_id").notNull(),
+    count: integer("count").notNull().default(0),
+    updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [primaryKey({ columns: [t.formId, t.blockRef, t.optionId] })],
+);

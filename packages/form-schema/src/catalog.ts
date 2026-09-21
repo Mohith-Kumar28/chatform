@@ -103,6 +103,14 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
   },
 
   single_select: { summary: "Pick one from a short list.", needsOptions: true },
+  poll: {
+    summary:
+      "Pick one, then see how everybody else answered. Use it when showing the split is the point; use single_select when it is not.",
+    needsOptions: true,
+    configKeys: ["showResults", "minResponsesToReveal"],
+    config:
+      "showResults=false to collect the answer without ever showing the tally back; minResponsesToReveal=<n> to hold the split until n people have answered (default 2, so nobody is shown an audience of one)",
+  },
   multi_select: { summary: "Pick any number from a list.", needsOptions: true },
   dropdown: { summary: "Pick one from a long list: a country, a plan.", needsOptions: true },
   picture_choice: {
@@ -310,6 +318,7 @@ export const BLOCK_PRESENTATION: Record<BlockType, BlockPresentation> = {
 
   yes_no: { label: "Yes / No", group: "Choice", tone: "choice" },
   single_select: { label: "Single select", group: "Choice", tone: "choice" },
+  poll: { label: "Poll", group: "Choice", tone: "choice" },
   multi_select: { label: "Multi select", group: "Choice", tone: "choice" },
   dropdown: { label: "Dropdown", group: "Choice", tone: "choice" },
   picture_choice: { label: "Picture choice", group: "Choice", tone: "choice" },

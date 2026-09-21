@@ -34,6 +34,7 @@ import { isSendablePhone } from "./composers/phone-value";
 import { forgetValue, suggestionsFor } from "./respondent-profile";
 import { QuestionAffordance } from "./question-affordance";
 import { QuestionMedia } from "./question-media";
+import { PollResultCard } from "./poll-result";
 import { ChatBoot } from "./chat-boot";
 import { FormClosed } from "./form-closed";
 import { FeedbackDialog } from "./feedback-dialog";
@@ -600,6 +601,15 @@ export function ChatSurface({
               />
               {m.id === mediaMessageId && description && !chat.ending && !chat.auth && !chat.verify && (
                 <QuestionDescription markdown={description} className="mt-2 max-w-[90%] px-1 opacity-85" />
+              )}
+              {/*
+                The poll's bars, under the answer they belong to rather than as
+                a message of their own: they are not something the form said,
+                and a respondent scrolling back should find them attached to
+                what they picked.
+              */}
+              {m.answeredRef && chat.pollResults[m.answeredRef] && (
+                <PollResultCard result={chat.pollResults[m.answeredRef]!} />
               )}
             </div>
           ))}

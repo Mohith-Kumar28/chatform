@@ -70,6 +70,28 @@ export type ServerEvent =
   | { type: "upload_request"; data: { ref: string; accept: string[]; maxFiles: number; maxSizeMB: number } }
   | { type: "upload_received"; data: { ref: string; fileId: string; filename: string } }
   | { type: "answer_recorded"; data: { ref: string; pct: number } }
+  /**
+   * The split on a poll, sent once, immediately after the vote that earned it.
+   *
+   * Pushed rather than fetched because the respondent is owed it the instant
+   * they answer, and because the session already knows the numbers: a second
+   * request would be a round trip to learn what the first one just wrote.
+   *
+   * `counts` is absent until `total` reaches the block's reveal floor. The
+   * total is sent either way, so a form that cannot show the split yet can
+   * still say how many people are ahead of them rather than going quiet.
+   */
+  | {
+      type: "poll_result";
+      data: {
+        ref: string;
+        total: number;
+        /** This respondent's own option, so the card can mark it without keeping its own books. */
+        picked?: string;
+        /** Every option with its count, labels included, or absent below the reveal floor. */
+        options?: { id: string; label: string; count: number }[];
+      };
+    }
   | { type: "branch_jump"; data: { from: string; to: string } }
   | { type: "escalate_ui"; data: EscalatePayload }
   | {

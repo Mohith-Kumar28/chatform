@@ -330,6 +330,7 @@ export function validateAnswer(block: Block, input: unknown): ValidationResult {
     }
 
     case "single_select":
+    case "poll":
     case "dropdown": {
       const option = block.options.find((o) => o.id === raw || o.label.toLowerCase() === String(raw).toLowerCase());
       if (!option) return fail("invalid_option", "Please pick one of the available options.");

@@ -56,6 +56,7 @@ import {
 import { buildAgentTools, nextStepAfter, resumeAfterChange, revisionOf, type ToolOutcome } from "./agent-tools.js";
 import { knowledgeStore, knowledgeAvailable } from "../lib/knowledge/index.js";
 import { getEntitlements } from "../lib/entitlements.js";
+import { movePollVote, readPollTally } from "../lib/poll-tallies.js";
 import { clampForRuntime } from "../lib/doc-entitlements.js";
 import { can } from "@repo/entitlements";
 import { meter } from "../lib/entitlements.js";
@@ -2758,12 +2759,15 @@ export class SessionDO extends DurableObject<Bindings> {
       return this.beginVerification(block, String(result.value), channel, echoId);
     }
 
+    /** What they had picked before this answer, which only a poll's tally cares about. */
+    let previousValue: unknown;
     if (result.value !== undefined) {
       // Counted once per question, not once per answer. Re-answering after an
       // edit used to add a second tally for the same ref, which put the
       // progress bar past 100% and told `finalize` that more questions were
       // answered than the form has.
       if (this.state.answers[block.ref] === undefined) this.collectedCount += 1;
+      previousValue = this.state.answers[block.ref];
       this.state.answers[block.ref] = result.value;
     }
     this.invalidCounts.delete(block.ref);
@@ -2790,7 +2794,19 @@ export class SessionDO extends DurableObject<Bindings> {
     await this.emit("answer_recorded", { ref: block.ref, pct: this.progressPct(), messageId: answerMessageId });
 
     // projection write (async, non-blocking for the stream)
-    this.ctx.waitUntil(this.projectAnswer(block, result.value));
+    this.ctx.waitUntil(this.projectAnswer(block, result.value, previousValue));
+
+    /*
+     * The poll's split, and the one thing in this method that is deliberately
+     * awaited rather than backgrounded.
+     *
+     * The respondent has just been promised a number. Writing their vote in
+     * `waitUntil` and reading the tally at the same time is a race they would
+     * lose about half the time, and losing it means being shown a total that
+     * does not include the answer they are looking at. One D1 round trip, on
+     * the one block type that asks for it.
+     */
+    if (block.type === "poll") await this.emitPollResult(block, previousValue, result.value);
 
     await this.advanceTo(next, block.ref);
     return { accepted: true };
@@ -3804,9 +3820,13 @@ export class SessionDO extends DurableObject<Bindings> {
      * the `edit` action.
      */
     if (this.state.answers[target.ref] !== undefined) {
+      const retracted = this.state.answers[target.ref];
       delete this.state.answers[target.ref];
       this.collectedCount = Math.max(0, this.collectedCount - 1);
       this.ctx.waitUntil(this.unprojectAnswer(target.ref));
+      // A retracted poll vote leaves the tally, or the bar keeps a choice the
+      // respondent has just taken back.
+      this.ctx.waitUntil(this.tallyPollVote(target, retracted, undefined));
     }
 
     /*
@@ -4249,7 +4269,7 @@ export class SessionDO extends DurableObject<Bindings> {
     }
   }
 
-  private async projectAnswer(block: Block, value: unknown): Promise<void> {
+  private async projectAnswer(block: Block, value: unknown, previous?: unknown): Promise<void> {
     try {
       if (!this.meta) return;
       if (this.meta.formVersionId === "preview") return; // preview sessions never project to D1
@@ -4261,6 +4281,78 @@ export class SessionDO extends DurableObject<Bindings> {
         blockRef: block.ref,
         ...errorInfo(err),
       });
+    }
+  }
+
+  /**
+   * Cast the vote, read the room, tell the respondent.
+   *
+   * The options nobody picked are filled in as zero here rather than in the
+   * client: the tally table only holds rows for options that have been chosen,
+   * and a bar chart missing its empty bars reads as a different question.
+   */
+  private async emitPollResult(block: Block, previous: unknown, value: unknown): Promise<void> {
+    if (block.type !== "poll" || !this.meta) return;
+    await this.tallyPollVote(block, previous, value);
+    if (!block.showResults) return;
+    try {
+      const tally = await readPollTally(this.env, this.meta.formId, block.ref);
+      await this.emit("poll_result", {
+        ref: block.ref,
+        total: tally.total,
+        ...(typeof value === "string" ? { picked: value } : {}),
+        /*
+         * Held back below the floor: at one answer the only vote on screen is
+         * the respondent's own, which tells them nothing and tells the next
+         * person exactly what the last one said.
+         *
+         * The labels travel with the counts so the card is self-contained. The
+         * alternative is the client joining ids against a block it may not
+         * have in hand, which is the sort of lookup that renders an empty
+         * chart the day a question is edited between two answers.
+         */
+        ...(tally.total >= block.minResponsesToReveal
+          ? {
+              options: block.options.map((option) => ({
+                id: option.id,
+                label: option.label,
+                count: tally.counts[option.id] ?? 0,
+              })),
+            }
+          : {}),
+      });
+    } catch (err) {
+      // No numbers is a worse answer than wrong numbers is a worse form. The
+      // vote is recorded either way; the respondent simply moves on.
+      console.error("poll_result_failed", { blockRef: block.ref, ...errorInfo(err) });
+    }
+  }
+
+  /**
+   * Move this session's vote on a poll, if the block is one.
+   *
+   * Called with both the old value and the new, so the three things that can
+   * happen to a vote are one operation: cast it, move it to another option, or
+   * take it back. An increment on one path and a decrement on another is how a
+   * counter ends up disagreeing with the answers it is supposed to summarise.
+   *
+   * Test sessions are excluded here as well as in `projectAnswer`, which skips
+   * only previews. A test response is a real row in `responses` and is filtered
+   * out of the author's own analytics; it must not be able to move a bar that
+   * every respondent after it will see.
+   */
+  private async tallyPollVote(block: Block, previous: unknown, value: unknown): Promise<void> {
+    if (block.type !== "poll") return;
+    if (!this.meta || this.meta.isTest === true || this.meta.formVersionId === "preview") return;
+    const from = typeof previous === "string" ? previous : null;
+    const to = typeof value === "string" ? value : null;
+    if (from === to) return;
+    try {
+      await movePollVote(this.env, { formId: this.meta.formId, blockRef: block.ref, from, to });
+    } catch (err) {
+      // A lost vote is a wrong bar, not a lost answer: the response row is
+      // already written and the tally can be rebuilt from it.
+      console.error("poll_tally_failed", { blockRef: block.ref, ...errorInfo(err) });
     }
   }
 

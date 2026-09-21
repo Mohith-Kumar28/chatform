@@ -58,6 +58,25 @@ export interface QuestionState {
   prefill?: Record<string, string>;
 }
 
+/**
+ * What a poll answered back, keyed by the question's ref.
+ *
+ * Kept for the whole session rather than shown once and dropped: the bars sit
+ * under the answer in the transcript, and a respondent who scrolls up to check
+ * what they picked should find the numbers still there.
+ *
+ * `counts` is absent when the form is holding the split back until enough
+ * people have answered. That is a different state from "nobody has answered",
+ * which is why the total is always here.
+ */
+export interface PollResult {
+  total: number;
+  /** This respondent's own option id, so the card can mark it. */
+  picked?: string;
+  /** Every option with its count. Absent while the split is being held back. */
+  options?: { id: string; label: string; count: number }[];
+}
+
 export interface EndingState {
   title: string;
   bodyMd: string;
@@ -346,6 +365,7 @@ async function refusalCode(res: Response): Promise<string | null> {
 
 export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId, existingSession, onRestart }: UseChatOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [pollResults, setPollResults] = useState<Record<string, PollResult>>({});
   const [question, setQuestion] = useState<QuestionState | null>(null);
   /** The question on screen, for callbacks that must stay stable across renders. */
   const currentQuestionRef = useRef<string | null>(null);
@@ -674,6 +694,26 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
        * earlier turn had failed validation, and pinned the pencil to the wrong
        * bubble.
        */
+      /**
+       * The split on a poll, pushed once when the vote lands.
+       *
+       * Stored by ref, not appended as a message: it belongs to the question
+       * it answers, and a re-answer has to replace the old numbers rather than
+       * leave two sets of bars in the transcript disagreeing with each other.
+       */
+      on("poll_result", (e) => {
+        const data = JSON.parse((e as MessageEvent).data) as {
+          ref: string;
+          total: number;
+          picked?: string;
+          options?: { id: string; label: string; count: number }[];
+        };
+        setPollResults((prev) => ({
+          ...prev,
+          [data.ref]: { total: data.total, picked: data.picked, options: data.options },
+        }));
+      });
+
       on("answer_recorded", (e) => {
         const { ref, messageId } = JSON.parse((e as MessageEvent).data) as {
           ref: string;
@@ -1924,6 +1964,7 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
 
   return {
     messages,
+    pollResults,
     question,
     review,
     submitted,
