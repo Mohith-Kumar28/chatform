@@ -99,7 +99,7 @@ templatesV1Router.post(
     tags: ["v1"],
     summary: "Create a draft form from a template",
     description:
-      "Creates a draft, exactly as `POST /v1/forms` does — publish it when you are ready. Omit `workspace` to use the organization's first.",
+      "Creates a draft, exactly as `POST /v1/forms` does. Publish it when you are ready. The form lands in the organization's first workspace, which is not something an API key can choose: `/v1` exposes no workspace endpoint.",
     responses: {
       200: { description: "The created form" },
       402: { description: "A plan limit refuses another form" },

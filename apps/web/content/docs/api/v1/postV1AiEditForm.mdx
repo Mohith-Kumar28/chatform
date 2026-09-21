@@ -1,7 +1,7 @@
 ---
 title: 'Ask a model to change an existing form: add, edit or remove questions
   and rewire the flow'
-description: "Returns the proposed document **without saving it** — send it to
+description: "Returns the proposed document **without saving it**. Send it to
   `PUT /v1/forms/{id}/doc` to keep it. An edit may add no questions at all: most
   requests about a working form change the routing rather than the wording. Pass
   `history` (oldest first) when this is a follow-up, or the model cannot resolve
@@ -16,7 +16,7 @@ _openapi:
   structuredData:
     headings: []
     contents:
-      - content: "Returns the proposed document **without saving it** — send it to `PUT
+      - content: "Returns the proposed document **without saving it**. Send it to `PUT
           /v1/forms/{id}/doc` to keep it. An edit may add no questions at all:
           most requests about a working form change the routing rather than the
           wording. Pass `history` (oldest first) when this is a follow-up, or

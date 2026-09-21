@@ -105,7 +105,7 @@ webhooksV1Router.post(
   ),
   describeRoute({
     tags: ["v1"],
-    summary: "Create a webhook endpoint — the signing secret is returned ONCE",
+    summary: "Create a webhook endpoint. The signing secret is returned ONCE",
     responses: {
       201: { description: "Created" },
       404: { description: "Form not found" },

@@ -85,7 +85,7 @@ integrationsV1Router.put(
     tags: ["v1"],
     summary: "Create, update or rotate the spreadsheet feed",
     description:
-      "Idempotent by nature — one feed per form — which is why this is a PUT. The returned `feedUrl` is a live CSV a " +
+      "Idempotent by nature, because there is one feed per form, which is why this is a PUT. The returned `feedUrl` is a live CSV a " +
       "spreadsheet can re-read on a schedule; it is unauthenticated, so the URL is the whole credential. Send " +
       "`rotate: true` to invalidate the previous one.",
     responses: {

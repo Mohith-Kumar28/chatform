@@ -104,7 +104,7 @@ formsV1Router.get(
   requireScope("form", "read"),
   describeRoute({
     tags: ["v1"],
-    summary: "Read a form — its public config, or the document behind it",
+    summary: "Read a form: its public config, or the document behind it",
     responses: { 200: { description: "Form" }, 404: { description: "Not found" } },
   }),
   async (c) => {
@@ -356,7 +356,7 @@ formsV1Router.delete(
   requireScope("form", "write"),
   describeRoute({
     tags: ["v1"],
-    summary: "Delete a form (soft — responses are kept)",
+    summary: "Delete a form (soft, so responses are kept)",
     responses: { 200: { description: "Deleted" }, 404: { description: "Not found" } },
   }),
   async (c) => {

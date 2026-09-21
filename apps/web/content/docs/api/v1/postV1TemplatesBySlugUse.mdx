@@ -1,7 +1,8 @@
 ---
 title: Create a draft form from a template
-description: Creates a draft, exactly as `POST /v1/forms` does — publish it when
-  you are ready. Omit `workspace` to use the organization's first.
+description: "Creates a draft, exactly as `POST /v1/forms` does. Publish it when
+  you are ready. The form lands in the organization's first workspace, which is
+  not something an API key can choose: `/v1` exposes no workspace endpoint."
 full: true
 _openapi:
   preload:
@@ -12,8 +13,10 @@ _openapi:
   structuredData:
     headings: []
     contents:
-      - content: Creates a draft, exactly as `POST /v1/forms` does — publish it when you
-          are ready. Omit `workspace` to use the organization's first.
+      - content: "Creates a draft, exactly as `POST /v1/forms` does. Publish it when you
+          are ready. The form lands in the organization's first workspace, which
+          is not something an API key can choose: `/v1` exposes no workspace
+          endpoint."
 llmsExclude: true
 ---
 

@@ -223,7 +223,7 @@ exportsV1Router.get(
     tags: ["v1"],
     summary: "A respondent's uploaded file, with a short-lived download link",
     description:
-      "File-upload answers carry a `fileId`. This resolves one to its metadata and a signed URL that needs no API key — safe to hand to a browser, and expired within minutes.",
+      "File-upload answers carry a `fileId`. This resolves one to its metadata and a signed URL that needs no API key, so it is safe to hand to a browser and it expires within minutes.",
     responses: {
       200: { description: "The file", content: { "application/json": { schema: resolver(FileView) } } },
       404: { description: "File not found" },

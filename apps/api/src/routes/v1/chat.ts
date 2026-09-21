@@ -379,7 +379,7 @@ const eventsRoute = (base: string) =>
   requireScope("session", "read"),
   describeRoute({
     tags: ["v1"],
-    summary: "The session's events — streamed, or pulled since a sequence number",
+    summary: "The session's events, streamed or pulled since a sequence number",
     responses: { 200: { description: "SSE stream, or a JSON page of events" } },
   }),
   async (c) => {

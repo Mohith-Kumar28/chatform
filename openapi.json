@@ -5801,7 +5801,7 @@
         "tags": [
           "public"
         ],
-        "summary": "Register an upload — returns a fileId to PUT against",
+        "summary": "Register an upload, returning a fileId to PUT against",
         "responses": {
           "200": {
             "description": "Intent created",
@@ -5857,7 +5857,7 @@
           "public"
         ],
         "summary": "Upload the bytes for a registered intent",
-        "description": "PUT the raw file body — not multipart, not base64 — to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.",
+        "description": "PUT the raw file body, not multipart and not base64, to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -5930,7 +5930,7 @@
         "tags": [
           "public"
         ],
-        "summary": "Confirm an upload — flips pending → confirmed and notifies the session",
+        "summary": "Confirm an upload: flips pending to confirmed and notifies the session",
         "responses": {
           "200": {
             "description": "Confirmed",
@@ -10928,7 +10928,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "Read a form — its public config, or the document behind it",
+        "summary": "Read a form: its public config, or the document behind it",
         "responses": {
           "200": {
             "description": "Form"
@@ -10965,7 +10965,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "Delete a form (soft — responses are kept)",
+        "summary": "Delete a form (soft, so responses are kept)",
         "responses": {
           "200": {
             "description": "Deleted"
@@ -11475,7 +11475,7 @@
           "v1"
         ],
         "summary": "Create a draft form from a template",
-        "description": "Creates a draft, exactly as `POST /v1/forms` does — publish it when you are ready. Omit `workspace` to use the organization's first.",
+        "description": "Creates a draft, exactly as `POST /v1/forms` does. Publish it when you are ready. The form lands in the organization's first workspace, which is not something an API key can choose: `/v1` exposes no workspace endpoint.",
         "responses": {
           "200": {
             "description": "The created form"
@@ -11505,7 +11505,7 @@
           "v1"
         ],
         "summary": "Every published version of a form, newest first",
-        "description": "Each version carries the number of completed responses recorded against it — a version nobody answered can be replaced freely; one with responses behind it is the schema those answers were recorded against.",
+        "description": "Each version carries the number of completed responses recorded against it. A version nobody answered can be replaced freely; one with responses behind it is the schema those answers were recorded against.",
         "responses": {
           "200": {
             "description": "Versions",
@@ -11778,7 +11778,7 @@
           "v1"
         ],
         "summary": "Restore a published version into the working document",
-        "description": "Writes the draft, not the live form — respondents see nothing change until you publish. Returns the restored document and what it changed.",
+        "description": "Writes the draft, not the live form, so respondents see nothing change until you publish. Returns the restored document and what it changed.",
         "responses": {
           "200": {
             "description": "The draft now matches that version"
@@ -11991,7 +11991,7 @@
           "v1"
         ],
         "summary": "Generate a form document from a natural-language prompt",
-        "description": "Returns a document and its lint issues **without saving anything** — pass the result to `POST /v1/forms` to keep it. Consumes one `ai_generations` unit and the tokens it costs, charged only when a usable document comes back. If you are already driving this from a model of your own, writing the document yourself and posting it to `/v1/forms` costs you nothing here.",
+        "description": "Returns a document and its lint issues **without saving anything**. Pass the result to `POST /v1/forms` to keep it. Consumes one `ai_generations` unit and the tokens it costs, charged only when a usable document comes back. If you are already driving this from a model of your own, writing the document yourself and posting it to `/v1/forms` costs you nothing here.",
         "responses": {
           "200": {
             "description": "The generated document, its lint issues, and the tokens spent",
@@ -12219,7 +12219,7 @@
           "v1"
         ],
         "summary": "Ask a model to change an existing form: add, edit or remove questions and rewire the flow",
-        "description": "Returns the proposed document **without saving it** — send it to `PUT /v1/forms/{id}/doc` to keep it. An edit may add no questions at all: most requests about a working form change the routing rather than the wording. Pass `history` (oldest first) when this is a follow-up, or the model cannot resolve 'also', 'it' or 'instead'.",
+        "description": "Returns the proposed document **without saving it**. Send it to `PUT /v1/forms/{id}/doc` to keep it. An edit may add no questions at all: most requests about a working form change the routing rather than the wording. Pass `history` (oldest first) when this is a follow-up, or the model cannot resolve 'also', 'it' or 'instead'.",
         "responses": {
           "200": {
             "description": "The proposed document and what changed"
@@ -12452,7 +12452,7 @@
           "v1"
         ],
         "summary": "Ask what a form request leaves open, before generating from it",
-        "description": "Returns up to three questions whose answers would change the form — and **usually returns none**, which is the intended answer rather than a failure. Worth calling when a person is going to see the result: a request that asks to take a payment but names no UPI id, or to branch by plan without naming the plans, produces a form with a hole in it that only they can fill.\n\nFeed the answers back as `clarifications` on `POST /v1/ai/generate-form`. Skipping this endpoint entirely is fine; generation does not require it.\n\nRuns on the cheapest tier and is not charged as a generation — it is a question about a form, not a form — though its tokens are still counted.",
+        "description": "Returns up to three questions whose answers would change the form, and **usually returns none**, which is the intended answer rather than a failure. Worth calling when a person is going to see the result: a request that asks to take a payment but names no UPI id, or to branch by plan without naming the plans, produces a form with a hole in it that only they can fill.\n\nFeed the answers back as `clarifications` on `POST /v1/ai/generate-form`. Skipping this endpoint entirely is fine; generation does not require it.\n\nRuns on the cheapest tier and is not charged as a generation, being a question about a form rather than a form, though its tokens are still counted.",
         "responses": {
           "200": {
             "description": "Questions worth asking, oldest concern first. An empty list means the request is answerable as it stands.",
@@ -12731,7 +12731,7 @@
           "v1"
         ],
         "summary": "Create, update or rotate the spreadsheet feed",
-        "description": "Idempotent by nature — one feed per form — which is why this is a PUT. The returned `feedUrl` is a live CSV a spreadsheet can re-read on a schedule; it is unauthenticated, so the URL is the whole credential. Send `rotate: true` to invalidate the previous one.",
+        "description": "Idempotent by nature, because there is one feed per form, which is why this is a PUT. The returned `feedUrl` is a live CSV a spreadsheet can re-read on a schedule; it is unauthenticated, so the URL is the whole credential. Send `rotate: true` to invalidate the previous one.",
         "responses": {
           "200": {
             "description": "The feed",
@@ -13122,7 +13122,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "Create a webhook endpoint — the signing secret is returned ONCE",
+        "summary": "Create a webhook endpoint. The signing secret is returned ONCE",
         "responses": {
           "201": {
             "description": "Created"
@@ -13682,7 +13682,7 @@
           "v1"
         ],
         "summary": "A respondent's uploaded file, with a short-lived download link",
-        "description": "File-upload answers carry a `fileId`. This resolves one to its metadata and a signed URL that needs no API key — safe to hand to a browser, and expired within minutes.",
+        "description": "File-upload answers carry a `fileId`. This resolves one to its metadata and a signed URL that needs no API key, so it is safe to hand to a browser and it expires within minutes.",
         "responses": {
           "200": {
             "description": "The file",
@@ -13820,7 +13820,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "Register an upload — returns a fileId to PUT against",
+        "summary": "Register an upload, returning a fileId to PUT against",
         "responses": {
           "200": {
             "description": "Intent created",
@@ -13882,7 +13882,7 @@
           "v1"
         ],
         "summary": "Upload the bytes for a registered intent",
-        "description": "PUT the raw file body — not multipart, not base64 — to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.",
+        "description": "PUT the raw file body, not multipart and not base64, to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -13961,7 +13961,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "Confirm an upload — flips pending → confirmed and notifies the session",
+        "summary": "Confirm an upload: flips pending to confirmed and notifies the session",
         "responses": {
           "200": {
             "description": "Confirmed",
@@ -15298,7 +15298,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "The session's events — streamed, or pulled since a sequence number",
+        "summary": "The session's events, streamed or pulled since a sequence number",
         "responses": {
           "200": {
             "description": "SSE stream, or a JSON page of events"
@@ -15695,7 +15695,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "The session's events — streamed, or pulled since a sequence number",
+        "summary": "The session's events, streamed or pulled since a sequence number",
         "responses": {
           "200": {
             "description": "SSE stream, or a JSON page of events"

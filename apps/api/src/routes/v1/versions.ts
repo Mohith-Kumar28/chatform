@@ -68,7 +68,7 @@ versionsV1Router.get(
     tags: ["v1"],
     summary: "Every published version of a form, newest first",
     description:
-      "Each version carries the number of completed responses recorded against it — a version nobody answered can be replaced freely; one with responses behind it is the schema those answers were recorded against.",
+      "Each version carries the number of completed responses recorded against it. A version nobody answered can be replaced freely; one with responses behind it is the schema those answers were recorded against.",
     responses: {
       200: { description: "Versions", content: { "application/json": { schema: resolver(z.array(VersionSummary)) } } },
       404: { description: "Form not found", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
@@ -123,7 +123,7 @@ versionsV1Router.post(
     tags: ["v1"],
     summary: "Restore a published version into the working document",
     description:
-      "Writes the draft, not the live form — respondents see nothing change until you publish. Returns the restored document and what it changed.",
+      "Writes the draft, not the live form, so respondents see nothing change until you publish. Returns the restored document and what it changed.",
     responses: {
       200: { description: "The draft now matches that version" },
       404: { description: "No such form or version", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },

@@ -61,7 +61,7 @@ function blockConfigSchemas(): Record<string, unknown> {
 
 /** How an answer to this type reaches us — which is what shapes an integration. */
 function answeringMode(type: BlockType): string {
-  if (DETERMINISTIC_TYPES.has(type)) return "matched exactly — never sent to a model";
+  if (DETERMINISTIC_TYPES.has(type)) return "matched exactly, never sent to a model";
   if (OUT_OF_BAND_TYPES.has(type)) return "arrives out of band (upload, payment or booking)";
   return "extracted from free text by the agent, then re-validated";
 }

@@ -139,7 +139,7 @@ uploadsRouter.post(
   ),
   describeRoute({
     tags: [mode === "respondent" ? "public" : "v1"],
-    summary: "Register an upload — returns a fileId to PUT against",
+    summary: "Register an upload, returning a fileId to PUT against",
     responses: {
       200: { description: "Intent created", content: { "application/json": { schema: resolver(z.object({ fileId: z.string(), uploadUrl: z.string() })) } } },
       413: { description: "Too large" },
@@ -244,7 +244,7 @@ uploadsRouter.put(
     tags: [mode === "respondent" ? "public" : "v1"],
     summary: "Upload the bytes for a registered intent",
     description:
-      "PUT the raw file body — not multipart, not base64 — to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.",
+      "PUT the raw file body, not multipart and not base64, to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.",
     requestBody: {
       required: true,
       content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } },
@@ -313,7 +313,7 @@ uploadsRouter.post(
   `/sessions/${sid}/uploads/:fileId/confirm`,
   describeRoute({
     tags: [mode === "respondent" ? "public" : "v1"],
-    summary: "Confirm an upload — flips pending → confirmed and notifies the session",
+    summary: "Confirm an upload: flips pending to confirmed and notifies the session",
     responses: { 200: { description: "Confirmed", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } }, 400: { description: "Not uploaded" }, 404: { description: "Not found" } },
   }),
   async (c) => {
@@ -327,7 +327,7 @@ uploadsRouter.post(
     if (!file || file.status !== "pending") return c.json({ error: { code: "not_found", message: "Upload intent not found" } }, 404);
 
     const obj = await c.env.R2.head(file.r2_key);
-    if (!obj) return c.json({ error: { code: "not_uploaded", message: "File body missing — PUT first" } }, 400);
+    if (!obj) return c.json({ error: { code: "not_uploaded", message: "File body missing. PUT the bytes first" } }, 400);
     if (obj.size > MAX_FILE_MB * MB || Math.abs(obj.size - file.size_bytes) > 1024) {
       await c.env.R2.delete(file.r2_key);
       return c.json({ error: { code: "too_large", message: `Max ${MAX_FILE_MB}MB` } }, 413);

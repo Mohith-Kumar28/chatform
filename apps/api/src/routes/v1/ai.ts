@@ -50,7 +50,7 @@ aiV1Router.post(
     tags: ["v1"],
     summary: "Generate a form document from a natural-language prompt",
     description:
-      "Returns a document and its lint issues **without saving anything** — pass the result to `POST /v1/forms` to keep it. " +
+      "Returns a document and its lint issues **without saving anything**. Pass the result to `POST /v1/forms` to keep it. " +
       "Consumes one `ai_generations` unit and the tokens it costs, charged only when a usable document comes back. " +
       "If you are already driving this from a model of your own, writing the document yourself and posting it to `/v1/forms` costs you nothing here.",
     responses: {
@@ -78,7 +78,7 @@ aiV1Router.post(
     tags: ["v1"],
     summary: "Ask a model to change an existing form: add, edit or remove questions and rewire the flow",
     description:
-      "Returns the proposed document **without saving it** — send it to `PUT /v1/forms/{id}/doc` to keep it. " +
+      "Returns the proposed document **without saving it**. Send it to `PUT /v1/forms/{id}/doc` to keep it. " +
       "An edit may add no questions at all: most requests about a working form change the routing rather than the wording. " +
       "Pass `history` (oldest first) when this is a follow-up, or the model cannot resolve 'also', 'it' or 'instead'.",
     responses: {
@@ -100,13 +100,13 @@ aiV1Router.post(
     tags: ["v1"],
     summary: "Ask what a form request leaves open, before generating from it",
     description:
-      "Returns up to three questions whose answers would change the form — and **usually returns none**, which is the " +
+      "Returns up to three questions whose answers would change the form, and **usually returns none**, which is the " +
       "intended answer rather than a failure. Worth calling when a person is going to see the result: a request that " +
       "asks to take a payment but names no UPI id, or to branch by plan without naming the plans, produces a form with " +
       "a hole in it that only they can fill.\n\n" +
       "Feed the answers back as `clarifications` on `POST /v1/ai/generate-form`. Skipping this endpoint entirely is " +
       "fine; generation does not require it.\n\n" +
-      "Runs on the cheapest tier and is not charged as a generation — it is a question about a form, not a form — " +
+      "Runs on the cheapest tier and is not charged as a generation, being a question about a form rather than a form, " +
       "though its tokens are still counted.",
     responses: {
       200: {
