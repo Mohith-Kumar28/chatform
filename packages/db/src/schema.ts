@@ -1585,8 +1585,9 @@ export const feedbackEmbeddings = sqliteTable("feedback_embeddings", {
  * the same reason they never write a response row: an author trying their own
  * form must not be able to stuff their own poll.
  *
- * Rebuildable. If it ever drifts, the responses table is the source of truth
- * and this is a cache that can be recomputed from it.
+ * Rebuildable. If it ever drifts, `submission_answers` is the source of truth
+ * and this is a cache that can be recomputed from it; the migration carries the
+ * query, checked against production.
  */
 export const pollTallies = sqliteTable(
   "poll_tallies",

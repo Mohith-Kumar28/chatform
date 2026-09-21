@@ -3,16 +3,25 @@
 -- A poll is the one question that answers back: tap an option and you are shown
 -- how everybody else answered. That is a read on the respondent's path, taken
 -- immediately after every poll answer, which is what rules out counting it from
--- the responses table. Deriving it there would mean scanning a form's whole
+-- the answers themselves. Deriving it there would mean scanning a form's whole
 -- history and extracting JSON from every row to draw four bars, with the person
 -- who just answered waiting for it.
 --
--- So it is a counter, and like every counter it can drift. The responses table
--- stays the source of truth and this is a cache that can be rebuilt from it:
+-- So it is a counter, and like every counter it can drift. `submission_answers`
+-- stays the source of truth and this is a cache that can be rebuilt from it.
+-- Verified against production on 2026-09-21; it reproduced the live counts
+-- exactly:
 --
 --   INSERT INTO poll_tallies (form_id, block_ref, option_id, count, updated_at)
---   SELECT form_id, <ref>, json_extract(answers, '$.<ref>'), COUNT(*), unixepoch() * 1000
---     FROM responses WHERE form_id = ? AND is_test = 0 GROUP BY 3;
+--   SELECT a.form_id, a.block_ref, json_extract(a.value_json, '$'), COUNT(*),
+--          unixepoch() * 1000
+--     FROM submission_answers a
+--     JOIN submissions s ON s.id = a.submission_id
+--    WHERE a.form_id = ? AND a.block_type = 'poll' AND s.is_test = 0
+--    GROUP BY 1, 2, 3;
+--
+-- A poll's `value_json` is a JSON string, so the `'$'` extraction is what turns
+-- "\"opt_x\"" back into the option id the counter is keyed by.
 --
 -- ── Why block_ref and not a block id ──
 --
@@ -22,7 +31,7 @@
 --
 -- ── What is deliberately not here ──
 --
--- No respondent id, so this cannot say who picked what: the responses table
+-- No respondent id, so this cannot say who picked what: `submission_answers`
 -- already answers that, for the one person allowed to ask it. And no row is
 -- written by a preview or a test session, for the same reason neither writes a
 -- response: an author trying their own form must not be able to stuff a poll
