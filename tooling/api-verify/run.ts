@@ -132,7 +132,9 @@ async function main() {
   // ---- Templates ---------------------------------------------------------
   section("2. Templates");
   const templates = await step({ method: "GET", path: "/v1/templates" }, { status: 200 });
-  const slug = templates?.[0]?.slug;
+  /** Every list answers `{data, has_more, next_cursor}` now; tolerate both while deployments catch up. */
+  const rows = <T,>(b: any): T[] => (Array.isArray(b) ? b : Array.isArray(b?.data) ? b.data : []);
+  const slug = rows<{ slug: string }>(templates)[0]?.slug;
   await step({ method: "GET", path: "/v1/templates/{slug}", params: { slug } }, { status: 200 });
   const fromTemplate = await step(
     { method: "POST", path: "/v1/templates/{slug}/use", params: { slug }, body: {} },
@@ -463,7 +465,7 @@ async function main() {
   section("14. Webhook deliveries");
   if (hook?.id) {
     const deliveries = await step({ method: "GET", path: "/v1/webhooks/{id}/deliveries", params: { id: hook.id } }, { status: 200 });
-    const d = (Array.isArray(deliveries) ? deliveries : deliveries?.data)?.[0];
+    const d = rows<{ id: string }>(deliveries)[0];
     if (d?.id) {
       await step({ method: "POST", path: "/v1/webhooks/{id}/deliveries/{deliveryId}/replay", params: { id: hook.id, deliveryId: d.id }, body: {} }, { status: [200, 201, 202] });
     } else {
