@@ -12,6 +12,7 @@ import { SignatureComposer } from "./composers/signature";
 import { FieldsComposer, GroupComposer, MatrixComposer, RankingComposer } from "./composers/structured";
 import { FileUploadControl } from "./file-upload";
 import { PaymentAffordance } from "./payment-affordance";
+import { PollBallot } from "./poll-result";
 import { assetUrl } from "@/lib/assets";
 import { cn } from "@/lib/utils";
 
@@ -265,13 +266,17 @@ function AffordanceControls({
       );
 
     /*
-     * A poll is a single select that answers back. Nothing about the choosing
-     * differs, which is the point: the bars arrive under the answer a moment
-     * later, from `poll_result`, and drawing anything here about results would
-     * be promising them before the vote is counted.
+     * A poll is a single select that answers back, so it is drawn as the poll
+     * card its results will arrive in. With results switched off it is meant
+     * to be indistinguishable from a single select, so it falls through to the
+     * chips.
      */
-    case "single_select":
     case "poll":
+      if (block.showResults !== false) {
+        return <PollBallot options={options} disabled={disabled} onVote={onStructured} />;
+      }
+    // falls through
+    case "single_select":
     case "dropdown":
       return (
         <Affordance>

@@ -1,8 +1,65 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Crown } from "lucide-react";
+import { BarChart3, Check, Crown } from "lucide-react";
+import { KeyHint } from "./composers/primitives";
 import type { PollResult } from "./use-chat";
+
+/**
+ * The poll before anybody votes: the same card the results arrive in, with
+ * empty rows where the fills will be.
+ *
+ * It used to be the single select's row of chips, so a poll looked like any
+ * other question until it was answered and then turned into a card. Drawing
+ * the card up front says "this one answers back" before the tap, and makes
+ * the results a continuation of the thing just touched rather than a new
+ * widget appearing under it.
+ */
+export function PollBallot({
+  options,
+  disabled,
+  onVote,
+}: {
+  options: { id: string; label: string }[];
+  disabled?: boolean;
+  onVote: (id: string, label: string) => void;
+}) {
+  return (
+    <div
+      className="w-full max-w-[85%] rounded-2xl border p-3.5 shadow-sm sm:max-w-sm"
+      style={{
+        background: "var(--cf-bot-bubble)",
+        color: "var(--cf-bot-bubble-text)",
+        borderColor: "var(--cf-bot-bubble-border)",
+      }}
+    >
+      <div className="mb-3 flex items-center justify-between gap-3 px-0.5 text-xs">
+        <span className="flex items-center gap-1.5 font-medium">
+          <BarChart3 className="size-3.5" style={{ color: "var(--cf-accent)" }} aria-hidden />
+          Poll
+        </span>
+        <span className="opacity-55">Vote to see results</span>
+      </div>
+
+      <ul className="space-y-2">
+        {options.map((o, i) => (
+          <li key={o.id}>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onVote(o.id, o.label)}
+              className="group flex min-h-11 w-full items-center gap-2.5 rounded-xl border border-[var(--cf-chip-border)] bg-[color-mix(in_srgb,var(--cf-accent)_4%,transparent)] px-3 py-2 text-left text-sm transition-[background-color,border-color,transform] duration-[var(--duration-micro)] ease-[var(--ease-out)] hover:border-[var(--cf-accent)] hover:bg-[color-mix(in_srgb,var(--cf-accent)_10%,transparent)] active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none"
+            >
+              <span className="size-5 shrink-0 rounded-full border-[1.5px] border-[var(--cf-chip-border)] transition-colors group-hover:border-[var(--cf-accent)]" />
+              <span className="min-w-0 flex-1">{o.label}</span>
+              {i < 9 && <KeyHint>{i + 1}</KeyHint>}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 /**
  * What everybody else said, drawn under the answer that earned it.
