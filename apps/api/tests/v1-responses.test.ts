@@ -295,6 +295,19 @@ describe("the lifecycle", () => {
     // The partial answer is kept: that is the whole point of tracking partials.
     expect(await answerRows(id)).toHaveLength(1);
   });
+
+  it("deletes a response abandoned before anything was answered", async () => {
+    const created = (await (
+      await api(`/v1/forms/${t.formId}/responses`, { method: "POST", body: "{}" })
+    ).json()) as { id: string };
+
+    const res = await api(`/v1/responses/${created.id}/abandon`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { status: string }).status).toBe("abandoned");
+
+    // An empty response is not a partial one, and must not sit in that tab.
+    expect((await api(`/v1/responses/${created.id}`)).status).toBe(404);
+  });
 });
 
 describe("single-shot", () => {

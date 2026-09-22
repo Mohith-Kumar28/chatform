@@ -30,6 +30,7 @@ import {
   deleteAnswerRow,
   findDuplicateAnswer,
   finalizeResponse,
+  discardEmptyResponse,
   newResponseId,
   type ResponseOwner,
 } from "../../lib/submissions.js";
@@ -663,6 +664,17 @@ responsesRouter.post(
 
     const hidden = jsonOr<Record<string, string>>(row.hidden_fields, {});
     const answers = await loadAnswers(c.env, row.id);
+
+    /*
+      Nothing was answered, so there is nothing to keep: the row is deleted
+      rather than left in the Partial tab as an empty line, the same as a
+      conversation that ends before its first answer. The reply still
+      describes what the caller abandoned; a later read of this id is a 404.
+    */
+    if (Object.keys(answers).length === 0 && (await discardEmptyResponse(c.env, row.id))) {
+      return c.json(projectResponse({ ...row, status: "abandoned" }, form.doc, answers, new Set(["answers"])));
+    }
+
     const { state } = replayState(form.doc, answers, hidden);
     const body = c.req.valid("json");
 

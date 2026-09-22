@@ -122,6 +122,11 @@ not finish" already has a name and a status, and letting completion mean two
 things would make your completion rate unreadable. Abandoned responses keep every
 answer that was given.
 
+A response abandoned with no answers is deleted instead, and so is one that
+expires empty: a conversation that ends before its first answer leaves no row
+either, and an empty response is not a partial one. The reply still describes
+it, and reading that id afterwards returns `404`.
+
 ## Reading responses back
 
 ```bash

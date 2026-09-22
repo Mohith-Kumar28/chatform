@@ -39,7 +39,7 @@ export async function sweepExpiredResponses(env: Bindings, limit = 200): Promise
       started_at: number;
     }>();
 
-  const { finalizeResponse } = await import("./submissions.js");
+  const { discardEmptyResponse, finalizeResponse } = await import("./submissions.js");
   const rows = due.results ?? [];
 
   /**
@@ -76,6 +76,13 @@ export async function sweepExpiredResponses(env: Bindings, limit = 200): Promise
   let n = 0;
   for (const row of rows) {
     const map = answersBySub.get(row.id)!;
+
+    // Opened and never answered: not a partial response, so no row, no
+    // webhook and no analytics point, exactly as an empty conversation.
+    if (Object.keys(map).length === 0 && (await discardEmptyResponse(env, row.id))) {
+      n++;
+      continue;
+    }
 
     const { changed } = await finalizeResponse(
       {
