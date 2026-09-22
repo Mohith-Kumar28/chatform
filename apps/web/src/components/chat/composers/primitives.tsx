@@ -165,7 +165,7 @@ export function SkipButton({ onSkip }: { onSkip: () => void }) {
       onClick={onSkip}
       onMouseDown={keepFocus}
       className={cn(
-        "inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium",
+        "inline-flex h-11 w-full shrink-0 items-center justify-center gap-1.5 rounded-full border px-3.5 text-sm font-medium sm:w-auto",
         "border-[var(--cf-accent)] bg-[color-mix(in_oklch,var(--cf-accent)_8%,transparent)] text-[var(--cf-accent)]",
         "transition-[background-color,transform] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
         "hover:bg-[color-mix(in_oklch,var(--cf-accent)_16%,transparent)]",
@@ -204,44 +204,54 @@ export function SendRow({
     <div className="flex items-end">
       <div className="min-w-0 flex-1">{children}</div>
       {/*
-        Always mounted, animated from nothing.
-
-        Skip appears and disappears question to question, and mounting it would
-        snap the message box to a new width mid-conversation — the one element
-        that has to hold still while somebody is typing into it. Animating
-        `max-width` on a wrapper that is always present means the box grows and
-        shrinks into the space instead, and the gap lives inside the wrapper so
-        a collapsed Skip leaves none behind.
+        On a phone Skip stacks above Send instead of beside it. Side by side,
+        the two pills took nearly half the row and squeezed the message box to
+        a sliver that wrapped "Type your answer…" onto two lines. Stacked, the
+        box keeps all but one button's width. From `sm` up there is room for
+        the row.
       */}
-      <div
-        aria-hidden={!canSkip}
-        className={cn(
-          "shrink-0 overflow-hidden",
-          "transition-[max-width,opacity] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none",
-          canSkip ? "max-w-[9rem] opacity-100" : "pointer-events-none max-w-0 opacity-0",
-        )}
-      >
-        <div className="pl-2">{onSkip && <SkipButton onSkip={onSkip} />}</div>
+      <div className="ml-2 flex shrink-0 flex-col items-stretch sm:flex-row sm:items-end">
+        {/*
+          Always mounted, animated from nothing.
+
+          Skip appears and disappears question to question, and mounting it
+          would snap the message box to a new size mid-conversation, the one
+          element that has to hold still while somebody is typing into it.
+          Animating `max-width` and `max-height` on a wrapper that is always
+          present means the box eases into the space instead (width in the row,
+          height in the stack), and the gap lives inside the wrapper so a
+          collapsed Skip leaves none behind.
+        */}
+        <div
+          aria-hidden={!canSkip}
+          className={cn(
+            "shrink-0 overflow-hidden",
+            "transition-[max-width,max-height,opacity] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none",
+            canSkip ? "max-h-14 max-w-[9rem] opacity-100" : "pointer-events-none max-h-0 max-w-0 opacity-0",
+          )}
+        >
+          <div className="pb-2 sm:pb-0 sm:pr-2">{onSkip && <SkipButton onSkip={onSkip} />}</div>
+        </div>
+        <button
+          type="button"
+          onClick={onSend}
+          onMouseDown={keepFocus}
+          disabled={disabled}
+          className={cn(
+            "inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-medium",
+            "bg-[var(--cf-accent)] text-[var(--cf-accent-text)]",
+            "transition-transform duration-[var(--duration-micro)] active:scale-[0.97]",
+            "motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40",
+          )}
+        >
+          {label}
+          {/* Says Enter sends, in the same key chip the choice chips use. The
+              icon this replaces was hidden below `sm`, which is the width proxy
+              `kbd-hint` exists to avoid: an embedded form in a 400px frame on
+              a desktop has a keyboard and was told nothing. */}
+          <KeyHint tone="inverse">↵</KeyHint>
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={onSend}
-        onMouseDown={keepFocus}
-        disabled={disabled}
-        className={cn(
-          "ml-2 inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium",
-          "bg-[var(--cf-accent)] text-[var(--cf-accent-text)]",
-          "transition-transform duration-[var(--duration-micro)] active:scale-[0.97]",
-          "motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40",
-        )}
-      >
-        {label}
-        {/* Says Enter sends, in the same key chip the choice chips use. The
-            icon this replaces was hidden below `sm`, which is the width proxy
-            `kbd-hint` exists to avoid: an embedded form in a 400px frame on
-            a desktop has a keyboard and was told nothing. */}
-        <KeyHint tone="inverse">↵</KeyHint>
-      </button>
     </div>
   );
 }

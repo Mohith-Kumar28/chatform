@@ -883,6 +883,15 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
         // card had reached — re-mounting it at "enter your number" would throw
         // away a code the respondent is in the middle of typing.
         setAuth((prev) => prev ?? { method: data.method, message: data.message, pending: false, error: null });
+        /*
+         * A gated session has no question outstanding. A gate that closes
+         * mid-form arrives right after the answer to the question before it,
+         * and the server's cursor still points there (see `projectTurn`). Kept
+         * here, that block's chips came straight back the moment sign-in
+         * cleared the gate, sitting under the typing dots until the next
+         * question arrived.
+         */
+        setQuestion(null);
         settleTurn();
       });
 
@@ -914,8 +923,13 @@ export function useChat({ slug, apiOrigin, hiddenFields, resumeToken, followUpId
         settleEcho();
       });
 
-      on("verify_settled", () => {
+      on("verify_settled", (e) => {
+        const { verified } = JSON.parse((e as MessageEvent).data) as { verified?: boolean };
         setVerify(null);
+        // Proved means answered: the next question is on its way, and the one
+        // that asked for the code must not flash back while it streams. A
+        // failed proof re-asks the same question, so that one stays.
+        if (verified) setQuestion(null);
         setValidationHint(null);
       });
 
