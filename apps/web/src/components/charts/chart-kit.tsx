@@ -292,6 +292,8 @@ export function Donut({
   centerLabel,
   emptyLabel = "Nothing to show yet.",
   ariaLabel = "Share of answers",
+  size = 132,
+  legend = "beside",
 }: {
   items: BarItem[];
   total: number;
@@ -299,6 +301,14 @@ export function Donut({
   centerLabel?: React.ReactNode;
   emptyLabel?: string;
   ariaLabel?: string;
+  /** Diameter in px. Bigger where the ring is the point of the card. */
+  size?: number;
+  /**
+   * `below` stacks the key under the ring across the full width, which lets the
+   * ring grow and the labels stop truncating. `beside` is the default because
+   * most cards here are a third of a row.
+   */
+  legend?: "beside" | "below";
 }) {
   const gradientId = useId();
 
@@ -312,8 +322,7 @@ export function Donut({
   if (total <= 0 || items.length === 0) {
     return <Empty>{emptyLabel}</Empty>;
   }
-  const size = 132;
-  const stroke = 18;
+  const stroke = Math.round(size * 0.14);
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const denom = total > 0 ? total : 1;
@@ -328,7 +337,7 @@ export function Donut({
   }));
 
   return (
-    <div className="flex flex-wrap items-center gap-5">
+    <div className={legend === "below" ? "flex flex-col items-center gap-4" : "flex flex-wrap items-center gap-5"}>
       <div className="relative shrink-0" style={{ width: size, height: size }}>
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={ariaLabel}>
           <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--muted)" strokeWidth={stroke} />
@@ -358,7 +367,13 @@ export function Donut({
           </div>
         )}
       </div>
-      <ul className="min-w-48 flex-1 space-y-1.5">
+      <ul
+        className={
+          legend === "below"
+            ? "grid w-full grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-x-5 gap-y-1.5"
+            : "min-w-48 flex-1 space-y-1.5"
+        }
+      >
         {items.map((item, i) => (
           <li key={`${item.label}-${i}`} className="flex items-baseline gap-2 text-sm">
             <span

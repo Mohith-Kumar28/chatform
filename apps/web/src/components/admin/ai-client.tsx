@@ -126,58 +126,93 @@ const PARTS = [
   { key: "cachedUsd", label: "Cached input", color: SERIES[1] },
   { key: "outputUsd", label: "Reply", color: SERIES[2] },
   { key: "reasoningUsd", label: "Thinking", color: SERIES[3] },
-  { key: "otherUsd", label: "Web search & fees", color: SERIES[4] },
+  { key: "otherUsd", label: "Search & fees", color: SERIES[4] },
 ] as const;
 
 /**
- * The ring for one purpose, or for all of them.
+ * What one purpose's spend bought, or all of them.
  *
- * Only the calls that could be broken down are drawn. Anything written before
- * the breakdown existed is a total with no parts, and it is said in a line
- * under the ring rather than drawn as a grey slice that looks like a sixth
- * kind of spending.
+ * Every dollar OpenRouter charged is in the ring: the four token parts, and
+ * `other` for the charges no token explains, which is where a web search or a
+ * per-request fee lands. Tool round trips are NOT a sixth slice, because that
+ * money is already in `Input` and `Reply` — a tool call is paid for by sending
+ * the whole prompt again. It gets its own bar underneath, which is the same
+ * money cut a different way, and only when there were any.
+ *
+ * Calls written before the split existed have a total and no parts. That is
+ * said in a line, not drawn as a grey slice pretending to be a kind of
+ * spending.
  */
 function CostParts({ b, label }: { b: Breakdown | null; label: string }) {
   if (!b || b.splitCostUsd <= 0) {
-    return <Empty>No breakdown for {label.toLowerCase()} in this period yet. Calls are split from the day the breakdown shipped.</Empty>;
+    return <Empty>Nothing broken down yet. Calls split from the day this shipped.</Empty>;
   }
   const items = PARTS.map((p) => ({ label: p.label, value: b[p.key], display: usd(b[p.key]), color: p.color })).filter(
     (i) => i.value > 0,
   );
   const unsplit = Math.max(0, b.costUsd - b.splitCostUsd);
-  const toolShare = b.splitCostUsd > 0 ? Math.round((b.toolStepsUsd / b.splitCostUsd) * 100) : 0;
+  const toolShare = Math.round((b.toolStepsUsd / b.splitCostUsd) * 100);
+  const perCall = b.calls > 0 ? b.promptTokens / b.calls : 0;
+  const thinkShare = b.completionTokens > 0 ? Math.round((b.reasoningTokens / b.completionTokens) * 100) : 0;
   return (
-    <div className="space-y-4">
-      <Donut items={items} total={b.splitCostUsd} centerValue={usd(b.splitCostUsd)} centerLabel="spent" ariaLabel={`What ${label.toLowerCase()} spend bought`} />
-      <dl className="text-caption grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+    <div className="space-y-5">
+      <Donut
+        items={items}
+        total={b.splitCostUsd}
+        centerValue={usd(b.splitCostUsd)}
+        centerLabel="spent"
+        size={184}
+        legend="below"
+        ariaLabel={`What ${label.toLowerCase()} spend bought`}
+      />
+
+      {/*
+        The same money, cut by round trip rather than by token. One bar rather
+        than a second ring, because it is a two-part split of a figure the ring
+        has already drawn — and it is only worth the space where tools ran.
+      */}
+      {b.toolStepsUsd > 0 && (
         <div>
-          <dt className="text-muted-foreground">Tool round trips</dt>
-          <dd className="tabular">
-            {usd(b.toolStepsUsd)} <span className="text-muted-foreground">({toolShare}%)</span>
-          </dd>
+          <div className="text-caption mb-1.5 flex items-baseline justify-between gap-3">
+            <span className="text-muted-foreground">Tool round trips</span>
+            <span className="tabular">
+              {usd(b.toolStepsUsd)} <span className="text-muted-foreground">of {usd(b.splitCostUsd)}</span>
+            </span>
+          </div>
+          {/*
+            One fill against a track, not two coloured halves: every hue in this
+            card already names a part of the ring, and a second palette for
+            "first answer vs round trip" would have two things wearing the same
+            colour in one card.
+          */}
+          <div className="bg-muted h-2 overflow-hidden rounded-full">
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${Math.max(2, toolShare)}%`, background: "var(--chart-6)" }}
+            />
+          </div>
+          <p className="text-muted-foreground text-micro mt-1.5">
+            {compact(b.toolCalls)} tool calls sent the prompt again, {toolShare}% of the spend.
+          </p>
         </div>
-        <div>
-          <dt className="text-muted-foreground">Tool calls</dt>
-          <dd className="tabular">
-            {compact(b.toolCalls)} <span className="text-muted-foreground">over {compact(b.steps)} steps</span>
-          </dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Input per call</dt>
-          <dd className="tabular">{b.calls > 0 ? compact(b.promptTokens / b.calls) : "0"} tokens</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Thinking share</dt>
-          <dd className="tabular">
-            {b.completionTokens > 0 ? Math.round((b.reasoningTokens / b.completionTokens) * 100) : 0}%
-          </dd>
-        </div>
-      </dl>
-      {unsplit > 0.000001 && (
-        <p className="text-muted-foreground text-caption">
-          {usd(unsplit)} more was spent before the breakdown existed and is left out of the ring.
-        </p>
       )}
+
+      <dl className="text-caption grid grid-cols-2 gap-x-6 gap-y-2">
+        <div className="flex items-baseline justify-between gap-2">
+          <dt className="text-muted-foreground">Prompt per call</dt>
+          <dd className="tabular">{compact(perCall)}</dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-2">
+          <dt className="text-muted-foreground">Thinking share</dt>
+          <dd className="tabular">{thinkShare}%</dd>
+        </div>
+        {unsplit > 0.000001 && (
+          <div className="col-span-2 flex items-baseline justify-between gap-2">
+            <dt className="text-muted-foreground">Not yet broken down</dt>
+            <dd className="tabular">{usd(unsplit)}</dd>
+          </div>
+        )}
+      </dl>
     </div>
   );
 }
@@ -198,6 +233,8 @@ export function AiClient() {
   // Spend per purpose, keyed for lookup beside the call counts.
   const costOfKind = new Map((a.costByKind ?? []).map((k) => [k.key, k.value] as const));
   const byKind = a.byKind ?? [];
+  // The leader sets the top of the bar colour ramp, as it sets the bar length.
+  const topCalls = Math.max(1, ...byKind.map((k) => k.value));
   const breakdown = a.breakdown ?? [];
   const selectedIndex = selectedKind ? byKind.findIndex((k) => k.key === selectedKind) : -1;
   const selectedBreakdown = selectedKind
@@ -326,10 +363,10 @@ export function AiClient() {
       <ChartCard
         className="xl:col-span-2"
         title="Where the money goes"
-        subtitle="Pick a purpose to see what its spend bought. Nothing picked shows the whole period."
+        subtitle="Pick one to break it down. Nothing picked shows the whole period."
         hint="Each call's cost is what OpenRouter charged. It is split into parts by OpenRouter's own live rates for the model that ran, so the parts always add back up to the charge. Input is the prompt sent fresh; cached input is prompt served from the provider's cache at a fraction of the rate; thinking is output the model spends reasoning and nobody sees; web search & fees is whatever no token accounts for. Tool round trips are the steps after a tool call, which re-send the whole prompt: a different cut of the same money, not another part."
       >
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="grid gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] xl:grid-cols-[minmax(0,5fr)_minmax(0,4fr)]">
           <div>
             <p className="text-muted-foreground text-caption mb-2">Calls by purpose</p>
             <BarList
@@ -346,10 +383,15 @@ export function AiClient() {
                   label: KIND_LABEL[k.key] ?? k.key,
                   value: k.value,
                   display: cost > 0 ? `${compact(k.value)} · ${usd(cost)}` : compact(k.value),
-                  // Neutral on purpose: the ring beside it owns the colours in
-                  // this card, and an orange bar next to an orange "Input" slice
-                  // reads as the same thing.
-                  color: "var(--muted-foreground)",
+                  /*
+                    One hue, stepped by share: a magnitude ramp, not an identity
+                    palette. The ring beside it owns identity, so bars in the
+                    ring's colours read as the same thing — but all-grey bars
+                    threw away the ranking the length already shows and made the
+                    biggest spender look like the smallest. `--chart-6` is the
+                    one series hue the ring never reaches.
+                  */
+                  color: `color-mix(in oklch, var(--chart-6) ${40 + Math.round(Math.sqrt(k.value / Math.max(1, topCalls)) * 60)}%, var(--muted))`,
                 };
               })}
               total={byKind.reduce((n, k) => n + k.value, 0)}
@@ -359,7 +401,7 @@ export function AiClient() {
             />
           </div>
           <div>
-            <p className="text-muted-foreground text-caption mb-2">{selectedLabel}: what it bought</p>
+            <p className="text-muted-foreground text-caption mb-2">{selectedLabel}</p>
             <CostParts b={selectedBreakdown} label={selectedLabel} />
           </div>
         </div>
@@ -377,9 +419,10 @@ export function AiClient() {
       >
         <DataTable
           rows={modelRows}
+          minWidth="23rem"
           empty="No model calls in this period."
           columns={[
-            { key: "model", header: "Model", render: (m) => m.model.split("/").pop() ?? m.model },
+            { key: "model", header: "Model", render: (m) => <span title={m.model}>{m.model.split("/").pop() ?? m.model}</span> },
             { key: "calls", header: "Calls", width: "3.5rem", numeric: true, render: (m) => compact(m.calls) },
             {
               key: "cost",

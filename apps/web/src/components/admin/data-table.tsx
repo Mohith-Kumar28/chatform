@@ -47,6 +47,7 @@ export function DataTable<T>({
   hrefFor,
   empty = "Nothing here yet.",
   caption,
+  minWidth,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -54,6 +55,14 @@ export function DataTable<T>({
   hrefFor?: (row: T) => string;
   empty?: React.ReactNode;
   caption?: React.ReactNode;
+  /**
+   * A floor the table will not be squeezed below, so the wrapper scrolls
+   * instead. Fixed layout divides whatever width it is given, and on a phone a
+   * five-column table gave the name column about one character: "gemini-3.7-fl"
+   * became "g", and the header above it sat under its neighbour. Set it on
+   * tables with several numeric columns.
+   */
+  minWidth?: string;
 }) {
   /**
    * An empty table is one quiet line, not a void.
@@ -83,7 +92,7 @@ export function DataTable<T>({
         account name, the question, the endpoint — which is also the only column
         anyone reads across.
       */}
-      <Table className="w-full table-fixed">
+      <Table className="w-full table-fixed" style={minWidth ? { minWidth } : undefined}>
         <TableHeader>
           <TableRow>
             {columns.map((col) => (
