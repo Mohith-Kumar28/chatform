@@ -28,6 +28,12 @@
 --   frm_demo00001     keep sbm_83e973b701f0411fb064 (7 answers), fold in
 --                     sbm_437433141a1248b2b946 (4 answers) where it does not collide
 --
+-- One more clash, made while verifying this fix: a browser test on 22 Sept
+-- 14:43 UTC opened sbm_8476965a78f44c659f5b (one answer) on the demo form as
+-- rsp_7b91919241fd4bd8978e, who also owns the 10 Sept draft
+-- sbm_da870f4b68654249804b (three answers) by sign-in. The test row goes; the
+-- real one keeps its answers and takes the id.
+--
 -- Scratch tables rather than CTEs, because the new ids are random and each has
 -- to be read back by three later statements.
 
@@ -65,6 +71,8 @@ UPDATE chat_sessions SET submission_id = CASE submission_id
 DELETE FROM submissions
  WHERE id IN ('sbm_fa0123e4180f4d3ba9b8', 'sbm_e3cbb960732b47d2917d',
               'sbm_25b5945706a142bfa386', 'sbm_437433141a1248b2b946');
+
+DELETE FROM submissions WHERE id = 'sbm_8476965a78f44c659f5b' AND form_id = 'frm_demo00001';
 
 -- ── 3. Signed in: one person per identity ───────────────────────────────────
 
