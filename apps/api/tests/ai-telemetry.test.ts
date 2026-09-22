@@ -133,6 +133,16 @@ describe("reportedUsage", () => {
     expect(sum.toolStepsCostUsd).toBeCloseTo(0.05, 10);
     expect(addUsage(NO_USAGE, a).reasoningTokens).toBe(2);
   });
+
+  it("does not let an empty slot make a real cost unknown", () => {
+    const priced: TokenUsage = { input: 10, output: 5, costUsd: 0.1, generationId: "g" };
+    // How every form generation came to be written down as unpriced: the
+    // accumulator starts empty, and empty had no cost to report.
+    expect(addUsage(NO_USAGE, priced).costUsd).toBe(0.1);
+    expect(addUsage(priced, NO_USAGE).costUsd).toBe(0.1);
+    // A real call that genuinely went unpriced still poisons the sum.
+    expect(addUsage(priced, { input: 8, output: 2, costUsd: null, generationId: "g2" }).costUsd).toBeNull();
+  });
 });
 
 describe("splitCost", () => {

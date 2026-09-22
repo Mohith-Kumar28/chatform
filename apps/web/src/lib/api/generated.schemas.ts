@@ -994,6 +994,15 @@ export type GetApiAdminAi200Totals = {
   conversations: number;
 };
 
+export type GetApiAdminAi200Previous = {
+  costUsd: number;
+  tokens: number;
+  calls: number;
+  errorRate: number;
+  costPerConversationUsd: number;
+  conversations: number;
+};
+
 export type GetApiAdminAi200LatencyItem = {
   model: string;
   calls: number;
@@ -1034,6 +1043,7 @@ export type GetApiAdminAi200 = {
   byKind: GetApiAdminAi200ByKindItem[];
   costByKind: GetApiAdminAi200CostByKindItem[];
   totals: GetApiAdminAi200Totals;
+  previous: GetApiAdminAi200Previous;
   latency: GetApiAdminAi200LatencyItem[];
   breakdown: GetApiAdminAi200BreakdownItem[];
   topSpenders: GetApiAdminAi200TopSpendersItem[];

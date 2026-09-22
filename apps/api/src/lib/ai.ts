@@ -768,6 +768,11 @@ export const NO_USAGE: TokenUsage = { input: 0, output: 0, costUsd: null, genera
  * contributes nothing; a side that made one and did not say makes the sum
  * unknown, for the same reason an unpriced call makes the cost unknown.
  */
+/** No tokens, no cost, no generation: a slot nothing was ever put in. */
+function isNothing(t: TokenUsage): boolean {
+  return t.input === 0 && t.output === 0 && t.costUsd === null && !t.generationId;
+}
+
 function addKnown(x: number | undefined, y: number | undefined, a: TokenUsage, b: TokenUsage): number | undefined {
   const made = (t: TokenUsage) => t.input + t.output > 0;
   if ((made(a) && x === undefined) || (made(b) && y === undefined)) return undefined;
@@ -775,6 +780,18 @@ function addKnown(x: number | undefined, y: number | undefined, a: TokenUsage, b
 }
 
 export function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
+  /**
+   * A call that never happened is not an unpriced call.
+   *
+   * Callers accumulate from `NO_USAGE`, whose cost is `null` because nothing
+   * reported one, and "unknown plus known is unknown" then made the sum unknown
+   * forever: every form generation in production was written down as unpriced,
+   * so generation contributed nothing to the spend chart and nothing to cost
+   * per conversation. `null` still poisons the sum when a real call went
+   * unpriced; an empty one is simply skipped.
+   */
+  if (isNothing(a)) return b;
+  if (isNothing(b)) return a;
   return {
     input: a.input + b.input,
     output: a.output + b.output,

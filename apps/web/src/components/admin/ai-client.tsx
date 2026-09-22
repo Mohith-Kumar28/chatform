@@ -48,6 +48,14 @@ interface Ai {
     pricedConversations: number;
     conversations: number;
   };
+  previous: {
+    costUsd: number;
+    tokens: number;
+    calls: number;
+    errorRate: number;
+    costPerConversationUsd: number;
+    conversations: number;
+  };
   latency: { model: string; calls: number; p50: number; p90: number; errorRate: number }[];
   breakdown?: Breakdown[];
   topSpenders: Row[];
@@ -183,6 +191,9 @@ export function AiClient() {
   if (isPending) return <Skeleton className="h-96 rounded-xl" />;
   const a = apiData<Ai>(data) ?? ({} as Ai);
   const t = a.totals ?? ({} as Ai["totals"]);
+  // The same window immediately before, so each tile shows a movement rather
+  // than a caption explaining itself. Same comparison the Overview tiles make.
+  const p = a.previous ?? ({} as Ai["previous"]);
   const days = a.days ?? [];
   // Spend per purpose, keyed for lookup beside the call counts.
   const costOfKind = new Map((a.costByKind ?? []).map((k) => [k.key, k.value] as const));
@@ -214,58 +225,74 @@ export function AiClient() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {/*
+          Every tile compares against the same length of time immediately
+          before, as the Overview tiles do. They used to be handed their own
+          value as `previous`, so all six printed "no change" for ever and the
+          line under each number was spent on a caveat about its denominator
+          instead. The caveats still exist, in the tooltip, where a caveat you
+          need once belongs.
+        */}
         <KpiTile
           label="Spend"
           value={t.costUsd ?? 0}
-          previous={t.costUsd ?? 0}
+          previous={p.costUsd ?? 0}
+          comparedTo="the period before"
           series={a.costSeries}
           format={usd}
           lowerIsBetter
-          /**
-           * The hint carries the gap rather than hiding it. These are calls
-           * OpenRouter reported no cost for; counting them as free is how this
-           * page came to show $0.70 for a month that cost $6.53.
-           */
-          hint={
+          hint="as billed by OpenRouter"
+          about={
             (t.unpricedCalls ?? 0) > 0
-              ? `as billed by OpenRouter · ${(t.unpricedCalls ?? 0).toLocaleString()} unpriced`
-              : "as billed by OpenRouter"
+              ? `Summed from what OpenRouter charged, never computed here. ${(t.unpricedCalls ?? 0).toLocaleString()} calls in this window came back with no cost and are left out rather than counted as free.`
+              : "Summed from what OpenRouter charged, never computed here."
           }
         />
         <KpiTile
           label="Per conversation"
           value={t.costPerConversationUsd ?? 0}
-          previous={t.costPerConversationUsd ?? 0}
+          previous={p.costPerConversationUsd ?? 0}
+          comparedTo="the period before"
           format={usd}
           lowerIsBetter
-          /**
-           * Says what it is averaged over, because the denominator is not the
-           * conversation count beside it — it is the conversations whose cost
-           * is actually known. Dividing by all of them reads a hundred times
-           * too low while unpriced history is still in the window.
-           */
-          hint={
+          hint="what one chat costs us"
+          about={
             (t.pricedConversations ?? 0) > 0
-              ? `over ${(t.pricedConversations ?? 0).toLocaleString()} priced conversation${(t.pricedConversations ?? 0) === 1 ? "" : "s"}`
-              : "nothing priced yet"
+              ? `Averaged over the ${(t.pricedConversations ?? 0).toLocaleString()} conversations whose cost is actually known. Dividing by every conversation would read far too low while unpriced history is still in range.`
+              : "No conversation in this window has a known cost yet."
           }
         />
         <KpiTile
           label="Tokens"
           value={t.tokens ?? 0}
-          previous={t.tokens ?? 0}
+          previous={p.tokens ?? 0}
+          comparedTo="the period before"
           series={a.tokenSeries}
           format={compact}
         />
-        <KpiTile label="Model calls" value={t.calls ?? 0} previous={t.calls ?? 0} series={a.callSeries} format={compact} />
-        <KpiTile label="Conversations" value={t.conversations ?? 0} previous={t.conversations ?? 0} format={compact} />
+        <KpiTile
+          label="Model calls"
+          value={t.calls ?? 0}
+          previous={p.calls ?? 0}
+          comparedTo="the period before"
+          series={a.callSeries}
+          format={compact}
+        />
+        <KpiTile
+          label="Conversations"
+          value={t.conversations ?? 0}
+          previous={p.conversations ?? 0}
+          comparedTo="the period before"
+          format={compact}
+        />
         <KpiTile
           label="Error rate"
           value={t.errorRate ?? 0}
-          previous={t.errorRate ?? 0}
+          previous={p.errorRate ?? 0}
+          comparedTo="the period before"
           format={(n) => `${n}%`}
           lowerIsBetter
-          hint={`${(t.errors ?? 0).toLocaleString()} failed calls`}
+          hint={`${(t.errors ?? 0).toLocaleString()} failed`}
         />
       </div>
 
@@ -288,12 +315,21 @@ export function AiClient() {
         />
       </ChartCard>
 
+      {/*
+        Two thirds and one third of one row. The models table is five short
+        columns and was taking a full-width row to say very little, while the
+        donut card beside it is the one people came to read. Below `xl` they
+        stack, because the money card's own two halves need the width more than
+        the row does.
+      */}
+      <div className="grid gap-3 xl:grid-cols-3">
       <ChartCard
+        className="xl:col-span-2"
         title="Where the money goes"
         subtitle="Pick a purpose to see what its spend bought. Nothing picked shows the whole period."
         hint="Each call's cost is what OpenRouter charged. It is split into parts by OpenRouter's own live rates for the model that ran, so the parts always add back up to the charge. Input is the prompt sent fresh; cached input is prompt served from the provider's cache at a fraction of the rate; thinking is output the model spends reasoning and nobody sees; web search & fees is whatever no token accounts for. Tool round trips are the steps after a tool call, which re-send the whole prompt: a different cut of the same money, not another part."
       >
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div>
             <p className="text-muted-foreground text-caption mb-2">Calls by purpose</p>
             <BarList
@@ -334,20 +370,32 @@ export function AiClient() {
         number people feel is how long the interviewer takes to answer, and
         that is a per-model property traded off directly against cost.
       */}
-      <ChartCard title="Models" subtitle="What each one cost, and how fast it answered (median and 90th percentile).">
+      <ChartCard
+        title="Models"
+        subtitle="What each cost, and how fast it answered."
+        hint="p50 is the median call and p90 the slow tenth, both measured end to end. Share is this model's cut of the period's spend. A model with no calls recorded has latency of 0."
+      >
         <DataTable
           rows={modelRows}
           empty="No model calls in this period."
           columns={[
             { key: "model", header: "Model", render: (m) => m.model.split("/").pop() ?? m.model },
-            { key: "calls", header: "Calls", width: "4.5rem", numeric: true, render: (m) => compact(m.calls) },
-            { key: "cost", header: "Cost", width: "5.5rem", numeric: true, render: (m) => usd(m.cost) },
+            { key: "calls", header: "Calls", width: "3.5rem", numeric: true, render: (m) => compact(m.calls) },
             {
-              key: "share",
-              header: "Share",
-              width: "4.5rem",
+              key: "cost",
+              header: "Cost",
+              width: "6.5rem",
               numeric: true,
-              render: (m) => `${modelSpend > 0 ? Math.round((m.cost / modelSpend) * 100) : 0}%`,
+              // Cost and its share in one cell: two columns of money in a third
+              // of a row left the model name with nothing to be read in.
+              render: (m) => (
+                <>
+                  {usd(m.cost)}
+                  <span className="text-muted-foreground ml-1.5 opacity-70">
+                    {modelSpend > 0 ? Math.round((m.cost / modelSpend) * 100) : 0}%
+                  </span>
+                </>
+              ),
             },
             { key: "p50", header: "p50", width: "4rem", numeric: true, render: (m) => `${(m.p50 / 1000).toFixed(1)}s` },
             {
@@ -364,6 +412,7 @@ export function AiClient() {
           ]}
         />
       </ChartCard>
+      </div>
 
       {/*
         The margin table. A free account costing real money is a marketing

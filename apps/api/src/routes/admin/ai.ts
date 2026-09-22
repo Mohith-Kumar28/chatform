@@ -58,6 +58,19 @@ const AiResponse = z.object({
     pricedConversations: z.number(),
     conversations: z.number(),
   }),
+  /**
+   * The same window immediately before this one, so every tile can show a
+   * movement instead of a caption explaining its own denominator. Same shape as
+   * `totals`, minus the figures that have no meaningful previous value.
+   */
+  previous: z.object({
+    costUsd: z.number(),
+    tokens: z.number(),
+    calls: z.number(),
+    errorRate: z.number(),
+    costPerConversationUsd: z.number(),
+    conversations: z.number(),
+  }),
   latency: z.array(
     z.object({ model: z.string(), calls: z.number(), p50: z.number(), p90: z.number(), errorRate: z.number() }),
   ),
@@ -149,43 +162,40 @@ aiRouter.get(
     const window = dayKeys(days);
     const windowSet = new Set(window);
     const since = Date.now() - days * DAY_MS;
+    // The window before this one, the same length: what every tile compares against.
+    const prevSince = since - days * DAY_MS;
 
     const metrics = await loadMetrics(c.env, window[0]!, window[window.length - 1]!);
 
-    const [totals, conversations, pricedConversations, models, topSpenders, breakdown] = await Promise.all([
-      c.env.DB.prepare(
-        `SELECT COUNT(*) AS calls,
-                COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens,
-                COALESCE(SUM(cost_usd), 0) AS cost,
-                COALESCE(SUM(CASE WHEN cost_usd IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
-                COALESCE(SUM(CASE WHEN status != 'ok' THEN 1 ELSE 0 END), 0) AS errors
-           FROM ai_generations WHERE created_at >= ?`,
-      )
-        .bind(since)
-        .first<{ calls: number; tokens: number; cost: number; unpriced: number; errors: number }>(),
-      c.env.DB.prepare(
-        `SELECT COUNT(*) AS n FROM chat_sessions WHERE created_at >= ? AND is_test = 0`,
-      )
-        .bind(since)
-        .first<{ n: number }>(),
+    const [totals, conversations, models, topSpenders, breakdown] = await Promise.all([
       /**
-       * Conversations that have a priced call, which is not the same as
-       * conversations.
-       *
-       * Unit economics divided by the wrong denominator is worse than no unit
-       * economics. Dividing the priced spend by EVERY conversation in the
-       * window reads $0.00016 when the real figure is a hundred times that —
-       * because most of those conversations predate OpenRouter-reported cost
-       * and contribute a denominator with no numerator. The answer to "what
-       * does one conversation cost" can only be drawn from the conversations we
-       * actually know the cost of.
+       * Both windows in one scan. Two queries over the same index would say the
+       * same thing at twice the cost, and the `CASE` keeps the pair honest:
+       * whatever counts as a call this period counts as one last period too.
        */
       c.env.DB.prepare(
-        `SELECT COUNT(DISTINCT session_id) AS n FROM ai_generations
-          WHERE created_at >= ? AND cost_usd IS NOT NULL AND session_id IS NOT NULL`,
+        `SELECT SUM(CASE WHEN created_at >= ?1 THEN 1 ELSE 0 END) AS calls,
+                COALESCE(SUM(CASE WHEN created_at >= ?1 THEN prompt_tokens + completion_tokens END), 0) AS tokens,
+                COALESCE(SUM(CASE WHEN created_at >= ?1 THEN cost_usd END), 0) AS cost,
+                COALESCE(SUM(CASE WHEN created_at >= ?1 AND cost_usd IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
+                COALESCE(SUM(CASE WHEN created_at >= ?1 AND status != 'ok' THEN 1 ELSE 0 END), 0) AS errors,
+                SUM(CASE WHEN created_at < ?1 THEN 1 ELSE 0 END) AS prev_calls,
+                COALESCE(SUM(CASE WHEN created_at < ?1 THEN prompt_tokens + completion_tokens END), 0) AS prev_tokens,
+                COALESCE(SUM(CASE WHEN created_at < ?1 THEN cost_usd END), 0) AS prev_cost,
+                COALESCE(SUM(CASE WHEN created_at < ?1 AND status != 'ok' THEN 1 ELSE 0 END), 0) AS prev_errors,
+                COUNT(DISTINCT CASE WHEN created_at >= ?1 AND cost_usd IS NOT NULL THEN session_id END) AS priced_convos,
+                COUNT(DISTINCT CASE WHEN created_at < ?1 AND cost_usd IS NOT NULL THEN session_id END) AS prev_priced_convos
+           FROM ai_generations WHERE created_at >= ?2`,
       )
-        .bind(since)
-        .first<{ n: number }>(),
+        .bind(since, prevSince)
+        .first<Record<string, number>>(),
+      c.env.DB.prepare(
+        `SELECT SUM(CASE WHEN created_at >= ?1 THEN 1 ELSE 0 END) AS n,
+                SUM(CASE WHEN created_at < ?1 THEN 1 ELSE 0 END) AS prev
+           FROM chat_sessions WHERE created_at >= ?2 AND is_test = 0`,
+      )
+        .bind(since, prevSince)
+        .first<{ n: number; prev: number }>(),
       rows<{ model: string }>(
         c.env.DB.prepare(`SELECT DISTINCT model FROM ai_generations WHERE created_at >= ? LIMIT 12`).bind(since),
       ),
@@ -273,8 +283,18 @@ aiRouter.get(
 
     const calls = totals?.calls ?? 0;
     const convos = conversations?.n ?? 0;
-    const pricedConvos = pricedConversations?.n ?? 0;
+    /**
+     * Conversations with a priced call, which is not the same as conversations.
+     *
+     * Unit economics divided by the wrong denominator is worse than none.
+     * Dividing the priced spend by EVERY conversation in the window reads a
+     * hundred times low while unpriced history is still in range, because those
+     * conversations contribute a denominator with no numerator.
+     */
+    const pricedConvos = totals?.priced_convos ?? 0;
+    const prevPricedConvos = totals?.prev_priced_convos ?? 0;
     const cost = totals?.cost ?? 0;
+    const prevCalls = totals?.prev_calls ?? 0;
 
     return c.json({
       days: window,
@@ -303,6 +323,14 @@ aiRouter.get(
         // over the conversations whose cost is actually known.
         costPerConversationUsd: pricedConvos > 0 ? cost / pricedConvos : 0,
         pricedConversations: pricedConvos,
+      },
+      previous: {
+        costUsd: totals?.prev_cost ?? 0,
+        tokens: totals?.prev_tokens ?? 0,
+        calls: prevCalls,
+        errorRate: prevCalls > 0 ? Math.round(((totals?.prev_errors ?? 0) / prevCalls) * 1000) / 10 : 0,
+        costPerConversationUsd: prevPricedConvos > 0 ? (totals?.prev_cost ?? 0) / prevPricedConvos : 0,
+        conversations: conversations?.prev ?? 0,
       },
       latency: latency.sort((a, b) => b.calls - a.calls),
       breakdown: breakdown.map((r) => {

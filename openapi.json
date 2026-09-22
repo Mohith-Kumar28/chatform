@@ -4142,6 +4142,37 @@
                         "conversations"
                       ]
                     },
+                    "previous": {
+                      "type": "object",
+                      "properties": {
+                        "costUsd": {
+                          "type": "number"
+                        },
+                        "tokens": {
+                          "type": "number"
+                        },
+                        "calls": {
+                          "type": "number"
+                        },
+                        "errorRate": {
+                          "type": "number"
+                        },
+                        "costPerConversationUsd": {
+                          "type": "number"
+                        },
+                        "conversations": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "costUsd",
+                        "tokens",
+                        "calls",
+                        "errorRate",
+                        "costPerConversationUsd",
+                        "conversations"
+                      ]
+                    },
                     "latency": {
                       "type": "array",
                       "items": {
@@ -4276,6 +4307,7 @@
                     "byKind",
                     "costByKind",
                     "totals",
+                    "previous",
                     "latency",
                     "breakdown",
                     "topSpenders",
