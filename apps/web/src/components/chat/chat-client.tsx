@@ -884,25 +884,9 @@ export function ChatSurface({
           */}
           {!replay && (!config.brandingHidden || !previewMode) && (
             /*
-              Centred under the message box, not under the row.
-
-              The line used to be centred on the footer, which is centred on the
-              screen — arithmetically right and visibly wrong, because the object
-              the eye measures against is the box, and the box sits half a Send
-              button left of centre. One item there and nobody noticed; two made
-              the caption wide enough to read as pushed to the right.
-
-              The offset is an invisible twin of the Send button rather than a
-              number, so it is exactly right by construction: same classes, same
-              label, same key chip — which means it also narrows itself on a
-              phone, where `kbd-hint` draws no ↵ and the real button is smaller.
-              A hardcoded 48px would have been 11px wrong on every phone and
-              wrong again the day the button's label changes.
-
-              Skip is deliberately not counted. It comes and goes question to
-              question, and following it would slide this line sideways
-              mid-conversation — a caption that moves while you read is worse
-              than one that is a few pixels off on optional questions.
+              Centred on the screen. It used to be centred under the message
+              box, which sits half a Send button left of centre, and on a phone
+              that read as a caption with more room on its right than its left.
             */
             <div className="mx-auto flex w-full max-w-2xl items-center px-4 pb-2">
               <p className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-x-2 text-center text-[0.6875rem]">
@@ -931,19 +915,6 @@ export function ChatSurface({
                   </button>
                 )}
               </p>
-              {/*
-                The twin. `h-0 overflow-hidden` keeps its width and gives back
-                its height, so it reserves the horizontal space and adds no
-                vertical space; `aria-hidden` and no text node of its own that
-                a screen reader could read as a second Send.
-              */}
-              <span
-                aria-hidden
-                className="ml-2 inline-flex h-0 shrink-0 items-center gap-1.5 overflow-hidden px-4 text-sm font-medium"
-              >
-                Send
-                <KeyHint tone="inverse">↵</KeyHint>
-              </span>
             </div>
           )}
         </footer>
