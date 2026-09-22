@@ -107,9 +107,9 @@ export interface FormRow {
   questionCount?: number;
   preview?: string[];
   /**
-   * The few theme values a thumbnail can show, or null when nobody has designed
-   * this form — which is what keeps the brand band for those rather than
-   * painting a whole grid in the same default cream.
+   * The few theme values a thumbnail can show. The API sends the defaults for
+   * a form nobody has designed, so the card matches the page a respondent
+   * opens. Null only in an older payload, which falls back to the brand band.
    */
   theme?: {
     background: string;
@@ -862,13 +862,9 @@ function ChatThumb({
   pills: React.ReactNode;
 }) {
   /*
-   * Unthemed forms keep the brand band.
-   *
-   * A form that has never been near the Design tab has no colours of its own to
-   * show, and painting it in the defaults would say "this one is themed" about
-   * a form that is not. The band is the honest answer for those, and it is also
-   * what a brand-new account sees on every card, which is when the grid most
-   * needs to look like something.
+   * No theme at all only comes from an older payload. Every current one
+   * carries the form's colours, defaults included, because an undesigned form
+   * still opens in cream and orange and the card should show that.
    */
   if (!theme) {
     return (

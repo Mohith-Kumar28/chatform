@@ -128,13 +128,12 @@ const FormListItem = FormSummary.extend({
    */
   hasUnpublishedChanges: z.boolean(),
   /**
-   * Null when nobody has designed this form.
+   * The colours the form opens in, defaults included.
    *
-   * Not "null when `theme_json` is absent": the builder writes a full theme the
-   * first time it saves anything, so absence stops being a useful signal almost
-   * immediately. A theme identical to the defaults is the honest test for
-   * "never touched", and it is what lets the card keep the brand band for those
-   * rather than painting a whole grid in the same default cream.
+   * It used to be null for a form nobody had designed, and the card painted a
+   * brand gradient for those instead. That is not what a respondent sees: an
+   * AI-generated or blank form opens in the default cream and orange, and the
+   * card now says so. Nullable only so an older payload still parses.
    */
   theme: FormCardTheme.nullable(),
 });
@@ -149,11 +148,8 @@ const FormListItem = FormSummary.extend({
 /**
  * What an undesigned form looks like, read from the schema rather than copied.
  *
- * A hardcoded copy was already wrong within a day — the `userBubble` default
- * moved and this file did not hear about it, which would have made every
- * default form look "designed" and quietly retired the brand band. Parsing an
- * empty object gives whatever `ThemeDoc` currently defaults to, so the two
- * cannot disagree.
+ * Parsing an empty object gives whatever `ThemeDoc` currently defaults to, so
+ * a card drawn for an undesigned form cannot disagree with the runtime.
  */
 const THEME_DEFAULTS = ThemeDoc.parse({});
 const DEFAULT_CARD_THEME = {
@@ -171,9 +167,9 @@ type CardTheme = z.infer<typeof FormCardTheme>;
 function summariseDoc(raw: string | null): {
   questionCount: number;
   preview: string[];
-  theme: CardTheme | null;
+  theme: CardTheme;
 } {
-  if (!raw) return { questionCount: 0, preview: [], theme: null };
+  if (!raw) return { questionCount: 0, preview: [], theme: { ...DEFAULT_CARD_THEME } };
   try {
     const doc = JSON.parse(raw) as {
       blocks?: { type?: string; title?: string }[];
@@ -210,14 +206,9 @@ function summariseDoc(raw: string | null): {
       logoUrl: typeof t.logoUrl === "string" && t.logoUrl.trim() ? t.logoUrl : null,
       backgroundPattern: pick(t.backgroundPattern, DEFAULT_CARD_THEME.backgroundPattern),
     };
-    const untouched =
-      theme.logoUrl === null &&
-      (Object.keys(DEFAULT_CARD_THEME) as (keyof CardTheme)[]).every(
-        (k) => k === "logoUrl" || theme[k] === DEFAULT_CARD_THEME[k],
-      );
-    return { questionCount: questions.length, preview, theme: untouched ? null : theme };
+    return { questionCount: questions.length, preview, theme };
   } catch {
-    return { questionCount: 0, preview: [], theme: null };
+    return { questionCount: 0, preview: [], theme: { ...DEFAULT_CARD_THEME } };
   }
 }
 
