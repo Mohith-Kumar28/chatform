@@ -42,7 +42,9 @@ const arg = (name: string, fallback: string): string => {
 
 const MODE = arg("mode", "both");
 const RUNS = Number(arg("runs", "3"));
-const env = { OPENROUTER_API_KEY: apiKey() } as Bindings;
+// `ENVIRONMENT: "script"` lands as `trace.environment`, so bench runs are
+// filtered out of the production numbers in Langfuse rather than mixed in.
+const env = { OPENROUTER_API_KEY: apiKey(), ENVIRONMENT: "script" } as Bindings;
 
 interface Attempt {
   ok: boolean;

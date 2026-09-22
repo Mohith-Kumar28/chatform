@@ -52,6 +52,11 @@ describe("money formatting", () => {
     expect(usd(0.001404)).toBe("$0.0014");
   });
 
+  it("prints cents on money, never $2.6", () => {
+    expect(usd(2.6)).toBe("$2.60");
+    expect(usd(1240)).toBe("$1,240.00");
+  });
+
   it("compacts large counts", () => {
     expect(compact(61_306)).toBe("61.3K");
     expect(compact(42)).toBe("42");

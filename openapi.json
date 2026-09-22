@@ -4172,6 +4172,80 @@
                         ]
                       }
                     },
+                    "breakdown": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string"
+                          },
+                          "calls": {
+                            "type": "number"
+                          },
+                          "costUsd": {
+                            "type": "number"
+                          },
+                          "splitCostUsd": {
+                            "type": "number"
+                          },
+                          "inputUsd": {
+                            "type": "number"
+                          },
+                          "cachedUsd": {
+                            "type": "number"
+                          },
+                          "outputUsd": {
+                            "type": "number"
+                          },
+                          "reasoningUsd": {
+                            "type": "number"
+                          },
+                          "otherUsd": {
+                            "type": "number"
+                          },
+                          "toolStepsUsd": {
+                            "type": "number"
+                          },
+                          "steps": {
+                            "type": "number"
+                          },
+                          "toolCalls": {
+                            "type": "number"
+                          },
+                          "promptTokens": {
+                            "type": "number"
+                          },
+                          "completionTokens": {
+                            "type": "number"
+                          },
+                          "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "reasoningTokens": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "calls",
+                          "costUsd",
+                          "splitCostUsd",
+                          "inputUsd",
+                          "cachedUsd",
+                          "outputUsd",
+                          "reasoningUsd",
+                          "otherUsd",
+                          "toolStepsUsd",
+                          "steps",
+                          "toolCalls",
+                          "promptTokens",
+                          "completionTokens",
+                          "cacheReadTokens",
+                          "reasoningTokens"
+                        ]
+                      }
+                    },
                     "topSpenders": {
                       "type": "array",
                       "items": {
@@ -4203,6 +4277,7 @@
                     "costByKind",
                     "totals",
                     "latency",
+                    "breakdown",
                     "topSpenders",
                     "lossMakers"
                   ]

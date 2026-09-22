@@ -379,7 +379,7 @@ export const getPostPSessionsByIdUploadsIntentUrl = (id: string,) => {
 }
 
 /**
- * @summary Register an upload — returns a fileId to PUT against
+ * @summary Register an upload, returning a fileId to PUT against
  */
 export const postPSessionsByIdUploadsIntent = async (id: string,
     postPSessionsByIdUploadsIntentBody: PostPSessionsByIdUploadsIntentBody, options?: Parameters<typeof customFetch>[1]): Promise<postPSessionsByIdUploadsIntentResponse> => {
@@ -436,7 +436,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostPSessionsByIdUploadsIntentMutationVariables = {id: string;data: PostPSessionsByIdUploadsIntentBody}
 
     /**
- * @summary Register an upload — returns a fileId to PUT against
+ * @summary Register an upload, returning a fileId to PUT against
  */
 export const usePostPSessionsByIdUploadsIntent = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdUploadsIntent>>, TError,PostPSessionsByIdUploadsIntentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -487,7 +487,7 @@ export const getPutPSessionsByIdUploadsByFileIdUrl = (id: string,
 }
 
 /**
- * PUT the raw file body — not multipart, not base64 — to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.
+ * PUT the raw file body, not multipart and not base64, to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.
  * @summary Upload the bytes for a registered intent
  */
 export const putPSessionsByIdUploadsByFileId = async (id: string,
@@ -592,7 +592,7 @@ export const getPostPSessionsByIdUploadsByFileIdConfirmUrl = (id: string,
 }
 
 /**
- * @summary Confirm an upload — flips pending → confirmed and notifies the session
+ * @summary Confirm an upload: flips pending to confirmed and notifies the session
  */
 export const postPSessionsByIdUploadsByFileIdConfirm = async (id: string,
     fileId: string, options?: Parameters<typeof customFetch>[1]): Promise<postPSessionsByIdUploadsByFileIdConfirmResponse> => {
@@ -643,7 +643,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostPSessionsByIdUploadsByFileIdConfirmMutationVariables = {id: string;fileId: string}
 
     /**
- * @summary Confirm an upload — flips pending → confirmed and notifies the session
+ * @summary Confirm an upload: flips pending to confirmed and notifies the session
  */
 export const usePostPSessionsByIdUploadsByFileIdConfirm = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdUploadsByFileIdConfirm>>, TError,PostPSessionsByIdUploadsByFileIdConfirmMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}

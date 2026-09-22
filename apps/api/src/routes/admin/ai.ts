@@ -61,6 +61,34 @@ const AiResponse = z.object({
   latency: z.array(
     z.object({ model: z.string(), calls: z.number(), p50: z.number(), p90: z.number(), errorRate: z.number() }),
   ),
+  /**
+   * What the money bought, per purpose. Sum the rows for the whole period.
+   *
+   * The five `*Usd` parts add up to `splitCostUsd`, which is the reported cost
+   * of the calls that could be broken down; `costUsd - splitCostUsd` is spend
+   * written before the breakdown existed, or whose price list was unreadable.
+   * `toolStepsUsd` is a different cut of the same money, not a sixth part.
+   */
+  breakdown: z.array(
+    z.object({
+      kind: z.string(),
+      calls: z.number(),
+      costUsd: z.number(),
+      splitCostUsd: z.number(),
+      inputUsd: z.number(),
+      cachedUsd: z.number(),
+      outputUsd: z.number(),
+      reasoningUsd: z.number(),
+      otherUsd: z.number(),
+      toolStepsUsd: z.number(),
+      steps: z.number(),
+      toolCalls: z.number(),
+      promptTokens: z.number(),
+      completionTokens: z.number(),
+      cacheReadTokens: z.number(),
+      reasoningTokens: z.number(),
+    }),
+  ),
   topSpenders: OpsRows,
   lossMakers: OpsRows,
 });
@@ -124,7 +152,7 @@ aiRouter.get(
 
     const metrics = await loadMetrics(c.env, window[0]!, window[window.length - 1]!);
 
-    const [totals, conversations, pricedConversations, models, topSpenders] = await Promise.all([
+    const [totals, conversations, pricedConversations, models, topSpenders, breakdown] = await Promise.all([
       c.env.DB.prepare(
         `SELECT COUNT(*) AS calls,
                 COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens,
@@ -194,6 +222,35 @@ aiRouter.get(
             LIMIT 40`,
         ).bind(since),
       ),
+      /**
+       * Read straight off `ai_generations` rather than the daily rollup: it is
+       * one indexed range per window, and a rollup would need eleven new
+       * metrics to say the same thing.
+       */
+      rows<Record<string, number | string>>(
+        c.env.DB.prepare(
+          `SELECT kind,
+                  COUNT(*) AS calls,
+                  COALESCE(SUM(cost_usd), 0) AS costUsd,
+                  COALESCE(SUM(CASE WHEN cost_input_usd IS NOT NULL THEN cost_usd END), 0) AS splitCostUsd,
+                  COALESCE(SUM(cost_input_usd), 0) AS inputUsd,
+                  COALESCE(SUM(cost_cached_usd), 0) AS cachedUsd,
+                  COALESCE(SUM(cost_output_usd), 0) AS outputUsd,
+                  COALESCE(SUM(cost_reasoning_usd), 0) AS reasoningUsd,
+                  COALESCE(SUM(cost_other_usd), 0) AS otherUsd,
+                  COALESCE(SUM(cost_tool_steps_usd), 0) AS toolStepsUsd,
+                  COALESCE(SUM(steps), 0) AS steps,
+                  COALESCE(SUM(tool_calls), 0) AS toolCalls,
+                  COALESCE(SUM(prompt_tokens), 0) AS promptTokens,
+                  COALESCE(SUM(completion_tokens), 0) AS completionTokens,
+                  COALESCE(SUM(cache_read_tokens), 0) AS cacheReadTokens,
+                  COALESCE(SUM(reasoning_tokens), 0) AS reasoningTokens
+             FROM ai_generations
+            WHERE created_at >= ?
+            GROUP BY kind
+            ORDER BY costUsd DESC`,
+        ).bind(since),
+      ),
     ]);
 
     const latency = await Promise.all(models.map((m) => latencyFor(c.env, m.model, since)));
@@ -248,6 +305,11 @@ aiRouter.get(
         pricedConversations: pricedConvos,
       },
       latency: latency.sort((a, b) => b.calls - a.calls),
+      breakdown: breakdown.map((r) => {
+        const out: Record<string, number | string> = {};
+        for (const [k, v] of Object.entries(r)) out[k] = k === "kind" ? String(v) : Number(v ?? 0);
+        return out;
+      }),
       topSpenders,
       lossMakers,
     });

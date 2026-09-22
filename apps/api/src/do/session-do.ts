@@ -40,7 +40,7 @@ import {
   extractAnswer,
   MODELS,
   INTERVIEW_PROVIDER_OPTIONS,
-  callTag,
+  telemetry,
   REASONING_HEADROOM_TOKENS,
   reportedUsage,
   NO_USAGE,
@@ -1805,13 +1805,14 @@ export class SessionDO extends DurableObject<Bindings> {
         // The author's setting governs the visible reply; reasoning gets its
         // own headroom on top so it can never starve the answer.
         maxOutputTokens: this.doc.settings.agent.responseMaxTokens + REASONING_HEADROOM_TOKENS,
-        providerOptions: {
-          openrouter: {
-            ...INTERVIEW_PROVIDER_OPTIONS.openrouter,
-            // Which feature, whose org, which conversation — see `callTag`.
-            user: callTag("interview_turn", this.meta.organizationId, this.meta.sessionId),
-          },
-        },
+        // Which feature, whose org, which conversation: see `telemetry`.
+        providerOptions: telemetry(this.env, INTERVIEW_PROVIDER_OPTIONS, {
+          kind: "interview_turn",
+          organizationId: this.meta.organizationId,
+          sessionId: this.meta.sessionId,
+          formId: this.meta.formId,
+          source: "chat",
+        }),
         // A turn that never returns is worse than a turn phrased by template.
         // See AI_TURN_TIMEOUT_MS.
         abortSignal: AbortSignal.timeout(AI_TURN_TIMEOUT_MS),
@@ -1950,6 +1951,8 @@ export class SessionDO extends DurableObject<Bindings> {
         env: this.env,
         organizationId: this.meta?.organizationId,
         sessionId: this.meta?.sessionId,
+        formId: this.meta?.formId,
+        trace: { source: "chat" },
         schema: schema as never,
         question: block.title,
         guidance: extractionGuidance(block, new Date().toISOString().slice(0, 10)),

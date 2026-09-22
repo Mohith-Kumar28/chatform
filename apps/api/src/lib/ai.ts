@@ -107,45 +107,110 @@ export function openrouter(env: Bindings) {
 }
 
 /**
- * The label a single call carries into OpenRouter's activity feed.
+ * What one model call was for, and on whose behalf.
  *
- * OpenRouter has no general-purpose metadata field; `user` is the one string
- * that travels with a request and comes back on the row. So it is packed:
- * feature first, then the org paying for it, then the conversation it belongs
- * to. `interview_turn/org_d40ea4bb/chs_f4ce7182aa89` reconciles a line on the
- * bill against a session in `chat_sessions` without opening a support ticket.
- *
- * Ids only, and never a respondent's. The field is echoed back on OpenRouter's
- * side, so an email or a phone number here would be handing a third party the
- * very thing the form was collecting.
+ * `kind` is the same string the call is later written to `ai_generations`
+ * under, so OpenRouter, Langfuse and `/admin/ai` name every feature alike.
+ * These used to disagree: the builder told OpenRouter `form_generate` and
+ * `form_edit` while the table said `generate` and `edit`, so no two views of
+ * the bill could be lined up by feature.
  */
-export function callTag(kind: string, organizationId: string, sessionId?: string | null): string {
-  return [kind, organizationId, sessionId].filter(Boolean).join("/");
+export interface AiCallContext {
+  kind: string;
+  organizationId?: string | null;
+  /** The author, when a person started it. Never a respondent. */
+  userId?: string | null;
+  formId?: string | null;
+  /** A `chat_sessions` id, for calls made inside a conversation. */
+  sessionId?: string | null;
+  /** Shared by every call one action makes; see `AiTrace`. */
+  traceId?: string | null;
+  /** The action's name, when it is more than this one call. Defaults to `kind`. */
+  traceName?: string | null;
+  /**
+   * Who asked: `dashboard`, `api` (a `/v1` key), `mcp` (an agent through the MCP
+   * server), `chat` (a respondent), or `system` (queues). An MCP agent drafting
+   * forms in a loop is a different problem from an author doing it by hand, and
+   * the two are otherwise the same feature.
+   */
+  source?: string | null;
+}
+
+/**
+ * The per-action half of `AiCallContext`, made once by whoever starts the
+ * action and handed to every AI helper it calls.
+ *
+ * A form generation is a research call, a draft and sometimes a fallback draft;
+ * an edit is a tool loop, a review and sometimes a retry. Without one id across
+ * them Langfuse shows each as an unrelated trace and the cost of "generating a
+ * form" has to be reassembled by hand.
+ */
+export type AiTrace = Pick<AiCallContext, "traceId" | "traceName" | "userId" | "source">;
+
+/** A fresh `AiTrace`. Call it per action, never at module scope. */
+export function newTrace(traceName: string, userId?: string | null, source?: string | null): AiTrace {
+  return { traceId: crypto.randomUUID(), traceName, userId: userId ?? null, source: source ?? null };
 }
 
 type ProviderOptions = NonNullable<Parameters<typeof generateObject>[0]["providerOptions"]>;
 
 /**
- * `providerOptions` carrying the attribution tag, merged onto whatever else the
- * call already sends.
+ * `providerOptions` carrying the call's attribution, merged onto whatever else
+ * the call already sends.
  *
- * Nine of the eleven call sites used to send no `user` at all, so most of the
- * bill arrived at OpenRouter anonymous: the activity feed could show what was
- * spent but not which feature or which account spent it, which is the one
- * question you actually ask it. `callTag` existed and was wired to two places.
+ * OpenRouter's Broadcast forwards three request fields to Langfuse (and any
+ * other destination configured under Settings → Observability):
  *
- * Returns the options untouched when there is no org to name — an unattributed
- * call is better than one tagged with an empty string.
+ * - `user` becomes the Langfuse user. It is the ORGANIZATION, not the author,
+ *   because the org is the account that pays, and "which account costs the
+ *   most" is the question this exists to answer.
+ * - `session_id` becomes the Langfuse session: the conversation for a chat
+ *   turn, and `form:<id>` for builder calls, so every AI edit of one form reads
+ *   as one session.
+ * - `trace` is free-form. `trace_id`, `trace_name`, `generation_name` and
+ *   `environment` are reserved by Broadcast; every other key lands as
+ *   filterable metadata, which is where `feature` lives.
+ *
+ * The installed provider spreads `providerOptions.openrouter` into the request
+ * body verbatim, so no custom fetch is needed; `tests/ai-telemetry.test.ts`
+ * pins that, because an upgrade that stops doing it would fail silently.
+ *
+ * Ids only, and never a respondent's. Every one of these fields is stored by
+ * OpenRouter and by Langfuse, so an email or a phone number here would be
+ * handing third parties the very thing the form was collecting.
  */
-export function tagged(
+export function telemetry(
+  env: Pick<Bindings, "ENVIRONMENT" | "CF_VERSION_METADATA">,
   base: ProviderOptions,
-  kind: string,
-  organizationId?: string | null,
-  subjectId?: string | null,
+  ctx: AiCallContext & { model?: string },
 ): ProviderOptions {
-  if (!organizationId) return base;
   const { openrouter, ...rest } = base;
-  return { ...rest, openrouter: { ...openrouter, user: callTag(kind, organizationId, subjectId) } };
+  const trace = Object.fromEntries(
+    Object.entries({
+      trace_id: ctx.traceId,
+      trace_name: ctx.traceName ?? ctx.kind,
+      generation_name: ctx.kind,
+      environment: env.ENVIRONMENT,
+      release: env.CF_VERSION_METADATA?.id,
+      feature: ctx.kind,
+      source: ctx.source,
+      organization_id: ctx.organizationId,
+      user_id: ctx.userId,
+      form_id: ctx.formId,
+      chat_session_id: ctx.sessionId,
+      model_role: ctx.model === MODELS.generationFallback ? "fallback" : undefined,
+    }).filter((e): e is [string, string] => typeof e[1] === "string" && e[1] !== ""),
+  );
+  const sessionId = ctx.sessionId || (ctx.formId ? `form:${ctx.formId}` : null);
+  return {
+    ...rest,
+    openrouter: {
+      ...openrouter,
+      ...(ctx.organizationId ? { user: ctx.organizationId.slice(0, 128) } : {}),
+      ...(sessionId ? { session_id: sessionId.slice(0, 256) } : {}),
+      trace,
+    },
+  };
 }
 
 export function chatModel(env: Bindings, model: string = DEFAULT_MODEL): LanguageModel {
@@ -591,6 +656,28 @@ export interface TokenUsage {
   costUsd: number | null;
   /** OpenRouter's `gen-…` id, so a row can be traced back to its generation. */
   generationId: string | null;
+  /**
+   * Where the tokens went, as the provider counted them. Each is a slice of
+   * `input` or `output`, not an addition to it: cached reads are input billed at
+   * about a tenth of the rate, and reasoning is output nobody sees. Absent when
+   * the provider did not say, which is not the same as zero.
+   */
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  reasoningTokens?: number;
+  /**
+   * Model round trips, and the tool calls that caused them. A tool loop re-sends
+   * the whole prompt on every step, so a turn that looks up the knowledge base
+   * twice pays for its system prompt three times.
+   */
+  steps?: number;
+  toolCalls?: number;
+  /**
+   * What OpenRouter reported for every step after the first: the price of the
+   * tool round trips alone. `null` when a step went unpriced, for the same
+   * reason `costUsd` is.
+   */
+  toolStepsCostUsd?: number | null;
 }
 
 /** The slice of `providerMetadata` the OpenRouter provider fills in. */
@@ -604,9 +691,14 @@ type OpenRouterMeta = { openrouter?: { usage?: { cost?: number } } } | undefined
  * authoritative about what we were charged.
  */
 interface UsageBearing {
-  usage?: { inputTokens?: number; outputTokens?: number };
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    inputTokenDetails?: { cacheReadTokens?: number; cacheWriteTokens?: number };
+    outputTokenDetails?: { reasoningTokens?: number };
+  };
   providerMetadata?: OpenRouterMeta;
-  steps?: readonly { providerMetadata?: OpenRouterMeta }[];
+  steps?: readonly { providerMetadata?: OpenRouterMeta; toolCalls?: readonly unknown[] }[];
   response?: { id?: string };
 }
 
@@ -628,22 +720,36 @@ interface UsageBearing {
 export function reportedUsage(result: UsageBearing): TokenUsage {
   const costOf = (meta: OpenRouterMeta) => meta?.openrouter?.usage?.cost;
 
+  const sum = (costs: (number | undefined)[]) =>
+    costs.every((c) => typeof c === "number") ? costs.reduce<number>((t, c) => t + (c as number), 0) : null;
+
   let costUsd: number | null;
+  let toolStepsCostUsd: number | null = 0;
+  let steps = 1;
+  let toolCalls = 0;
   if (result.steps && result.steps.length > 0) {
     const perStep = result.steps.map((s) => costOf(s.providerMetadata));
-    costUsd = perStep.every((c) => typeof c === "number")
-      ? perStep.reduce<number>((sum, c) => sum + (c as number), 0)
-      : null;
+    costUsd = sum(perStep);
+    toolStepsCostUsd = sum(perStep.slice(1));
+    steps = result.steps.length;
+    toolCalls = result.steps.reduce((n, s) => n + (s.toolCalls?.length ?? 0), 0);
   } else {
     const single = costOf(result.providerMetadata);
     costUsd = typeof single === "number" ? single : null;
   }
 
+  const u = result.usage;
   return {
-    input: result.usage?.inputTokens ?? 0,
-    output: result.usage?.outputTokens ?? 0,
+    input: u?.inputTokens ?? 0,
+    output: u?.outputTokens ?? 0,
     costUsd,
     generationId: result.response?.id ?? null,
+    cacheReadTokens: u?.inputTokenDetails?.cacheReadTokens,
+    cacheWriteTokens: u?.inputTokenDetails?.cacheWriteTokens,
+    reasoningTokens: u?.outputTokenDetails?.reasoningTokens,
+    steps,
+    toolCalls,
+    toolStepsCostUsd,
   };
 }
 
@@ -657,6 +763,17 @@ export const NO_USAGE: TokenUsage = { input: 0, output: 0, costUsd: null, genera
  * stated, so it is not: the row goes out as unpriced and says so, rather than
  * reporting the half we happen to know as if it were the whole.
  */
+/**
+ * A token detail summed across two calls. A side that made no call (no tokens)
+ * contributes nothing; a side that made one and did not say makes the sum
+ * unknown, for the same reason an unpriced call makes the cost unknown.
+ */
+function addKnown(x: number | undefined, y: number | undefined, a: TokenUsage, b: TokenUsage): number | undefined {
+  const made = (t: TokenUsage) => t.input + t.output > 0;
+  if ((made(a) && x === undefined) || (made(b) && y === undefined)) return undefined;
+  return (x ?? 0) + (y ?? 0);
+}
+
 export function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
   return {
     input: a.input + b.input,
@@ -664,6 +781,15 @@ export function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
     costUsd: a.costUsd === null || b.costUsd === null ? null : a.costUsd + b.costUsd,
     // The later call's id — enough to find the run in OpenRouter's activity feed.
     generationId: b.generationId ?? a.generationId,
+    cacheReadTokens: addKnown(a.cacheReadTokens, b.cacheReadTokens, a, b),
+    cacheWriteTokens: addKnown(a.cacheWriteTokens, b.cacheWriteTokens, a, b),
+    reasoningTokens: addKnown(a.reasoningTokens, b.reasoningTokens, a, b),
+    steps: (a.steps ?? 0) + (b.steps ?? 0) || undefined,
+    toolCalls: (a.toolCalls ?? 0) + (b.toolCalls ?? 0),
+    toolStepsCostUsd:
+      a.toolStepsCostUsd === null || b.toolStepsCostUsd === null
+        ? null
+        : (a.toolStepsCostUsd ?? 0) + (b.toolStepsCostUsd ?? 0),
   };
 }
 
@@ -776,6 +902,8 @@ export type ClarifyQuestions = z.output<typeof ClarifyQuestions>;
 export async function clarifyRequest(opts: {
   env: Bindings;
   organizationId?: string | null;
+  /** Groups this call with the rest of the action in Langfuse; see `AiTrace`. */
+  trace?: AiTrace;
   prompt: string;
   system: string;
   abortSignal?: AbortSignal;
@@ -786,7 +914,7 @@ export async function clarifyRequest(opts: {
       schema: ClarifyQuestions,
       system: opts.system,
       prompt: opts.prompt,
-      providerOptions: tagged({}, "clarify", opts.organizationId),
+      providerOptions: telemetry(opts.env, {}, { kind: "clarify", organizationId: opts.organizationId, ...opts.trace }),
       abortSignal: opts.abortSignal ?? AbortSignal.timeout(12_000),
     });
     const usage = reportedUsage(result);
@@ -839,6 +967,8 @@ export async function reviewEdit(opts: {
   env: Bindings;
   organizationId?: string | null;
   formId?: string | null;
+  /** Groups this call with the rest of the action in Langfuse; see `AiTrace`. */
+  trace?: AiTrace;
   request: string;
   /** What changed, rendered compactly by the caller. */
   diff: string;
@@ -868,7 +998,7 @@ export async function reviewEdit(opts: {
         "have written.\n\n" +
         'When ok=false, "problem" is one sentence saying what to do about it, addressed to whoever is fixing it.',
       prompt: `THEY ASKED FOR:\n${opts.request}\n\nTHE EDIT DID:\n${opts.diff}`,
-      providerOptions: tagged({}, "edit_review", opts.organizationId, opts.formId),
+      providerOptions: telemetry(opts.env, {}, { kind: "edit_review", organizationId: opts.organizationId, formId: opts.formId, ...opts.trace }),
       abortSignal: opts.abortSignal ?? AbortSignal.timeout(12_000),
     });
     const usage = reportedUsage(result);
@@ -946,6 +1076,10 @@ export async function runEditAgent(opts: {
   tools: ToolSet;
   organizationId?: string;
   formId?: string;
+  /** `edit` or `edit_retry`, as it will be logged. */
+  kind?: string;
+  /** Groups this call with the rest of the action in Langfuse; see `AiTrace`. */
+  trace?: AiTrace;
   abortSignal?: AbortSignal;
   /** Called as each step completes, for the SSE stage events. */
   onStep?: (step: { number: number; toolNames: string[] }) => void;
@@ -983,7 +1117,7 @@ export async function runEditAgent(opts: {
        * on purpose, with the number recorded so it is not re-theorised.
        */
       prepareStep: ({ stepNumber }) => (stepNumber === 0 ? { toolChoice: "required" as const } : {}),
-      providerOptions: {
+      providerOptions: telemetry(opts.env, {
         openrouter: {
           ...GENERATION_PROVIDER_OPTIONS.openrouter,
           /**
@@ -1003,9 +1137,8 @@ export async function runEditAgent(opts: {
            * which have no second turn to replay anything into.
            */
           reasoning: { effort: "low" as const, exclude: false },
-          user: callTag("form_edit", opts.organizationId ?? "", opts.formId),
         },
-      },
+      }, { kind: opts.kind ?? "edit", organizationId: opts.organizationId, formId: opts.formId, ...opts.trace, model }),
       onStepFinish: (step) => {
         steps++;
         const names = step.toolCalls.map((c) => c.toolName);
@@ -1039,7 +1172,7 @@ export async function runEditAgent(opts: {
   };
 }
 
-export async function generateEdit(opts: { env: Bindings; prompt: string; system?: string; organizationId?: string | null; formId?: string | null }): Promise<{ draft: EditDraft; tokens: number; usage: TokenUsage; model: string }> {
+export async function generateEdit(opts: { env: Bindings; prompt: string; system?: string; organizationId?: string | null; formId?: string | null; kind?: string; trace?: AiTrace }): Promise<{ draft: EditDraft; tokens: number; usage: TokenUsage; model: string }> {
   // Which vendor actually answered — `MODELS.generation` unless the schema was
   // refused and this fell back to `MODELS.generationFallback`. Reported back so
   // the caller can log the model that was actually billed, not the one that
@@ -1052,7 +1185,7 @@ export async function generateEdit(opts: { env: Bindings; prompt: string; system
       schema: EditDraft,
       system: opts.system,
       prompt: opts.prompt,
-      providerOptions: tagged(GENERATION_PROVIDER_OPTIONS, "form_edit", opts.organizationId, opts.formId),
+      providerOptions: telemetry(opts.env, GENERATION_PROVIDER_OPTIONS, { kind: opts.kind ?? "edit", organizationId: opts.organizationId, formId: opts.formId, ...opts.trace, model }),
     });
   });
   const usage = reportedUsage(result);
@@ -1066,7 +1199,7 @@ export async function generateEdit(opts: { env: Bindings; prompt: string; system
  * the larger half and is byte-identical on every call — sits in front of the
  * provider's prompt cache instead of being billed as fresh input each time.
  */
-export async function generateFormDraft(opts: { env: Bindings; prompt: string; system?: string; organizationId?: string | null }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage; model: string }> {
+export async function generateFormDraft(opts: { env: Bindings; prompt: string; system?: string; organizationId?: string | null; trace?: AiTrace }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage; model: string }> {
   let usedModel: string = MODELS.generation;
   const result = await withSchemaFallback("generate", (model) => {
     usedModel = model;
@@ -1075,7 +1208,7 @@ export async function generateFormDraft(opts: { env: Bindings; prompt: string; s
       schema: GenerationDraft,
       system: opts.system,
       prompt: opts.prompt,
-      providerOptions: tagged(GENERATION_PROVIDER_OPTIONS, "form_generate", opts.organizationId),
+      providerOptions: telemetry(opts.env, GENERATION_PROVIDER_OPTIONS, { kind: "generate", organizationId: opts.organizationId, ...opts.trace, model }),
     });
   });
   const usage = reportedUsage(result);
@@ -1110,6 +1243,8 @@ export async function streamFormDraft(opts: {
   system?: string;
   organizationId?: string | null;
   formId?: string | null;
+  /** Groups this call with the rest of the action in Langfuse; see `AiTrace`. */
+  trace?: AiTrace;
   onBlock?: (block: DraftBlockPreview) => void;
   abortSignal?: AbortSignal;
 }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage; model: string }> {
@@ -1127,7 +1262,7 @@ export async function streamFormDraft(opts: {
       schema: GenerationDraft,
       system: opts.system,
       prompt: opts.prompt,
-      providerOptions: tagged(GENERATION_PROVIDER_OPTIONS, "form_generate_stream", opts.organizationId, opts.formId),
+      providerOptions: telemetry(opts.env, GENERATION_PROVIDER_OPTIONS, { kind: "generate_stream", organizationId: opts.organizationId, formId: opts.formId, ...opts.trace, model }),
       abortSignal: opts.abortSignal,
     });
 
@@ -1202,6 +1337,9 @@ export async function streamFormDraft(opts: {
 export async function researchBrief(opts: {
   env: Bindings;
   organizationId?: string | null;
+  formId?: string | null;
+  /** Groups this call with the rest of the action in Langfuse; see `AiTrace`. */
+  trace?: AiTrace;
   request: string;
   sites: { url: string; title: string | null; text: string }[];
   abortSignal?: AbortSignal;
@@ -1225,15 +1363,15 @@ VOCABULARY: 3-6 product-specific terms the questions should use
 WORTH ASKING: 3-4 things this product specifically needs to know from a respondent
 
 Use only what the page content and your search results support. If something is not evidenced, leave that line out rather than guessing — an invented detail becomes a question nobody can answer.`,
-      providerOptions: tagged(
+      providerOptions: telemetry(
+        opts.env,
         {
           openrouter: {
             plugins: [{ id: "web" as const, max_results: 3 }],
             reasoning: { effort: "minimal" as const, exclude: true },
           },
         },
-        "research",
-        opts.organizationId,
+        { kind: "research", organizationId: opts.organizationId, formId: opts.formId, ...opts.trace },
       ),
       abortSignal: opts.abortSignal,
     });
@@ -1276,6 +1414,9 @@ export async function extractAnswer(opts: {
   env: Bindings;
   organizationId?: string | null;
   sessionId?: string | null;
+  formId?: string | null;
+  /** Groups this call with the rest of the action in Langfuse; see `AiTrace`. */
+  trace?: AiTrace;
   /** Built by `extractionSchema(block)` — always an envelope-shaped object. */
   schema: z.ZodType<ExtractionEnvelope>;
   question: string;
@@ -1305,7 +1446,7 @@ export async function extractAnswer(opts: {
 ${opts.guidance}
 ${opts.transcript ? `\nRecent conversation:\n${opts.transcript}\n` : ""}
 Their reply: """${opts.answer}"""`,
-      providerOptions: tagged({}, "extraction", opts.organizationId, opts.sessionId),
+      providerOptions: telemetry(opts.env, {}, { kind: "extraction", organizationId: opts.organizationId, sessionId: opts.sessionId, formId: opts.formId, ...opts.trace }),
     });
     const out = result.object;
     // The split is returned as well as the total, because the caller used to

@@ -1002,6 +1002,25 @@ export type GetApiAdminAi200LatencyItem = {
   errorRate: number;
 };
 
+export type GetApiAdminAi200BreakdownItem = {
+  kind: string;
+  calls: number;
+  costUsd: number;
+  splitCostUsd: number;
+  inputUsd: number;
+  cachedUsd: number;
+  outputUsd: number;
+  reasoningUsd: number;
+  otherUsd: number;
+  toolStepsUsd: number;
+  steps: number;
+  toolCalls: number;
+  promptTokens: number;
+  completionTokens: number;
+  cacheReadTokens: number;
+  reasoningTokens: number;
+};
+
 export type GetApiAdminAi200TopSpendersItem = {[key: string]: unknown};
 
 export type GetApiAdminAi200LossMakersItem = {[key: string]: unknown};
@@ -1016,6 +1035,7 @@ export type GetApiAdminAi200 = {
   costByKind: GetApiAdminAi200CostByKindItem[];
   totals: GetApiAdminAi200Totals;
   latency: GetApiAdminAi200LatencyItem[];
+  breakdown: GetApiAdminAi200BreakdownItem[];
   topSpenders: GetApiAdminAi200TopSpendersItem[];
   lossMakers: GetApiAdminAi200LossMakersItem[];
 };
@@ -1380,6 +1400,21 @@ export type PostPFormsBySlugSessions404Error = {
 
 export type PostPFormsBySlugSessions404 = {
   error: PostPFormsBySlugSessions404Error;
+};
+
+export type PostPSessionsByIdAuthGoogle200 = {
+  ok: boolean;
+  [key: string]: unknown;
+};
+
+export type PostPSessionsByIdAuthPhoneToken200 = {
+  ok: boolean;
+  [key: string]: unknown;
+};
+
+export type PostPSessionsByIdVerifyPhoneToken200 = {
+  ok: boolean;
+  [key: string]: unknown;
 };
 
 export type PostPSessionsByIdUploadsIntentBody = {
@@ -2433,6 +2468,103 @@ export type PostV1FormsByIdResponsesBody = {
   respondent?: PostV1FormsByIdResponsesBodyRespondent;
 };
 
+export type PostV1FormsByIdResponses201Status = typeof PostV1FormsByIdResponses201Status[keyof typeof PostV1FormsByIdResponses201Status];
+
+
+export const PostV1FormsByIdResponses201Status = {
+  in_progress: 'in_progress',
+  completed: 'completed',
+  abandoned: 'abandoned',
+  disqualified: 'disqualified',
+} as const;
+
+export type PostV1FormsByIdResponses201Progress = {
+  answered: number;
+  totalEstimate: number;
+  pct: number;
+};
+
+export type PostV1FormsByIdResponses201Variables = {[key: string]: unknown};
+
+export type PostV1FormsByIdResponses201HiddenFields = {[key: string]: unknown};
+
+export type PostV1FormsByIdResponses201NextBlock = {
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+};
+
+export type PostV1FormsByIdResponses201NextEndingKind = typeof PostV1FormsByIdResponses201NextEndingKind[keyof typeof PostV1FormsByIdResponses201NextEndingKind];
+
+
+export const PostV1FormsByIdResponses201NextEndingKind = {
+  success: 'success',
+  screen_out: 'screen_out',
+} as const;
+
+export type PostV1FormsByIdResponses201NextEnding = {
+  ref: string;
+  title: string;
+  bodyMd?: string;
+  kind?: PostV1FormsByIdResponses201NextEndingKind;
+  requirements?: unknown[];
+  [key: string]: unknown;
+};
+
+export type PostV1FormsByIdResponses201Next = {
+  kind: string;
+  block?: PostV1FormsByIdResponses201NextBlock;
+  ending?: PostV1FormsByIdResponses201NextEnding;
+  [key: string]: unknown;
+} | null;
+
+export type PostV1FormsByIdResponses201MissingRequiredItem = {
+  ref: string;
+  title: string;
+};
+
+export type PostV1FormsByIdResponses201AnswersItem = {
+  ref: string;
+  type: string;
+  value: unknown;
+};
+
+export type PostV1FormsByIdResponses201RecordedItem = {
+  ref: string;
+  value: unknown;
+};
+
+export type PostV1FormsByIdResponses201 = {
+  id: string;
+  object: 'response';
+  form_id: string;
+  status: PostV1FormsByIdResponses201Status;
+  source: string;
+  mode: string;
+  started_at: number;
+  updated_at: number;
+  completed_at: number | null;
+  expires_at: number | null;
+  duration_ms: number | null;
+  ending_ref: string | null;
+  abandon_reason: string | null;
+  progress: PostV1FormsByIdResponses201Progress;
+  variables: PostV1FormsByIdResponses201Variables;
+  hidden_fields: PostV1FormsByIdResponses201HiddenFields;
+  next: PostV1FormsByIdResponses201Next;
+  complete_ready: boolean;
+  missing_required: PostV1FormsByIdResponses201MissingRequiredItem[];
+  off_path_answers: string[];
+  answers?: PostV1FormsByIdResponses201AnswersItem[];
+  recorded?: PostV1FormsByIdResponses201RecordedItem[];
+  [key: string]: unknown;
+};
+
 export type GetV1FormsByIdResponsesParams = {
 status?: string;
 source?: string;
@@ -2472,6 +2604,109 @@ export const GetV1FormsByIdResponsesOrder = {
   updated: 'updated',
 } as const;
 
+export type GetV1FormsByIdResponses200DataItemStatus = typeof GetV1FormsByIdResponses200DataItemStatus[keyof typeof GetV1FormsByIdResponses200DataItemStatus];
+
+
+export const GetV1FormsByIdResponses200DataItemStatus = {
+  in_progress: 'in_progress',
+  completed: 'completed',
+  abandoned: 'abandoned',
+  disqualified: 'disqualified',
+} as const;
+
+export type GetV1FormsByIdResponses200DataItemProgress = {
+  answered: number;
+  totalEstimate: number;
+  pct: number;
+};
+
+export type GetV1FormsByIdResponses200DataItemVariables = {[key: string]: unknown};
+
+export type GetV1FormsByIdResponses200DataItemHiddenFields = {[key: string]: unknown};
+
+export type GetV1FormsByIdResponses200DataItemNextBlock = {
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+};
+
+export type GetV1FormsByIdResponses200DataItemNextEndingKind = typeof GetV1FormsByIdResponses200DataItemNextEndingKind[keyof typeof GetV1FormsByIdResponses200DataItemNextEndingKind];
+
+
+export const GetV1FormsByIdResponses200DataItemNextEndingKind = {
+  success: 'success',
+  screen_out: 'screen_out',
+} as const;
+
+export type GetV1FormsByIdResponses200DataItemNextEnding = {
+  ref: string;
+  title: string;
+  bodyMd?: string;
+  kind?: GetV1FormsByIdResponses200DataItemNextEndingKind;
+  requirements?: unknown[];
+  [key: string]: unknown;
+};
+
+export type GetV1FormsByIdResponses200DataItemNext = {
+  kind: string;
+  block?: GetV1FormsByIdResponses200DataItemNextBlock;
+  ending?: GetV1FormsByIdResponses200DataItemNextEnding;
+  [key: string]: unknown;
+} | null;
+
+export type GetV1FormsByIdResponses200DataItemMissingRequiredItem = {
+  ref: string;
+  title: string;
+};
+
+export type GetV1FormsByIdResponses200DataItemAnswersItem = {
+  ref: string;
+  type: string;
+  value: unknown;
+};
+
+export type GetV1FormsByIdResponses200DataItemRecordedItem = {
+  ref: string;
+  value: unknown;
+};
+
+export type GetV1FormsByIdResponses200DataItem = {
+  id: string;
+  object: 'response';
+  form_id: string;
+  status: GetV1FormsByIdResponses200DataItemStatus;
+  source: string;
+  mode: string;
+  started_at: number;
+  updated_at: number;
+  completed_at: number | null;
+  expires_at: number | null;
+  duration_ms: number | null;
+  ending_ref: string | null;
+  abandon_reason: string | null;
+  progress: GetV1FormsByIdResponses200DataItemProgress;
+  variables: GetV1FormsByIdResponses200DataItemVariables;
+  hidden_fields: GetV1FormsByIdResponses200DataItemHiddenFields;
+  next: GetV1FormsByIdResponses200DataItemNext;
+  complete_ready: boolean;
+  missing_required: GetV1FormsByIdResponses200DataItemMissingRequiredItem[];
+  off_path_answers: string[];
+  answers?: GetV1FormsByIdResponses200DataItemAnswersItem[];
+  recorded?: GetV1FormsByIdResponses200DataItemRecordedItem[];
+  [key: string]: unknown;
+};
+
+export type GetV1FormsByIdResponses200 = {
+  data: GetV1FormsByIdResponses200DataItem[];
+  has_more: boolean;
+  next_cursor: string | null;
+};
+
 export type PostV1ResponsesByIdAnswersBody = {
   /**
      * @minItems 1
@@ -2486,13 +2721,634 @@ export type PostV1ResponsesByIdAnswersBody = {
   value: unknown;
 };
 
+export type PostV1ResponsesByIdAnswers200Status = typeof PostV1ResponsesByIdAnswers200Status[keyof typeof PostV1ResponsesByIdAnswers200Status];
+
+
+export const PostV1ResponsesByIdAnswers200Status = {
+  in_progress: 'in_progress',
+  completed: 'completed',
+  abandoned: 'abandoned',
+  disqualified: 'disqualified',
+} as const;
+
+export type PostV1ResponsesByIdAnswers200Progress = {
+  answered: number;
+  totalEstimate: number;
+  pct: number;
+};
+
+export type PostV1ResponsesByIdAnswers200Variables = {[key: string]: unknown};
+
+export type PostV1ResponsesByIdAnswers200HiddenFields = {[key: string]: unknown};
+
+export type PostV1ResponsesByIdAnswers200NextBlock = {
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+};
+
+export type PostV1ResponsesByIdAnswers200NextEndingKind = typeof PostV1ResponsesByIdAnswers200NextEndingKind[keyof typeof PostV1ResponsesByIdAnswers200NextEndingKind];
+
+
+export const PostV1ResponsesByIdAnswers200NextEndingKind = {
+  success: 'success',
+  screen_out: 'screen_out',
+} as const;
+
+export type PostV1ResponsesByIdAnswers200NextEnding = {
+  ref: string;
+  title: string;
+  bodyMd?: string;
+  kind?: PostV1ResponsesByIdAnswers200NextEndingKind;
+  requirements?: unknown[];
+  [key: string]: unknown;
+};
+
+export type PostV1ResponsesByIdAnswers200Next = {
+  kind: string;
+  block?: PostV1ResponsesByIdAnswers200NextBlock;
+  ending?: PostV1ResponsesByIdAnswers200NextEnding;
+  [key: string]: unknown;
+} | null;
+
+export type PostV1ResponsesByIdAnswers200MissingRequiredItem = {
+  ref: string;
+  title: string;
+};
+
+export type PostV1ResponsesByIdAnswers200AnswersItem = {
+  ref: string;
+  type: string;
+  value: unknown;
+};
+
+export type PostV1ResponsesByIdAnswers200RecordedItem = {
+  ref: string;
+  value: unknown;
+};
+
+export type PostV1ResponsesByIdAnswers200 = {
+  id: string;
+  object: 'response';
+  form_id: string;
+  status: PostV1ResponsesByIdAnswers200Status;
+  source: string;
+  mode: string;
+  started_at: number;
+  updated_at: number;
+  completed_at: number | null;
+  expires_at: number | null;
+  duration_ms: number | null;
+  ending_ref: string | null;
+  abandon_reason: string | null;
+  progress: PostV1ResponsesByIdAnswers200Progress;
+  variables: PostV1ResponsesByIdAnswers200Variables;
+  hidden_fields: PostV1ResponsesByIdAnswers200HiddenFields;
+  next: PostV1ResponsesByIdAnswers200Next;
+  complete_ready: boolean;
+  missing_required: PostV1ResponsesByIdAnswers200MissingRequiredItem[];
+  off_path_answers: string[];
+  answers?: PostV1ResponsesByIdAnswers200AnswersItem[];
+  recorded?: PostV1ResponsesByIdAnswers200RecordedItem[];
+  [key: string]: unknown;
+};
+
+export type DeleteV1ResponsesByIdAnswersByRef200Status = typeof DeleteV1ResponsesByIdAnswersByRef200Status[keyof typeof DeleteV1ResponsesByIdAnswersByRef200Status];
+
+
+export const DeleteV1ResponsesByIdAnswersByRef200Status = {
+  in_progress: 'in_progress',
+  completed: 'completed',
+  abandoned: 'abandoned',
+  disqualified: 'disqualified',
+} as const;
+
+export type DeleteV1ResponsesByIdAnswersByRef200Progress = {
+  answered: number;
+  totalEstimate: number;
+  pct: number;
+};
+
+export type DeleteV1ResponsesByIdAnswersByRef200Variables = {[key: string]: unknown};
+
+export type DeleteV1ResponsesByIdAnswersByRef200HiddenFields = {[key: string]: unknown};
+
+export type DeleteV1ResponsesByIdAnswersByRef200NextBlock = {
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+};
+
+export type DeleteV1ResponsesByIdAnswersByRef200NextEndingKind = typeof DeleteV1ResponsesByIdAnswersByRef200NextEndingKind[keyof typeof DeleteV1ResponsesByIdAnswersByRef200NextEndingKind];
+
+
+export const DeleteV1ResponsesByIdAnswersByRef200NextEndingKind = {
+  success: 'success',
+  screen_out: 'screen_out',
+} as const;
+
+export type DeleteV1ResponsesByIdAnswersByRef200NextEnding = {
+  ref: string;
+  title: string;
+  bodyMd?: string;
+  kind?: DeleteV1ResponsesByIdAnswersByRef200NextEndingKind;
+  requirements?: unknown[];
+  [key: string]: unknown;
+};
+
+export type DeleteV1ResponsesByIdAnswersByRef200Next = {
+  kind: string;
+  block?: DeleteV1ResponsesByIdAnswersByRef200NextBlock;
+  ending?: DeleteV1ResponsesByIdAnswersByRef200NextEnding;
+  [key: string]: unknown;
+} | null;
+
+export type DeleteV1ResponsesByIdAnswersByRef200MissingRequiredItem = {
+  ref: string;
+  title: string;
+};
+
+export type DeleteV1ResponsesByIdAnswersByRef200AnswersItem = {
+  ref: string;
+  type: string;
+  value: unknown;
+};
+
+export type DeleteV1ResponsesByIdAnswersByRef200RecordedItem = {
+  ref: string;
+  value: unknown;
+};
+
+export type DeleteV1ResponsesByIdAnswersByRef200 = {
+  id: string;
+  object: 'response';
+  form_id: string;
+  status: DeleteV1ResponsesByIdAnswersByRef200Status;
+  source: string;
+  mode: string;
+  started_at: number;
+  updated_at: number;
+  completed_at: number | null;
+  expires_at: number | null;
+  duration_ms: number | null;
+  ending_ref: string | null;
+  abandon_reason: string | null;
+  progress: DeleteV1ResponsesByIdAnswersByRef200Progress;
+  variables: DeleteV1ResponsesByIdAnswersByRef200Variables;
+  hidden_fields: DeleteV1ResponsesByIdAnswersByRef200HiddenFields;
+  next: DeleteV1ResponsesByIdAnswersByRef200Next;
+  complete_ready: boolean;
+  missing_required: DeleteV1ResponsesByIdAnswersByRef200MissingRequiredItem[];
+  off_path_answers: string[];
+  answers?: DeleteV1ResponsesByIdAnswersByRef200AnswersItem[];
+  recorded?: DeleteV1ResponsesByIdAnswersByRef200RecordedItem[];
+  [key: string]: unknown;
+};
+
 export type PostV1ResponsesByIdCompleteBody = {
   endingRef?: string;
+};
+
+export type PostV1ResponsesByIdComplete200Status = typeof PostV1ResponsesByIdComplete200Status[keyof typeof PostV1ResponsesByIdComplete200Status];
+
+
+export const PostV1ResponsesByIdComplete200Status = {
+  in_progress: 'in_progress',
+  completed: 'completed',
+  abandoned: 'abandoned',
+  disqualified: 'disqualified',
+} as const;
+
+export type PostV1ResponsesByIdComplete200Progress = {
+  answered: number;
+  totalEstimate: number;
+  pct: number;
+};
+
+export type PostV1ResponsesByIdComplete200Variables = {[key: string]: unknown};
+
+export type PostV1ResponsesByIdComplete200HiddenFields = {[key: string]: unknown};
+
+export type PostV1ResponsesByIdComplete200NextBlock = {
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+};
+
+export type PostV1ResponsesByIdComplete200NextEndingKind = typeof PostV1ResponsesByIdComplete200NextEndingKind[keyof typeof PostV1ResponsesByIdComplete200NextEndingKind];
+
+
+export const PostV1ResponsesByIdComplete200NextEndingKind = {
+  success: 'success',
+  screen_out: 'screen_out',
+} as const;
+
+export type PostV1ResponsesByIdComplete200NextEnding = {
+  ref: string;
+  title: string;
+  bodyMd?: string;
+  kind?: PostV1ResponsesByIdComplete200NextEndingKind;
+  requirements?: unknown[];
+  [key: string]: unknown;
+};
+
+export type PostV1ResponsesByIdComplete200Next = {
+  kind: string;
+  block?: PostV1ResponsesByIdComplete200NextBlock;
+  ending?: PostV1ResponsesByIdComplete200NextEnding;
+  [key: string]: unknown;
+} | null;
+
+export type PostV1ResponsesByIdComplete200MissingRequiredItem = {
+  ref: string;
+  title: string;
+};
+
+export type PostV1ResponsesByIdComplete200AnswersItem = {
+  ref: string;
+  type: string;
+  value: unknown;
+};
+
+export type PostV1ResponsesByIdComplete200RecordedItem = {
+  ref: string;
+  value: unknown;
+};
+
+export type PostV1ResponsesByIdComplete200 = {
+  id: string;
+  object: 'response';
+  form_id: string;
+  status: PostV1ResponsesByIdComplete200Status;
+  source: string;
+  mode: string;
+  started_at: number;
+  updated_at: number;
+  completed_at: number | null;
+  expires_at: number | null;
+  duration_ms: number | null;
+  ending_ref: string | null;
+  abandon_reason: string | null;
+  progress: PostV1ResponsesByIdComplete200Progress;
+  variables: PostV1ResponsesByIdComplete200Variables;
+  hidden_fields: PostV1ResponsesByIdComplete200HiddenFields;
+  next: PostV1ResponsesByIdComplete200Next;
+  complete_ready: boolean;
+  missing_required: PostV1ResponsesByIdComplete200MissingRequiredItem[];
+  off_path_answers: string[];
+  answers?: PostV1ResponsesByIdComplete200AnswersItem[];
+  recorded?: PostV1ResponsesByIdComplete200RecordedItem[];
+  [key: string]: unknown;
 };
 
 export type PostV1ResponsesByIdAbandonBody = {
   /** @maxLength 100 */
   reason?: string;
+};
+
+export type PostV1ResponsesByIdAbandon200Status = typeof PostV1ResponsesByIdAbandon200Status[keyof typeof PostV1ResponsesByIdAbandon200Status];
+
+
+export const PostV1ResponsesByIdAbandon200Status = {
+  in_progress: 'in_progress',
+  completed: 'completed',
+  abandoned: 'abandoned',
+  disqualified: 'disqualified',
+} as const;
+
+export type PostV1ResponsesByIdAbandon200Progress = {
+  answered: number;
+  totalEstimate: number;
+  pct: number;
+};
+
+export type PostV1ResponsesByIdAbandon200Variables = {[key: string]: unknown};
+
+export type PostV1ResponsesByIdAbandon200HiddenFields = {[key: string]: unknown};
+
+export type PostV1ResponsesByIdAbandon200NextBlock = {
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+};
+
+export type PostV1ResponsesByIdAbandon200NextEndingKind = typeof PostV1ResponsesByIdAbandon200NextEndingKind[keyof typeof PostV1ResponsesByIdAbandon200NextEndingKind];
+
+
+export const PostV1ResponsesByIdAbandon200NextEndingKind = {
+  success: 'success',
+  screen_out: 'screen_out',
+} as const;
+
+export type PostV1ResponsesByIdAbandon200NextEnding = {
+  ref: string;
+  title: string;
+  bodyMd?: string;
+  kind?: PostV1ResponsesByIdAbandon200NextEndingKind;
+  requirements?: unknown[];
+  [key: string]: unknown;
+};
+
+export type PostV1ResponsesByIdAbandon200Next = {
+  kind: string;
+  block?: PostV1ResponsesByIdAbandon200NextBlock;
+  ending?: PostV1ResponsesByIdAbandon200NextEnding;
+  [key: string]: unknown;
+} | null;
+
+export type PostV1ResponsesByIdAbandon200MissingRequiredItem = {
+  ref: string;
+  title: string;
+};
+
+export type PostV1ResponsesByIdAbandon200AnswersItem = {
+  ref: string;
+  type: string;
+  value: unknown;
+};
+
+export type PostV1ResponsesByIdAbandon200RecordedItem = {
+  ref: string;
+  value: unknown;
+};
+
+export type PostV1ResponsesByIdAbandon200 = {
+  id: string;
+  object: 'response';
+  form_id: string;
+  status: PostV1ResponsesByIdAbandon200Status;
+  source: string;
+  mode: string;
+  started_at: number;
+  updated_at: number;
+  completed_at: number | null;
+  expires_at: number | null;
+  duration_ms: number | null;
+  ending_ref: string | null;
+  abandon_reason: string | null;
+  progress: PostV1ResponsesByIdAbandon200Progress;
+  variables: PostV1ResponsesByIdAbandon200Variables;
+  hidden_fields: PostV1ResponsesByIdAbandon200HiddenFields;
+  next: PostV1ResponsesByIdAbandon200Next;
+  complete_ready: boolean;
+  missing_required: PostV1ResponsesByIdAbandon200MissingRequiredItem[];
+  off_path_answers: string[];
+  answers?: PostV1ResponsesByIdAbandon200AnswersItem[];
+  recorded?: PostV1ResponsesByIdAbandon200RecordedItem[];
+  [key: string]: unknown;
+};
+
+export type GetV1ResponsesById200Status = typeof GetV1ResponsesById200Status[keyof typeof GetV1ResponsesById200Status];
+
+
+export const GetV1ResponsesById200Status = {
+  in_progress: 'in_progress',
+  completed: 'completed',
+  abandoned: 'abandoned',
+  disqualified: 'disqualified',
+} as const;
+
+export type GetV1ResponsesById200Progress = {
+  answered: number;
+  totalEstimate: number;
+  pct: number;
+};
+
+export type GetV1ResponsesById200Variables = {[key: string]: unknown};
+
+export type GetV1ResponsesById200HiddenFields = {[key: string]: unknown};
+
+export type GetV1ResponsesById200NextBlock = {
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+};
+
+export type GetV1ResponsesById200NextEndingKind = typeof GetV1ResponsesById200NextEndingKind[keyof typeof GetV1ResponsesById200NextEndingKind];
+
+
+export const GetV1ResponsesById200NextEndingKind = {
+  success: 'success',
+  screen_out: 'screen_out',
+} as const;
+
+export type GetV1ResponsesById200NextEnding = {
+  ref: string;
+  title: string;
+  bodyMd?: string;
+  kind?: GetV1ResponsesById200NextEndingKind;
+  requirements?: unknown[];
+  [key: string]: unknown;
+};
+
+export type GetV1ResponsesById200Next = {
+  kind: string;
+  block?: GetV1ResponsesById200NextBlock;
+  ending?: GetV1ResponsesById200NextEnding;
+  [key: string]: unknown;
+} | null;
+
+export type GetV1ResponsesById200MissingRequiredItem = {
+  ref: string;
+  title: string;
+};
+
+export type GetV1ResponsesById200AnswersItem = {
+  ref: string;
+  type: string;
+  value: unknown;
+};
+
+export type GetV1ResponsesById200RecordedItem = {
+  ref: string;
+  value: unknown;
+};
+
+export type GetV1ResponsesById200 = {
+  id: string;
+  object: 'response';
+  form_id: string;
+  status: GetV1ResponsesById200Status;
+  source: string;
+  mode: string;
+  started_at: number;
+  updated_at: number;
+  completed_at: number | null;
+  expires_at: number | null;
+  duration_ms: number | null;
+  ending_ref: string | null;
+  abandon_reason: string | null;
+  progress: GetV1ResponsesById200Progress;
+  variables: GetV1ResponsesById200Variables;
+  hidden_fields: GetV1ResponsesById200HiddenFields;
+  next: GetV1ResponsesById200Next;
+  complete_ready: boolean;
+  missing_required: GetV1ResponsesById200MissingRequiredItem[];
+  off_path_answers: string[];
+  answers?: GetV1ResponsesById200AnswersItem[];
+  recorded?: GetV1ResponsesById200RecordedItem[];
+  [key: string]: unknown;
+};
+
+export type GetV1ResponsesByIdNext200NextBlock = {
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+};
+
+export type GetV1ResponsesByIdNext200NextEndingKind = typeof GetV1ResponsesByIdNext200NextEndingKind[keyof typeof GetV1ResponsesByIdNext200NextEndingKind];
+
+
+export const GetV1ResponsesByIdNext200NextEndingKind = {
+  success: 'success',
+  screen_out: 'screen_out',
+} as const;
+
+export type GetV1ResponsesByIdNext200NextEnding = {
+  ref: string;
+  title: string;
+  bodyMd?: string;
+  kind?: GetV1ResponsesByIdNext200NextEndingKind;
+  requirements?: unknown[];
+  [key: string]: unknown;
+};
+
+export type GetV1ResponsesByIdNext200Next = {
+  kind: string;
+  block?: GetV1ResponsesByIdNext200NextBlock;
+  ending?: GetV1ResponsesByIdNext200NextEnding;
+  [key: string]: unknown;
+} | null;
+
+export type GetV1ResponsesByIdNext200Progress = {
+  answered: number;
+  totalEstimate: number;
+  pct: number;
+};
+
+export type GetV1ResponsesByIdNext200MissingRequiredItem = {
+  ref: string;
+  title: string;
+};
+
+export type GetV1ResponsesByIdNext200 = {
+  next: GetV1ResponsesByIdNext200Next;
+  progress: GetV1ResponsesByIdNext200Progress;
+  answered: unknown[];
+  missing_required: GetV1ResponsesByIdNext200MissingRequiredItem[];
+  complete_ready: boolean;
+};
+
+export type GetV1Blocks200BlocksItemPublicBlock = {
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+};
+
+export type GetV1Blocks200BlocksItem = {
+  type: string;
+  summary: string;
+  config_hint: string | null;
+  needs_options: boolean;
+  answered_by: string;
+  config_schema: unknown;
+  public_block: GetV1Blocks200BlocksItemPublicBlock;
+  answer: unknown;
+  [key: string]: unknown;
+};
+
+export type GetV1Blocks200 = {
+  schema_version: number;
+  blocks: GetV1Blocks200BlocksItem[];
+};
+
+export type GetV1BlocksByType200PublicBlock = {
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+};
+
+export type GetV1BlocksByType200 = {
+  type: string;
+  summary: string;
+  config_hint: string | null;
+  needs_options: boolean;
+  answered_by: string;
+  config_schema: unknown;
+  public_block: GetV1BlocksByType200PublicBlock;
+  answer: unknown;
+  [key: string]: unknown;
+};
+
+export type GetV1Events200EventsItem = {
+  name: string;
+  also_matches: string[];
+};
+
+export type GetV1Events200 = {
+  events: GetV1Events200EventsItem[];
+};
+
+export type GetV1Me200KeyScopes = {[key: string]: string[]};
+
+export type GetV1Me200Key = {
+  id: string;
+  type: string;
+  mode: string;
+  scopes: GetV1Me200KeyScopes;
+};
+
+export type GetV1Me200ScopeVocabulary = {[key: string]: string[]};
+
+export type GetV1Me200Limits = {[key: string]: unknown};
+
+export type GetV1Me200 = {
+  organization_id: string;
+  key: GetV1Me200Key;
+  scope_vocabulary: GetV1Me200ScopeVocabulary;
+  plan?: string;
+  limits?: GetV1Me200Limits;
+  [key: string]: unknown;
 };
 
 export type GetV1FormsParams = {
@@ -2515,6 +3371,22 @@ export const GetV1FormsStatus = {
   all: 'all',
 } as const;
 
+export type GetV1Forms200DataItem = {
+  id: string;
+  title: string;
+  slug: string;
+  status: string;
+  published: boolean;
+  created_at: number;
+  updated_at: number;
+};
+
+export type GetV1Forms200 = {
+  data: GetV1Forms200DataItem[];
+  has_more: boolean;
+  next_cursor: string | null;
+};
+
 export type PostV1FormsBody = {
   /**
      * @minLength 1
@@ -2524,11 +3396,149 @@ export type PostV1FormsBody = {
   doc?: unknown;
 };
 
+export type PostV1Forms201 = {
+  id: string;
+  title: string;
+  slug: string;
+  status: string;
+  published: boolean;
+  created_at: number;
+  updated_at: number;
+};
+
+export type GetV1FormsByIdParams = {
+/**
+ * `document` returns the editable working draft, which is the only view a form has before it is published.
+ */
+view?: GetV1FormsByIdView;
+};
+
+export type GetV1FormsByIdView = typeof GetV1FormsByIdView[keyof typeof GetV1FormsByIdView];
+
+
+export const GetV1FormsByIdView = {
+  public: 'public',
+  document: 'document',
+} as const;
+
+export type GetV1FormsById200 = {
+  id: string;
+  slug: string;
+  status: string;
+  doc: unknown;
+  [key: string]: unknown;
+} | {
+  slug: string;
+  blocks: ({
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+})[];
+  [key: string]: unknown;
+};
+
+export type DeleteV1FormsById200 = {
+  ok: boolean;
+  deleted: boolean;
+};
+
 export type PutV1FormsByIdDocBody = {
   doc: unknown;
 };
 
-export type GetV1Templates200Item = {
+export type PutV1FormsByIdDoc200IssuesItem = {
+  level: string;
+  code: string;
+  message: string;
+  path?: string;
+  refs?: string[];
+};
+
+export type PutV1FormsByIdDoc200 = {
+  ok: boolean;
+  issues: PutV1FormsByIdDoc200IssuesItem[];
+};
+
+export type PostV1FormsByIdUnpublish200 = {
+  ok: boolean;
+};
+
+export type PostV1FormsByIdPublish200 = {
+  ok: boolean;
+  version: number;
+  versionId: string;
+  stripped: unknown[];
+};
+
+export type GetV1FormsByIdAnalytics200PerBlockItem = {
+  blockRef: string;
+  blockType: string;
+  title: string;
+  answered: number;
+  answerRate: number;
+  dropOff: number;
+};
+
+export type GetV1FormsByIdAnalytics200DailyItem = {
+  date: string;
+  views: number;
+  starts: number;
+  completed: number;
+};
+
+export type GetV1FormsByIdAnalytics200ByDevice = {[key: string]: number};
+
+export type GetV1FormsByIdAnalytics200DurationBucketsItem = {
+  label: string;
+  count: number;
+};
+
+export type GetV1FormsByIdAnalytics200 = {
+  views: number;
+  starts: number;
+  completed: number;
+  abandoned: number;
+  avgDurationMs: number;
+  medianDurationMs: number;
+  completionRate: number;
+  perBlock: GetV1FormsByIdAnalytics200PerBlockItem[];
+  distributions: unknown[];
+  daily: GetV1FormsByIdAnalytics200DailyItem[];
+  bySource: unknown[];
+  byCountry: unknown[];
+  byDevice: GetV1FormsByIdAnalytics200ByDevice;
+  durationBuckets: GetV1FormsByIdAnalytics200DurationBucketsItem[];
+  locked?: string[];
+  [key: string]: unknown;
+};
+
+export type GetV1FormsByIdFollowupAnalytics200DailyItem = {
+  date: string;
+  sent: number;
+  recovered: number;
+};
+
+export type GetV1FormsByIdFollowupAnalytics200 = {
+  everScheduled: boolean;
+  sent: number;
+  pending: number;
+  clicked: number;
+  recovered: number;
+  clickRate: number;
+  recoveryRate: number;
+  byStep: unknown[];
+  daily: GetV1FormsByIdFollowupAnalytics200DailyItem[];
+  holdout: number | null;
+  liftPoints: number | null;
+  [key: string]: unknown;
+};
+
+export type GetV1Templates200DataItem = {
   slug: string;
   title: string;
   category: string;
@@ -2540,6 +3550,12 @@ export type GetV1Templates200Item = {
   blockCount: number;
   estMinutes: number;
   usageCount: number;
+};
+
+export type GetV1Templates200 = {
+  data: GetV1Templates200DataItem[];
+  has_more: boolean;
+  next_cursor: string | null;
 };
 
 export type GetV1TemplatesBySlug200 = {
@@ -2581,7 +3597,17 @@ export type PostV1TemplatesBySlugUseParams = {
 workspace?: string;
 };
 
-export type GetV1FormsByIdVersions200Item = {
+export type PostV1TemplatesBySlugUse200 = {
+  id: string;
+  title: string;
+  slug: string;
+  status: string;
+  published: boolean;
+  created_at: number;
+  updated_at: number;
+};
+
+export type GetV1FormsByIdVersions200DataItem = {
   version: number;
   versionId: string;
   note: string | null;
@@ -2590,6 +3616,12 @@ export type GetV1FormsByIdVersions200Item = {
   changeCount: number;
   isActive: boolean;
   responses: number;
+};
+
+export type GetV1FormsByIdVersions200 = {
+  data: GetV1FormsByIdVersions200DataItem[];
+  has_more: boolean;
+  next_cursor: string | null;
 };
 
 export type GetV1FormsByIdVersions404ErrorIssuesItem = {
@@ -2620,6 +3652,18 @@ export type GetV1FormsByIdVersionsByVersionParams = {
 compare?: number;
 };
 
+export type GetV1FormsByIdVersionsByVersion200 = {
+  version: number;
+  versionId: string;
+  note: string | null;
+  publishedAt: number;
+  doc: unknown;
+  comparedTo?: number;
+  changes: unknown[];
+  summary: string;
+  [key: string]: unknown;
+};
+
 export type GetV1FormsByIdVersionsByVersion404ErrorIssuesItem = {
   ref?: string;
   path?: string;
@@ -2638,6 +3682,15 @@ export type GetV1FormsByIdVersionsByVersion404Error = {
 
 export type GetV1FormsByIdVersionsByVersion404 = {
   error: GetV1FormsByIdVersionsByVersion404Error;
+};
+
+export type PostV1FormsByIdVersionsByVersionRestore200 = {
+  ok: boolean;
+  version: number;
+  summary: string;
+  changes: unknown[];
+  doc: unknown;
+  [key: string]: unknown;
 };
 
 export type PostV1FormsByIdVersionsByVersionRestore404ErrorIssuesItem = {
@@ -2779,6 +3832,20 @@ export type PostV1AiEditFormBody = {
   count?: number;
 };
 
+export type PostV1AiEditForm200IssuesItem = {
+  level: string;
+  code: string;
+  message: string;
+  path?: string;
+  refs?: string[];
+};
+
+export type PostV1AiEditForm200 = {
+  doc: unknown;
+  issues?: PostV1AiEditForm200IssuesItem[];
+  [key: string]: unknown;
+};
+
 export type PostV1AiEditForm402ErrorIssuesItem = {
   ref?: string;
   path?: string;
@@ -2886,13 +3953,19 @@ export type PostV1AiClarifyForm403 = {
   error: PostV1AiClarifyForm403Error;
 };
 
-export type GetV1FormsByIdIntegrations200Item = {
+export type GetV1FormsByIdIntegrations200DataItem = {
   id: string;
   provider: string;
   status: string;
   createdAt: number;
   feedUrl?: string;
   includePartials?: boolean;
+};
+
+export type GetV1FormsByIdIntegrations200 = {
+  data: GetV1FormsByIdIntegrations200DataItem[];
+  has_more: boolean;
+  next_cursor: string | null;
 };
 
 export type GetV1FormsByIdIntegrations404ErrorIssuesItem = {
@@ -2969,6 +4042,10 @@ export type PutV1FormsByIdIntegrationsSpreadsheet404 = {
   error: PutV1FormsByIdIntegrationsSpreadsheet404Error;
 };
 
+export type DeleteV1FormsByIdIntegrationsSpreadsheet200 = {
+  ok: boolean;
+};
+
 export type DeleteV1FormsByIdIntegrationsSpreadsheet404ErrorIssuesItem = {
   ref?: string;
   path?: string;
@@ -2989,7 +4066,7 @@ export type DeleteV1FormsByIdIntegrationsSpreadsheet404 = {
   error: DeleteV1FormsByIdIntegrationsSpreadsheet404Error;
 };
 
-export type GetV1Webhooks200Item = {
+export type GetV1Webhooks200DataItem = {
   id: string;
   url: string;
   events: string[];
@@ -2998,6 +4075,12 @@ export type GetV1Webhooks200Item = {
   consecutiveFailures: number;
   createdAt: number;
   secretPreview: string;
+};
+
+export type GetV1Webhooks200 = {
+  data: GetV1Webhooks200DataItem[];
+  has_more: boolean;
+  next_cursor: string | null;
 };
 
 export type PostV1WebhooksBody = {
@@ -3010,6 +4093,39 @@ export type PostV1WebhooksBody = {
   events: string[];
   /** @maxLength 64 */
   formId?: string;
+};
+
+export type PostV1Webhooks201 = {
+  id: string;
+  url: string;
+  events: string[];
+  formId: string | null;
+  active: boolean;
+  consecutiveFailures: number;
+  createdAt: number;
+  secretPreview: string;
+};
+
+export type DeleteV1WebhooksById200 = {
+  ok: boolean;
+  deleted: boolean;
+};
+
+export type GetV1WebhooksByIdDeliveries200DataItem = {
+  id: string;
+  event?: string;
+  status?: string;
+  [key: string]: unknown;
+};
+
+export type GetV1WebhooksByIdDeliveries200 = {
+  data: GetV1WebhooksByIdDeliveries200DataItem[];
+  has_more: boolean;
+  next_cursor: string | null;
+};
+
+export type PostV1WebhooksByIdDeliveriesByDeliveryIdReplay200 = {
+  ok: boolean;
 };
 
 export type PostV1FormsByIdExportsBodyFormat = typeof PostV1FormsByIdExportsBodyFormat[keyof typeof PostV1FormsByIdExportsBodyFormat];
@@ -3115,6 +4231,46 @@ form_id?: string;
  * @maximum 100
  */
 limit?: number;
+};
+
+export type GetV1Exports200DataItemStatus = typeof GetV1Exports200DataItemStatus[keyof typeof GetV1Exports200DataItemStatus];
+
+
+export const GetV1Exports200DataItemStatus = {
+  queued: 'queued',
+  running: 'running',
+  ready: 'ready',
+  failed: 'failed',
+} as const;
+
+export type GetV1Exports200DataItemFormat = typeof GetV1Exports200DataItemFormat[keyof typeof GetV1Exports200DataItemFormat];
+
+
+export const GetV1Exports200DataItemFormat = {
+  csv: 'csv',
+  json: 'json',
+} as const;
+
+export type GetV1Exports200DataItem = {
+  id: string;
+  object: 'export';
+  form_id: string;
+  status: GetV1Exports200DataItemStatus;
+  format: GetV1Exports200DataItemFormat;
+  row_count: number | null;
+  bytes: number | null;
+  error: string | null;
+  created_at: number;
+  completed_at: number | null;
+  expires_at: number | null;
+  download_url: string | null;
+  download_expires_at: number | null;
+};
+
+export type GetV1Exports200 = {
+  data: GetV1Exports200DataItem[];
+  has_more: boolean;
+  next_cursor: string | null;
 };
 
 export type GetV1FilesById200 = {
@@ -3416,6 +4572,66 @@ export type PostV1SessionsBySidMessagesBody = {
   value: unknown;
 };
 
+export type PostV1SessionsBySidMessages200Question = {
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+} | null;
+
+export type PostV1SessionsBySidMessages200EndingKind = typeof PostV1SessionsBySidMessages200EndingKind[keyof typeof PostV1SessionsBySidMessages200EndingKind];
+
+
+export const PostV1SessionsBySidMessages200EndingKind = {
+  success: 'success',
+  screen_out: 'screen_out',
+} as const;
+
+export type PostV1SessionsBySidMessages200Ending = {
+  ref: string;
+  title: string;
+  bodyMd?: string;
+  kind?: PostV1SessionsBySidMessages200EndingKind;
+  requirements?: unknown[];
+  [key: string]: unknown;
+} | null;
+
+export type PostV1SessionsBySidMessages200Validation = {
+  ref: string;
+  code: string;
+  message: string;
+} | null;
+
+export type PostV1SessionsBySidMessages200Answers = {[key: string]: unknown};
+
+export type PostV1SessionsBySidMessages200EventsItem = {
+  v: number;
+  seq: number;
+  ts: number;
+  type: string;
+  data: unknown;
+};
+
+export type PostV1SessionsBySidMessages200 = {
+  accepted: boolean;
+  complete: boolean;
+  awaitingSubmit: boolean;
+  assistantMessages: string[];
+  question: PostV1SessionsBySidMessages200Question;
+  ending: PostV1SessionsBySidMessages200Ending;
+  validation: PostV1SessionsBySidMessages200Validation;
+  answers: PostV1SessionsBySidMessages200Answers;
+  collected: number;
+  pendingVerification: unknown | null;
+  events: PostV1SessionsBySidMessages200EventsItem[];
+  sinceSeq: number;
+  [key: string]: unknown;
+};
+
 export type PostV1SessionsBySidActionsBodyAction = typeof PostV1SessionsBySidActionsBodyAction[keyof typeof PostV1SessionsBySidActionsBodyAction];
 
 
@@ -3435,6 +4651,141 @@ export type PostV1SessionsBySidActionsBody = {
   ref?: string;
 };
 
+export type PostV1SessionsBySidActions200Question = {
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+} | null;
+
+export type PostV1SessionsBySidActions200EndingKind = typeof PostV1SessionsBySidActions200EndingKind[keyof typeof PostV1SessionsBySidActions200EndingKind];
+
+
+export const PostV1SessionsBySidActions200EndingKind = {
+  success: 'success',
+  screen_out: 'screen_out',
+} as const;
+
+export type PostV1SessionsBySidActions200Ending = {
+  ref: string;
+  title: string;
+  bodyMd?: string;
+  kind?: PostV1SessionsBySidActions200EndingKind;
+  requirements?: unknown[];
+  [key: string]: unknown;
+} | null;
+
+export type PostV1SessionsBySidActions200Validation = {
+  ref: string;
+  code: string;
+  message: string;
+} | null;
+
+export type PostV1SessionsBySidActions200Answers = {[key: string]: unknown};
+
+export type PostV1SessionsBySidActions200EventsItem = {
+  v: number;
+  seq: number;
+  ts: number;
+  type: string;
+  data: unknown;
+};
+
+export type PostV1SessionsBySidActions200 = {
+  accepted: boolean;
+  complete: boolean;
+  awaitingSubmit: boolean;
+  assistantMessages: string[];
+  question: PostV1SessionsBySidActions200Question;
+  ending: PostV1SessionsBySidActions200Ending;
+  validation: PostV1SessionsBySidActions200Validation;
+  answers: PostV1SessionsBySidActions200Answers;
+  collected: number;
+  pendingVerification: unknown | null;
+  events: PostV1SessionsBySidActions200EventsItem[];
+  sinceSeq: number;
+  [key: string]: unknown;
+};
+
+export type GetV1SessionsBySid200Answers = {[key: string]: unknown};
+
+export type GetV1SessionsBySid200Variables = {[key: string]: unknown};
+
+export type GetV1SessionsBySid200EndingKind = typeof GetV1SessionsBySid200EndingKind[keyof typeof GetV1SessionsBySid200EndingKind];
+
+
+export const GetV1SessionsBySid200EndingKind = {
+  success: 'success',
+  screen_out: 'screen_out',
+} as const;
+
+export type GetV1SessionsBySid200Ending = {
+  ref: string;
+  title: string;
+  bodyMd?: string;
+  kind?: GetV1SessionsBySid200EndingKind;
+  requirements?: unknown[];
+  [key: string]: unknown;
+} | null;
+
+export type GetV1SessionsBySid200 = {
+  sessionId: string;
+  status: string;
+  currentRef: string | null;
+  collected: number;
+  answers: GetV1SessionsBySid200Answers;
+  variables: GetV1SessionsBySid200Variables;
+  summary: unknown[];
+  awaitingSubmit: boolean;
+  completedAt: number | null;
+  ending: GetV1SessionsBySid200Ending;
+  canRepeat: boolean;
+  auth: unknown | null;
+  pendingVerification: unknown | null;
+  expiresAt: number | null;
+  mode: string;
+  source: string;
+  [key: string]: unknown;
+};
+
+export type GetV1SessionsBySidEvents200EventsItem = {
+  v: number;
+  seq: number;
+  ts: number;
+  type: string;
+  data: unknown;
+};
+
+export type GetV1SessionsBySidEvents200 = {
+  events: GetV1SessionsBySidEvents200EventsItem[];
+  latest_seq: number;
+  has_more: boolean;
+};
+
+export type PostV1SessionsBySidTokenRotate200 = {
+  respondentToken: string;
+  rotatedAt: number;
+};
+
+export type PostV1SessionsBySidAuthGoogle200 = {
+  ok: boolean;
+  [key: string]: unknown;
+};
+
+export type PostV1SessionsBySidAuthPhoneToken200 = {
+  ok: boolean;
+  [key: string]: unknown;
+};
+
+export type PostV1SessionsBySidVerifyPhoneToken200 = {
+  ok: boolean;
+  [key: string]: unknown;
+};
+
 export type PostV1ChatSessionsBySidMessagesBody = {
   type: 'text';
   /**
@@ -3447,6 +4798,66 @@ export type PostV1ChatSessionsBySidMessagesBody = {
   /** @pattern ^[a-z][a-z0-9_]{1,40}$ */
   ref: string;
   value: unknown;
+};
+
+export type PostV1ChatSessionsBySidMessages200Question = {
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+} | null;
+
+export type PostV1ChatSessionsBySidMessages200EndingKind = typeof PostV1ChatSessionsBySidMessages200EndingKind[keyof typeof PostV1ChatSessionsBySidMessages200EndingKind];
+
+
+export const PostV1ChatSessionsBySidMessages200EndingKind = {
+  success: 'success',
+  screen_out: 'screen_out',
+} as const;
+
+export type PostV1ChatSessionsBySidMessages200Ending = {
+  ref: string;
+  title: string;
+  bodyMd?: string;
+  kind?: PostV1ChatSessionsBySidMessages200EndingKind;
+  requirements?: unknown[];
+  [key: string]: unknown;
+} | null;
+
+export type PostV1ChatSessionsBySidMessages200Validation = {
+  ref: string;
+  code: string;
+  message: string;
+} | null;
+
+export type PostV1ChatSessionsBySidMessages200Answers = {[key: string]: unknown};
+
+export type PostV1ChatSessionsBySidMessages200EventsItem = {
+  v: number;
+  seq: number;
+  ts: number;
+  type: string;
+  data: unknown;
+};
+
+export type PostV1ChatSessionsBySidMessages200 = {
+  accepted: boolean;
+  complete: boolean;
+  awaitingSubmit: boolean;
+  assistantMessages: string[];
+  question: PostV1ChatSessionsBySidMessages200Question;
+  ending: PostV1ChatSessionsBySidMessages200Ending;
+  validation: PostV1ChatSessionsBySidMessages200Validation;
+  answers: PostV1ChatSessionsBySidMessages200Answers;
+  collected: number;
+  pendingVerification: unknown | null;
+  events: PostV1ChatSessionsBySidMessages200EventsItem[];
+  sinceSeq: number;
+  [key: string]: unknown;
 };
 
 export type PostV1ChatSessionsBySidActionsBodyAction = typeof PostV1ChatSessionsBySidActionsBodyAction[keyof typeof PostV1ChatSessionsBySidActionsBodyAction];
@@ -3466,6 +4877,141 @@ export const PostV1ChatSessionsBySidActionsBodyAction = {
 export type PostV1ChatSessionsBySidActionsBody = {
   action: PostV1ChatSessionsBySidActionsBodyAction;
   ref?: string;
+};
+
+export type PostV1ChatSessionsBySidActions200Question = {
+  id: string;
+  ref: string;
+  type: string;
+  title: string;
+  required: boolean;
+  imageKey?: string | null;
+  media?: unknown;
+  [key: string]: unknown;
+} | null;
+
+export type PostV1ChatSessionsBySidActions200EndingKind = typeof PostV1ChatSessionsBySidActions200EndingKind[keyof typeof PostV1ChatSessionsBySidActions200EndingKind];
+
+
+export const PostV1ChatSessionsBySidActions200EndingKind = {
+  success: 'success',
+  screen_out: 'screen_out',
+} as const;
+
+export type PostV1ChatSessionsBySidActions200Ending = {
+  ref: string;
+  title: string;
+  bodyMd?: string;
+  kind?: PostV1ChatSessionsBySidActions200EndingKind;
+  requirements?: unknown[];
+  [key: string]: unknown;
+} | null;
+
+export type PostV1ChatSessionsBySidActions200Validation = {
+  ref: string;
+  code: string;
+  message: string;
+} | null;
+
+export type PostV1ChatSessionsBySidActions200Answers = {[key: string]: unknown};
+
+export type PostV1ChatSessionsBySidActions200EventsItem = {
+  v: number;
+  seq: number;
+  ts: number;
+  type: string;
+  data: unknown;
+};
+
+export type PostV1ChatSessionsBySidActions200 = {
+  accepted: boolean;
+  complete: boolean;
+  awaitingSubmit: boolean;
+  assistantMessages: string[];
+  question: PostV1ChatSessionsBySidActions200Question;
+  ending: PostV1ChatSessionsBySidActions200Ending;
+  validation: PostV1ChatSessionsBySidActions200Validation;
+  answers: PostV1ChatSessionsBySidActions200Answers;
+  collected: number;
+  pendingVerification: unknown | null;
+  events: PostV1ChatSessionsBySidActions200EventsItem[];
+  sinceSeq: number;
+  [key: string]: unknown;
+};
+
+export type GetV1ChatSessionsBySid200Answers = {[key: string]: unknown};
+
+export type GetV1ChatSessionsBySid200Variables = {[key: string]: unknown};
+
+export type GetV1ChatSessionsBySid200EndingKind = typeof GetV1ChatSessionsBySid200EndingKind[keyof typeof GetV1ChatSessionsBySid200EndingKind];
+
+
+export const GetV1ChatSessionsBySid200EndingKind = {
+  success: 'success',
+  screen_out: 'screen_out',
+} as const;
+
+export type GetV1ChatSessionsBySid200Ending = {
+  ref: string;
+  title: string;
+  bodyMd?: string;
+  kind?: GetV1ChatSessionsBySid200EndingKind;
+  requirements?: unknown[];
+  [key: string]: unknown;
+} | null;
+
+export type GetV1ChatSessionsBySid200 = {
+  sessionId: string;
+  status: string;
+  currentRef: string | null;
+  collected: number;
+  answers: GetV1ChatSessionsBySid200Answers;
+  variables: GetV1ChatSessionsBySid200Variables;
+  summary: unknown[];
+  awaitingSubmit: boolean;
+  completedAt: number | null;
+  ending: GetV1ChatSessionsBySid200Ending;
+  canRepeat: boolean;
+  auth: unknown | null;
+  pendingVerification: unknown | null;
+  expiresAt: number | null;
+  mode: string;
+  source: string;
+  [key: string]: unknown;
+};
+
+export type GetV1ChatSessionsBySidEvents200EventsItem = {
+  v: number;
+  seq: number;
+  ts: number;
+  type: string;
+  data: unknown;
+};
+
+export type GetV1ChatSessionsBySidEvents200 = {
+  events: GetV1ChatSessionsBySidEvents200EventsItem[];
+  latest_seq: number;
+  has_more: boolean;
+};
+
+export type PostV1ChatSessionsBySidTokenRotate200 = {
+  respondentToken: string;
+  rotatedAt: number;
+};
+
+export type PostV1ChatSessionsBySidAuthGoogle200 = {
+  ok: boolean;
+  [key: string]: unknown;
+};
+
+export type PostV1ChatSessionsBySidAuthPhoneToken200 = {
+  ok: boolean;
+  [key: string]: unknown;
+};
+
+export type PostV1ChatSessionsBySidVerifyPhoneToken200 = {
+  ok: boolean;
+  [key: string]: unknown;
 };
 
 export type GetApiKeys200ItemKeyType = typeof GetApiKeys200ItemKeyType[keyof typeof GetApiKeys200ItemKeyType];

@@ -20,27 +20,54 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  DeleteV1FormsById200,
+  DeleteV1FormsByIdIntegrationsSpreadsheet200,
   DeleteV1FormsByIdIntegrationsSpreadsheet404,
   DeleteV1FormsByIdKnowledgeBySourceId200,
+  DeleteV1ResponsesByIdAnswersByRef200,
+  DeleteV1WebhooksById200,
+  GetV1Blocks200,
+  GetV1BlocksByType200,
+  GetV1ChatSessionsBySid200,
+  GetV1ChatSessionsBySidEvents200,
+  GetV1Events200,
+  GetV1Exports200,
   GetV1ExportsById200,
   GetV1ExportsParams,
   GetV1FilesById200,
-  GetV1FormsByIdIntegrations200Item,
+  GetV1Forms200,
+  GetV1FormsById200,
+  GetV1FormsByIdAnalytics200,
+  GetV1FormsByIdFollowupAnalytics200,
+  GetV1FormsByIdIntegrations200,
   GetV1FormsByIdIntegrations404,
   GetV1FormsByIdKnowledge200,
+  GetV1FormsByIdParams,
+  GetV1FormsByIdResponses200,
   GetV1FormsByIdResponsesParams,
-  GetV1FormsByIdVersions200Item,
+  GetV1FormsByIdVersions200,
   GetV1FormsByIdVersions404,
+  GetV1FormsByIdVersionsByVersion200,
   GetV1FormsByIdVersionsByVersion404,
   GetV1FormsByIdVersionsByVersionParams,
   GetV1FormsParams,
-  GetV1Templates200Item,
+  GetV1Me200,
+  GetV1ResponsesById200,
+  GetV1ResponsesByIdNext200,
+  GetV1SessionsBySid200,
+  GetV1SessionsBySidEvents200,
+  GetV1Templates200,
   GetV1TemplatesBySlug200,
   GetV1TemplatesBySlug404,
-  GetV1Webhooks200Item,
+  GetV1Webhooks200,
+  GetV1WebhooksByIdDeliveries200,
+  PostPSessionsByIdAuthGoogle200,
+  PostPSessionsByIdAuthPhoneToken200,
+  PostPSessionsByIdVerifyPhoneToken200,
   PostV1AiClarifyForm200,
   PostV1AiClarifyForm403,
   PostV1AiClarifyFormBody,
+  PostV1AiEditForm200,
   PostV1AiEditForm402,
   PostV1AiEditForm403,
   PostV1AiEditForm404,
@@ -49,8 +76,15 @@ import type {
   PostV1AiGenerateForm402,
   PostV1AiGenerateForm403,
   PostV1AiGenerateFormBody,
+  PostV1ChatSessionsBySidActions200,
   PostV1ChatSessionsBySidActionsBody,
+  PostV1ChatSessionsBySidAuthGoogle200,
+  PostV1ChatSessionsBySidAuthPhoneToken200,
+  PostV1ChatSessionsBySidMessages200,
   PostV1ChatSessionsBySidMessagesBody,
+  PostV1ChatSessionsBySidTokenRotate200,
+  PostV1ChatSessionsBySidVerifyPhoneToken200,
+  PostV1Forms201,
   PostV1FormsBody,
   PostV1FormsByIdChatSessions200,
   PostV1FormsByIdChatSessionsBody,
@@ -68,21 +102,38 @@ import type {
   PostV1FormsByIdKnowledgeUpload200,
   PostV1FormsByIdKnowledgeUpload413,
   PostV1FormsByIdKnowledgeUpload415,
+  PostV1FormsByIdPublish200,
+  PostV1FormsByIdResponses201,
   PostV1FormsByIdResponsesBody,
   PostV1FormsByIdSessions200,
   PostV1FormsByIdSessionsBody,
+  PostV1FormsByIdUnpublish200,
+  PostV1FormsByIdVersionsByVersionRestore200,
   PostV1FormsByIdVersionsByVersionRestore404,
   PostV1FormsByIdVersionsByVersionRestore422,
+  PostV1ResponsesByIdAbandon200,
   PostV1ResponsesByIdAbandonBody,
+  PostV1ResponsesByIdAnswers200,
   PostV1ResponsesByIdAnswersBody,
+  PostV1ResponsesByIdComplete200,
   PostV1ResponsesByIdCompleteBody,
+  PostV1SessionsBySidActions200,
   PostV1SessionsBySidActionsBody,
+  PostV1SessionsBySidAuthGoogle200,
+  PostV1SessionsBySidAuthPhoneToken200,
+  PostV1SessionsBySidMessages200,
   PostV1SessionsBySidMessagesBody,
+  PostV1SessionsBySidTokenRotate200,
   PostV1SessionsBySidUploadsByFileIdConfirm200,
   PostV1SessionsBySidUploadsIntent200,
   PostV1SessionsBySidUploadsIntentBody,
+  PostV1SessionsBySidVerifyPhoneToken200,
+  PostV1TemplatesBySlugUse200,
   PostV1TemplatesBySlugUseParams,
+  PostV1Webhooks201,
   PostV1WebhooksBody,
+  PostV1WebhooksByIdDeliveriesByDeliveryIdReplay200,
+  PutV1FormsByIdDoc200,
   PutV1FormsByIdDocBody,
   PutV1FormsByIdIntegrationsSpreadsheet200,
   PutV1FormsByIdIntegrationsSpreadsheet402,
@@ -114,7 +165,7 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
 };
 
 export type postPSessionsByIdAuthGoogleResponse200 = {
-  data: void
+  data: PostPSessionsByIdAuthGoogle200
   status: 200
 }
 
@@ -209,7 +260,7 @@ export const usePostPSessionsByIdAuthGoogle = <TError = void,
       return useMutation(getPostPSessionsByIdAuthGoogleMutationOptions(options));
     }
     export type postPSessionsByIdAuthPhoneTokenResponse200 = {
-  data: void
+  data: PostPSessionsByIdAuthPhoneToken200
   status: 200
 }
 
@@ -304,7 +355,7 @@ export const usePostPSessionsByIdAuthPhoneToken = <TError = void,
       return useMutation(getPostPSessionsByIdAuthPhoneTokenMutationOptions(options));
     }
     export type postPSessionsByIdVerifyPhoneTokenResponse200 = {
-  data: void
+  data: PostPSessionsByIdVerifyPhoneToken200
   status: 200
 }
 
@@ -394,7 +445,7 @@ export const usePostPSessionsByIdVerifyPhoneToken = <TError = void,
       return useMutation(getPostPSessionsByIdVerifyPhoneTokenMutationOptions(options));
     }
     export type postV1FormsByIdResponsesResponse201 = {
-  data: void
+  data: PostV1FormsByIdResponses201
   status: 201
 }
 
@@ -496,7 +547,7 @@ export const usePostV1FormsByIdResponses = <TError = void,
       return useMutation(getPostV1FormsByIdResponsesMutationOptions(options));
     }
     export type getV1FormsByIdResponsesResponse200 = {
-  data: void
+  data: GetV1FormsByIdResponses200
   status: 200
 }
 
@@ -613,7 +664,7 @@ export function useGetV1FormsByIdResponses<TData = Awaited<ReturnType<typeof get
 
 
 export type postV1ResponsesByIdAnswersResponse200 = {
-  data: void
+  data: PostV1ResponsesByIdAnswers200
   status: 200
 }
 
@@ -720,7 +771,7 @@ export const usePostV1ResponsesByIdAnswers = <TError = void,
       return useMutation(getPostV1ResponsesByIdAnswersMutationOptions(options));
     }
     export type deleteV1ResponsesByIdAnswersByRefResponse200 = {
-  data: void
+  data: DeleteV1ResponsesByIdAnswersByRef200
   status: 200
 }
 
@@ -812,7 +863,7 @@ export const useDeleteV1ResponsesByIdAnswersByRef = <TError = void,
       return useMutation(getDeleteV1ResponsesByIdAnswersByRefMutationOptions(options));
     }
     export type postV1ResponsesByIdCompleteResponse200 = {
-  data: void
+  data: PostV1ResponsesByIdComplete200
   status: 200
 }
 
@@ -919,7 +970,7 @@ export const usePostV1ResponsesByIdComplete = <TError = void,
       return useMutation(getPostV1ResponsesByIdCompleteMutationOptions(options));
     }
     export type postV1ResponsesByIdAbandonResponse200 = {
-  data: void
+  data: PostV1ResponsesByIdAbandon200
   status: 200
 }
 
@@ -1016,7 +1067,7 @@ export const usePostV1ResponsesByIdAbandon = <TError = void,
       return useMutation(getPostV1ResponsesByIdAbandonMutationOptions(options));
     }
     export type getV1ResponsesByIdResponse200 = {
-  data: void
+  data: GetV1ResponsesById200
   status: 200
 }
 
@@ -1111,7 +1162,7 @@ export function useGetV1ResponsesById<TData = Awaited<ReturnType<typeof getV1Res
 
 
 export type getV1ResponsesByIdNextResponse200 = {
-  data: void
+  data: GetV1ResponsesByIdNext200
   status: 200
 }
 
@@ -1206,7 +1257,7 @@ export function useGetV1ResponsesByIdNext<TData = Awaited<ReturnType<typeof getV
 
 
 export type getV1BlocksResponse200 = {
-  data: void
+  data: GetV1Blocks200
   status: 200
 }
 
@@ -1294,7 +1345,7 @@ export function useGetV1Blocks<TData = Awaited<ReturnType<typeof getV1Blocks>>, 
 
 
 export type getV1BlocksByTypeResponse200 = {
-  data: void
+  data: GetV1BlocksByType200
   status: 200
 }
 
@@ -1389,7 +1440,7 @@ export function useGetV1BlocksByType<TData = Awaited<ReturnType<typeof getV1Bloc
 
 
 export type getV1EventsResponse200 = {
-  data: void
+  data: GetV1Events200
   status: 200
 }
 
@@ -1477,7 +1528,7 @@ export function useGetV1Events<TData = Awaited<ReturnType<typeof getV1Events>>, 
 
 
 export type getV1MeResponse200 = {
-  data: void
+  data: GetV1Me200
   status: 200
 }
 
@@ -1565,7 +1616,7 @@ export function useGetV1Me<TData = Awaited<ReturnType<typeof getV1Me>>, TError =
 
 
 export type getV1FormsResponse200 = {
-  data: void
+  data: GetV1Forms200
   status: 200
 }
 
@@ -1667,7 +1718,7 @@ export function useGetV1Forms<TData = Awaited<ReturnType<typeof getV1Forms>>, TE
 
 
 export type postV1FormsResponse201 = {
-  data: void
+  data: PostV1Forms201
   status: 201
 }
 
@@ -1763,7 +1814,7 @@ export const usePostV1Forms = <TError = void,
       return useMutation(getPostV1FormsMutationOptions(options));
     }
     export type getV1FormsByIdResponse200 = {
-  data: void
+  data: GetV1FormsById200
   status: 200
 }
 
@@ -1781,20 +1832,30 @@ export type getV1FormsByIdResponseError = (getV1FormsByIdResponse404) & {
 
 export type getV1FormsByIdResponse = (getV1FormsByIdResponseSuccess | getV1FormsByIdResponseError)
 
-export const getGetV1FormsByIdUrl = (id: string,) => {
+export const getGetV1FormsByIdUrl = (id: string,
+    params?: GetV1FormsByIdParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/v1/forms/${id}`
+  return stringifiedParams.length > 0 ? `/v1/forms/${id}?${stringifiedParams}` : `/v1/forms/${id}`
 }
 
 /**
- * @summary Read a form — its public config, or the document behind it
+ * Without `view`, this answers the published form exactly as a respondent receives it. A form with no published version has only a draft, so that is what comes back instead -- the same body as `view=document`, with `status` saying which you are looking at. Pass `view=document` to read the draft of a form that is already live.
+ * @summary Read a form: its public config, or the document behind it
  */
-export const getV1FormsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1FormsByIdResponse> => {
+export const getV1FormsById = async (id: string,
+    params?: GetV1FormsByIdParams, options?: Parameters<typeof customFetch>[1]): Promise<getV1FormsByIdResponse> => {
 
-  return customFetch<getV1FormsByIdResponse>(getGetV1FormsByIdUrl(id),
+  return customFetch<getV1FormsByIdResponse>(getGetV1FormsByIdUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -1807,23 +1868,25 @@ export const getV1FormsById = async (id: string, options?: Parameters<typeof cus
 
 
 
-export const getGetV1FormsByIdQueryKey = (id: string,) => {
+export const getGetV1FormsByIdQueryKey = (id: string,
+    params?: GetV1FormsByIdParams,) => {
     return [
-    `/v1/forms/${id}`
+    `/v1/forms/${id}`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetV1FormsByIdQueryOptions = <TData = Awaited<ReturnType<typeof getV1FormsById>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetV1FormsByIdQueryOptions = <TData = Awaited<ReturnType<typeof getV1FormsById>>, TError = void>(id: string,
+    params?: GetV1FormsByIdParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetV1FormsByIdQueryKey(id);
+  const queryKey =  queryOptions?.queryKey ?? getGetV1FormsByIdQueryKey(id,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1FormsById>>> = ({ signal }) => getV1FormsById(id, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1FormsById>>> = ({ signal }) => getV1FormsById(id,params, { signal, ...requestOptions });
 
 
 
@@ -1837,15 +1900,16 @@ export type GetV1FormsByIdQueryError = void
 
 
 /**
- * @summary Read a form — its public config, or the document behind it
+ * @summary Read a form: its public config, or the document behind it
  */
 
 export function useGetV1FormsById<TData = Awaited<ReturnType<typeof getV1FormsById>>, TError = void>(
- id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ id: string,
+    params?: GetV1FormsByIdParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetV1FormsByIdQueryOptions(id,options)
+  const queryOptions = getGetV1FormsByIdQueryOptions(id,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -1858,7 +1922,7 @@ export function useGetV1FormsById<TData = Awaited<ReturnType<typeof getV1FormsBy
 
 
 export type deleteV1FormsByIdResponse200 = {
-  data: void
+  data: DeleteV1FormsById200
   status: 200
 }
 
@@ -1885,7 +1949,7 @@ export const getDeleteV1FormsByIdUrl = (id: string,) => {
 }
 
 /**
- * @summary Delete a form (soft — responses are kept)
+ * @summary Delete a form (soft, so responses are kept)
  */
 export const deleteV1FormsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteV1FormsByIdResponse> => {
 
@@ -1935,7 +1999,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DeleteV1FormsByIdMutationVariables = {id: string}
 
     /**
- * @summary Delete a form (soft — responses are kept)
+ * @summary Delete a form (soft, so responses are kept)
  */
 export const useDeleteV1FormsById = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteV1FormsById>>, TError,DeleteV1FormsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -1948,7 +2012,7 @@ export const useDeleteV1FormsById = <TError = void,
       return useMutation(getDeleteV1FormsByIdMutationOptions(options));
     }
     export type putV1FormsByIdDocResponse200 = {
-  data: void
+  data: PutV1FormsByIdDoc200
   status: 200
 }
 
@@ -2050,7 +2114,7 @@ export const usePutV1FormsByIdDoc = <TError = void,
       return useMutation(getPutV1FormsByIdDocMutationOptions(options));
     }
     export type postV1FormsByIdUnpublishResponse200 = {
-  data: void
+  data: PostV1FormsByIdUnpublish200
   status: 200
 }
 
@@ -2145,7 +2209,7 @@ export const usePostV1FormsByIdUnpublish = <TError = void,
       return useMutation(getPostV1FormsByIdUnpublishMutationOptions(options));
     }
     export type postV1FormsByIdPublishResponse200 = {
-  data: void
+  data: PostV1FormsByIdPublish200
   status: 200
 }
 
@@ -2245,7 +2309,7 @@ export const usePostV1FormsByIdPublish = <TError = void,
       return useMutation(getPostV1FormsByIdPublishMutationOptions(options));
     }
     export type getV1FormsByIdAnalyticsResponse200 = {
-  data: void
+  data: GetV1FormsByIdAnalytics200
   status: 200
 }
 
@@ -2345,7 +2409,7 @@ export function useGetV1FormsByIdAnalytics<TData = Awaited<ReturnType<typeof get
 
 
 export type getV1FormsByIdFollowupAnalyticsResponse200 = {
-  data: void
+  data: GetV1FormsByIdFollowupAnalytics200
   status: 200
 }
 
@@ -2440,7 +2504,7 @@ export function useGetV1FormsByIdFollowupAnalytics<TData = Awaited<ReturnType<ty
 
 
 export type getV1TemplatesResponse200 = {
-  data: GetV1Templates200Item[]
+  data: GetV1Templates200
   status: 200
 }
 
@@ -2624,7 +2688,7 @@ export function useGetV1TemplatesBySlug<TData = Awaited<ReturnType<typeof getV1T
 
 
 export type postV1TemplatesBySlugUseResponse200 = {
-  data: void
+  data: PostV1TemplatesBySlugUse200
   status: 200
 }
 
@@ -2664,7 +2728,7 @@ export const getPostV1TemplatesBySlugUseUrl = (slug: string,
 }
 
 /**
- * Creates a draft, exactly as `POST /v1/forms` does — publish it when you are ready. Omit `workspace` to use the organization's first.
+ * Creates a draft, exactly as `POST /v1/forms` does. Publish it when you are ready. The form lands in the organization's first workspace, which is not something an API key can choose: `/v1` exposes no workspace endpoint.
  * @summary Create a draft form from a template
  */
 export const postV1TemplatesBySlugUse = async (slug: string,
@@ -2729,7 +2793,7 @@ export const usePostV1TemplatesBySlugUse = <TError = void,
       return useMutation(getPostV1TemplatesBySlugUseMutationOptions(options));
     }
     export type getV1FormsByIdVersionsResponse200 = {
-  data: GetV1FormsByIdVersions200Item[]
+  data: GetV1FormsByIdVersions200
   status: 200
 }
 
@@ -2756,7 +2820,7 @@ export const getGetV1FormsByIdVersionsUrl = (id: string,) => {
 }
 
 /**
- * Each version carries the number of completed responses recorded against it — a version nobody answered can be replaced freely; one with responses behind it is the schema those answers were recorded against.
+ * Each version carries the number of completed responses recorded against it. A version nobody answered can be replaced freely; one with responses behind it is the schema those answers were recorded against.
  * @summary Every published version of a form, newest first
  */
 export const getV1FormsByIdVersions = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1FormsByIdVersionsResponse> => {
@@ -2825,7 +2889,7 @@ export function useGetV1FormsByIdVersions<TData = Awaited<ReturnType<typeof getV
 
 
 export type getV1FormsByIdVersionsByVersionResponse200 = {
-  data: void
+  data: GetV1FormsByIdVersionsByVersion200
   status: 200
 }
 
@@ -2938,7 +3002,7 @@ export function useGetV1FormsByIdVersionsByVersion<TData = Awaited<ReturnType<ty
 
 
 export type postV1FormsByIdVersionsByVersionRestoreResponse200 = {
-  data: void
+  data: PostV1FormsByIdVersionsByVersionRestore200
   status: 200
 }
 
@@ -2971,7 +3035,7 @@ export const getPostV1FormsByIdVersionsByVersionRestoreUrl = (id: string,
 }
 
 /**
- * Writes the draft, not the live form — respondents see nothing change until you publish. Returns the restored document and what it changed.
+ * Writes the draft, not the live form, so respondents see nothing change until you publish. Returns the restored document and what it changed.
  * @summary Restore a published version into the working document
  */
 export const postV1FormsByIdVersionsByVersionRestore = async (id: string,
@@ -3078,7 +3142,7 @@ export const getPostV1AiGenerateFormUrl = () => {
 }
 
 /**
- * Returns a document and its lint issues **without saving anything** — pass the result to `POST /v1/forms` to keep it. Consumes one `ai_generations` unit and the tokens it costs, charged only when a usable document comes back. If you are already driving this from a model of your own, writing the document yourself and posting it to `/v1/forms` costs you nothing here.
+ * Returns a document and its lint issues **without saving anything**. Pass the result to `POST /v1/forms` to keep it. Consumes one `ai_generations` unit and the tokens it costs, charged only when a usable document comes back. If you are already driving this from a model of your own, writing the document yourself and posting it to `/v1/forms` costs you nothing here.
  * @summary Generate a form document from a natural-language prompt
  */
 export const postV1AiGenerateForm = async (postV1AiGenerateFormBody: PostV1AiGenerateFormBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1AiGenerateFormResponse> => {
@@ -3148,7 +3212,7 @@ export const usePostV1AiGenerateForm = <TError = PostV1AiGenerateForm402 | PostV
       return useMutation(getPostV1AiGenerateFormMutationOptions(options));
     }
     export type postV1AiEditFormResponse200 = {
-  data: void
+  data: PostV1AiEditForm200
   status: 200
 }
 
@@ -3195,7 +3259,7 @@ export const getPostV1AiEditFormUrl = () => {
 }
 
 /**
- * Returns the proposed document **without saving it** — send it to `PUT /v1/forms/{id}/doc` to keep it. An edit may add no questions at all: most requests about a working form change the routing rather than the wording. Pass `history` (oldest first) when this is a follow-up, or the model cannot resolve 'also', 'it' or 'instead'.
+ * Returns the proposed document **without saving it**. Send it to `PUT /v1/forms/{id}/doc` to keep it. An edit may add no questions at all: most requests about a working form change the routing rather than the wording. Pass `history` (oldest first) when this is a follow-up, or the model cannot resolve 'also', 'it' or 'instead'.
  * @summary Ask a model to change an existing form: add, edit or remove questions and rewire the flow
  */
 export const postV1AiEditForm = async (postV1AiEditFormBody: PostV1AiEditFormBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1AiEditFormResponse> => {
@@ -3292,11 +3356,11 @@ export const getPostV1AiClarifyFormUrl = () => {
 }
 
 /**
- * Returns up to three questions whose answers would change the form — and **usually returns none**, which is the intended answer rather than a failure. Worth calling when a person is going to see the result: a request that asks to take a payment but names no UPI id, or to branch by plan without naming the plans, produces a form with a hole in it that only they can fill.
+ * Returns up to three questions whose answers would change the form, and **usually returns none**, which is the intended answer rather than a failure. Worth calling when a person is going to see the result: a request that asks to take a payment but names no UPI id, or to branch by plan without naming the plans, produces a form with a hole in it that only they can fill.
  *
  * Feed the answers back as `clarifications` on `POST /v1/ai/generate-form`. Skipping this endpoint entirely is fine; generation does not require it.
  *
- * Runs on the cheapest tier and is not charged as a generation — it is a question about a form, not a form — though its tokens are still counted.
+ * Runs on the cheapest tier and is not charged as a generation, being a question about a form rather than a form, though its tokens are still counted.
  * @summary Ask what a form request leaves open, before generating from it
  */
 export const postV1AiClarifyForm = async (postV1AiClarifyFormBody: PostV1AiClarifyFormBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1AiClarifyFormResponse> => {
@@ -3366,7 +3430,7 @@ export const usePostV1AiClarifyForm = <TError = PostV1AiClarifyForm403,
       return useMutation(getPostV1AiClarifyFormMutationOptions(options));
     }
     export type getV1FormsByIdIntegrationsResponse200 = {
-  data: GetV1FormsByIdIntegrations200Item[]
+  data: GetV1FormsByIdIntegrations200
   status: 200
 }
 
@@ -3494,7 +3558,7 @@ export const getPutV1FormsByIdIntegrationsSpreadsheetUrl = (id: string,) => {
 }
 
 /**
- * Idempotent by nature — one feed per form — which is why this is a PUT. The returned `feedUrl` is a live CSV a spreadsheet can re-read on a schedule; it is unauthenticated, so the URL is the whole credential. Send `rotate: true` to invalidate the previous one.
+ * Idempotent by nature, because there is one feed per form, which is why this is a PUT. The returned `feedUrl` is a live CSV a spreadsheet can re-read on a schedule; it is unauthenticated, so the URL is the whole credential. Send `rotate: true` to invalidate the previous one.
  * @summary Create, update or rotate the spreadsheet feed
  */
 export const putV1FormsByIdIntegrationsSpreadsheet = async (id: string,
@@ -3565,7 +3629,7 @@ export const usePutV1FormsByIdIntegrationsSpreadsheet = <TError = PutV1FormsById
       return useMutation(getPutV1FormsByIdIntegrationsSpreadsheetMutationOptions(options));
     }
     export type deleteV1FormsByIdIntegrationsSpreadsheetResponse200 = {
-  data: void
+  data: DeleteV1FormsByIdIntegrationsSpreadsheet200
   status: 200
 }
 
@@ -3656,7 +3720,7 @@ export const useDeleteV1FormsByIdIntegrationsSpreadsheet = <TError = DeleteV1For
       return useMutation(getDeleteV1FormsByIdIntegrationsSpreadsheetMutationOptions(options));
     }
     export type getV1WebhooksResponse200 = {
-  data: GetV1Webhooks200Item[]
+  data: GetV1Webhooks200
   status: 200
 }
 
@@ -3744,7 +3808,7 @@ export function useGetV1Webhooks<TData = Awaited<ReturnType<typeof getV1Webhooks
 
 
 export type postV1WebhooksResponse201 = {
-  data: void
+  data: PostV1Webhooks201
   status: 201
 }
 
@@ -3776,7 +3840,7 @@ export const getPostV1WebhooksUrl = () => {
 }
 
 /**
- * @summary Create a webhook endpoint — the signing secret is returned ONCE
+ * @summary Create a webhook endpoint. The signing secret is returned ONCE
  */
 export const postV1Webhooks = async (postV1WebhooksBody: PostV1WebhooksBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1WebhooksResponse> => {
 
@@ -3832,7 +3896,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostV1WebhooksMutationVariables = {data: PostV1WebhooksBody}
 
     /**
- * @summary Create a webhook endpoint — the signing secret is returned ONCE
+ * @summary Create a webhook endpoint. The signing secret is returned ONCE
  */
 export const usePostV1Webhooks = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1Webhooks>>, TError,PostV1WebhooksMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -3845,7 +3909,7 @@ export const usePostV1Webhooks = <TError = void,
       return useMutation(getPostV1WebhooksMutationOptions(options));
     }
     export type deleteV1WebhooksByIdResponse200 = {
-  data: void
+  data: DeleteV1WebhooksById200
   status: 200
 }
 
@@ -3935,7 +3999,7 @@ export const useDeleteV1WebhooksById = <TError = void,
       return useMutation(getDeleteV1WebhooksByIdMutationOptions(options));
     }
     export type getV1WebhooksByIdDeliveriesResponse200 = {
-  data: void
+  data: GetV1WebhooksByIdDeliveries200
   status: 200
 }
 
@@ -4030,7 +4094,7 @@ export function useGetV1WebhooksByIdDeliveries<TData = Awaited<ReturnType<typeof
 
 
 export type postV1WebhooksByIdDeliveriesByDeliveryIdReplayResponse200 = {
-  data: void
+  data: PostV1WebhooksByIdDeliveriesByDeliveryIdReplay200
   status: 200
 }
 
@@ -4326,7 +4390,7 @@ export function useGetV1ExportsById<TData = Awaited<ReturnType<typeof getV1Expor
 
 
 export type getV1ExportsResponse200 = {
-  data: void
+  data: GetV1Exports200
   status: 200
 }
 
@@ -4449,7 +4513,7 @@ export const getGetV1FilesByIdUrl = (id: string,) => {
 }
 
 /**
- * File-upload answers carry a `fileId`. This resolves one to its metadata and a signed URL that needs no API key — safe to hand to a browser, and expired within minutes.
+ * File-upload answers carry a `fileId`. This resolves one to its metadata and a signed URL that needs no API key, so it is safe to hand to a browser and it expires within minutes.
  * @summary A respondent's uploaded file, with a short-lived download link
  */
 export const getV1FilesById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1FilesByIdResponse> => {
@@ -4550,7 +4614,7 @@ export const getPostV1SessionsBySidUploadsIntentUrl = (sid: string,) => {
 }
 
 /**
- * @summary Register an upload — returns a fileId to PUT against
+ * @summary Register an upload, returning a fileId to PUT against
  */
 export const postV1SessionsBySidUploadsIntent = async (sid: string,
     postV1SessionsBySidUploadsIntentBody: PostV1SessionsBySidUploadsIntentBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidUploadsIntentResponse> => {
@@ -4607,7 +4671,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostV1SessionsBySidUploadsIntentMutationVariables = {sid: string;data: PostV1SessionsBySidUploadsIntentBody}
 
     /**
- * @summary Register an upload — returns a fileId to PUT against
+ * @summary Register an upload, returning a fileId to PUT against
  */
 export const usePostV1SessionsBySidUploadsIntent = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidUploadsIntent>>, TError,PostV1SessionsBySidUploadsIntentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -4658,7 +4722,7 @@ export const getPutV1SessionsBySidUploadsByFileIdUrl = (sid: string,
 }
 
 /**
- * PUT the raw file body — not multipart, not base64 — to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.
+ * PUT the raw file body, not multipart and not base64, to the `uploadUrl` returned by the intent step. The declared size must match within 1KB, and the object is not visible to the form until `confirm`.
  * @summary Upload the bytes for a registered intent
  */
 export const putV1SessionsBySidUploadsByFileId = async (sid: string,
@@ -4763,7 +4827,7 @@ export const getPostV1SessionsBySidUploadsByFileIdConfirmUrl = (sid: string,
 }
 
 /**
- * @summary Confirm an upload — flips pending → confirmed and notifies the session
+ * @summary Confirm an upload: flips pending to confirmed and notifies the session
  */
 export const postV1SessionsBySidUploadsByFileIdConfirm = async (sid: string,
     fileId: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidUploadsByFileIdConfirmResponse> => {
@@ -4814,7 +4878,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostV1SessionsBySidUploadsByFileIdConfirmMutationVariables = {sid: string;fileId: string}
 
     /**
- * @summary Confirm an upload — flips pending → confirmed and notifies the session
+ * @summary Confirm an upload: flips pending to confirmed and notifies the session
  */
 export const usePostV1SessionsBySidUploadsByFileIdConfirm = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidUploadsByFileIdConfirm>>, TError,PostV1SessionsBySidUploadsByFileIdConfirmMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -5590,7 +5654,7 @@ export const usePostV1FormsByIdChatSessions = <TError = void,
       return useMutation(getPostV1FormsByIdChatSessionsMutationOptions(options));
     }
     export type postV1SessionsBySidMessagesResponse200 = {
-  data: void
+  data: PostV1SessionsBySidMessages200
   status: 200
 }
 
@@ -5692,7 +5756,7 @@ export const usePostV1SessionsBySidMessages = <TError = void,
       return useMutation(getPostV1SessionsBySidMessagesMutationOptions(options));
     }
     export type postV1SessionsBySidActionsResponse200 = {
-  data: void
+  data: PostV1SessionsBySidActions200
   status: 200
 }
 
@@ -5794,7 +5858,7 @@ export const usePostV1SessionsBySidActions = <TError = void,
       return useMutation(getPostV1SessionsBySidActionsMutationOptions(options));
     }
     export type getV1SessionsBySidResponse200 = {
-  data: void
+  data: GetV1SessionsBySid200
   status: 200
 }
 
@@ -5889,7 +5953,7 @@ export function useGetV1SessionsBySid<TData = Awaited<ReturnType<typeof getV1Ses
 
 
 export type getV1SessionsBySidEventsResponse200 = {
-  data: void
+  data: GetV1SessionsBySidEvents200
   status: 200
 }
 
@@ -5909,7 +5973,7 @@ export const getGetV1SessionsBySidEventsUrl = (sid: string,) => {
 }
 
 /**
- * @summary The session's events — streamed, or pulled since a sequence number
+ * @summary The session's events, streamed or pulled since a sequence number
  */
 export const getV1SessionsBySidEvents = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1SessionsBySidEventsResponse> => {
 
@@ -5956,7 +6020,7 @@ export type GetV1SessionsBySidEventsQueryError = unknown
 
 
 /**
- * @summary The session's events — streamed, or pulled since a sequence number
+ * @summary The session's events, streamed or pulled since a sequence number
  */
 
 export function useGetV1SessionsBySidEvents<TData = Awaited<ReturnType<typeof getV1SessionsBySidEvents>>, TError = unknown>(
@@ -5977,7 +6041,7 @@ export function useGetV1SessionsBySidEvents<TData = Awaited<ReturnType<typeof ge
 
 
 export type postV1SessionsBySidTokenRotateResponse200 = {
-  data: void
+  data: PostV1SessionsBySidTokenRotate200
   status: 200
 }
 
@@ -6067,7 +6131,7 @@ export const usePostV1SessionsBySidTokenRotate = <TError = void,
       return useMutation(getPostV1SessionsBySidTokenRotateMutationOptions(options));
     }
     export type postV1SessionsBySidAuthGoogleResponse200 = {
-  data: void
+  data: PostV1SessionsBySidAuthGoogle200
   status: 200
 }
 
@@ -6162,7 +6226,7 @@ export const usePostV1SessionsBySidAuthGoogle = <TError = void,
       return useMutation(getPostV1SessionsBySidAuthGoogleMutationOptions(options));
     }
     export type postV1SessionsBySidAuthPhoneTokenResponse200 = {
-  data: void
+  data: PostV1SessionsBySidAuthPhoneToken200
   status: 200
 }
 
@@ -6257,7 +6321,7 @@ export const usePostV1SessionsBySidAuthPhoneToken = <TError = void,
       return useMutation(getPostV1SessionsBySidAuthPhoneTokenMutationOptions(options));
     }
     export type postV1SessionsBySidVerifyPhoneTokenResponse200 = {
-  data: void
+  data: PostV1SessionsBySidVerifyPhoneToken200
   status: 200
 }
 
@@ -6347,7 +6411,7 @@ export const usePostV1SessionsBySidVerifyPhoneToken = <TError = void,
       return useMutation(getPostV1SessionsBySidVerifyPhoneTokenMutationOptions(options));
     }
     export type postV1ChatSessionsBySidMessagesResponse200 = {
-  data: void
+  data: PostV1ChatSessionsBySidMessages200
   status: 200
 }
 
@@ -6449,7 +6513,7 @@ export const usePostV1ChatSessionsBySidMessages = <TError = void,
       return useMutation(getPostV1ChatSessionsBySidMessagesMutationOptions(options));
     }
     export type postV1ChatSessionsBySidActionsResponse200 = {
-  data: void
+  data: PostV1ChatSessionsBySidActions200
   status: 200
 }
 
@@ -6551,7 +6615,7 @@ export const usePostV1ChatSessionsBySidActions = <TError = void,
       return useMutation(getPostV1ChatSessionsBySidActionsMutationOptions(options));
     }
     export type getV1ChatSessionsBySidResponse200 = {
-  data: void
+  data: GetV1ChatSessionsBySid200
   status: 200
 }
 
@@ -6646,7 +6710,7 @@ export function useGetV1ChatSessionsBySid<TData = Awaited<ReturnType<typeof getV
 
 
 export type getV1ChatSessionsBySidEventsResponse200 = {
-  data: void
+  data: GetV1ChatSessionsBySidEvents200
   status: 200
 }
 
@@ -6666,7 +6730,7 @@ export const getGetV1ChatSessionsBySidEventsUrl = (sid: string,) => {
 }
 
 /**
- * @summary The session's events — streamed, or pulled since a sequence number
+ * @summary The session's events, streamed or pulled since a sequence number
  */
 export const getV1ChatSessionsBySidEvents = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1ChatSessionsBySidEventsResponse> => {
 
@@ -6713,7 +6777,7 @@ export type GetV1ChatSessionsBySidEventsQueryError = unknown
 
 
 /**
- * @summary The session's events — streamed, or pulled since a sequence number
+ * @summary The session's events, streamed or pulled since a sequence number
  */
 
 export function useGetV1ChatSessionsBySidEvents<TData = Awaited<ReturnType<typeof getV1ChatSessionsBySidEvents>>, TError = unknown>(
@@ -6734,7 +6798,7 @@ export function useGetV1ChatSessionsBySidEvents<TData = Awaited<ReturnType<typeo
 
 
 export type postV1ChatSessionsBySidTokenRotateResponse200 = {
-  data: void
+  data: PostV1ChatSessionsBySidTokenRotate200
   status: 200
 }
 
@@ -6824,7 +6888,7 @@ export const usePostV1ChatSessionsBySidTokenRotate = <TError = void,
       return useMutation(getPostV1ChatSessionsBySidTokenRotateMutationOptions(options));
     }
     export type postV1ChatSessionsBySidAuthGoogleResponse200 = {
-  data: void
+  data: PostV1ChatSessionsBySidAuthGoogle200
   status: 200
 }
 
@@ -6919,7 +6983,7 @@ export const usePostV1ChatSessionsBySidAuthGoogle = <TError = void,
       return useMutation(getPostV1ChatSessionsBySidAuthGoogleMutationOptions(options));
     }
     export type postV1ChatSessionsBySidAuthPhoneTokenResponse200 = {
-  data: void
+  data: PostV1ChatSessionsBySidAuthPhoneToken200
   status: 200
 }
 
@@ -7014,7 +7078,7 @@ export const usePostV1ChatSessionsBySidAuthPhoneToken = <TError = void,
       return useMutation(getPostV1ChatSessionsBySidAuthPhoneTokenMutationOptions(options));
     }
     export type postV1ChatSessionsBySidVerifyPhoneTokenResponse200 = {
-  data: void
+  data: PostV1ChatSessionsBySidVerifyPhoneToken200
   status: 200
 }
 

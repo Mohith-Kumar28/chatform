@@ -21,7 +21,7 @@ export function money(cents: number): string {
 export function usd(dollars: number): string {
   if (dollars === 0) return "$0";
   if (dollars < 0.01) return `$${dollars.toPrecision(2)}`;
-  return `$${dollars.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  return `$${dollars.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 /** `1_240_000` → `1.24M`. For axis ticks and table cells, never for money. */

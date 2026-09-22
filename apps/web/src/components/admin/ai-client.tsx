@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useGetApiAdminAi } from "@/lib/api/admin/admin";
-import { BarList, ChartCard, Legend, SERIES } from "@/components/charts/chart-kit";
+import { BarList, ChartCard, Donut, Empty, Legend, SERIES } from "@/components/charts/chart-kit";
 import { TrendChart } from "@/components/charts/trend-chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +49,7 @@ interface Ai {
     conversations: number;
   };
   latency: { model: string; calls: number; p50: number; p90: number; errorRate: number }[];
+  breakdown?: Breakdown[];
   topSpenders: Row[];
   lossMakers: Row[];
 }
@@ -68,11 +70,115 @@ const KIND_LABEL: Record<string, string> = {
   clarify: "Clarifying questions",
   research: "Website research",
   knowledge_ocr: "Reading uploads",
+  edit_retry: "Builder edits (retried)",
+  edit_review: "Builder edits (checked)",
+  feedback_tag: "Feedback tagging",
+  feedback_issue: "Feedback triage",
 };
+
+/** One purpose's spend, split by what it bought. See `breakdown` on `/admin/ai`. */
+interface Breakdown {
+  kind: string;
+  calls: number;
+  costUsd: number;
+  splitCostUsd: number;
+  inputUsd: number;
+  cachedUsd: number;
+  outputUsd: number;
+  reasoningUsd: number;
+  otherUsd: number;
+  toolStepsUsd: number;
+  steps: number;
+  toolCalls: number;
+  promptTokens: number;
+  completionTokens: number;
+  cacheReadTokens: number;
+  reasoningTokens: number;
+}
+
+const BREAKDOWN_KEYS = [
+  "calls", "costUsd", "splitCostUsd", "inputUsd", "cachedUsd", "outputUsd", "reasoningUsd", "otherUsd",
+  "toolStepsUsd", "steps", "toolCalls", "promptTokens", "completionTokens", "cacheReadTokens", "reasoningTokens",
+] as const;
+
+/** Every purpose added together: what the donut shows with nothing picked. */
+function sumBreakdown(rows: Breakdown[]): Breakdown {
+  const total = { kind: "all" } as Breakdown;
+  for (const k of BREAKDOWN_KEYS) total[k] = rows.reduce((n, r) => n + (r[k] ?? 0), 0);
+  return total;
+}
+
+/**
+ * The parts, in a fixed order with a fixed colour each. The colour follows the
+ * part, never its rank, so "Thinking" is the same colour on every purpose and
+ * picking another row never repaints the ring.
+ */
+const PARTS = [
+  { key: "inputUsd", label: "Input", color: SERIES[0] },
+  { key: "cachedUsd", label: "Cached input", color: SERIES[1] },
+  { key: "outputUsd", label: "Reply", color: SERIES[2] },
+  { key: "reasoningUsd", label: "Thinking", color: SERIES[3] },
+  { key: "otherUsd", label: "Web search & fees", color: SERIES[4] },
+] as const;
+
+/**
+ * The ring for one purpose, or for all of them.
+ *
+ * Only the calls that could be broken down are drawn. Anything written before
+ * the breakdown existed is a total with no parts, and it is said in a line
+ * under the ring rather than drawn as a grey slice that looks like a sixth
+ * kind of spending.
+ */
+function CostParts({ b, label }: { b: Breakdown | null; label: string }) {
+  if (!b || b.splitCostUsd <= 0) {
+    return <Empty>No breakdown for {label.toLowerCase()} in this period yet. Calls are split from the day the breakdown shipped.</Empty>;
+  }
+  const items = PARTS.map((p) => ({ label: p.label, value: b[p.key], display: usd(b[p.key]), color: p.color })).filter(
+    (i) => i.value > 0,
+  );
+  const unsplit = Math.max(0, b.costUsd - b.splitCostUsd);
+  const toolShare = b.splitCostUsd > 0 ? Math.round((b.toolStepsUsd / b.splitCostUsd) * 100) : 0;
+  return (
+    <div className="space-y-4">
+      <Donut items={items} total={b.splitCostUsd} centerValue={usd(b.splitCostUsd)} centerLabel="spent" ariaLabel={`What ${label.toLowerCase()} spend bought`} />
+      <dl className="text-caption grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+        <div>
+          <dt className="text-muted-foreground">Tool round trips</dt>
+          <dd className="tabular">
+            {usd(b.toolStepsUsd)} <span className="text-muted-foreground">({toolShare}%)</span>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Tool calls</dt>
+          <dd className="tabular">
+            {compact(b.toolCalls)} <span className="text-muted-foreground">over {compact(b.steps)} steps</span>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Input per call</dt>
+          <dd className="tabular">{b.calls > 0 ? compact(b.promptTokens / b.calls) : "0"} tokens</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Thinking share</dt>
+          <dd className="tabular">
+            {b.completionTokens > 0 ? Math.round((b.reasoningTokens / b.completionTokens) * 100) : 0}%
+          </dd>
+        </div>
+      </dl>
+      {unsplit > 0.000001 && (
+        <p className="text-muted-foreground text-caption">
+          {usd(unsplit)} more was spent before the breakdown existed and is left out of the ring.
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function AiClient() {
   const range = useRange();
   const { data, isPending } = useGetApiAdminAi({ range });
+  // Which purpose the breakdown is showing; null is all of them.
+  const [selectedKind, setSelectedKind] = useState<string | null>(null);
 
   if (isPending) return <Skeleton className="h-96 rounded-xl" />;
   const a = apiData<Ai>(data) ?? ({} as Ai);
@@ -80,6 +186,25 @@ export function AiClient() {
   const days = a.days ?? [];
   // Spend per purpose, keyed for lookup beside the call counts.
   const costOfKind = new Map((a.costByKind ?? []).map((k) => [k.key, k.value] as const));
+  const byKind = a.byKind ?? [];
+  const breakdown = a.breakdown ?? [];
+  const selectedIndex = selectedKind ? byKind.findIndex((k) => k.key === selectedKind) : -1;
+  const selectedBreakdown = selectedKind
+    ? (breakdown.find((b) => b.kind === selectedKind) ?? null)
+    : breakdown.length > 0
+      ? sumBreakdown(breakdown)
+      : null;
+  const selectedLabel = selectedKind ? (KIND_LABEL[selectedKind] ?? selectedKind) : "All purposes";
+  // Cost and speed per model, joined into one table: they are the two halves of
+  // the same trade-off and used to sit in two cards listing the same models.
+  const costOfModel = new Map((a.byModel ?? []).map((m) => [m.key, m.value] as const));
+  const modelSpend = (a.byModel ?? []).reduce((n, m) => n + m.value, 0);
+  const modelRows = [
+    ...(a.latency ?? []).map((l) => ({ ...l, cost: costOfModel.get(l.model) ?? 0 })),
+    ...(a.byModel ?? [])
+      .filter((m) => !(a.latency ?? []).some((l) => l.model === m.key))
+      .map((m) => ({ model: m.key, calls: 0, p50: 0, p90: 0, errorRate: 0, cost: m.value })),
+  ].sort((x, y) => y.cost - x.cost || y.calls - x.calls);
 
   return (
     <div className="space-y-4">
@@ -163,71 +288,82 @@ export function AiClient() {
         />
       </ChartCard>
 
-      <div className="grid gap-3 lg:grid-cols-3">
-        <ChartCard title="Cost by model">
-          <BarList
-            items={(a.byModel ?? []).map((m) => ({
-              label: m.key.split("/").pop() ?? m.key,
-              value: m.value,
-              display: usd(m.value),
-            }))}
-            total={(a.byModel ?? []).reduce((n, m) => n + m.value, 0)}
-            colorBy="series"
-            emptyLabel="No model calls in this period."
-          />
-        </ChartCard>
+      <ChartCard
+        title="Where the money goes"
+        subtitle="Pick a purpose to see what its spend bought. Nothing picked shows the whole period."
+        hint="Each call's cost is what OpenRouter charged. It is split into parts by OpenRouter's own live rates for the model that ran, so the parts always add back up to the charge. Input is the prompt sent fresh; cached input is prompt served from the provider's cache at a fraction of the rate; thinking is output the model spends reasoning and nobody sees; web search & fees is whatever no token accounts for. Tool round trips are the steps after a tool call, which re-send the whole prompt: a different cut of the same money, not another part."
+      >
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+          <div>
+            <p className="text-muted-foreground text-caption mb-2">Calls by purpose</p>
+            <BarList
+              /*
+                Bars stay sized by call count, since that is what "calls by purpose"
+                means, with the spend carried alongside. The two rarely rank the
+                same way, and the gap is the interesting part: a purpose that is
+                2% of calls and most of the bill is the one worth making cheaper,
+                and a count-only chart hides exactly that.
+              */
+              items={byKind.map((k) => {
+                const cost = costOfKind.get(k.key) ?? 0;
+                return {
+                  label: KIND_LABEL[k.key] ?? k.key,
+                  value: k.value,
+                  display: cost > 0 ? `${compact(k.value)} · ${usd(cost)}` : compact(k.value),
+                  // Neutral on purpose: the ring beside it owns the colours in
+                  // this card, and an orange bar next to an orange "Input" slice
+                  // reads as the same thing.
+                  color: "var(--muted-foreground)",
+                };
+              })}
+              total={byKind.reduce((n, k) => n + k.value, 0)}
+              emptyLabel="No model calls in this period."
+              selected={selectedIndex >= 0 ? selectedIndex : null}
+              onSelect={(i) => setSelectedKind(i === null ? null : (byKind[i]?.key ?? null))}
+            />
+          </div>
+          <div>
+            <p className="text-muted-foreground text-caption mb-2">{selectedLabel}: what it bought</p>
+            <CostParts b={selectedBreakdown} label={selectedLabel} />
+          </div>
+        </div>
+      </ChartCard>
 
-        <ChartCard title="Calls by purpose" subtitle="What each one is asking models to do, and what it costs.">
-          <BarList
-            /*
-              Bars stay sized by call count — that is what "calls by purpose"
-              means — with the spend carried alongside. The two rarely rank the
-              same way, and the gap is the interesting part: a purpose that is
-              2% of calls and most of the bill is the one worth making cheaper,
-              and a count-only chart hides exactly that.
-            */
-            items={(a.byKind ?? []).map((k) => {
-              const cost = costOfKind.get(k.key) ?? 0;
-              return {
-                label: KIND_LABEL[k.key] ?? k.key,
-                value: k.value,
-                display: cost > 0 ? `${compact(k.value)} · ${usd(cost)}` : compact(k.value),
-              };
-            })}
-            total={(a.byKind ?? []).reduce((n, k) => n + k.value, 0)}
-            colorBy="series"
-            emptyLabel="No model calls in this period."
-          />
-        </ChartCard>
-
-        {/*
-          Latency belongs on this page rather than a general health one: the
-          number people feel is how long the interviewer takes to answer, and
-          that is a per-model property traded off directly against cost.
-        */}
-        <ChartCard title="How fast each model answers" subtitle="Median and 90th percentile.">
-          <DataTable
-            rows={a.latency ?? []}
-            empty="No latency recorded."
-            columns={[
-              { key: "model", header: "Model", render: (m) => m.model.split("/").pop() ?? m.model },
-              { key: "calls", header: "Calls", width: "4.5rem", numeric: true, render: (m) => compact(m.calls) },
-              { key: "p50", header: "p50", width: "4rem", numeric: true, render: (m) => `${(m.p50 / 1000).toFixed(1)}s` },
-              {
-                key: "p90",
-                header: "p90",
-                width: "4rem",
-                numeric: true,
-                render: (m) => (
-                  <span className={m.p90 > 15_000 ? "text-[var(--warning-soft-foreground)]" : undefined}>
-                    {(m.p90 / 1000).toFixed(1)}s
-                  </span>
-                ),
-              },
-            ]}
-          />
-        </ChartCard>
-      </div>
+      {/*
+        Latency belongs on this page rather than a general health one: the
+        number people feel is how long the interviewer takes to answer, and
+        that is a per-model property traded off directly against cost.
+      */}
+      <ChartCard title="Models" subtitle="What each one cost, and how fast it answered (median and 90th percentile).">
+        <DataTable
+          rows={modelRows}
+          empty="No model calls in this period."
+          columns={[
+            { key: "model", header: "Model", render: (m) => m.model.split("/").pop() ?? m.model },
+            { key: "calls", header: "Calls", width: "4.5rem", numeric: true, render: (m) => compact(m.calls) },
+            { key: "cost", header: "Cost", width: "5.5rem", numeric: true, render: (m) => usd(m.cost) },
+            {
+              key: "share",
+              header: "Share",
+              width: "4.5rem",
+              numeric: true,
+              render: (m) => `${modelSpend > 0 ? Math.round((m.cost / modelSpend) * 100) : 0}%`,
+            },
+            { key: "p50", header: "p50", width: "4rem", numeric: true, render: (m) => `${(m.p50 / 1000).toFixed(1)}s` },
+            {
+              key: "p90",
+              header: "p90",
+              width: "4rem",
+              numeric: true,
+              render: (m) => (
+                <span className={m.p90 > 15_000 ? "text-[var(--warning-soft-foreground)]" : undefined}>
+                  {(m.p90 / 1000).toFixed(1)}s
+                </span>
+              ),
+            },
+          ]}
+        />
+      </ChartCard>
 
       {/*
         The margin table. A free account costing real money is a marketing

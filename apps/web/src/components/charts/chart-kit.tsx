@@ -164,6 +164,8 @@ export function BarList({
   colorBy = "single",
   unit = "",
   emptyLabel = "No answers yet",
+  selected,
+  onSelect,
 }: {
   items: BarItem[];
   /** The denominator for the percentages. Defaults to the largest bar. */
@@ -172,6 +174,13 @@ export function BarList({
   colorBy?: "single" | "series";
   unit?: string;
   emptyLabel?: string;
+  /**
+   * Makes each row a toggle: clicking a row selects it, clicking it again
+   * clears the selection. The list only draws which row is selected; the
+   * caller owns what that means.
+   */
+  selected?: number | null;
+  onSelect?: (index: number | null) => void;
 }) {
   /*
     Centred in whatever height the card ended up at, rather than pinned to the
@@ -191,7 +200,7 @@ export function BarList({
     question everyone answered the same way. The sentence carries the same fact
     and leaves the card legible.
   */
-  if (items.length === 1 && items[0]!.value >= denom) {
+  if (items.length === 1 && items[0]!.value >= denom && !onSelect) {
     const only = items[0]!;
     return (
       <Empty>
@@ -205,8 +214,12 @@ export function BarList({
     <ol className="space-y-2.5">
       {items.map((item, i) => {
         const pct = Math.round((item.value / denom) * 100);
-        return (
-          <li key={`${item.label}-${i}`}>
+        const isSelected = selected === i;
+        // Rows that are not selected fade while one is, so the eye lands on
+        // the one the rest of the card is now about.
+        const dimmed = selected != null && !isSelected;
+        const body = (
+          <>
             <div className="mb-1 flex items-baseline justify-between gap-3">
               <span className="min-w-0 truncate text-sm" title={item.label}>
                 {item.label}
@@ -238,6 +251,24 @@ export function BarList({
                 }}
               />
             </div>
+          </>
+        );
+        return (
+          <li key={`${item.label}-${i}`}>
+            {onSelect ? (
+              <button
+                type="button"
+                aria-pressed={isSelected}
+                onClick={() => onSelect(isSelected ? null : i)}
+                className={`focus-visible:ring-ring/50 -mx-2 block w-[calc(100%+1rem)] rounded-md px-2 py-1 text-left outline-none transition-[background-color,opacity] duration-[var(--duration-standard)] focus-visible:ring-[3px] ${
+                  isSelected ? "bg-muted" : "hover:bg-muted/60"
+                } ${dimmed ? "opacity-55" : ""}`}
+              >
+                {body}
+              </button>
+            ) : (
+              body
+            )}
           </li>
         );
       })}
@@ -260,12 +291,14 @@ export function Donut({
   centerValue,
   centerLabel,
   emptyLabel = "Nothing to show yet.",
+  ariaLabel = "Share of answers",
 }: {
   items: BarItem[];
   total: number;
   centerValue?: React.ReactNode;
   centerLabel?: React.ReactNode;
   emptyLabel?: string;
+  ariaLabel?: string;
 }) {
   const gradientId = useId();
 
@@ -297,7 +330,7 @@ export function Donut({
   return (
     <div className="flex flex-wrap items-center gap-5">
       <div className="relative shrink-0" style={{ width: size, height: size }}>
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Share of answers">
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={ariaLabel}>
           <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--muted)" strokeWidth={stroke} />
           {arcs.map(({ item, i, dash, offset: o }) => (
             <circle
@@ -325,7 +358,7 @@ export function Donut({
           </div>
         )}
       </div>
-      <ul className="min-w-0 flex-1 space-y-1.5">
+      <ul className="min-w-48 flex-1 space-y-1.5">
         {items.map((item, i) => (
           <li key={`${item.label}-${i}`} className="flex items-baseline gap-2 text-sm">
             <span

@@ -89,6 +89,12 @@ export interface Bindings {
 
   ENVIRONMENT: string;
   /**
+   * Which deploy is running. Sent to OpenRouter as `trace.release`, so a jump in
+   * AI spend in Langfuse can be lined up against the version that caused it.
+   * Optional: Miniflare and the test pool do not always provide it.
+   */
+  CF_VERSION_METADATA?: { id: string; tag?: string; timestamp?: string };
+  /**
    * This API's own public origin. Better Auth uses it as `baseURL`, so it must be where
    * the API actually answers — not where the browser app lives.
    */

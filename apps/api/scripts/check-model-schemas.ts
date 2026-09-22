@@ -22,7 +22,7 @@ import { generateObject, generateText, stepCountIs } from "ai";
 import { z } from "zod";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { extractionSchema, FormDoc, type Block } from "@repo/form-schema";
-import { GenerationDraft, EditDraft, MODELS, isSchemaRejection, APP_HEADERS } from "../src/lib/ai.js";
+import { GenerationDraft, EditDraft, MODELS, isSchemaRejection, APP_HEADERS, telemetry } from "../src/lib/ai.js";
 import { buildEditContext, buildEditTools } from "../src/lib/edit-tools.js";
 
 function apiKey(): string {
@@ -90,6 +90,8 @@ for (const c of CASES) {
       model: or.chat(c.model),
       schema: c.schema as never,
       prompt: c.prompt,
+      // Labelled like worker traffic, but as `script`, so it never reads as production spend.
+      providerOptions: telemetry({ ENVIRONMENT: "script" }, {}, { kind: "schema_probe" }),
     });
     console.log(`  ok       ${c.name}  [${c.model}]  ${Date.now() - started}ms`);
   } catch (err) {
