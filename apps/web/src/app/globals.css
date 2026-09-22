@@ -1300,6 +1300,18 @@
   }
 }
 
+/* iPhone Safari zooms the page in on any field whose text is under 16px, and
+   the chat's are 15px: focusing the message box cropped the form and shifted
+   the layout. Touch screens get 16px in every field on the chat surface.
+   Unlayered, so it wins over the `text-*` utilities on the fields. */
+@media (pointer: coarse) {
+  .chat-surface input,
+  .chat-surface textarea,
+  .chat-surface select {
+    font-size: 16px;
+  }
+}
+
 /* ── chat surface ───────────────────────────────────────────────────────────
    Per-form runtime theming. These defaults are what renders before a ThemeDoc
    is applied; `chatThemeVars()` overwrites them inline on the same element.   */
