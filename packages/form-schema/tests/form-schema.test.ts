@@ -23,7 +23,7 @@ describe("FormDoc parsing", () => {
   it("parses the lead fixture with defaults applied", () => {
     const doc = FormDoc.parse(leadFormFixture);
     expect(doc.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(doc.settings.agent.mode).toBe("ai");
+    expect(doc.settings.agent.mode).toBe("hybrid");
     expect(doc.blocks).toHaveLength(7);
     expect(doc.endings[0]!.showSummary).toBe(true);
   });

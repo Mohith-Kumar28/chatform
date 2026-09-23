@@ -5,6 +5,7 @@ import { memo, useCallback, useMemo, useState } from "react";
 import { CornerDownLeft } from "lucide-react";
 import { isMeetingRoom, schedulingLabel, type PublicBlock } from "@repo/form-schema";
 import { Chip, KeyHint } from "./composers/primitives";
+import { OtherOption } from "./composers/other-option";
 import { useChoiceKeys, type Choice } from "./composers/choice-keys";
 import { RatingComposer, ScaleComposer } from "./composers/rating";
 import { DateComposer } from "./composers/date";
@@ -198,6 +199,9 @@ function AffordanceControls({
   onSkip: () => void;
 }) {
   const [multi, setMulti] = useState<string[]>([]);
+  // The respondent's own "Other" answer while its box is open; null when closed.
+  const [other, setOther] = useState<string | null>(null);
+  const allowOther = block.allowOther === true;
   // Memoised because `submitMulti` depends on it, and `block.options ?? []`
   // makes a new array on every render — which would rebuild the callback on
   // every streamed token.
@@ -209,25 +213,31 @@ function AffordanceControls({
   // enforces the same bounds, but finding out from a rejection — after the
   // answer has already appeared in the thread — is not enforcement, it is a
   // scolding.
-  const maxSelections = Math.min(block.maxSelections ?? options.length, options.length);
+  // An "Other" answer is one more thing that can be picked.
+  const maxSelections = Math.min(block.maxSelections ?? options.length, options.length + (allowOther ? 1 : 0));
   const minSelections = Math.max(block.minSelections ?? 1, block.required ? 1 : 0);
+
+  const own = other?.trim() ? other.trim() : null;
+  const picked = multi.length + (own ? 1 : 0);
 
   const toggle = useCallback(
     (id: string) =>
       setMulti((m) =>
-        m.includes(id) ? m.filter((x) => x !== id) : m.length >= maxSelections ? m : [...m, id],
+        m.includes(id) ? m.filter((x) => x !== id) : m.length + (own ? 1 : 0) >= maxSelections ? m : [...m, id],
       ),
-    [maxSelections],
+    [maxSelections, own],
   );
 
   const submitMulti = useCallback(() => {
     // Read the selection from state, not from inside a `setMulti` updater —
     // React invokes updaters twice in development, and sending the answer from
     // inside one would post the same answer twice.
-    if (multi.length < minSelections) return;
-    onStructured(multi, multi.map((id) => options.find((o) => o.id === id)?.label).filter(Boolean).join(", "));
+    if (picked < minSelections) return;
+    const labels = multi.map((id) => options.find((o) => o.id === id)?.label).filter(Boolean);
+    onStructured(own ? [...multi, own] : multi, [...labels, ...(own ? [own] : [])].join(", "));
     setMulti([]);
-  }, [minSelections, multi, onStructured, options]);
+    setOther(null);
+  }, [minSelections, multi, onStructured, options, own, picked]);
 
   useChoiceKeys(
     disabled || preview ? [] : choices,
@@ -285,6 +295,17 @@ function AffordanceControls({
               {o.label}
             </Chip>
           ))}
+          {allowOther && block.type === "single_select" && (
+            <OtherOption
+              value={other}
+              onChange={setOther}
+              disabled={disabled}
+              onSubmit={(text) => {
+                onStructured(text, text);
+                setOther(null);
+              }}
+            />
+          )}
         </Affordance>
       );
 
@@ -320,29 +341,36 @@ function AffordanceControls({
                   selected={selected}
                   // At the ceiling, the unpicked ones stop responding rather
                   // than letting an answer be built that will be refused.
-                  disabled={disabled || (!selected && multi.length >= maxSelections)}
+                  disabled={disabled || (!selected && picked >= maxSelections)}
                   onClick={() => toggle(o.id)}
                 >
                   {o.label}
                 </Chip>
               );
             })}
+            {allowOther && (
+              <OtherOption
+                value={other}
+                onChange={setOther}
+                disabled={disabled || (other === null && picked >= maxSelections)}
+              />
+            )}
           </Affordance>
           <div className="flex items-center gap-2">
             <button
               type="button"
-              disabled={disabled || multi.length < minSelections}
+              disabled={disabled || picked < minSelections}
               onClick={submitMulti}
               className="inline-flex h-9 items-center gap-2 rounded-full bg-[var(--cf-accent)] px-4 text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
             >
-              Continue{multi.length > 0 ? ` · ${multi.length}` : ""}
+              Continue{picked > 0 ? ` · ${picked}` : ""}
               {/* The shortcut was already live and completely invisible. */}
               <CornerDownLeft className="hidden size-3.5 opacity-70 sm:block" aria-hidden />
             </button>
             <p className="text-xs opacity-55">
-              {multi.length >= maxSelections
+              {picked >= maxSelections
                 ? `That's the most you can pick (${maxSelections}).`
-                : minSelections > 1 && multi.length < minSelections
+                : minSelections > 1 && picked < minSelections
                   ? `Pick at least ${minSelections}.`
                   : `Pick up to ${maxSelections}.`}
             </p>

@@ -601,7 +601,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -1244,7 +1244,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -1862,7 +1862,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -2499,7 +2499,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -2887,7 +2887,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -3272,7 +3272,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -3739,7 +3739,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -4198,7 +4198,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -4651,7 +4651,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -5191,7 +5191,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -5926,7 +5926,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -6384,7 +6384,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -6831,7 +6831,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -7307,7 +7307,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -7802,7 +7802,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -8224,7 +8224,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -8781,7 +8781,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -9208,7 +9208,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -10080,7 +10080,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -10693,7 +10693,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -11299,7 +11299,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -11674,7 +11674,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -12093,7 +12093,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -12709,7 +12709,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -13306,7 +13306,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -13897,7 +13897,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -14506,7 +14506,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -15248,7 +15248,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -15777,7 +15777,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -16260,7 +16260,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -16915,7 +16915,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -17485,7 +17485,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -18227,7 +18227,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -18837,7 +18837,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,
@@ -19307,7 +19307,7 @@
      "allowedOrigins": []
     },
     "agent": {
-     "mode": "ai",
+     "mode": "hybrid",
      "tone": "friendly",
      "language": "en",
      "rephraseQuestions": true,

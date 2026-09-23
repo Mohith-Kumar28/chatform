@@ -27,6 +27,17 @@ export default defineConfig({
           // DODO_API_KEY stays unset so nothing can reach the real API from a test run.
           DODO_WEBHOOK_SECRET: "whsec_test_dodo_secret",
           DODO_ENVIRONMENT: "test",
+          /*
+           * No model key, whatever `.dev.vars` says.
+           *
+           * The pool reads `.dev.vars`, so on a machine with a real key every
+           * conversation test was quietly calling OpenRouter: slower, billed, and
+           * decided by a model rather than by the test. CI never had the key, so
+           * the suite only ever passed as written there. Empty counts as absent
+           * everywhere the key is checked. Tests that want a model stub `fetch`
+           * and set the key themselves (see `answer-gate-runtime.test.ts`).
+           */
+          OPENROUTER_API_KEY: "",
         },
       },
     }),

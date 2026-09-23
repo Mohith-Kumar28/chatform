@@ -149,7 +149,7 @@ describe("readFormDoc", () => {
 
 describe("agent layer", () => {
   it("defaults new forms to ai mode", () => {
-    expect(FormDoc.parse(leadFormFixture).settings.agent.mode).toBe("ai");
+    expect(FormDoc.parse(leadFormFixture).settings.agent.mode).toBe("hybrid");
   });
 
   it("accepts a full agent config", () => {

@@ -61,6 +61,7 @@ import { clampForRuntime } from "../lib/doc-entitlements.js";
 import { can } from "@repo/entitlements";
 import { meter } from "../lib/entitlements.js";
 import { logAiGeneration } from "../lib/ai-usage.js";
+import { gateAnswer } from "../lib/answer-gate.js";
 import {
   newResponseId,
   openResponse,
@@ -1662,12 +1663,33 @@ export class SessionDO extends DurableObject<Bindings> {
     }
   }
 
+  /**
+   * The form's interview style. A session with no doc is treated as scripted,
+   * the one mode that never reaches for a model on its own.
+   */
+  private mode(): "ai" | "hybrid" | "template" {
+    return this.doc?.settings.agent.mode ?? "template";
+  }
+
+  /**
+   * Whether the agent words the questions, as opposed to only stepping in when
+   * a reply needs it.
+   *
+   * Agentic only. Hybrid asks every question in the author's words and spends a
+   * model turn only on a reply the answer gate would not take, which is where
+   * nearly all of Agentic's cost was: an "acknowledge and ask the next one" turn
+   * after every answer, a tapped chip included.
+   */
+  private agentPhrases(): boolean {
+    return this.mode() === "ai" && this.aiEnabled();
+  }
+
   /** True when the LLM layer should phrase this turn. */
   private aiEnabled(): boolean {
     if (this.degraded) return false;
     const mode = this.doc?.settings.agent.mode ?? "template";
     return (
-      this.env.OPENROUTER_API_KEY !== undefined &&
+      Boolean(this.env.OPENROUTER_API_KEY) &&
       mode !== "template" &&
       this.sessionTokensUsed < (this.doc?.settings.agent.sessionTokenBudget ?? FALLBACK_TOKEN_BUDGET)
     );
@@ -1691,7 +1713,7 @@ export class SessionDO extends DurableObject<Bindings> {
   private comprehensionEnabled(): boolean {
     const mode = this.doc?.settings.agent.mode ?? "template";
     return (
-      this.env.OPENROUTER_API_KEY !== undefined &&
+      Boolean(this.env.OPENROUTER_API_KEY) &&
       mode !== "template" &&
       this.extractionCalls < MAX_EXTRACTION_CALLS
     );
@@ -2445,7 +2467,27 @@ export class SessionDO extends DurableObject<Bindings> {
 
     const direct = validateAnswer(block, text);
 
-    // ── 2. Otherwise, let the agent read it.
+    // ── 2. Hybrid and Scripted: is this simply the answer?
+    //
+    // One classifier call, a tiny fraction of an agent turn, settles most
+    // replies. What it will not take goes on to the agent in Hybrid.
+    //
+    // Scripted has no agent to pass it to, so a reply the gate judged not to
+    // be an answer ("why do you need this?") gets the same question again.
+    // Only a judgement does that, though. When the gate could not decide, or
+    // could not be asked at all, Scripted keeps what it always had: the
+    // validator's word, so a form with the classifier down still takes a
+    // typed name.
+    const mode = this.mode();
+    let notAnAnswer = false;
+    if (mode !== "ai") {
+      const gated = await this.gate(block, text);
+      if (gated.kind === "answer") return this.record(block, gated.value);
+      notAnAnswer = gated.reason === "question" || gated.reason === "not_direct";
+      if (mode === "template" && notAnAnswer) return this.offScript(block, text, direct);
+    }
+
+    // ── 3. Otherwise, let the agent read it.
     //
     // People do not speak in form fields. They answer and ask in the same
     // breath ("Nothing else — also, do I get any offers for this?"), they
@@ -2490,11 +2532,14 @@ export class SessionDO extends DurableObject<Bindings> {
       // Model unavailable — fall through rather than strand the respondent.
     }
 
-    // ── 3. Deterministic fallback: template mode, degraded sessions, or a
+    // ── 4. Deterministic fallback: degraded sessions, a spent budget, or a
     //    failed turn.
-    if (direct.ok) return this.record(block, text);
+    // Not when the gate has already said this is no answer. A short-text
+    // question validates any string, so "why do you need my name?" was being
+    // stored as the name whenever the agent it was sent to could not reply.
+    if (direct.ok && !notAnAnswer) return this.record(block, text);
 
-    const extracted = await this.extractTypedAnswer(block, text);
+    const extracted = notAnAnswer ? null : await this.extractTypedAnswer(block, text);
     if (extracted !== null) return this.record(block, extracted);
 
     /**
@@ -2508,17 +2553,57 @@ export class SessionDO extends DurableObject<Bindings> {
      * respondent into the "let's make this easier" widget as though they
      * could not work the form.
      */
+    return this.offScript(block, text, direct);
+  }
+
+  /**
+   * A reply nothing could take as the answer, with no agent to hand it to.
+   *
+   * Scripted lands here straight from the gate. A question is told, kindly,
+   * that it cannot be answered here; anything else is an attempt that did not
+   * land, and counts towards `escalateAfterInvalid` like any other. Both end on
+   * the same question, asked again in the author's words.
+   */
+  private async offScript(
+    block: Block,
+    text: string,
+    direct: { code?: string; hint?: string },
+  ): Promise<{ accepted: boolean; error?: string }> {
     if (looksLikeQuestion(text)) {
       await this.emitMessage(asideText(block));
+      await this.emitMessage(questionText(block));
       await this.emitQuestion();
       return { accepted: true };
     }
-
     return this.recordInvalid(
       block,
       direct.code ?? "unclear",
       direct.hint ?? "I didn't quite catch that one.",
     );
+  }
+
+  /**
+   * Ask the answer gate, and write down what it cost and what it decided.
+   *
+   * The outcome goes to the logs rather than the event stream: it is for us,
+   * to see how often the gate takes a reply and why it passes the rest on.
+   */
+  private async gate(block: Block, text: string) {
+    const { outcome, call } = await gateAnswer(this.env, block, text, {
+      organizationId: this.meta?.organizationId,
+      sessionId: this.meta?.sessionId,
+      formId: this.meta?.formId,
+      source: "chat",
+    });
+    if (call) await this.logAiUsage("answer_gate", call.usage, call.model, call.latencyMs);
+    console.log("answer_gate", {
+      sessionId: this.meta?.sessionId,
+      mode: this.mode(),
+      blockType: block.type,
+      outcome: outcome.kind === "answer" ? "answer" : outcome.reason,
+      latencyMs: call?.latencyMs ?? null,
+    });
+    return outcome;
   }
 
   /**
@@ -2998,6 +3083,22 @@ export class SessionDO extends DurableObject<Bindings> {
        * to X!") on every typed answer. The question itself is all that is left.
        */
       if (this.suppressNextAsk && verbatim) {
+        await this.emitMessage(questionText(next.block));
+        await this.emitQuestion();
+        await this.persistMeta();
+        return;
+      }
+
+      /*
+       * Hybrid and Scripted: the author's words, and no model.
+       *
+       * This turn was the single largest cost in a conversation. It ran after
+       * every answer, a tapped chip included, to say "Got it!" and reword a
+       * question the author had already written. Outside Agentic the agent
+       * speaks only when a reply needs it, and that path arrives here with
+       * `suppressNextAsk` set, above.
+       */
+      if (!this.agentPhrases()) {
         await this.emitMessage(questionText(next.block));
         await this.emitQuestion();
         await this.persistMeta();
@@ -3706,7 +3807,7 @@ export class SessionDO extends DurableObject<Bindings> {
       await this.persistMeta();
 
       await this.emitMessage(`Sure, let's redo that one.`);
-      if (this.doc.settings.agent.rephraseQuestions === false || !this.aiEnabled()) {
+      if (this.doc.settings.agent.rephraseQuestions === false || !this.agentPhrases()) {
         await this.emitMessage(questionText(target));
       } else {
         const ok = await this.aiStreamMessage(

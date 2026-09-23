@@ -29,6 +29,14 @@ export const MODELS = {
   /** Free-text → structured answer. Narrow, schema-bound, wants to be cheap. */
   extraction: "google/gemini-3.1-flash-lite",
   /**
+   * "Is this reply simply the answer?", asked before any turn in Hybrid and
+   * Scripted. A classifier, not a chat model: served on `/api/v1/systemone`
+   * rather than chat completions, and absent from `/api/v1/models` (check
+   * `/api/v1/models/typesafe/jev-1.13/endpoints`). Pinned rather than
+   * `jev-latest`, because the gate's thresholds were tuned against this version.
+   */
+  answerGate: "typesafe/jev-1.13",
+  /**
    * Form generation and every builder-side edit.
    *
    * This was `anthropic/claude-sonnet-5`, chosen on the reasoning that

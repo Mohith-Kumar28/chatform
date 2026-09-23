@@ -161,6 +161,16 @@ function isFileDescriptorArray(v: unknown): v is { fileId: string; filename: str
   );
 }
 
+/** The longest "Other" answer we keep. A choice, not an essay. */
+export const MAX_OTHER_LENGTH = 200;
+
+/** A respondent's own "Other" entry, cleaned, or null when it cannot be one. */
+function otherText(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const text = cleanText(raw).trim();
+  return text.length > 0 && text.length <= MAX_OTHER_LENGTH ? text : null;
+}
+
 /**
  * Deterministic per-type validation of a raw answer value.
  * `raw` comes from structured client actions (already typed) or from
@@ -333,8 +343,20 @@ export function validateAnswer(block: Block, input: unknown): ValidationResult {
     case "poll":
     case "dropdown": {
       const option = block.options.find((o) => o.id === raw || o.label.toLowerCase() === String(raw).toLowerCase());
-      if (!option) return fail("invalid_option", "Please pick one of the available options.");
-      return ok(option.id);
+      if (option) return ok(option.id);
+      /*
+       * "Other" is the respondent's own words, stored as they wrote them.
+       *
+       * The builder has offered the toggle for a long time, but nothing past it
+       * honoured it: an answer outside the list failed here as `invalid_option`,
+       * so someone told they could say "violin" was told it was not allowed.
+       * Stored as the text itself rather than wrapped, because every surface
+       * that reads an answer already falls back to the raw value for anything
+       * that is not an option id (`displayAnswer`'s `labelIn`).
+       */
+      const other = block.type === "single_select" && block.allowOther ? otherText(raw) : null;
+      if (other !== null) return ok(other);
+      return fail("invalid_option", "Please pick one of the available options.");
     }
 
     case "multi_select":
@@ -342,11 +364,19 @@ export function validateAnswer(block: Block, input: unknown): ValidationResult {
       const arr = Array.isArray(raw) ? raw : [raw];
       if (arr.length === 0) return block.required ? fail("required", "Please pick at least one option.") : ok(undefined);
       const ids: string[] = [];
+      // At most one entry of their own, and only where the author allowed it.
+      let other: string | null = null;
       for (const r of arr) {
         const option = block.options.find((o) => o.id === r || o.label.toLowerCase() === String(r).toLowerCase());
-        if (!option) return fail("invalid_option", `"${String(r)}" is not one of the available options.`);
-        if (!ids.includes(option.id)) ids.push(option.id);
+        if (option) {
+          if (!ids.includes(option.id)) ids.push(option.id);
+          continue;
+        }
+        const own: string | null = block.type === "multi_select" && block.allowOther && other === null ? otherText(r) : null;
+        if (own === null) return fail("invalid_option", `"${String(r)}" is not one of the available options.`);
+        other = own;
       }
+      if (other !== null) ids.push(other);
       if (block.type === "picture_choice") {
         if (!block.multiSelect && ids.length > 1) {
           return fail("too_many", "Please select only one option.");

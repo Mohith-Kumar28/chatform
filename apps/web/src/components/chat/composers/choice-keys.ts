@@ -43,6 +43,8 @@ export function useChoiceKeys(
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
       if (target?.isContentEditable) return;
+      // A box that takes its own keys, like the "Other" answer: digits are text there.
+      if (target?.closest?.("[data-own-keys]")) return;
       const tag = target?.tagName;
       const inField = tag === "INPUT" || tag === "TEXTAREA";
       // Safe only while the box is empty: someone writing "1 or 2 a week"

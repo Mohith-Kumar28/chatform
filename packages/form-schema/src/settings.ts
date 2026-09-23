@@ -417,7 +417,16 @@ export const SettingsDoc = z.object({
    */
   agent: z
     .object({
-      mode: z.enum(["template", "hybrid", "ai"]).default("ai"),
+      /**
+       * How much of the conversation a model runs.
+       *
+       * - `template` (Scripted): the author's words only. A classifier maps typed
+       *   replies onto the question; anything else gets the question again.
+       * - `hybrid`: the same, except a reply that is not simply the answer goes to
+       *   the agent. The default: most replies are just the answer.
+       * - `ai` (Agentic): the agent reads every reply and words every question.
+       */
+      mode: z.enum(["template", "hybrid", "ai"]).default("hybrid"),
       tone: z.enum(["friendly", "professional", "playful"]).default("friendly"),
       personaPrompt: boundedString(2000).optional(),
       /** Display name for the interviewer, shown in the chat header. */

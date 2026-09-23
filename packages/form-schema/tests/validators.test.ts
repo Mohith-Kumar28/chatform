@@ -64,3 +64,44 @@ describe("invisible characters in an answer", () => {
     expect(validateAnswer(text, "\u200B".repeat(50) + "Ada").ok).toBe(true);
   });
 });
+
+/**
+ * "Other", where the author allowed it.
+ *
+ * The builder offered the toggle long before anything honoured it: an answer
+ * outside the list failed as `invalid_option`, so a form promising "Other"
+ * told someone who plays the violin that the violin was not allowed.
+ */
+describe("an Other answer", () => {
+  const options = [
+    { id: "opt_guitar01", label: "Guitar" },
+    { id: "opt_piano001", label: "Piano" },
+  ];
+  const single = (allowOther: boolean) =>
+    Block.parse({ id: "blk_oth0001", ref: "q_i", type: "single_select", title: "Instrument?", options, allowOther });
+  const multi = (allowOther: boolean) =>
+    Block.parse({ id: "blk_oth0002", ref: "q_m", type: "multi_select", title: "Instruments?", options, allowOther, maxSelections: 3 });
+
+  it("is stored as the respondent's own words", () => {
+    expect(validateAnswer(single(true), "  violin ")).toMatchObject({ ok: true, value: "violin" });
+  });
+
+  it("still resolves a listed option to its id first", () => {
+    expect(validateAnswer(single(true), "piano")).toMatchObject({ ok: true, value: "opt_piano001" });
+  });
+
+  it("is refused where the author did not allow it", () => {
+    expect(validateAnswer(single(false), "violin")).toMatchObject({ ok: false, code: "invalid_option" });
+  });
+
+  it("is refused past its length, and when it is not text", () => {
+    expect(validateAnswer(single(true), "x".repeat(201)).ok).toBe(false);
+    expect(validateAnswer(single(true), 42).ok).toBe(false);
+  });
+
+  it("sits beside listed picks on a multi-select, once", () => {
+    expect(validateAnswer(multi(true), ["opt_guitar01", "violin"])).toMatchObject({ ok: true, value: ["opt_guitar01", "violin"] });
+    expect(validateAnswer(multi(true), ["violin", "cello"])).toMatchObject({ ok: false, code: "invalid_option" });
+    expect(validateAnswer(multi(false), ["opt_guitar01", "violin"])).toMatchObject({ ok: false, code: "invalid_option" });
+  });
+});

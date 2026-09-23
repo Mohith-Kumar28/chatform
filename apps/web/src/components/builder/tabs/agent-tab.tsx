@@ -7,6 +7,7 @@ import { SettingGroup, SettingRow } from "@/components/ui/setting-row";
 import {  NumberField, SwitchField } from "../inspector/fields";
 import { useBuilderStore } from "@/stores/builder-store";
 import { KnowledgePanel } from "@/components/knowledge/knowledge-panel";
+import { InterviewStylePicker } from "./interview-style-picker";
 import { BufferedInput, BufferedTextarea } from "@/components/ui/buffered-input";
 
 const SECTIONS = [
@@ -60,25 +61,13 @@ export function AgentTab() {
 
         {section === "persona" && (
           <SettingGroup>
-            <SettingRow label="Interview style" control={
-              <SegmentedControl
-                size="sm"
-                options={[
-                  { value: "ai", label: "Agentic" },
-                  { value: "hybrid", label: "Hybrid" },
-                  { value: "template", label: "Scripted" },
-                ]}
-                value={agent.mode}
-                onChange={(mode) => patch({ mode })}
-              />
-            } />
-            <p className="text-muted-foreground text-micro -mt-1 px-1">
-              {agent.mode === "ai"
-                ? "Rephrases, answers back, handles objections."
-                : agent.mode === "hybrid"
-                  ? "Conversational, falling back to your wording if the model is down."
-                  : "Your exact wording. No AI cost."}
-            </p>
+            <SettingRow
+              label="Interview style"
+              description="How much of the conversation the AI runs. It decides what each response costs."
+              stacked
+            >
+              <InterviewStylePicker value={agent.mode} onChange={(mode) => patch({ mode })} />
+            </SettingRow>
 
             <SettingRow label="Name" description="Shown in the chat header." stacked>
               <BufferedInput

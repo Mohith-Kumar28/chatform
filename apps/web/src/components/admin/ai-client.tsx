@@ -71,6 +71,7 @@ interface Ai {
 const KIND_LABEL: Record<string, string> = {
   interview_turn: "Conversation turns",
   extraction: "Answer extraction",
+  answer_gate: "Answer check (Jev)",
   generate: "Form generation",
   generate_stream: "Form generation (streamed)",
   edit: "Builder edits",
