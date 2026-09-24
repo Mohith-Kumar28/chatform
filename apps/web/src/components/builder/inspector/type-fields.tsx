@@ -1007,64 +1007,87 @@ function AmountFields({
 }) {
   const key = (field: string) => `${field}:${block.ref}`;
   const variables = useBuilderStore((s) => s.doc?.variables ?? []);
-  const pickable = gateway && variables.length > 0;
+  const formId = useBuilderStore((s) => s.formId);
 
   return (
     <>
       <SelectField
-        label="Amount type"
+        label="Amount"
         value={block.amountMode}
         onChange={(v) => patch({ amountMode: v } as Partial<Block>)}
         options={[
-          { value: "fixed", label: "Fixed" },
-          { value: "variable", label: "From a variable" },
+          { value: "fixed", label: "Fixed amount" },
+          { value: "variable", label: "Worked out from answers" },
         ]}
       />
       {block.amountMode === "fixed" ? (
         <MoneyField
-          label="Amount"
+          label="Price"
           value={block.amount}
           currency={block.currency}
           onChange={(v) => patch({ amount: v } as Partial<Block>, key("amount"))}
         />
       ) : (
         <>
-          {pickable ? (
-            <SelectField
-              label="Variable"
-              value={block.amountVariable ?? NO_ACCOUNT}
-              onChange={(v) => patch({ amountVariable: v === NO_ACCOUNT ? undefined : v } as Partial<Block>)}
-              options={[
-                ...(block.amountVariable ? [] : [{ value: NO_ACCOUNT, label: "Choose a variable" }]),
-                ...(block.amountVariable && !variables.some((v) => v.name === block.amountVariable)
-                  ? [{ value: block.amountVariable, label: `${block.amountVariable} (missing)` }]
-                  : []),
-                ...variables.map((v) => ({ value: v.name, label: v.name })),
-              ]}
-            />
+          {variables.length === 0 ? (
+            <Field label="Take the price from">
+              <div className="bg-muted/40 space-y-2 rounded-lg border border-dashed p-3">
+                <p className="text-muted-foreground text-xs">
+                  No variables yet. Add one, like <code className="text-foreground">price</code>, then set it with a
+                  logic rule (for example, VIP ticket sets price to 999). The person is charged whatever it holds when
+                  they reach Pay.
+                </p>
+                <Button variant="secondary" size="sm" asChild className="w-fit gap-1.5">
+                  <Link href={`/forms/${formId}/settings/hidden`}>
+                    Add a variable
+                    <ArrowUpRight className="size-3.5" aria-hidden />
+                  </Link>
+                </Button>
+              </div>
+            </Field>
           ) : (
-            <TextField
-              label="Variable name"
-              value={block.amountVariable ?? ""}
-              onChange={(v) => patch({ amountVariable: v || undefined } as Partial<Block>, key("amountVar"))}
-            />
+            <div className="space-y-1.5">
+              <SelectField
+                label="Take the price from"
+                value={block.amountVariable ?? NO_ACCOUNT}
+                onChange={(v) => patch({ amountVariable: v === NO_ACCOUNT ? undefined : v } as Partial<Block>)}
+                options={[
+                  ...(block.amountVariable ? [] : [{ value: NO_ACCOUNT, label: "Choose a variable" }]),
+                  ...(block.amountVariable && !variables.some((v) => v.name === block.amountVariable)
+                    ? [{ value: block.amountVariable, label: `${block.amountVariable} (missing)` }]
+                    : []),
+                  ...variables.map((v) => ({ value: v.name, label: v.name })),
+                ]}
+              />
+              <p className="text-muted-foreground text-xs">
+                Whatever this variable holds when they reach Pay is what they&apos;re charged.
+              </p>
+            </div>
           )}
           {gateway && (
-            <div className="grid grid-cols-2 gap-3">
-              <MoneyField
-                label="Minimum amount"
-                value={block.minAmount}
-                currency={block.currency}
-                placeholder="None"
-                onChange={(v) => patch({ minAmount: v } as Partial<Block>, key("minAmount"))}
-              />
-              <MoneyField
-                label="Maximum amount"
-                value={block.maxAmount}
-                currency={block.currency}
-                placeholder="None"
-                onChange={(v) => patch({ maxAmount: v } as Partial<Block>, key("maxAmount"))}
-              />
+            <div className="space-y-2">
+              <div>
+                <p className="text-sm font-medium">Allowed range (optional)</p>
+                <p className="text-muted-foreground text-xs">
+                  If the worked-out price is outside this range, checkout won&apos;t open. Leave empty for no limit.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <MoneyField
+                  label="Minimum"
+                  value={block.minAmount}
+                  currency={block.currency}
+                  placeholder="No minimum"
+                  onChange={(v) => patch({ minAmount: v } as Partial<Block>, key("minAmount"))}
+                />
+                <MoneyField
+                  label="Maximum"
+                  value={block.maxAmount}
+                  currency={block.currency}
+                  placeholder="No maximum"
+                  onChange={(v) => patch({ maxAmount: v } as Partial<Block>, key("maxAmount"))}
+                />
+              </div>
             </div>
           )}
         </>
