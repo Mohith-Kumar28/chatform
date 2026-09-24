@@ -23,7 +23,7 @@ import {
 import { FormGenerationProgress, useFormGeneration } from "@/components/forms/form-generation";
 import { ClarifyPanel, type ClarifyAnswer, type ClarifyQuestion } from "@/components/forms/clarify-panel";
 import { TemplateCard, TemplateCardSkeleton } from "@/components/templates/template-card";
-import { usePostApiForms, usePostApiTemplatesBySlugUse } from "@/lib/api/dashboard/dashboard";
+import { usePostApiForms } from "@/lib/api/dashboard/dashboard";
 import { apiData } from "@/lib/api/payload";
 import { customFetch } from "@/lib/api/mutator";
 import { invalidateForms } from "@/lib/query-keys";
@@ -96,7 +96,6 @@ export function CreateFormDialog({
 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
-  const [pendingSlug, setPendingSlug] = useState<string | null>(null);
 
   /**
    * The workspace the new form lands in — whichever one the dashboard behind
@@ -146,20 +145,7 @@ export function CreateFormDialog({
     },
   });
 
-  const useTemplate = usePostApiTemplatesBySlugUse<Error>({
-    mutation: {
-      onSuccess: async (created) => {
-        await invalidateForms(queryClient);
-        onOpenChange(false);
-        router.push(`/forms/${apiData<{ id: string }>(created).id}/build`);
-      },
-      onError: (e) =>
-        toast.error("Couldn't start from this template", { description: e.message }),
-      onSettled: () => setPendingSlug(null),
-    },
-  });
-
-  const busy = generation.running || asking || createBlank.isPending || useTemplate.isPending;
+  const busy = generation.running || asking || createBlank.isPending;
   const canGenerate = prompt.trim().length > 5 && !busy;
 
   /**
@@ -384,12 +370,7 @@ export function CreateFormDialog({
                         key={t.slug}
                         template={t}
                         variant="compact"
-                        pending={pendingSlug === t.slug}
-                        disabled={busy && pendingSlug !== t.slug}
-                        onUse={() => {
-                          setPendingSlug(t.slug);
-                          useTemplate.mutate({ slug: t.slug, params: ws ? { ws } : undefined });
-                        }}
+                        disabled={busy}
                         // The card leads to the template's own page, so this
                         // dialog gets out of the way rather than sitting over
                         // the route it just sent you to.

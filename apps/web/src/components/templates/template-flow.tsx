@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Node } from "@xyflow/react";
-import { Flag, Play, ShieldAlert } from "lucide-react";
+import { Flag, Minus, Play, Plus, Scan, ShieldAlert } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { Block, FormDoc } from "@repo/form-schema";
 import { blockMeta, TONE_ACCENT, TONE_CLASSES } from "@/components/builder/block-library";
 import { BRANCH_HEADER, BRANCH_ROW, nodeSize } from "@/components/builder/flow-layout";
@@ -69,17 +70,12 @@ function path(from: Anchor, to: Anchor): string {
 export function TemplateFlow({
   doc,
   className,
-  /**
-   * How tall the frame is: a pixel cap, or "fill" to take a sized parent's
-   * height. The dialog uses "fill" so the diagram is the only thing that
-   * scrolls — a frame with its own cap inside a scrolling parent gives the
-   * reader two scrollbars over one picture.
-   */
+  /** The frame's height cap; taller flows scroll inside it. */
   height = 440,
 }: {
   doc: FormDoc;
   className?: string;
-  height?: number | "fill";
+  height?: number;
 }) {
   // Down a column, not across one: see `Rankdir` in `flow-layout`.
   const graph = useMemo(() => deriveGraph(doc, doc.logic.filter(isGoto), undefined, "TB"), [doc]);
@@ -139,7 +135,7 @@ export function TemplateFlow({
       onScroll={onScroll}
       className={cn("relative w-full overflow-auto", className)}
       style={{
-        ...(height === "fill" ? { height: "100%" } : { maxHeight: height }),
+        maxHeight: height,
         maskImage: more ? "linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent)" : undefined,
       }}
       role="img"
@@ -158,51 +154,241 @@ export function TemplateFlow({
           transformOrigin: "0 0",
         }}
       >
-        <svg
-          className="pointer-events-none absolute top-0 left-0 overflow-visible"
-          width={graphWidth}
-          height={graphHeight}
-          aria-hidden
-        >
-          <defs>
-            <marker
-              id="cf-template-arrow"
-              viewBox="0 0 10 10"
-              refX="8"
-              refY="5"
-              markerWidth="6"
-              markerHeight="6"
-              orient="auto-start-reverse"
-            >
-              <path d="M0 0 L10 5 L0 10 z" fill="var(--border)" />
-            </marker>
-          </defs>
-          {wires.map((w) => (
-            <g key={w.id}>
-              <path
-                d={path(w.from, w.to)}
-                fill="none"
-                stroke="var(--border)"
-                strokeWidth={1.5}
-                markerEnd="url(#cf-template-arrow)"
-              />
-              {w.label && <WireLabel wire={w} />}
-            </g>
-          ))}
-        </svg>
-
-        {placed.map((p) => (
-          <div
-            key={p.node.id}
-            className="absolute"
-            style={{ left: p.x, top: p.y, width: p.width, height: p.height }}
-          >
-            <FlowNode node={p.node} />
-          </div>
-        ))}
+        <FlowDrawing placed={placed} wires={wires} width={graphWidth} height={graphHeight} />
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The same flow in a viewport you can move around: drag to pan, scroll to pan,
+ * pinch or ⌘/Ctrl-scroll to zoom, and buttons for anyone without a trackpad.
+ *
+ * Used by the expanded dialog, where the point is to read a big flow up close.
+ * The inline version stays a plain scrolling column, because a canvas that
+ * captures the wheel inside a page that scrolls is a trap for the page.
+ *
+ * Wheel means pan and ⌘/Ctrl-wheel means zoom, the Figma convention. A trackpad
+ * pinch arrives as a ctrl-wheel, so pinching zooms without a special case.
+ */
+export function PannableFlow({ doc, className }: { doc: FormDoc; className?: string }) {
+  const graph = useMemo(() => deriveGraph(doc, doc.logic.filter(isGoto), undefined, "TB"), [doc]);
+  const { placed, wires, width: graphWidth, height: graphHeight } = useMemo(
+    () => measure(graph.nodes, graph.edges),
+    [graph],
+  );
+
+  const frame = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState<{ x: number; y: number; k: number } | null>(null);
+
+  /** The whole flow in view. */
+  const fit = useCallback(() => {
+    const el = frame.current;
+    if (!el) return;
+    setView(fitted(el, graphWidth, graphHeight));
+  }, [graphWidth, graphHeight]);
+
+  // Open at reading size: fitted to the width, top first, like the inline
+  // column. Squeezing a twenty-question flow into the frame's height opens it
+  // at 40% and every label unreadable; Fit is one click away for the overview.
+  // Waits for the frame to have a size, since the dialog animates in.
+  useEffect(() => {
+    const el = frame.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth > 0) setView((v) => v ?? fitted(el, graphWidth, graphHeight, false));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [graphWidth, graphHeight]);
+
+  /** Zoom to `k`, keeping the graph point under (cx, cy) where it is. */
+  const zoomAt = useCallback((next: number, cx: number, cy: number) => {
+    setView((v) => {
+      if (!v) return v;
+      const k = clamp(next);
+      return { k, x: cx - ((cx - v.x) * k) / v.k, y: cy - ((cy - v.y) * k) / v.k };
+    });
+  }, []);
+
+  const zoomBy = (factor: number) => {
+    const el = frame.current;
+    if (el && view) zoomAt(view.k * factor, el.clientWidth / 2, el.clientHeight / 2);
+  };
+
+  // A non-passive listener: React's onWheel is passive, so it cannot stop the
+  // dialog behind from scrolling or the browser from zooming the page.
+  useEffect(() => {
+    const el = frame.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) {
+        const rect = el.getBoundingClientRect();
+        setView((v) => {
+          if (!v) return v;
+          const k = clamp(v.k * Math.exp(-e.deltaY * 0.004));
+          const cx = e.clientX - rect.left;
+          const cy = e.clientY - rect.top;
+          return { k, x: cx - ((cx - v.x) * k) / v.k, y: cy - ((cy - v.y) * k) / v.k };
+        });
+      } else {
+        setView((v) => (v ? { ...v, x: v.x - e.deltaX, y: v.y - e.deltaY } : v));
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  /**
+   * Drag to pan with one pointer, pinch with two. Tracked by pointer id so a
+   * finger lifting mid-pinch hands over to a pan instead of jumping.
+   */
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const [dragging, setDragging] = useState(false);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    setDragging(true);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const map = pointers.current;
+    const prev = map.get(e.pointerId);
+    if (!prev) return;
+    const others = [...map.entries()].filter(([id]) => id !== e.pointerId);
+    if (others.length === 0) {
+      setView((v) => (v ? { ...v, x: v.x + e.clientX - prev.x, y: v.y + e.clientY - prev.y } : v));
+    } else {
+      const other = others[0]![1];
+      const before = Math.hypot(prev.x - other.x, prev.y - other.y);
+      const after = Math.hypot(e.clientX - other.x, e.clientY - other.y);
+      const rect = e.currentTarget.getBoundingClientRect();
+      if (before > 0 && view) {
+        zoomAt(view.k * (after / before), (e.clientX + other.x) / 2 - rect.left, (e.clientY + other.y) / 2 - rect.top);
+      }
+    }
+    map.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size === 0) setDragging(false);
+  };
+
+  return (
+    <div className={cn("relative h-full w-full overflow-hidden", className)}>
+      <div
+        ref={frame}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onDoubleClick={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          if (view) zoomAt(view.k * 1.6, e.clientX - rect.left, e.clientY - rect.top);
+        }}
+        className={cn(
+          "absolute inset-0 touch-none select-none",
+          dragging ? "cursor-grabbing" : "cursor-grab",
+        )}
+        role="img"
+        aria-label={flowSummary(doc)}
+      >
+        {view && (
+          <div
+            className="absolute top-0 left-0"
+            style={{
+              width: graphWidth,
+              height: graphHeight,
+              transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})`,
+              transformOrigin: "0 0",
+            }}
+          >
+            <FlowDrawing placed={placed} wires={wires} width={graphWidth} height={graphHeight} />
+          </div>
+        )}
+      </div>
+
+      <div className="bg-card border-border absolute right-3 bottom-3 flex items-center gap-0.5 rounded-full border p-1 shadow-sm">
+        <Button variant="ghost" size="icon-sm" shape="pill" aria-label="Zoom out" onClick={() => zoomBy(1 / 1.25)}>
+          <Minus className="size-3.5" />
+        </Button>
+        <span className="text-muted-foreground tabular w-11 text-center text-xs" aria-live="polite">
+          {view ? `${Math.round(view.k * 100)}%` : ""}
+        </span>
+        <Button variant="ghost" size="icon-sm" shape="pill" aria-label="Zoom in" onClick={() => zoomBy(1.25)}>
+          <Plus className="size-3.5" />
+        </Button>
+        <Button variant="ghost" size="icon-sm" shape="pill" aria-label="Fit to screen" onClick={fit}>
+          <Scan className="size-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+const MIN_ZOOM = 0.2;
+const MAX_ZOOM = 3;
+const clamp = (k: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, k));
+
+/** Centred and never past 1:1; `whole` also fits the height, not just the width. */
+function fitted(el: HTMLElement, gw: number, gh: number, whole = true) {
+  const { clientWidth: w, clientHeight: h } = el;
+  const k = clamp(Math.min(1, (w - 2 * PAD) / gw, whole ? (h - 2 * PAD) / gh : 1));
+  return { x: (w - gw * k) / 2, y: Math.max(PAD, (h - gh * k) / 2), k };
+}
+
+/** The boxes and wires at 1:1, in graph coordinates. Both viewports scale this. */
+function FlowDrawing({ placed, wires, width, height }: { placed: Placed[]; wires: Wire[]; width: number; height: number }) {
+  return (
+    <>
+      <svg
+        className="pointer-events-none absolute top-0 left-0 overflow-visible"
+        width={width}
+        height={height}
+        aria-hidden
+      >
+        <defs>
+          <marker
+            id="cf-template-arrow"
+            viewBox="0 0 10 10"
+            refX="8"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--border)" />
+          </marker>
+        </defs>
+        {wires.map((w) => (
+          <g key={w.id}>
+            <path
+              d={path(w.from, w.to)}
+              fill="none"
+              stroke="var(--border)"
+              strokeWidth={1.5}
+              markerEnd="url(#cf-template-arrow)"
+            />
+            {w.label && <WireLabel wire={w} />}
+          </g>
+        ))}
+      </svg>
+
+      {placed.map((p) => (
+        <div
+          key={p.node.id}
+          className="absolute"
+          style={{ left: p.x, top: p.y, width: p.width, height: p.height }}
+        >
+          <FlowNode node={p.node} />
+        </div>
+      ))}
+    </>
   );
 }
 

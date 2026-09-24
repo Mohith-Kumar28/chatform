@@ -22,7 +22,7 @@ import type { FormDoc } from "@repo/form-schema";
 import { computeQuestionFlow } from "@/components/builder/branch-layout";
 import { isGoto } from "@/components/builder/flow-graph";
 import { blockMeta } from "@/components/builder/block-library";
-import { TemplateFlow } from "@/components/templates/template-flow";
+import { PannableFlow, TemplateFlow } from "@/components/templates/template-flow";
 import { TemplateCard } from "@/components/templates/template-card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -180,12 +180,14 @@ export function TemplatePanes({
       </div>
 
       <Dialog open={expanded} onOpenChange={setExpanded}>
-        <DialogContent size="full" layout="panel">
+        {/* A set height, not just the panel's max: the viewport inside fills
+            its parent, and a parent sized by its content has nothing to fill. */}
+        <DialogContent size="full" layout="panel" className="h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)]">
           <DialogHeader className="border-border border-b p-4">
-            <DialogTitle className="font-display text-base">{title} — flow</DialogTitle>
+            <DialogTitle className="font-display text-base">{title}: flow</DialogTitle>
           </DialogHeader>
-          <div className="min-h-0 flex-1 p-4">
-            <TemplateFlow doc={doc} height="fill" />
+          <div className="bg-muted/30 relative min-h-0 flex-1">
+            <PannableFlow doc={doc} />
           </div>
         </DialogContent>
       </Dialog>

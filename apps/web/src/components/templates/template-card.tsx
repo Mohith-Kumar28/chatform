@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ArrowRight, Blocks, Clock, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { templateAccent } from "@/lib/category-accent";
 import type { TemplateSummary } from "@/lib/templates";
 import { cn } from "@/lib/utils";
@@ -19,14 +18,15 @@ import { cn } from "@/lib/utils";
  * is, and the one a curious reader makes — created a form and dropped them in
  * the builder. Nobody browsing a catalogue means "yes, this one, now"; they
  * mean "what is this?". Creating a form is an explicit act with its own button,
- * on a page that has told you what you are about to get.
+ * on a page that has told you what you are about to get. The card used to
+ * reveal a "Use template" shortcut on hover too; it popped up under every
+ * passing pointer, so the card is now only ever the way in.
  */
 export function TemplateCard({
   template,
   variant = "full",
   pending = false,
   disabled = false,
-  onUse,
   onOpen,
   href,
 }: {
@@ -34,8 +34,6 @@ export function TemplateCard({
   variant?: "full" | "compact";
   pending?: boolean;
   disabled?: boolean;
-  /** Offered as an explicit shortcut for a reader who already knows this one. */
-  onUse?: () => void;
   /** Fired when the card is followed — the create dialog closes itself on it. */
   onOpen?: () => void;
   /** Where the card leads. The app's own detail page unless the public gallery says otherwise. */
@@ -141,28 +139,6 @@ export function TemplateCard({
               <ArrowRight className="size-3.5 transition-transform duration-[var(--duration-micro)] group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0" />
             </span>
 
-            {/* The shortcut past the detail page, for someone who already
-                knows this one. It holds its space at every moment — only the
-                paint is revealed — so nothing in the card moves on hover.
-                Always visible on touch, where there is no hover to reveal it
-                with, and reachable by keyboard, where there is none either. */}
-            {onUse && (
-              <Button
-                size="sm"
-                shape="pill"
-                onClick={onUse}
-                aria-label={`Create a form from the ${template.title} template`}
-                className={cn(
-                  "z-10 ml-auto h-7 px-3 text-xs",
-                  "pointer-events-none opacity-0 transition-opacity",
-                  "group-hover:pointer-events-auto group-hover:opacity-100",
-                  "focus-visible:pointer-events-auto focus-visible:opacity-100",
-                  "max-sm:pointer-events-auto max-sm:opacity-100",
-                )}
-              >
-                Use template
-              </Button>
-            )}
           </>
         )}
       </div>

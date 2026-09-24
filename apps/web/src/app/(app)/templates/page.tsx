@@ -2,12 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
 import { Search, Sparkles } from "lucide-react";
-import { toast } from "sonner";
-import { usePostApiTemplatesBySlugUse } from "@/lib/api/dashboard/dashboard";
-import { apiData } from "@/lib/api/payload";
-import { invalidateForms } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -26,48 +21,21 @@ import { filterTemplates, POPULAR_COUNT, templateCategories, useTemplates } from
  *
  * With a real catalogue behind it the screen has one job: help someone find
  * the one that fits. Deciding happens on the template's own page — a card here
- * opens it, and nothing on this screen creates a form except the explicit
- * shortcut on a card you already know you want.
+ * opens it, and nothing on this screen creates a form. "Use template" lives
+ * on that page, after the reader has seen what they would be getting.
  */
 export default function TemplatesPage() {
   const router = useRouter();
-  const queryClient = useQueryClient();
 
   const { templates, isLoading } = useTemplates();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
-  const [pendingSlug, setPendingSlug] = useState<string | null>(null);
 
   const categories = useMemo(() => templateCategories(templates), [templates]);
   const shown = useMemo(
     () => filterTemplates(templates, search, category),
     [templates, search, category],
   );
-
-  const use = usePostApiTemplatesBySlugUse<Error>({
-    mutation: {
-      onSuccess: async (created) => {
-        await invalidateForms(queryClient);
-        // `/build`, like every other create path. This landed on `/forms/{id}`
-        // and left people on a route the builder redirects away from.
-        router.push(`/forms/${apiData<{ id: string }>(created).id}/build`);
-      },
-      /**
-       * Said out loud. A refused "Use template" — a form-count limit, a role
-       * that cannot create — used to do nothing at all and explain nothing.
-       * (A plan denial still opens the global paywall; this is for the rest.)
-       */
-      onError: (err) => {
-        toast.error("Couldn't start from this template", { description: err.message });
-        setPendingSlug(null);
-      },
-    },
-  });
-
-  const startFrom = (slug: string) => {
-    setPendingSlug(slug);
-    use.mutate({ slug });
-  };
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
@@ -160,9 +128,6 @@ export default function TemplatesPage() {
               <li key={t.slug} className="flex">
                 <TemplateCard
                   template={t}
-                  pending={pendingSlug === t.slug}
-                  disabled={use.isPending && pendingSlug !== t.slug}
-                  onUse={() => startFrom(t.slug)}
                 />
               </li>
             ))}
