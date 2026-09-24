@@ -75,7 +75,12 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 export function formatAmount(amount: number, currency: string): string {
   const code = currency.toUpperCase();
   const symbol = CURRENCY_SYMBOLS[code] ?? `${code} `;
-  const shown = Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
+  // Grouped the way the currency's own readers group it: ₹1,49,999 but $149,999.
+  const digits = Number.isInteger(amount) ? 0 : 2;
+  const shown = amount.toLocaleString(code === "INR" ? "en-IN" : "en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
   return `${symbol}${shown}`;
 }
 
