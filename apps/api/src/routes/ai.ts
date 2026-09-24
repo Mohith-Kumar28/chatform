@@ -646,6 +646,10 @@ aiRouter.post(
           questions,
           rules,
           issues: issues.filter((i) => i.level === "error").length,
+          // The pages named in the brief, so the dialog can add them to the new
+          // form's knowledge base. Extracted here rather than re-parsed in the
+          // browser, so both sides agree on what counted as a link.
+          urls,
         });
       } catch (err) {
         console.error("generate_form_stream_failed", err);

@@ -48,6 +48,8 @@ export interface GenerationResult {
   title: string;
   questions: number;
   rules: number;
+  /** URLs found in the brief. Missing from servers deployed before this field. */
+  urls?: string[];
 }
 
 const STAGE_ORDER: StageId[] = ["reading", "researching", "drafting", "logic", "saving"];

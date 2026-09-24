@@ -29,6 +29,7 @@ import { customFetch } from "@/lib/api/mutator";
 import { invalidateForms } from "@/lib/query-keys";
 import { filterTemplates, templateCategories, useTemplates } from "@/lib/templates";
 import { cn } from "@/lib/utils";
+import { PromptTips } from "@/components/forms/prompt-tips";
 import { seedAiBarThread } from "@/components/builder/ai-bar-thread";
 import {
   AddKnowledgeButton,
@@ -55,6 +56,21 @@ import {
 
 /** The endpoint caps the prompt at 2000 characters; so does this. */
 const PROMPT_MAX = 2000;
+
+/**
+ * Staged knowledge plus the links the brief mentioned, minus any the author
+ * already added by hand. Compared without the trailing slash, which is the
+ * difference between "acme.com" in the brief and "https://acme.com/" typed
+ * into the link field.
+ */
+function withBriefLinks(staged: StagedItem[], urls: string[]): StagedItem[] {
+  const key = (u: string) => u.trim().replace(/\/+$/, "").toLowerCase();
+  const have = new Set(staged.flatMap((i) => (i.kind === "link" ? [key(i.url)] : [])));
+  const added = urls
+    .filter((u) => !have.has(key(u)))
+    .map((url) => ({ kind: "link" as const, id: crypto.randomUUID().slice(0, 8), url }));
+  return [...staged, ...added];
+}
 
 export function CreateFormDialog({
   open,
@@ -191,8 +207,12 @@ export function CreateFormDialog({
         // Fire-and-forget: ingestion is asynchronous anyway, and the Knowledge
         // tab is where its progress and any failure belong. Blocking the route
         // change on an upload would make creating a form feel slower than it is.
-        if (staged.length > 0) {
-          void flushStagedKnowledge(result.formId, staged);
+        //
+        // Any site named in the brief goes in too, so the agent can already
+        // answer questions about it by the time the author opens the builder.
+        const knowledge = withBriefLinks(staged, result.urls ?? []);
+        if (knowledge.length > 0) {
+          void flushStagedKnowledge(result.formId, knowledge);
           setStaged([]);
         }
         setPrompt("");
@@ -290,6 +310,8 @@ export function CreateFormDialog({
                 canGenerate={canGenerate}
                 onGenerate={generate}
               />
+
+              <PromptTips onOpenKnowledge={() => setKnowledgeOpen(true)} />
 
               {/* The alternative, kept close to the composer so it reads as
                   part of the same decision rather than a separate offer. One
