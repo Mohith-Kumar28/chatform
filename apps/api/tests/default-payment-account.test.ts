@@ -109,10 +109,16 @@ describe("withDefaultPaymentAccount", () => {
     expect((out.blocks[1] as { method: string }).method).toBe("gateway");
   });
 
-  it("does nothing without the plan, an account, or the flag", async () => {
+  it("with no account yet, makes it verified checkout waiting for one", async () => {
+    const out = await withDefaultPaymentAccount(E, empty.orgId, docWith(payment("b_pay")));
+    const block = out.blocks[0] as Extract<FormDoc["blocks"][number], { type: "payment" }>;
+    expect(block.method).toBe("gateway");
+    expect(block.paymentAccountId).toBeUndefined();
+  });
+
+  it("does nothing without the plan or the flag", async () => {
     const doc = docWith(payment("b_pay"));
     expect(await withDefaultPaymentAccount(E, free.orgId, doc)).toEqual(doc);
-    expect(await withDefaultPaymentAccount(E, empty.orgId, doc)).toEqual(doc);
     mutableEnv.PAYMENTS_GATEWAY_ENABLED = "";
     expect(await withDefaultPaymentAccount(E, pro.orgId, doc)).toEqual(doc);
     mutableEnv.PAYMENTS_GATEWAY_ENABLED = "on";

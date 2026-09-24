@@ -17,8 +17,11 @@ const INR_ONLY = new Set(["razorpay", "cashfree"]);
  * real checkout URL or UPI id to keeps it, since the author asked for exactly
  * that, and so does every question the form already had.
  *
- * Nothing happens without a default to use: the flag off, a plan without
- * `collect_payments`, or no working account all leave the draft as it was.
+ * With no account connected yet, the question still becomes verified checkout,
+ * just without an account: the builder then shows "Connect a payment account"
+ * on it, which is the step the author actually has to take. A plain link with
+ * no URL would only have asked them to paste one. The flag off, or a plan
+ * without `collect_payments`, leave the draft as it was.
  */
 export async function withDefaultPaymentAccount(
   env: Bindings,
@@ -40,12 +43,12 @@ export async function withDefaultPaymentAccount(
     const ent = await getEntitlements(env, orgId);
     if (!ent.features.collect_payments) return doc;
     const account = (await listAccounts(env, orgId)).find((a) => a.isDefault && a.status === "active");
-    if (!account) return doc;
 
     return {
       ...doc,
       blocks: doc.blocks.map((b) => {
         if (b.type !== "payment" || !candidates.has(b.ref)) return b;
+        if (!account) return { ...b, method: "gateway" as const };
         const currency = INR_ONLY.has(account.provider) ? "INR" : (account.currencies[0] ?? b.currency);
         return { ...b, method: "gateway" as const, paymentAccountId: account.id, currency: currency.toUpperCase() };
       }),
